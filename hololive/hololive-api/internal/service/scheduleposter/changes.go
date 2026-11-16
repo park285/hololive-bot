@@ -439,15 +439,20 @@ func publishedChanges(ctx context.Context, tx pgx.Tx, schedule *PublishedSchedul
 
 	changes, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Change, error) {
 		var (
-			change Change
-			day    *time.Time
+			change   Change
+			day      *time.Time
+			editedAt *time.Time
 		)
 
 		scanErr := row.Scan(&change.PostID, &change.Item, &change.PostedAt, &change.RecordedAt, &change.Kind, &change.Slot,
 			&change.TargetPostID, &change.TargetItem, &day, &change.Start, &change.Status, &change.Text, &change.TitleKo,
-			&change.WithKo, &change.PlaceKo, &change.TagsKo, &change.NoteKo)
+			&change.WithKo, &change.PlaceKo, &change.TagsKo, &change.NoteKo, &editedAt)
 		if day != nil {
 			change.Day = *day
+		}
+
+		if editedAt != nil {
+			change.EditedAt = *editedAt
 		}
 
 		return change, scanErr

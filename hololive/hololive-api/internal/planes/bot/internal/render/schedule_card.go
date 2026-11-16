@@ -28,25 +28,36 @@ type scheduleCardKey struct {
 	posterID      int64
 	extractedAtNS int64
 	changedAtNS   int64
+	editedAtNS    int64
 	changes       int
 	format        schedulecard.Format
 }
 
 func (k scheduleCardKey) String() string {
-	return fmt.Sprintf("%d:%d:%d:%d:%s", k.posterID, k.extractedAtNS, k.changedAtNS, k.changes, k.format)
+	return fmt.Sprintf("%d:%d:%d:%d:%d:%s", k.posterID, k.extractedAtNS, k.changedAtNS, k.editedAtNS, k.changes, k.format)
 }
 
 func newScheduleCardKey(schedule *scheduleposter.PublishedSchedule, format schedulecard.Format) scheduleCardKey {
 	key := scheduleCardKey{posterID: schedule.PosterID, extractedAtNS: schedule.ExtractedAt.UnixNano(), changes: len(schedule.Changes), format: format}
 
+	for i := range schedule.Rows {
+		if edited := schedule.Rows[i].EditedAt; !edited.IsZero() {
+			key.editedAtNS = max(key.editedAtNS, edited.UnixNano())
+		}
+	}
+
 	for i := range schedule.Changes {
 		key.changedAtNS = max(key.changedAtNS, schedule.Changes[i].RecordedAt.UnixNano())
+
+		if edited := schedule.Changes[i].EditedAt; !edited.IsZero() {
+			key.editedAtNS = max(key.editedAtNS, edited.UnixNano())
+		}
 	}
 
 	return key
 }
 
-// ScheduleCardRenderer는 !스케쥴 카드를 그리고 (포스터, 행 추출 시각, 게시되는 변경의 마지막 기록 시각과 개수, 판형)마다 한 번만 그린다.
+// ScheduleCardRenderer는 !스케쥴 카드를 그리고 (포스터, 행 추출 시각, 게시되는 변경의 마지막 기록 시각과 개수, 마지막 윤문 시각, 판형)마다 한 번만 그린다.
 type ScheduleCardRenderer struct {
 	format  schedulecard.Format
 	cache   *imageCache[scheduleCardKey]

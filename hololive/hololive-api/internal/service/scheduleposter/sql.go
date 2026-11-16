@@ -29,7 +29,10 @@ var (
 	listSQL                      = mustSQL("list.sql")
 	lockChannelConfirmSQL        = mustSQL("lock_channel_confirm.sql")
 	lockUnreviewedCandidateSQL   = mustSQL("lock_unreviewed_candidate.sql")
+	memoSQL                      = mustSQL("memo.sql")
 	pendingRowsSQL               = mustSQL("pending_rows.sql")
+	polishChangeSQL              = mustSQL("polish_change.sql")
+	polishRowSQL                 = mustSQL("polish_row.sql")
 	posterPostChangesSQL         = mustSQL("poster_post_changes.sql")
 	posterRowsSQL                = mustSQL("poster_rows.sql")
 	posterScheduleSQL            = mustSQL("poster_schedule.sql")
@@ -44,6 +47,7 @@ var (
 	requestRowsSQL               = mustSQL("request_rows.sql")
 	requeueLaterPostsSQL         = mustSQL("requeue_later_posts.sql")
 	saveImageSQL                 = mustSQL("save_image.sql")
+	saveMemoSQL                  = mustSQL("save_memo.sql")
 	summarySQL                   = mustSQL("summary.sql")
 	unreviewedCandidatesSQL      = mustSQL("unreviewed_candidates.sql")
 	updateWeekSQL                = mustSQL("update_week.sql")
@@ -61,6 +65,7 @@ var (
 	revokePostSQL      = withFragment("revoke_post.sql", "post_window", postWindowSQL)
 	publishedPosterSQL = mustSQL("published_poster.sql")
 	publishedRowsSQL   = withFragment("published_rows.sql", "published_poster", publishedPosterSQL)
+	lockPosterSQL      = posterScheduleSQL + "\nFOR UPDATE"
 )
 
 func withFragment(name, marker, fragment string) string {

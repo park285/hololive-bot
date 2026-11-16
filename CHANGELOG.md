@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **일정표 칸 윤문과 번역 메모 (migration 026):** 관리 API `POST /api/holo/schedule-posters/{id}/rows/polish`와 `POST /api/holo/schedule-posters/{id}/changes/polish`가 일정표 칸 하나의 한국어 다섯 칸(제목, 함께하는 사람, 장소, 태그, 메모)을 관리자가 고친 값으로 바꿉니다. 앞은 포스터 행에서 온 칸, 뒤는 글이 더한 칸입니다. 값은 그 칸의 한국어를 마지막으로 정한 포스터 행이나 글의 변경에 쓰고, 그 행이나 변경의 `doubt_ko`·`warnings`를 비우며 고친 글에 남지 않은 표기를 `terms`에서 뺍니다. `!스케쥴` 카드는 다음 요청에 다시 그려지고 갱신 시각에 윤문 시각이 반영됩니다. 행을 다시 뽑거나 글을 다시 대응하면 윤문한 값은 사라집니다. `GET`·`POST /api/holo/schedule-posters/memo`는 번역 메모 한 건(4000자)을 읽고 저장하며, 메모가 있으면 그 뒤의 행 번역과 변경 재번역 지시문에 `Editor notes` 절로 붙습니다. 메모가 비면 지시문은 이전과 바이트 단위로 같습니다. 칸 읽기 응답(`GET /{id}/rows`)의 칸에 `editedAt`·`addedItem`이 늘었고 `updatedAt`은 윤문 시각도 반영합니다. `Editor notes` 절은 모델 실호출 검증을 거치지 않았습니다. migration 026은 `schedule_poster_rows`·`schedule_poster_changes`에 `edited_at` 열을, `schedule_poster_translation_memo` 표를 더하며 이전 image는 이를 읽지도 쓰지도 않습니다. Console에서 쓰려면 iris-console이 이 계약으로 생성 사본을 다시 만들어야 합니다. Fallback delta: none.
+
 ## v18.4.0 - 2026-11-16
 
 - **의존성:** 다섯 Go 모듈을 shared-go v2.22.0과 iris-client-go v5.2.0으로 올렸습니다. 이 저장소가 쓰지 않는 shared-go export 삭제(`healthprobe --smoke`·`CheckURL` 포함)와 iris-client-go의 H3 CA 파일 엄격 해석·unspecified 주소 거절이 들어 있습니다. 운영 `iris-ca.pem`은 2026-11-16에 `CERTIFICATE` 블록 하나만 담고 있음을 확인했습니다. 최소 버전 선택으로 quic-go v0.65.0, pgx v5.13.0과 golang.org/x 모듈도 함께 올라갑니다.

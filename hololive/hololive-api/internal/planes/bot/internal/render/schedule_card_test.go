@@ -243,6 +243,36 @@ func TestScheduleCardRendererRedrawsAfterRevokedChange(t *testing.T) {
 	}
 }
 
+func TestScheduleCardRendererRedrawsAfterPolish(t *testing.T) {
+	drawer := &recordingCardDrawer{}
+	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
+	schedule := changedSchedule()
+	polishedAt := schedule.UpdatedAt().Add(time.Hour)
+
+	render := func(wantDraws int, what string) {
+		t.Helper()
+
+		if _, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), schedule); err != nil || len(drawer.cards) != wantDraws {
+			t.Fatalf("%s: RenderScheduleCard() = %v, draws = %d; want %d", what, err, len(drawer.cards), wantDraws)
+		}
+	}
+
+	render(1, "before polish")
+
+	schedule.Rows[0].TitleKo, schedule.Rows[0].EditedAt = "윤문한 잡담", polishedAt
+
+	render(2, "polished row")
+
+	schedule.Changes[0].TitleKo, schedule.Changes[0].EditedAt = "윤문한 콜라보", polishedAt.Add(time.Minute)
+
+	render(3, "polished change")
+	render(3, "same polish")
+
+	if got := drawer.cards[1].Items[0].Title; got != "윤문한 잡담" {
+		t.Fatalf("polished row title = %q", got)
+	}
+}
+
 func TestScheduleCardRendererDoesNotShareInFlightDrawAcrossChanges(t *testing.T) {
 	base, revoked, later, rematched, reextracted, confirmed := changedSchedule(), changedSchedule(), changedSchedule(), changedSchedule(), changedSchedule(), changedSchedule()
 	newTitle := scheduleposter.Change{PostID: 105, Item: 1, Kind: scheduleposter.ChangeContentChanged, Slot: 1, TitleKo: "새 제목"}

@@ -90,7 +90,12 @@ func (s *Service) translateChanges(
 		return nil, translationReport{}, fmt.Errorf("load schedule poster week terms: %w", err)
 	}
 
-	translated, err := s.translateLines(ctx, target, schedule, lines, changes, terms, members)
+	memo, err := s.rows.TranslationMemo(ctx)
+	if err != nil {
+		return nil, translationReport{}, fmt.Errorf("load schedule poster translation memo: %w", err)
+	}
+
+	translated, err := s.translateLines(ctx, target, schedule, lines, changes, translationRefs{terms: terms, memo: memo.Body}, members)
 	if errors.Is(err, errChangeServiceFailed) {
 		return nil, translationReport{}, err
 	}
@@ -105,9 +110,14 @@ func (s *Service) translateChanges(
 	return translated, translationReport{translated: len(lines)}, nil
 }
 
+type translationRefs struct {
+	terms []posterstore.Term
+	memo  string
+}
+
 func (s *Service) translateLines(
 	ctx context.Context, target Target, schedule *posterstore.PublishedSchedule, lines []translationLine,
-	changes []posterstore.Change, terms []posterstore.Term, members []*domain.Member,
+	changes []posterstore.Change, refs translationRefs, members []*domain.Member,
 ) ([]posterstore.Change, error) {
 	owner, ok := posterOwner(target.ChannelID, members)
 	if !ok {
@@ -125,7 +135,8 @@ func (s *Service) translateLines(
 	}
 
 	named := nameTableMembers(members)
-	prompt := buildTranslatePrompt(rows, posterZone(zones), owner, named, s.config.Translation.Glossary, earlierRenderings(terms))
+	prompt := buildTranslatePrompt(
+		rows, posterZone(zones), owner, named, s.config.Translation.Glossary, earlierRenderings(refs.terms), refs.memo)
 	checker := newRowChecker(owner, named)
 
 	var filled []posterstore.Change
