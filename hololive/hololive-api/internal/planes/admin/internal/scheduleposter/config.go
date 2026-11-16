@@ -92,7 +92,7 @@ type RowStageConfig struct {
 func defaultRowsConfig() RowsConfig {
 	return RowsConfig{
 		Extract:   RowStageConfig{Model: carbonModel, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: defaultExtractTimeout},
-		Translate: RowStageConfig{Model: carbonModel, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: defaultRowsTimeout},
+		Translate: RowStageConfig{Model: hydrogenModel, ThinkingLevel: genai.ThinkingLevelMedium, TimeoutSeconds: defaultRowsTimeout},
 		Match:     RowStageConfig{Model: hydrogenModel, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: defaultRowsTimeout},
 		Decide:    DecideConfig{ScheduleInfoMin: defaultScheduleInfoMin},
 	}
