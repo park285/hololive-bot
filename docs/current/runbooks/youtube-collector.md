@@ -97,8 +97,11 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 
 ## Collector DB 계정 분리 컷오버
 
-수집기는 slot마다 `hololive_collector_a`~`d`로 접속하고, `hololive_scraper`는 migration grant를 담는 NOLOGIN 그룹으로만 남습니다. migration 028의 trigger는 수집기 세션(`session_user`)을 `youtube-collector-<slot>`에 묶어 다음을 SQLSTATE `42501`로 거부합니다: 만료 전인 다른 slot lease의 변경·인수, 다른 instance 이름의 lease·provenance·collision 기록, 자기 ACTIVE lease의 fence·projection generation과 맞지 않는 관측·queue 기록. `hololive_scraper` 로그인과 그 그룹에 속하지만 slot에 매핑되지 않은 로그인도 같은 표에 쓰지 못합니다. runtime·migrator·superuser 세션은 검사하지 않습니다. checkpoint와 payload 기록은 slot에 묶이지 않습니다.
+수집기는 slot마다 `hololive_collector_a`~`d`로 접속하고, `hololive_scraper`는 migration grant를 담는 NOLOGIN 그룹으로만 남습니다. migration 028의 trigger는 수집기 세션(`session_user`)을 `youtube-collector-<slot>`에 묶어 다음을 SQLSTATE `42501`로 거부합니다: 만료 전인 다른 slot lease의 변경·인수, 다른 instance 이름의 lease·provenance·collision 기록, 자기 ACTIVE lease의 fence·projection generation과 맞지 않는 관측·queue 기록. `hololive_scraper` 로그인과 그 그룹에 속하지만 slot에 매핑되지 않은 로그인도 같은 표에 쓰지 못합니다. runtime·migrator·superuser 세션은 검사하지 않습니다.
 
+이 경계가 막지 않는 것도 있습니다. 한 slot의 계정을 가진 쪽은 자기 이름으로 새 lease 행(다른 `job_key`, 같은 subject 포함)을 만들고 그 lease로 target 관측을 쓸 수 있습니다. 관측의 subject·kind가 lease membership에 드는지는 앱만 확인합니다. owner가 없는 다른 lease(IDLE·DEFERRED)의 일정 열 변경, checkpoint와 payload 기록도 slot에 묶이지 않습니다.
+
+0. 운영 DB에서 `SELECT member::regrole FROM pg_auth_members WHERE roleid = 'hololive_scraper'::regrole`로 그룹 멤버를 확인합니다. 수집기 네 계정 말고 superuser가 아닌 멤버가 있으면, 그 계정은 028 이후 lease·관측 표에 쓰지 못하므로 먼저 정리합니다.
 1. stack-platform-ops로 `HOLOLIVE_COLLECTOR_A_PASSWORD`~`HOLOLIVE_COLLECTOR_D_PASSWORD`를 준비합니다. 중앙 `quadlet-prestart`는 `holo-postgres`·`hololive-db-migrate`에 넷 모두를, collector c에 `C`를 필수로 요구합니다. 값 없이 새 unit을 설치하면 `holo-postgres` 재시작도 실패합니다. AP는 a(Osaka host-native), b(iris-seoul), d(kapu)에 자기 slot 값만 둡니다.
 2. 같은 release로 `sync-opt-current.sh`를 실행합니다. `pg_hba.conf`는 `holo-postgres`에 단일 파일 bind mount이므로 실행 중인 DB가 새 규칙을 읽었는지 `SELECT count(*) FROM pg_hba_file_rules WHERE 'hololive_collector_c' = ANY(user_name)`로 확인합니다. 0보다 크면 `SELECT pg_reload_conf()`로 적용하고, 0이면 `holo-postgres.service` 재시작(DB 중단을 포함한 별도 승인)이 필요합니다. 새 규칙에는 `hololive_scraper` 허용이 없으므로 이때부터 공용 계정의 새 연결은 거부됩니다.
 3. migrator image를 포함한 중앙 재배포로 `hololive-db-migrate`를 실행합니다. db-migrate는 migration 전에 네 계정의 LOGIN·SCRAM 비밀번호·연결 한도 7·그룹 멤버십을 맞추고, `hololive_scraper`를 `NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL`로 바꾼 뒤 남은 `hololive_scraper` 세션을 모두 끊습니다. 비밀번호가 하나라도 없으면 역할을 바꾸기 전에 실패합니다. 그다음 migration 028을 적용합니다.
