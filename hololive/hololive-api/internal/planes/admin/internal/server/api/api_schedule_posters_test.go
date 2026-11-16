@@ -3,6 +3,7 @@ package api
 import (
 	jsonv2 "encoding/json/v2"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -113,4 +114,51 @@ func TestGetSchedulePosterRowsPointsAtTheUpcomingWeekWhenNothingCoversToday(t *t
 	require.Equal(t, rowsResponse{
 		Today: "2026-11-15", PublishStart: new("2026-11-09"), PublishEnd: new("2026-11-15"), TodayPosterID: new("102"),
 	}, getSchedulePosterRows(t, store, "101", sunday))
+}
+
+func TestGetSchedulePosterImageServesTheStoredBytes(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	store, err := scheduleposter.NewStore(pool)
+	require.NoError(t, err)
+
+	_, err = store.InsertCandidates(t.Context(), []scheduleposter.Candidate{{
+		ID: 101, ChannelID: "UCROQtXcp2loQEmvpe5rhJzQ", XUserID: "2054825907916054528",
+		PostURL: scheduleposter.PostURL(101), ImageURL: "https://pbs.twimg.com/media/a.jpg?name=orig",
+		TextExcerpt: "週間スケジュール", PostedAt: time.Now(),
+	}}, false)
+	require.NoError(t, err)
+
+	_, err = store.InsertThumbnailCandidates(t.Context(), []scheduleposter.ThumbnailCandidate{{
+		ChannelID: "UC8eitCE9Z6EwUCs-VUi1blg", VideoID: "4uuYjSf0rpU", Image: scheduleposter.Image{MIME: "image/png", Data: []byte("\x89PNG stored")}, PostedAt: time.Now(),
+	}}, false)
+	require.NoError(t, err)
+
+	var thumbnail string
+
+	require.NoError(t, pool.QueryRow(t.Context(), `SELECT id::text FROM schedule_posters WHERE source = 'youtube_thumbnail'`).Scan(&thumbnail))
+
+	handler := &SchedulePosterHandler{store: store, logger: newDiscardLogger()}
+	get := func(id string) *httptest.ResponseRecorder {
+		ctx, recorder := newAPITestContext(http.MethodGet, "/api/holo/schedule-posters/"+id+"/image", nil)
+
+		ctx.Params = gin.Params{{Key: "id", Value: id}}
+		handler.GetSchedulePosterImage(ctx)
+
+		return recorder
+	}
+
+	stored := get(thumbnail)
+	require.Equal(t, http.StatusOK, stored.Code, stored.Body.String())
+	require.Equal(t, "image/png", stored.Header().Get("Content-Type"), "저장한 형식 그대로 보낸다")
+	require.Equal(t, "\x89PNG stored", stored.Body.String())
+
+	unstored := get("101")
+	require.Equal(t, http.StatusNotFound, unstored.Code)
+	require.JSONEq(t, `{"error":"schedule poster image not stored"}`, unstored.Body.String(), "그림을 저장하지 않은 포스터")
+
+	missing := get("1")
+	require.Equal(t, http.StatusNotFound, missing.Code)
+	require.JSONEq(t, `{"error":"schedule poster not found"}`, missing.Body.String())
+
+	require.Equal(t, http.StatusBadRequest, get("01").Code)
 }

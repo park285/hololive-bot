@@ -439,6 +439,36 @@ func (h *SchedulePosterHandler) GetSchedulePoster(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, newSchedulePosterResponse(&poster))
 }
 
+// GetSchedulePosterImage는 포스터에 저장한 그림을 저장한 형식 그대로 보낸다. 그림을 저장하지 않은 포스터도 404다.
+func (h *SchedulePosterHandler) GetSchedulePosterImage(c *gin.Context) {
+	if !h.ready(c) {
+		return
+	}
+
+	id, ok := h.posterID(c)
+	if !ok {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), schedulePosterTimeout)
+	defer cancel()
+
+	image, stored, err := h.store.Image(ctx, id)
+	if err != nil {
+		h.respondStoreError(c, "get schedule poster image", err)
+
+		return
+	}
+
+	if !stored {
+		sharedserver.RespondError(c, http.StatusNotFound, "schedule poster image not stored", nil)
+
+		return
+	}
+
+	c.Data(http.StatusOK, image.MIME, image.Data)
+}
+
 // GetSchedulePosterChanges는 포스터의 수집 조건에 드는 글과, 지금 행 묶음에 대응한 글의 변경을 돌려준다.
 func (h *SchedulePosterHandler) GetSchedulePosterChanges(c *gin.Context) {
 	if !h.ready(c) {

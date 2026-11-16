@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"mime"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -81,13 +83,15 @@ func loadAdminOpenAPI(t *testing.T) *adminOpenAPI {
 }
 
 // 해당 status 응답이 없으면 default(ProducerError)를 쓴다.
-func (s *adminOpenAPI) assertResponse(t *testing.T, method, path string, status int, body []byte) {
+func (s *adminOpenAPI) assertResponse(t *testing.T, method, path string, rec *httptest.ResponseRecorder) {
 	t.Helper()
 
 	operation, ok := s.Paths[path][strings.ToLower(method)]
 	if !ok {
 		t.Fatalf("contract has no operation %s %s", method, path)
 	}
+
+	status, body := rec.Code, rec.Body.Bytes()
 
 	response, ok := operation.Responses[strconv.Itoa(status)]
 	if !ok {
@@ -98,13 +102,31 @@ func (s *adminOpenAPI) assertResponse(t *testing.T, method, path string, status 
 		t.Fatalf("contract has no %d response for %s %s", status, method, path)
 	}
 
+	mediaType, _, err := mime.ParseMediaType(rec.Header().Get("Content-Type"))
+	if err != nil {
+		t.Fatalf("%s %s %d content type: %v", method, path, status, err)
+	}
+
+	content, ok := response.Content[mediaType]
+	if !ok {
+		t.Fatalf("%s %s %d content type %q is not in the contract", method, path, status, mediaType)
+	}
+
+	if mediaType != "application/json" {
+		if len(content.Schema) != 0 || len(body) == 0 {
+			t.Fatalf("%s %s %d %s body must be non-empty bytes without a schema", method, path, status, mediaType)
+		}
+
+		return
+	}
+
 	var value any
 
 	if err := jsonv2.Unmarshal(body, &value, preserveNumbers); err != nil {
 		t.Fatalf("%s %s %d body is not JSON: %v: %s", method, path, status, err, body)
 	}
 
-	if err := s.check(response.Content["application/json"].Schema, value, "$"); err != nil {
+	if err := s.check(content.Schema, value, "$"); err != nil {
 		t.Fatalf("%s %s %d body violates contract: %v: %s", method, path, status, err, body)
 	}
 }
@@ -385,7 +407,7 @@ func TestRoomOperationsMatchAdminOpenAPI(t *testing.T) {
 			spec.assertRequest(t, step.method, step.path, step.body, rec.Code != http.StatusBadRequest)
 		}
 
-		spec.assertResponse(t, step.method, step.path, rec.Code, rec.Body.Bytes())
+		spec.assertResponse(t, step.method, step.path, rec)
 	}
 }
 
@@ -430,6 +452,12 @@ func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
 
 	seedSchedulePosterSources(t, pool, store)
 
+	var thumbnail string
+
+	if err := pool.QueryRow(t.Context(), `SELECT id::text FROM schedule_posters WHERE source = 'youtube_thumbnail'`).Scan(&thumbnail); err != nil {
+		t.Fatal(err)
+	}
+
 	const (
 		base      = "/api/holo/schedule-posters"
 		poster    = base + "/2119784604752343207"
@@ -447,6 +475,10 @@ func TestSchedulePosterOperationsMatchAdminOpenAPI(t *testing.T) {
 		{http.MethodGet, base + "?status=unknown", base, "", http.StatusBadRequest, "", ""},
 		{http.MethodGet, poster, itemRoute, "", http.StatusOK, "", ""},
 		{http.MethodGet, base + "/1", itemRoute, "", http.StatusNotFound, "", ""},
+		{http.MethodGet, base + "/" + thumbnail + "/image", itemRoute + "/image", "", http.StatusOK, "", ""},
+		{http.MethodGet, poster + "/image", itemRoute + "/image", "", http.StatusNotFound, "", ""},
+		{http.MethodGet, base + "/1/image", itemRoute + "/image", "", http.StatusNotFound, "", ""},
+		{http.MethodGet, base + "/01/image", itemRoute + "/image", "", http.StatusBadRequest, "", ""},
 		{http.MethodGet, poster + "/rows", itemRoute + "/rows", "", http.StatusOK, "", ""},
 		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"2","weekStart":"2026-11-09","weekEnd":"2026-11-15"}`, http.StatusConflict, "", ""},
 		{http.MethodPost, poster + "/confirm", itemRoute + "/confirm", `{"expectedRevision":"1","weekStart":"2026-12-07","weekEnd":"2026-12-13"}`, http.StatusConflict, "", ""},
@@ -497,7 +529,7 @@ func (s *adminOpenAPI) runSteps(t *testing.T, serve adminTestServe, pool *pgxpoo
 			s.assertRequest(t, step.method, step.route, step.body, rec.Code != http.StatusBadRequest)
 		}
 
-		s.assertResponse(t, step.method, step.route, rec.Code, rec.Body.Bytes())
+		s.assertResponse(t, step.method, step.route, rec)
 	}
 }
 
@@ -834,7 +866,7 @@ func TestSchedulePosterChangesAtCapacityMatchAdminOpenAPI(t *testing.T) {
 	path := schedulePostersBase + "/" + strconv.FormatInt(fx.posterID, 10) + "/changes"
 	rec := serve(http.MethodGet, path, "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	spec.assertResponse(t, http.MethodGet, schedulePosterRoute+"/changes", rec.Code, rec.Body.Bytes())
+	spec.assertResponse(t, http.MethodGet, schedulePosterRoute+"/changes", rec)
 
 	var got struct {
 		Posts []struct {

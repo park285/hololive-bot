@@ -330,6 +330,41 @@
         }
       }
     },
+    "/api/holo/schedule-posters/{id}/image": {
+      "get": {
+        "operationId": "holoGetSchedulePosterImage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "포스터에 저장한 그림 바이트입니다. 형식은 저장할 때 내용으로 판정한 것이고 한 번 저장한 그림은 바뀌지 않습니다. 그림을 저장하지 않은 포스터(거절·만료본, 저장 전에 확정한 포스터)와 없는 포스터는 404입니다.",
+            "content": {
+              "image/jpeg": {},
+              "image/png": {},
+              "image/webp": {}
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/holo/schedule-posters/{id}/confirm": {
       "post": {
         "operationId": "holoConfirmSchedulePoster",
