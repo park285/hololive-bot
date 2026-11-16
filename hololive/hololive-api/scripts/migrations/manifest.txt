@@ -27,3 +27,4 @@
 027 027_schedule_poster_post_channels.sql
 028 028_collector_database_identity_fence.sql
 029 029_alarm_worker_database_role.sql
+030 030_collector_identity_owner_token.sql

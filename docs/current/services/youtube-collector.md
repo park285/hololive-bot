@@ -82,7 +82,7 @@ membership 개정(migration 259)은 CURRENT guard를 잡은 뒤 lease·현재 ta
 
 수집 결과는 immutable 관측과 latency만 보관합니다. `collectorruntime.Publisher`가 관측을 한 번 복사해 같은 순서·identity의 checkpoint와 저장 입력을 만듭니다. Repository의 독립 payload·cursor·binding 검증과 방어적 복사는 유지합니다. Job 계약 definition은 불변 handle을 공유하되 호출자에게 주는 kind slice와 확장 가능한 계약 map은 독립 소유입니다.
 
-현재 publish SQL은 migration 317의 provenance 사전과 bytea observation key를 사용합니다. 공개 envelope·checkpoint·충돌·claim/replay 키는 계속 기존 소문자 hex와 출처 문자열이며 payload·dedup 의미는 바꾸지 않습니다. 사전 행은 resolver로 만들며 migration 028의 trigger가 연결 role과 collector instance를 고정합니다.
+현재 publish SQL은 migration 317의 provenance 사전과 bytea observation key를 사용합니다. 공개 envelope·checkpoint·충돌·claim/replay 키는 계속 기존 소문자 hex와 출처 문자열이며 payload·dedup 의미는 바꾸지 않습니다. 사전 행은 resolver로 만들며 migration 028·030의 trigger가 연결 role과 collector instance를 고정합니다.
 
 API의 감사 어휘 cutover까지 포함한 315–321과 호환 API·collector를 별도 점검 창에서 함께 전환해야 합니다. 구 binary와 혼합 운용하거나 image만 되돌리지 않으며, 로컬 구현·검증은 운영 적용 승인이 아닙니다.
 
