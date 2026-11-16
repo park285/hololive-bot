@@ -13,38 +13,41 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
-type collectorRoleCredential struct {
-	user     string
+type loginRole struct {
+	user            string
+	env             string
+	connectionLimit int
+	collector       bool
+}
+
+type loginCredential struct {
+	loginRole
+
 	password string
 }
 
-var collectorRolePasswordEnvs = []struct {
-	user string
-	env  string
-}{
-	{runtimepolicy.PostgresCollectorARoleUser, "HOLOLIVE_COLLECTOR_A_PASSWORD"},
-	{runtimepolicy.PostgresCollectorBRoleUser, "HOLOLIVE_COLLECTOR_B_PASSWORD"},
-	{runtimepolicy.PostgresCollectorCRoleUser, "HOLOLIVE_COLLECTOR_C_PASSWORD"},
-	{runtimepolicy.PostgresCollectorDRoleUser, "HOLOLIVE_COLLECTOR_D_PASSWORD"},
+// API 비밀번호는 마지막에 바꾼다. 앞 역할에서 실패하면 실행 중인 API는 이전 비밀번호로 계속 재접속할 수 있다.
+var loginRoles = []loginRole{
+	{user: runtimepolicy.PostgresCollectorARoleUser, env: "HOLOLIVE_COLLECTOR_A_PASSWORD", connectionLimit: 7, collector: true},
+	{user: runtimepolicy.PostgresCollectorBRoleUser, env: "HOLOLIVE_COLLECTOR_B_PASSWORD", connectionLimit: 7, collector: true},
+	{user: runtimepolicy.PostgresCollectorCRoleUser, env: "HOLOLIVE_COLLECTOR_C_PASSWORD", connectionLimit: 7, collector: true},
+	{user: runtimepolicy.PostgresCollectorDRoleUser, env: "HOLOLIVE_COLLECTOR_D_PASSWORD", connectionLimit: 7, collector: true},
+	{user: runtimepolicy.PostgresAlarmWorkerRoleUser, env: "HOLOLIVE_ALARM_WORKER_PASSWORD", connectionLimit: 8},
+	{user: runtimepolicy.PostgresRuntimeRoleUser, env: "HOLOLIVE_DB_PASSWORD", connectionLimit: 17},
 }
 
 // POSTGRES_ADMIN_PASSWORD가 명시되지 않으면 순수 migrate(롤백) 경로로 보고 bootstrap을 생략한다 — PGPASSWORD로 fallback하면 migrator 자격증명으로
-// admin 접속을 시도해 순수 migrate가 깨지기 때문이다. 역할 bootstrap을 할 때 collector별 비밀번호는 모두 필수다. 비어 있을 때 admin 비밀번호로
-// role을 ALTER하면 역할 분리가 깨지므로, 대신할 값을 찾지 않고 실패한다.
-func bootstrapCollectorRoles(ctx context.Context) error {
+// admin 접속을 시도해 순수 migrate가 깨지기 때문이다. 역할 bootstrap을 할 때 역할별 비밀번호는 모두 필수이고 서로 달라야 한다. 비어 있을 때 admin
+// 비밀번호로 role을 ALTER하면 역할 분리가 깨지므로, 대신할 값을 찾지 않고 실패한다.
+func bootstrapLoginRoles(ctx context.Context) error {
 	adminPassword := os.Getenv("POSTGRES_ADMIN_PASSWORD")
 	if strings.TrimSpace(adminPassword) == "" {
 		return nil
 	}
 
-	collectorRoles := make([]collectorRoleCredential, 0, len(collectorRolePasswordEnvs))
-	for _, role := range collectorRolePasswordEnvs {
-		password := os.Getenv(role.env)
-		if strings.TrimSpace(password) == "" {
-			return fmt.Errorf("%s is required for collector role bootstrap", role.env)
-		}
-
-		collectorRoles = append(collectorRoles, collectorRoleCredential{user: role.user, password: password})
+	credentials, err := loginCredentialsFromEnv(adminPassword)
+	if err != nil {
+		return err
 	}
 
 	if err := validatePrivilegedTransport(); err != nil {
@@ -55,8 +58,8 @@ func bootstrapCollectorRoles(ctx context.Context) error {
 	scraperGroup := runtimepolicy.PostgresScraperRoleUser
 	database := envDefault("PGDATABASE", "hololive")
 
-	if err := ensureCollectorRoles(ctx, adminConnString("postgres", adminUser, adminPassword), scraperGroup, collectorRoles, database); err != nil {
-		return fmt.Errorf("ensure collector roles: %w", err)
+	if err := ensureLoginRoles(ctx, adminConnString("postgres", adminUser, adminPassword), scraperGroup, credentials, database); err != nil {
+		return fmt.Errorf("ensure login roles: %w", err)
 	}
 
 	if err := grantScraperSchemaUsage(ctx, adminConnString(database, adminUser, adminPassword), scraperGroup); err != nil {
@@ -66,11 +69,40 @@ func bootstrapCollectorRoles(ctx context.Context) error {
 	return nil
 }
 
-func ensureCollectorRoles(
+func loginCredentialsFromEnv(adminPassword string) ([]loginCredential, error) {
+	credentials := make([]loginCredential, 0, len(loginRoles))
+
+	for _, role := range loginRoles {
+		password := os.Getenv(role.env)
+		if strings.TrimSpace(password) == "" {
+			return nil, fmt.Errorf("%s is required for login role bootstrap", role.env)
+		}
+
+		if password == adminPassword {
+			return nil, fmt.Errorf("POSTGRES_ADMIN_PASSWORD and %s must be distinct", role.env)
+		}
+
+		if _, err := pgxdb.SCRAMVerifier(password); err != nil {
+			return nil, fmt.Errorf("%s is not a compatible PostgreSQL password: %w", role.env, err)
+		}
+
+		for _, previous := range credentials {
+			if previous.password == password {
+				return nil, fmt.Errorf("%s and %s must be distinct", previous.env, role.env)
+			}
+		}
+
+		credentials = append(credentials, loginCredential{loginRole: role, password: password})
+	}
+
+	return credentials, nil
+}
+
+func ensureLoginRoles(
 	ctx context.Context,
 	connString,
 	scraperGroup string,
-	collectorRoles []collectorRoleCredential,
+	credentials []loginCredential,
 	database string,
 ) (err error) {
 	config, err := pgxdb.ParseConfig(connString)
@@ -92,29 +124,41 @@ func ensureCollectorRoles(
 		return fmt.Errorf("upsert scraper group role: %w", err)
 	}
 
-	for _, role := range collectorRoles {
-		if err := upsertCollectorRole(ctx, conn, role.user, role.password); err != nil {
-			return fmt.Errorf("upsert collector role %s: %w", role.user, err)
-		}
+	databaseIdent := pgx.Identifier{database}.Sanitize()
 
-		grantMembership := fmt.Sprintf(
-			mustSQL("grant_scraper_membership.sql.tpl"),
-			pgx.Identifier{scraperGroup}.Sanitize(),
-			pgx.Identifier{role.user}.Sanitize(),
-		)
-		if _, err := conn.Exec(ctx, grantMembership); err != nil {
-			return fmt.Errorf("bootstrap: grant scraper membership to %s: %w", role.user, err)
-		}
-
-		limit := fmt.Sprintf(mustSQL("alter_collector_role_limit.sql.tpl"), pgx.Identifier{role.user}.Sanitize())
-		if _, err := conn.Exec(ctx, limit); err != nil {
-			return fmt.Errorf("bootstrap: limit collector role %s: %w", role.user, err)
+	for _, credential := range credentials {
+		if err := ensureLoginRole(ctx, conn, scraperGroup, databaseIdent, credential); err != nil {
+			return fmt.Errorf("ensure login role %s: %w", credential.user, err)
 		}
 	}
 
-	grant := fmt.Sprintf(mustSQL("grant_connect.sql.tpl"), pgx.Identifier{database}.Sanitize(), pgx.Identifier{scraperGroup}.Sanitize())
+	grant := fmt.Sprintf(mustSQL("grant_connect.sql.tpl"), databaseIdent, pgx.Identifier{scraperGroup}.Sanitize())
 	if _, err := conn.Exec(ctx, grant); err != nil {
 		return fmt.Errorf("bootstrap: grant connect: %w", err)
+	}
+
+	return nil
+}
+
+func ensureLoginRole(ctx context.Context, conn roleConnection, scraperGroup, databaseIdent string, credential loginCredential) error {
+	if err := upsertLoginRole(ctx, conn, credential.user, credential.password); err != nil {
+		return err
+	}
+
+	roleIdent := pgx.Identifier{credential.user}.Sanitize()
+	membership := fmt.Sprintf(mustSQL("grant_connect.sql.tpl"), databaseIdent, roleIdent)
+
+	if credential.collector {
+		membership = fmt.Sprintf(mustSQL("grant_scraper_membership.sql.tpl"), pgx.Identifier{scraperGroup}.Sanitize(), roleIdent)
+	}
+
+	if _, err := conn.Exec(ctx, membership); err != nil {
+		return fmt.Errorf("bootstrap: grant database access: %w", err)
+	}
+
+	limit := fmt.Sprintf(mustSQL("alter_role_connection_limit.sql.tpl"), roleIdent, credential.connectionLimit)
+	if _, err := conn.Exec(ctx, limit); err != nil {
+		return fmt.Errorf("bootstrap: limit role connections: %w", err)
 	}
 
 	return nil
@@ -147,7 +191,7 @@ func upsertScraperGroupRole(ctx context.Context, conn roleConnection, scraperGro
 }
 
 func protectCredentialSession(config *pgx.ConnConfig) {
-	config.RuntimeParams["application_name"] = "hololive-collector-role-bootstrap"
+	config.RuntimeParams["application_name"] = "hololive-login-role-bootstrap"
 	config.RuntimeParams["log_statement"] = "none"
 	config.RuntimeParams["log_min_duration_statement"] = "-1"
 	config.RuntimeParams["log_min_duration_sample"] = "-1"
@@ -169,33 +213,33 @@ type roleConnection interface {
 	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 }
 
-func upsertCollectorRole(ctx context.Context, conn roleConnection, user, password string) error {
+func upsertLoginRole(ctx context.Context, conn roleConnection, user, password string) error {
 	var exists bool
 
 	if err := conn.QueryRow(ctx, mustSQL("check_role.sql"), user).Scan(&exists); err != nil {
-		return fmt.Errorf("bootstrap: check collector role: %w", err)
+		return fmt.Errorf("bootstrap: check login role: %w", err)
 	}
 
 	verifier, err := pgxdb.SCRAMVerifier(password)
 	if err != nil {
-		return fmt.Errorf("bootstrap: prepare collector password: %w", err)
+		return fmt.Errorf("bootstrap: prepare login password: %w", err)
 	}
 
 	roleIdent := pgx.Identifier{user}.Sanitize()
 	passwordLiteral := quoteSQLLiteral(verifier)
 
 	if !exists {
-		if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("create_collector_role.sql.tpl"), roleIdent, passwordLiteral)); err != nil {
-			return fmt.Errorf("bootstrap: create collector role: %w", err)
+		if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("create_login_role.sql.tpl"), roleIdent, passwordLiteral)); err != nil {
+			return fmt.Errorf("bootstrap: create login role: %w", err)
 		}
 	}
 
 	alter := fmt.Sprintf(
-		mustSQL("alter_collector_role.sql.tpl"),
+		mustSQL("alter_login_role.sql.tpl"),
 		roleIdent, passwordLiteral,
 	)
 	if _, err := conn.Exec(ctx, alter); err != nil {
-		return fmt.Errorf("bootstrap: alter collector role: %w", err)
+		return fmt.Errorf("bootstrap: alter login role: %w", err)
 	}
 
 	return nil

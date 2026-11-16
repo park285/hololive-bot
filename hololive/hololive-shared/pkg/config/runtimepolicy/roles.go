@@ -19,12 +19,13 @@ const (
 	NotificationSchedulerRoleWorker = "worker"
 	NotificationSchedulerRoleOff    = "off"
 
-	PostgresScraperRoleUser    = "hololive_scraper"
-	PostgresRuntimeRoleUser    = "hololive_runtime"
-	PostgresCollectorARoleUser = "hololive_collector_a"
-	PostgresCollectorBRoleUser = "hololive_collector_b"
-	PostgresCollectorCRoleUser = "hololive_collector_c"
-	PostgresCollectorDRoleUser = "hololive_collector_d"
+	PostgresScraperRoleUser     = "hololive_scraper"
+	PostgresRuntimeRoleUser     = "hololive_runtime"
+	PostgresAlarmWorkerRoleUser = "hololive_alarm_worker"
+	PostgresCollectorARoleUser  = "hololive_collector_a"
+	PostgresCollectorBRoleUser  = "hololive_collector_b"
+	PostgresCollectorCRoleUser  = "hololive_collector_c"
+	PostgresCollectorDRoleUser  = "hololive_collector_d"
 )
 
 // PostgresCollectorRoleUser는 collector instance에 고정된 PostgreSQL login role을 반환합니다.

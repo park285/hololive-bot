@@ -3,7 +3,8 @@
 -- 롤백용 이전 rolconnlimit를 기록하고 한도를 복구하기 전에 풀을 늘리지 않는다.
 -- 모든 풀에 scripts/ci/postgres-capacity-policy.tsv의 역할 한도를 반영한다.
 BEGIN;
-ALTER ROLE hololive_runtime CONNECTION LIMIT 25;
+ALTER ROLE hololive_runtime CONNECTION LIMIT 17;
+ALTER ROLE hololive_alarm_worker CONNECTION LIMIT 8;
 ALTER ROLE hololive_scraper NOLOGIN CONNECTION LIMIT 0;
 ALTER ROLE hololive_collector_a CONNECTION LIMIT 7;
 ALTER ROLE hololive_collector_b CONNECTION LIMIT 7;

@@ -44,6 +44,7 @@ HOLOLIVE_MIGRATOR_USER="${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}"
 # 역할별 비밀번호는 모두 필수다. 비어 있을 때 admin DB_PASSWORD로 역할을 만들던 폴백은 역할 분리를 깨므로
 # 두지 않는다.
 HOLOLIVE_DB_PASSWORD="${HOLOLIVE_DB_PASSWORD:-}"
+HOLOLIVE_ALARM_WORKER_PASSWORD="${HOLOLIVE_ALARM_WORKER_PASSWORD:-}"
 HOLOLIVE_MIGRATOR_PASSWORD="${HOLOLIVE_MIGRATOR_PASSWORD:-}"
 HOLOLIVE_COLLECTOR_A_PASSWORD="${HOLOLIVE_COLLECTOR_A_PASSWORD:-}"
 HOLOLIVE_COLLECTOR_B_PASSWORD="${HOLOLIVE_COLLECTOR_B_PASSWORD:-}"
@@ -52,7 +53,7 @@ HOLOLIVE_COLLECTOR_D_PASSWORD="${HOLOLIVE_COLLECTOR_D_PASSWORD:-}"
 
 HOLOLIVE_REPLICATOR_USER="${HOLOLIVE_REPLICATOR_USER:-hololive_replicator}"
 HOLOLIVE_REPLICATOR_PASSWORD="${HOLOLIVE_REPLICATOR_PASSWORD:-}"
-export POSTGRES_ADMIN_PASSWORD HOLOLIVE_DB_PASSWORD HOLOLIVE_MIGRATOR_PASSWORD
+export POSTGRES_ADMIN_PASSWORD HOLOLIVE_DB_PASSWORD HOLOLIVE_ALARM_WORKER_PASSWORD HOLOLIVE_MIGRATOR_PASSWORD
 export HOLOLIVE_COLLECTOR_A_PASSWORD HOLOLIVE_COLLECTOR_B_PASSWORD
 export HOLOLIVE_COLLECTOR_C_PASSWORD HOLOLIVE_COLLECTOR_D_PASSWORD HOLOLIVE_REPLICATOR_PASSWORD
 
@@ -64,6 +65,7 @@ require_role_password() {
 }
 
 require_role_password HOLOLIVE_DB_PASSWORD "${HOLOLIVE_DB_PASSWORD}"
+require_role_password HOLOLIVE_ALARM_WORKER_PASSWORD "${HOLOLIVE_ALARM_WORKER_PASSWORD}"
 require_role_password HOLOLIVE_MIGRATOR_PASSWORD "${HOLOLIVE_MIGRATOR_PASSWORD}"
 require_role_password HOLOLIVE_COLLECTOR_A_PASSWORD "${HOLOLIVE_COLLECTOR_A_PASSWORD}"
 require_role_password HOLOLIVE_COLLECTOR_B_PASSWORD "${HOLOLIVE_COLLECTOR_B_PASSWORD}"
@@ -75,6 +77,23 @@ if [ -z "${POSTGRES_ADMIN_PASSWORD}" ]; then
   exit 1
 fi
 
+# 로그인 역할 비밀번호가 같으면 한 서비스의 비밀값으로 다른 서비스 권한을 얻으므로 거부한다.
+role_password_names="POSTGRES_ADMIN_PASSWORD HOLOLIVE_DB_PASSWORD HOLOLIVE_ALARM_WORKER_PASSWORD HOLOLIVE_MIGRATOR_PASSWORD
+HOLOLIVE_COLLECTOR_A_PASSWORD HOLOLIVE_COLLECTOR_B_PASSWORD HOLOLIVE_COLLECTOR_C_PASSWORD HOLOLIVE_COLLECTOR_D_PASSWORD"
+for first in $role_password_names; do
+  seen=0
+  for second in $role_password_names; do
+    if [ "$first" = "$second" ]; then
+      seen=1
+      continue
+    fi
+    if [ "$seen" -eq 1 ] && eval "[ \"\${$first}\" = \"\${$second}\" ]"; then
+      echo "$first and $second must be distinct." >&2
+      exit 1
+    fi
+  done
+done
+
 echo "Initializing hololive Postgres roles/databases with least privilege..."
 
 psql -X -v ON_ERROR_STOP=1 -v ECHO=none -v ECHO_HIDDEN=off -v VERBOSITY=sqlstate \
@@ -83,6 +102,7 @@ psql -X -v ON_ERROR_STOP=1 -v ECHO=none -v ECHO_HIDDEN=off -v VERBOSITY=sqlstate
   --set=postgres_admin_user="${POSTGRES_ADMIN_USER}" \
   --set=hololive_db="${HOLOLIVE_DB_NAME}" \
   --set=hololive_user=hololive_runtime \
+  --set=hololive_alarm_worker=hololive_alarm_worker \
   --set=hololive_migrator="${HOLOLIVE_MIGRATOR_USER}" \
   --set=hololive_scraper=hololive_scraper \
   --set=hololive_collector_a=hololive_collector_a \
@@ -91,6 +111,7 @@ psql -X -v ON_ERROR_STOP=1 -v ECHO=none -v ECHO_HIDDEN=off -v VERBOSITY=sqlstate
   --set=hololive_collector_d=hololive_collector_d <<'EOSQL'
 \getenv postgres_admin_password POSTGRES_ADMIN_PASSWORD
 \getenv hololive_user_password HOLOLIVE_DB_PASSWORD
+\getenv hololive_alarm_worker_password HOLOLIVE_ALARM_WORKER_PASSWORD
 \getenv hololive_migrator_password HOLOLIVE_MIGRATOR_PASSWORD
 \getenv hololive_collector_a_password HOLOLIVE_COLLECTOR_A_PASSWORD
 \getenv hololive_collector_b_password HOLOLIVE_COLLECTOR_B_PASSWORD
@@ -113,6 +134,9 @@ SELECT format(
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_user', :'hololive_user_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_user') \gexec
 
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_alarm_worker', :'hololive_alarm_worker_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_alarm_worker') \gexec
+
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_migrator', :'hololive_migrator_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_migrator') \gexec
 
@@ -131,6 +155,11 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_collector_d'
 SELECT format(
   'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD %L',
   :'hololive_user', :'hololive_user_password'
+) \gexec
+
+SELECT format(
+  'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD %L',
+  :'hololive_alarm_worker', :'hololive_alarm_worker_password'
 ) \gexec
 
 SELECT format(
@@ -168,7 +197,8 @@ SELECT format(
 
 -- Aggregate role limits, not per-process limits; runtime includes 3 control slots.
 -- Keep aligned with scripts/ci/postgres-capacity-policy.tsv and role-limits.sql.
-SELECT format('ALTER ROLE %I CONNECTION LIMIT 25', :'hololive_user') \gexec
+SELECT format('ALTER ROLE %I CONNECTION LIMIT 17', :'hololive_user') \gexec
+SELECT format('ALTER ROLE %I CONNECTION LIMIT 8', :'hololive_alarm_worker') \gexec
 SELECT format('ALTER ROLE %I CONNECTION LIMIT 1', :'hololive_migrator') \gexec
 SELECT format('ALTER ROLE %I CONNECTION LIMIT 7', :'hololive_collector_a') \gexec
 SELECT format('ALTER ROLE %I CONNECTION LIMIT 7', :'hololive_collector_b') \gexec
@@ -183,13 +213,14 @@ SELECT format('ALTER DATABASE %I OWNER TO %I', :'hololive_db', :'hololive_migrat
 SELECT format('REVOKE ALL ON DATABASE %I FROM PUBLIC', :'hololive_db') \gexec
 
 SELECT format(
-  'GRANT CONNECT ON DATABASE %I TO %I, %I, %I',
-  :'hololive_db', :'hololive_user', :'hololive_migrator', :'hololive_scraper'
+  'GRANT CONNECT ON DATABASE %I TO %I, %I, %I, %I',
+  :'hololive_db', :'hololive_user', :'hololive_alarm_worker', :'hololive_migrator', :'hololive_scraper'
 ) \gexec
 
 \connect :hololive_db
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 SELECT format('REVOKE ALL ON SCHEMA public FROM %I', :'hololive_user') \gexec
+SELECT format('REVOKE ALL ON SCHEMA public FROM %I', :'hololive_alarm_worker') \gexec
 SELECT format('REVOKE ALL ON SCHEMA public FROM %I', :'hololive_migrator') \gexec
 SELECT format('REVOKE ALL ON SCHEMA public FROM %I', :'hololive_scraper') \gexec
 SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'hololive_user') \gexec

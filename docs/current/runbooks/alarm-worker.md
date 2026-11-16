@@ -39,9 +39,15 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 
 `ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH`(양의 정수, 기본 1000), `CELEBRATION_CHECK_HOUR_KST`(0–23, 기본 0), `CELEBRATION_RUN_INTERVAL_MS`(양의 밀리초)는 키가 없으면 기본값을 씁니다. 키가 있는데 비어 있거나 공백뿐이면, 또는 정수가 아니거나 범위를 벗어나면 기본값으로 바꾸지 않고 기동에 실패합니다. `ALARM_DISPATCH_RETENTION_*` 키와 같은 규칙입니다. 다만 `ALARM_DISPATCH_RETENTION_LIMIT`은 10000을 넘어도 기동에 실패하지 않고 10000으로 줄여 씁니다. 배포 전에 alarm-worker env에 `KEY=` 형태의 빈 값이 없는지 확인합니다. celebration 키는 runner가 켜졌을 때만 읽습니다.
 
-최초 role 분리 cutover에서는 stack-secrets master에 API·worker·collector별로 서로 다른 비밀번호를 두고 기존
-`HOLOLIVE_DB_PASSWORD`도 회전합니다. 같은 revision의 db-migrate가 세 runtime role을 먼저 생성·회전하고 ACL migration을 적용한 뒤
-API와 worker를 한 cutover에서 재시작해야 합니다. `alarm-worker.env`에는 API 또는 master DB 비밀번호를 복사하지 않습니다.
+worker 권한은 migration 029가 worker 코드가 쓰는 표·sequence에만 줍니다. `hololive_alarm_worker`에는 미래 객체 기본 권한이 없으므로,
+worker가 새 표를 쓰게 되면 그 migration에서 필요한 동사만 GRANT합니다. `alarm-worker.env`에는 API 또는 admin DB 비밀번호를 복사하지 않습니다.
+
+worker 계정 분리는 [collector DB 계정 분리 컷오버](youtube-collector.md#collector-db-계정-분리-컷오버)와 한 번에 반영합니다.
+stack-secrets master에 `HOLOLIVE_ALARM_WORKER_PASSWORD`를 새로 두고, worker가 지금까지 함께 쓰던 `HOLOLIVE_DB_PASSWORD`도 새 값으로 바꿉니다.
+db-migrate가 역할을 맞추는 순간 API 비밀번호가 바뀌므로, 기존 API·worker 연결은 유지되지만 새 연결은 각 서비스를 재시작해야 열립니다.
+그래서 db-migrate를 포함한 `hololive-api` 재배포 직후 alarm-worker를 재배포합니다. 그 사이 이전 worker는 새 연결을 열지 못합니다.
+`hololive_runtime`의 표 권한은 바꾸지 않으므로, worker를 되돌릴 때는 이전 revision의 unit·prestart·image 쌍으로 되돌리면
+회전된 `HOLOLIVE_DB_PASSWORD`로 `hololive_runtime`에 접속합니다. migration 029는 되돌리지 않습니다.
 
 ## Notification egress
 

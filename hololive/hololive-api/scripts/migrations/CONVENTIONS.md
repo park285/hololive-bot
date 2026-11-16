@@ -68,6 +68,8 @@
 - 라이브 원본 행 변경은 원본 잠금 전에 `SELECT public.lock_youtube_live_runtime_state();`를 실행하고,
   같은 READ COMMITTED 트랜잭션 끝에서 변경 전후 video_id를 모두 넣어 `refresh_youtube_live_runtime_state(ARRAY[...])`를
   호출합니다. 누락은 `scripts/maintenance/queries/live_runtime_state_drift.sql`로 확인합니다.
+- `hololive_runtime`은 migrator 기본 권한으로 새 표·sequence·함수 권한을 받지만 `hololive_alarm_worker`는 받지 않습니다.
+  alarm-worker 코드가 새 표나 sequence를 쓰면 같은 migration에서 필요한 동사만 GRANT하고 worker 권한 시험에 더합니다.
 
 ## 스키마와 시험
 
