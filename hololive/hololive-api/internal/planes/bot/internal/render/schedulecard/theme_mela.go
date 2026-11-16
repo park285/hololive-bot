@@ -152,7 +152,7 @@ const melaMinK = 0.8
 const melaFitRounds = 6
 
 // melaRows의 높이 단위는 줄 간격 pitch다. 제목이 기본 캡슐(capH)에 들지 않는 칸만 1보다 큰 단위를 받아 캡슐이 세로로 늘고,
-// 그만큼 나머지 칸의 줄 간격이 준다. 휴방·빈 날은 slotUnits가 nil이다.
+// 그만큼 나머지 칸의 줄 간격이 준다.
 type melaRows struct {
 	days      []day
 	dayUnits  []float64
@@ -166,10 +166,7 @@ func melaLines(f *fontSet, kMax float64, days []day, t box) (melaRows, bool) {
 
 	for i, d := range days {
 		r.dayUnits[i] = float64(max(1, len(d.slots)))
-
-		if !d.off() {
-			r.slotUnits[i] = slices.Repeat([]float64{1}, len(d.slots))
-		}
+		r.slotUnits[i] = slices.Repeat([]float64{1}, len(d.slots))
 	}
 
 	r.measure(t)
@@ -199,11 +196,13 @@ func melaLines(f *fontSet, kMax float64, days []day, t box) (melaRows, bool) {
 func (r *melaRows) clone() melaRows {
 	c := *r
 
-	c.dayUnits = slices.Clone(r.dayUnits)
-	c.slotUnits = slices.Clone(r.slotUnits)
+	c.dayUnits = make([]float64, len(r.dayUnits))
+	copy(c.dayUnits, r.dayUnits)
 
-	for i := range c.slotUnits {
-		c.slotUnits[i] = slices.Clone(c.slotUnits[i])
+	c.slotUnits = make([][]float64, len(r.slotUnits))
+	for i, units := range r.slotUnits {
+		c.slotUnits[i] = make([]float64, len(units))
+		copy(c.slotUnits[i], units)
 	}
 
 	return c
@@ -224,7 +223,11 @@ func (r *melaRows) grow(f *fontSet, kMax float64, t box) bool {
 	grew := false
 
 	for i, units := range r.slotUnits {
-		for j, s := range r.days[i].slots[:len(units)] {
+		if r.days[i].off() {
+			continue
+		}
+
+		for j, s := range r.days[i].slots {
 			if u := melaSlotUnits(f, kMax, s, t, r.pitch, r.capH); u > units[j] {
 				r.dayUnits[i] += u - units[j]
 

@@ -909,11 +909,7 @@ func checkMelaFit(t *testing.T, f *fontSet, c *canvas, days []day) {
 
 	for i, d := range folded {
 		for j, s := range d.slots {
-			h := rows.capH
-			if rows.slotUnits[i] != nil {
-				h += rows.pitch * (rows.slotUnits[i][j] - 1)
-			}
-
+			h := rows.capH + rows.pitch*(rows.slotUnits[i][j]-1)
 			b := box{tb.X + melaPlateW + 34, tb.Y, melaCapsuleW(tb), h}
 
 			tw := b.right() - 66 - melaTitleX(f, b, rows.capH, s)
