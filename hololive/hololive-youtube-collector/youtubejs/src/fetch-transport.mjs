@@ -17,20 +17,22 @@ const retryableYouTubePaths = new Map([
 ]);
 const retryDelayMinMs = 100;
 const retryDelayMaxMs = 300;
+const defaultMaxResponseBodyBytes = 8 * 1024 * 1024;
 
 export function createFetchTransport(options) {
   const retryOptions = {
     delayMs: validateRetryDelay(options.retryDelayMs),
     observe: typeof options.observeRetry === "function" ? options.observeRetry : logRetryEvent,
   };
+  const maxResponseBodyBytes = validateResponseBodyLimit(options.maxResponseBodyBytes);
   return {
-    fetch: effectiveFetch(options.currentSignal, retryOptions),
+    fetch: effectiveFetch(options.currentSignal, retryOptions, maxResponseBodyBytes),
     // 라이브 확인 RPC는 물리 요청 상한을 지키도록 같은 요청 취소 신호를 쓰되 재시도하지 않습니다.
-    singleAttemptFetch: effectiveFetch(options.currentSignal, null),
+    singleAttemptFetch: effectiveFetch(options.currentSignal, null, maxResponseBodyBytes),
   };
 }
 
-function effectiveFetch(currentSignal, retryOptions) {
+function effectiveFetch(currentSignal, retryOptions, maxResponseBodyBytes) {
   return async (input, init) => {
     if (input instanceof Request && (input.bodyUsed || input.body?.locked)) {
       throw new FetchTransportError(
@@ -110,7 +112,7 @@ function effectiveFetch(currentSignal, retryOptions) {
         continue;
       }
 
-      return await classifyUpstreamResponse(response);
+      return await classifyUpstreamResponse(response, maxResponseBodyBytes);
     }
   };
 }
@@ -155,6 +157,18 @@ function validateRetryDelay(value) {
     );
   }
   return value;
+}
+
+function validateResponseBodyLimit(value) {
+  const limit = value ?? defaultMaxResponseBodyBytes;
+  if (!Number.isSafeInteger(limit) || limit <= 0) {
+    throw new FetchTransportError(
+      "helper_internal_invariant",
+      "INTERNAL",
+      "fetch response body limit is invalid",
+    );
+  }
+  return limit;
 }
 
 function nextRetryDelay(override) {
@@ -206,14 +220,99 @@ async function waitBeforeRetry(signal, delayMs) {
   });
 }
 
-async function classifyUpstreamResponse(response) {
+async function classifyUpstreamResponse(response, maxResponseBodyBytes) {
   if (response.status !== 429 && (response.status < 500 || response.status > 599)) {
-    return response;
+    return await limitUpstreamResponse(response, maxResponseBodyBytes);
   }
   // youtubei.js가 HTTP status 없는 InnertubeError로 바꾸기 전에 기존 실패 계약을 보존합니다.
   await discardUpstreamResponse(response);
   const code = upstreamHTTPFailureCode(response.status);
   throw new FetchTransportError(code, failureTuples[code].class, `upstream request failed with status code ${response.status}`);
+}
+
+async function limitUpstreamResponse(response, maxResponseBodyBytes) {
+  const declaredLength = declaredResponseLength(response.headers.get("content-length"));
+  if (declaredLength !== undefined && declaredLength > maxResponseBodyBytes) {
+    try {
+      await response.body?.cancel();
+    } catch {}
+    throw responseTooLargeError();
+  }
+  if (response.body == null) return response;
+  return preserveResponseMetadata(
+    new Response(limitedResponseBody(response.body, maxResponseBodyBytes), {
+      headers: response.headers,
+      status: response.status,
+      statusText: response.statusText,
+    }),
+    response,
+  );
+}
+
+function declaredResponseLength(value) {
+  if (value == null || !/^\d+$/u.test(value)) return undefined;
+  const length = Number(value);
+  return Number.isSafeInteger(length) ? length : Number.POSITIVE_INFINITY;
+}
+
+function limitedResponseBody(body, maxResponseBodyBytes) {
+  const reader = body.getReader();
+  let receivedBytes = 0;
+  let stopped = false;
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const chunk = await reader.read();
+        if (stopped) return;
+        if (chunk.done) {
+          stopped = true;
+          controller.close();
+          return;
+        }
+        receivedBytes += chunk.value.byteLength;
+        if (receivedBytes > maxResponseBodyBytes) {
+          stopped = true;
+          const error = responseTooLargeError();
+          controller.error(error);
+          void reader.cancel(error).catch(() => {});
+          return;
+        }
+        controller.enqueue(chunk.value);
+      } catch (error) {
+        if (stopped) return;
+        stopped = true;
+        controller.error(error);
+      }
+    },
+    cancel(reason) {
+      stopped = true;
+      return reader.cancel(reason);
+    },
+  });
+}
+
+function preserveResponseMetadata(response, source) {
+  const clone = response.clone.bind(response);
+  Object.defineProperties(response, {
+    url: { configurable: true, enumerable: true, value: source.url },
+    redirected: { configurable: true, enumerable: true, value: source.redirected },
+    type: { configurable: true, enumerable: true, value: source.type },
+    clone: {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: () => preserveResponseMetadata(clone(), source),
+    },
+  });
+  return response;
+}
+
+function responseTooLargeError() {
+  return new FetchTransportError(
+    "response_too_large",
+    failureTuples.response_too_large.class,
+    "upstream response exceeds body limit",
+  );
 }
 
 async function discardUpstreamResponse(response) {
