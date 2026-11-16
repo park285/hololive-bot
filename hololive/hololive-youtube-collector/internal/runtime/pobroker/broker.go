@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -124,7 +125,6 @@ func (b *Broker) Generation() string { return b.generation }
 // 정상 종료는 nil을 반환한다. VM·listener 정리를 확인하지 못하면 워커 출력을 제외한 오류를 반환한다.
 func (b *Broker) Serve(listener net.Listener, startupTimeout time.Duration) error {
 	// 연결 재사용과 client 우선 유휴 종료를 위해 keep-alive를 유지합니다.
-	// AppArmor 경쟁(b1aea2c19607)의 과거 완화책이었으며, 운영 커널 수정 확인은 runbook §4에 기록합니다.
 	// 유휴 연결은 client(youtubejs/src/proof-broker.mjs)가 idleConnectionLimit보다 먼저 닫도록 하고,
 	// 퇴역 시에는 retire의 server.Close가 유휴·진행 중 연결을 모두 즉시 닫습니다.
 	b.server = &http.Server{
@@ -710,24 +710,34 @@ func success(w http.ResponseWriter, body any) bool {
 		return false
 	}
 
-	_, err = w.Write(encoded)
-
-	return err == nil
+	return writeBody(w, http.StatusOK, encoded)
 }
 
 func failure(w http.ResponseWriter, status int, code string) {
-	w.WriteHeader(status)
-
-	// 고정 본문의 인코딩은 실패하지 않으므로 오류는 연결 종료를 뜻한다.
-	// net/http가 연결을 닫으며, 상태 변경 실패는 본문 전달 여부와 관계없이 해당 세대를 종료한다.
-	if err := json.MarshalWrite(w, struct {
+	encoded, err := json.Marshal(struct {
 		ProtocolVersion int `json:"protocol_version"`
 		Error           struct {
 			Code string `json:"code"`
 		} `json:"error"`
 	}{ProtocolVersion: protocolVersion, Error: struct {
 		Code string `json:"code"`
-	}{code}}); err != nil {
+	}{code}})
+	if err != nil {
+		w.WriteHeader(status)
+
 		return
 	}
+
+	// 쓰기 오류는 연결이 끊겼다는 뜻이며, 상태 변경 실패는 본문 전달 여부와 관계없이 해당 세대를 종료한다.
+	writeBody(w, status, encoded)
+}
+
+// 퇴역 응답은 Flush 직후 server.Close가 연결을 닫으므로, chunked 종료 표시가 잘리지 않게 길이를 먼저 보낸다.
+func writeBody(w http.ResponseWriter, status int, encoded []byte) bool {
+	w.Header().Set("Content-Length", strconv.Itoa(len(encoded)))
+	w.WriteHeader(status)
+
+	_, err := w.Write(encoded)
+
+	return err == nil
 }

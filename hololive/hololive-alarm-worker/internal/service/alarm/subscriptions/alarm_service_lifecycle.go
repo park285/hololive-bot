@@ -48,7 +48,7 @@ func NewAlarmService(
 		return nil, errors.New("new alarm service: cache client is nil")
 	}
 
-	// PG가 구독·방 이름의 원천이다. repository 없이 Valkey만으로 조회·변경하던 경로는 없앴다.
+	// PG가 구독·방 이름의 원천이므로 repository가 필수다.
 	if alarmRepository == nil {
 		return nil, errors.New("new alarm service: alarm repository is nil")
 	}
