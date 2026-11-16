@@ -500,6 +500,7 @@ TABLE schedule_poster_changes
   COLUMN warnings text[] NOT NULL DEFAULT '{}'::text[]
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN edited_at timestamp with time zone
+  COLUMN channel_id character varying(64) NOT NULL
   CONSTRAINT chk_schedule_poster_changes_item CHECK (((item >= 1) AND (item <= 20)))
   CONSTRAINT chk_schedule_poster_changes_kind_vocab CHECK ((kind = ANY (ARRAY['same'::text, 'time_changed'::text, 'confirmed'::text, 'tentative'::text, 'cancelled'::text, 'off'::text, 'added'::text, 'moved'::text, 'moved_out'::text, 'content_changed'::text, 'rejected'::text])))
   CONSTRAINT chk_schedule_poster_changes_lists CHECK (((cardinality(with_ko) <= 40) AND (cardinality(tags_ko) <= 40) AND (cardinality(warnings) <= 40) AND (jsonb_typeof(terms) = 'array'::text)))
@@ -508,8 +509,8 @@ TABLE schedule_poster_changes
   CONSTRAINT chk_schedule_poster_changes_target CHECK ((((slot IS NULL) OR ((slot >= 1) AND (slot <= 100))) AND ((target_post_id IS NULL) = (target_item IS NULL)) AND ((target_post_id IS NULL) OR (target_post_id > 0)) AND ((target_item IS NULL) OR ((target_item >= 1) AND (target_item <= 20))) AND ((slot IS NULL) OR (target_post_id IS NULL)) AND ((kind = ANY (ARRAY['same'::text, 'rejected'::text, 'added'::text])) OR (slot IS NOT NULL) OR (target_post_id IS NOT NULL))))
   CONSTRAINT chk_schedule_poster_changes_text CHECK (((char_length(source_text) <= 500) AND ((title_ko IS NULL) OR ((char_length(title_ko) >= 1) AND (char_length(title_ko) <= 1000))) AND (char_length(place_ko) <= 1000) AND (char_length(note_ko) <= 1000) AND (char_length(doubt_ko) <= 1000)))
   CONSTRAINT chk_schedule_poster_changes_values CHECK ((((kind <> 'rejected'::text) OR ((day IS NULL) AND (start_time IS NULL) AND (status IS NULL) AND (title_ko IS NULL))) AND ((kind <> 'same'::text) OR ((title_ko IS NULL) AND (cardinality(with_ko) = 0) AND (place_ko = ''::text) AND (cardinality(tags_ko) = 0) AND (note_ko = ''::text))) AND ((kind <> ALL (ARRAY['moved'::text, 'moved_out'::text])) OR (day IS NOT NULL)) AND ((kind <> 'added'::text) OR (slot IS NOT NULL) OR (target_post_id IS NOT NULL) OR ((day IS NOT NULL) AND (start_time IS NOT NULL) AND (status IS NOT NULL))) AND ((start_time IS NULL) OR (start_time = ''::text) OR (start_time ~ '^([01]?[0-9]|2[0-9]):[0-5][0-9]$'::text)) AND ((status IS NULL) OR (status = ANY (ARRAY['planned'::text, 'tentative'::text, 'cancelled'::text, 'off'::text])))))
-  CONSTRAINT fk_schedule_poster_changes_post FOREIGN KEY (post_id) REFERENCES schedule_poster_posts(post_id) ON DELETE CASCADE
-  CONSTRAINT schedule_poster_changes_pkey PRIMARY KEY (post_id, item)
+  CONSTRAINT fk_schedule_poster_changes_post FOREIGN KEY (post_id, channel_id) REFERENCES schedule_poster_posts(post_id, channel_id) ON DELETE CASCADE
+  CONSTRAINT schedule_poster_changes_pkey PRIMARY KEY (post_id, channel_id, item)
 
 TABLE schedule_poster_posts
   COLUMN post_id bigint NOT NULL
@@ -530,7 +531,7 @@ TABLE schedule_poster_posts
   CONSTRAINT chk_schedule_poster_posts_match CHECK ((((matched_poster_id IS NULL) = (matched_rows_at IS NULL)) AND ((status = ANY (ARRAY['matched'::text, 'match_failed'::text])) = (matched_poster_id IS NOT NULL))))
   CONSTRAINT chk_schedule_poster_posts_reason CHECK ((((status = ANY (ARRAY['judge_failed'::text, 'match_failed'::text])) = (reason <> ''::text)) AND (char_length(reason) <= 40)))
   CONSTRAINT chk_schedule_poster_posts_status_vocab CHECK ((status = ANY (ARRAY['unjudged'::text, 'not_relevant'::text, 'judge_failed'::text, 'relevant'::text, 'matched'::text, 'match_failed'::text, 'revoked'::text])))
-  CONSTRAINT schedule_poster_posts_pkey PRIMARY KEY (post_id)
+  CONSTRAINT schedule_poster_posts_pkey PRIMARY KEY (post_id, channel_id)
 
 TABLE schedule_poster_rows
   COLUMN poster_id bigint NOT NULL

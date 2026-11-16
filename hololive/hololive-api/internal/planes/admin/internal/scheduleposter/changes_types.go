@@ -11,13 +11,14 @@ import (
 type changeStore interface {
 	PublishedRows(ctx context.Context, channelID string, day time.Time) (posterstore.PublishedSchedule, bool, error)
 	PendingPosts(ctx context.Context, schedule posterstore.PublishedSchedule, limit int) ([]posterstore.Post, error)
-	RecordDecision(ctx context.Context, postID int64, decision posterstore.PostDecision) (bool, error)
+	RecordDecision(ctx context.Context, channelID string, postID int64, decision posterstore.PostDecision) (bool, error)
 	RecordMatch(ctx context.Context, schedule posterstore.PublishedSchedule, post posterstore.Post, result posterstore.MatchResult) (bool, error)
 }
 
 type postLedger interface {
 	InsertPosts(ctx context.Context, posterID int64, posts []posterstore.Post) (int64, error)
 	PurgePosts(ctx context.Context, before time.Time, limit int) (int64, error)
+	OfficialStreams(ctx context.Context, videoIDs []string) (map[string]posterstore.OfficialStream, error)
 }
 
 type postClassifier interface {

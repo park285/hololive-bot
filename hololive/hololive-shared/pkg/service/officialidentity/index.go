@@ -17,8 +17,6 @@ type Index map[string][]string
 // Build는 멤버 데이터에서 공식 표기명→채널 색인을 만든다. 멤버 적재 실패는 빈 색인으로 바꾸지 않고 오류로 돌려준다.
 // 멤버 데이터 없이 구성한 호출자(membersData nil)는 빈 색인이다.
 func Build(ctx context.Context, membersData domain.MemberDataProvider) (Index, error) {
-	candidates := make(map[string]map[string]struct{})
-
 	if membersData == nil {
 		return Index{}, nil
 	}
@@ -27,6 +25,13 @@ func Build(ctx context.Context, membersData domain.MemberDataProvider) (Index, e
 	if err != nil {
 		return nil, fmt.Errorf("build official identity index: %w", err)
 	}
+
+	return New(members), nil
+}
+
+// New는 이미 읽은 멤버 목록으로 공식 표기명→채널 색인을 만든다.
+func New(members []*domain.Member) Index {
+	candidates := make(map[string]map[string]struct{})
 
 	for _, member := range members {
 		addMemberCandidates(candidates, member)
@@ -44,7 +49,7 @@ func Build(ctx context.Context, membersData domain.MemberDataProvider) (Index, e
 		index[name] = resolved
 	}
 
-	return index, nil
+	return index
 }
 
 func (index Index) Resolve(name string) string {

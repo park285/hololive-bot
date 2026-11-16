@@ -316,7 +316,10 @@ func TestStorePostsOfAnotherMemberDoNotMatch(t *testing.T) {
 
 	_, err := store.InsertPosts(ctx, 201, []scheduleposter.Post{post(41, jstAt(10, 18, 0))})
 	require.NoError(t, err)
-	decide(t, store, 41, relevant)
+
+	judged, err := store.RecordDecision(ctx, tsuzuriChannel, 41, relevant)
+	require.NoError(t, err)
+	require.True(t, judged)
 
 	require.Empty(t, pendingPostIDs(t, store, sophia))
 	require.Equal(t, []int64{41}, pendingPostIDs(t, store, tsuzuri))
@@ -433,7 +436,7 @@ func TestStoreRevokePostRemovesItsChangesForGood(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, recorded)
 
-	recorded, err = store.RecordDecision(ctx, 14, relevant)
+	recorded, err = store.RecordDecision(ctx, sophiaChannel, 14, relevant)
 	require.NoError(t, err)
 	require.False(t, recorded)
 	require.Equal(t, "revoked", postStatus(t, pool, 14))

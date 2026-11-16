@@ -54,6 +54,8 @@ type changeLoopState struct {
 	collected map[string]collectMark
 	judging   map[judgeKey]time.Time
 	matches   map[matchKey]matchEntry
+	// mentions는 다른 멤버의 글에서 찾은, 그 채널 멤버가 출연하는 방송의 글이다. 그 멤버의 확정본이 나중에 게시돼도 넣을 수 있게 lookback 동안 둔다.
+	mentions map[string]map[int64]posterstore.Post
 }
 
 type judgeKey struct {
@@ -114,8 +116,13 @@ func (s *Service) detectChanges(ctx context.Context) error {
 	roster := &changeRoster{}
 
 	if s.changeLoop.collected == nil {
-		s.changeLoop = changeLoopState{collected: map[string]collectMark{}, judging: map[judgeKey]time.Time{}, matches: map[matchKey]matchEntry{}}
+		s.changeLoop = changeLoopState{
+			collected: map[string]collectMark{}, judging: map[judgeKey]time.Time{}, matches: map[matchKey]matchEntry{},
+			mentions: map[string]map[int64]posterstore.Post{},
+		}
 	}
+
+	s.changeLoop.dropMentionsBefore(now.Add(-lookback))
 
 	var (
 		errs   []error
@@ -123,10 +130,6 @@ func (s *Service) detectChanges(ctx context.Context) error {
 	)
 
 	for _, target := range s.config.Targets {
-		if target.XUserID == "" {
-			continue
-		}
-
 		stage, err := s.detectTarget(ctx, target, postedDate(now), roster)
 		if ctx.Err() != nil {
 			return errors.Join(append(errs, ctx.Err())...)
@@ -189,7 +192,7 @@ func (s *Service) detectTarget(ctx context.Context, target Target, today time.Ti
 		return "", nil
 	}
 
-	err = s.storePosts(ctx, target, &schedule)
+	err = s.storePosts(ctx, target, &schedule, roster)
 	if err != nil {
 		return "", err
 	}
@@ -206,7 +209,9 @@ func (s *Service) detectTarget(ctx context.Context, target Target, today time.Ti
 	})
 	maps.DeleteFunc(s.changeLoop.matches, func(key matchKey, _ matchEntry) bool {
 		return key.channelID == target.ChannelID &&
-			!slices.ContainsFunc(pending, func(post posterstore.Post) bool { return pendingMatchKey(target, &schedule, &post) == key })
+			!slices.ContainsFunc(pending, func(post posterstore.Post) bool {
+				return post.Status != posterstore.PostUnjudged && pendingMatchKey(target, &schedule, &post) == key
+			})
 	})
 
 	return s.processPosts(ctx, target, today, schedule, pending, roster)
@@ -286,42 +291,82 @@ func postedAfter(post, than *posterstore.Post) bool {
 	return post.PostedAt.After(than.PostedAt) || post.PostedAt.Equal(than.PostedAt) && post.ID > than.ID
 }
 
-func (s *Service) storePosts(ctx context.Context, target Target, schedule *posterstore.PublishedSchedule) error {
-	collected, err := s.collectPosts(ctx, target, schedule)
-	if err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
+func (s *Service) storePosts(ctx context.Context, target Target, schedule *posterstore.PublishedSchedule, roster *changeRoster) error {
+	posts := s.changeLoop.mentionsFor(target.ChannelID)
+
+	var (
+		collected collectedPosts
+		fetched   bool
+	)
+
+	if target.XUserID != "" {
+		var err error
+
+		collected, fetched, err = s.fetchPosts(ctx, target, schedule, roster)
+		if err != nil {
+			return err
 		}
 
-		s.logger.Warn("Schedule poster change detection paused",
-			slog.String("stage", pauseCollect), slog.String("channel_id", target.ChannelID), slog.Any("error", err))
-
-		return nil
+		posts = append(collected.posts, posts...)
 	}
 
-	inserted, err := s.ledger.InsertPosts(ctx, schedule.PosterID, collected.posts)
-	if err != nil {
-		return fmt.Errorf("store schedule poster posts: %w", err)
+	var stored int64
+
+	if fetched || len(posts) > 0 {
+		var err error
+
+		stored, err = s.ledger.InsertPosts(ctx, schedule.PosterID, posts)
+		if err != nil {
+			return fmt.Errorf("store schedule poster posts: %w", err)
+		}
 	}
 
-	if collected.reached {
+	switch {
+	case !fetched:
+	case collected.reached:
 		newest := collected.newest
 		if mark := s.changeLoop.collected[target.ChannelID]; mark.posterID == schedule.PosterID {
 			newest = later(newest, mark.newest)
 		}
 
 		s.changeLoop.collected[target.ChannelID] = collectMark{posterID: schedule.PosterID, newest: newest}
-	} else {
+	default:
 		s.logger.Warn("Schedule poster posts collection stopped at the page limit",
 			slog.String("channel_id", target.ChannelID), slog.Int64("poster_id", schedule.PosterID), slog.Int("pages", maxChangePages))
 	}
 
-	if inserted > 0 {
+	if stored > 0 {
 		s.logger.Info("Schedule poster posts collected",
-			slog.String("channel_id", target.ChannelID), slog.Int64("poster_id", schedule.PosterID), slog.Int64("inserted", inserted))
+			slog.String("channel_id", target.ChannelID), slog.Int64("poster_id", schedule.PosterID), slog.Int64("inserted", stored))
 	}
 
 	return nil
+}
+
+// fetchPosts가 false를 돌려주면 X 글을 읽지 못한 것이고 이번 주기에는 본인 글을 넣지 않는다. 오류는 저장소 오류이거나 ctx 종료다.
+func (s *Service) fetchPosts(
+	ctx context.Context, target Target, schedule *posterstore.PublishedSchedule, roster *changeRoster,
+) (collectedPosts, bool, error) {
+	collected, err := s.collectPosts(ctx, target, schedule)
+	if err != nil {
+		if ctx.Err() != nil {
+			return collectedPosts{}, false, ctx.Err()
+		}
+
+		s.logger.Warn("Schedule poster change detection paused",
+			slog.String("stage", pauseCollect), slog.String("channel_id", target.ChannelID), slog.Any("error", err))
+
+		return collectedPosts{}, false, nil
+	}
+
+	mentions, err := s.attachStreams(ctx, target, &collected, roster)
+	if err != nil {
+		return collectedPosts{}, false, err
+	}
+
+	s.changeLoop.keepMentions(mentions)
+
+	return collected, true, nil
 }
 
 func (s *Service) decidePost(
@@ -357,7 +402,7 @@ func (s *Service) decidePost(
 		decision = answer.decision(s.config.Translation.Rows.Decide.ScheduleInfoMin)
 	}
 
-	recorded, err := s.changes.RecordDecision(ctx, post.ID, decision)
+	recorded, err := s.changes.RecordDecision(ctx, target.ChannelID, post.ID, decision)
 	if err != nil {
 		return postStop, fmt.Errorf("record schedule poster post decision: %w", err)
 	}

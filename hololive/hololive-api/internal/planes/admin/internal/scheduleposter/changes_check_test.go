@@ -364,6 +364,34 @@ func TestJudgeItemsRedirectsToTheRowBeforeCheckingPastTime(t *testing.T) {
 	require.Equal(t, []posterstore.Change{want}, got)
 }
 
+func TestJudgeItemsLeavesAStartedStreamToThePostsOwnWords(t *testing.T) {
+	t.Parallel()
+
+	const posted = "2026-11-13 22:30"
+
+	post := posterstore.Post{
+		ID: judgePostID, PostedAt: at(posted),
+		Body: "コラボありがとう！ゲストはC\n\nQuoted post by 霧島なぎ at 2026-11-12 12:00 JST:\n明日20時から #クイズ王決定戦 深夜もやるよ",
+	}
+
+	got := judgeItems(post, utcDate("2026-11-09"), utcDate("2026-11-15"), judgeRows(), nil, []matchItem{
+		citing(item(new(2), "2026-11-13", new("20:00"), posterstore.RowPlanned, "#クイズ王決定戦"), "#クイズ王決定戦"),
+		citing(item(new(1), "2026-11-13", nil, posterstore.RowPlanned, "ゲストはC"), "ゲストはC"),
+		citing(item(new(6), "2026-11-13", nil, posterstore.RowPlanned, "深夜もやるよ"), "深夜もやるよ"),
+	})
+
+	want := []posterstore.Change{
+		rejected(1, 2, rejectPastTime),
+		change(2, posterstore.ChangeContentChanged, func(c *posterstore.Change) { c.Slot, c.Text = 1, "ゲストはC" }),
+		change(3, posterstore.ChangeContentChanged, func(c *posterstore.Change) { c.Slot, c.Text = 6, "深夜もやるよ" }),
+	}
+	for i := range want {
+		want[i].PostedAt = at(posted)
+	}
+
+	require.Equal(t, want, got, "이미 시작한 방송의 내용은 글쓴이 본인의 말로만 바꾸고, 인용한 지난 안내로는 바꾸지 않는다")
+}
+
 func TestJudgeItemsChecksCollisionsWhenRestoringACalledOffSlot(t *testing.T) {
 	t.Parallel()
 
@@ -476,14 +504,16 @@ func TestJudgeItemsOnMatchPromptExamples(t *testing.T) {
 	t.Parallel()
 
 	want := map[string][]string{
-		"1": {"time_changed"},
-		"2": {"time_changed", "time_changed", "tentative"},
-		"3": {"off", "same", "rejected:" + rejectForeignZone},
-		"4": {},
-		"5": {"content_changed", "added", string(posterstore.ChangeCancelled), "same"},
-		"6": {"added", "moved"},
-		"7": {"content_changed"},
-		"8": {},
+		"1":  {"time_changed"},
+		"2":  {"time_changed", "time_changed", "tentative"},
+		"3":  {"off", "same", "rejected:" + rejectForeignZone},
+		"4":  {},
+		"5":  {"content_changed", "added", string(posterstore.ChangeCancelled), "same"},
+		"6":  {"added", "moved"},
+		"7":  {"content_changed"},
+		"8":  {},
+		"9":  {"content_changed"},
+		"10": {"added"},
 	}
 	blocks := strings.Split(matchPromptTemplate, "\n\nExample ")[1:]
 	require.Len(t, blocks, len(want))

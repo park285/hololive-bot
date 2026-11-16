@@ -13,8 +13,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// InsertPosts는 확정본 posterID를 게시한 뒤이고 그 주 범위(JST 날짜) 안에 올린 글만 넣고, 넣은 글 수를 돌려준다.
-// 이미 기록한 글은 건너뛴다. 글 하나라도 저장할 수 없으면 아무것도 넣지 않고 오류다.
+// InsertPosts는 확정본 posterID를 게시한 뒤이고 그 주 범위(JST 날짜) 안에 올린 글만 그 포스터의 멤버 앞으로 넣고, 넣거나 본문을 바꾼 글 수를 돌려준다.
+// 이미 기록한 글은 새 본문이 저장한 본문 뒤에 내용을 더 붙인 것일 때만 본문을 바꾸고 그 글의 변경을 지워 판별부터 다시 하게 한다. 철회한 글은 건너뛴다.
+// 글 하나라도 저장할 수 없으면 아무것도 넣지 않고 오류다.
 func (s *Store) InsertPosts(ctx context.Context, posterID int64, posts []Post) (int64, error) {
 	if err := validatePosts(posts); err != nil {
 		return 0, fmt.Errorf("insert schedule poster posts: %w", err)
@@ -32,12 +33,13 @@ func (s *Store) InsertPosts(ctx context.Context, posterID int64, posts []Post) (
 		ids[i], postedAt[i], bodies[i] = posts[i].ID, posts[i].PostedAt, posts[i].Body
 	}
 
-	tag, err := s.pool.Exec(ctx, insertPostsSQL, posterID, ids, postedAt, bodies)
-	if err != nil {
+	var stored int64
+
+	if err := s.pool.QueryRow(ctx, insertPostsSQL, posterID, ids, postedAt, bodies).Scan(&stored); err != nil {
 		return 0, fmt.Errorf("insert schedule poster posts: %w", err)
 	}
 
-	return tag.RowsAffected(), nil
+	return stored, nil
 }
 
 func validatePosts(posts []Post) error {
@@ -92,8 +94,8 @@ func (s *Store) PendingPosts(ctx context.Context, schedule PublishedSchedule, li
 	return posts, nil
 }
 
-// RecordDecision은 아직 판별하지 않은 글에만 판별 결과를 기록한다. 이미 판별한 글이면 false다.
-func (s *Store) RecordDecision(ctx context.Context, postID int64, decision PostDecision) (bool, error) {
+// RecordDecision은 멤버 channelID 앞으로 기록한 글이 아직 판별 전일 때만 판별 결과를 기록한다. 이미 판별한 글이면 false다.
+func (s *Store) RecordDecision(ctx context.Context, channelID string, postID int64, decision PostDecision) (bool, error) {
 	switch decision.Status {
 	case PostNotRelevant, PostJudgeFailed, PostRelevant:
 	case PostUnjudged, PostMatched, PostMatchFailed, PostRevoked:
@@ -111,7 +113,7 @@ func (s *Store) RecordDecision(ctx context.Context, postID int64, decision PostD
 		info, kind = new(decision.ScheduleInfo), new(decision.Kind)
 	}
 
-	tag, err := s.pool.Exec(ctx, recordDecisionSQL, postID, decision.Status, decision.Reason, info, kind)
+	tag, err := s.pool.Exec(ctx, recordDecisionSQL, postID, channelID, decision.Status, decision.Reason, info, kind)
 	if err != nil {
 		return false, fmt.Errorf("record schedule poster decision: %w", err)
 	}
@@ -152,12 +154,12 @@ func (s *Store) RecordMatch(ctx context.Context, schedule PublishedSchedule, pos
 			return nil
 		}
 
-		if _, deleteErr := tx.Exec(ctx, deleteChangesSQL, post.ID); deleteErr != nil {
+		if _, deleteErr := tx.Exec(ctx, deleteChangesSQL, post.ID, schedule.PosterID); deleteErr != nil {
 			return fmt.Errorf("delete changes: %w", deleteErr)
 		}
 
 		if payload != "" {
-			if _, insertErr := tx.Exec(ctx, insertChangesSQL, post.ID, payload); insertErr != nil {
+			if _, insertErr := tx.Exec(ctx, insertChangesSQL, post.ID, schedule.PosterID, payload); insertErr != nil {
 				return fmt.Errorf("insert changes: %w", insertErr)
 			}
 		}
@@ -263,7 +265,7 @@ func (s *Store) RevokePost(ctx context.Context, posterID, postID int64) error {
 			return err
 		}
 
-		if _, err := tx.Exec(ctx, deleteChangesSQL, postID); err != nil {
+		if _, err := tx.Exec(ctx, deleteChangesSQL, postID, posterID); err != nil {
 			return fmt.Errorf("delete changes: %w", err)
 		}
 
@@ -356,7 +358,7 @@ func (s *Store) PosterPosts(ctx context.Context, posterID int64) ([]PosterPost, 
 			return err
 		}
 
-		return loadPosterPostChanges(ctx, tx, posts)
+		return loadPosterPostChanges(ctx, tx, posterID, posts)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list schedule poster posts: %w", err)
@@ -384,7 +386,7 @@ func loadPosterPosts(ctx context.Context, tx pgx.Tx, posterID int64) ([]PosterPo
 	return posts, nil
 }
 
-func loadPosterPostChanges(ctx context.Context, tx pgx.Tx, posts []PosterPost) error {
+func loadPosterPostChanges(ctx context.Context, tx pgx.Tx, posterID int64, posts []PosterPost) error {
 	current := make(map[int64]int, len(posts))
 	ids := make([]int64, 0, len(posts))
 
@@ -399,7 +401,7 @@ func loadPosterPostChanges(ctx context.Context, tx pgx.Tx, posts []PosterPost) e
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, posterPostChangesSQL, ids)
+	rows, err := tx.Query(ctx, posterPostChangesSQL, posterID, ids)
 	if err != nil {
 		return fmt.Errorf("load post changes: %w", err)
 	}

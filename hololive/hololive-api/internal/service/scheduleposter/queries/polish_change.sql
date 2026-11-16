@@ -8,3 +8,4 @@ SET title_ko = $3, with_ko = $4, place_ko = $5, tags_ko = $6, note_ko = $7, doub
         WHERE strpos($8, t.term ->> 'ko') > 0
     ), '[]'::jsonb)
 WHERE post_id = $1 AND item = $2 AND created_at = $9
+  AND channel_id = (SELECT channel_id FROM schedule_posters WHERE id = $10)
