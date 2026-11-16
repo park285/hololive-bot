@@ -39,14 +39,12 @@ func TestResolvePoolConns(t *testing.T) {
 		wantMax int
 	}{
 		{
-			// plane 검증이 허용하는 MIN=0은 idle 연결 없음으로 그대로 전달돼야 한다.
 			name:    "명시적 MIN=0 보존",
 			config:  PostgresConfig{PoolMinConns: 0, PoolMaxConns: 4},
 			wantMin: 0,
 			wantMax: 4,
 		},
 		{
-			// 예전 0→2 치환에서는 pgxdb가 "min conns 2 exceeds max conns 1"로 기동을 거부했다.
 			name:    "MIN=0과 MAX=1 조합 허용",
 			config:  PostgresConfig{PoolMinConns: 0, PoolMaxConns: 1},
 			wantMin: 0,

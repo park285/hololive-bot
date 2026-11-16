@@ -8,8 +8,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 )
 
-// projectionRetentionMaxBatches는 실측 약 12세대/120초 유입을 처리하면서도
-// 한 tick의 쓰기를 제한한다. 각 배치의 1,000행 상한과 전체 DB 시한은 유지한다.
+// 세대별 자식 삭제를 여러 번 진행하되 한 tick의 쓰기와 전체 DB 시한을 제한한다.
 const projectionRetentionMaxBatches = 64
 
 func (r *Runtime) retainProjectionBatches(ctx context.Context, now time.Time) (targetprojection.RetentionResult, error) {
