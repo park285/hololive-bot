@@ -57,7 +57,6 @@ var alarmWorkerSequenceACL = map[string]string{
 func TestAlarmWorkerRoleGrantsAreLeastPrivilege(t *testing.T) {
 	pool := NewPool(t)
 	role := createAlarmWorkerGrantRole(t, pool)
-	grantAlarmWorkerBroadPrivileges(t, pool, role)
 	applyAlarmWorkerRoleMigration(t, pool, role)
 
 	assertAlarmWorkerSchemaPrivileges(t, pool, role)
@@ -110,18 +109,6 @@ func createAlarmWorkerGrantRole(t *testing.T, pool *pgxpool.Pool) string {
 	})
 
 	return role
-}
-
-func grantAlarmWorkerBroadPrivileges(t *testing.T, pool *pgxpool.Pool, role string) {
-	t.Helper()
-
-	quoted := pgx.Identifier{role}.Sanitize()
-
-	for _, objects := range []string{"SCHEMA public", "ALL TABLES IN SCHEMA public", "ALL SEQUENCES IN SCHEMA public", "ALL FUNCTIONS IN SCHEMA public"} {
-		if _, err := pool.Exec(t.Context(), "GRANT ALL PRIVILEGES ON "+objects+" TO "+quoted); err != nil {
-			t.Fatalf("grant broad %s privileges: %v", objects, err)
-		}
-	}
 }
 
 func applyAlarmWorkerRoleMigration(t *testing.T, pool *pgxpool.Pool, role string) {

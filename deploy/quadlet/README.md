@@ -60,6 +60,8 @@ sudo ./scripts/deploy/sync-opt-current.sh
 방화벽 규칙(`scripts/systemd/admin-dashboard-ingress.nft`)이 바뀐 배포에서는 설치 뒤
 `sudo systemctl reload admin-dashboard-ingress-firewall.service`로 적용합니다(아래 '기동·정지·의존').
 이 규칙은 같은 호스트의 ChatBotGo(5432)·TwentyQ(5458) PostgreSQL 게시 포트도 loopback과 kapu(`bot_postgres_sources`)에서만 받습니다.
+Tailscale은 tailscale0에서 전달하는 패킷을 masquerade하므로, 규칙이 없으면 PostgreSQL은 원격 접속을 모두 bridge gateway(`172.23.0.1`)로 봅니다.
+`forward_preserve_postgres_source` 체인이 holo-postgres 게시(5433)로 들어오는 `postgres_sources` 접속에서만 그 표시를 지워 `pg_hba.conf`가 AP별 tailnet 주소로 판정합니다. 두 봇 DB 게시와 다른 게시 포트는 그대로 masquerade됩니다.
 두 봇의 DB unit(`chatbotgo-postgres`·`twentyq-postgres`)도 holo-postgres처럼 이 방화벽 unit을 `Requires=`하므로, 방화벽 unit이 시작에 실패하면 기동하지 않고 멈추면 함께 멈춥니다. reload는 두 DB에 영향을 주지 않습니다.
 
 prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)로 설치됩니다.

@@ -207,6 +207,10 @@ ct status dnat ct original proto-dst 5433 tcp dport 5432 reject with tcp reset
 ct status dnat ct original proto-dst { 5432, 5458 } tcp dport 5432 iifname "tailscale0" ip saddr @bot_postgres_sources accept
 ct status dnat ct original proto-dst { 5432, 5458 } tcp dport 5432 reject with tcp reset
 }
+chain forward_preserve_postgres_source {
+type filter hook forward priority 10; policy accept;
+ct status dnat ct original proto-dst 5433 tcp dport 5432 iifname "tailscale0" ip saddr @postgres_sources meta mark set meta mark and 0xff00ffff
+}
 }
 EOF
 awk 'NF && $1 !~ /^#/ { gsub(/^[[:space:]]+|[[:space:]]+$/, ""); gsub(/[[:space:]]+/, " "); print }' \
