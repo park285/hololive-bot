@@ -146,23 +146,59 @@ timer·service·apply drop-in과 Osaka의 `iris_seoul_standby` physical slot을 
 | PostgreSQL | Most runtime services | schema/migration files under `hololive/hololive-api/scripts/migrations` |
 | Valkey | cache, rate limit, alarm dispatch and YouTube delivery outbox wakeup, member epoch Pub/Sub, job locks (no settings/ACL Pub/Sub) | `contracts/valkey_ephemeral_contract.md`, `QUEUE_AND_PUBSUB_CONTRACTS.md` |
 
+## PostgreSQL 18.7 — 2026-11-16
+
+서울 `holo-postgres`만 2026-11-16 06:09:39–06:09:45 UTC에 재시작하여 18.6에서 18.7로
+갱신했습니다. ARM64 image는 `sha256:4ec2189fec89931dba200818e53007573c65bcc5fbea3444b2029f5f8da6d3ae`,
+소스 revision은 `c21973a0218bd73cec7dde49b6c4f335f4ef153a`입니다.
+`stack-secrets`의 서울 Hololive `compose.env` 마스터에서 `POSTGRES_IMAGE`만 바꾸고
+scoped sync로 반영했습니다. 다른 env 값·manifest는 동일했고 owner/mode는 유지했습니다.
+앱 배포 트리와 `.source-revision`은 기존 `b4d3045ace00d7e592b7f4485d38132d6762f57a`를 유지합니다.
+
+- kapu에서 ARM64 확장 빌드·root/UID 999 시험, amd64 read-only/tmpfs 시험, TLS/HBA·격리 migration
+  socket 검사를 통과했습니다. 기존 ARM64 18.6 image의 합성 PGDATA를 그대로 18.7에 연결하여
+  composite/JSONB 1,000행·GIN 조회·kcache와 sampling current/history/profile 결과 보존을 확인했습니다.
+- `hololive-dbtest`, `migrationrunner`, `cmd/db-migrate`와 live-head 복구 시험을 통과했습니다.
+  Trivy 0.76.2 최종 후보 스캔은 보고된 취약점 0건입니다(DB 갱신 2026-11-16 01:11 UTC).
+  로컬 스캔 증거는 `/home/kapu/.cache-ssd/tmpdir/hololive-image-scan.3DQm5o/`에 있습니다.
+  스캔 범위는 Alpine 패키지와 gosu이며 PostgreSQL core 수정은 공식 18.7 릴리스에 근거합니다.
+- 초기 로컬 시험은 DNS 조회 실패, scanner의 미설정 runtime socket 경로와 일회성 auth pipe 읽기
+  실패를 만났습니다. 기존 rootless socket과 `XDG_RUNTIME_DIR`·일반 파일의 익명 registry context를
+  명시한 최종 시험은 통과했습니다. DNS 최초 실패의 단일 원인은 확정하지 않았으며 재시도·우회
+  코드는 추가하지 않았습니다.
+- 운영 read-only guard·30초 문장/3초 잠금 제한 아래 18.7 primary,
+  `composite_type_mismatch=error`, builtin `C.UTF-8`, checksum, PGDATA, 기존 preload·확장 7개
+  판본과 runtime 계약을 확인했습니다. `hololive-bot_holo-pg-data` volume은 그대로입니다.
+- DB와 중앙 API·worker·collector c는 healthy 및 `NRestarts=0`이며 앱 container ID·기동 시각은
+  그대로입니다. collector a/b/d readiness와 API·worker·collector a/b/c/d의 TLS DB 재연결을
+  확인했습니다. 기동 완료 이후 중앙 네 unit의 오류·panic·권한·TLS·OOM 표식은 0건이었습니다.
+- `gist_trgm_ops`, 길이 없는 `bpchar`(domain 포함) B-tree, partitioned `NOT NULL NO INHERIT`,
+  invalid index는 0건이었습니다. GIN 4개는 존재하지만 손상을 확정한 것은 아닙니다.
+  이전 기동 이후 확인한 로그에 TOAST/index 손상 표식은 없었고 전체 무결성 검사는 실행하지 않았습니다.
+
+직전 전체 image `sha256:b8c3cddc74aafc945d9a867a8e4e215a1ebf190d646af2e3c3dbdc04f0d7525a`
+(revision `4a64b7bc340e17e828288d2dcefb7f6dd0ffdc8b`)는 보존했습니다.
+이미지 보존은 데이터 백업이 아니며, 새 백업·REINDEX·DDL·migration·확장 재설치·다른 봇 DB 변경은
+수행하지 않았습니다. 향후 composite DDL 뒤의 18.6 다운그레이드는 별도 호환성 검토가 필요합니다.
+백업 중단 정책은 그대로이며 Git 원격 게시도 하지 않았습니다. Fallback delta: none.
+
 ## PostgreSQL Observability
 
 2026-10-07 Osaka primary에 `pg_stat_kcache` 2.3.2와 `pg_wait_sampling`
 binary 1.1.11(SQL extension 1.1)을 활성화한 뒤, 같은 날 서울 중앙으로 이전하면서
 설정·확장·전용 스키마·권한을 보존했습니다. 2026-10-27(UTC)에는 같은 절차로
 `holo-postgres`만 재생성하여 `auto_explain`을 preload에 더하고 `pg_buffercache` 1.6과
-`amcheck` 1.5를 같은 스키마에 활성화했습니다. 현재 `hololive-seoul`의 PostgreSQL image revision은
-`12588674f2ddfac1a784c145b0a66620800691cf`(image ID `sha256:5606cad5c443…`)이며, 호스트의 비밀 아닌
-`HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES` 설정이 `pg_stat_statements,pg_stat_kcache,pg_wait_sampling,auto_explain`을
-preload합니다. 직전 image `hololive-postgres:infra-58fc86436-20261026T044001Z-arm64`와 이전 compose 파일은
-`/opt/hololive-bot/compose/deploy-backups/pre-pg-auto-explain-20261027T150624Z/`에 복구점으로 남겼습니다.
+`amcheck` 1.5를 같은 스키마에 활성화했습니다. 당시 PostgreSQL image revision은
+`12588674f2ddfac1a784c145b0a66620800691cf`(image ID `sha256:5606cad5c443…`)였습니다. 호스트의 비밀 아닌
+`HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES` 설정은 `pg_stat_statements,pg_stat_kcache,pg_wait_sampling,auto_explain`을
+preload합니다. 당시 직전 image `hololive-postgres:infra-58fc86436-20261026T044001Z-arm64`와 이전 compose 파일의
+복구 기록 경로는 `/opt/hololive-bot/compose/deploy-backups/pre-pg-auto-explain-20261027T150624Z/`입니다.
 새 통계는 `hololive_observability` 스키마에서 기존 `pg_read_all_stats` 역할이 읽습니다.
 exporter의 public USAGE 차단과 앱 역할의 권한은 유지했습니다.
 [적용 기록](plans/2026-10-07-postgres-extensions.md#운영-적용-결과--2026-10-07)과
 [활성화·복구 절차](runbooks/postgres-observability.md)를 따릅니다.
-이후 별도 계측 브랜치의 검증된 소스를 로컬 main에 통합했습니다. 운영 이미지·실행 설정은
-그대로이며, 소스 통합을 이유로 DB를 재생성하거나 확장 활성화 SQL을 다시 실행하지 않습니다.
+이후 별도 계측 브랜치의 검증된 소스를 로컬 main에 통합했습니다. 그 소스 통합만으로는 운영 이미지를
+바꾸거나 확장 활성화 SQL을 다시 실행하지 않았습니다. 현재 image와 복구점은 위 18.7 적용 기록을 따릅니다.
 
 ## PostgreSQL Resource Baseline
 
