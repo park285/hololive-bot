@@ -429,13 +429,26 @@ func sortSlots(slots []slot) []slot {
 }
 
 func mergeOff(slots []slot) []slot {
+	off, streaming := 0, false
+
 	for _, s := range slots {
-		if s.status != StatusOff {
-			return slots
+		if s.status == StatusOff {
+			off++
+		}
+
+		if s.status == StatusPlanned || s.status == StatusTentative {
+			streaming = true
 		}
 	}
 
-	return slots[:min(len(slots), 1)]
+	switch {
+	case off == len(slots):
+		return slots[:min(len(slots), 1)]
+	case streaming:
+		return slices.DeleteFunc(slots, func(s slot) bool { return s.status == StatusOff })
+	default:
+		return slots
+	}
 }
 
 func capSlots(slots []slot, limit int) []slot {

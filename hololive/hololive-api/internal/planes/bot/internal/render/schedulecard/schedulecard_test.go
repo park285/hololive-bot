@@ -235,25 +235,28 @@ func TestPrepareFoldsConvertedRowsOutsideTheWindowIntoTheEdgeDays(t *testing.T) 
 	}
 }
 
-func TestPrepareMergesOffOnlyDay(t *testing.T) {
+func TestPrepareMergesOff(t *testing.T) {
 	off := Item{Day: date(t, "2026-11-10"), Status: StatusOff}
+	canceled := Item{Day: date(t, "2026-11-10"), Start: at21, Status: StatusCancelled, Title: "취소"}
+	tentative := Item{Day: date(t, "2026-11-10"), Status: StatusTentative, Title: "게릴라"}
 
-	v, err := prepare(weekCard(t, off, off), everyRune)
-	if err != nil {
-		t.Fatalf("prepare() error = %v", err)
-	}
+	for name, tc := range map[string]struct {
+		items []Item
+		want  []string
+	}{
+		"휴방만 있는 날은 휴방 하나":   {[]Item{off, off}, []string{"휴방"}},
+		"예정 방송이 있으면 휴방을 뺀다": {[]Item{off, planned(t, "2026-11-10", at20, "방송")}, []string{"방송"}},
+		"미정 방송이 있어도 휴방을 뺀다": {[]Item{off, tentative}, []string{"게릴라"}},
+		"취소 칸만 있으면 휴방을 둔다":  {[]Item{off, canceled}, []string{"취소", "휴방"}},
+	} {
+		v, err := prepare(weekCard(t, tc.items...), everyRune)
+		if err != nil {
+			t.Fatalf("%s: prepare() error = %v", name, err)
+		}
 
-	if !v.days[1].off() {
-		t.Errorf("two off rows on one day = %v, want one day off", slotTitles(v.days[1].slots))
-	}
-
-	v, err = prepare(weekCard(t, off, planned(t, "2026-11-10", at20, "방송")), everyRune)
-	if err != nil {
-		t.Fatalf("prepare() error = %v", err)
-	}
-
-	if len(v.days[1].slots) != 2 {
-		t.Errorf("off mixed with a stream = %v, want both kept", slotTitles(v.days[1].slots))
+		if got := slotTitles(v.days[1].slots); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: slots = %q, want %q", name, got, tc.want)
+		}
 	}
 }
 
