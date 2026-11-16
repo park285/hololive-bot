@@ -41,6 +41,7 @@ var ErrInvalidCard = errors.New("invalid schedule card")
 // PrevStart는 같은 날 시각이 바뀐 항목의 포스터 원래 시각이고, MovedFrom은 주 안의 다른 날에서 옮겨 온 항목의 원래 날짜다.
 // 둘 다 Start·Day와 같으면 바뀌지 않은 것으로 그린다.
 // Converted는 다른 시간대의 시각을 JST로 바꾼 항목이다. 주 범위 밖이어도 시각이 있고 휴방이 아니면 가까운 끝 날 칸에 시각 앞 요일을 붙여 그린다.
+// FromPost는 포스터가 아니라 뒤에 올라온 글이 그날 일정으로 만든 항목이다. 휴방은 같은 날 방송과 둘 다 포스터가 적은 것일 때만 방송 앞에 함께 그린다.
 type Item struct {
 	Day       time.Time
 	Start     string
@@ -48,6 +49,7 @@ type Item struct {
 	PrevStart string
 	MovedFrom time.Time
 	Converted bool
+	FromPost  bool
 	Status    Status
 	Title     string
 	With      []string

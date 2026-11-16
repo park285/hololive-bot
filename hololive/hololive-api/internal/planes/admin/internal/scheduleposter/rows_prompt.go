@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -158,10 +159,10 @@ func writePairs(prompt *strings.Builder, pairs map[string]string) {
 	}
 }
 
-// buildTranslatePrompt의 형식은 모델 검증에 쓴 하니스와 바이트 단위로 같아야 한다.
+// buildTranslatePrompt의 형식은 memo가 비면 모델 검증에 쓴 하니스와 바이트 단위로 같아야 한다. Editor notes 절(memo가 붙임)은 그 검증 밖이다.
 // 인자 zone은 포스터 전체 행에서 정한 값이다. 넘긴 행이 일부일 수 있어 여기서 계산하지 않는다.
 func buildTranslatePrompt(
-	rows []extractedRow, zone string, owner *domain.Member, named []*domain.Member, glossary, renderings map[string]string,
+	rows []extractedRow, zone string, owner *domain.Member, named []*domain.Member, glossary, renderings map[string]string, memo string,
 ) string {
 	var prompt strings.Builder
 
@@ -178,6 +179,7 @@ func buildTranslatePrompt(
 	writePairs(&prompt, glossary)
 	prompt.WriteString("\n\nEarlier renderings (original → Korean):")
 	writePairs(&prompt, renderings)
+	writeEditorNotes(&prompt, memo)
 	prompt.WriteString("\n\nRows:")
 
 	for i := range rows {
@@ -185,6 +187,25 @@ func buildTranslatePrompt(
 	}
 
 	return prompt.String()
+}
+
+const editorNotesHeading = "Editor notes (guidance from the person who edits this schedule in Korean; apply each note to every row it fits, " +
+	"and follow a note wherever it differs from the rules above or from the other reference sections):"
+
+func writeEditorNotes(prompt *strings.Builder, memo string) {
+	var notes []string
+
+	for line := range strings.SplitSeq(memo, "\n") {
+		if line = strings.TrimRightFunc(line, unicode.IsSpace); line != "" {
+			notes = append(notes, line)
+		}
+	}
+
+	if len(notes) == 0 {
+		return
+	}
+
+	prompt.WriteString("\n\n" + editorNotesHeading + "\n" + strings.Join(notes, "\n"))
 }
 
 func rowLine(index int, row extractedRow) string {

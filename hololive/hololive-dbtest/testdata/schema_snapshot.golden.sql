@@ -499,6 +499,7 @@ TABLE schedule_poster_changes
   COLUMN doubt_ko text NOT NULL DEFAULT ''::text
   COLUMN warnings text[] NOT NULL DEFAULT '{}'::text[]
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN edited_at timestamp with time zone
   CONSTRAINT chk_schedule_poster_changes_item CHECK (((item >= 1) AND (item <= 20)))
   CONSTRAINT chk_schedule_poster_changes_kind_vocab CHECK ((kind = ANY (ARRAY['same'::text, 'time_changed'::text, 'confirmed'::text, 'tentative'::text, 'cancelled'::text, 'off'::text, 'added'::text, 'moved'::text, 'moved_out'::text, 'content_changed'::text, 'rejected'::text])))
   CONSTRAINT chk_schedule_poster_changes_lists CHECK (((cardinality(with_ko) <= 40) AND (cardinality(tags_ko) <= 40) AND (cardinality(warnings) <= 40) AND (jsonb_typeof(terms) = 'array'::text)))
@@ -550,6 +551,7 @@ TABLE schedule_poster_rows
   COLUMN terms jsonb NOT NULL DEFAULT '[]'::jsonb
   COLUMN doubt_ko text NOT NULL DEFAULT ''::text
   COLUMN warnings text[] NOT NULL DEFAULT '{}'::text[]
+  COLUMN edited_at timestamp with time zone
   CONSTRAINT chk_schedule_poster_rows_lists CHECK (((cardinality(badges) <= 40) AND (cardinality(with_ko) <= 40) AND (cardinality(tags_ko) <= 40) AND (cardinality(warnings) <= 40) AND (jsonb_typeof(terms) = 'array'::text)))
   CONSTRAINT chk_schedule_poster_rows_ordinal CHECK (((ordinal >= 1) AND (ordinal <= 100)))
   CONSTRAINT chk_schedule_poster_rows_status_vocab CHECK ((status = ANY (ARRAY['planned'::text, 'tentative'::text, 'cancelled'::text, 'off'::text])))
@@ -557,6 +559,16 @@ TABLE schedule_poster_rows
   CONSTRAINT chk_schedule_poster_rows_time CHECK ((((start_time IS NULL) OR (start_time ~ '^([01]?[0-9]|2[0-9]):[0-5][0-9]$'::text)) AND ((end_time IS NULL) OR (end_time ~ '^([01]?[0-9]|2[0-9]):[0-5][0-9]$'::text))))
   CONSTRAINT fk_schedule_poster_rows_poster FOREIGN KEY (poster_id) REFERENCES schedule_posters(id) ON DELETE CASCADE
   CONSTRAINT schedule_poster_rows_pkey PRIMARY KEY (poster_id, ordinal)
+
+TABLE schedule_poster_translation_memo
+  COLUMN id boolean NOT NULL DEFAULT true
+  COLUMN body text NOT NULL DEFAULT ''::text
+  COLUMN revision bigint NOT NULL DEFAULT 1
+  COLUMN updated_at timestamp with time zone
+  CONSTRAINT chk_schedule_poster_translation_memo_body CHECK ((char_length(body) <= 4000))
+  CONSTRAINT chk_schedule_poster_translation_memo_revision CHECK ((revision >= 1))
+  CONSTRAINT chk_schedule_poster_translation_memo_single CHECK (id)
+  CONSTRAINT schedule_poster_translation_memo_pkey PRIMARY KEY (id)
 
 TABLE schedule_posters
   COLUMN id bigint NOT NULL

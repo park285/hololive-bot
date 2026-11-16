@@ -256,6 +256,68 @@
         }
       }
     },
+    "/api/holo/schedule-posters/memo": {
+      "get": {
+        "operationId": "holoGetSchedulePosterMemo",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterMemo"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "holoSaveSchedulePosterMemo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePosterMemoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterMemoSaved"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/holo/schedule-posters/collect": {
       "post": {
         "operationId": "holoCollectSchedulePosters",
@@ -573,6 +635,100 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SchedulePosterRevokeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/{id}/changes/polish": {
+      "post": {
+        "operationId": "holoPolishSchedulePosterAddedSlot",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePosterPolishAddedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterPolishResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/schedule-posters/{id}/rows/polish": {
+      "post": {
+        "operationId": "holoPolishSchedulePosterRow",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SchedulePosterId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePosterPolishRowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePosterPolishResponse"
                 }
               }
             }
@@ -1188,6 +1344,170 @@
           }
         }
       },
+      "SchedulePosterMemo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "body",
+          "revision",
+          "updatedAt"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "번역 메모 본문입니다. 줄바꿈은 \\n이고 빈 문자열은 메모가 없다는 뜻입니다."
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "저장할 때마다 오르는 값입니다. 저장 요청의 expectedRevision으로 돌려보냅니다."
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "마지막으로 저장한 시각(RFC3339)입니다. 저장한 적이 없으면 null입니다."
+          }
+        },
+        "description": "일정표 번역에 참고로 붙이는 관리자 메모입니다. 본문이 있으면 그 뒤의 행 번역과 변경 번역 지시문에 참고 절로 붙고, 이미 저장한 번역은 바꾸지 않습니다."
+      },
+      "SchedulePosterMemoRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision",
+          "body"
+        ],
+        "properties": {
+          "expectedRevision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          },
+          "body": {
+            "type": "string",
+            "pattern": "^[^\\x00-\\x09\\x0B\\x0C\\x0E-\\x1F\\x7F-\\x9F]*$",
+            "description": "줄바꿈(\\r\\n, \\r, \\n) 밖의 제어 문자를 담을 수 없습니다. 생산자는 줄바꿈을 \\n으로 맞추고 앞뒤 공백을 뺀 뒤 저장하며, 그 결과가 4000자를 넘으면 400입니다."
+          }
+        },
+        "description": "expectedRevision이 지금 값과 다르면 409 code=revision_conflict입니다."
+      },
+      "SchedulePosterMemoSaved": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          }
+        }
+      },
+      "SchedulePosterPolishAddedRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedUpdatedAt",
+          "postId",
+          "item",
+          "titleKo"
+        ],
+        "properties": {
+          "expectedUpdatedAt": {
+            "$ref": "#/components/schemas/SchedulePosterSeenAt"
+          },
+          "postId": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "칸의 addedPostId입니다."
+          },
+          "item": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "description": "칸의 addedItem입니다."
+          },
+          "titleKo": {
+            "$ref": "#/components/schemas/SchedulePosterPolishedText"
+          },
+          "withKo": {
+            "$ref": "#/components/schemas/SchedulePosterPolishedList"
+          },
+          "placeKo": {
+            "type": "string"
+          },
+          "tagsKo": {
+            "$ref": "#/components/schemas/SchedulePosterPolishedList"
+          },
+          "noteKo": {
+            "type": "string"
+          }
+        },
+        "description": "글이 더한 칸(ordinal이 null인 칸)의 한국어 다섯 칸을 고칩니다. 조건과 오류는 SchedulePosterPolishRowRequest와 같습니다."
+      },
+      "SchedulePosterPolishResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/SchedulePosterId"
+          }
+        }
+      },
+      "SchedulePosterPolishRowRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedUpdatedAt",
+          "ordinal",
+          "titleKo"
+        ],
+        "properties": {
+          "expectedUpdatedAt": {
+            "$ref": "#/components/schemas/SchedulePosterSeenAt"
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "칸의 ordinal입니다."
+          },
+          "titleKo": {
+            "$ref": "#/components/schemas/SchedulePosterPolishedText"
+          },
+          "withKo": {
+            "$ref": "#/components/schemas/SchedulePosterPolishedList"
+          },
+          "placeKo": {
+            "type": "string"
+          },
+          "tagsKo": {
+            "$ref": "#/components/schemas/SchedulePosterPolishedList"
+          },
+          "noteKo": {
+            "type": "string"
+          }
+        },
+        "description": "포스터 행에서 온 칸의 한국어 다섯 칸(titleKo, withKo, placeKo, tagsKo, noteKo)을 관리자가 고친 값으로 바꿉니다. 빠진 칸은 비웁니다. 값은 앞뒤 공백을 뺀 뒤 그 칸의 한국어를 마지막으로 정한 포스터 행이나 글의 변경에 쓰고, 그 칸의 doubtKo와 warnings를 비우며 editedAt을 채웁니다. 글이 한국어를 바꾼 칸이면 그 글의 변경을 고치므로 글을 철회하면 포스터 행의 한국어로 돌아갑니다. 행을 다시 뽑거나 글을 다시 대응하면 고친 값은 사라집니다. 포스터가 없으면 404, 확정본이 아니거나 행 묶음이 없으면 409 code=invalid_state, expectedUpdatedAt 뒤에 일정이 바뀌었거나 칸이 없으면 409 code=revision_conflict, 칸마다 1000자·목록 40개를 넘거나 제어 문자가 있으면 400입니다."
+      },
+      "SchedulePosterPolishedList": {
+        "type": "array",
+        "maxItems": 40,
+        "items": {
+          "$ref": "#/components/schemas/SchedulePosterPolishedText"
+        }
+      },
+      "SchedulePosterPolishedText": {
+        "type": "string",
+        "pattern": "[^\\s]",
+        "description": "공백이 아닌 글자가 하나 이상 있어야 합니다."
+      },
       "SchedulePosterPost": {
         "type": "object",
         "additionalProperties": false,
@@ -1499,7 +1819,7 @@
               "string",
               "null"
             ],
-            "description": "`!스케쥴` 카드에 찍히는 갱신 시각(RFC3339)으로, 행 묶음 저장 시각과 반영한 변경의 기록 시각 가운데 가장 늦은 값입니다. 행 묶음이 없으면 null입니다."
+            "description": "`!스케쥴` 카드에 찍히는 갱신 시각(RFC3339)으로, 행 묶음 저장 시각, 반영한 변경의 기록 시각, 관리자가 한국어 칸을 고친 시각 가운데 가장 늦은 값입니다. 행 묶음이 없으면 null입니다. 칸을 고칠 때 expectedUpdatedAt으로 돌려보냅니다."
           },
           "slots": {
             "type": "array",
@@ -1511,6 +1831,11 @@
         },
         "description": "포스터 하나의 일정표 칸과 오늘 게시 여부입니다. 포스터가 없으면 404입니다."
       },
+      "SchedulePosterSeenAt": {
+        "type": "string",
+        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$",
+        "description": "고치기 전에 읽은 일정표 응답의 updatedAt(RFC3339)입니다."
+      },
       "SchedulePosterSlot": {
         "type": "object",
         "additionalProperties": false,
@@ -1518,6 +1843,8 @@
           "number",
           "ordinal",
           "addedPostId",
+          "addedItem",
+          "editedAt",
           "day",
           "start",
           "end",
@@ -1560,6 +1887,22 @@
             ],
             "pattern": "^[1-9][0-9]{0,18}$",
             "description": "칸을 더한 X 글 ID입니다. 원래 행이면 null입니다."
+          },
+          "addedItem": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 20,
+            "description": "칸을 더한 글 안의 항목 번호입니다. 원래 행이면 null입니다."
+          },
+          "editedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "지금 한국어 칸을 관리자가 마지막으로 고친 시각(RFC3339)입니다. 고친 적이 없거나, 고친 뒤 글이 한국어를 바꿨으면 null입니다."
           },
           "day": {
             "type": "string",

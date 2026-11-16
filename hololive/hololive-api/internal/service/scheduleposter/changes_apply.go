@@ -136,9 +136,11 @@ type Change struct {
 	Terms    []Term
 	DoubtKo  string
 	Warnings []string
+	// EditedAt은 관리자가 이 변경의 한국어 다섯 칸을 마지막으로 고친 시각이며 고친 적이 없으면 zero다. PolishSlot만 쓴다.
+	EditedAt time.Time
 }
 
-// Slot은 원래 행에 변경을 적용한 현재 일정 한 칸이다. 더한 칸은 Ordinal이 0이고 AddedPostID·AddedItem이 그 칸을 만든 변경이다.
+// Slot은 원래 행에 변경을 적용한 현재 일정 한 칸이다. EditedAt은 지금 한국어 칸을 정한 행이나 변경의 값이다. 더한 칸은 Ordinal이 0이고 AddedPostID·AddedItem이 그 칸을 만든 변경이다.
 type Slot struct {
 	Row
 
@@ -292,15 +294,35 @@ func (s *Slot) setValues(change *Change) {
 	}
 }
 
+func (c *Change) setsKorean() bool {
+	return c.TitleKo != "" || c.Kind == ChangeOff || c.Kind == ChangeAdded
+}
+
 func (s *Slot) setKorean(change *Change) {
+	if !change.setsKorean() {
+		return
+	}
+
+	s.EditedAt = change.EditedAt
+
 	switch {
 	case change.TitleKo != "":
 		s.TitleKo, s.WithKo, s.PlaceKo, s.TagsKo, s.NoteKo = change.TitleKo, change.WithKo, change.PlaceKo, change.TagsKo, change.NoteKo
 	case change.Kind == ChangeOff:
 		s.TitleKo, s.WithKo, s.PlaceKo, s.TagsKo, s.NoteKo = offTitleKo, nil, "", nil, ""
-	case change.Kind == ChangeAdded:
+	default:
 		s.TitleKo, s.WithKo, s.PlaceKo, s.TagsKo, s.NoteKo = streamTitleKo, nil, "", nil, ""
 	}
+}
+
+func (s *Slot) koreanStep() (*Change, bool) {
+	for i := range slices.Backward(s.Steps) {
+		if change := &s.Steps[i].Change; change.setsKorean() {
+			return change, true
+		}
+	}
+
+	return nil, false
 }
 
 // ValidateChanges는 migration 020의 CHECK와 같은 조건을 DB에 가기 전에 검사한다. 거절 행은 사유와 칸 번호만 가질 수 있고,

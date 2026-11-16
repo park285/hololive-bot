@@ -237,17 +237,22 @@ func TestPrepareFoldsConvertedRowsOutsideTheWindowIntoTheEdgeDays(t *testing.T) 
 
 func TestPrepareMergesOff(t *testing.T) {
 	off := Item{Day: date(t, "2026-11-10"), Status: StatusOff}
+	postedOff := Item{Day: date(t, "2026-11-10"), Status: StatusOff, FromPost: true}
 	canceled := Item{Day: date(t, "2026-11-10"), Start: at21, Status: StatusCancelled, Title: "취소"}
-	tentative := Item{Day: date(t, "2026-11-10"), Status: StatusTentative, Title: "게릴라"}
+	stream := planned(t, "2026-11-10", at20, "방송")
+	added := Item{Day: date(t, "2026-11-10"), Start: at20, Status: StatusPlanned, Title: "게릴라", FromPost: true}
+	maybe := Item{Day: date(t, "2026-11-10"), Status: StatusTentative, Title: "게릴라 미정", FromPost: true}
 
 	for name, tc := range map[string]struct {
 		items []Item
 		want  []string
 	}{
-		"휴방만 있는 날은 휴방 하나":   {[]Item{off, off}, []string{"휴방"}},
-		"예정 방송이 있으면 휴방을 뺀다": {[]Item{off, planned(t, "2026-11-10", at20, "방송")}, []string{"방송"}},
-		"미정 방송이 있어도 휴방을 뺀다": {[]Item{off, tentative}, []string{"게릴라"}},
-		"취소 칸만 있으면 휴방을 둔다":  {[]Item{off, canceled}, []string{"취소", "휴방"}},
+		"휴방만 있는 날은 휴방 하나":             {[]Item{off, off}, []string{"휴방"}},
+		"포스터가 함께 적은 휴방과 방송은 둘 다 둔다":   {[]Item{off, stream}, []string{"휴방", "방송"}},
+		"글이 더한 예정 방송이 있으면 휴방을 뺀다":     {[]Item{off, added}, []string{"게릴라"}},
+		"글이 더한 미정 방송이 있어도 휴방을 뺀다":     {[]Item{off, maybe}, []string{"게릴라 미정"}},
+		"글이 휴방으로 바꾼 칸은 남은 방송이 있으면 뺀다": {[]Item{postedOff, stream}, []string{"방송"}},
+		"취소 칸만 있으면 휴방을 둔다":            {[]Item{off, canceled}, []string{"취소", "휴방"}},
 	} {
 		v, err := prepare(weekCard(t, tc.items...), everyRune)
 		if err != nil {

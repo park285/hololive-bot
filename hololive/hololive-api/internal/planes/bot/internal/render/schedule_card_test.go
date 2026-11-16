@@ -99,7 +99,7 @@ func TestScheduleCardRendererCopiesRowsIntoCard(t *testing.T) {
 func scheduleItemEqual(a, b schedulecard.Item) bool {
 	return a.Day.Equal(b.Day) && a.Start == b.Start && a.End == b.End && a.Status == b.Status && a.Title == b.Title &&
 		slices.Equal(a.With, b.With) && a.Place == b.Place && slices.Equal(a.Tags, b.Tags) && a.Note == b.Note &&
-		a.PrevStart == b.PrevStart && a.MovedFrom.Equal(b.MovedFrom) && a.Converted == b.Converted
+		a.PrevStart == b.PrevStart && a.MovedFrom.Equal(b.MovedFrom) && a.Converted == b.Converted && a.FromPost == b.FromPost
 }
 
 func TestScheduleCardMovesTheWindowWithTheConvertedPoster(t *testing.T) {
@@ -182,16 +182,54 @@ func TestScheduleCardShowsChangedSlots(t *testing.T) {
 
 	want := []schedulecard.Item{
 		{Day: novemberDay(9), Start: "21:30", PrevStart: "20:30", Status: schedulecard.StatusPlanned, Title: "잡담"},
-		{Day: novemberDay(12), Start: "19:30", MovedFrom: novemberDay(10), Status: schedulecard.StatusPlanned, Title: "게임"},
+		{Day: novemberDay(12), Start: "19:30", MovedFrom: novemberDay(10), FromPost: true, Status: schedulecard.StatusPlanned, Title: "게임"},
 		{Day: novemberDay(11), Start: "19:00", Status: schedulecard.StatusCancelled, Title: "노래"},
 		{Day: novemberDay(13), Start: "18:00", Status: schedulecard.StatusPlanned, Title: "마인크래프트"},
 		{Day: novemberDay(14), Start: "02:00", MovedFrom: novemberDay(13), Status: schedulecard.StatusPlanned, Title: "심야"},
 		{Day: novemberDay(14), Start: "22:00", Status: schedulecard.StatusCancelled, Title: "ASMR"},
-		{Day: novemberDay(15), Start: "17:00", Status: schedulecard.StatusPlanned, Title: "콜라보"},
+		{Day: novemberDay(15), Start: "17:00", FromPost: true, Status: schedulecard.StatusPlanned, Title: "콜라보"},
 	}
 
 	if !slices.EqualFunc(card.Items, want, scheduleItemEqual) {
 		t.Fatalf("card items = %+v, want %+v", card.Items, want)
+	}
+}
+
+func TestScheduleCardMarksSlotsThatPostsAnnounced(t *testing.T) {
+	recorded := time.Date(2026, time.November, 15, 8, 0, 0, 0, time.UTC)
+	schedule := scheduleposter.PublishedSchedule{
+		PosterID:    9,
+		WeekStart:   novemberDay(9),
+		WeekEnd:     novemberDay(15),
+		ExtractedAt: time.Date(2026, time.November, 9, 3, 0, 0, 0, time.UTC),
+		Rows: []scheduleposter.Row{
+			{Ordinal: 1, Day: novemberDay(12), Status: scheduleposter.RowOff, TitleKo: "휴방"},
+			{Ordinal: 2, Day: novemberDay(12), Start: late23, Status: scheduleposter.RowPlanned, TitleKo: "불러보았다 쇼츠"},
+			{Ordinal: 3, Day: novemberDay(15), Start: late23, Status: scheduleposter.RowPlanned, TitleKo: "게임"},
+		},
+		Changes: []scheduleposter.Change{
+			recordedChange(scheduleposter.Change{PostID: 201, Item: 1, Kind: scheduleposter.ChangeOff, Slot: 3, Status: scheduleposter.RowOff}, recorded),
+			recordedChange(scheduleposter.Change{PostID: 201, Item: 2, Kind: scheduleposter.ChangeAdded, Day: novemberDay(15), Status: scheduleposter.RowTentative, TitleKo: "게릴라"}, recorded),
+			recordedChange(scheduleposter.Change{PostID: 202, Item: 1, Kind: scheduleposter.ChangeConfirmed, TargetPostID: 201, TargetItem: 2, Start: new("22:15"), Status: scheduleposter.RowPlanned}, recorded.Add(time.Hour)),
+		},
+	}
+
+	drawer := &recordingCardDrawer{}
+	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
+
+	if _, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), schedule); err != nil {
+		t.Fatalf("RenderScheduleCard() error = %v", err)
+	}
+
+	want := []schedulecard.Item{
+		{Day: novemberDay(12), Status: schedulecard.StatusOff, Title: "휴방"},
+		{Day: novemberDay(12), Start: late23, Status: schedulecard.StatusPlanned, Title: "불러보았다 쇼츠"},
+		{Day: novemberDay(15), Start: late23, FromPost: true, Status: schedulecard.StatusOff, Title: "휴방"},
+		{Day: novemberDay(15), Start: "22:15", FromPost: true, Status: schedulecard.StatusPlanned, Title: "게릴라"},
+	}
+
+	if got := drawer.cards[0].Items; !slices.EqualFunc(got, want, scheduleItemEqual) {
+		t.Fatalf("card items = %+v, want %+v (the poster's own day off and stream stay unmarked)", got, want)
 	}
 }
 
@@ -240,6 +278,36 @@ func TestScheduleCardRendererRedrawsAfterRevokedChange(t *testing.T) {
 
 	if drawer.cards[1].Items[2].Status != schedulecard.StatusPlanned {
 		t.Fatalf("revoked cancellation still drawn: %+v", drawer.cards[1].Items[2])
+	}
+}
+
+func TestScheduleCardRendererRedrawsAfterPolish(t *testing.T) {
+	drawer := &recordingCardDrawer{}
+	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
+	schedule := changedSchedule()
+	polishedAt := schedule.UpdatedAt().Add(time.Hour)
+
+	render := func(wantDraws int, what string) {
+		t.Helper()
+
+		if _, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), schedule); err != nil || len(drawer.cards) != wantDraws {
+			t.Fatalf("%s: RenderScheduleCard() = %v, draws = %d; want %d", what, err, len(drawer.cards), wantDraws)
+		}
+	}
+
+	render(1, "before polish")
+
+	schedule.Rows[0].TitleKo, schedule.Rows[0].EditedAt = "윤문한 잡담", polishedAt
+
+	render(2, "polished row")
+
+	schedule.Changes[0].TitleKo, schedule.Changes[0].EditedAt = "윤문한 콜라보", polishedAt.Add(time.Minute)
+
+	render(3, "polished change")
+	render(3, "same polish")
+
+	if got := drawer.cards[1].Items[0].Title; got != "윤문한 잡담" {
+		t.Fatalf("polished row title = %q", got)
 	}
 }
 

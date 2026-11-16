@@ -60,6 +60,8 @@ type schedulePosterSlotResponse struct {
 	Number      int                          `json:"number"`
 	Ordinal     *int                         `json:"ordinal"`
 	AddedPostID *string                      `json:"addedPostId"`
+	AddedItem   *int                         `json:"addedItem"`
+	EditedAt    *string                      `json:"editedAt"`
 	Day         string                       `json:"day"`
 	Start       string                       `json:"start"`
 	End         string                       `json:"end"`
@@ -277,8 +279,13 @@ func newSchedulePosterSlotResponse(slot *scheduleposter.Slot) schedulePosterSlot
 		Steps:       steps,
 	}
 
+	if !slot.EditedAt.IsZero() {
+		item.EditedAt = new(formatTimestamp(slot.EditedAt))
+	}
+
 	if slot.AddedPostID != 0 {
 		item.AddedPostID = new(strconv.FormatInt(slot.AddedPostID, 10))
+		item.AddedItem = new(slot.AddedItem)
 	} else {
 		item.Ordinal = new(slot.Ordinal)
 		item.OrigDay = new(slot.OrigDay.Format(time.DateOnly))
@@ -344,7 +351,8 @@ func parseSchedulePosterID(raw string) (int64, bool) {
 
 func (h *SchedulePosterHandler) respondStoreError(c *gin.Context, action string, err error) {
 	switch {
-	case errors.Is(err, errInvalidSchedulePosterRequest):
+	case errors.Is(err, errInvalidSchedulePosterRequest), errors.Is(err, scheduleposter.ErrInvalidKorean),
+		errors.Is(err, scheduleposter.ErrInvalidMemo):
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid schedule poster request body", nil)
 	case errors.Is(err, scheduleposter.ErrNotFound):
 		sharedserver.RespondError(c, http.StatusNotFound, "schedule poster not found", nil)
@@ -698,6 +706,10 @@ func (h *SchedulePosterHandler) change(
 }
 
 func decodeSchedulePosterChange(c *gin.Context, request any) bool {
+	return decodeSchedulePosterBody(c, request, schedulePosterMaxBody)
+}
+
+func decodeSchedulePosterBody(c *gin.Context, request any, maxBytes int64) bool {
 	mediaType, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
 	if err != nil || mediaType != "application/json" {
 		sharedserver.RespondError(c, http.StatusUnsupportedMediaType, "application/json required", nil)
@@ -705,7 +717,7 @@ func decodeSchedulePosterChange(c *gin.Context, request any) bool {
 		return false
 	}
 
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, schedulePosterMaxBody)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
 	if err := jsonv2.UnmarshalRead(c.Request.Body, request, jsonv2.RejectUnknownMembers(true)); err != nil {
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid schedule poster request body", nil)
 

@@ -5,7 +5,7 @@
 hololive-api admin plane의 `/api/holo/*` 관리 HTTP API 요청·응답 schema는 생산자인 hololive-api가 소유합니다.
 정본은 [admin-api.openapi.json](admin-api.openapi.json)(OpenAPI 3.1)이고, 이 파일에는 생산자 시험이 실제 handler
 요청·응답으로 검증한 operation만 둡니다. 현재 범위는 방·ACL 관리(`GET/POST/DELETE /api/holo/rooms`,
-`GET /api/holo/rooms/joined`, `POST /api/holo/rooms/acl`)와 주간 일정 포스터 검토(`/api/holo/schedule-posters*` 13개)입니다. iris-console은 이 범위의 schema를 고정한
+`GET /api/holo/rooms/joined`, `POST /api/holo/rooms/acl`)와 주간 일정 포스터 검토(`/api/holo/schedule-posters*` 17개)입니다. iris-console은 이 범위의 schema를 고정한
 hololive-bot revision에서 가져와 gateway 검증용 생성 사본을 만들고, 자기 공개 경로(`/admin/api/holo/*`)와
 gateway 고유 header·오류 envelope를 소유합니다. 범위 밖 `/api/holo/*` operation의 schema는 생산자 시험이 붙기 전까지
 iris-console `contracts/hololive/openapi.json`이 소유합니다.
@@ -21,8 +21,11 @@ iris-console `contracts/hololive/openapi.json`이 소유합니다.
   상세 의미는 [settings 계약](settings.md)을 따릅니다.
 - 일정 포스터 operation은 목록·요약·상세 읽기, 저장한 그림 읽기(`GET /{id}/image`), 수집 예약(`POST /collect`), 확정·주 범위 수정·거절
   (`POST /{id}/confirm|week|reject`), 일정표 행만 다시 뽑기(`POST /{id}/rows`), 일정표 칸 읽기(`GET /{id}/rows`), 글·변경 목록
-  (`GET /{id}/changes`), 글 단위 변경 철회와 되살리기(`POST /{id}/changes/revoke|restore`)입니다. 성공 응답은 모두
-  200이고 경로 변수는 포스터 `{id}` 하나뿐이라 철회하거나 되살릴 글 ID는 본문 `postId`에 둡니다. 포스터 응답의
+  (`GET /{id}/changes`), 글 단위 변경 철회와 되살리기(`POST /{id}/changes/revoke|restore`), 칸의 한국어 고치기
+  (`POST /{id}/rows/polish`, 글이 더한 칸은 `POST /{id}/changes/polish`), 번역 메모 읽기와 저장(`GET|POST /memo`)입니다. 성공 응답은 모두
+  200이고 경로 변수는 포스터 `{id}` 하나뿐이라 철회하거나 되살릴 글 ID와 고칠 칸은 본문에 둡니다. 칸을 고치는 요청은 읽은
+  일정표 응답의 `updatedAt`을 `expectedUpdatedAt`으로 돌려보내고, 그 뒤에 일정이 바뀌었으면 409 `revision_conflict`입니다.
+  번역 메모는 한 건이며 저장한 뒤의 번역 지시문에 참고 절로 붙습니다. 포스터 응답의
   `rowsStatus`·`rowsError`·`rowsExtractedAt`·`rowsCount`는 확정본에서만 뜻이 있습니다. 행 재추출은 revision을 올리지
   않습니다. 저장한 그림은 수집·자동 검토·행 추출 때 원본을 받은 그대로이고, 한 번 저장하면 바뀌지 않으며 revision도 올리지
   않습니다. 그림을 저장하지 않은 포스터(거절·만료본, 저장 전에 확정한 포스터)와 없는 포스터는 모두 404입니다. 일정표 칸 읽기는 행 묶음에 반영 변경을 적용한 `!스케쥴` 카드와 같은 칸과, 오늘(JST) `!스케쥴`이 이 포스터를

@@ -40,6 +40,7 @@ const (
 type rowStore interface {
 	PendingRows(ctx context.Context, today time.Time, limit int) ([]posterstore.PendingRows, error)
 	WeekTerms(ctx context.Context, item posterstore.PendingRows) ([]posterstore.Term, error)
+	TranslationMemo(ctx context.Context) (posterstore.Memo, error)
 	RecordRows(ctx context.Context, item posterstore.PendingRows, rows []posterstore.Row, dayShift int) (bool, error)
 	RecordRowsFailure(ctx context.Context, item posterstore.PendingRows, reason string) (bool, error)
 }
@@ -203,6 +204,11 @@ func (s *Service) extractOne(
 		return nil, 0, "", fmt.Errorf("load schedule poster week terms: %w", err)
 	}
 
+	memo, err := s.rows.TranslationMemo(ctx)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("load schedule poster translation memo: %w", err)
+	}
+
 	extracted, base, err := s.extractRows(ctx, item, original, buildExtractPrompt(item.WeekStart, item.WeekEnd, named))
 	if errors.Is(err, errUnsupportedZone) {
 		return nil, 0, reasonUnsupportedZone, err
@@ -221,7 +227,8 @@ func (s *Service) extractOne(
 		zones[i] = optional(extracted[i].TZ)
 	}
 
-	prompt := buildTranslatePrompt(extracted, posterZone(zones), owner, named, s.config.Translation.Glossary, earlierRenderings(terms))
+	prompt := buildTranslatePrompt(
+		extracted, posterZone(zones), owner, named, s.config.Translation.Glossary, earlierRenderings(terms), memo.Body)
 
 	rows, err := s.translateRows(ctx, item, extracted, base, prompt, newRowChecker(owner, named))
 	if err != nil {

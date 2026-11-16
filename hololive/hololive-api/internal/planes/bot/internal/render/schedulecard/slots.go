@@ -78,6 +78,8 @@ func prepare(card Card, drawable func(rune) bool) (view, error) {
 		days[i].date = start.AddDate(0, 0, i)
 	}
 
+	fromPost := make([]bool, daysPerWeek)
+
 	for i := range card.Items {
 		it := &card.Items[i]
 
@@ -100,10 +102,11 @@ func prepare(card Card, drawable func(rune) bool) (view, error) {
 		idx := int(edge.Sub(start).Hours() / 24)
 
 		days[idx].slots = append(days[idx].slots, s)
+		fromPost[idx] = fromPost[idx] || it.FromPost && it.Status != StatusCancelled
 	}
 
 	for i := range days {
-		days[i].slots = capSlots(mergeOff(sortSlots(days[i].slots)), maxSlotsPerDay)
+		days[i].slots = capSlots(mergeOff(sortSlots(days[i].slots), fromPost[i]), maxSlotsPerDay)
 	}
 
 	return view{
@@ -428,24 +431,31 @@ func sortSlots(slots []slot) []slot {
 	return slots
 }
 
-func mergeOff(slots []slot) []slot {
-	off, streaming := 0, false
+func mergeOff(slots []slot, fromPost bool) []slot {
+	var (
+		offs, rest []slot
+		streaming  bool
+	)
 
 	for _, s := range slots {
-		if s.status == StatusOff {
-			off++
-		}
-
-		if s.status == StatusPlanned || s.status == StatusTentative {
+		switch s.status {
+		case StatusOff:
+			offs = append(offs, s)
+		case StatusPlanned, StatusTentative:
+			rest = append(rest, s)
 			streaming = true
+		case StatusCancelled:
+			rest = append(rest, s)
 		}
 	}
 
 	switch {
-	case off == len(slots):
-		return slots[:min(len(slots), 1)]
+	case len(offs) == 0, streaming && fromPost:
+		return rest
+	case len(rest) == 0:
+		return offs[:1]
 	case streaming:
-		return slices.DeleteFunc(slots, func(s slot) bool { return s.status == StatusOff })
+		return append(offs[:1:1], rest...)
 	default:
 		return slots
 	}

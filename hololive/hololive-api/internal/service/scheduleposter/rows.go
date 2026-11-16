@@ -76,6 +76,8 @@ type Row struct {
 	DoubtKo    string    `json:"doubt_ko"`
 	// Warnings는 구조 검사가 이 행에서 찾은 경고다. 저장을 막지 않는다.
 	Warnings []string `json:"warnings"`
+	// EditedAt은 관리자가 한국어 다섯 칸을 마지막으로 고친 시각이며 고친 적이 없으면 zero다. PolishSlot만 쓴다.
+	EditedAt time.Time `json:"-"`
 }
 
 // PendingRows는 일정표 행을 뽑을 확정본이다. 그 사이 거절·주 범위 수정·재추출 예약으로 RowsRevision이 오르면 결과를 기록하지 않는다.
@@ -111,16 +113,29 @@ func (s *PublishedSchedule) Slots() []Slot {
 	return ApplyChanges(s.Rows, s.Changes)
 }
 
-// UpdatedAt은 행 묶음을 뽑은 시각과 Applied인 변경을 기록한 시각 가운데 가장 늦은 값이다.
+// UpdatedAt은 행 묶음을 뽑은 시각, Applied인 변경을 기록한 시각, 관리자가 행이나 Applied인 변경의 한국어를 고친 시각 가운데 가장 늦은 값이다.
 func (s *PublishedSchedule) UpdatedAt() time.Time {
 	latest := s.ExtractedAt
+
+	for i := range s.Rows {
+		latest = laterOf(latest, s.Rows[i].EditedAt)
+	}
+
 	for i := range s.Changes {
-		if s.Changes[i].Kind.Applied() && s.Changes[i].RecordedAt.After(latest) {
-			latest = s.Changes[i].RecordedAt
+		if s.Changes[i].Kind.Applied() {
+			latest = laterOf(latest, laterOf(s.Changes[i].RecordedAt, s.Changes[i].EditedAt))
 		}
 	}
 
 	return latest
+}
+
+func laterOf(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+
+	return a
 }
 
 // PendingRows의 today는 JST 날짜다.
@@ -334,12 +349,18 @@ func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Ti
 		}
 
 		collected, collectErr := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Row, error) {
-			var item Row
+			var (
+				item     Row
+				editedAt *time.Time
+			)
 
 			scanErr := row.Scan(&schedule.PosterID, &schedule.WeekStart, &schedule.WeekEnd, &schedule.ExtractedAt,
 				&schedule.PostedAt, &schedule.RowsPending, &schedule.RowsDayShift,
 				&item.Ordinal, &item.Day, &item.Start, &item.End, &item.TZ, &item.SourceZone, &item.Status, &item.SourceText, &item.Badges,
-				&item.TitleKo, &item.WithKo, &item.PlaceKo, &item.TagsKo, &item.NoteKo)
+				&item.TitleKo, &item.WithKo, &item.PlaceKo, &item.TagsKo, &item.NoteKo, &editedAt)
+			if editedAt != nil {
+				item.EditedAt = *editedAt
+			}
 
 			return item, scanErr
 		})
@@ -439,10 +460,18 @@ func loadPosterRows(ctx context.Context, tx pgx.Tx, schedule *PublishedSchedule)
 	}
 
 	collected, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Row, error) {
-		var item Row
+		var (
+			item     Row
+			editedAt *time.Time
+		)
 
-		return item, row.Scan(&item.Ordinal, &item.Day, &item.Start, &item.End, &item.TZ, &item.SourceZone, &item.Status, &item.SourceText,
-			&item.Badges, &item.TitleKo, &item.WithKo, &item.PlaceKo, &item.TagsKo, &item.NoteKo, &item.DoubtKo, &item.Warnings)
+		scanErr := row.Scan(&item.Ordinal, &item.Day, &item.Start, &item.End, &item.TZ, &item.SourceZone, &item.Status, &item.SourceText,
+			&item.Badges, &item.TitleKo, &item.WithKo, &item.PlaceKo, &item.TagsKo, &item.NoteKo, &item.DoubtKo, &item.Warnings, &editedAt)
+		if editedAt != nil {
+			item.EditedAt = *editedAt
+		}
+
+		return item, scanErr
 	})
 	if err != nil {
 		return fmt.Errorf("load rows: %w", err)

@@ -31,6 +31,8 @@ type fakeRowStore struct {
 	pending   []posterstore.PendingRows
 	terms     []posterstore.Term
 	termsErr  error
+	memo      string
+	memoErr   error
 	recordErr error
 	today     []time.Time
 	recorded  [][]posterstore.Row
@@ -46,6 +48,10 @@ func (f *fakeRowStore) PendingRows(_ context.Context, today time.Time, _ int) ([
 
 func (f *fakeRowStore) WeekTerms(context.Context, posterstore.PendingRows) ([]posterstore.Term, error) {
 	return f.terms, f.termsErr
+}
+
+func (f *fakeRowStore) TranslationMemo(context.Context) (posterstore.Memo, error) {
+	return posterstore.Memo{Body: f.memo}, f.memoErr
 }
 
 func (f *fakeRowStore) RecordRows(_ context.Context, _ posterstore.PendingRows, rows []posterstore.Row, dayShift int) (bool, error) {
@@ -185,6 +191,23 @@ func TestExtractPendingRowsRetriesRejectedResponses(t *testing.T) {
 		require.Empty(t, store.recorded[0][0].End, name)
 		require.Equal(t, []time.Time{utcDate("2026-11-11")}, store.today, "JST 오늘 날짜로 대상을 고른다")
 	}
+}
+
+func TestExtractPendingRowsPutsTheTranslationMemoInOneSectionBeforeTheRows(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeRowStore{pending: []posterstore.PendingRows{week}, memo: "朝活은 아침 방송으로 옮긴다\n\n  문장형 제목은 명사구로 줄인다  \n"}
+	model := &fakeRowModel{extracted: [][]extractedRow{{plannedRow}}, translated: [][]translatedRow{{chatRowKo}}}
+
+	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
+	require.Contains(t, model.prompts[0],
+		"\n(none)\n\n"+editorNotesHeading+"\n朝活은 아침 방송으로 옮긴다\n  문장형 제목은 명사구로 줄인다\n\nRows:\n1. 雑談")
+
+	store = &fakeRowStore{pending: []posterstore.PendingRows{week}, memo: " \n\n"}
+	model = &fakeRowModel{extracted: [][]extractedRow{{plannedRow}}, translated: [][]translatedRow{{chatRowKo}}}
+
+	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
+	require.NotContains(t, model.prompts[0], "Editor notes", "빈 메모는 절을 만들지 않는다")
 }
 
 func TestExtractPendingRowsNeverRecordsRowsTheStoreWouldReject(t *testing.T) {
@@ -385,6 +408,12 @@ func TestExtractPendingRowsLeavesPostersPendingOnStoreErrors(t *testing.T) {
 
 	require.Error(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
 	require.Zero(t, model.extracts)
+	require.Empty(t, store.failures)
+
+	store = &fakeRowStore{pending: []posterstore.PendingRows{week}, memoErr: errors.New("memo unavailable")}
+
+	require.Error(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
+	require.Zero(t, model.extracts, "메모를 못 읽으면 메모 없이 번역하지 않는다")
 	require.Empty(t, store.failures)
 
 	store = &fakeRowStore{pending: []posterstore.PendingRows{week}, recordErr: errors.New("write denied")}
@@ -871,7 +900,7 @@ func TestLoadConfigUsesStageDefaultsForRows(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RowsConfig{
 		Extract:   RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 900},
-		Translate: RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelMedium, TimeoutSeconds: 180},
+		Translate: RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
 		Match:     RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
 		Decide:    DecideConfig{ScheduleInfoMin: 0.7},
 	}, config.Translation.Rows)
@@ -884,7 +913,7 @@ func TestLoadConfigKeepsDefaultsForOmittedRowKeys(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RowsConfig{
 		Extract:   RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 900},
-		Translate: RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelMedium, Temperature: new(float32(0.5)), TimeoutSeconds: 300},
+		Translate: RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, Temperature: new(float32(0.5)), TimeoutSeconds: 300},
 		Match:     RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
 		Decide:    DecideConfig{ScheduleInfoMin: 0.7},
 	}, config.Translation.Rows)
@@ -893,7 +922,7 @@ func TestLoadConfigKeepsDefaultsForOmittedRowKeys(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelMinimal, Temperature: new(float32(0)), TimeoutSeconds: 900},
 		config.Translation.Rows.Extract)
-	require.Equal(t, genai.ThinkingLevelMedium, config.Translation.Rows.Translate.ThinkingLevel)
+	require.Equal(t, defaultRowsConfig().Translate, config.Translation.Rows.Translate)
 }
 
 func TestLoadConfigRejectsInvalidRowSettings(t *testing.T) {

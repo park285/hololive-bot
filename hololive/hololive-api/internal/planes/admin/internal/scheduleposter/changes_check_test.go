@@ -482,6 +482,8 @@ func TestJudgeItemsOnMatchPromptExamples(t *testing.T) {
 		"4": {},
 		"5": {"content_changed", "added", string(posterstore.ChangeCancelled), "same"},
 		"6": {"added", "moved"},
+		"7": {"content_changed"},
+		"8": {},
 	}
 	blocks := strings.Split(matchPromptTemplate, "\n\nExample ")[1:]
 	require.Len(t, blocks, len(want))
