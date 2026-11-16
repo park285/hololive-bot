@@ -62,7 +62,7 @@ func (m *alarmDispatchMembers) collabIndex(ctx context.Context) (officialidentit
 }
 
 // renderAlarmDispatchGroup는 알림을 자동 접기 없이 렌더링하고 사전 렌더된 다이제스트는 그대로 유지한다.
-func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members *alarmDispatchMembers, shortLinkBaseURL string, group alarmDispatchGroup) (delivery.MessageVariants, error) {
+func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members *alarmDispatchMembers, shortLinks shortlinkservice.YouTubeBuilder, group alarmDispatchGroup) (delivery.MessageVariants, error) {
 	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, members.provider, group); handled {
 		if err != nil {
 			return message, fmt.Errorf("render alarm dispatch group source: %w", err)
@@ -75,7 +75,7 @@ func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, 
 		return renderAlarmDispatchNotification(ctx, renderer, messageStrings, members, &group.notifications[0])
 	}
 
-	return renderAlarmDispatchNotificationGroup(ctx, renderer, messageStrings, members, shortLinkBaseURL, group)
+	return renderAlarmDispatchNotificationGroup(ctx, renderer, messageStrings, members, shortLinks, group)
 }
 
 func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) (message delivery.MessageVariants, handled bool, err error) {
@@ -246,12 +246,7 @@ func buildAlarmDispatchGroupViewWithShortLinks(
 	}, nil
 }
 
-func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members *alarmDispatchMembers, shortLinkBaseURL string, group alarmDispatchGroup) (delivery.MessageVariants, error) {
-	shortLinks, err := configuredAlarmShortLinkBuilder(shortLinkBaseURL)
-	if err != nil {
-		return delivery.MessageVariants{}, fmt.Errorf("render alarm dispatch notification group: short links: %w", err)
-	}
-
+func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members *alarmDispatchMembers, shortLinks shortlinkservice.YouTubeBuilder, group alarmDispatchGroup) (delivery.MessageVariants, error) {
 	view, err := buildAlarmDispatchGroupViewWithShortLinks(ctx, store, members, group, shortLinks)
 	if err != nil {
 		return delivery.MessageVariants{}, fmt.Errorf("render alarm dispatch notification group: %w", err)

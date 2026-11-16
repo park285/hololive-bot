@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 // 두 지시문은 모델 검증을 거친 원문이다. 고치면 다시 검증해야 한다.

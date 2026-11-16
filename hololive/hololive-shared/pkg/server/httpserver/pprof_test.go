@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
+
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
 )
 
 func TestNewPprofServerServesProfile(t *testing.T) {
@@ -86,7 +87,7 @@ func TestNewPprofServerRequiresAPIKey(t *testing.T) {
 	}
 
 	wrong := httptest.NewRequestWithContext(ctx, http.MethodGet, "/debug/pprof/", http.NoBody)
-	wrong.Header.Set(common.APIKeyHeader, "wrong-key")
+	wrong.Header.Set(httputil.HeaderAPIKey, "wrong-key")
 
 	wrongRecorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(wrongRecorder, wrong)
@@ -96,7 +97,7 @@ func TestNewPprofServerRequiresAPIKey(t *testing.T) {
 	}
 
 	ok := httptest.NewRequestWithContext(ctx, http.MethodGet, "/debug/pprof/", http.NoBody)
-	ok.Header.Set(common.APIKeyHeader, "test-key")
+	ok.Header.Set(httputil.HeaderAPIKey, "test-key")
 
 	okRecorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(okRecorder, ok)
@@ -113,7 +114,7 @@ func TestNewPprofServerServesGoroutineLeakWithAPIKey(t *testing.T) {
 
 	for _, key := range []string{"", "wrong-key", "leak-profile-test-key"} {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, http.NoBody)
-		req.Header.Set(common.APIKeyHeader, key)
+		req.Header.Set(httputil.HeaderAPIKey, key)
 
 		rec := httptest.NewRecorder()
 		server.Handler.ServeHTTP(rec, req)

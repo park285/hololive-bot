@@ -187,6 +187,48 @@ func TestBotRuntimeClosesResourcesAfterIdleOnlyH3ShutdownError(t *testing.T) {
 	}
 }
 
+func TestBotRuntimeShutdownHTTPServerStopsShortLinkWhileH3Drains(t *testing.T) {
+	runtime := &BotRuntime{}
+	serverAddr, client := newRuntimeH3TestPeer(t, runtime)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://"+serverAddr, http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := performRuntimeTestRequest(client.http, req); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := client.socket.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	shortLink, _, serveErr := newShortLinkTestServer(t)
+
+	runtime.ShortLinkServer = shortLink
+
+	drainCtx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	shutdownErr := make(chan error, 1)
+
+	go func() { shutdownErr <- runtime.ShutdownHTTPServer(drainCtx) }()
+
+	select {
+	case err := <-serveErr:
+		if !errors.Is(err, http.ErrServerClosed) {
+			t.Fatalf("short-link Serve() error = %v, want http.ErrServerClosed", err)
+		}
+	case <-drainCtx.Done():
+		t.Fatal("short-link listener kept serving until the H3 drain context ended")
+	}
+
+	if err := <-shutdownErr; !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("idle vanished peer ShutdownHTTPServer() = %v, want preserved deadline", err)
+	}
+}
+
 type runtimeH3TestPeer struct {
 	http   *http.Client
 	socket net.PacketConn

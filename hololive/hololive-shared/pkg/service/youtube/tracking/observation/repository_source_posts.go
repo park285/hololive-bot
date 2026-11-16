@@ -68,7 +68,7 @@ func buildSourcePostsBatchUpsert(
 			sb.WriteByte(',')
 		}
 
-		writeRowPlaceholders(&sb, i, columnsPerRow)
+		dbx.WriteRowPlaceholders(&sb, i, columnsPerRow)
 
 		args = append(args, record.Kind, record.PostID, record.ChannelID, record.ActualPublishedAt, record.DetectedAt, now, now)
 	}

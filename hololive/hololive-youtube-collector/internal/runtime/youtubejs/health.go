@@ -196,11 +196,7 @@ func readControlBody(resp *http.Response) ([]byte, error) {
 			return nil, errors.Join(collecterr.New(contract.ErrorResponseTooLarge, contract.ClassResourceLimit, "youtube.js helper control response exceeds body limit"), err)
 		}
 
-		if fromErr := collecterr.FromContext(fmt.Errorf("read youtube.js helper control: %w", err)); fromErr != nil {
-			return nil, fmt.Errorf("from context: %w", fromErr)
-		}
-
-		return nil, nil
+		return nil, collecterr.FromContext(fmt.Errorf("read youtube.js helper control: %w", err))
 	}
 
 	return payload, nil

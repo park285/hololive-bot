@@ -2,7 +2,8 @@
 
 이 디렉터리에는 실행 정의가 더 이상 없습니다. 중앙(hololive-seoul)은 [deploy/quadlet](../quadlet/README.md),
 Seoul AP collector b는 2026-11-06부터 iris-seoul rootful Podman Quadlet([deploy/podman/iris-seoul](../podman/iris-seoul/README.md)),
-Osaka a/d는 host-native systemd입니다. Docker Compose AP 정의와 `compose.sh`·`ap-deploy.sh`는 그 전환으로 지웠습니다.
+Osaka collector a는 host-native systemd, kapu collector d는 수동 설치하는 rootful Podman Quadlet([deploy/podman/kapu](../podman/kapu/README.md))입니다.
+Docker Compose AP 정의와 `compose.sh`·`ap-deploy.sh`는 그 전환으로 지웠습니다.
 
 > 아래 절은 AP와 중앙에 함께 걸린 계약(worker profile, DB·TLS 정책, env 소유)을 다룹니다. unit 정의·설치·
 > 재시작 명령은 위 README들과 `docs/current/runbooks/`가 소유합니다.
@@ -83,13 +84,16 @@ the original container identity in the receipt, retains its image, and does not 
 The ordinary deployment can also perform this first capture while the original bytes are
 still available. Before a maintenance-stopped deployment, preparation must already exist.
 
-Native a/d use `ap-host-native-deploy.sh <host> --prepare-profile` from kapu with the
+Native a uses `ap-host-native-deploy.sh <host> --prepare-profile` from kapu with the
 host's existing deploy approval variable. This does not build or stop a service. It proves
 the running executable and loaded hash, validates the old binary, then freezes
 `worker-profile.json` and `SHA256SUMS` inside that release and updates only the host-owned
 `youtube-collector-host.env` to its release path plus canonical source path. Normal native
 deployment freezes each candidate the same way; manual and automatic rollback validate
 the previous release's checksums and binary/profile pair before starting it.
+`worker-profile-pair.py` and the `ap-host-native-*` scripts handle only a. kapu d uses the
+`SHA256SUMS`-verified release profile and `runtime-before-<date>` image tag rollback in
+[deploy/podman/kapu](../podman/kapu/README.md).
 
 **11.0.0 prerequisite:** deploy and actually accept the old-profile-compatible
 10.2.1 binary with `STACK_WORKER_PROFILE_SOURCE_FILE` before incompatible settings
@@ -155,8 +159,8 @@ release pair, not as extra keys or aliases in the new profile.
 
 ### Build and CLI prerequisites
 
-- 다섯 소비자는 shared-go `v2.19.0`과 공식 checksum을 고정합니다.
-  api·alarm-worker·shared는 `github.com/park285/iris-client-go/v5 v5.0.0`을 직접,
+- 다섯 소비자는 각 `go.mod`가 고정한 shared-go 판본과 공식 checksum을 씁니다.
+  api·alarm-worker·shared는 `github.com/park285/iris-client-go/v5`를 직접,
   collector는 간접 의존성으로 고정합니다. 두 정식 tag와 공식 Go 도구로 생성한 checksum이
   운영 빌드 전에 있어야 하며, 미게시 외부 replace나 가짜 tag·checksum은 운영 입력이 아닙니다.
   SDK v5는 H3 `GET /auth/epoch`를 지원하는 Iris와 같은 배포 창에서 교체하며,
@@ -165,10 +169,11 @@ release pair, not as extra keys or aliases in the new profile.
   production builds. Use root/API/alarm version `11.0.0`, a clean full
   40-character source revision, and the architecture/Node/issuer manifests.
   Runtime hosts never build.
-- Preserve the full upstream migration manifest through **324**, including
+- Preserve the full current migration manifest (epoch-3,
+  [`CONVENTIONS.md`](../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md)), including
   stream-duration, time-finalization and membership behavior. This worker/DB
-  operations cutover adds no data migration. Never run an old manifest ending
-  at 321 or roll back already-applied migrations to make an old image start.
+  operations cutover adds no data migration. Never run an older manifest or roll
+  back already-applied migrations to make an old image start.
 - Run each actual candidate binary's `--check-worker-profile` on the final
   candidate bytes, including invalid enabled and disabled profile cases. The
   effective file is the only settings input; the separate desired path is
@@ -185,7 +190,7 @@ release pair, not as extra keys or aliases in the new profile.
    the bounded `/diagnostics/workers` v1 `profile.hash`, compares exact bytes, rechecks process identity and
    runs the old image CLI with no network. Missing/mutated bytes or an unpaired
    stopped process fail closed; do not reconstruct a profile from defaults.
-2. For native a/d, use the approved
+2. For native a, use the approved
    `scripts/deploy/ap-host-native-deploy.sh HOST --prepare-profile` before any
    mirror update or maintenance stop. It freezes the old binary/profile checksums
    and changes only the host-owned effective/source paths, without restarting.
@@ -222,8 +227,8 @@ inputs until acceptance; per-file atomic publication is not a whole-deploy lock.
 A prepared pair alone is **not** an API/alarm rollback bundle. Preserve the previous pair
 directory (`previous/{profile.json,pair.json,SHA256SUMS}`), its retained image tag and the unit
 revision it ran under. `worker-profile-pair.py verify SERVICE PREVIOUS_PAIR_DIR` and `check`
-prove the pair; only an approved `rollback`/`activate` plus unit restart restores it. Collector c/b
-and native a/d retain their existing rollback entrypoints.
+prove the pair; only an approved `rollback`/`activate` plus unit restart restores it. Collector c/b,
+native a and kapu d retain their existing rollback entrypoints.
 Rollback never writes the desired mirror or synthesizes removed keys; verify
 the restored loaded hash, not health alone. A known schema-incompatible old
 writer must stay stopped even when its profile CLI succeeds.
@@ -291,9 +296,9 @@ The central unsuffixed `youtube-collector` (`c`) also uses scoped
 is only a `[Service]` interpolation file, never a container env file.
 
 `youtube-collector.env` must provide a non-empty `METRICS_API_KEY` for every
-deployed slot. Host-native `a`/`d` bind metrics to their tailnet address, so
-omitting `METRICS_API_KEY` is a startup configuration error rather than a
-keyless metrics mode.
+deployed slot. Host-native `a` binds metrics to its tailnet address and kapu `d` binds
+them to its unpublished container network address (`10.89.15.x`), so omitting
+`METRICS_API_KEY` is a startup configuration error rather than a keyless metrics mode.
 
 Admin loopback bindings remain unchanged.
 `HOLOLIVE_ADMIN_API_PORT_BIND_IP` must match `tailscale ip --assert` on the deployment
@@ -357,8 +362,9 @@ role constant and HBA. The configurable scraper-name input is removed by the app
 local contract cutover. A differently named existing login requires separately approved
 credential/ownership migration; there is no membership alias or automatic role rename.
 There is no active replication TCP allow rule, including the retired `.5` standby route.
-Standby reactivation requires a separately approved explicit TLS transport/address rule;
-the retained standby Quadlet reference unit is not authorization to enable replication access.
+Standby reactivation requires a separately approved standby definition and explicit TLS
+transport/address rule; the standby unit removed from the repository (still present at commit
+`bb000290e`) is not authorization to enable replication access.
 
 Server command flags prepare TCP keepalive 60/10/6, lock waits, all temp files, slow statements
 at 1s, and bind-parameter lengths 0 for normal/error logging. SQL literals/comments can still
@@ -378,8 +384,6 @@ scrape failure, used/max memory, evictions, rejected writes/OOM and headroom; co
 coverage, budget non-evictable overhead, and explicitly accept write failures at the cap.
 Different logical DB numbers do not isolate instance-wide eviction. Nothing here claims readiness.
 
-
-Collector compatibility env pairs use `${NEW-${OLD-default}}` / `${OLD-${NEW-default}}` interpolation. This preserves explicit empty values so the collector loader fails closed, while unset, new-only, old-only, equal, and conflicting inputs retain the truth table documented in [`youtube-collector.md`](../../docs/current/runbooks/youtube-collector.md#key-environment-variables).
 
 Deploy this repo-side contract after `tools/sync-host.sh <host> --apply` has mirrored
 `compose.env` (central) plus the per-service env files to the target host.

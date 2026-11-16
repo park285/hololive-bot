@@ -12,9 +12,9 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/schedulecard"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 const (

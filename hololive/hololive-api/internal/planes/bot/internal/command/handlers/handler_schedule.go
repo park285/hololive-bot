@@ -142,23 +142,7 @@ func scheduleMemberName(params map[string]any) (string, bool) {
 }
 
 func scheduleDays(params map[string]any) int {
-	return clampScheduleDays(rawScheduleDays(params))
-}
-
-func rawScheduleDays(params map[string]any) int {
-	d, ok := params["days"]
-	if !ok {
-		return 7
-	}
-
-	switch v := d.(type) {
-	case float64:
-		return int(v)
-	case int:
-		return v
-	default:
-		return 7
-	}
+	return clampScheduleDays(intParam(params, paramDays, 7))
 }
 
 func clampScheduleDays(days int) int {
@@ -194,13 +178,13 @@ func shouldSuppressSchedulePrompt(cmdCtx *botcommand.CommandContext, rawToken st
 		return false
 	}
 
-	message := stringutil.TrimSpace(cmdCtx.Message)
+	message := strings.TrimSpace(cmdCtx.Message)
 	if message == "" {
 		return false
 	}
 
 	message = strings.TrimLeft(message, "!/\\.")
-	message = stringutil.TrimSpace(message)
+	message = strings.TrimSpace(message)
 
 	normalizedMessage := stringutil.Normalize(message)
 

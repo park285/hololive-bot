@@ -45,7 +45,7 @@ const (
 )
 
 func normalizeCommandPrefix(prefix string) string {
-	trimmed := stringutil.TrimSpace(prefix)
+	trimmed := strings.TrimSpace(prefix)
 	if trimmed == "" {
 		return "!"
 	}
@@ -71,7 +71,7 @@ func trimLeadingSpaceAndZeroWidth(text string) string {
 func (ma *MessageAdapter) extractCommandText(raw string) (normalized, commandText string, ok bool) {
 	text := trimLeadingSpaceAndZeroWidth(raw)
 
-	text = stringutil.TrimSpace(text)
+	text = strings.TrimSpace(text)
 	if text == "" {
 		return text, "", false
 	}
@@ -81,7 +81,7 @@ func (ma *MessageAdapter) extractCommandText(raw string) (normalized, commandTex
 		return text, "", false
 	}
 
-	cmd := stringutil.TrimSpace(text[len(prefix):])
+	cmd := strings.TrimSpace(text[len(prefix):])
 	if cmd == "" {
 		return text, "", false
 	}

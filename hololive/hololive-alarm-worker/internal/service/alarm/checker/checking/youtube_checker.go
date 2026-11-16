@@ -103,7 +103,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 		evaluationWindowCap = 75 * time.Second
 	}
 
-	initCheckerMetrics()
+	checkerMetrics()
 
 	subscribers := alarmstore.NewSubscriberResolver(cacheClient, subscriptionDB)
 	checker := &YouTubeChecker{

@@ -3,22 +3,19 @@
 package envload
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/joho/godotenv"
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 // DotEnv: 런타임 로더가 기동 시 한 번 호출하는 .env 로드다. 파일이 없으면 무시한다.
 func DotEnv() error {
-	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := sharedenv.LoadDotenv(sharedenv.DotenvOptions{}); err != nil {
 		return fmt.Errorf("load .env: %w", err)
 	}
 
@@ -38,7 +35,7 @@ func CommaSeparated(value string) []string {
 	result := make([]string, 0, len(parts))
 
 	for _, part := range parts {
-		if trimmed := stringutil.TrimSpace(part); trimmed != "" {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
 			result = append(result, trimmed)
 		}
 	}

@@ -28,12 +28,11 @@ import (
 )
 
 type normalizeCommandKeyTestCase struct {
-	name           string
-	cmdType        botcommand.CommandType
-	params         map[string]any
-	wantKey        string
-	wantAction     string
-	wantParamsKept bool // 기존 파라미터가 그대로 유지되어야 하는 경우
+	name       string
+	cmdType    botcommand.CommandType
+	params     map[string]any
+	wantKey    string
+	wantAction string
 }
 
 func normalizeCommandKeyTestCases() []normalizeCommandKeyTestCase {
@@ -72,21 +71,6 @@ func normalizeCommandKeyTestCases() []normalizeCommandKeyTestCase {
 			params:     map[string]any{},
 			wantKey:    CommandKeyAlarm,
 			wantAction: "invalid",
-		},
-		{
-			name:       "alarm(action 없음) → alarm 키 + 기본 action=list",
-			cmdType:    botcommand.CommandType("alarm"),
-			params:     map[string]any{},
-			wantKey:    CommandKeyAlarm,
-			wantAction: "list",
-		},
-		{
-			name:           "alarm(action 있음) → alarm 키 + 기존 action 유지",
-			cmdType:        botcommand.CommandType("alarm"),
-			params:         map[string]any{"action": "custom"},
-			wantKey:        CommandKeyAlarm,
-			wantAction:     "custom",
-			wantParamsKept: true,
 		},
 		{
 			name:    "live → 변환 없이 live 키 반환",
@@ -128,7 +112,6 @@ func assertNormalizeCommandKey(t *testing.T, tc *normalizeCommandKeyTestCase) {
 	}
 
 	assertNormalizeCommandAction(t, gotParams, tc.wantAction)
-	assertNormalizeCommandKeptParams(t, gotParams, origParams, tc.wantParamsKept)
 	assertOriginalParamsUnchanged(t, tc.params, origParams)
 }
 
@@ -146,20 +129,6 @@ func assertNormalizeCommandAction(t *testing.T, gotParams map[string]any, wantAc
 
 	if gotAction != wantAction {
 		t.Errorf("gotParams[action] = %q, want %q", gotAction, wantAction)
-	}
-}
-
-func assertNormalizeCommandKeptParams(t *testing.T, gotParams, origParams map[string]any, wantParamsKept bool) {
-	t.Helper()
-
-	if !wantParamsKept {
-		return
-	}
-
-	for k, origV := range origParams {
-		if gotV := gotParams[k]; gotV != origV {
-			t.Errorf("gotParams[%q] = %v, want %v (원본 파라미터 변경됨)", k, gotV, origV)
-		}
 	}
 }
 

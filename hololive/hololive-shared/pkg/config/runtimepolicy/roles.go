@@ -60,13 +60,13 @@ func RejectReservedEgressRoles(runtime, egressRole, schedulerRole string) error 
 	return nil
 }
 
-// RequireNotificationRoleEnv: alarm-worker production이 소유 역할을 명시하도록 강제한다.
-func RequireNotificationRoleEnv(key, value string, allowed ...string) error {
+// RequireNotificationRoleEnv: runtime의 production 설정이 역할 env를 허용값 가운데 하나로 명시하도록 강제한다.
+func RequireNotificationRoleEnv(runtime, key, value string, allowed ...string) error {
 	if MatchesNotificationRole(value, allowed...) {
 		return nil
 	}
 
-	return fmt.Errorf("%s production requires %s=%s", RuntimeAlarmWorker, key, strings.Join(allowed, "|"))
+	return fmt.Errorf("%s production requires %s=%s", runtime, key, strings.Join(allowed, "|"))
 }
 
 func validateKnownNotificationRoleEnv(key, value string, allowed ...string) error {

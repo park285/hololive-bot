@@ -6,8 +6,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	dbtest "github.com/kapu/hololive-dbtest"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -29,7 +29,7 @@ func requireHandoffWindowRejection(t *testing.T, aliasRows int) {
 
 	seedLogicalGroupWindowNoise(t, pool, unit.contentID, unit.roomID, aliasRows)
 
-	result, err := transition.ReissueAfterHandoff(t.Context(), &claim, handoffcheck.CodeFailed, "iris reply status failed")
+	result, err := transition.ReissueAfterHandoff(t.Context(), &claim, contractsalarm.HandoffCodeFailed, "iris reply status failed")
 	require.ErrorIs(t, err, ErrHandoffCheckClosed)
 	require.Equal(t, ApplyConflict, result.Outcome)
 	require.Equal(t, domain.OutboxStatusSent, loadHandoffTestDelivery(t, pool, unit.ownerID).status)

@@ -67,32 +67,21 @@ func (c *UpcomingCommand) Execute(ctx context.Context, cmdCtx *botcommand.Comman
 	return nil
 }
 
+const upcomingHours = 24
+
 type upcomingOptions struct {
 	hours        int
 	displayLimit int
 }
 
 func parseUpcomingOptions(params map[string]any) upcomingOptions {
-	hours := normalizeUpcomingHours(intParam(params, "hours", 24))
 	showAll := boolParam(params, "all")
 	displayLimit := normalizeUpcomingDisplayLimit(intParam(params, "limit", 0), showAll)
 
 	return upcomingOptions{
-		hours:        hours,
+		hours:        upcomingHours,
 		displayLimit: displayLimit,
 	}
-}
-
-func normalizeUpcomingHours(hours int) int {
-	if hours < 1 {
-		return 24
-	}
-
-	if hours > 168 {
-		return 168
-	}
-
-	return hours
 }
 
 func normalizeUpcomingDisplayLimit(displayLimit int, showAll bool) int {

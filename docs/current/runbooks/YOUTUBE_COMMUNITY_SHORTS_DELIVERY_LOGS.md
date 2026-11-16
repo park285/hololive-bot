@@ -138,7 +138,7 @@
 
 1차 경로는 위 alarm-worker 구조화 로그입니다. 로그로 판단할 수 없을 때만 DB를 조회합니다.
 DB 조회는 stack-platform-ops의 guarded read 경로(iris-stack
-`.agents/skills/stack-platform-ops/references/postgres.md`)를 따릅니다. `hololive-osaka`의
+`.agents/skills/stack-platform-ops/references/postgres.md`)를 따릅니다. 중앙 `hololive-seoul`의
 `holo-postgres`에 컨테이너 socket으로 접속하고, 조회 전에 read-only guard를 먼저 증명합니다.
 비밀 env 파일을 셸에 source하거나 `PGPASSWORD`를 쓰지 않습니다.
 

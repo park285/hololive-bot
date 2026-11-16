@@ -125,6 +125,10 @@ type ObservationClock struct {
 
 var lowercaseSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
+func ValidSHA256Hex(value string) bool {
+	return lowercaseSHA256Pattern.MatchString(value)
+}
+
 func PrepareEnvelope(envelope Envelope) (Envelope, error) {
 	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(&envelope)
 	if err != nil {
@@ -293,7 +297,7 @@ func validateEnvelopeSHA256s(e *Envelope) error {
 		"payload sha256":  e.PayloadSHA256,
 		"evidence sha256": e.EvidenceSHA256,
 	} {
-		if !lowercaseSHA256Pattern.MatchString(value) {
+		if !ValidSHA256Hex(value) {
 			return fmt.Errorf("validate source observation envelope: %s must be 64 lowercase hexadecimal characters", name)
 		}
 	}

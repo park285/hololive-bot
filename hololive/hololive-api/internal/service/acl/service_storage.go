@@ -23,8 +23,7 @@ package acl
 import (
 	"context"
 	"fmt"
-
-	"github.com/park285/shared-go/v2/pkg/stringutil"
+	"strings"
 )
 
 func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, defaultMode ACLMode, defaultRooms []string) error {
@@ -171,7 +170,7 @@ func (s *Service) populateRoomsFromRecords(rooms []Room) {
 }
 
 func (s *Service) populateRoomFromRecord(room Room) {
-	roomID := stringutil.TrimSpace(room.RoomID)
+	roomID := strings.TrimSpace(room.RoomID)
 	if roomID == "" {
 		return
 	}

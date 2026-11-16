@@ -333,6 +333,8 @@ type pgxAdvisoryLockSession struct {
 	conn *pgxpool.Conn
 }
 
+var _ dbmigrate.UnlockFailureEvicter = pgxAdvisoryLockSession{}
+
 func (s pgxAdvisoryLockSession) TryAdvisoryLock(ctx context.Context, key int64) (bool, error) {
 	var acquired bool
 
@@ -351,4 +353,21 @@ func (s pgxAdvisoryLockSession) AdvisoryUnlock(ctx context.Context, key int64) (
 	}
 
 	return released, nil
+}
+
+func (s pgxAdvisoryLockSession) EvictAfterUnlockFailure() error {
+	if s.conn == nil {
+		return errors.New("evict advisory lock conn: conn is nil")
+	}
+
+	conn := s.conn.Hijack()
+	closeCtx, cancel := context.WithTimeout(context.Background(), advisoryUnlockTimeout)
+
+	defer cancel()
+
+	if err := conn.Close(closeCtx); err != nil {
+		return fmt.Errorf("evict advisory lock conn: close: %w", err)
+	}
+
+	return nil
 }

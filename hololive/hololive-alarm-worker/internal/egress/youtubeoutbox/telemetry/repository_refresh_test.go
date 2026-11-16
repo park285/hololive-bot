@@ -78,7 +78,7 @@ func readRefreshTelemetryTracking(ctx context.Context, t *testing.T, counting *e
 	return got
 }
 
-func refreshTrackingOf(row *domain.YouTubeNotificationDeliveryTelemetry) refreshTelemetryTracking {
+func refreshTrackingOf(row *YouTubeNotificationDeliveryTelemetry) refreshTelemetryTracking {
 	return refreshTelemetryTracking{
 		actualPublishedAt:  row.ActualPublishedAt,
 		alarmSentAt:        row.AlarmSentAt,
@@ -99,7 +99,7 @@ func requireRefreshTelemetryTracking(ctx context.Context, t *testing.T, counting
 	}
 }
 
-func requireRefreshRowsEnriched(t *testing.T, rows []domain.YouTubeNotificationDeliveryTelemetry) {
+func requireRefreshRowsEnriched(t *testing.T, rows []YouTubeNotificationDeliveryTelemetry) {
 	t.Helper()
 
 	if rows[0].ActualPublishedAt == nil || rows[0].AlarmSentAt == nil || rows[0].AlarmLatencyMillis == nil || rows[0].DetectedAt == nil {
@@ -152,7 +152,7 @@ func TestRefreshLockedRowsBatchesTargetsAndLeavesOthersUnchanged(t *testing.T) {
 
 	control := seedRefreshControlBaseline(ctx, t, counting, idControl, base)
 
-	rows := []domain.YouTubeNotificationDeliveryTelemetry{
+	rows := []YouTubeNotificationDeliveryTelemetry{
 		{ID: idA, AlarmType: domain.AlarmTypeCommunity, ContentID: "post-a"},
 		{ID: idB, AlarmType: domain.AlarmTypeCommunity, ContentID: "post-b"},
 	}

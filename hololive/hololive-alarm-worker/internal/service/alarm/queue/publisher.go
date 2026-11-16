@@ -78,7 +78,7 @@ func NewPublisher(c WakeupCache, outbox dispatchoutbox.Writer, config PublishCon
 		logger = slog.Default()
 	}
 
-	initQueueMetrics()
+	queueMetrics()
 
 	return &Publisher{
 		cache:         c,

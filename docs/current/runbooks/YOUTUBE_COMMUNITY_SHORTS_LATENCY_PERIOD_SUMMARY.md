@@ -21,7 +21,7 @@
 
 아래 절차로 같은 집계를 직접 확인할 수 있습니다. `periods` CTE 의 행만 바꾸면 원하는 기간 조합으로 집계를 다시 만들 수 있습니다.
 DB 조회는 stack-platform-ops의 guarded read 경로(iris-stack
-`.agents/skills/stack-platform-ops/references/postgres.md`)를 따릅니다. `hololive-osaka`의
+`.agents/skills/stack-platform-ops/references/postgres.md`)를 따릅니다. 중앙 `hololive-seoul`의
 `holo-postgres`에 컨테이너 socket으로 접속하고, 조회 전에 read-only guard를 먼저 증명합니다.
 비밀 env 파일을 셸에 source하거나 `PGPASSWORD`를 쓰지 않습니다.
 

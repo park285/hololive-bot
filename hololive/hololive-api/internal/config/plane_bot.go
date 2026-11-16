@@ -23,7 +23,7 @@ type BotPlaneConfig struct {
 	Server           settings.ServerConfig
 	InternalH3       sharedh3.ClientOptions
 	Iris             settings.IrisConfig
-	Kakao            settings.KakaoConfig
+	Kakao            KakaoConfig
 	Holodex          settings.HolodexConfig
 	OfficialSchedule settings.OfficialScheduleRuntimeConfig
 	Valkey           settings.ValkeyConfig
@@ -86,7 +86,7 @@ func loadBotPlaneConfig() (*BotPlaneConfig, error) {
 		return nil, fmt.Errorf("load iris config: %w", err)
 	}
 
-	kakao, err := settings.LoadKakaoConfig()
+	kakao, err := loadKakaoConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load Kakao config: %w", err)
 	}
@@ -164,7 +164,7 @@ func (c *BotPlaneConfig) Validate() error {
 }
 
 func (c *BotPlaneConfig) validateRequired() error {
-	if err := settings.ValidateKakaoRooms(c.Kakao.Rooms); err != nil {
+	if err := validateKakaoRooms(c.Kakao.Rooms); err != nil {
 		return fmt.Errorf("validate kakao rooms: %w", err)
 	}
 

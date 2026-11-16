@@ -39,9 +39,10 @@ image label로 합니다.
 활성화하지 않습니다. 준비 receipt나 source 통합은 이 수용을 대신하지 않습니다.
 [worker settings cutover 절차](../../../deploy/compose/README.md#worker-settings-cutover-1100)는
 11.0.0의 단일 strict schema, 최초 capture, no-build 후보 검사와 복구 bundle을 정의합니다.
-다섯 genuine shared-go v2.14.0 pin/sum과 전체 upstream migration manifest 324까지를 유지하며
+각 module `go.mod`가 고정한 정식 shared-go·iris-client-go pin/sum과 현행 migration manifest 전체
+([epoch-3 규약](../../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md))를 유지하며
 stream-duration·time-finalization·membership·Node·issuer 산출물을 함께 보존합니다.
-이 worker/DB 운영 변경에 data migration을 추가하거나 구 321 manifest를 실행하지 않습니다.
+이 worker/DB 운영 변경에 data migration을 추가하거나, 이전 manifest를 실행하거나, 적용된 migration을 되돌리지 않습니다.
 
 11.0.0의 API/alarm·collector pair와 standalone Seoul 구성을 검증한 뒤 승인된 순서로 교체합니다.
 privileged migrator는 전용 Unix socket·network-none이고 network consumer는 TLS verify-full입니다.

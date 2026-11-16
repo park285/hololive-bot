@@ -23,7 +23,7 @@ type deliveryTelemetryTrackingSnapshot struct {
 	alarmSentAt       *time.Time
 }
 
-func (r *Repository) enrichRows(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
+func (r *Repository) enrichRows(ctx context.Context, rows []YouTubeNotificationDeliveryTelemetry) error {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -48,7 +48,7 @@ func (r *Repository) enrichRows(ctx context.Context, rows []domain.YouTubeNotifi
 }
 
 func collectDeliveryTelemetryIdentities(
-	rows []domain.YouTubeNotificationDeliveryTelemetry,
+	rows []YouTubeNotificationDeliveryTelemetry,
 ) map[deliveryTelemetryIdentity]struct{} {
 	identities := make(map[deliveryTelemetryIdentity]struct{}, len(rows))
 	for i := range rows {
@@ -61,7 +61,7 @@ func collectDeliveryTelemetryIdentities(
 }
 
 func applyDeliveryTelemetryTrackingContexts(
-	rows []domain.YouTubeNotificationDeliveryTelemetry,
+	rows []YouTubeNotificationDeliveryTelemetry,
 	trackingByIdentity map[deliveryTelemetryIdentity]deliveryTelemetryTrackingSnapshot,
 ) {
 	for i := range rows {
@@ -83,7 +83,7 @@ func applyDeliveryTelemetryTrackingContexts(
 }
 
 func applyDeliveryTelemetryTrackingContext(
-	row *domain.YouTubeNotificationDeliveryTelemetry,
+	row *YouTubeNotificationDeliveryTelemetry,
 	snapshot *deliveryTelemetryTrackingSnapshot,
 ) {
 	if row == nil {
@@ -109,8 +109,8 @@ func applyDeliveryTelemetryTrackingContext(
 }
 
 func deliveryTelemetryTrackingContextChanged(
-	left *domain.YouTubeNotificationDeliveryTelemetry,
-	right *domain.YouTubeNotificationDeliveryTelemetry,
+	left *YouTubeNotificationDeliveryTelemetry,
+	right *YouTubeNotificationDeliveryTelemetry,
 ) bool {
 	if !sameUTCTimePtr(left.ActualPublishedAt, right.ActualPublishedAt) {
 		return true

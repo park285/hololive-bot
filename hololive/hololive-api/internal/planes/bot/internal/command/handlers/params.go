@@ -23,8 +23,6 @@ func intParam(params map[string]any, key string, defaultValue int) int {
 	switch value := params[key].(type) {
 	case int:
 		return value
-	case float64:
-		return int(value)
 	default:
 		return defaultValue
 	}

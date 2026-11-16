@@ -9,8 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/health"
-
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 func TestNewRuntimeRouter_PublicReadyIncludesProcessComponents(t *testing.T) {
@@ -90,7 +89,7 @@ func serveRuntimeReadyRequest(t *testing.T, router http.Handler, path, apiKey st
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, http.NoBody)
 
 	if apiKey != "" {
-		req.Header.Set(common.APIKeyHeader, apiKey)
+		req.Header.Set(httputil.HeaderAPIKey, apiKey)
 	}
 
 	rec := httptest.NewRecorder()

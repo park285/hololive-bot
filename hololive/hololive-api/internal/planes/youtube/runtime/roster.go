@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
+	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
@@ -106,7 +107,8 @@ func (r rosterReader) TimeFinalizationVideos(ctx context.Context, tx dbx.Tx) ([]
 	)
 
 	rows, err := tx.Query(ctx, timeFinalizationVideosSQL, r.timeFinalizationBacklogBatchSize,
-		maxNewFinalizations, maxBacklogFinalizations)
+		maxNewFinalizations, maxBacklogFinalizations,
+		sourceobservation.TimeFinalizationNewWindow, sourceobservation.TimeFinalizationFirstAttemptDelay)
 	if err != nil {
 		return nil, fmt.Errorf("%w: load time finalization videos: %w", targetprojection.ErrInputRead, err)
 	}

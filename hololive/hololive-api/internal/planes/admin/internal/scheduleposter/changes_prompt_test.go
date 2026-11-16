@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 func TestMatchRowsKeepPosterTextFromForgingMarkers(t *testing.T) {

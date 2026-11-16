@@ -66,7 +66,6 @@ type IngestionConfig struct {
 	PhotoSyncEnabled bool
 }
 
-// loadIngestionConfig는 PHOTO_SYNC_ENABLED 미설정을 true로 본다. 같은 키를 자기 loader로 읽는 collector는 기본값이 false다.
 func loadIngestionConfig() (IngestionConfig, error) {
 	photoSyncEnabled, err := sharedenv.BoolE("PHOTO_SYNC_ENABLED", true)
 	if err != nil {

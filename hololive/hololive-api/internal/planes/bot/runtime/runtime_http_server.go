@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 )
 
 func (r *BotRuntime) StartHTTPServer(errCh chan<- error) {
@@ -114,15 +115,24 @@ func (r *BotRuntime) joinHTTPRequests(ctx context.Context) error {
 	return nil
 }
 
+// ShutdownHTTPServer는 H3·short-link·metrics·pprof를 같은 ctx 안에서 동시에 멈춘다. H3 정지는 idle 연결만 남으면
+// ctx가 끝날 때까지 기다리므로, 그 뒤에 나머지를 멈추면 그동안 열려 있던 listener의 연결 때문에 정지가 ctx 오류로 끝난다.
 func (r *BotRuntime) ShutdownHTTPServer(ctx context.Context) error {
 	if r == nil {
 		return nil
 	}
 
-	return errors.Join(
-		shutdownHTTP3Server(ctx, r.H3Server),
-		shutdownShortLinkServer(ctx, r.ShortLinkServer),
-		shutdownMetricsServer(ctx, r.MetricsServer),
-		shutdownPprofServer(ctx, r.PprofServer),
-	)
+	var shortLinkErr, metricsErr, pprofErr error
+
+	var wg sync.WaitGroup
+
+	wg.Go(func() { shortLinkErr = shutdownShortLinkServer(ctx, r.ShortLinkServer) })
+	wg.Go(func() { metricsErr = shutdownMetricsServer(ctx, r.MetricsServer) })
+	wg.Go(func() { pprofErr = shutdownPprofServer(ctx, r.PprofServer) })
+
+	h3Err := shutdownHTTP3Server(ctx, r.H3Server)
+
+	wg.Wait()
+
+	return errors.Join(h3Err, shortLinkErr, metricsErr, pprofErr)
 }

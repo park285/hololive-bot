@@ -23,7 +23,6 @@ func setYouTubeCollectorRuntimeLoadEnv(t *testing.T) {
 	t.Setenv("POSTGRES_USER", runtimepolicy.PostgresScraperRoleUser)
 	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", collectorInstanceC)
 	t.Setenv("YOUTUBE_COLLECTOR_RUNTIME_ALLOWED", "true")
-	t.Setenv("PHOTO_SYNC_ENABLED", "false")
 	useCollectorProfileFixture(t)
 	t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
 
@@ -66,7 +65,6 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *RuntimeConfig {
 
 	return &RuntimeConfig{
 		Environment: runtimepolicy.EnvironmentProduction,
-		Version:     "test",
 		Server: settings.ServerConfig{
 			Port:           30025,
 			APIKey:         "test-metrics-key",
@@ -85,7 +83,6 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *RuntimeConfig {
 		},
 		RuntimeOwnership: RuntimeOwnershipConfig{
 			RuntimeAllowed:         true,
-			PhotoSyncEnabled:       false,
 			NotificationEgressRole: runtimepolicy.NotificationEgressRoleOff,
 		},
 		WorkerProfile: mustLoadCollectorWorkerProfile(t),
@@ -189,14 +186,16 @@ func collectorRuntimeOwnershipValidateCases() []collectorRuntimeValidateCase {
 			wantSub: "YOUTUBE_COLLECTOR_RUNTIME_ALLOWED",
 		},
 		{
-			name:    "photo sync enabled",
-			mutate:  func(c *RuntimeConfig) { c.RuntimeOwnership.PhotoSyncEnabled = true },
-			wantSub: "PHOTO_SYNC_ENABLED",
-		},
-		{
 			name:    "notification egress not off",
 			mutate:  func(c *RuntimeConfig) { c.RuntimeOwnership.NotificationEgressRole = "" },
 			wantSub: "NOTIFICATION_EGRESS_ROLE",
+		},
+		{
+			name: "notification scheduler worker",
+			mutate: func(c *RuntimeConfig) {
+				c.RuntimeOwnership.NotificationSchedulerRole = runtimepolicy.NotificationSchedulerRoleWorker
+			},
+			wantSub: "NOTIFICATION_SCHEDULER_ROLE",
 		},
 		{
 			name:    "empty instance id",

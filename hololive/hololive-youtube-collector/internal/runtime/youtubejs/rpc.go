@@ -497,11 +497,7 @@ func (c *RPC) waitLimiter(ctx context.Context) error {
 	}
 
 	if err := c.limiter.Wait(ctx); err != nil {
-		if fromContextErr := collecterr.FromContext(fmt.Errorf("wait for youtube.js rate limiter: %w", err)); fromContextErr != nil {
-			return fmt.Errorf("from context: %w", fromContextErr)
-		}
-
-		return nil
+		return collecterr.FromContext(fmt.Errorf("wait for youtube.js rate limiter: %w", err))
 	}
 
 	return nil

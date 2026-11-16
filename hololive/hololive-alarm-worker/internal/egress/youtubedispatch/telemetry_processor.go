@@ -12,11 +12,10 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	timeline "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-func buildDeliveryAuditLogAttrsWithClassification(row *domain.YouTubeNotificationDeliveryTelemetry, classification *timeline.PostLatencyClassificationResult) []any {
+func buildDeliveryAuditLogAttrsWithClassification(row *telemetry.YouTubeNotificationDeliveryTelemetry, classification *timeline.PostLatencyClassificationResult) []any {
 	attrs := []any{
 		slog.Int64(FieldDeliveryID, row.DeliveryID),
 		slog.Int64(FieldOutboxID, row.OutboxID),
@@ -108,7 +107,7 @@ func (tp *TelemetryProcessor) processDeliveryTelemetry(ctx context.Context) {
 	tp.markDeliveryTelemetryResults(ctx, loggedIDs, failedIDs)
 }
 
-func (tp *TelemetryProcessor) fetchDeliveryTelemetryRows(ctx context.Context) ([]domain.YouTubeNotificationDeliveryTelemetry, bool) {
+func (tp *TelemetryProcessor) fetchDeliveryTelemetryRows(ctx context.Context) ([]telemetry.YouTubeNotificationDeliveryTelemetry, bool) {
 	rows, err := tp.telemetry.FetchAndLockPending(ctx, tp.config.TelemetryFlushBatch, tp.config.LockTimeout)
 	if err != nil {
 		tp.logger.Warn("Failed to fetch delivery telemetry buffer", slog.Any("error", err))
@@ -121,7 +120,7 @@ func (tp *TelemetryProcessor) fetchDeliveryTelemetryRows(ctx context.Context) ([
 
 func (tp *TelemetryProcessor) loadDeliveryTelemetryClassificationsForRows(
 	ctx context.Context,
-	rows []domain.YouTubeNotificationDeliveryTelemetry,
+	rows []telemetry.YouTubeNotificationDeliveryTelemetry,
 ) map[int64]timeline.PostLatencyClassificationResult {
 	classificationsByOutboxID, err := tp.loadDeliveryTelemetryLatencyClassifications(ctx, rows)
 	if err != nil {
@@ -134,7 +133,7 @@ func (tp *TelemetryProcessor) loadDeliveryTelemetryClassificationsForRows(
 }
 
 func (tp *TelemetryProcessor) emitDeliveryTelemetryRows(
-	rows []domain.YouTubeNotificationDeliveryTelemetry,
+	rows []telemetry.YouTubeNotificationDeliveryTelemetry,
 	classificationsByOutboxID map[int64]timeline.PostLatencyClassificationResult,
 ) (loggedIDs, failedIDs []int64) {
 	loggedIDs = make([]int64, 0, len(rows))
@@ -165,7 +164,7 @@ func (tp *TelemetryProcessor) markDeliveryTelemetryResults(ctx context.Context, 
 
 func (tp *TelemetryProcessor) loadDeliveryTelemetryLatencyClassifications(
 	ctx context.Context,
-	rows []domain.YouTubeNotificationDeliveryTelemetry,
+	rows []telemetry.YouTubeNotificationDeliveryTelemetry,
 ) (map[int64]timeline.PostLatencyClassificationResult, error) {
 	if tp == nil || tp.telemetry == nil || len(rows) == 0 {
 		return map[int64]timeline.PostLatencyClassificationResult{}, nil
@@ -189,7 +188,7 @@ func (tp *TelemetryProcessor) loadDeliveryTelemetryLatencyClassifications(
 }
 
 func (tp *TelemetryProcessor) emitDeliveryTelemetry(
-	row *domain.YouTubeNotificationDeliveryTelemetry,
+	row *telemetry.YouTubeNotificationDeliveryTelemetry,
 	classification *timeline.PostLatencyClassificationResult,
 ) error {
 	if strings.TrimSpace(row.RoomID) == "" {

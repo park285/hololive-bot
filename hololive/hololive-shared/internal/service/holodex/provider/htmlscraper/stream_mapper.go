@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/stringutil"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -104,21 +102,21 @@ func (s *Service) mapOfficialScheduleRow(rawRow jsontext.Value) (*officialSchedu
 		return nil, fmt.Errorf("parse official schedule video URL: %w", err)
 	}
 
-	startTime, err := time.ParseInLocation("2006/01/02 15:04:05", stringutil.TrimSpace(item.Datetime), officialScheduleJST)
+	startTime, err := time.ParseInLocation("2006/01/02 15:04:05", strings.TrimSpace(item.Datetime), officialScheduleJST)
 	if err != nil {
 		return nil, fmt.Errorf("parse official schedule datetime: %w", err)
 	}
 
-	channelName := stringutil.TrimSpace(item.Name)
+	channelName := strings.TrimSpace(item.Name)
 	if channelName == "" {
-		channelName = stringutil.TrimSpace(item.Talent.Name)
+		channelName = strings.TrimSpace(item.Talent.Name)
 	}
 
 	if channelName == "" {
 		return nil, errors.New("official schedule video row has no talent name")
 	}
 
-	providerTitle := stringutil.TrimSpace(item.Title)
+	providerTitle := strings.TrimSpace(item.Title)
 	title := providerTitle
 
 	if title == "" {
@@ -144,7 +142,7 @@ func (s *Service) mapOfficialScheduleRow(rawRow jsontext.Value) (*officialSchedu
 }
 
 func parseOfficialScheduleVideoURL(rawURL string) (parsedVideoID, parsedURL string, parseErr error) {
-	parsed, err := url.Parse(stringutil.TrimSpace(rawURL))
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
 		return "", "", fmt.Errorf("parse official schedule video URL: %w", err)
 	}
@@ -154,7 +152,7 @@ func parseOfficialScheduleVideoURL(rawURL string) (parsedVideoID, parsedURL stri
 		return "", "", errors.New("unsupported official schedule video URL")
 	}
 
-	videoID := stringutil.TrimSpace(parsed.Query().Get("v"))
+	videoID := strings.TrimSpace(parsed.Query().Get("v"))
 	if !validOfficialScheduleVideoID(videoID) {
 		return "", "", errors.New("invalid official schedule YouTube video ID")
 	}
@@ -186,7 +184,7 @@ func isOfficialScheduleVideoIDChar(char rune) bool {
 }
 
 func officialScheduleThumbnail(rawURL, videoID string) (string, bool) {
-	thumbnail := stringutil.TrimSpace(rawURL)
+	thumbnail := strings.TrimSpace(rawURL)
 	parsed, err := url.Parse(thumbnail)
 
 	if err == nil && parsed.Scheme == "https" && parsed.Hostname() != "" && parsed.User == nil {

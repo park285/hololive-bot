@@ -11,8 +11,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 const sophiaChannel = "UCROQtXcp2loQEmvpe5rhJzQ"

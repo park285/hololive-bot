@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -69,7 +70,10 @@ func TestAlarmRequestReplaysPinnedTemplateRouteAfterRestart(t *testing.T) {
 	sender.route = dispatchoutbox.SendRouteText
 	sender.messageErr = nil
 
-	restarted := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, maxBatch: 10, shortLinkBaseURL: "https://changed.example", attemptTimeout: testHandoffHorizon, handoffHorizon: testHandoffHorizon}
+	changedShortLinks, err := shortlinkservice.NewYouTubeBuilder("https://changed.example")
+	require.NoError(t, err)
+
+	restarted := Runner{members: alarmGoldenMembers{}, consumer: consumer, sender: sender, maxBatch: 10, shortLinks: changedShortLinks, attemptTimeout: testHandoffHorizon, handoffHorizon: testHandoffHorizon}
 
 	_, err = restarted.runOnce(ctx)
 	require.NoError(t, err)

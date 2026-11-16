@@ -30,12 +30,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/stretchr/testify/require"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
@@ -72,7 +72,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 		t.Fatalf("new /metrics request error = %v", err)
 	}
 
-	metricsReq.Header.Set(common.APIKeyHeader, "test-key")
+	metricsReq.Header.Set(httputil.HeaderAPIKey, "test-key")
 
 	metricsResp, err := http.DefaultClient.Do(metricsReq)
 	if err != nil {
@@ -184,7 +184,7 @@ func TestProvideBotRouter_DependencyReadyProbeIsInternalOnly(t *testing.T) {
 		t.Fatalf("build /internal/ready request: %v", err)
 	}
 
-	internalReq.Header.Set(common.APIKeyHeader, "test-key")
+	internalReq.Header.Set(httputil.HeaderAPIKey, "test-key")
 
 	internalResp, err := http.DefaultClient.Do(internalReq)
 	if err != nil {

@@ -21,9 +21,8 @@
 package messaging
 
 import (
+	"slices"
 	"strings"
-
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
@@ -33,7 +32,7 @@ func (ma *MessageAdapter) tryMemberInfoCommand(command string, args []string, ra
 		return nil, false
 	}
 
-	query := stringutil.TrimSpace(strings.Join(args, " "))
+	query := strings.TrimSpace(strings.Join(args, " "))
 	params := make(map[string]any)
 
 	if query != "" {
@@ -46,5 +45,5 @@ func (ma *MessageAdapter) tryMemberInfoCommand(command string, args []string, ra
 var memberInfoCommandAliases = []string{"멤버", "member", "프로필", "profile", "정보", "info"}
 
 func (ma *MessageAdapter) isMemberInfoCommand(cmd string) bool {
-	return stringutil.ContainsString(memberInfoCommandAliases, cmd)
+	return slices.Contains(memberInfoCommandAliases, cmd)
 }

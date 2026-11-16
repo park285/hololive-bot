@@ -27,7 +27,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 )
 
@@ -60,7 +59,7 @@ func APIKeyAuthMiddleware(apiKey string) gin.HandlerFunc {
 			return
 		}
 
-		providedKey := c.GetHeader(common.APIKeyHeader)
+		providedKey := c.GetHeader(httputil.HeaderAPIKey)
 		if providedKey == "" {
 			abortWithError(c, http.StatusUnauthorized, "unauthorized", "API key required")
 
@@ -87,7 +86,7 @@ func NoRouteAuthHandler(apiKey string) gin.HandlerFunc {
 			return
 		}
 
-		providedKey := c.GetHeader(common.APIKeyHeader)
+		providedKey := c.GetHeader(httputil.HeaderAPIKey)
 		if providedKey == "" {
 			respondWithError(c, http.StatusUnauthorized, "unauthorized", "API key required")
 

@@ -24,7 +24,7 @@ func (c *Consumer) reconcileProfile(
 			return profile.Reduce(state, evidence, c.profilePolicy())
 		},
 		persist:      persistProfileDecision,
-		applications: func(decision profile.Decision) []Application { return mapProfileApplications(decision.Applications) },
+		applications: func(decision profile.Decision) []Application { return applicationsOf(decision.Applications) },
 	}
 
 	result, err := steps.reconcile(ctx, tx, claimed)
@@ -68,17 +68,4 @@ func profileEvidenceFromObservation(observation *Observation) (profile.Evidence,
 			ReceivedAt:    observation.ReceivedAt,
 		},
 	}, nil
-}
-
-func mapProfileApplications(items []profile.Application) []Application {
-	applications := make([]Application, len(items))
-	for i := range items {
-		applications[i] = Application{
-			EntityKind: items[i].EntityKind,
-			EntityKey:  items[i].EntityKey,
-			Decision:   items[i].Decision,
-		}
-	}
-
-	return applications
 }

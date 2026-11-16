@@ -12,7 +12,6 @@ var configurePlanesIntEnvKeys = []string{
 	"HOLOLIVE_ADMIN_API_PORT",
 	"ADMIN_API_POSTGRES_POOL_MIN_CONNS",
 	"ADMIN_API_POSTGRES_POOL_MAX_CONNS",
-	"SERVER_PORT",
 	"BOT_POSTGRES_POOL_MIN_CONNS",
 	"BOT_POSTGRES_POOL_MAX_CONNS",
 }
@@ -46,8 +45,6 @@ func TestConfigurePlanesRejectsInvalidEnvValues(t *testing.T) {
 	}
 }
 
-// configurePlanes에서만 읽는 키는 LoadRuntime 기동 오류로 전파된다. SERVER_PORT는 bot plane 로더가 먼저 읽어
-// 거절하므로 이 경로의 대상이 아니다.
 func TestLoadRuntimeRejectsInvalidPlaneEnvValues(t *testing.T) {
 	for _, key := range []string{
 		"HOLOLIVE_ADMIN_API_PORT",
@@ -60,6 +57,7 @@ func TestLoadRuntimeRejectsInvalidPlaneEnvValues(t *testing.T) {
 			settingstest.ClearRuntimeRoleEnv(t)
 			configtest.SetRequiredLoadEnv(t)
 			clearConfigurePlanesIntEnv(t)
+			t.Setenv("SERVER_PORT", "")
 			t.Setenv("APP_ENV", "development")
 			t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")
 			t.Setenv(key, "1.5")
@@ -80,6 +78,7 @@ func TestLoadRuntimeIgnoresGenericPoolKeys(t *testing.T) {
 	settingstest.ClearRuntimeRoleEnv(t)
 	configtest.SetRequiredLoadEnv(t)
 	clearConfigurePlanesIntEnv(t)
+	t.Setenv("SERVER_PORT", "")
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")
 	t.Setenv("POSTGRES_POOL_MIN_CONNS", "ignored")

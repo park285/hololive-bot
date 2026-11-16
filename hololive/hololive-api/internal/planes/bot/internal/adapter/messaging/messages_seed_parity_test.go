@@ -32,8 +32,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
-var nonConstantErrorKeys = []string{
-	"async_command_backpressure",
+var unprefixedErrorKeys = map[string]bool{
+	messaging.ErrCommandRateLimited:               true,
+	messaging.ErrBroadcastHistoryQueryFailed:      true,
+	messaging.ErrBroadcastTimeQueryFailed:         true,
+	messaging.ErrBroadcastTypeUnknown:             true,
+	messaging.ErrBroadcastThumbnailUsage:          true,
+	messaging.ErrBroadcastThumbnailNotFound:       true,
+	messaging.ErrBroadcastThumbnailDownloadFailed: true,
 }
 
 func TestErrorKeyConstantsResolveInSeed(t *testing.T) {
@@ -54,6 +60,10 @@ func TestErrorKeyConstantsResolveInSeed(t *testing.T) {
 			t.Errorf("error key %q = %q, SendError passes no format args", key, value)
 		}
 
+		if unprefixedErrorKeys[key] {
+			continue
+		}
+
 		wantGlyph := "❌"
 
 		if key == messaging.ErrGraduatedMemberBlocked {
@@ -72,12 +82,8 @@ func TestErrorSeedHasNoOrphanKeys(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 
-	expected := make(map[string]bool, len(messaging.ErrorMessageKeys())+len(nonConstantErrorKeys))
+	expected := make(map[string]bool, len(messaging.ErrorMessageKeys()))
 	for _, key := range messaging.ErrorMessageKeys() {
-		expected[key] = true
-	}
-
-	for _, key := range nonConstantErrorKeys {
 		expected[key] = true
 	}
 

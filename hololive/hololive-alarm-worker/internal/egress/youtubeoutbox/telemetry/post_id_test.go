@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestEnqueueRejectsMissingCanonicalIdentityFields(t *testing.T) {
@@ -34,7 +32,7 @@ func TestEnqueueRejectsMissingCanonicalIdentityFields(t *testing.T) {
 			invalid.PostID = tc.postID
 			invalid.DeliveryPath = tc.deliveryPath
 
-			err := repo.Enqueue(t.Context(), []domain.YouTubeNotificationDeliveryTelemetry{valid, invalid})
+			err := repo.Enqueue(t.Context(), []YouTubeNotificationDeliveryTelemetry{valid, invalid})
 			require.Error(t, err)
 
 			var count int

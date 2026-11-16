@@ -7,12 +7,11 @@ single-primary 구성입니다. Seoul AP 호스트(`iris-seoul` / `100.100.1.5`)
 `holo-postgres-standby`, 복제 슬롯과 failover controller는 2026-09-08 사용자 결정에 따라
 제거했습니다.
 
-이 문서의 Bootstrap 이하 물리 복제와 failover 절차는 재활성화 참고 자료입니다. 다시
-사용하려면 명시적 승인을 새로 받고 당시 Seoul primary에서 새 `pg_basebackup`으로 standby를
-재시딩해야 합니다. 대기 서버 참고 unit `deploy/quadlet/hololive-bot-standby/`와 controller 코드는 그
-재검토를 위해 저장소에 유지하며 현재 production 활성 구성을 뜻하지 않습니다. 아래 Bootstrap 명령은 이
-참고 unit을 쓰는 rootful Podman 대기 호스트 기준입니다. Docker 대기 호스트(예: iris-seoul)용 정의는 저장소에 남아
-있지 않으므로 그 호스트로 재활성화하려면 정의부터 새로 승인받습니다.
+아래 safety model·Dependencies·재활성화 전제는 물리 복제와 failover를 다시 들일 때의 검토
+기준입니다. 대기 서버 unit(`deploy/quadlet/hololive-bot-standby/`), failover controller·fence·route
+코드와 그 bootstrap·설치·smoke·비상 실행 절차는 저장소에서 지웠고 커밋 `bb000290e`에 남아 있습니다.
+다시 사용하려면 명시적 승인을 새로 받고 대상 호스트용 정의를 새로 승인받은 뒤, 당시 primary에서 새
+`pg_basebackup`으로 standby를 재시딩해야 합니다.
 
 `kapu`의 기존 시간별 dump/restore는 사용자 지시로 2026-09-05 종료했습니다
 (`DEC-20260905-kapu-db-backup-retirement`). 후속 승인으로 로컬 `holo-postgres` container와
@@ -71,14 +70,15 @@ authorization and all affected consumers/certificates; binary rollback alone is 
 authorization to reinstate retired DNS routes.
 
 Prepared WAL settings are command-line `checkpoint_timeout=900s`, `max_wal_size=2GB`,
-`wal_compression=lz4` in both production and inactive standby. No source edit cleans
+`wal_compression=lz4` in production; a reactivated standby definition must carry the same values. No source edit cleans
 existing `postgresql.auto.conf`; that exact cleanup, role-limit changes, HBA installation,
 DB recreation and refreshed-session acceptance remain separate approved operations.
 Capture old values/sources and preserve matching WAL flags when rolling back old unit definitions.
 
 ## Inactive HA reference: safety model
 
-이 절과 Dependencies의 failover 설계는 production에서 비활성인 재활성화 참고 절차입니다.
+이 절과 Dependencies의 failover 설계는 production에서 비활성인 재활성화 참고 기준이며, 이를 구현한
+controller는 커밋 `bb000290e`에 남아 있습니다.
 명시적 재승인, 새 base backup, fencing/route 재검증 없이 실행하지 않습니다. 아래 Stable
 database endpoint도 HA 재활성화 때 검토하는 참고 경로이며 현재 consumer는 사용하지 않습니다.
 
@@ -96,9 +96,9 @@ database endpoint도 HA 재활성화 때 검토하는 참고 경로이며 현재
 6. 승격 후 별도 권한 경계의 route hook이 권위 DB endpoint를 새 primary로 전환하고
    `ROUTED|<new-primary-host>:<new-primary-port>|<fence-token>`을 반환합니다.
 
-기본 systemd unit은 `--dry-run`입니다. apply drop-in이 없으면 fencing, `pg_promote()`,
-route 변경을 실행하지 않습니다. apply 모드도 fencing hook과 route hook 중 하나라도
-없거나 안전 검증에 실패하면 승격 전에 중단합니다.
+커밋 `bb000290e`의 controller systemd unit은 기본이 `--dry-run`이었습니다. apply drop-in이
+없으면 fencing, `pg_promote()`, route 변경을 실행하지 않았고, apply 모드도 fencing hook과
+route hook 중 하나라도 없거나 안전 검증에 실패하면 승격 전에 중단했습니다.
 
 이 구조는 비동기 복제의 RPO를 0으로 만들지 않습니다. 마지막 정상 샘플 이후 primary에
 commit됐지만 standby로 전송되기 전에 primary가 사라진 트랜잭션은 알 수 없습니다.
@@ -116,7 +116,7 @@ commit됐지만 standby로 전송되기 전에 primary가 사라진 트랜잭션
 | standby 자격 | `/etc/stack-secrets/hololive-bot/postgres/pgpass` (`0600 999:999`). PostgreSQL 컨테이너는 스택 공통 uid 999로 실행되므로 그 uid가 읽을 수 있어야 합니다. |
 | standby CA | `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem`. `primary_conninfo`와 controller probe가 `sslmode=verify-full`을 사용합니다. |
 | host client | PGDG `postgresql-client-18`의 canonical `/usr/lib/postgresql/18/bin/psql`. `/usr/bin/psql`의 `pg_wrapper` symlink는 trusted-path 검사에서 거부합니다. controller는 Docker socket 또는 `docker` 그룹을 사용하지 않습니다. |
-| failover env | `/etc/stack-secrets/hololive-bot/postgres-failover.env` (`0600 root:root`). systemd `LoadCredential`이 전용 사용자에게 read-only 사본을 전달하고 allowlist launcher가 해석합니다. |
+| failover env | `/etc/stack-secrets/hololive-bot/postgres-failover.env` (`0600 root:root`). 커밋 `bb000290e`의 controller unit은 systemd `LoadCredential`로 전용 사용자에게 read-only 사본을 전달했고 allowlist launcher가 해석했습니다. |
 | fencing backend | 구 primary가 절대로 writer로 재등장하지 않게 하는 외부 증명입니다. SSH reference hook은 호스트가 reachable할 때만 유효합니다. 전원/호스트 상실까지 자동 처리하려면 hypervisor/cloud/PDU 같은 out-of-band fence hook이 필요합니다. |
 | route backend | Tailscale Service `svc:hololive-postgres`, client endpoint `hololive-postgres.tail742dd8.ts.net:5433`. old primary drain 뒤 새 primary의 tailnet IP/port를 광고하고 stable endpoint가 read/write인지 검증합니다. |
 
@@ -126,7 +126,7 @@ commit됐지만 standby로 전송되기 전에 primary가 사라진 트랜잭션
 함께 넣고, 갖추지 못하면 slot을 만들지 않습니다. 지금 unit에는 이 상한을 넣지 않습니다. 적용은
 재활성 변경과 함께 hololive-bot-ops가 수행합니다.
 
-1. **WAL 보존 상한:** `holo-postgres.container`와 `holo-postgres-standby.container`의 PostgreSQL
+1. **WAL 보존 상한:** `holo-postgres.container`와 새로 승인한 standby unit의 PostgreSQL
    `Exec=` 모두에 `-c max_slot_wal_keep_size=<값>`을 둡니다. 승격하면 standby unit이 primary가
    되므로 한쪽에만 두지 않습니다. 설정이 없으면 PostgreSQL 기본값 `-1`(무제한)이 적용되어 standby가
    끊긴 동안 slot이 WAL을 계속 보존합니다. 값은 재활성 시점의 primary 여유 디스크와 WAL 생성 속도를
@@ -134,7 +134,7 @@ commit됐지만 standby로 전송되기 전에 primary가 사라진 트랜잭션
    primary 디스크가 찰 수 있습니다(2026-09 기록 기준 추정 약 3–5일, Osaka 여유 46GiB는 09-26 실측).
    `Exec=`의 `-c` 값은 postmaster command line이므로 바꾸려면 `holo-postgres.service`를 재시작해야 합니다.
 2. **slot 생성 단계:** 2026-09-08에 slot을 제거했으므로 `pg_basebackup -S`만으로는 slot이 없어
-   실패합니다. 아래 Bootstrap처럼 `-C`(`--create-slot`)를 함께 써서 base backup과 같은 실행에서
+   실패합니다. `-C`(`--create-slot`)를 함께 써서 base backup과 같은 실행에서
    slot을 만듭니다. 같은 이름의 slot이 이미 있으면 `-C`가 실패하므로, 남은 slot을 확인한 뒤
    진행합니다.
 3. **slot 지표 경보:** postgres_exporter의 replication slot 지표(`wal_status`, `safe_wal_size`)로
@@ -209,436 +209,23 @@ certificate가 기존 SAN을 보존하면서 `DNS:hololive-postgres.tail742dd8.t
 인증서와 pgpass는 stack-secrets master에서 변경하고 host sync 뒤 각 PostgreSQL에 HUP을
 보낸 다음 direct replication과 service endpoint를 모두 재검증합니다.
 
-## Reactivation reference: Bootstrap
-
-이 절부터 문서 끝까지는 비활성 HA 재구축 참고 절차입니다. 현재 single-primary를 변경할
-권한을 주지 않으며, 명시적 재승인과 새 base backup 없이는 실행하지 않습니다.
-
-primary 준비가 끝난 뒤 standby 호스트에서 실행합니다. image는 unit 기본값과 같은 로컬
-`localhost/hololive-postgres:prod`이며(`Pull=never`) kapu에서 전송·identity 대조를 마친 것만 씁니다.
-bind 원본의 SELinux label은 `rhel-host-security` fcontext가 소유하므로 `:z`/`:Z`를 붙이지 않습니다.
-
-```bash
-# 1. 볼륨 생성(holo-pg-standby-data.volume의 VolumeName과 같은 이름)
-sudo podman volume create hololive-bot_holo-pg-standby-data
-
-# 2. base backup. -R은 사용하지 않습니다. primary_conninfo 소유자는 holo-postgres-standby.container입니다.
-#    -C는 slot을 이 실행에서 만듭니다(현재 slot 0개). 먼저 slot WAL 보존 상한을 갖춥니다.
-sudo podman run --rm --pull=never \
-  -v hololive-bot_holo-pg-standby-data:/var/lib/postgresql \
-  -v /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro \
-  -v /etc/stack-secrets/hololive-bot/postgres/pgpass:/run/hololive-bot/postgres/pgpass:ro \
-  --user 999:999 \
-  -e PGPASSFILE=/run/hololive-bot/postgres/pgpass \
-  -e PGSSLMODE=verify-full \
-  -e PGSSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem \
-  --entrypoint pg_basebackup \
-  localhost/hololive-postgres:prod \
-  -h 100.100.1.8 -p 5433 -U hololive_replicator \
-  -D /var/lib/postgresql/pgdata -X stream -C -S iris_seoul_standby -P -v
-
-# 3. standby signal
-sudo podman run --rm --pull=never -v hololive-bot_holo-pg-standby-data:/v --user 999:999 \
-  --entrypoint sh localhost/hololive-postgres:prod -c \
-  'touch /v/pgdata/standby.signal'
-
-# 4. 기동. unit이 pg_hba.conf를 bind하는 배포 트리 /opt/hololive-bot/compose/current에서 실행합니다.
-#    참고 unit은 [Install]이 없어 부팅 때 기동하지 않습니다.
-sudo install -d -m0755 /etc/containers/systemd/hololive-bot-standby
-sudo install -m0644 deploy/quadlet/hololive-bot-standby/holo-pg-standby-data.volume \
-  deploy/quadlet/hololive-bot-standby/holo-postgres-standby.container \
-  /etc/containers/systemd/hololive-bot-standby/
-sudo systemctl daemon-reload
-sudo systemctl start holo-postgres-standby.service
-```
-
-자동 route가 새 primary에 접속하려면 standby port를 tailnet에 미리 열어야 합니다.
-`ap-compose.env`의 값은 명시적으로 승인합니다.
-
-```text
-HOLOLIVE_STANDBY_POSTGRES_BIND_IP=100.100.1.5
-HOLOLIVE_STANDBY_POSTGRES_PORT=5434
-```
-
-방화벽은 필요한 tailnet source만 허용해야 합니다. public bind는 금지합니다.
-
-## Reactivation reference: Install the failover controller
-
-standby 호스트에 unit을 설치하되 처음에는 dry-run timer만 활성화합니다.
-
-```bash
-test -x /usr/lib/postgresql/18/bin/psql
-/usr/lib/postgresql/18/bin/psql --version
-sudo install -m0644 scripts/systemd/hololive-postgres-failover.sysusers.conf \
-  /usr/lib/sysusers.d/hololive-postgres-failover.conf
-sudo systemd-sysusers /usr/lib/sysusers.d/hololive-postgres-failover.conf
-sudo install -d -m0755 /usr/local/libexec/hololive-postgres-failover/lib
-sudo install -m0644 scripts/ops/postgres-failover-launch.sh \
-  /usr/local/libexec/hololive-postgres-failover/postgres-failover-launch.sh
-sudo install -m0644 scripts/ops/postgres-failover.sh \
-  /usr/local/libexec/hololive-postgres-failover/postgres-failover.sh
-sudo install -m0644 scripts/ops/lib/postgres-failover-lib.sh \
-  /usr/local/libexec/hololive-postgres-failover/lib/postgres-failover-lib.sh
-sudo install -m0644 scripts/ops/lib/postgres-failover-transition-lib.sh \
-  /usr/local/libexec/hololive-postgres-failover/lib/postgres-failover-transition-lib.sh
-sudo install -m0644 scripts/ops/postgres-failover-fence-ssh.sh \
-  /usr/local/libexec/hololive-postgres-failover/postgres-failover-fence-ssh.sh
-sudo install -m0644 scripts/ops/postgres-failover-route-ssh.sh \
-  /usr/local/libexec/hololive-postgres-failover/postgres-failover-route-ssh.sh
-sudo install -m0644 scripts/ops/postgres-route-tailscale.sh \
-  /usr/local/libexec/hololive-postgres-failover/postgres-route-tailscale.sh
-sudo install -m0644 scripts/ops/postgres-failover.service \
-  /etc/systemd/system/postgres-failover.service
-sudo install -m0644 scripts/ops/postgres-failover.timer \
-  /etc/systemd/system/postgres-failover.timer
-sudo install -m0600 scripts/ops/postgres-failover.env.example \
-  /etc/stack-secrets/hololive-bot/postgres-failover.env
-sudo systemctl daemon-reload
-sudo systemctl enable --now postgres-failover.timer
-```
-
-`systemctl show postgres-failover.service -p User -p Group`은 둘 다
-`hololive-pg-failover`여야 합니다. 이 계정을 `docker` 그룹에 넣지 않습니다. state는
-`StateDirectory=`가 소유하고, pgpass/CA/SSH 파일은 unit과 apply drop-in의
-`LoadCredential=`로만 전달합니다. controller는 systemd의 `0440 root:root` pgpass를
-검증한 뒤 service 전용 `RuntimeDirectory=`에 `0600` 임시 passfile로 복사하고 종료 시
-삭제합니다. 영속 `StateDirectory=`에는 credential을 기록하지 않습니다.
-
-기존 primary에는 apply 활성화 전에 admin 세션으로 다음 privilege bootstrap을 별도 승인해
-한 번 적용합니다. 이 SQL은 대상 role이 LOGIN+REPLICATION이면서 non-superuser인지 먼저
-검증하고 CONNECT와 `pg_promote()` 실행 권한만 부여합니다.
-
-```bash
-psql -U postgres_admin -d postgres \
-  -v failover_user=hololive_replicator \
-  -v failover_database=hololive \
-  -f scripts/maintenance/postgres-failover-db-role.sql
-```
-
-`journalctl -u postgres-failover.service`에서 `primary_healthy` 관측과 LSN이 반복 기록되는지
-확인합니다. dry-run에서 장애 조건을 만족하면 `promotion_would_run`까지만 기록돼야 합니다.
-
-### Fencing hook
-
-controller는 절대경로의 regular file만 실행하며 symlink, group/world writable, 비root 소유
-hook을 거부합니다. hook 파일은 root-owned이지만 프로세스는 `hololive-pg-failover`로 실행됩니다.
-old-primary의 실제 `systemctl`(`holo-postgres.service` 정지) 변경만 제한된 remote root helper가 담당합니다.
-
-```text
-POSTGRES_FAILOVER_REQUEST_ID
-POSTGRES_FAILOVER_PRIMARY_HOST
-POSTGRES_FAILOVER_PRIMARY_PORT
-POSTGRES_FAILOVER_NEW_PRIMARY_HOST
-POSTGRES_FAILOVER_NEW_PRIMARY_PORT
-POSTGRES_FAILOVER_FAILURE_SINCE
-POSTGRES_FAILOVER_LAST_PRIMARY_LSN
-
-stdout: FENCED|<POSTGRES_FAILOVER_PRIMARY_HOST>|<POSTGRES_FAILOVER_NEW_PRIMARY_HOST>:<POSTGRES_FAILOVER_NEW_PRIMARY_PORT>|<POSTGRES_FAILOVER_REQUEST_ID>|<8..128-char-fence-token>
-```
-
-네 번째 필드는 현재 invocation ID와 정확히 일치해야 하며, 다섯 번째 필드는 같은 fence
-generation에서 재호출해도 유지되는 durable token입니다. 이 분리로 예전 성공 응답 재사용을
-거부하면서 crash recovery는 같은 fence generation에 묶입니다.
-
-`postgres-failover-fence-ssh.sh`는 reference backend입니다. 구 primary에서
-`postgres-primary-fence.sh`를 sudo로 실행해 다음을 수행합니다.
-
-- `holo-postgres.service`의 현재 loaded boot-fence condition과 `NeedDaemonReload=no` 검증
-- `/var/lib/hololive-postgres-fence/fence.intent`를 첫 외부 변경 전에 영속 기록(이후 명시적 start와 의존 start job은 조건이 막음)
-- stable Tailscale Service를 drain
-- 중앙 consumer는 stable endpoint에 연결된 채 유지하고 `holo-postgres.service`만 정지(consumer는 `Wants=`라 함께 멈추지 않음)
-- unit이 `inactive`/`failed`인지 재검증하고, `podman ps -a`로 `holo-postgres` 이름과 PGDATA volume(`hololive-bot_holo-pg-data`)을 쓰는 container가 모두 멈췄는지 확인(조회 실패도 거부)
-- `/var/lib/hololive-postgres-fence/fenced` 영속 마커에 fence token과 새 primary 후보 endpoint 기록
-- 이미 fenced된 세대를 다른 새 primary 후보가 재사용하려 하면 거부
-
-`holo-postgres.service` 단독 정지는 이 fence 절차로만 합니다. 표식 없이 `systemctl stop holo-postgres.service`만
-하면, `Wants=`로 묶인 소비자(`hololive-api`, `hololive-alarm-worker`, `hololive-youtube-collector-c`)가 crash나
-`HealthOnFailure=stop`으로 자동 재시작할 때 `holo-postgres` start job도 함께 걸려 DB가 다시 기동됩니다. 표식이
-있으면 그 start job은 `skipped because of an unmet condition check`로 끝납니다. 반대로 `Restart=always`의 자동
-재시작은 `ConditionPathExists=`를 다시 평가하지 않습니다(systemd 257 rootless Quadlet 실측). 그래서 fence 중
-죽은 소비자는 표식과 무관하게 다시 뜨고, 표식을 쓴 직후 crash한 `holo-postgres`도 다시 뜰 수 있습니다. fence
-helper가 표식을 쓴 뒤 명시적으로 `stop`하고 `inactive`/`failed`를 재검증하는 이유입니다. 표식 없이 DB를 멈춰야
-하는 정비라면 소비자도 함께 멈춥니다.
-
-구 primary에는 먼저 fence condition이 포함된 Quadlet unit(`scripts/deploy/sync-opt-current.sh`)과 remote action을 배포합니다.
-
-```bash
-sudo install -d -m0755 /usr/local/libexec/hololive-postgres-failover
-sudo install -m0644 scripts/ops/postgres-primary-fence.sh \
-  /usr/local/libexec/hololive-postgres-failover/postgres-primary-fence.sh
-sudo install -m0644 scripts/ops/postgres-primary-unfence.sh \
-  /usr/local/libexec/hololive-postgres-failover/postgres-primary-unfence.sh
-sudo install -m0755 scripts/ops/postgres-failover-ssh-dispatch.sh \
-  /usr/local/libexec/hololive-postgres-failover/postgres-failover-ssh-dispatch.sh
-sudo systemctl cat holo-postgres.service | \
-  grep -F 'ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced'
-```
-
-SSH 사용자는 root-owned `AuthorizedKeysFile`과 server-side `ForceCommand`로 고정 remote
-script 외의 명령을 실행할 수 없어야 합니다. `restrict`만으로는 명령 실행을 제한하지
-못하므로 단독으로 사용하지 않습니다. 현재 전용 계정은 `hololive-pg-fence`이며 password
-login과 forwarding은 허용하지 않습니다.
-
-```text
-hololive-pg-fence ALL=(root) NOPASSWD: /usr/bin/env bash /usr/local/libexec/hololive-postgres-failover/postgres-primary-fence.sh *
-```
-
-중앙 Quadlet unit은 모두 intent/fenced 마커 중 하나라도 있으면 시작되지 않습니다.
-이 SSH backend는 구 primary가 reachable한 장애에만 성공합니다. 호스트 전원 상실에서 SSH가
-실패하면 controller도 fail-closed로 승격하지 않습니다. 완전 자동 host-loss failover에는
-동일 acknowledgement 계약을 구현한 외부 전원 fencing hook을 사용합니다.
-
-### Route hook
-
-route hook은 다음 입력을 받습니다.
-
-```text
-POSTGRES_FAILOVER_OLD_PRIMARY_HOST
-POSTGRES_FAILOVER_OLD_PRIMARY_PORT
-POSTGRES_FAILOVER_NEW_PRIMARY_HOST
-POSTGRES_FAILOVER_NEW_PRIMARY_PORT
-POSTGRES_FAILOVER_FENCE_TOKEN
-
-stdout: ROUTED|<POSTGRES_FAILOVER_NEW_PRIMARY_HOST>:<POSTGRES_FAILOVER_NEW_PRIMARY_PORT>|<POSTGRES_FAILOVER_FENCE_TOKEN>
-```
-
-hook은 endpoint owner를 갱신한 뒤 새 주소에서 `pg_is_in_recovery()=false`와
-`transaction_read_only=off`를 검증하고 acknowledgement를 반환해야 합니다. 단순 파일 수정만
-하고 소비자 재기동/재연결을 생략하면 route 완료로 인정하면 안 됩니다. 승격은 완료됐지만
-route hook이 실패하면 controller는 `promoted_route_failed`를 저장하고 다음 timer에서 route만
-재시도하며 두 번째 `pg_promote()`는 실행하지 않습니다. acknowledgement의 세 번째 필드는
-fencing generation을 묶기 위해 입력받은 fence token과 정확히 같아야 합니다. hook은
-멱등해야 하며 timeout이나 controller crash 뒤 같은 fence token으로 재호출돼도 endpoint를
-재적용·재검증한 후 동일한 acknowledgement를 반환해야 합니다.
-
-reference backend는 `postgres-failover-route-ssh.sh`가 새 primary host의 전용
-`hololive-pg-route` 계정으로 접속하고, root helper `postgres-route-tailscale.sh`만 sudo로
-실행합니다. helper는 다음을 모두 만족해야 `ROUTED`를 반환합니다.
-
-- new primary host가 로컬 `tailscale0` IPv4와 정확히 일치
-- `svc:hololive-postgres`의 TCP 5433 target이 `tcp://<new-primary>:<new-port>`와 일치하고 advertised 상태
-- service DNS를 통한 `verify-full` probe가 정확히 `f|off`
-- root-owned route config, `route.pgpass`, CA, executable, state path 검증
-- 같은 fence token 재호출에서도 route 재적용·probe 수행
-
-standby host 설치 예시는 다음과 같습니다.
-
-```bash
-sudo install -m0644 scripts/systemd/hololive-postgres-route.sysusers.conf \
-  /usr/lib/sysusers.d/hololive-postgres-route.conf
-sudo systemd-sysusers /usr/lib/sysusers.d/hololive-postgres-route.conf
-sudo install -d -m0755 -o root -g root /var/empty
-sudo usermod --home /var/empty --shell /bin/dash hololive-pg-route
-getent passwd hololive-pg-route | grep -F ':/var/empty:/bin/dash'
-sudo install -d -m0755 /etc/hololive-postgres-failover
-sudo install -m0600 scripts/ops/postgres-route-tailscale.env.example \
-  /etc/hololive-postgres-failover/route.env
-sudo install -d -m0700 /var/lib/hololive-postgres-route
-sudo install -m0644 scripts/ops/postgres-route-tailscale.sudoers \
-  /etc/sudoers.d/hololive-postgres-route
-sudo visudo -cf /etc/sudoers.d/hololive-postgres-route
-```
-
-primary에는 같은 방식으로 `hololive-postgres-fence.sysusers.conf`와
-`postgres-primary-fence.sudoers`를 설치합니다. 두 호스트에는 dispatcher와 sshd Match 설정을
-설치하고, 각 public key는 root-owned 전용 파일에 `restrict` option과 함께 한 줄만 둡니다.
-사용자 home의 `.ssh/authorized_keys`는 사용하지 않습니다. 두 계정의 home은 root-owned
-`/var/empty`, login shell은 `/bin/dash`로 고정합니다. 기존 계정이라면 `usermod` 적용 전에
-기존 home의 `.bashrc`, profile, `.ssh/environment` 존재 여부를 검사하고 사용하지 않는다는
-것을 확인합니다.
-
-```bash
-sudo install -m0755 scripts/ops/postgres-failover-ssh-dispatch.sh \
-  /usr/local/libexec/hololive-postgres-failover/postgres-failover-ssh-dispatch.sh
-sudo install -d -m0755 -o root -g root /var/empty
-sudo usermod --home /var/empty --shell /bin/dash <hololive-pg-fence-or-hololive-pg-route>
-sudo install -d -m0755 -o root -g root /etc/ssh/authorized_keys
-sudo install -m0600 -o root -g root <authorized-key-file> \
-  /etc/ssh/authorized_keys/<hololive-pg-fence-or-hololive-pg-route>
-sudo install -m0644 -o root -g root scripts/ops/hololive-postgres-failover.sshd.conf \
-  /etc/ssh/sshd_config.d/90-hololive-postgres-failover.conf
-sudo sshd -t
-sudo sshd -T -C user=hololive-pg-fence,host=localhost,addr=127.0.0.1 | \
-  grep -E '^(authorizedkeysfile|forcecommand|disableforwarding) '
-sudo sshd -T -C user=hololive-pg-route,host=localhost,addr=127.0.0.1 | \
-  grep -E '^(authorizedkeysfile|forcecommand|disableforwarding) '
-sudo sshd -T -C user=hololive-pg-route,host=localhost,addr=127.0.0.1 | \
-  grep -E '^(permituserenvironment|acceptenv) '
-sudo systemctl reload ssh
-```
-
-private key와 pinned `known_hosts`는 controller의 `LoadCredential=` 경로로만 배포합니다. 두
-키는 서로 재사용하지 않습니다. `sshd -T` 결과는 각 계정의 root-owned key path, 해당
-dispatcher mode, `disableforwarding yes`와 정확히 일치해야 합니다. 임의 명령 probe는 실패해야
-하고, `permituserenvironment no`여야 하며 `acceptenv`에는 `BASH_ENV`, `ENV`, `PATH`가 없어야
-합니다. 정상 controller command만 acknowledgement를 반환해야 합니다.
-
-route config/state와 credential 경로는 다음으로 고정합니다.
-
-```text
-/etc/hololive-postgres-failover/route.env                 root:root 0600
-/etc/stack-secrets/hololive-bot/postgres-failover/route.pgpass root:root 0600
-/var/lib/hololive-postgres-route                         root:root 0700
-```
-
-### Isolated apply verification
-
-production apply를 활성화하기 전에 repository controller를 실제 PostgreSQL 18.4 두 node에
-연결하는 격리 harness를 실행합니다. kapu 사용자 계정의 rootless Podman에서 고유한 internal network와
-volume만 사용하며, production failover 환경변수, Podman 원격 연결(`CONTAINER_HOST`·`CONTAINER_CONNECTION`),
-rootful Podman이 감지되면 중단합니다.
-
-```bash
-HOLOLIVE_POSTGRES_FAILOVER_INTEGRATION=1 \
-  bash scripts/ops/integration/postgres-failover-integration_test.sh
-```
-
-physical slot, TLS `verify-full`, zero-known-lag sample, durable fence, old primary 비쓰기,
-`pg_promote`, new primary `f|off`, route 멱등성, cleanup residue 0이 모두 통과해야 합니다.
-
-### Reactivation reference: Enable apply
-
-fence와 route의 fault-injection 검증이 끝난 뒤에만 apply drop-in을 설치합니다.
-
-```bash
-sudo install -d -m0755 /etc/systemd/system/postgres-failover.service.d
-sudo install -m0644 scripts/ops/postgres-failover-apply.conf.example \
-  /etc/systemd/system/postgres-failover.service.d/apply.conf
-sudo systemctl daemon-reload
-sudo systemctl restart postgres-failover.timer
-```
-
-활성화 직후에는 production 장애를 주입하지 않습니다. primary/standby가 정상인 상태에서
-controller를 1회 실행하고 `primary_healthy`, `failure_count=0`,
-`promotion_state=monitoring`만 확인합니다. apply drop-in, SSH credentials, route config,
-Tailscale approval 중 하나라도 불완전하면 drop-in을 제거하고 dry-run으로 복귀합니다.
-
-## Reactivation reference: HA smoke test
-
-```bash
-# primary: streaming과 slot
-# primary host에서 실행
-sudo podman exec holo-postgres psql -U postgres_admin -d hololive -Atc \
-  "select application_name, state, sync_state, sent_lsn, replay_lsn, replay_lag from pg_stat_replication"
-sudo podman exec holo-postgres psql -U postgres_admin -d hololive -Atc \
-  "select slot_name, active, pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) from pg_replication_slots"
-
-# standby: recovery/read-only와 host promotion signal 부재
-sudo podman exec holo-postgres-standby psql -U postgres_admin -d hololive -Atc \
-  "select pg_is_in_recovery(), current_setting('transaction_read_only'), pg_last_wal_replay_lsn()"
-test ! -e /var/lib/hololive-postgres-failover/health.signal
-
-# controller dry-run 상태
-sudo systemctl start postgres-failover.service
-sudo journalctl -u postgres-failover.service -n 20 --no-pager
-sudo cat /var/lib/hololive-postgres-failover/state.tsv
-```
-
-합격 기준은 `state=streaming`, slot `active=true`, standby
-`pg_is_in_recovery()=t`, replay lag 수 초 이내, controller `primary_healthy`입니다.
-접속 성공만으로는 복제를 증명하지 못합니다.
-
-자동 승격 fault-injection은 production primary를 끊지 말고 격리된 두 PostgreSQL
-인스턴스에서 수행합니다. 최소 검증 항목은 fence invalid ack, fence 뒤 writable primary,
-stale LSN sample, route failure/retry, promotion 직후 controller crash입니다.
-
-consumer stable endpoint 전환은 service endpoint의 `f|off`가 확인된 뒤 중앙과 AP를 한 host씩
-재배포합니다. 각 단계에서 readiness, restart count, DB TLS 접속을 확인하고 다음 host로
-진행합니다. old primary direct endpoint는 rollback용으로 유지하되 신규 consumer 설정에는
-남기지 않습니다.
-
-apply 활성화 뒤 fencing은 중앙 unit 전체를 내리지 않습니다. 이미 stable endpoint로
-기동한 API, alarm worker, producer는 `holo-postgres.service`만 정지하는 동안 실행을 유지하고
-route 전환 뒤 재접속합니다(런타임 peer가 `Wants=`라 DB 정지가 전파되지 않습니다). fence marker가 있는 동안에는
-모든 중앙 unit의 `ConditionPathExists=!`가 명시적 start와 의존 start job을 막습니다. `Restart=always` 자동 재시작은
-조건을 다시 평가하지 않으므로 이미 기동한 소비자는 crash 뒤에도 다시 뜹니다. old host를 새 primary의 streaming standby로 재시딩하고
-unfence한 뒤에만 정상 unit lifecycle을 재개합니다.
-
-## Common failure modes
-
-| 증상 | 원인 | 대응 |
-|---|---|---|
-| `no pg_hba.conf entry for replication connection` | primary에 standby IP replication 규칙 없음 | `deploy/postgres/pg_hba.conf` 배포 후 `holo-postgres.service` 재시작. `hba_file`은 postmaster 설정입니다. |
-| `hostssl` 규칙이 보이지 않음 | 서버 `ssl=off` | `ssl=on` 조건에서 `pg_hba_file_rules`를 확인합니다. |
-| primary 디스크 증가 | standby 단절 중 physical slot이 WAL 보존 | standby 복구 또는 승인 후 slot 제거. `max_slot_wal_keep_size` 상한이 있으면 초과 시 slot이 invalidated되므로 새 base backup으로 재시딩합니다. |
-| standby 기동 거부 `max_connections` | standby 설정이 primary보다 작음 | primary 이상으로 맞춥니다. |
-| `could not read password file` | pgpass 소유자가 uid 999가 아님 | `0600 999:999`로 sync합니다. |
-| local probe `100.100.1.5:5434 connection refused` | `ap-compose.env`에 standby bind 값이 없어 unit 기본값 `127.0.0.1:5434`에만 publish함 | 데이터 볼륨을 유지하고 값을 넣은 뒤 `systemctl restart holo-postgres-standby.service`로 standby만 다시 시작하고 `sudo podman port holo-postgres-standby`의 host binding과 `primary_healthy`를 확인합니다. |
-| `promotion_blocked reason=no_healthy_observation` | exact-lag 정상 샘플을 아직 저장하지 못함 | 복제를 정상화하고 `primary_healthy`가 기록될 때까지 승격하지 않습니다. |
-| `fence_failed` | SSH-only fence에서 구 host가 unreachable이거나 외부 fence 실패 | 구 primary 상태를 수동 확인하거나 out-of-band fence backend를 복구합니다. fencing을 우회하지 않습니다. |
-| `old_primary_still_writable_after_fence` | fence가 거짓 성공했거나 다른 endpoint를 막음 | 즉시 hook을 비활성화하고 구 primary를 실제 격리합니다. |
-| promoted container unhealthy | host health signal이 없거나 role과 marker 불일치 | controller intent/promoted marker를 확인합니다. 수동으로 signal만 만들지 말고 controller crash recovery를 실행합니다. |
-| `promoted_route_failed` | DB 승격 후 endpoint 전환 실패 | 새 primary는 유지하고 route hook을 수정합니다. timer가 route만 재시도합니다. |
-| `cannot drain Tailscale Service` | primary service가 미승인·미구성됐거나 tailscaled 오류 | DB stop 전에 중단된 상태입니다. service 승인/config를 복구하고 같은 fence generation을 재실행합니다. |
-| `Tailscale service PostgreSQL probe failed` | service DNS/ACL/certificate/pgpass/advertisement 불일치 | 새 primary와 old-primary fence를 유지하고 route만 복구합니다. direct old endpoint로 되돌리지 않습니다. |
-
-## Reactivation reference: Emergency execution
-
-구 primary를 out-of-band로 이미 격리했더라도 `pg_promote()`를 직접 호출하지 않습니다.
-승격 intent, host health signal, route 재시도 상태를 controller 한 곳이 소유해야 crash recovery가
-성립합니다. 외부 fence hook이 기존 격리 상태를 멱등하게 확인해 acknowledgement를 반환하도록 한
-뒤 apply controller를 1회 실행합니다.
-
-```bash
-sudo systemctl stop postgres-failover.timer
-sudo systemctl start postgres-failover.service
-sudo systemctl start postgres-failover.timer
-```
-
-연속 실패, 최소 outage, 마지막 정상 LSN freshness 조건을 우회하지 않습니다. 조건을 충족하지
-못하면 데이터 손실 가능성을 운영자가 먼저 판단하고 별도 승인된 복구 절차를 작성해야 합니다.
-구 primary 상태가 불명확한 채 직접 승격하면 split brain입니다.
-
 ## Reactivation and retirement reference
 
-승격은 되돌릴 수 없습니다. 새 timeline으로 갈라진 구 primary는 그대로 재기동하지 않습니다.
+물리 standby bootstrap, failover controller 설치, fencing·route hook, apply 활성화, HA smoke, 비상 실행과 폐기
+절차는 지운 참고 자산과 함께 커밋 `bb000290e`의 이 문서에 남아 있습니다. 재활성화는 그 절차를 그대로 실행하지
+않고 새로 승인한 정의와 검증으로 진행합니다.
 
-승격 전 rollout rollback은 apply drop-in을 제거하고 `daemon-reload` 뒤 timer를 dry-run으로
-재시작하는 것으로 시작합니다. consumer가 stable service를 이미 사용 중이면 primary service가
-정상 `f|off`인 동안 그대로 유지할 수 있습니다. direct endpoint로 되돌려야 할 때는 모든
-consumer host를 순차 복구하고 readiness를 확인한 다음에만 primary의 service advertisement를
-drain/clear합니다. standby service는 계속 drained 상태로 둡니다.
+중앙 `holo-postgres.container`는 fence 뒤 재시드한 구 primary를 unit으로 넘길 때 복제 접속 설정이 그대로
+읽히도록 CA를 `/run/hololive-bot/certs/postgres-ca.pem`에 읽기 전용으로 마운트합니다. 그 standby의
+`primary_conninfo`·`primary_slot_name`은 `ALTER SYSTEM`(data volume의 `postgresql.auto.conf`)으로 두고,
+`sslrootcert`는 위 경로를, passfile은 data volume 안(`/var/lib/postgresql/replication.pgpass`, `0600 999:999`)을
+씁니다. unit은 `/etc/stack-secrets/hololive-bot/postgres/pgpass`를 마운트하지 않습니다.
 
-standby 구성을 폐기할 때는 slot까지 제거합니다.
-
-```bash
-# standby host
-sudo systemctl stop holo-postgres-standby.service
-sudo rm /etc/containers/systemd/hololive-bot-standby/holo-postgres-standby.container \
-  /etc/containers/systemd/hololive-bot-standby/holo-pg-standby-data.volume
-sudo systemctl daemon-reload
-sudo podman volume rm hololive-bot_holo-pg-standby-data
-
-# current primary
-psql -Atc "select pg_drop_replication_slot('iris_seoul_standby')"
-```
-
-fenced 구 primary를 재사용하려면 새 primary에서 다시 base backup해 standby로 만든 뒤,
-`holo-postgres.service` 밖에서 같은 volume(`hololive-bot_holo-pg-data`)으로 restart policy `no`인
-`holo-postgres` 컨테이너를 수동 기동합니다. handoff에서 unit이 이 컨테이너를 `--replace`로 교체하므로,
-복제 접속 설정은 `holo-postgres.container` 안에서도 그대로 읽혀야 합니다.
-- `primary_conninfo`·`primary_slot_name`은 `ALTER SYSTEM`(data volume의 `postgresql.auto.conf`)으로 둡니다.
-  unit의 `postgres -c` 인자에는 복제 설정이 없습니다.
-- `sslrootcert=/run/hololive-bot/certs/postgres-ca.pem`을 씁니다. unit이 같은 경로에 CA를 읽기 전용으로 마운트합니다.
-- passfile은 data volume 안(`/var/lib/postgresql/replication.pgpass`, `0600 999:999`)에 두고 그 경로를 `passfile=`로 지정합니다.
-  unit은 `/etc/stack-secrets/hololive-bot/postgres/pgpass`를 마운트하지 않습니다. marker를 직접 삭제하지 않습니다. helper가 unit이 `inactive`이고
-`NeedDaemonReload=no`인지, 수동 컨테이너가 systemd 라벨 없이 그 volume으로 실행 중인지, local recovery/read-only,
-WAL receiver `streaming`, sender endpoint, current primary read/write, fence token을 모두 재검증합니다.
-그 뒤 marker를 치우고 `holo-postgres.service`를 시작해(`--replace`가 수동 컨테이너를 교체) healthy가 된 뒤 다시
-standby인지 확인합니다. 이 handoff가 실패하면 같은 marker를 되돌리고 unit을 정지해 fence를 유지합니다.
-
-```bash
-sudo /usr/bin/bash \
-  /usr/local/libexec/hololive-postgres-failover/postgres-primary-unfence.sh \
-  <fence-token> 100.100.1.8 100.100.1.5 5434
-```
-
-marker 삭제만으로 예전 데이터 디렉터리를 재기동하면 안 됩니다. 자동 failback은 지원하지
-않습니다.
+승격은 되돌릴 수 없습니다. 새 timeline으로 갈라진 구 primary는 그대로 재기동하지 않으며, fence 표식 삭제만으로
+예전 데이터 디렉터리를 재기동하지 않습니다. 자동 failback은 지원하지 않습니다.
 
 ## Related documents
 
 - `../DEPLOYMENT_BASELINE.md`
 - `release.md`
 - `rollback.md`
-- `../../../scripts/ops/postgres-failover.env.example`

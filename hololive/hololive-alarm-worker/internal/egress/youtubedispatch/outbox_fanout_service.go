@@ -52,7 +52,7 @@ func (s *OutboxFanoutService) materialize(
 	startedAt := time.Now()
 
 	defer func() {
-		outboxEnqueueDuration.Observe(time.Since(startedAt).Seconds())
+		outboxMetrics().enqueueDuration.Observe(time.Since(startedAt).Seconds())
 	}()
 
 	roomsByChannel := s.grouper.collectRoomsByChannel(ctx, items)

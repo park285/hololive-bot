@@ -75,7 +75,7 @@ func NewDispatcher(deps Dependencies, logger *slog.Logger, config *Config) (*Dis
 		return nil, fmt.Errorf("initialize youtube dispatcher: %w", err)
 	}
 
-	initOutboxMetrics()
+	outboxMetrics()
 
 	logger = dispatcherLogger(logger)
 

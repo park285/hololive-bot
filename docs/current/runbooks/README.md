@@ -20,7 +20,7 @@ Collector runbook은 중앙 `c`·iris-seoul `b`·kapu `d`의 Podman Quadlet과 O
 - `alarm-dispatch-quarantine-closeout.md` - 검토한 격리 send unit의 재발송 없는 종료 영수증
 - `release.md` - release checklist
 - `rollback.md` - rollback 기준
-- `postgres-replication.md` - Osaka single-primary 운영 기준과 명시적 재승인 뒤 사용하는 Seoul physical standby/failover 재구축 참고 절차
+- `postgres-replication.md` - 중앙 `hololive-seoul` single-primary 운영 기준과 physical standby/failover 재활성화 전제(지운 절차·자산은 커밋 `bb000290e`)
 - `postgres-observability.md` - 선택적 PostgreSQL CPU·대기 계측 확장의 검증·활성화·복구
 - `integration-tests.md` - opt-in integration 테스트 주기 실행 경로
 - `member-cache-v2-rollout.md` - durable epoch 기반 member cache expand/rollback 절차

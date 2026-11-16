@@ -31,8 +31,8 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/collabmembers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 type Command interface {

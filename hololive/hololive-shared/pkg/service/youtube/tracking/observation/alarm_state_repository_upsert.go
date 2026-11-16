@@ -71,7 +71,7 @@ func buildAlarmStateUpsertQuery(
 			sb.WriteByte(',')
 		}
 
-		writeRowPlaceholders(&sb, i, columnsPerRow)
+		dbx.WriteRowPlaceholders(&sb, i, columnsPerRow)
 
 		args = append(args,
 			record.Kind,

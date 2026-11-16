@@ -21,7 +21,6 @@ import (
 
 	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -431,7 +430,7 @@ func TestSettingsAPIHandlerOperationBudgetIncludesCoordinatorWait(t *testing.T) 
 
 		remaining := <-applier.remaining
 
-		assert.Equal(t, constants.RequestTimeout.AdminRequest-3*time.Second, remaining)
+		assert.Equal(t, adminRequestTimeout-3*time.Second, remaining)
 
 		time.Sleep(remaining)
 
@@ -439,7 +438,7 @@ func TestSettingsAPIHandlerOperationBudgetIncludesCoordinatorWait(t *testing.T) 
 
 		<-secondDone
 
-		assert.Equal(t, constants.RequestTimeout.AdminRequest, time.Since(started))
+		assert.Equal(t, adminRequestTimeout, time.Since(started))
 
 		runtime := decodeUpdateSettingsRuntime(t, secondRec)
 

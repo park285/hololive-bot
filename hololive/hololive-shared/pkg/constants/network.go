@@ -31,12 +31,8 @@ var AppTimeout = struct {
 }
 
 var RequestTimeout = struct {
-	AdminRequest time.Duration
-	BotCommand   time.Duration
 	DatabasePing time.Duration
 }{
-	AdminRequest: 10 * time.Second,
-	BotCommand:   10 * time.Second,
 	DatabasePing: 5 * time.Second,
 }
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 func TestStoreSavesThePosterImageOnceWithoutTouchingThePoster(t *testing.T) {

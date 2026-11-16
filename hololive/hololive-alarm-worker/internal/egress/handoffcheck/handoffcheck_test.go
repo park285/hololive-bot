@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
+
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
 const testRequestID = "iris-request-1"
@@ -29,24 +31,24 @@ func TestDecideRoutesEveryObservation(t *testing.T) {
 		wantCode   string
 	}{
 		{"handoff completed", Input{Snapshot: snapshot("handoff_completed")}, ActionComplete, ""},
-		{"padded upper-case completed is not a wire state", Input{Snapshot: snapshot("  HANDOFF_COMPLETED ")}, ActionQuarantine, CodeOutcomeUnknown},
-		{"capitalized failed is not reissued", Input{Snapshot: snapshot("Failed"), RetryBudgetLeft: true}, ActionQuarantine, CodeOutcomeUnknown},
-		{"failed with generation and budget left", Input{Snapshot: snapshot("failed"), Generation: 1, RetryBudgetLeft: true}, ActionReissue, CodeFailed},
-		{"failed at the last generation", Input{Snapshot: snapshot("failed"), Generation: iris.ReplyReissueMaxGenerations, RetryBudgetLeft: true}, ActionExhausted, CodeFailed},
-		{"failed without attempt budget", Input{Snapshot: snapshot("failed"), RetryBudgetLeft: false}, ActionExhausted, CodeFailed},
-		{"outcome unknown", Input{Snapshot: snapshot("outcome_unknown"), RetryBudgetLeft: true}, ActionQuarantine, CodeOutcomeUnknown},
-		{"unrecognized state", Input{Snapshot: snapshot("delivered")}, ActionQuarantine, CodeOutcomeUnknown},
-		{"empty state", Input{Snapshot: snapshot("")}, ActionQuarantine, CodeOutcomeUnknown},
-		{"nil snapshot", Input{}, ActionQuarantine, CodeOutcomeUnknown},
-		{"request id mismatch", Input{Snapshot: &iris.ReplyStatusSnapshot{RequestID: "other", State: "handoff_completed"}}, ActionQuarantine, CodeOutcomeUnknown},
-		{"status not found", Input{QueryErr: notFound}, ActionQuarantine, CodeStatusMissing},
+		{"padded upper-case completed is not a wire state", Input{Snapshot: snapshot("  HANDOFF_COMPLETED ")}, ActionQuarantine, contractsalarm.HandoffCodeOutcomeUnknown},
+		{"capitalized failed is not reissued", Input{Snapshot: snapshot("Failed"), RetryBudgetLeft: true}, ActionQuarantine, contractsalarm.HandoffCodeOutcomeUnknown},
+		{"failed with generation and budget left", Input{Snapshot: snapshot("failed"), Generation: 1, RetryBudgetLeft: true}, ActionReissue, contractsalarm.HandoffCodeFailed},
+		{"failed at the last generation", Input{Snapshot: snapshot("failed"), Generation: iris.ReplyReissueMaxGenerations, RetryBudgetLeft: true}, ActionExhausted, contractsalarm.HandoffCodeFailed},
+		{"failed without attempt budget", Input{Snapshot: snapshot("failed"), RetryBudgetLeft: false}, ActionExhausted, contractsalarm.HandoffCodeFailed},
+		{"outcome unknown", Input{Snapshot: snapshot("outcome_unknown"), RetryBudgetLeft: true}, ActionQuarantine, contractsalarm.HandoffCodeOutcomeUnknown},
+		{"unrecognized state", Input{Snapshot: snapshot("delivered")}, ActionQuarantine, contractsalarm.HandoffCodeOutcomeUnknown},
+		{"empty state", Input{Snapshot: snapshot("")}, ActionQuarantine, contractsalarm.HandoffCodeOutcomeUnknown},
+		{"nil snapshot", Input{}, ActionQuarantine, contractsalarm.HandoffCodeOutcomeUnknown},
+		{"request id mismatch", Input{Snapshot: &iris.ReplyStatusSnapshot{RequestID: "other", State: "handoff_completed"}}, ActionQuarantine, contractsalarm.HandoffCodeOutcomeUnknown},
+		{"status not found", Input{QueryErr: notFound}, ActionQuarantine, contractsalarm.HandoffCodeStatusMissing},
 		{"pending before horizon", Input{Snapshot: snapshot("queued"), Elapsed: horizon - time.Millisecond}, ActionReschedule, ""},
 		{"sending before horizon", Input{Snapshot: snapshot("sending"), Elapsed: 5 * time.Second}, ActionReschedule, ""},
-		{"pending at horizon", Input{Snapshot: snapshot("prepared"), Elapsed: horizon}, ActionQuarantine, CodeUnconfirmed},
+		{"pending at horizon", Input{Snapshot: snapshot("prepared"), Elapsed: horizon}, ActionQuarantine, contractsalarm.HandoffCodeUnconfirmed},
 		{"server error before horizon", Input{QueryErr: unavailable, Elapsed: 20 * time.Second}, ActionReschedule, ""},
 		{"transport error before horizon", Input{QueryErr: transport, Elapsed: 20 * time.Second}, ActionReschedule, ""},
-		{"query error at horizon", Input{QueryErr: unavailable, Elapsed: horizon}, ActionQuarantine, CodeUnconfirmed},
-		{"not found beats pending horizon", Input{QueryErr: notFound, Elapsed: time.Second}, ActionQuarantine, CodeStatusMissing},
+		{"query error at horizon", Input{QueryErr: unavailable, Elapsed: horizon}, ActionQuarantine, contractsalarm.HandoffCodeUnconfirmed},
+		{"not found beats pending horizon", Input{QueryErr: notFound, Elapsed: time.Second}, ActionQuarantine, contractsalarm.HandoffCodeStatusMissing},
 	}
 
 	for _, tc := range cases {

@@ -67,7 +67,7 @@ func NewHandoffReconciler(
 		return nil, fmt.Errorf("new youtube handoff reconciler: %w", err)
 	}
 
-	initOutboxMetrics()
+	outboxMetrics()
 
 	logger = dispatcherLogger(logger)
 

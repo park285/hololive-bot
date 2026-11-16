@@ -27,20 +27,19 @@ import (
 	"os"
 
 	"github.com/park285/shared-go/v2/pkg/health"
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 
 	"github.com/kapu/hololive-alarm-worker/internal/app/workerapp"
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
+	"github.com/kapu/hololive-shared/pkg/entrypoint"
 )
 
 var Version = "dev"
 
 func main() {
-	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
+	if handled, exitCode := entrypoint.RunWorkerProfileCheck(os.Args[1:], os.Stderr, "alarm-worker", func() error {
 		if _, err := workerconfig.LoadWorkerProfile(); err != nil {
 			return fmt.Errorf("load alarm worker profile: %w", err)
 		}
@@ -58,22 +57,7 @@ func main() {
 		LoadConfig:             workerconfig.LoadRuntime,
 		LoadConfigErrorMessage: "Failed to load config",
 		NewLogger: func(appConfig *workerconfig.RuntimeConfig) (*slog.Logger, io.Closer, error) {
-			logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
-				Level:      appConfig.Logging.Level,
-				Dir:        appConfig.Logging.Dir,
-				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
-				MaxBackups: appConfig.Logging.MaxBackups,
-				MaxAgeDays: appConfig.Logging.MaxAgeDays,
-				Compress:   appConfig.Logging.Compress,
-			}, "alarm-worker.log", sharedlogging.Options{AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
-			if err != nil {
-				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
-			}
-
-			// slog.Default()로 기록하는 라이브러리 경로도 같은 JSON 파일·sanitize lane을 타게 한다.
-			slog.SetDefault(logger)
-
-			return logger, closer, nil
+			return entrypoint.NewFileLogger(appConfig.Logging, "alarm-worker.log")
 		},
 		LoggerLevel: func(appConfig *workerconfig.RuntimeConfig) string {
 			return appConfig.Logging.Level
@@ -83,24 +67,4 @@ func main() {
 		BuildRuntime:      workerapp.BuildAlarmWorkerRuntime,
 		BuildErrorMessage: "Failed to assemble alarm worker runtime",
 	}.Run())
-}
-
-func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
-	if len(args) != 1 || args[0] != "--check-worker-profile" {
-		return false, 0
-	}
-
-	if err := load(); err != nil {
-		if _, writeErr := fmt.Fprintf(stderr, "Failed to load alarm-worker worker profile: %v\n", err); writeErr != nil {
-			return true, 1
-		}
-
-		return true, 1
-	}
-
-	if _, err := fmt.Fprintln(stderr, "alarm-worker worker profile valid"); err != nil {
-		return true, 1
-	}
-
-	return true, 0
 }

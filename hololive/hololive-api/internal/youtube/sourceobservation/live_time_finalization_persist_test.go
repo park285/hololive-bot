@@ -414,7 +414,7 @@ func TestTimeFinalizationLeavesNonCandidatesEnded(t *testing.T) {
 		"already provider":          func(f *endedFixture) { f.timesSrc = providerTimesSource },
 		"no start or live evidence": func(f *endedFixture) { f.startedAt, f.positiveAt = nil, nil },
 		"ended before new window": func(f *endedFixture) {
-			f.detectedAt = f.detectedAt.Add(-finalizationNewWindow - time.Minute)
+			f.detectedAt = f.detectedAt.Add(-TimeFinalizationNewWindow - time.Minute)
 			f.startedAt, f.endedAt = new(f.detectedAt.Add(-2*time.Hour)), f.detectedAt
 		},
 	} {

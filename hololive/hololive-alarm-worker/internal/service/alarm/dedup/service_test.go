@@ -35,7 +35,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/testutil"
@@ -282,7 +281,7 @@ func TestService_TryClaimPair_NotificationKeyCategoryAndSchedulePolicy(t *testin
 		stream := &domain.Stream{ID: "vid1", Title: "테스트 방송", StartScheduled: &scheduled}
 		notifyKey, logicalKey := notificationPairKeys("room1", "UC_TEST", stream, minutesUntil)
 
-		acquired, _, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, constants.CacheTTL.NotificationSent)
+		acquired, _, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, NotificationSentTTL)
 		require.NoError(t, err)
 
 		return notifyKey, acquired
@@ -320,7 +319,7 @@ func TestService_TryClaimPair_LogicalEventBlocksReuploadedStream(t *testing.T) {
 	notifyKey, logicalKey := notificationPairKeys("room1", "UC_TEST", original, 5)
 	assert.Equal(t, keys.BuildLogicalEventClaimKey("room1", "UC_TEST", original.ID, original.Title, start, "target"), logicalKey)
 
-	notifyClaimed, logicalClaimed, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, constants.CacheTTL.NotificationSent)
+	notifyClaimed, logicalClaimed, err := service.TryClaimPair(t.Context(), notifyKey, logicalKey, NotificationSentTTL)
 	require.NoError(t, err)
 	assert.True(t, notifyClaimed)
 	assert.True(t, logicalClaimed)
@@ -329,7 +328,7 @@ func TestService_TryClaimPair_LogicalEventBlocksReuploadedStream(t *testing.T) {
 	assert.NotEqual(t, notifyKey, reNotifyKey)
 	assert.Equal(t, logicalKey, reLogicalKey)
 
-	notifyClaimed, logicalClaimed, err = service.TryClaimPair(t.Context(), reNotifyKey, reLogicalKey, constants.CacheTTL.NotificationSent)
+	notifyClaimed, logicalClaimed, err = service.TryClaimPair(t.Context(), reNotifyKey, reLogicalKey, NotificationSentTTL)
 	require.NoError(t, err)
 	assert.True(t, notifyClaimed)
 	assert.False(t, logicalClaimed)

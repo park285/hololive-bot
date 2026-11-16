@@ -14,9 +14,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 var (

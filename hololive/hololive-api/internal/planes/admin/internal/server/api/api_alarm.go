@@ -28,7 +28,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/server/ginjson"
@@ -46,7 +45,7 @@ type alarmDeleteResponse struct {
 }
 
 func (h *AlarmHandler) GetAlarms(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), adminRequestTimeout)
 	defer cancel()
 
 	// 관리 목록은 alarm-worker가 PG에서 (방, 채널) 단위로 만든다.
@@ -73,7 +72,7 @@ func (h *AlarmHandler) DeleteAlarm(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), adminRequestTimeout)
 	defer cancel()
 
 	removed, err := h.alarm.RemoveAlarm(ctx, req.RoomID, req.ChannelID, nil)

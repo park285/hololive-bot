@@ -149,7 +149,6 @@ player 근거가 부족하거나 허용된 lookup이 실패하면 목록 자체�
 - slot-specific strict `STACK_WORKER_PROFILE_FILE` with the `collection` worker
 - `YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true`
 - `YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-{a,b,c,d}`
-- `PHOTO_SYNC_ENABLED=false`
 - `POSTGRES_USER=hololive_scraper`
 - `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT` set to the container/native CA path above
 - Central startup uses the Quadlet units `hololive-youtube-collector-c.container` and `hololive-youtube-po-c.container` (`deploy/quadlet/hololive-bot/`) for fleet member `c` and its issuer. iris-seoul uses the Quadlet units in `deploy/podman/iris-seoul/` for `youtube-collector-b` and issuer `hololive-youtube-po-b`. kapu uses the Quadlet units in `deploy/podman/kapu/` for `youtube-collector-d` and issuer `hololive-youtube-po-d`. Osaka `a` runs only as a native systemd unit. All deployments follow the [paired collector/issuer procedure](../runbooks/youtube-collector.md#isolated-po-token-lifecycle).

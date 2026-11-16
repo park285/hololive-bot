@@ -229,7 +229,8 @@ func buildAlarmDispatchRunner(
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) (workerruntime.Scheduler, error) {
-	if err := alarmdispatch.ValidateAlarmShortLinkConfig(appConfig.Notification.AlarmShortLinkBaseURL); err != nil {
+	shortLinks, err := alarmdispatch.NewAlarmShortLinkBuilder(appConfig.Notification.AlarmShortLinkBaseURL)
+	if err != nil {
 		return nil, fmt.Errorf("validate alarm dispatch short links: %w", err)
 	}
 
@@ -248,6 +249,7 @@ func buildAlarmDispatchRunner(
 
 	config := alarmDispatchRunnerConfig(appConfig)
 
+	config.ShortLinks = shortLinks
 	config.WorkerTracker = workerState.trackers[workerconfig.WorkerAlarmDispatch]
 	config.WorkerTotals = workerState.totals[workerconfig.WorkerAlarmDispatch]
 
@@ -311,7 +313,6 @@ func alarmDispatchRunnerConfig(appConfig *workerconfig.RuntimeConfig) alarmdispa
 	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerAlarmDispatch]
 
 	return alarmdispatch.RunnerConfig{
-		ShortLinkBaseURL:  appConfig.Notification.AlarmShortLinkBaseURL,
 		MaxBatch:          profile.MaxBatch,
 		MaxBatchesPerWake: profile.MaxBatchesPerWake,
 		AttemptTimeout:    workercontract.Milliseconds(*worker.Executor.AttemptTimeout.Milliseconds),

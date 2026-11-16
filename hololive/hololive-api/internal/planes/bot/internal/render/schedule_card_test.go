@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/schedulecard"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 const (

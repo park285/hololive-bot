@@ -29,7 +29,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"regexp"
 	"strings"
 	"time"
 
@@ -38,6 +37,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/imagehost"
+	"github.com/kapu/hololive-shared/pkg/service/shortlink"
 )
 
 type youTubeThumbnailDownloader struct {
@@ -47,8 +47,6 @@ type youTubeThumbnailDownloader struct {
 const maxBroadcastThumbnailBytes = 12 << 20
 
 var errThumbnailStatusNotFound = errors.New("thumbnail status 404")
-
-var youtubeVideoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 func NewYouTubeThumbnailDownloader(client *http.Client) handlercore.BroadcastThumbnailDownloader {
 	if client == nil {
@@ -302,7 +300,7 @@ func normalizeThumbnailContentType(raw string) string {
 }
 
 func validYouTubeVideoID(videoID string) bool {
-	return youtubeVideoIDPattern.MatchString(strings.TrimSpace(videoID))
+	return shortlink.ValidYouTubeVideoID(strings.TrimSpace(videoID))
 }
 
 func uniqueStrings(values []string) []string {

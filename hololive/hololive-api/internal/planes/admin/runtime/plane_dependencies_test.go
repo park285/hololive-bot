@@ -20,6 +20,7 @@ import (
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -28,7 +29,6 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 

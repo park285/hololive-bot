@@ -22,6 +22,7 @@ package messaging
 
 import (
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -52,13 +53,13 @@ func (ma *MessageAdapter) tryBroadcastHistoryCommand(command string, args []stri
 var broadcastHistoryCommandAliases = []string{"방송이력", "방송기록", "종료방송", "이전방송", "history", "broadcast_history"}
 
 func (ma *MessageAdapter) isBroadcastHistoryCommand(cmd string) bool {
-	return stringutil.ContainsString(broadcastHistoryCommandAliases, cmd)
+	return slices.Contains(broadcastHistoryCommandAliases, cmd)
 }
 
 var broadcastTimeCommandAliases = []string{"방송시간", "broadcast_time"}
 
 func (ma *MessageAdapter) tryBroadcastTimeCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
-	if !stringutil.ContainsString(broadcastTimeCommandAliases, command) {
+	if !slices.Contains(broadcastTimeCommandAliases, command) {
 		return nil, false
 	}
 
@@ -75,7 +76,7 @@ func (ma *MessageAdapter) tryBroadcastTimeCommand(command string, args []string,
 		memberTokens = append(memberTokens, arg)
 	}
 
-	if member := stringutil.TrimSpace(strings.Join(memberTokens, " ")); member != "" {
+	if member := strings.TrimSpace(strings.Join(memberTokens, " ")); member != "" {
 		params[paramMember] = member
 	}
 
@@ -85,7 +86,7 @@ func (ma *MessageAdapter) tryBroadcastTimeCommand(command string, args []string,
 var broadcastThumbnailCommandAliases = []string{"방송썸네일", "썸네일", "썸네일다운", "썸네일다운로드", "thumbnail", "thumbnail_download", "thumbnaildownload", "broadcast_thumbnail"}
 
 func (ma *MessageAdapter) isBroadcastThumbnailCommand(cmd string) bool {
-	return stringutil.ContainsString(broadcastThumbnailCommandAliases, cmd)
+	return slices.Contains(broadcastThumbnailCommandAliases, cmd)
 }
 
 func broadcastThumbnailCommand(args []string, raw string) *ParsedCommand {
@@ -194,7 +195,7 @@ func parseBroadcastHistoryArgs(args []string) map[string]any {
 		i += consumed
 	}
 
-	if member := stringutil.TrimSpace(strings.Join(memberTokens, " ")); member != "" && params[paramMember] == nil {
+	if member := strings.TrimSpace(strings.Join(memberTokens, " ")); member != "" && params[paramMember] == nil {
 		params[paramMember] = member
 	}
 
@@ -202,7 +203,7 @@ func parseBroadcastHistoryArgs(args []string) map[string]any {
 }
 
 func applyBroadcastHistoryArg(params map[string]any, memberTokens *[]string, args []string, index int) int {
-	token := stringutil.TrimSpace(args[index])
+	token := strings.TrimSpace(args[index])
 	if token == "" {
 		return 0
 	}
@@ -316,7 +317,7 @@ func splitBroadcastHistoryFilter(token string) (key, value string, ok bool) {
 		return "", "", false
 	}
 
-	value = stringutil.TrimSpace(after)
+	value = strings.TrimSpace(after)
 
 	return key, value, true
 }
@@ -331,7 +332,7 @@ func consumeBroadcastHistoryFilterValue(key string, args []string) (value string
 
 func consumeSingleBroadcastHistoryFilterValue(args []string) (value string, consumed int) {
 	for i, arg := range args {
-		value := stringutil.TrimSpace(arg)
+		value := strings.TrimSpace(arg)
 		if value != "" {
 			return value, i + 1
 		}
@@ -343,7 +344,7 @@ func consumeSingleBroadcastHistoryFilterValue(args []string) (value string, cons
 func consumeMemberBroadcastHistoryFilterValue(args []string) (value string, consumed int) {
 	values := make([]string, 0, len(args))
 	for _, arg := range args {
-		value := stringutil.TrimSpace(arg)
+		value := strings.TrimSpace(arg)
 		if value == "" {
 			consumed++
 			continue
@@ -385,7 +386,7 @@ func isBroadcastHistoryFilterKey(key string) bool {
 }
 
 func applyBroadcastHistoryFilter(params map[string]any, key, value string) {
-	value = stringutil.TrimSpace(value)
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return
 	}
@@ -417,13 +418,13 @@ func applyBroadcastHistoryLimitFilter(params map[string]any, value string) {
 var broadcastThumbnailActionAliases = []string{"썸네일", "thumbnail", "thumb", "다운로드", "download"}
 
 func isBroadcastThumbnailAction(token string) bool {
-	return stringutil.ContainsString(broadcastThumbnailActionAliases, stringutil.Normalize(token))
+	return slices.Contains(broadcastThumbnailActionAliases, stringutil.Normalize(token))
 }
 
 var allBroadcastHistoryTokens = []string{"전체", "전부", "모두", "all"}
 
 func isAllBroadcastHistoryToken(token string) bool {
-	return stringutil.ContainsString(allBroadcastHistoryTokens, token)
+	return slices.Contains(allBroadcastHistoryTokens, token)
 }
 
 func parseBroadcastHistoryDays(token string) (int, bool) {

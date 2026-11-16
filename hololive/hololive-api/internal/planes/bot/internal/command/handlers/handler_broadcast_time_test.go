@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -30,8 +31,11 @@ func newBroadcastTimeTestDeps(repo *stubBroadcastHistoryRepository, sent *[]stri
 			*sent = append(*sent, message)
 			return nil
 		},
-		SendError: func(_ context.Context, _, _ string) error { return nil },
-		Logger:    slog.New(slog.DiscardHandler),
+		SendError: func(_ context.Context, _, key string) error {
+			*sent = append(*sent, key)
+			return nil
+		},
+		Logger: slog.New(slog.DiscardHandler),
 	}
 }
 
@@ -106,5 +110,5 @@ func TestBroadcastTimeCommandListErrorSendsOneUserMessage(t *testing.T) {
 	err := NewBroadcastTimeCommand(newBroadcastTimeTestDeps(repo, &sent)).Execute(t.Context(),
 		&botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{paramMember: broadcastTimeTestMember})
 	require.NoError(t, err)
-	require.Equal(t, []string{"방송 시간 조회 중 오류가 발생했습니다."}, sent)
+	require.Equal(t, []string{messaging.ErrBroadcastTimeQueryFailed}, sent)
 }

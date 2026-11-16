@@ -17,7 +17,7 @@ Iris Console이 소유하며 이 저장소에는 독립 `admin-dashboard` 서비
 
 ## 중앙 호스트의 역할
 
-- `hololive-api`와 업무 봇은 Osaka에서 기존 이미지와 데이터·인증서를 사용합니다.
+- `hololive-api`와 업무 봇은 중앙(`hololive-seoul`) Quadlet에서 기존 이미지와 데이터·인증서로 실행합니다.
 - 중앙 `hololive-api.container`의 `${HOLOLIVE_ADMIN_API_PORT_BIND_IP}:30006/udp` publish가 H3 관리 API의 승인된 Tailscale publish입니다. 통합 웹의 API 연결에 필요합니다.
 - `admin-dashboard-ingress`는 기존 shortlink 소비자를 위해 이름을 유지합니다. 30192의 단축 링크와 30193의 health만 제공합니다.
 - source 제한은 `admin-dashboard-ingress-firewall.service`가 `/etc/nftables.d/admin-dashboard-ingress.nft`로 적용합니다.
@@ -35,7 +35,7 @@ Iris의 플랫폼 secret master/manifest를 거쳐 전달하며 여기에서 중
 
 웹·SSR·native 변경은 Iris Console의 운영 절차로 적용합니다. 검증한 공통 앱 generation·계정 범위와
 대표 origin을 확인하고, 운영 변경은 승인된 효과에 한정합니다. 기존 native generation·공개 ingress 설정·
-Osaka deploy snapshot과 secret 복구 자료를 보존합니다. 웹 변경 승인만으로 DB migration이나 봇 재시작을 실행하지 않습니다.
+중앙 deploy 트리 backup과 secret 복구 자료를 보존합니다. 웹 변경 승인만으로 DB migration이나 봇 재시작을 실행하지 않습니다.
 
 영향받는 저장소의 검증과 이 저장소의 Quadlet/실제 Nginx 검사를 마친 뒤 kapu의 검증된 빌드 산출물만 호스트에 전송합니다.
 공통 인증 조회·SSR·권한 거절·logout/PWA와 기존 봇·단축 링크 상태를 확인하고 임시 조회 계정은 정확한 ID로 폐기합니다.

@@ -16,7 +16,6 @@ import (
 
 type RuntimeConfig struct {
 	Environment string
-	Version     string
 
 	Server   settings.ServerConfig
 	Logging  settings.LoggingConfig
@@ -30,9 +29,9 @@ type RuntimeConfig struct {
 }
 
 type RuntimeOwnershipConfig struct {
-	RuntimeAllowed         bool
-	PhotoSyncEnabled       bool
-	NotificationEgressRole string
+	RuntimeAllowed            bool
+	NotificationEgressRole    string
+	NotificationSchedulerRole string
 }
 
 type HolodexConfig struct {
@@ -97,7 +96,6 @@ func buildRuntimeConfig() (*RuntimeConfig, error) {
 
 	config := &RuntimeConfig{
 		Environment:      envload.AppEnvironment(),
-		Version:          sharedenv.String("APP_VERSION", "1.1.0-go"),
 		Server:           server,
 		Logging:          logging,
 		Postgres:         postgres,
@@ -118,15 +116,10 @@ func loadRuntimeOwnershipConfig() (RuntimeOwnershipConfig, error) {
 		return RuntimeOwnershipConfig{}, fmt.Errorf("read bool env: %w", err)
 	}
 
-	photoSyncEnabled, err := sharedenv.BoolE("PHOTO_SYNC_ENABLED", false)
-	if err != nil {
-		return RuntimeOwnershipConfig{}, fmt.Errorf("read bool env: %w", err)
-	}
-
 	return RuntimeOwnershipConfig{
-		RuntimeAllowed:         runtimeAllowed,
-		PhotoSyncEnabled:       photoSyncEnabled,
-		NotificationEgressRole: sharedenv.String(runtimepolicy.NotificationEgressRoleEnv, ""),
+		RuntimeAllowed:            runtimeAllowed,
+		NotificationEgressRole:    sharedenv.String(runtimepolicy.NotificationEgressRoleEnv, ""),
+		NotificationSchedulerRole: sharedenv.String(runtimepolicy.NotificationSchedulerRoleEnv, ""),
 	}, nil
 }
 
@@ -242,20 +235,12 @@ func (c *RuntimeConfig) validateCollectorOwnershipFlags() error {
 		return errors.New("youtube collector worker profile is required")
 	}
 
-	if c.RuntimeOwnership.PhotoSyncEnabled {
-		return fmt.Errorf("%s requires PHOTO_SYNC_ENABLED=false", runtimepolicy.RuntimeYouTubeCollector)
-	}
-
 	return nil
 }
 
 func (c *RuntimeConfig) validateCollectorEgressOwnership() error {
-	if err := runtimepolicy.ValidateNotificationRoleEnvValues(sharedenv.String(runtimepolicy.NotificationEgressRoleEnv, ""), sharedenv.String(runtimepolicy.NotificationSchedulerRoleEnv, "")); err != nil {
-		return fmt.Errorf("validate notification role env values: %w", err)
-	}
-
-	if err := runtimepolicy.RejectReservedEgressRoles(runtimepolicy.RuntimeYouTubeCollector, sharedenv.String(runtimepolicy.NotificationEgressRoleEnv, ""), sharedenv.String(runtimepolicy.NotificationSchedulerRoleEnv, "")); err != nil {
-		return fmt.Errorf("reject reserved egress roles: %w", err)
+	if err := runtimepolicy.ValidateNoNotificationEgressOwnership(runtimepolicy.RuntimeYouTubeCollector, c.RuntimeOwnership.NotificationEgressRole, c.RuntimeOwnership.NotificationSchedulerRole); err != nil {
+		return fmt.Errorf("validate no notification egress ownership: %w", err)
 	}
 
 	return nil
@@ -266,8 +251,8 @@ func (c *RuntimeConfig) validateProductionCollectorOwnership() error {
 		return nil
 	}
 
-	if !strings.EqualFold(c.RuntimeOwnership.NotificationEgressRole, runtimepolicy.NotificationEgressRoleOff) {
-		return fmt.Errorf("%s production requires %s=%s", runtimepolicy.RuntimeYouTubeCollector, runtimepolicy.NotificationEgressRoleEnv, runtimepolicy.NotificationEgressRoleOff)
+	if err := runtimepolicy.RequireNotificationRoleEnv(runtimepolicy.RuntimeYouTubeCollector, runtimepolicy.NotificationEgressRoleEnv, c.RuntimeOwnership.NotificationEgressRole, runtimepolicy.NotificationEgressRoleOff); err != nil {
+		return fmt.Errorf("require notification egress role env: %w", err)
 	}
 
 	return nil

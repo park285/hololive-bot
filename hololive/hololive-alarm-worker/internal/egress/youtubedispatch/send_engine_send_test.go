@@ -1969,9 +1969,7 @@ func TestDispatchGroupedClaimedRows_OutcomeUnknownHoldsWithoutFallback(t *testin
 }
 
 func groupedSendFallbackCount(result string) float64 {
-	initOutboxMetrics()
-
-	return testutil.ToFloat64(outboxGroupedSendFallbackTotal.WithLabelValues(result))
+	return testutil.ToFloat64(outboxMetrics().groupedSendFallbackTotal.WithLabelValues(result))
 }
 
 func (s *groupedPermanentFailureSender) PrepareMessageRequest(_ context.Context, _ string, body messagedelivery.MessageVariants) (string, string, error) {

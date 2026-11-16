@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -33,7 +32,7 @@ func (h *MemberHandler) GetCalendar(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), adminRequestTimeout)
 	defer cancel()
 
 	result, err := h.repository.FindMembersWithCelebrationsInMonth(ctx, month, year)

@@ -28,7 +28,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
@@ -188,7 +187,7 @@ func (s *Service) MarkLogicalScheduleObserved(ctx context.Context, roomID, chann
 		NotifiedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
 
-	if err := s.cache.Set(ctx, key, data, constants.CacheTTL.NotificationSent); err != nil {
+	if err := s.cache.Set(ctx, key, data, NotificationSentTTL); err != nil {
 		return fmt.Errorf("mark logical schedule observed: set cache key: %w", err)
 	}
 

@@ -4,20 +4,21 @@ import (
 	"context"
 	"time"
 
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type Status string
 
 const (
-	StatusPending     Status = "pending"
-	StatusLeased      Status = "leased"
-	StatusRetry       Status = "retry"
-	StatusSending     Status = "sending"
-	StatusSent        Status = "sent"
-	StatusDLQ         Status = "dlq"
-	StatusQuarantined Status = "quarantined"
-	StatusCancelled   Status = "cancelled" //nolint:misspell // dispatch_delivery.status에 저장되는 실제 값이라, canceled로 바꾸면 기존 행과 상태 비교가 어긋난다.
+	StatusPending     Status = contractsalarm.DispatchStatusPending
+	StatusLeased      Status = contractsalarm.DispatchStatusLeased
+	StatusRetry       Status = contractsalarm.DispatchStatusRetry
+	StatusSending     Status = contractsalarm.DispatchStatusSending
+	StatusSent        Status = contractsalarm.DispatchStatusSent
+	StatusDLQ         Status = contractsalarm.DispatchStatusDLQ
+	StatusQuarantined Status = contractsalarm.DispatchStatusQuarantined
+	StatusCancelled   Status = contractsalarm.DispatchStatusCancelled
 )
 
 type Record struct {

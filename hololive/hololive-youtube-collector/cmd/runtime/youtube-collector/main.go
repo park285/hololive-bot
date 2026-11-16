@@ -14,22 +14,18 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/envutil"
 	"github.com/park285/shared-go/v2/pkg/health"
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
+	"github.com/kapu/hololive-shared/pkg/entrypoint"
 	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime"
 )
 
-var (
-	Version  = "dev"
-	Revision = "unknown"
-)
+var Version = "dev"
 
 func main() {
-	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
+	if handled, exitCode := entrypoint.RunWorkerProfileCheck(os.Args[1:], os.Stderr, "youtube collector", func() error {
 		if _, err := collectorconfig.LoadWorkerProfile(); err != nil {
 			return fmt.Errorf("load youtube collector worker profile: %w", err)
 		}
@@ -57,22 +53,7 @@ func main() {
 				return nil, nil, fmt.Errorf("resolve log file name: %w", err)
 			}
 
-			logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
-				Level:      appConfig.Logging.Level,
-				Dir:        appConfig.Logging.Dir,
-				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
-				MaxBackups: appConfig.Logging.MaxBackups,
-				MaxAgeDays: appConfig.Logging.MaxAgeDays,
-				Compress:   appConfig.Logging.Compress,
-			}, logFileName, sharedlogging.Options{AsyncStdout: true, PrivacyKeys: privacylog.LoggerPrivacyKeys()})
-			if err != nil {
-				return nil, nil, fmt.Errorf("initialize correlated logger: %w", err)
-			}
-
-			// slog.Default()로 기록하는 의존성도 같은 JSON 파일과 마스킹 경로로 보낸다.
-			slog.SetDefault(logger)
-
-			return logger, closer, nil
+			return entrypoint.NewFileLogger(appConfig.Logging, logFileName)
 		},
 		LoggerLevel: func(appConfig *collectorconfig.RuntimeConfig) string {
 			return appConfig.Logging.Level
@@ -110,26 +91,6 @@ func parseStartupOptions(args []string) (startupOptions, bool) {
 	}
 
 	return options, true
-}
-
-func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
-	if len(args) != 1 || args[0] != "--check-worker-profile" {
-		return false, 0
-	}
-
-	if err := load(); err != nil {
-		if _, writeErr := fmt.Fprintf(stderr, "Failed to load youtube collector worker profile: %v\n", err); writeErr != nil {
-			return true, 1
-		}
-
-		return true, 1
-	}
-
-	if _, err := fmt.Fprintln(stderr, "youtube collector worker profile valid"); err != nil {
-		return true, 1
-	}
-
-	return true, 0
 }
 
 func youtubeCollectorLogFileName() (string, error) {

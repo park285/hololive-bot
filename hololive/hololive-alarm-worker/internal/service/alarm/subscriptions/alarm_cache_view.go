@@ -4,9 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
-
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
@@ -78,7 +77,7 @@ func (as *AlarmService) memberDisplayNames(ctx context.Context, channelIDs []str
 func buildAlarmListViews(alarms []*domain.Alarm, memberNames map[string]string) []domain.AlarmListView {
 	entries := make([]domain.AlarmListView, 0, len(alarms))
 	for _, alarm := range alarms {
-		memberName := stringutil.TrimSpace(memberNames[alarm.ChannelID])
+		memberName := strings.TrimSpace(memberNames[alarm.ChannelID])
 		if memberName == "" {
 			memberName = alarm.ChannelID
 		}

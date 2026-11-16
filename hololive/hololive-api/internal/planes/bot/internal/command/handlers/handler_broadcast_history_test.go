@@ -10,6 +10,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
@@ -170,10 +171,14 @@ func TestBroadcastHistoryCommandInvalidType(t *testing.T) {
 		BroadcastHistory: repo,
 		Formatter:        formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
-			sent = message
+			t.Fatalf("unexpected message: %s", message)
+
 			return nil
 		},
-		SendError: func(_ context.Context, _, _ string) error { return nil },
+		SendError: func(_ context.Context, _, key string) error {
+			sent = key
+			return nil
+		},
 	}
 
 	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{
@@ -187,13 +192,8 @@ func TestBroadcastHistoryCommandInvalidType(t *testing.T) {
 		t.Fatalf("ListEndedBroadcasts calls = %d, want 0", repo.listCalls)
 	}
 
-	if sent == "" {
-		t.Fatal("expected invalid type message")
-	}
-
-	want := "알 수 없는 방송 타입입니다. 사용 가능: 게임, 잡담, 노래, ASMR, 멤버십, 이벤트, 경마, 동시시청, 뉴스, 기타, 미분류"
-	if sent != want {
-		t.Fatalf("invalid type message = %q, want %q", sent, want)
+	if sent != messaging.ErrBroadcastTypeUnknown {
+		t.Fatalf("invalid type error key = %q, want %q", sent, messaging.ErrBroadcastTypeUnknown)
 	}
 }
 
@@ -275,12 +275,12 @@ func TestBroadcastHistoryCommandListErrorSendsOneUserMessage(t *testing.T) {
 		BroadcastHistory: repo,
 		Formatter:        formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
-			sent = append(sent, message)
+			t.Fatalf("unexpected message: %s", message)
+
 			return nil
 		},
-		SendError: func(_ context.Context, _, message string) error {
-			t.Fatalf("unexpected generic error response: %s", message)
-
+		SendError: func(_ context.Context, _, key string) error {
+			sent = append(sent, key)
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
@@ -291,8 +291,8 @@ func TestBroadcastHistoryCommandListErrorSendsOneUserMessage(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	if len(sent) != 1 {
-		t.Fatalf("sent messages = %d, want 1: %#v", len(sent), sent)
+	if len(sent) != 1 || sent[0] != messaging.ErrBroadcastHistoryQueryFailed {
+		t.Fatalf("sent error keys = %#v, want [%s]", sent, messaging.ErrBroadcastHistoryQueryFailed)
 	}
 }
 
@@ -531,12 +531,12 @@ func TestBroadcastThumbnailCommandLookupErrorSendsOneUserMessage(t *testing.T) {
 		BroadcastHistory:    repo,
 		ThumbnailDownloader: &stubBroadcastThumbnailDownloader{},
 		SendMessage: func(_ context.Context, _, message string) error {
-			sent = append(sent, message)
+			t.Fatalf("unexpected message: %s", message)
+
 			return nil
 		},
-		SendError: func(_ context.Context, _, message string) error {
-			t.Fatalf("unexpected generic error response: %s", message)
-
+		SendError: func(_ context.Context, _, key string) error {
+			sent = append(sent, key)
 			return nil
 		},
 		SendImage: func(_ context.Context, _ string, _ []byte) error {
@@ -554,8 +554,8 @@ func TestBroadcastThumbnailCommandLookupErrorSendsOneUserMessage(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	if len(sent) != 1 {
-		t.Fatalf("sent messages = %d, want 1: %#v", len(sent), sent)
+	if len(sent) != 1 || sent[0] != messaging.ErrBroadcastHistoryQueryFailed {
+		t.Fatalf("sent error keys = %#v, want [%s]", sent, messaging.ErrBroadcastHistoryQueryFailed)
 	}
 }
 
@@ -569,12 +569,12 @@ func TestBroadcastThumbnailCommandDownloadErrorSendsOneUserMessage(t *testing.T)
 		BroadcastHistory:    repo,
 		ThumbnailDownloader: &stubBroadcastThumbnailDownloader{err: errors.New("thumbnail timeout")},
 		SendMessage: func(_ context.Context, _, message string) error {
-			sent = append(sent, message)
+			t.Fatalf("unexpected message: %s", message)
+
 			return nil
 		},
-		SendError: func(_ context.Context, _, message string) error {
-			t.Fatalf("unexpected generic error response: %s", message)
-
+		SendError: func(_ context.Context, _, key string) error {
+			sent = append(sent, key)
 			return nil
 		},
 		SendImage: func(_ context.Context, _ string, _ []byte) error {
@@ -592,8 +592,8 @@ func TestBroadcastThumbnailCommandDownloadErrorSendsOneUserMessage(t *testing.T)
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	if len(sent) != 1 {
-		t.Fatalf("sent messages = %d, want 1: %#v", len(sent), sent)
+	if len(sent) != 1 || sent[0] != messaging.ErrBroadcastThumbnailDownloadFailed {
+		t.Fatalf("sent error keys = %#v, want [%s]", sent, messaging.ErrBroadcastThumbnailDownloadFailed)
 	}
 }
 

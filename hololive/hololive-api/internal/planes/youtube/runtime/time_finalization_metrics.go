@@ -6,6 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 )
 
 type timeFinalizationSample struct {
@@ -38,7 +40,7 @@ func newTimeFinalizationMetrics(reg prometheus.Registerer) *timeFinalizationMetr
 }
 
 func (r *Runtime) loadTimeFinalizationSamples(ctx context.Context) ([]timeFinalizationSample, error) {
-	rows, err := r.pool.Query(ctx, timeFinalizationObservabilitySQL)
+	rows, err := r.pool.Query(ctx, timeFinalizationObservabilitySQL, sourceobservation.TimeFinalizationNewWindow)
 	if err != nil {
 		return nil, fmt.Errorf("query time finalization snapshot: %w", err)
 	}

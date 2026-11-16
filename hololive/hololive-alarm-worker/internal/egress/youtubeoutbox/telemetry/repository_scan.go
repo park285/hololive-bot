@@ -5,14 +5,12 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // scanTelemetryRow의 열 순서는 queries/repository_fetch_lock_pending.sql의 RETURNING 목록과 같아야 한다.
-func scanTelemetryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDeliveryTelemetry, error) {
+func scanTelemetryRow(row pgx.CollectableRow) (YouTubeNotificationDeliveryTelemetry, error) {
 	var (
-		item                                              domain.YouTubeNotificationDeliveryTelemetry
+		item                                              YouTubeNotificationDeliveryTelemetry
 		postID                                            sql.NullString
 		dedupeKey, deliveryPath, deliveryMode, sendResult sql.NullString
 		failureReason, rowError                           sql.NullString

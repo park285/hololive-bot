@@ -10,7 +10,6 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
@@ -29,7 +28,7 @@ func (s *Service) MarkUpcomingEventNotified(ctx context.Context, roomID, channel
 		NotifiedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	if err := s.cache.Set(ctx, key, data, constants.CacheTTL.NotificationSent); err != nil {
+	if err := s.cache.Set(ctx, key, data, NotificationSentTTL); err != nil {
 		return fmt.Errorf("mark upcoming event notified: set cache key: %w", err)
 	}
 

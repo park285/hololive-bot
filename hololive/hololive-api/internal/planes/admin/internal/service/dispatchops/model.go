@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
 const (
@@ -32,12 +34,16 @@ var (
 	ErrUnavailable = errors.New("dispatch operations unavailable")
 )
 
-const (
-	statusQuarantined = "quarantined"
-	statusCanceled    = "cancelled" //nolint:misspell // PostgreSQL 정본의 영국식 상태 철자입니다.
-)
-
-var statuses = [...]string{"pending", "retry", "leased", "sending", "sent", "dlq", statusQuarantined, statusCanceled}
+var statuses = [...]string{
+	contractsalarm.DispatchStatusPending,
+	contractsalarm.DispatchStatusRetry,
+	contractsalarm.DispatchStatusLeased,
+	contractsalarm.DispatchStatusSending,
+	contractsalarm.DispatchStatusSent,
+	contractsalarm.DispatchStatusDLQ,
+	contractsalarm.DispatchStatusQuarantined,
+	contractsalarm.DispatchStatusCancelled,
+}
 
 var errorCodeFilter = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
@@ -262,7 +268,8 @@ func replayBlock(group []Delivery) string {
 	for index := range group {
 		item := &group[index]
 
-		if (item.Status != "dlq" && item.Status != statusQuarantined) || item.SentAt != nil || item.CancelledAt != nil {
+		if (item.Status != contractsalarm.DispatchStatusDLQ && item.Status != contractsalarm.DispatchStatusQuarantined) ||
+			item.SentAt != nil || item.CancelledAt != nil {
 			return "group_not_terminal_failure"
 		}
 

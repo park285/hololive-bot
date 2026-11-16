@@ -27,7 +27,7 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 	db := openTelemetryLoopTestDB(t)
 
 	repository := newDeliveryTelemetryRepository(t, db)
-	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
+	require.NoError(t, repository.Enqueue(ctx, []telemetry.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     701,
 		AttemptOrdinal: 1,
 		OutboxID:       801,
@@ -67,7 +67,7 @@ func TestDispatcherRun_FlushesTelemetryInBackground(t *testing.T) {
 	db := openTelemetryLoopTestDB(t)
 
 	repository := newDeliveryTelemetryRepository(t, db)
-	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
+	require.NoError(t, repository.Enqueue(ctx, []telemetry.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     702,
 		AttemptOrdinal: 1,
 		OutboxID:       802,
@@ -112,7 +112,7 @@ func TestDispatcherTelemetryLoop_ProcessesImmediatelyThenTicksUntilCanceled(t *t
 	db := openTelemetryLoopTestDB(t)
 
 	repository := newDeliveryTelemetryRepository(t, db)
-	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
+	require.NoError(t, repository.Enqueue(ctx, []telemetry.YouTubeNotificationDeliveryTelemetry{
 		telemetryLoopTestRow(703, 803, "short-loop-immediate", "room-loop-immediate"),
 	}))
 
@@ -134,7 +134,7 @@ func TestDispatcherTelemetryLoop_ProcessesImmediatelyThenTicksUntilCanceled(t *t
 		return telemetryLoopRowLogged(t, db, 703)
 	}, 2*time.Second, 10*time.Millisecond)
 
-	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
+	require.NoError(t, repository.Enqueue(ctx, []telemetry.YouTubeNotificationDeliveryTelemetry{
 		telemetryLoopTestRow(704, 804, "short-loop-tick", "room-loop-tick"),
 	}))
 
@@ -181,8 +181,8 @@ func TestDispatcherTelemetryLoop_StopsOnContextCancelBeforeNextTick(t *testing.T
 	}
 }
 
-func telemetryLoopTestRow(deliveryID, outboxID int64, contentID, roomID string) domain.YouTubeNotificationDeliveryTelemetry {
-	return domain.YouTubeNotificationDeliveryTelemetry{
+func telemetryLoopTestRow(deliveryID, outboxID int64, contentID, roomID string) telemetry.YouTubeNotificationDeliveryTelemetry {
+	return telemetry.YouTubeNotificationDeliveryTelemetry{
 		DeliveryID:     deliveryID,
 		AttemptOrdinal: 1,
 		OutboxID:       outboxID,

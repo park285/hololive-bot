@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 // 자동 거절은 관리자가 되돌릴 수 없으므로 is_schedule 하나만 보고 판단한다.

@@ -13,8 +13,8 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 type schedulePosterStub struct {

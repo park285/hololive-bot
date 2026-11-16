@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
 // Settle는 실패 묶음의 상태와 감사를 원자적으로 변경하며 발송 큐에 등록하지 않습니다.
@@ -84,11 +86,11 @@ func prepareSettlement(group []Delivery, action string) (settlementMutation, err
 	mutation := settlementMutation{
 		ids:           make([]int64, 0, len(group)),
 		quarantineIDs: make([]int64, 0, len(group)),
-		status:        statusQuarantined,
+		status:        contractsalarm.DispatchStatusQuarantined,
 		cancel:        action == "cancel",
 	}
 	if mutation.cancel {
-		mutation.status = statusCanceled
+		mutation.status = contractsalarm.DispatchStatusCancelled
 	}
 
 	for index := range group {
@@ -100,7 +102,7 @@ func prepareSettlement(group []Delivery, action string) (settlementMutation, err
 		}
 
 		mutation.ids = append(mutation.ids, id)
-		if !mutation.cancel && item.Status != statusQuarantined {
+		if !mutation.cancel && item.Status != contractsalarm.DispatchStatusQuarantined {
 			mutation.quarantineIDs = append(mutation.quarantineIDs, id)
 		}
 	}

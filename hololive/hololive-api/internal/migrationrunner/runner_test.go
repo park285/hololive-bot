@@ -996,3 +996,67 @@ func tableExists(t *testing.T, pool *pgxpool.Pool, name string) bool {
 
 	return exists
 }
+
+func TestAdvisoryLockSessionEvictClosesConnAndReleasesLock(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	ctx := t.Context()
+
+	held, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire lock holder: %v", err)
+	}
+	defer held.Release()
+
+	holder := pgxAdvisoryLockSession{conn: held}
+
+	if acquired, lockErr := holder.TryAdvisoryLock(ctx, AdvisoryLockKey); lockErr != nil || !acquired {
+		t.Fatalf("holder TryAdvisoryLock() = %v, %v; want true", acquired, lockErr)
+	}
+
+	var holderPID int32
+
+	if pidErr := held.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&holderPID); pidErr != nil {
+		t.Fatalf("holder backend pid: %v", pidErr)
+	}
+
+	if evictErr := holder.EvictAfterUnlockFailure(); evictErr != nil {
+		t.Fatalf("EvictAfterUnlockFailure() error = %v", evictErr)
+	}
+
+	other, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire second session: %v", err)
+	}
+	defer other.Release()
+
+	deadline := time.Now().Add(5 * time.Second)
+
+	for {
+		var alive bool
+
+		if queryErr := other.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = $1)", holderPID).Scan(&alive); queryErr != nil {
+			t.Fatalf("query holder backend: %v", queryErr)
+		}
+
+		if !alive {
+			break
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatalf("holder backend %d still alive 5s after EvictAfterUnlockFailure", holderPID)
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	contender := pgxAdvisoryLockSession{conn: other}
+
+	acquired, err := contender.TryAdvisoryLock(ctx, AdvisoryLockKey)
+	if err != nil || !acquired {
+		t.Fatalf("contender TryAdvisoryLock() = %v, %v; want true after eviction", acquired, err)
+	}
+
+	if _, err := contender.AdvisoryUnlock(ctx, AdvisoryLockKey); err != nil {
+		t.Fatalf("contender AdvisoryUnlock() error = %v", err)
+	}
+}

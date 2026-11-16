@@ -163,10 +163,8 @@ run_content_gates() {
     scripts/deploy/lib/public-bind-mounts.sh scripts/systemd/admin-dashboard-ingress.nft
   # 중앙 Quadlet 원본이 systemd unit으로 생성되지 않으면 해당 서비스가 기동되지 않는다.
   if echo "$changed_files" | grep -q '^deploy/quadlet/'; then
-    for quadlet_dir in deploy/quadlet/hololive-bot deploy/quadlet/hololive-bot-standby; do
-      # 상대 경로를 주면 quadlet은 unit을 하나도 읽지 않고 rc=0으로 끝난다.
-      QUADLET_UNIT_DIRS="${ROOT_DIR}/${quadlet_dir}" /usr/libexec/podman/quadlet -dryrun >/dev/null
-    done
+    # 상대 경로를 주면 quadlet은 unit을 하나도 읽지 않고 rc=0으로 끝난다.
+    QUADLET_UNIT_DIRS="${ROOT_DIR}/deploy/quadlet/hololive-bot" /usr/libexec/podman/quadlet -dryrun >/dev/null
   fi
   run_if_changed scripts/deploy/sync-opt-current_test.sh \
     scripts/deploy/sync-opt-current.sh scripts/deploy/lib/compose-env.sh deploy/quadlet \
@@ -193,7 +191,6 @@ run_content_gates() {
   run_if_changed scripts/build/po-sandbox-manifest_test.py \
     scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
   run_if_changed scripts/logs/daily-rollup-logs_test.sh scripts/logs/daily-rollup-logs.sh
-  run_if_changed scripts/ops/postgres-failover_test.sh scripts/ops scripts/systemd deploy/quadlet
   run_if_changed scripts/logs/test-stream-mirror-retention.sh scripts/logs/lib/stream.sh
   run_if_changed scripts/deploy/verify-exec-tree-ownership_test.sh scripts/deploy/verify-exec-tree-ownership.sh
   run_if_changed scripts/deploy/lib/public-bind-mounts_test.sh scripts/deploy/lib/public-bind-mounts.sh deploy/nginx

@@ -28,12 +28,12 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/httpapi"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -216,7 +216,7 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.path, http.NoBody)
 			if tt.headerVal != "" {
-				req.Header.Set(common.APIKeyHeader, tt.headerVal)
+				req.Header.Set(httputil.HeaderAPIKey, tt.headerVal)
 			}
 
 			rec := httptest.NewRecorder()
@@ -286,7 +286,7 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
 
 			if tt.headerVal != "" {
-				req.Header.Set(common.APIKeyHeader, tt.headerVal)
+				req.Header.Set(httputil.HeaderAPIKey, tt.headerVal)
 			}
 
 			rec := httptest.NewRecorder()

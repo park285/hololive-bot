@@ -57,7 +57,6 @@ Environment=LOG_MAX_BACKUPS=5
 Environment=LOG_MAX_SIZE_MB=5
 Environment=NOTIFICATION_EGRESS_ROLE=off
 Environment=PGAPPNAME=youtube-collector-b
-Environment=PHOTO_SYNC_ENABLED=false
 Environment=POSTGRES_DB=hololive
 Environment=POSTGRES_HOST=100.100.1.8
 Environment=POSTGRES_POOL_MAX_CONNS=7

@@ -24,5 +24,5 @@ const (
 	testActionAdd   = "add"
 	testParamLimit  = "limit"
 	testParamMonth  = "month"
-	testParamHours  = "hours"
+	testParamQuery  = "query"
 )

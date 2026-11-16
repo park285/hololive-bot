@@ -67,11 +67,7 @@ func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 
 	resp, err := c.http.Do(req) //nolint:bodyclose // 응답 본문은 공통 bounded reader가 모든 경로에서 닫는다.
 	if err != nil {
-		if mapErr := providerhttp.MapRequestError("request official schedule", err); mapErr != nil {
-			return nil, fmt.Errorf("map request error: %w", mapErr)
-		}
-
-		return nil, nil
+		return nil, fmt.Errorf("send official schedule request: %w", providerhttp.MapRequestError("request official schedule", err))
 	}
 
 	out, err := providerhttp.ReadProviderJSONDocument(ctx, resp, c.policy, contract.ProviderHololiveOfficial)

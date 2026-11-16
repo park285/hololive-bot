@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"slices"
 	"strconv"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
@@ -25,7 +26,7 @@ func (ma *MessageAdapter) tryCelebrationCalendarCommand(command string, args []s
 var calendarCommandAliases = []string{"달력", "기념일", "calendar"}
 
 func (ma *MessageAdapter) isCalendarCommand(cmd string) bool {
-	return stringutil.ContainsString(calendarCommandAliases, cmd)
+	return slices.Contains(calendarCommandAliases, cmd)
 }
 
 func (ma *MessageAdapter) parseCalendarArgs(args []string) map[string]any {

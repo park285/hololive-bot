@@ -45,7 +45,7 @@ func mergeContentPremieres(
 		videoIDs[i] = decision.Sessions[i].VideoID
 	}
 
-	return mapLiveApplications(decision.Applications), videoIDs, nil
+	return applicationsOf(decision.Applications), videoIDs, nil
 }
 
 func confirmedPremiereFacts(evidence *content.Evidence) []live.ConfirmedPremiereFact {
@@ -97,7 +97,7 @@ func persistPremiereDecision(
 			ctx,
 			tx,
 			observation,
-			"youtube_live_session",
+			liveSessionEntityKind,
 			conflict.VideoID,
 			conflict.FieldName,
 			conflict.ExistingValueSHA256,

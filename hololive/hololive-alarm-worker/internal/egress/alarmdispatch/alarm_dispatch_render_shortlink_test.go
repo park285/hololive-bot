@@ -69,7 +69,10 @@ func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing
 		},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, alarmShortLinkOrigin, group)
+	shortLinks, err := NewAlarmShortLinkBuilder(alarmShortLinkOrigin)
+	require.NoError(t, err)
+
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, shortLinks, group)
 
 	require.NoError(t, err)
 
@@ -78,23 +81,6 @@ func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing
 		assert.Contains(t, text, alarmShortLinkOrigin+"/l/abcdefghijk")
 		assert.NotContains(t, text, domain.YouTubeWatchURL("dQw4w9WgXcQ"))
 	}
-}
-
-func TestRenderAlarmDispatchNotificationGroupRejectsInvalidShortLinkConfig(t *testing.T) {
-	renderer, store := newAlarmDispatchTestRendering(t)
-	group := alarmDispatchGroup{
-		minutesUntil: 5,
-		notifications: []domain.AlarmNotification{
-			alarmShortLinkNotification("dQw4w9WgXcQ", "First"),
-			alarmShortLinkNotification("abcdefghijk", "Second"),
-		},
-	}
-
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, "http://go.example.com", group)
-
-	require.Error(t, err)
-	assert.Empty(t, message)
-	assert.Contains(t, err.Error(), alarmShortLinkBaseURLEnv)
 }
 
 func alarmShortLinkNotification(videoID, title string) domain.AlarmNotification {

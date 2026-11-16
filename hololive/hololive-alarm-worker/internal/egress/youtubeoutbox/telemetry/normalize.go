@@ -6,7 +6,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func deliveryTelemetryIdentityForRow(row *domain.YouTubeNotificationDeliveryTelemetry) (deliveryTelemetryIdentity, bool) {
+func deliveryTelemetryIdentityForRow(row *YouTubeNotificationDeliveryTelemetry) (deliveryTelemetryIdentity, bool) {
 	kind, ok := deliveryTelemetryKindForAlarmType(row.AlarmType)
 	if !ok {
 		return deliveryTelemetryIdentity{}, false

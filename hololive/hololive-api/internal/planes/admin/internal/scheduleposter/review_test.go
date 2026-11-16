@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 type fakeJudge struct {

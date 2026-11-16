@@ -200,7 +200,7 @@ func checkMigrationSource(name, content string) error {
 	}
 
 	// 빈 DB에 적용하는 baseline만 트랜잭션 안에서 인덱스를 만든다.
-	uncommented := stripMigrationComments(content)
+	uncommented := sqlsplit.StripComments(content)
 	if name != epoch3Baseline && createIndexLinePattern.MatchString(uncommented) &&
 		!createIndexConcurrentlyLinePattern.MatchString(uncommented) {
 		return fmt.Errorf("%s creates a blocking index; use CREATE INDEX CONCURRENTLY in a single-statement migration", name)
@@ -214,7 +214,7 @@ func executableStatementCount(content string) int {
 	count := 0
 
 	for _, statement := range sqlsplit.Statements(content) {
-		if strings.TrimSpace(stripMigrationComments(statement)) != "" {
+		if strings.TrimSpace(sqlsplit.StripComments(statement)) != "" {
 			count++
 		}
 	}

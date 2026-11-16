@@ -5,15 +5,14 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 )
 
-func communityShortsAlarmTimingForTelemetryRow(row *domain.YouTubeNotificationDeliveryTelemetry) alarmtiming.Snapshot {
+func communityShortsAlarmTimingForTelemetryRow(row *YouTubeNotificationDeliveryTelemetry) alarmtiming.Snapshot {
 	return CommunityShortsAlarmTimingForTelemetryRow(row)
 }
 
-func CommunityShortsAlarmTimingForTelemetryRow(row *domain.YouTubeNotificationDeliveryTelemetry) alarmtiming.Snapshot {
+func CommunityShortsAlarmTimingForTelemetryRow(row *YouTubeNotificationDeliveryTelemetry) alarmtiming.Snapshot {
 	alarmSentAt := row.AlarmSentAt
 	if alarmSentAt == nil && strings.EqualFold(strings.TrimSpace(row.SendResult), "success") && !row.EventAt.IsZero() {
 		eventAt := row.EventAt.UTC()

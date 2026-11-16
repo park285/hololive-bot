@@ -311,28 +311,6 @@ func TestClampScheduleDays(t *testing.T) {
 	}
 }
 
-func TestRawScheduleDays(t *testing.T) {
-	tests := []struct {
-		name   string
-		params map[string]any
-		want   int
-	}{
-		{name: "missing key", params: map[string]any{}, want: 7},
-		{name: "int value", params: map[string]any{"days": 14}, want: 14},
-		{name: "float64 value", params: map[string]any{"days": 10.5}, want: 10},
-		{name: "unsupported type", params: map[string]any{"days": "14"}, want: 7},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := rawScheduleDays(tc.params)
-			if got != tc.want {
-				t.Fatalf("rawScheduleDays() = %d, want %d", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestScheduleMemberName(t *testing.T) {
 	tests := []struct {
 		name     string

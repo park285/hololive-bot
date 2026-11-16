@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 func recordRowsFor(t *testing.T, store *scheduleposter.Store, id int64, today, title string) {

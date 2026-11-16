@@ -31,7 +31,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/health"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-shared/pkg/server/ginjson"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -88,7 +87,7 @@ func (h *StatsHandler) collectStats(ctx context.Context) (members, alarmKeys int
 }
 
 func (h *StatsHandler) GetStats(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), adminRequestTimeout)
 	defer cancel()
 
 	members, alarmKeys, memberErr, alarmErr := h.collectStats(ctx)

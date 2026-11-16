@@ -13,9 +13,9 @@ import (
 	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
 const (
@@ -126,17 +126,17 @@ func TestHandoffReconcilerRoutesObservationToLedgerAction(t *testing.T) {
 		want       handoffCall
 	}{
 		{name: "completed", status: handoffStatus("handoff_completed"), want: handoffCall{op: "complete"}},
-		{name: "failed with budget", status: handoffStatus("failed"), attempt: 1, want: handoffCall{op: "reissue", retryAfter: 10 * time.Second, code: handoffcheck.CodeFailed}},
-		{name: "failed without attempt budget", status: handoffStatus("failed"), attempt: alarmDispatchMaxAttempts - 1, want: handoffCall{op: handoffOpDLQ, code: handoffcheck.CodeFailed}},
-		{name: "failed at last generation", status: handoffStatus("failed"), generation: iris.ReplyReissueMaxGenerations, want: handoffCall{op: handoffOpDLQ, code: handoffcheck.CodeFailed}},
+		{name: "failed with budget", status: handoffStatus("failed"), attempt: 1, want: handoffCall{op: "reissue", retryAfter: 10 * time.Second, code: contractsalarm.HandoffCodeFailed}},
+		{name: "failed without attempt budget", status: handoffStatus("failed"), attempt: alarmDispatchMaxAttempts - 1, want: handoffCall{op: handoffOpDLQ, code: contractsalarm.HandoffCodeFailed}},
+		{name: "failed at last generation", status: handoffStatus("failed"), generation: iris.ReplyReissueMaxGenerations, want: handoffCall{op: handoffOpDLQ, code: contractsalarm.HandoffCodeFailed}},
 		{name: "queued before horizon", status: handoffStatus("queued"), elapsed: 30 * time.Second, want: handoffCall{op: "reschedule", step: time.Minute, horizon: testHandoffHorizon}},
 		{name: "query error before horizon", status: func(string) (*iris.ReplyStatusSnapshot, error) {
 			return nil, &iris.HTTPError{StatusCode: http.StatusServiceUnavailable}
 		}, elapsed: 5 * time.Second, want: handoffCall{op: "reschedule", step: 15 * time.Second, horizon: testHandoffHorizon}},
-		{name: "queued at horizon", status: handoffStatus("queued"), elapsed: testHandoffHorizon, want: handoffCall{op: "quarantine", code: handoffcheck.CodeUnconfirmed}},
+		{name: "queued at horizon", status: handoffStatus("queued"), elapsed: testHandoffHorizon, want: handoffCall{op: "quarantine", code: contractsalarm.HandoffCodeUnconfirmed}},
 		{name: "status missing", status: func(string) (*iris.ReplyStatusSnapshot, error) {
 			return nil, &iris.HTTPError{StatusCode: http.StatusNotFound}
-		}, want: handoffCall{op: "quarantine", code: handoffcheck.CodeStatusMissing}},
+		}, want: handoffCall{op: "quarantine", code: contractsalarm.HandoffCodeStatusMissing}},
 	}
 
 	for _, tc := range cases {

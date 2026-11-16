@@ -30,133 +30,90 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 )
 
-var (
-	queueMetricsInitOnce sync.Once
-
-	alarmDispatchPublishBatchDuration     prometheus.Histogram
-	alarmDispatchPublishRequestedTotal    prometheus.Counter
-	alarmDispatchPublishProcessedTotal    prometheus.Counter
-	alarmDispatchPublishInsertedTotal     prometheus.Counter
-	alarmDispatchPublishDuplicateTotal    prometheus.Counter
-	alarmDispatchPublishHashConflictTotal prometheus.Counter
-	alarmDispatchWakeupSentTotal          prometheus.Counter
-	alarmDispatchWakeupSuppressedTotal    prometheus.Counter
-	alarmDispatchWakeupFailedTotal        prometheus.Counter
-	alarmDispatchWakeupExpireFailedTotal  prometheus.Counter
-)
-
-func initQueueMetrics() {
-	queueMetricsInitOnce.Do(func() {
-		initAlarmDispatchPublishMetrics()
-		initAlarmDispatchWakeupMetrics()
-	})
+type queueMetricSet struct {
+	publishBatchDuration     prometheus.Histogram
+	publishRequestedTotal    prometheus.Counter
+	publishProcessedTotal    prometheus.Counter
+	publishInsertedTotal     prometheus.Counter
+	publishDuplicateTotal    prometheus.Counter
+	publishHashConflictTotal prometheus.Counter
+	wakeupSentTotal          prometheus.Counter
+	wakeupSuppressedTotal    prometheus.Counter
+	wakeupFailedTotal        prometheus.Counter
+	wakeupExpireFailedTotal  prometheus.Counter
 }
 
-func initAlarmDispatchPublishMetrics() {
-	alarmDispatchPublishBatchDuration = promauto.NewHistogram(
-		prometheus.HistogramOpts{
-			Name:    "alarm_dispatch_publish_batch_duration_seconds",
-			Help:    "Alarm dispatch publisher batch duration in seconds.",
-			Buckets: prometheus.DefBuckets,
-		},
-	)
-	alarmDispatchPublishRequestedTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "alarm_dispatch_publish_requested_deliveries_total",
-		Help: "Requested alarm dispatch deliveries published.",
-	})
-	alarmDispatchPublishProcessedTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "alarm_dispatch_publish_processed_deliveries_total",
-		Help: "Alarm dispatch deliveries successfully processed by the active publish mode.",
-	})
-	alarmDispatchPublishInsertedTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "alarm_dispatch_publish_inserted_deliveries_total",
-		Help: "Inserted alarm dispatch deliveries.",
-	})
-	alarmDispatchPublishDuplicateTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "alarm_dispatch_publish_duplicate_deliveries_total",
-		Help: "Duplicate alarm dispatch deliveries skipped.",
-	})
-	alarmDispatchPublishHashConflictTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "alarm_dispatch_publish_hash_conflict_total",
-		Help: "Alarm dispatch event hash conflicts observed while publishing.",
-	})
-}
-
-func initAlarmDispatchWakeupMetrics() {
-	alarmDispatchWakeupSentTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "alarm_dispatch_wakeup_sent_total",
-		Help: "Alarm dispatch wakeup tokens sent.",
-	})
-	alarmDispatchWakeupSuppressedTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "alarm_dispatch_wakeup_suppressed_total",
-		Help: "Alarm dispatch wakeup tokens suppressed by guard.",
-	})
-	alarmDispatchWakeupFailedTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "alarm_dispatch_wakeup_failed_total",
-		Help: "Alarm dispatch wakeup token send failures.",
-	})
-	alarmDispatchWakeupExpireFailedTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "alarm_dispatch_wakeup_expire_failed_total",
-		Help: "Alarm dispatch wakeup list TTL failures.",
-	})
-}
+// queueMetrics는 NewPublisher가 먼저 호출해, label 없는 publish·wakeup 지표를 기동부터 0으로 노출한다.
+var queueMetrics = sync.OnceValue(func() *queueMetricSet {
+	return &queueMetricSet{
+		publishBatchDuration: promauto.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "alarm_dispatch_publish_batch_duration_seconds",
+				Help:    "Alarm dispatch publisher batch duration in seconds.",
+				Buckets: prometheus.DefBuckets,
+			},
+		),
+		publishRequestedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "alarm_dispatch_publish_requested_deliveries_total",
+			Help: "Requested alarm dispatch deliveries published.",
+		}),
+		publishProcessedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "alarm_dispatch_publish_processed_deliveries_total",
+			Help: "Alarm dispatch deliveries successfully processed by the active publish mode.",
+		}),
+		publishInsertedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "alarm_dispatch_publish_inserted_deliveries_total",
+			Help: "Inserted alarm dispatch deliveries.",
+		}),
+		publishDuplicateTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "alarm_dispatch_publish_duplicate_deliveries_total",
+			Help: "Duplicate alarm dispatch deliveries skipped.",
+		}),
+		publishHashConflictTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "alarm_dispatch_publish_hash_conflict_total",
+			Help: "Alarm dispatch event hash conflicts observed while publishing.",
+		}),
+		wakeupSentTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "alarm_dispatch_wakeup_sent_total",
+			Help: "Alarm dispatch wakeup tokens sent.",
+		}),
+		wakeupSuppressedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "alarm_dispatch_wakeup_suppressed_total",
+			Help: "Alarm dispatch wakeup tokens suppressed by guard.",
+		}),
+		wakeupFailedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "alarm_dispatch_wakeup_failed_total",
+			Help: "Alarm dispatch wakeup token send failures.",
+		}),
+		wakeupExpireFailedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "alarm_dispatch_wakeup_expire_failed_total",
+			Help: "Alarm dispatch wakeup list TTL failures.",
+		}),
+	}
+})
 
 func observeAlarmDispatchPublishBatch(duration time.Duration, result *dispatchoutbox.PublishBatchResult) {
-	initQueueMetrics()
-
-	if alarmDispatchPublishBatchDuration == nil ||
-		alarmDispatchPublishRequestedTotal == nil ||
-		alarmDispatchPublishProcessedTotal == nil ||
-		alarmDispatchPublishInsertedTotal == nil ||
-		alarmDispatchPublishDuplicateTotal == nil ||
-		alarmDispatchPublishHashConflictTotal == nil {
-		return
-	}
-
-	alarmDispatchPublishBatchDuration.Observe(duration.Seconds())
-	alarmDispatchPublishRequestedTotal.Add(float64(result.RequestedDeliveries))
-	alarmDispatchPublishProcessedTotal.Add(float64(result.ProcessedDeliveries))
-	alarmDispatchPublishInsertedTotal.Add(float64(result.InsertedDeliveries))
-	alarmDispatchPublishDuplicateTotal.Add(float64(result.DuplicateDeliveries))
-	alarmDispatchPublishHashConflictTotal.Add(float64(result.HashConflictEvents))
+	metrics := queueMetrics()
+	metrics.publishBatchDuration.Observe(duration.Seconds())
+	metrics.publishRequestedTotal.Add(float64(result.RequestedDeliveries))
+	metrics.publishProcessedTotal.Add(float64(result.ProcessedDeliveries))
+	metrics.publishInsertedTotal.Add(float64(result.InsertedDeliveries))
+	metrics.publishDuplicateTotal.Add(float64(result.DuplicateDeliveries))
+	metrics.publishHashConflictTotal.Add(float64(result.HashConflictEvents))
 }
 
 func observeAlarmDispatchWakeupSent() {
-	initQueueMetrics()
-
-	if alarmDispatchWakeupSentTotal == nil {
-		return
-	}
-
-	alarmDispatchWakeupSentTotal.Inc()
+	queueMetrics().wakeupSentTotal.Inc()
 }
 
 func observeAlarmDispatchWakeupSuppressed() {
-	initQueueMetrics()
-
-	if alarmDispatchWakeupSuppressedTotal == nil {
-		return
-	}
-
-	alarmDispatchWakeupSuppressedTotal.Inc()
+	queueMetrics().wakeupSuppressedTotal.Inc()
 }
 
 func observeAlarmDispatchWakeupFailed() {
-	initQueueMetrics()
-
-	if alarmDispatchWakeupFailedTotal == nil {
-		return
-	}
-
-	alarmDispatchWakeupFailedTotal.Inc()
+	queueMetrics().wakeupFailedTotal.Inc()
 }
 
 func observeAlarmDispatchWakeupExpireFailed() {
-	initQueueMetrics()
-
-	if alarmDispatchWakeupExpireFailedTotal == nil {
-		return
-	}
-
-	alarmDispatchWakeupExpireFailedTotal.Inc()
+	queueMetrics().wakeupExpireFailedTotal.Inc()
 }

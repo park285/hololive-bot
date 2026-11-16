@@ -24,11 +24,6 @@ type webhookMetrics struct {
 	handlerDuration prometheus.Histogram
 }
 
-var (
-	defaultWebhookMetricsOnce  sync.Once
-	defaultWebhookMetricsValue *webhookMetrics
-)
-
 var _ webhook.Metrics = (*webhookMetrics)(nil)
 
 func newWebhookMetrics(registerer prometheus.Registerer) *webhookMetrics {
@@ -64,13 +59,9 @@ func newWebhookMetrics(registerer prometheus.Registerer) *webhookMetrics {
 	return metrics
 }
 
-func defaultWebhookMetrics() *webhookMetrics {
-	defaultWebhookMetricsOnce.Do(func() {
-		defaultWebhookMetricsValue = newWebhookMetrics(prometheus.DefaultRegisterer)
-	})
-
-	return defaultWebhookMetricsValue
-}
+var defaultWebhookMetrics = sync.OnceValue(func() *webhookMetrics {
+	return newWebhookMetrics(prometheus.DefaultRegisterer)
+})
 
 type signatureDiagnosticsSource interface {
 	SignatureVersionDiagnostics() webhook.SignatureVersionDiagnostics

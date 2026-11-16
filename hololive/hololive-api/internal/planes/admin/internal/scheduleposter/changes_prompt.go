@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 // matchPromptTemplate은 모델로 검증한 원문이다. 고치면 다시 검증해야 하고, 꼬리는 하니스(match.py build)와 바이트 단위로 같아야 한다.

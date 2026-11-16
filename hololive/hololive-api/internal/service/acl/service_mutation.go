@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-
-	"github.com/park285/shared-go/v2/pkg/stringutil"
+	"strings"
 )
 
 func (s *Service) GetACLStatus() (enabled bool, mode ACLMode, rooms []string) {
@@ -101,7 +100,7 @@ func (s *Service) AddRoom(ctx context.Context, expectedMode ACLMode, room string
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 
-	room = stringutil.TrimSpace(room)
+	room = strings.TrimSpace(room)
 	if err := validateRoomChatID(room); err != nil {
 		return false, err
 	}
@@ -156,7 +155,7 @@ func (s *Service) RemoveRoom(ctx context.Context, expectedMode ACLMode, room str
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 
-	room = stringutil.TrimSpace(room)
+	room = strings.TrimSpace(room)
 	if err := validateRoomChatID(room); err != nil {
 		return false, err
 	}

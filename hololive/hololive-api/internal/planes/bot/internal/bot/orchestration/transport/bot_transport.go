@@ -24,14 +24,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+const CommandTimeout = 10 * time.Second
 
 // CommandTransport는 명령 응답을 durable reply outbox에 기록한다. Iris 발송은 outbox dispatcher가
 // DispatchStoredReply로만 하므로, 조립 실수로 원장 없이 즉시 발송하는 경로가 없다.
@@ -93,7 +95,7 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 		message = kakaoformat.Render(message)
 	}
 
-	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
+	sendCtx, cancel := context.WithTimeout(ctx, CommandTimeout)
 	defer cancel()
 
 	return t.recordTextReply(sendCtx, room, message, issueReplyEmission(sendCtx), useMarkdown)
@@ -195,7 +197,7 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 		return errors.New("send image: transport is not configured")
 	}
 
-	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
+	sendCtx, cancel := context.WithTimeout(ctx, CommandTimeout)
 	defer cancel()
 
 	emission := issueReplyEmission(sendCtx)
@@ -222,7 +224,7 @@ func (t *CommandTransport) SendImages(ctx context.Context, room string, images [
 		return errors.New("send images: transport is not configured")
 	}
 
-	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
+	sendCtx, cancel := context.WithTimeout(ctx, CommandTimeout)
 	defer cancel()
 
 	emission := issueReplyEmission(sendCtx)

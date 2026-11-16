@@ -21,7 +21,7 @@ func TestBuildDeliveryAuditLogAttrsIncludesCommunityTimingFields(t *testing.T) {
 	alarmSentAt := detectedAt.Add(25 * time.Second)
 	alarmLatencyMillis := int64(alarmSentAt.Sub(actualPublishedAt) / time.Millisecond)
 
-	row := domain.YouTubeNotificationDeliveryTelemetry{
+	row := telemetry.YouTubeNotificationDeliveryTelemetry{
 		DeliveryID:         31,
 		AttemptOrdinal:     1,
 		OutboxID:           41,
@@ -59,7 +59,7 @@ func TestBuildDeliveryAuditLogAttrsWithClassificationIncludesLatencyClassificati
 	t.Parallel()
 
 	evidenceMillis := int64(125 * time.Second / time.Millisecond)
-	row := domain.YouTubeNotificationDeliveryTelemetry{
+	row := telemetry.YouTubeNotificationDeliveryTelemetry{
 		DeliveryID:     41,
 		AttemptOrdinal: 2,
 		OutboxID:       51,
@@ -112,7 +112,7 @@ func TestAppendLatencyClassificationLogAttrAcceptsMissingClassification(t *testi
 func TestBuildDeliveryAuditLogAttrsWithClassificationIncludesExternalDelayReasonCode(t *testing.T) {
 	t.Parallel()
 
-	row := domain.YouTubeNotificationDeliveryTelemetry{
+	row := telemetry.YouTubeNotificationDeliveryTelemetry{
 		DeliveryID:     51,
 		AttemptOrdinal: 1,
 		OutboxID:       61,

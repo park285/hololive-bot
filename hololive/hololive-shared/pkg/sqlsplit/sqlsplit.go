@@ -58,6 +58,46 @@ func Statements(sql string) []string {
 	return statements
 }
 
+// StripComments는 인용 문자열과 dollar quote 밖의 주석을 지운다. 줄 주석은 뒤의 줄바꿈을 남기고
+// 블록 주석은 공백 하나로 바꾸므로, 주석을 사이에 둔 키워드와 줄 단위 패턴은 그대로 구분된다.
+func StripComments(sql string) string {
+	runes := []rune(sql)
+
+	var stripped, discard strings.Builder
+
+	stripped.Grow(len(sql))
+
+	for pos := 0; pos < len(runes); {
+		if isLineCommentStart(runes, pos) {
+			pos = scanLineComment(&discard, runes, pos)
+			discard.Reset()
+
+			continue
+		}
+
+		if isBlockCommentStart(runes, pos) {
+			pos = scanBlockComment(&discard, runes, pos)
+			discard.Reset()
+			stripped.WriteByte(' ')
+
+			continue
+		}
+
+		switch runes[pos] {
+		case '\'', '"':
+			pos = scanQuoted(&stripped, runes, pos)
+		case '$':
+			pos = scanDollar(&stripped, runes, pos)
+		default:
+			stripped.WriteRune(runes[pos])
+
+			pos++
+		}
+	}
+
+	return stripped.String()
+}
+
 func scanSQLToken(buf *strings.Builder, runes []rune, pos int) (next int, isSeparator bool) {
 	if end, ok := scanComment(buf, runes, pos); ok {
 		return end, false

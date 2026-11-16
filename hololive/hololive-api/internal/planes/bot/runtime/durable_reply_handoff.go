@@ -14,6 +14,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
@@ -38,14 +39,6 @@ var replyHandoffCheckSteps = [...]time.Duration{
 	15 * time.Second,
 	time.Minute,
 }
-
-// last_error에 남는 reconciler 결과 코드다.
-const (
-	replyHandoffErrorFailed         = "handoff_failed"
-	replyHandoffErrorOutcomeUnknown = "handoff_outcome_unknown"
-	replyHandoffErrorStatusMissing  = "handoff_status_missing"
-	replyHandoffErrorUnconfirmed    = "handoff_unconfirmed"
-)
 
 func replyHandoffFirstCheck() time.Duration {
 	return replyHandoffCheckSteps[0]
@@ -89,14 +82,14 @@ func decideReplyHandoff(
 ) replyHandoffDecision {
 	if queryErr != nil {
 		if httpErr, ok := errors.AsType[*iris.HTTPError](queryErr); ok && httpErr.StatusCode == http.StatusNotFound {
-			return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: replyHandoffErrorStatusMissing}
+			return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: contractsalarm.HandoffCodeStatusMissing}
 		}
 
 		return pendingReplyHandoffDecision(claim, horizon)
 	}
 
 	if snapshot == nil || strings.TrimSpace(snapshot.RequestID) != claim.IrisRequestID {
-		return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: replyHandoffErrorOutcomeUnknown}
+		return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: contractsalarm.HandoffCodeOutcomeUnknown}
 	}
 
 	switch iris.ClassifyReplyStatus(snapshot.State) {
@@ -106,22 +99,22 @@ func decideReplyHandoff(
 		retry := !claim.ReplayHorizonExpired &&
 			int64(claim.Attempts) < int64(maxAttempts)+int64(claim.OperatorReplayGrants)
 		if retry {
-			return replyHandoffDecision{status: durability.ReplyOutboxRetryablePreDispatch, lastError: replyHandoffErrorFailed}
+			return replyHandoffDecision{status: durability.ReplyOutboxRetryablePreDispatch, lastError: contractsalarm.HandoffCodeFailed}
 		}
 
-		return replyHandoffDecision{status: durability.ReplyOutboxDead, lastError: replyHandoffErrorFailed}
+		return replyHandoffDecision{status: durability.ReplyOutboxDead, lastError: contractsalarm.HandoffCodeFailed}
 	case iris.ReplyStatusPending:
 		return pendingReplyHandoffDecision(claim, horizon)
 	case iris.ReplyStatusUnknown:
 		// outcome_unknown과 모르는 상태는 아래의 결과 불명 처리로 간다.
 	}
 
-	return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: replyHandoffErrorOutcomeUnknown}
+	return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: contractsalarm.HandoffCodeOutcomeUnknown}
 }
 
 func pendingReplyHandoffDecision(claim durability.ReplyHandoffClaim, horizon time.Duration) replyHandoffDecision {
 	if claim.Elapsed >= horizon {
-		return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: replyHandoffErrorUnconfirmed}
+		return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: contractsalarm.HandoffCodeUnconfirmed}
 	}
 
 	return replyHandoffDecision{}
