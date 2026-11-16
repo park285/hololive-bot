@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
@@ -43,6 +44,7 @@ type status struct {
 	RepostedBy jsontext.Value `json:"reposted_by"`
 	ReplyingTo jsontext.Value `json:"replying_to"`
 	Media      jsontext.Value `json:"media"`
+	Quote      jsontext.Value `json:"quote"`
 }
 
 type statusMedia struct {
@@ -53,6 +55,31 @@ type statusMedia struct {
 
 func (s *status) original() bool {
 	return isJSONNull(s.RepostedBy) && isJSONNull(s.ReplyingTo)
+}
+
+type quotedStatus struct {
+	Text             string `json:"text"`
+	CreatedTimestamp int64  `json:"created_timestamp"`
+	Author           struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"author"`
+}
+
+// quoted는 다른 계정의 글을 인용했을 때만 그 글을 돌려준다. 본인 글은 이미 따로 수집하므로, 방송 시작·감사 글에 딸린 지난 안내를 다시 읽지 않는다.
+func (s *status) quoted() (quotedStatus, bool) {
+	if len(s.Quote) == 0 || s.Quote[0] != '{' {
+		return quotedStatus{}, false
+	}
+
+	var quote quotedStatus
+
+	if err := jsonv2.Unmarshal(s.Quote, &quote); err != nil || strings.TrimSpace(quote.Text) == "" ||
+		quote.CreatedTimestamp <= 0 || quote.Author.ID == s.Author.ID {
+		return quotedStatus{}, false
+	}
+
+	return quote, true
 }
 
 func (s *status) firstPhoto() (string, bool) {

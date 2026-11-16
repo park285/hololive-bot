@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"log/slog"
+	"slices"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/singleflight"
@@ -167,6 +168,7 @@ func newScheduleCard(member *domain.Member, schedule scheduleposter.PublishedSch
 			Start:     slot.Start,
 			End:       slot.End,
 			Converted: slot.SourceZone != "",
+			FromPost:  fromPost(slot),
 			Status:    schedulecard.Status(slot.Status),
 			Title:     slot.TitleKo,
 			With:      slot.WithKo,
@@ -197,4 +199,10 @@ func setTimeChange(item *schedulecard.Item, slot *scheduleposter.Slot) {
 	} else {
 		item.MovedFrom = slot.OrigDay
 	}
+}
+
+func fromPost(slot *scheduleposter.Slot) bool {
+	return slices.ContainsFunc(slot.Steps, func(step scheduleposter.Step) bool {
+		return step.Kind == scheduleposter.ChangeAdded || step.Kind == scheduleposter.ChangeMoved || step.Kind == scheduleposter.ChangeOff
+	})
 }

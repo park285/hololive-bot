@@ -11,7 +11,10 @@ import (
 	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
-const maxChangePages = 10
+const (
+	maxChangePages      = 10
+	maxQuoteAuthorRunes = 60
+)
 
 type collectedPosts struct {
 	posts   []posterstore.Post
@@ -86,6 +89,10 @@ func (c *collectedPosts) take(page *statusPage, target Target, schedule *posters
 			continue
 		}
 
+		if quote, ok := item.quoted(); ok {
+			body = withQuote(body, &quote)
+		}
+
 		c.seen[id] = true
 		c.posts = append(c.posts, posterstore.Post{ID: id, PostedAt: postedAt, Body: body})
 	}
@@ -98,6 +105,10 @@ func weekStartJST(weekStart time.Time) time.Time {
 }
 
 func postBody(text string) string {
+	return cleanPostText(text, posterstore.MaxPostChars)
+}
+
+func cleanPostText(text string, limit int) string {
 	text = strings.Map(func(r rune) rune {
 		if r != '\n' && r != '\r' && unicode.IsControl(r) {
 			return ' '
@@ -106,9 +117,22 @@ func postBody(text string) string {
 		return r
 	}, strings.ToValidUTF8(text, ""))
 
-	if utf8.RuneCountInString(text) <= posterstore.MaxPostChars {
+	if utf8.RuneCountInString(text) <= limit {
 		return text
 	}
 
-	return string([]rune(text)[:posterstore.MaxPostChars])
+	return string([]rune(text)[:limit])
+}
+
+// withQuote는 인용한 글을 본문 뒤에 붙인다. 머리 줄의 문구와 시각 형식은 대응 지시문(match.txt)이 읽는 형식이다.
+func withQuote(body string, quote *quotedStatus) string {
+	author := strings.Join(strings.Fields(cleanPostText(quote.Author.Name, maxQuoteAuthorRunes)), " ")
+	header := "\n\nQuoted post by " + author + " at " + time.Unix(quote.CreatedTimestamp, 0).In(jst).Format(matchClockLayout) + " JST:\n"
+
+	room := posterstore.MaxPostChars - utf8.RuneCountInString(body) - utf8.RuneCountInString(header)
+	if room <= 0 {
+		return body
+	}
+
+	return body + header + cleanPostText(quote.Text, room)
 }

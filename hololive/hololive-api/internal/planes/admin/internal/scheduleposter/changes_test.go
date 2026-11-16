@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"cloud.google.com/go/auth"
 	"github.com/park285/shared-go/v2/pkg/retry"
@@ -1143,6 +1144,55 @@ func TestCollectPostsKeepsCleanPostsFromTheWeek(t *testing.T) {
 		{ID: 202, PostedAt: time.Unix(at("2026-11-10 12:00").Unix(), 0), Body: "  配信 告知\n21時〜"},
 		{ID: 204, PostedAt: time.Unix(at("2026-11-10 14:00").Unix(), 0), Body: strings.Repeat("長", posterstore.MaxPostChars)},
 	}, got.posts)
+}
+
+func quotedPost(authorID, name string, postedAt time.Time, text string) jsontext.Value {
+	return jsontext.Value(fmt.Sprintf(`{"type":"status","text":%q,"created_timestamp":%d,"author":{"id":%q,"name":%q}}`,
+		text, postedAt.Unix(), authorID, name))
+}
+
+func TestCollectPostsAppendsAnotherAccountsQuotedPost(t *testing.T) {
+	t.Parallel()
+
+	host := xStatus(211, at("2026-11-10 12:30"), "明日のコラボはこちら！")
+
+	host.Quote = quotedPost("3003", " 霧島なぎ\n🌙 ", at("2026-11-10 12:00"), "📢明日20時から\t\n#クイズ王決定戦")
+
+	self := xStatus(212, at("2026-11-10 13:00"), "配信開始！")
+
+	self.Quote = quotedPost(changeUser, "本人", at("2026-11-10 09:00"), "このあと13時から雑談")
+
+	gone := xStatus(213, at("2026-11-10 14:00"), "これ見て")
+
+	gone.Quote = jsontext.Value(`{"type":"tombstone"}`)
+
+	full := xStatus(214, at("2026-11-10 15:00"), strings.Repeat("長", posterstore.MaxPostChars-10))
+
+	full.Quote = quotedPost("3003", "霧島なぎ", at("2026-11-10 12:00"), "入らない引用")
+
+	cut := xStatus(215, at("2026-11-10 16:00"), strings.Repeat("長", posterstore.MaxPostChars-50))
+
+	cut.Quote = quotedPost("3003", "N", at("2026-11-10 12:00"), strings.Repeat("引", 100))
+
+	f := newChangeFixture(host, self, gone, full, cut)
+
+	got, err := f.service.collectPosts(t.Context(), f.service.config.Targets[0], new(changeSchedule()))
+	require.NoError(t, err)
+
+	bodies := make([]string, len(got.posts))
+	for i := range got.posts {
+		bodies[i] = got.posts[i].Body
+	}
+
+	header := "\n\nQuoted post by N at 2026-11-10 12:00 JST:\n"
+
+	require.Equal(t, []string{
+		"明日のコラボはこちら！\n\nQuoted post by 霧島なぎ 🌙 at 2026-11-10 12:00 JST:\n📢明日20時から \n#クイズ王決定戦",
+		"配信開始！",
+		"これ見て",
+		strings.Repeat("長", posterstore.MaxPostChars-10),
+		strings.Repeat("長", posterstore.MaxPostChars-50) + header + strings.Repeat("引", 50-utf8.RuneCountInString(header)),
+	}, bodies, "본인 글·지워진 글 인용은 붙이지 않고, 붙인 본문도 글 상한을 넘지 않는다")
 }
 
 func TestCollectPostsStopsOnlyAtTheOwnersOriginalPosts(t *testing.T) {

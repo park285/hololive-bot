@@ -900,7 +900,7 @@ func TestLoadConfigUsesStageDefaultsForRows(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RowsConfig{
 		Extract:   RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 900},
-		Translate: RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelMedium, TimeoutSeconds: 180},
+		Translate: RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
 		Match:     RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
 		Decide:    DecideConfig{ScheduleInfoMin: 0.7},
 	}, config.Translation.Rows)
@@ -913,7 +913,7 @@ func TestLoadConfigKeepsDefaultsForOmittedRowKeys(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RowsConfig{
 		Extract:   RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 900},
-		Translate: RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelMedium, Temperature: new(float32(0.5)), TimeoutSeconds: 300},
+		Translate: RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, Temperature: new(float32(0.5)), TimeoutSeconds: 300},
 		Match:     RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
 		Decide:    DecideConfig{ScheduleInfoMin: 0.7},
 	}, config.Translation.Rows)
@@ -922,7 +922,7 @@ func TestLoadConfigKeepsDefaultsForOmittedRowKeys(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelMinimal, Temperature: new(float32(0)), TimeoutSeconds: 900},
 		config.Translation.Rows.Extract)
-	require.Equal(t, genai.ThinkingLevelMedium, config.Translation.Rows.Translate.ThinkingLevel)
+	require.Equal(t, defaultRowsConfig().Translate, config.Translation.Rows.Translate)
 }
 
 func TestLoadConfigRejectsInvalidRowSettings(t *testing.T) {
