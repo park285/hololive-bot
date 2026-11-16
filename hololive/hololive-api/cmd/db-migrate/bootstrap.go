@@ -31,7 +31,7 @@ var collectorRolePasswordEnvs = []struct {
 // POSTGRES_ADMIN_PASSWORD가 명시되지 않으면 순수 migrate(롤백) 경로로 보고 bootstrap을 생략한다 — PGPASSWORD로 fallback하면 migrator 자격증명으로
 // admin 접속을 시도해 순수 migrate가 깨지기 때문이다. 역할 bootstrap을 할 때 collector별 비밀번호는 모두 필수다. 비어 있을 때 admin 비밀번호로
 // role을 ALTER하면 역할 분리가 깨지므로, 대신할 값을 찾지 않고 실패한다.
-func bootstrapScraperRole(ctx context.Context) error {
+func bootstrapCollectorRoles(ctx context.Context) error {
 	adminPassword := os.Getenv("POSTGRES_ADMIN_PASSWORD")
 	if strings.TrimSpace(adminPassword) == "" {
 		return nil
@@ -93,7 +93,7 @@ func ensureCollectorRoles(
 	}
 
 	for _, role := range collectorRoles {
-		if err := upsertScraperRole(ctx, conn, role.user, role.password); err != nil {
+		if err := upsertCollectorRole(ctx, conn, role.user, role.password); err != nil {
 			return fmt.Errorf("upsert collector role %s: %w", role.user, err)
 		}
 
@@ -120,10 +120,10 @@ func ensureCollectorRoles(
 	return nil
 }
 
-func upsertScraperGroupRole(ctx context.Context, conn scraperRoleConnection, scraperGroup string) error {
+func upsertScraperGroupRole(ctx context.Context, conn roleConnection, scraperGroup string) error {
 	var exists bool
 
-	if err := conn.QueryRow(ctx, mustSQL("check_scraper_role.sql"), scraperGroup).Scan(&exists); err != nil {
+	if err := conn.QueryRow(ctx, mustSQL("check_role.sql"), scraperGroup).Scan(&exists); err != nil {
 		return fmt.Errorf("bootstrap: check scraper group role: %w", err)
 	}
 
@@ -138,11 +138,15 @@ func upsertScraperGroupRole(ctx context.Context, conn scraperRoleConnection, scr
 		return fmt.Errorf("bootstrap: alter scraper group role: %w", err)
 	}
 
+	if _, err := conn.Exec(ctx, mustSQL("terminate_role_sessions.sql"), scraperGroup); err != nil {
+		return fmt.Errorf("bootstrap: terminate scraper group sessions: %w", err)
+	}
+
 	return nil
 }
 
 func protectCredentialSession(config *pgx.ConnConfig) {
-	config.RuntimeParams["application_name"] = "hololive-scraper-role-bootstrap"
+	config.RuntimeParams["application_name"] = "hololive-collector-role-bootstrap"
 	config.RuntimeParams["log_statement"] = "none"
 	config.RuntimeParams["log_min_duration_statement"] = "-1"
 	config.RuntimeParams["log_min_duration_sample"] = "-1"
@@ -159,44 +163,44 @@ func protectCredentialSession(config *pgx.ConnConfig) {
 	config.RuntimeParams["track_activities"] = "off"
 }
 
-type scraperRoleConnection interface {
+type roleConnection interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 }
 
-func upsertScraperRole(ctx context.Context, conn scraperRoleConnection, scraperUser, scraperPassword string) error {
+func upsertCollectorRole(ctx context.Context, conn roleConnection, user, password string) error {
 	var exists bool
 
-	if err := conn.QueryRow(ctx, mustSQL("check_scraper_role.sql"), scraperUser).Scan(&exists); err != nil {
-		return fmt.Errorf("bootstrap: check scraper role: %w", err)
+	if err := conn.QueryRow(ctx, mustSQL("check_role.sql"), user).Scan(&exists); err != nil {
+		return fmt.Errorf("bootstrap: check collector role: %w", err)
 	}
 
-	verifier, err := pgxdb.SCRAMVerifier(scraperPassword)
+	verifier, err := pgxdb.SCRAMVerifier(password)
 	if err != nil {
-		return fmt.Errorf("bootstrap: prepare scraper password: %w", err)
+		return fmt.Errorf("bootstrap: prepare collector password: %w", err)
 	}
 
-	roleIdent := pgx.Identifier{scraperUser}.Sanitize()
+	roleIdent := pgx.Identifier{user}.Sanitize()
 	passwordLiteral := quoteSQLLiteral(verifier)
 
 	if !exists {
-		if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("create_scraper_role.sql.tpl"), roleIdent, passwordLiteral)); err != nil {
-			return fmt.Errorf("bootstrap: create scraper role: %w", err)
+		if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("create_collector_role.sql.tpl"), roleIdent, passwordLiteral)); err != nil {
+			return fmt.Errorf("bootstrap: create collector role: %w", err)
 		}
 	}
 
 	alter := fmt.Sprintf(
-		mustSQL("alter_scraper_role.sql.tpl"),
+		mustSQL("alter_collector_role.sql.tpl"),
 		roleIdent, passwordLiteral,
 	)
 	if _, err := conn.Exec(ctx, alter); err != nil {
-		return fmt.Errorf("bootstrap: alter scraper role: %w", err)
+		return fmt.Errorf("bootstrap: alter collector role: %w", err)
 	}
 
 	return nil
 }
 
-func grantScraperSchemaUsage(ctx context.Context, connString, scraperUser string) (err error) {
+func grantScraperSchemaUsage(ctx context.Context, connString, scraperGroup string) (err error) {
 	config, err := pgxdb.ParseConfig(connString)
 	if err != nil {
 		return fmt.Errorf("bootstrap: parse database config: %w", err)
@@ -209,7 +213,7 @@ func grantScraperSchemaUsage(ctx context.Context, connString, scraperUser string
 
 	defer func() { err = closeConn(ctx, conn, "database", err) }()
 
-	stmt := fmt.Sprintf(mustSQL("grant_schema_usage.sql.tpl"), pgx.Identifier{scraperUser}.Sanitize())
+	stmt := fmt.Sprintf(mustSQL("grant_schema_usage.sql.tpl"), pgx.Identifier{scraperGroup}.Sanitize())
 	if _, err := conn.Exec(ctx, stmt); err != nil {
 		return fmt.Errorf("bootstrap: grant schema usage: %w", err)
 	}

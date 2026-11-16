@@ -62,7 +62,7 @@ func run() error {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 
-	if bootstrapErr := bootstrapScraperRole(ctx); bootstrapErr != nil {
+	if bootstrapErr := bootstrapCollectorRoles(ctx); bootstrapErr != nil {
 		return fmt.Errorf("bootstrap collector roles: %w", bootstrapErr)
 	}
 

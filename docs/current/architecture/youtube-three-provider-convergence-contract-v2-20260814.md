@@ -1247,9 +1247,11 @@ shorts claim은 활성 queue partial index를 사용합니다. 현재 live slot 
 - 필요한 sequence `USAGE, SELECT`
 - canonical table, notification outbox, replay request, queue claim/finalize UPDATE 권한 없음
 
-raw DML은 collector session identity와 active lease owner·fence·projection·membership·target·job contract를
-검증하는 DB trigger를 통과해야 한다. 새 payload는 같은 transaction에서 이 검증을 통과한 observation에
-연결되어야 하며, queue insert 때 같은 lease fact를 다시 검증한다.
+migration 028의 trigger는 collector login을 instance에 묶는다. lease 변경과 provenance·collision 기록은
+같은 instance여야 하고, 만료 전인 다른 instance의 lease는 바꿀 수 없다. observation insert는 자기 ACTIVE
+lease의 owner·fence·projection generation과, queue insert는 그 observation의 fence와 자기 ACTIVE lease가
+맞아야 한다. membership·target·job 계약 검증은 앱이 맡고,
+checkpoint와 payload 기록은 instance에 묶이지 않는다.
 
 `hololive_runtime`은 target generation write, observation read, queue claim/finalize, replay/retention, canonical write 권한을 가진다. `alarm-worker` role에는 observation DML 권한을 추가하지 않는다.
 

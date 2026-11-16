@@ -45,7 +45,7 @@ func TestBootstrapScraperRoleRequiresEveryCollectorPassword(t *testing.T) {
 	t.Setenv("PGPORT", "1")
 	t.Setenv("PGSSLMODE", "disable")
 
-	err := bootstrapScraperRole(t.Context())
+	err := bootstrapCollectorRoles(t.Context())
 	if err == nil {
 		t.Fatal("missing collector password accepted")
 	}
@@ -94,28 +94,33 @@ func TestScraperGroupRoleIsNoLogin(t *testing.T) {
 	t.Parallel()
 
 	for _, exists := range []bool{false, true} {
-		recorder := &scraperRoleRecorder{exists: exists}
+		recorder := &roleRecorder{exists: exists}
 		if err := upsertScraperGroupRole(t.Context(), recorder, `scraper"group`); err != nil {
 			t.Fatal(err)
 		}
 
-		want := 2
+		want := 3
 		if exists {
-			want = 1
+			want = 2
 		}
 		if len(recorder.commands) != want {
 			t.Fatalf("commands=%d want=%d", len(recorder.commands), want)
 		}
 
-		for _, command := range recorder.commands {
+		roleCommands, terminate := recorder.commands[:want-1], recorder.commands[want-1]
+		for _, command := range roleCommands {
 			if !strings.Contains(command, "NOLOGIN") || !strings.Contains(command, `"scraper""group"`) {
 				t.Fatal("scraper group SQL lost no-login or identifier quoting")
 			}
 		}
+
+		if !strings.Contains(terminate, "pg_terminate_backend") {
+			t.Fatal("scraper group sessions were not terminated after NOLOGIN")
+		}
 	}
 }
 
-type scraperRoleRecorder struct {
+type roleRecorder struct {
 	exists   bool
 	commands []string
 	fail     error
@@ -138,11 +143,11 @@ func (r scraperRoleRow) Scan(dest ...any) error {
 	return nil
 }
 
-func (r *scraperRoleRecorder) QueryRow(context.Context, string, ...any) pgx.Row {
+func (r *roleRecorder) QueryRow(context.Context, string, ...any) pgx.Row {
 	return scraperRoleRow(r.exists)
 }
 
-func (r *scraperRoleRecorder) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+func (r *roleRecorder) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
 	r.commands = append(r.commands, sql)
 	return pgconn.CommandTag{}, r.fail
 }
@@ -153,8 +158,8 @@ func TestScraperRoleSQLUsesOnlySCRAMVerifier(t *testing.T) {
 	password := t.Name() + "'\\원문-" + t.TempDir()
 
 	for _, exists := range []bool{false, true} {
-		recorder := &scraperRoleRecorder{exists: exists}
-		if err := upsertScraperRole(t.Context(), recorder, `scraper"name`, password); err != nil {
+		recorder := &roleRecorder{exists: exists}
+		if err := upsertCollectorRole(t.Context(), recorder, `scraper"name`, password); err != nil {
 			t.Fatal(err)
 		}
 
@@ -180,9 +185,9 @@ func TestScraperRoleSQLUsesOnlySCRAMVerifier(t *testing.T) {
 	}
 
 	failure := errors.New("statement rejected")
-	recorder := &scraperRoleRecorder{fail: failure}
+	recorder := &roleRecorder{fail: failure}
 
-	if err := upsertScraperRole(t.Context(), recorder, "scraper", password); err == nil || !errors.Is(err, failure) || strings.Contains(err.Error(), password) {
+	if err := upsertCollectorRole(t.Context(), recorder, "scraper", password); err == nil || !errors.Is(err, failure) || strings.Contains(err.Error(), password) {
 		t.Fatal("role failure lost cause or exposed password")
 	}
 }
@@ -192,9 +197,9 @@ func TestScraperRoleRejectsIncompatiblePasswordsBeforeMutation(t *testing.T) {
 
 	for _, password := range []string{"", "sentinel-Ｆ", "sentinel-soft\u00adhyphen", "sentinel\x00suffix", "sentinel-\xff", "sentinel-\xff\a", "sentinel-\xff\ue000"} {
 		for _, exists := range []bool{false, true} {
-			recorder := &scraperRoleRecorder{exists: exists}
+			recorder := &roleRecorder{exists: exists}
 
-			err := upsertScraperRole(t.Context(), recorder, "scraper", password)
+			err := upsertCollectorRole(t.Context(), recorder, "scraper", password)
 			if err == nil {
 				t.Fatal("expected password compatibility rejection")
 			}
