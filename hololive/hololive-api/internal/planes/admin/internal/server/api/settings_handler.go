@@ -12,7 +12,6 @@ import (
 
 	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/server/ginjson"
@@ -115,7 +114,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), adminRequestTimeout)
 
 	defer cancel()
 
@@ -156,7 +155,7 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), adminRequestTimeout)
 
 	defer cancel()
 
@@ -197,7 +196,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), adminRequestTimeout)
 
 	defer cancel()
 

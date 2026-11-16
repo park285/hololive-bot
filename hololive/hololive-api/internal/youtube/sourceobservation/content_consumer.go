@@ -43,7 +43,7 @@ func (c *Consumer) reconcileContent(
 		return ReconcileResult{}, fmt.Errorf("merge content Premieres: %w", err)
 	}
 
-	applications := mergeContentApplications(mapContentApplications(decision.Applications), premiereApplications)
+	applications := mergeContentApplications(applicationsOf(decision.Applications), premiereApplications)
 
 	return ReconcileResult{
 		Applications:        applications,
@@ -141,17 +141,4 @@ func entitiesFromItems(items []contract.VideoListItemV1, shorts bool) []content.
 	}
 
 	return entities
-}
-
-func mapContentApplications(items []content.Application) []Application {
-	applications := make([]Application, len(items))
-	for i := range items {
-		applications[i] = Application{
-			EntityKind: items[i].EntityKind,
-			EntityKey:  items[i].EntityKey,
-			Decision:   items[i].Decision,
-		}
-	}
-
-	return applications
 }

@@ -13,8 +13,8 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 const (

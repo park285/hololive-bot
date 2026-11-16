@@ -28,9 +28,9 @@ import (
 	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-api/internal/service/activity"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 

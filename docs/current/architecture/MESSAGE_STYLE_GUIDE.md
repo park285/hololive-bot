@@ -109,7 +109,7 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 
 ## 9. 에러·알림 단문 규칙
 
-- `error` 네임스페이스: `❌ `/`⚠️ ` 접두와 키셋은 계약(parity 테스트 고정) — 값만 바꾼다. 본문은 한 문장 서술형 + 마침표, 사용 예시는 둘째 줄 `예) ...`.
+- `error` 네임스페이스: `❌ `/`⚠️ ` 접두와 키셋은 계약(parity 테스트 고정) — 값만 바꾼다. 본문은 한 문장 서술형 + 마침표, 사용 예시는 둘째 줄 `예) ...`. 예외로 명령 한도 초과(`command_rate_limited`)와 방송 이력·방송 시간·썸네일 안내(`broadcast_history_query_failed`, `broadcast_time_query_failed`, `broadcast_type_unknown`, `broadcast_thumbnail_usage`, `broadcast_thumbnail_not_found`, `broadcast_thumbnail_download_failed`)는 접두 없는 값으로 시드되어 있으며(migration 025), parity 테스트도 이 7개 key의 접두를 검사하지 않는다.
 - `notify` 네임스페이스: 상태 글리프(✅ ℹ️ 🔔 🔕) 접두 + 한 문장. 상태 상세는 `- ` 행.
 - 원인 노출 최소화: 내부 오류는 "무엇이 실패했는지 + 재시도 안내"까지만. 스택·코드·영문 에러 금지.
 

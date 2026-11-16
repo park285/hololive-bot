@@ -33,7 +33,7 @@
 * 실시간 알림 발송: `alarm-worker -> PostgreSQL dispatch outbox (Valkey wakeup) -> alarm-worker egress -> Iris Core -> 카카오톡`
 * 유튜브 신작 감지: `youtube-collector -> source_observations -> hololive-api YouTube plane -> alarm-worker`
 
-Iris 연결은 `iris-client-go/v5 v5.0.0`을 사용하며 기동 epoch 인증을 지원하는 Iris가 필수입니다.
+Iris 연결은 `iris-client-go/v5`(판본은 각 module `go.mod`)를 사용하며 기동 epoch 인증을 지원하는 Iris가 필수입니다.
 SDK는 보호 호출 전 같은 H3/TLS 대상의 공개 `GET /auth/epoch`를 조회·검증·캐시하고,
 bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 대체하지 않습니다.
 `401`과 검증된 `AUTH_EPOCH_MISMATCH`가 함께 온 경우만 원래 deadline·본문·`ClientRequestID`를 유지해
@@ -139,7 +139,7 @@ rollout 소유자만 활성화합니다.
 
 ## 서비스 상태 진단 (Logs & Health Check)
 
-* 로그 분석 표준(SSOT): 개발 및 문제 원인 추적 시 각 서비스의 표준 출력/표준 에러(stdout/stderr)를 1순위 데이터로 다룹니다. 중앙과 iris-seoul collector b는 journald(`journalctl -u <unit>`), host-native a/d도 journald입니다.
+* 로그 분석 표준(SSOT): 개발 및 문제 원인 추적 시 각 서비스의 표준 출력/표준 에러(stdout/stderr)를 1순위 데이터로 다룹니다. 중앙과 iris-seoul collector b는 journald(`journalctl -u <unit>`), host-native a와 kapu Quadlet d도 journald입니다.
 * 로컬 파일 로그: 디버깅 시 참고용 보조 미러 정보로만 취급합니다.
 
 ### 서비스별 상태 진단 엔드포인트

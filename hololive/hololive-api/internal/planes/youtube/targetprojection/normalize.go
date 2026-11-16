@@ -226,17 +226,3 @@ func hashNormalizedTargets(targets []TargetSpec) (string, error) {
 
 	return hex.EncodeToString(digest[:]), nil
 }
-
-func sameReasons(left, right []TargetReason) bool {
-	if len(left) != len(right) {
-		return false
-	}
-
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-
-	return true
-}

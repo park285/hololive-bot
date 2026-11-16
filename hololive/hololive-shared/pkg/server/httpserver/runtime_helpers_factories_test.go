@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 func TestNewHealthOnlyRuntimeRouter(t *testing.T) {
@@ -28,7 +28,7 @@ func TestNewHealthOnlyRuntimeRouter(t *testing.T) {
 	}
 
 	metricsReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
-	metricsReq.Header.Set(common.APIKeyHeader, "test-key")
+	metricsReq.Header.Set(httputil.HeaderAPIKey, "test-key")
 
 	metricsRes := httptest.NewRecorder()
 	router.ServeHTTP(metricsRes, metricsReq)

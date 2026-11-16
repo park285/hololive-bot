@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
 const (
@@ -258,12 +258,12 @@ func TestReconcilerRoutesDecisionToLedger(t *testing.T) {
 		{name: "completed", status: status(stateCompleted), want: ledgerCall{op: opComplete}},
 		{
 			name: "failed with budget", status: status(stateFailed), claim: testClaim{budgetLeft: true},
-			want:      ledgerCall{op: opReissue, code: handoffcheck.CodeFailed},
+			want:      ledgerCall{op: opReissue, code: contractsalarm.HandoffCodeFailed},
 			wantLevel: slog.LevelWarn, wantLog: "test ledger handoff failed; requeued with the next request generation",
 		},
 		{
 			name: "failed without budget", status: status(stateFailed),
-			want:      ledgerCall{op: opExhaust, code: handoffcheck.CodeFailed},
+			want:      ledgerCall{op: opExhaust, code: contractsalarm.HandoffCodeFailed},
 			wantLevel: slog.LevelError, wantLog: "test ledger handoff failed; reissue budget exhausted",
 		},
 		{
@@ -272,12 +272,12 @@ func TestReconcilerRoutesDecisionToLedger(t *testing.T) {
 		},
 		{
 			name: "queued at horizon", status: status(stateQueued), claim: testClaim{elapsed: testHorizon},
-			want:      ledgerCall{op: opQuarantine, code: handoffcheck.CodeUnconfirmed},
+			want:      ledgerCall{op: opQuarantine, code: contractsalarm.HandoffCodeUnconfirmed},
 			wantLevel: slog.LevelError, wantLog: "test ledger handoff outcome unknown; quarantined",
 		},
 		{
 			name: "status missing", status: statusError(http.StatusNotFound),
-			want:      ledgerCall{op: opQuarantine, code: handoffcheck.CodeStatusMissing},
+			want:      ledgerCall{op: opQuarantine, code: contractsalarm.HandoffCodeStatusMissing},
 			wantLevel: slog.LevelError, wantLog: "test ledger handoff outcome unknown; quarantined",
 		},
 	}

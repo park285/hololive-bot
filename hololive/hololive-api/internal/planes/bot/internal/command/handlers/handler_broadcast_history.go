@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
@@ -47,8 +48,6 @@ const (
 	defaultBroadcastHistoryDays = 7
 	MaxBroadcastHistoryDays     = 365
 )
-
-const broadcastThumbnailNotFoundMessage = "종료된 방송 이력에서 해당 video_id를 찾지 못했습니다."
 
 // 사용자-facing 응답을 이미 보냈으니 호출자는 추가 응답 없이 종료해야 한다.
 var errBroadcastHistoryHandled = errors.New("broadcast history request handled")
@@ -87,7 +86,7 @@ func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *botcomman
 	if err != nil {
 		c.Deps().Logger.Error("broadcast history query failed", slog.Any("error", err))
 
-		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, "방송 이력 조회 중 오류가 발생했습니다."); sendErr != nil {
+		if sendErr := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrBroadcastHistoryQueryFailed); sendErr != nil {
 			return fmt.Errorf("send message: %w", sendErr)
 		}
 
@@ -147,7 +146,7 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context,
 
 	typ, ok := broadcasttype.Parse(rawType)
 	if !ok {
-		if err := c.Deps().SendMessage(ctx, cmdCtx.Room, "알 수 없는 방송 타입입니다. 사용 가능: 게임, 잡담, 노래, ASMR, 멤버십, 이벤트, 경마, 동시시청, 뉴스, 기타, 미분류"); err != nil {
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrBroadcastTypeUnknown); err != nil {
 			return fmt.Errorf("send message: %w", err)
 		}
 
@@ -208,7 +207,7 @@ func (c *BroadcastThumbnailCommand) Description() string {
 func (c *BroadcastThumbnailCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	videoID := stringParam(params, "video_id")
 	if videoID == "" {
-		if err := c.Deps().SendMessage(ctx, cmdCtx.Room, "사용법: 방송이력 썸네일 <video_id>"); err != nil {
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrBroadcastThumbnailUsage); err != nil {
 			return fmt.Errorf("send message: %w", err)
 		}
 
@@ -253,7 +252,7 @@ func (c *BroadcastThumbnailCommand) lookupBroadcastThumbnailEntry(ctx context.Co
 	if err != nil && !errors.Is(err, handlercore.ErrBroadcastNotFound) {
 		c.Deps().Logger.Error("broadcast thumbnail lookup failed", slog.String("video_id", videoID), slog.Any("error", err))
 
-		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, "방송 이력 조회 중 오류가 발생했습니다."); sendErr != nil {
+		if sendErr := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrBroadcastHistoryQueryFailed); sendErr != nil {
 			return nil, fmt.Errorf("send message: %w", sendErr)
 		}
 
@@ -261,7 +260,7 @@ func (c *BroadcastThumbnailCommand) lookupBroadcastThumbnailEntry(ctx context.Co
 	}
 
 	if entry == nil {
-		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, broadcastThumbnailNotFoundMessage); sendErr != nil {
+		if sendErr := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrBroadcastThumbnailNotFound); sendErr != nil {
 			return nil, fmt.Errorf("send message: %w", sendErr)
 		}
 
@@ -273,7 +272,7 @@ func (c *BroadcastThumbnailCommand) lookupBroadcastThumbnailEntry(ctx context.Co
 
 func (c *BroadcastThumbnailCommand) downloadBroadcastThumbnail(ctx context.Context, cmdCtx *botcommand.CommandContext, entry *handlercore.BroadcastHistoryEntry) ([]byte, string, error) {
 	if entry == nil {
-		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, broadcastThumbnailNotFoundMessage); sendErr != nil {
+		if sendErr := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrBroadcastThumbnailNotFound); sendErr != nil {
 			return nil, "", fmt.Errorf("send message: %w", sendErr)
 		}
 
@@ -287,7 +286,7 @@ func (c *BroadcastThumbnailCommand) downloadBroadcastThumbnail(ctx context.Conte
 
 	c.Deps().Logger.Error("broadcast thumbnail download failed", slog.String("video_id", entry.VideoID), slog.Any("error", err))
 
-	if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, "고화질 썸네일을 다운로드하지 못했습니다."); sendErr != nil {
+	if sendErr := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrBroadcastThumbnailDownloadFailed); sendErr != nil {
 		return nil, "", fmt.Errorf("send message: %w", sendErr)
 	}
 

@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 func zoneRow(day, start, end, tz string) posterstore.Row {

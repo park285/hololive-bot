@@ -1,6 +1,7 @@
 package canonicalwrite
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -49,6 +50,34 @@ func TestBuildCommunityShortsAlarmStatesReturnsSortedRows(t *testing.T) {
 		string(domain.OutboxKindNewShort) + "\x00" + normalizeContentID(domain.OutboxKindNewShort, "video-a"),
 		string(domain.OutboxKindNewShort) + "\x00" + normalizeContentID(domain.OutboxKindNewShort, "video-b"),
 	}, actualKeys)
+}
+
+func TestBuildCommunityShortsAlarmStatesKeepsDuplicateKeysInInputOrder(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC)
+	tracking := make([]*domain.YouTubeContentAlarmTracking, 0, 13)
+
+	for i := range 13 {
+		tracking = append(tracking, &domain.YouTubeContentAlarmTracking{
+			Kind:       domain.OutboxKindNewShort,
+			ContentID:  []string{"video-a", "video-b"}[i%2],
+			ChannelID:  fmt.Sprintf("channel-%02d", i),
+			DetectedAt: now,
+		})
+	}
+
+	channelsByPost := map[string][]string{}
+
+	for _, row := range buildCommunityShortsAlarmStates(tracking) {
+		channelsByPost[row.PostID] = append(channelsByPost[row.PostID], row.ChannelID)
+	}
+
+	require.Len(t, channelsByPost, 2)
+
+	for postID, channels := range channelsByPost {
+		require.True(t, slices.IsSorted(channels), "%s: %v", postID, channels)
+	}
 }
 
 func TestNotificationChunksByKindDeduplicatesSameKindContentID(t *testing.T) {

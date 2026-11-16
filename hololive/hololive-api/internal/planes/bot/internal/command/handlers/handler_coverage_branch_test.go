@@ -52,35 +52,28 @@ func TestIntParam(t *testing.T) {
 		{
 			name:         "missing key uses default",
 			params:       map[string]any{},
-			key:          testParamHours,
+			key:          testParamLimit,
 			defaultValue: 24,
 			want:         24,
 		},
 		{
 			name:         "nil map uses default",
 			params:       nil,
-			key:          testParamHours,
+			key:          testParamLimit,
 			defaultValue: 12,
 			want:         12,
 		},
 		{
 			name:         "int value",
-			params:       map[string]any{testParamHours: 48},
-			key:          testParamHours,
+			params:       map[string]any{testParamLimit: 48},
+			key:          testParamLimit,
 			defaultValue: 24,
 			want:         48,
 		},
 		{
-			name:         "float64 value",
-			params:       map[string]any{testParamHours: 36.9},
-			key:          testParamHours,
-			defaultValue: 24,
-			want:         36,
-		},
-		{
 			name:         "unsupported type uses default",
-			params:       map[string]any{testParamHours: "36"},
-			key:          testParamHours,
+			params:       map[string]any{testParamLimit: "36"},
+			key:          testParamLimit,
 			defaultValue: 24,
 			want:         24,
 		},
@@ -89,29 +82,6 @@ func TestIntParam(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := intParam(tc.params, tc.key, tc.defaultValue)
-			if got != tc.want {
-				t.Fatalf("expected %d, got %d", tc.want, got)
-			}
-		})
-	}
-}
-
-func TestNormalizeUpcomingHours(t *testing.T) {
-	tests := []struct {
-		name  string
-		hours int
-		want  int
-	}{
-		{name: "less than one", hours: 0, want: 24},
-		{name: "negative", hours: -5, want: 24},
-		{name: "minimum boundary", hours: 1, want: 1},
-		{name: "maximum boundary", hours: 168, want: 168},
-		{name: "over maximum", hours: 999, want: 168},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := normalizeUpcomingHours(tc.hours)
 			if got != tc.want {
 				t.Fatalf("expected %d, got %d", tc.want, got)
 			}
@@ -146,31 +116,26 @@ func TestParseUpcomingOptions(t *testing.T) {
 	tests := []struct {
 		name             string
 		params           map[string]any
-		wantHours        int
 		wantDisplayLimit int
 	}{
 		{
 			name:             "defaults",
 			params:           map[string]any{},
-			wantHours:        24,
 			wantDisplayLimit: 0,
 		},
 		{
-			name:             "caps hours and limit",
-			params:           map[string]any{testParamHours: 200.0, testParamLimit: 120.0},
-			wantHours:        168,
+			name:             "caps limit",
+			params:           map[string]any{testParamLimit: 120},
 			wantDisplayLimit: 100,
 		},
 		{
 			name:             "show all overrides limit",
-			params:           map[string]any{testParamHours: 0, testParamLimit: 2, "all": true},
-			wantHours:        24,
+			params:           map[string]any{testParamLimit: 2, "all": true},
 			wantDisplayLimit: 0,
 		},
 		{
 			name:             "normalizes low limit",
-			params:           map[string]any{testParamHours: 36, testParamLimit: -1},
-			wantHours:        36,
+			params:           map[string]any{testParamLimit: -1},
 			wantDisplayLimit: 0,
 		},
 	}
@@ -178,10 +143,6 @@ func TestParseUpcomingOptions(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := parseUpcomingOptions(tc.params)
-			if got.hours != tc.wantHours {
-				t.Fatalf("expected hours %d, got %d", tc.wantHours, got.hours)
-			}
-
 			if got.displayLimit != tc.wantDisplayLimit {
 				t.Fatalf("expected displayLimit %d, got %d", tc.wantDisplayLimit, got.displayLimit)
 			}

@@ -39,15 +39,26 @@ var pretendardRegularData []byte
 //go:embed NotoSansJP-Regular-subset.ttf
 var notoSansJPData []byte
 
-var (
-	fontsOnce    sync.Once
-	errFontsLoad error
+var captionFaceCache sync.Map
 
-	pretendardRegular *opentype.Font
-	notoSansJP        *opentype.Font
+type captionFonts struct {
+	regular *opentype.Font
+	jp      *opentype.Font
+}
 
-	captionFaceCache sync.Map
-)
+var loadCaptionFonts = sync.OnceValues(func() (captionFonts, error) {
+	regular, err := opentype.Parse(pretendardRegularData)
+	if err != nil {
+		return captionFonts{}, fmt.Errorf("parse pretendard-regular font: %w", err)
+	}
+
+	jp, err := opentype.Parse(notoSansJPData)
+	if err != nil {
+		return captionFonts{}, fmt.Errorf("parse noto-sans-jp font: %w", err)
+	}
+
+	return captionFonts{regular: regular, jp: jp}, nil
+})
 
 // 반환되는 Face는 내부 sfnt.Buffer와 래스터 상태를 공유해 동시 사용에 안전하지 않다 —
 // 호출자는 render.fontMu처럼 렌더 전 구간을 단일 뮤텍스로 직렬화해야 한다(기존 계약).
@@ -65,7 +76,8 @@ func captionFace(size float64) (font.Face, error) {
 		size = 24
 	}
 
-	if err := loadFonts(); err != nil {
+	fonts, err := loadCaptionFonts()
+	if err != nil {
 		return nil, fmt.Errorf("load fonts: %w", err)
 	}
 
@@ -76,7 +88,7 @@ func captionFace(size float64) (font.Face, error) {
 		}
 	}
 
-	combined, err := buildCaptionFace(size)
+	combined, err := buildCaptionFace(fonts, size)
 	if err != nil {
 		return nil, fmt.Errorf("build caption face: %w", err)
 	}
@@ -91,8 +103,8 @@ func captionFace(size float64) (font.Face, error) {
 	return actualFace, nil
 }
 
-func buildCaptionFace(size float64) (font.Face, error) {
-	primary := pretendardRegular
+func buildCaptionFace(fonts captionFonts, size float64) (font.Face, error) {
+	primary := fonts.regular
 	opts := &opentype.FaceOptions{Size: size, DPI: 96, Hinting: font.HintingFull}
 
 	primaryFace, err := opentype.NewFace(primary, opts)
@@ -100,7 +112,7 @@ func buildCaptionFace(size float64) (font.Face, error) {
 		return nil, fmt.Errorf("create caption face size %.2f: %w", size, err)
 	}
 
-	jpFace, err := opentype.NewFace(notoSansJP, opts)
+	jpFace, err := opentype.NewFace(fonts.jp, opts)
 	if err != nil {
 		return nil, fmt.Errorf("create jp fallback face size %.2f: %w", size, err)
 	}
@@ -110,29 +122,6 @@ func buildCaptionFace(size float64) (font.Face, error) {
 		primarySFNT: primary,
 		fallback:    jpFace,
 	}, nil
-}
-
-func loadFonts() error {
-	fontsOnce.Do(func() {
-		parse := func(name string, data []byte) *opentype.Font {
-			if errFontsLoad != nil {
-				return nil
-			}
-
-			parsed, err := opentype.Parse(data)
-			if err != nil {
-				errFontsLoad = fmt.Errorf("parse %s font: %w", name, err)
-				return nil
-			}
-
-			return parsed
-		}
-
-		pretendardRegular = parse("pretendard-regular", pretendardRegularData)
-		notoSansJP = parse("noto-sans-jp", notoSansJPData)
-	})
-
-	return errFontsLoad
 }
 
 // fallbackFace는 rune 단위로 primary(Pretendard) cmap에 글리프가 없을 때만

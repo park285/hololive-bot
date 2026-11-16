@@ -24,8 +24,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/park285/shared-go/v2/pkg/stringutil"
-
 	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -101,7 +99,7 @@ func prepareMemberDirectoryGroup(group MemberDirectoryGroup) (memberDirectoryGro
 		return memberDirectoryGroupView{}, false
 	}
 
-	name := stringutil.TrimSpace(group.GroupName)
+	name := strings.TrimSpace(group.GroupName)
 	if name == "" {
 		name = "기타"
 	}
@@ -124,8 +122,8 @@ func prepareMemberDirectoryEntries(members []MemberDirectoryEntry) []memberDirec
 }
 
 func prepareMemberDirectoryEntry(member MemberDirectoryEntry) (memberDirectoryEntryView, bool) {
-	primary := stringutil.TrimSpace(member.PrimaryName)
-	secondary := stringutil.TrimSpace(member.SecondaryName)
+	primary := strings.TrimSpace(member.PrimaryName)
+	secondary := strings.TrimSpace(member.SecondaryName)
 
 	if primary == "" && secondary == "" {
 		return memberDirectoryEntryView{}, false

@@ -6,7 +6,7 @@ WITH new_queue AS (
     WHERE s.status = 'ENDED' AND s.times_source = 'observed'
       AND COALESCE(h.end_reason, '') <> 'CANCELLED_BEFORE_LIVE'
       AND (s.started_at IS NOT NULL OR h.last_live_positive_at IS NOT NULL)
-      AND ((f.video_id IS NULL AND s.status_observed_at >= statement_timestamp() - interval '48 hours')
+      AND ((f.video_id IS NULL AND s.status_observed_at >= statement_timestamp() - $1::interval)
            OR (f.queue = 'new' AND f.outcome = 'pending'))
 ), delays AS (
     SELECT f.queue, extract(epoch FROM f.completed_at -

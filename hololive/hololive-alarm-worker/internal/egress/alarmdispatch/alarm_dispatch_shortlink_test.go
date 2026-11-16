@@ -7,35 +7,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateAlarmShortLinkConfigAllowsDisabledConfiguration(t *testing.T) {
+func TestNewAlarmShortLinkBuilderAllowsDisabledConfiguration(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, ValidateAlarmShortLinkConfig(""))
+	builder, err := NewAlarmShortLinkBuilder("")
+	require.NoError(t, err)
+	assert.False(t, builder.Enabled())
 }
 
-func TestValidateAlarmShortLinkConfigRejectsInvalidOrigin(t *testing.T) {
+func TestNewAlarmShortLinkBuilderRejectsInvalidOrigin(t *testing.T) {
 	t.Parallel()
 
-	err := ValidateAlarmShortLinkConfig("http://go.example.com")
+	_, err := NewAlarmShortLinkBuilder("http://go.example.com")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), alarmShortLinkBaseURLEnv)
 	assert.Contains(t, err.Error(), "https")
 }
 
-func TestValidateAlarmShortLinkConfigRejectsUntrustedHTTPSOrigin(t *testing.T) {
+func TestNewAlarmShortLinkBuilderRejectsUntrustedHTTPSOrigin(t *testing.T) {
 	t.Parallel()
 
-	err := ValidateAlarmShortLinkConfig("https://go.example.com")
+	_, err := NewAlarmShortLinkBuilder("https://go.example.com")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), alarmShortLinkOrigin)
 }
 
-func TestConfiguredAlarmShortLinkBuilderBuildsLink(t *testing.T) {
+func TestNewAlarmShortLinkBuilderBuildsLink(t *testing.T) {
 	t.Parallel()
 
-	builder, err := configuredAlarmShortLinkBuilder(alarmShortLinkOrigin + "/")
+	builder, err := NewAlarmShortLinkBuilder(alarmShortLinkOrigin + "/")
 	require.NoError(t, err)
 
 	link, ok := builder.URL("dQw4w9WgXcQ")

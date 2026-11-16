@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -66,7 +67,7 @@ func (c *BroadcastTimeCommand) Execute(ctx context.Context, cmdCtx *botcommand.C
 	if err != nil {
 		c.Deps().Logger.Error("broadcast time query failed", slog.String("channel_id", channel.ID), slog.Any("error", err))
 
-		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, "방송 시간 조회 중 오류가 발생했습니다."); sendErr != nil {
+		if sendErr := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrBroadcastTimeQueryFailed); sendErr != nil {
 			return fmt.Errorf("send message: %w", sendErr)
 		}
 

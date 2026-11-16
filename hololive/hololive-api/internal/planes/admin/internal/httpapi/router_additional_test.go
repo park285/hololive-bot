@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -202,7 +202,7 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 	}
 
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/stats", http.NoBody)
-	req.Header.Set(common.APIKeyHeader, "wrong-key")
+	req.Header.Set(httputil.HeaderAPIKey, "wrong-key")
 
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

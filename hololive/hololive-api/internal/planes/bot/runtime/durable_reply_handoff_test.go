@@ -21,6 +21,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	dbtest "github.com/kapu/hololive-dbtest"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -55,22 +56,22 @@ func TestDecideReplyHandoff(t *testing.T) {
 		wantCode  string
 	}{
 		{name: "handoff completed confirms the reply", claim: inFlight, snapshot: snapshot("handoff_completed"), wantState: durability.ReplyOutboxHandoffCompleted},
-		{name: "padded upper-case completed needs review", claim: inFlight, snapshot: snapshot("  HANDOFF_COMPLETED "), wantState: durability.ReplyOutboxManualReview, wantCode: replyHandoffErrorOutcomeUnknown},
-		{name: "capitalized failed needs review instead of reissue", claim: inFlight, snapshot: snapshot("Failed"), wantState: durability.ReplyOutboxManualReview, wantCode: replyHandoffErrorOutcomeUnknown},
-		{name: "failed with budget is reissued", claim: inFlight, snapshot: snapshot("failed"), wantState: durability.ReplyOutboxRetryablePreDispatch, wantCode: replyHandoffErrorFailed},
-		{name: "failed with operator grant is reissued", claim: granted, snapshot: snapshot("failed"), wantState: durability.ReplyOutboxRetryablePreDispatch, wantCode: replyHandoffErrorFailed},
-		{name: "failed with exhausted attempts is dead", claim: exhausted, snapshot: snapshot("failed"), wantState: durability.ReplyOutboxDead, wantCode: replyHandoffErrorFailed},
-		{name: "failed past the replay horizon is dead", claim: replayExpired, snapshot: snapshot("failed"), wantState: durability.ReplyOutboxDead, wantCode: replyHandoffErrorFailed},
-		{name: "outcome unknown needs review", claim: inFlight, snapshot: snapshot("outcome_unknown"), wantState: durability.ReplyOutboxManualReview, wantCode: replyHandoffErrorOutcomeUnknown},
-		{name: "unrecognized state needs review", claim: inFlight, snapshot: snapshot("delivered"), wantState: durability.ReplyOutboxManualReview, wantCode: replyHandoffErrorOutcomeUnknown},
-		{name: "empty snapshot needs review", claim: inFlight, wantState: durability.ReplyOutboxManualReview, wantCode: replyHandoffErrorOutcomeUnknown},
-		{name: "another request id needs review", claim: inFlight, snapshot: &iris.ReplyStatusSnapshot{RequestID: "iris-other", State: "handoff_completed"}, wantState: durability.ReplyOutboxManualReview, wantCode: replyHandoffErrorOutcomeUnknown},
-		{name: "missing status needs review", claim: inFlight, err: fmt.Errorf("get reply status: %w", notFound), wantState: durability.ReplyOutboxManualReview, wantCode: replyHandoffErrorStatusMissing},
+		{name: "padded upper-case completed needs review", claim: inFlight, snapshot: snapshot("  HANDOFF_COMPLETED "), wantState: durability.ReplyOutboxManualReview, wantCode: contractsalarm.HandoffCodeOutcomeUnknown},
+		{name: "capitalized failed needs review instead of reissue", claim: inFlight, snapshot: snapshot("Failed"), wantState: durability.ReplyOutboxManualReview, wantCode: contractsalarm.HandoffCodeOutcomeUnknown},
+		{name: "failed with budget is reissued", claim: inFlight, snapshot: snapshot("failed"), wantState: durability.ReplyOutboxRetryablePreDispatch, wantCode: contractsalarm.HandoffCodeFailed},
+		{name: "failed with operator grant is reissued", claim: granted, snapshot: snapshot("failed"), wantState: durability.ReplyOutboxRetryablePreDispatch, wantCode: contractsalarm.HandoffCodeFailed},
+		{name: "failed with exhausted attempts is dead", claim: exhausted, snapshot: snapshot("failed"), wantState: durability.ReplyOutboxDead, wantCode: contractsalarm.HandoffCodeFailed},
+		{name: "failed past the replay horizon is dead", claim: replayExpired, snapshot: snapshot("failed"), wantState: durability.ReplyOutboxDead, wantCode: contractsalarm.HandoffCodeFailed},
+		{name: "outcome unknown needs review", claim: inFlight, snapshot: snapshot("outcome_unknown"), wantState: durability.ReplyOutboxManualReview, wantCode: contractsalarm.HandoffCodeOutcomeUnknown},
+		{name: "unrecognized state needs review", claim: inFlight, snapshot: snapshot("delivered"), wantState: durability.ReplyOutboxManualReview, wantCode: contractsalarm.HandoffCodeOutcomeUnknown},
+		{name: "empty snapshot needs review", claim: inFlight, wantState: durability.ReplyOutboxManualReview, wantCode: contractsalarm.HandoffCodeOutcomeUnknown},
+		{name: "another request id needs review", claim: inFlight, snapshot: &iris.ReplyStatusSnapshot{RequestID: "iris-other", State: "handoff_completed"}, wantState: durability.ReplyOutboxManualReview, wantCode: contractsalarm.HandoffCodeOutcomeUnknown},
+		{name: "missing status needs review", claim: inFlight, err: fmt.Errorf("get reply status: %w", notFound), wantState: durability.ReplyOutboxManualReview, wantCode: contractsalarm.HandoffCodeStatusMissing},
 		{name: "in flight before the horizon is rechecked", claim: inFlight, snapshot: snapshot("sending")},
-		{name: "in flight at the horizon is unconfirmed", claim: atHorizon, snapshot: snapshot("queued"), wantState: durability.ReplyOutboxManualReview, wantCode: replyHandoffErrorUnconfirmed},
+		{name: "in flight at the horizon is unconfirmed", claim: atHorizon, snapshot: snapshot("queued"), wantState: durability.ReplyOutboxManualReview, wantCode: contractsalarm.HandoffCodeUnconfirmed},
 		{name: "lookup error before the horizon is rechecked without a transition", claim: inFlight, err: unavailable},
 		{name: "lookup timeout before the horizon is rechecked without a transition", claim: inFlight, err: context.DeadlineExceeded},
-		{name: "lookup error at the horizon is unconfirmed", claim: atHorizon, err: unavailable, wantState: durability.ReplyOutboxManualReview, wantCode: replyHandoffErrorUnconfirmed},
+		{name: "lookup error at the horizon is unconfirmed", claim: atHorizon, err: unavailable, wantState: durability.ReplyOutboxManualReview, wantCode: contractsalarm.HandoffCodeUnconfirmed},
 	}
 
 	for _, tc := range cases {
@@ -283,7 +284,7 @@ func TestReplyHandoffFailedReissuesWithinTheGenerationCap(t *testing.T) {
 
 		row = readHandoffRow(t, pool, base)
 		require.Equal(t, durability.ReplyOutboxRetryablePreDispatch, row.status, "generation %d", generation)
-		require.Equal(t, replyHandoffErrorFailed, row.lastError)
+		require.Equal(t, contractsalarm.HandoffCodeFailed, row.lastError)
 		require.True(t, row.payloadKept)
 		require.False(t, row.checkPending)
 	}
@@ -317,7 +318,7 @@ func TestReplyHandoffFailedWithoutAttemptBudgetIsDead(t *testing.T) {
 
 	row := readHandoffRow(t, pool, base)
 	assert.Equal(t, durability.ReplyOutboxDead, row.status)
-	assert.Equal(t, replyHandoffErrorFailed, row.lastError)
+	assert.Equal(t, contractsalarm.HandoffCodeFailed, row.lastError)
 	assert.False(t, row.payloadKept)
 	assert.Equal(t, []string{base}, client.sentIDs())
 }
@@ -330,8 +331,8 @@ func TestReplyHandoffObservationOutcomes(t *testing.T) {
 		want      handoffRow
 	}{
 		{name: "completed", state: "handoff_completed", want: handoffRow{status: durability.ReplyOutboxHandoffCompleted}},
-		{name: "outcome unknown", state: "outcome_unknown", want: handoffRow{status: durability.ReplyOutboxManualReview, lastError: replyHandoffErrorOutcomeUnknown, payloadKept: true}},
-		{name: "missing status", statusErr: &iris.HTTPError{StatusCode: http.StatusNotFound}, want: handoffRow{status: durability.ReplyOutboxManualReview, lastError: replyHandoffErrorStatusMissing, payloadKept: true}},
+		{name: "outcome unknown", state: "outcome_unknown", want: handoffRow{status: durability.ReplyOutboxManualReview, lastError: contractsalarm.HandoffCodeOutcomeUnknown, payloadKept: true}},
+		{name: "missing status", statusErr: &iris.HTTPError{StatusCode: http.StatusNotFound}, want: handoffRow{status: durability.ReplyOutboxManualReview, lastError: contractsalarm.HandoffCodeStatusMissing, payloadKept: true}},
 		{name: "lookup error", statusErr: &iris.HTTPError{StatusCode: http.StatusServiceUnavailable}, want: handoffRow{status: durability.ReplyOutboxAccepted, payloadKept: true, checkPending: true}},
 		{name: "still sending", state: "sending", want: handoffRow{status: durability.ReplyOutboxAccepted, payloadKept: true, checkPending: true}},
 	}
@@ -378,7 +379,7 @@ func TestReplyHandoffUnconfirmedAtTheHorizonNeedsReview(t *testing.T) {
 
 	row := readHandoffRow(t, pool, base)
 	assert.Equal(t, durability.ReplyOutboxManualReview, row.status)
-	assert.Equal(t, replyHandoffErrorUnconfirmed, row.lastError)
+	assert.Equal(t, contractsalarm.HandoffCodeUnconfirmed, row.lastError)
 	assert.True(t, row.payloadKept)
 	assert.GreaterOrEqual(t, checks, 2, "지평 전 확인은 전이 없이 다시 예약된다")
 	assert.Equal(t, []string{base}, client.sentIDs())

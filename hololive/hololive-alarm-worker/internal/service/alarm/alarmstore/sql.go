@@ -18,7 +18,6 @@ var (
 	countAlarmEntriesSQL                     = mustSQL("count_alarm_entries.sql")
 	deleteRoomDisplayNameSQL                 = mustSQL("delete_room_display_name.sql")
 	findByChannelAndTypeSQL                  = mustSQL("find_by_channel_and_type.sql")
-	findByChannelSQL                         = mustSQL("find_by_channel.sql")
 	findByRoomSQL                            = mustSQL("find_by_room.sql")
 	getAllDistinctRoomIDsSQL                 = mustSQL("get_all_distinct_room_ids.sql")
 	getMemberNameSQL                         = mustSQL("get_member_name.sql")

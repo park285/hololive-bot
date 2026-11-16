@@ -196,7 +196,7 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 	}
 
 	if c.apiKey != "" {
-		req.Header.Set("X-API-Key", c.apiKey)
+		req.Header.Set(httputil.HeaderAPIKey, c.apiKey)
 	}
 
 	return req, nil

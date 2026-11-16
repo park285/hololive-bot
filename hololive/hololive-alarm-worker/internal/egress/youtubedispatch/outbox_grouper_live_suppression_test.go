@@ -47,9 +47,8 @@ func notifiedMarker(at time.Time) string {
 
 func liveCatchupSuppressionCount(t *testing.T, result string) int64 {
 	t.Helper()
-	initOutboxMetrics()
 
-	return int64(testutil.ToFloat64(outboxLiveCatchupSuppressionTotal.WithLabelValues(result)))
+	return int64(testutil.ToFloat64(outboxMetrics().liveCatchupSuppressionTotal.WithLabelValues(result)))
 }
 
 func TestFilterLiveCatchupSuppressedRoomsSkipsRecentUpcomingRooms(t *testing.T) {

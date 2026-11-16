@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+const NotificationSentTTL = 24 * time.Hour
 
 // 두 키를 한 pipeline으로 SetNX하면 경쟁자끼리 키를 나눠 잡은 뒤 서로 release해
 // 승자 0명이 될 수 있다(중복 배치에서 알림 전량 skip). 그래서 key1 승자만 key2를 시도한다.
@@ -34,7 +35,7 @@ func (s *Service) TryClaimPair(ctx context.Context, key1, key2 string, ttl time.
 func (s *Service) TryClaimRoomScheduleTransition(ctx context.Context, roomID, streamID string, oldScheduled, newScheduled time.Time) (string, bool, error) {
 	key := keys.BuildRoomScheduleTransitionKey(roomID, streamID, oldScheduled, newScheduled)
 
-	acquired, err := s.tryClaimKey(ctx, key, constants.CacheTTL.NotificationSent)
+	acquired, err := s.tryClaimKey(ctx, key, NotificationSentTTL)
 	if err != nil {
 		return key, false, fmt.Errorf("try claim room schedule transition: %w", err)
 	}
@@ -49,7 +50,7 @@ func (s *Service) TryClaimLogicalScheduleTransition(ctx context.Context, roomID,
 
 	key := keys.BuildLogicalScheduleTransitionKey(roomID, channelID, stream.ID, stream.Title, oldScheduled, newScheduled)
 
-	acquired, err := s.tryClaimKey(ctx, key, constants.CacheTTL.NotificationSent)
+	acquired, err := s.tryClaimKey(ctx, key, NotificationSentTTL)
 	if err != nil {
 		return key, false, fmt.Errorf("try claim logical schedule transition: %w", err)
 	}

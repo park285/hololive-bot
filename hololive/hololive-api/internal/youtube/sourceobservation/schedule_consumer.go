@@ -39,7 +39,7 @@ func (c *Consumer) reconcileSchedule(
 	}
 
 	return ReconcileResult{
-		Applications:        mapScheduleApplications(decision.Applications),
+		Applications:        applicationsOf(decision.Applications),
 		LiveRuntimeVideoIDs: scheduleDecisionRuntimeVideoIDs(&decision),
 	}, nil
 }
@@ -75,17 +75,4 @@ func scheduleEvidenceFromObservation(observation *Observation) (schedule.Evidenc
 		EffectiveAt:   observation.EffectiveAt,
 		ReceivedAt:    observation.ReceivedAt,
 	}, nil
-}
-
-func mapScheduleApplications(items []schedule.Application) []Application {
-	applications := make([]Application, len(items))
-	for i := range items {
-		applications[i] = Application{
-			EntityKind: items[i].EntityKind,
-			EntityKey:  items[i].EntityKey,
-			Decision:   items[i].Decision,
-		}
-	}
-
-	return applications
 }

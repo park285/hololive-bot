@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
+	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -67,9 +68,9 @@ func TestTimeFinalizationCandidateEligibility(t *testing.T) {
 		var expected time.Time
 
 		require.NoError(t, pool.QueryRow(t.Context(), `
-            SELECT COALESCE(f.next_attempt_at,s.status_observed_at+interval '3 minutes')
+            SELECT COALESCE(f.next_attempt_at,s.status_observed_at+$2::interval)
             FROM youtube_live_sessions s LEFT JOIN youtube_live_time_finalizations f USING(video_id)
-            WHERE s.video_id=$1`, id).Scan(&expected))
+            WHERE s.video_id=$1`, id, sourceobservation.TimeFinalizationFirstAttemptDelay).Scan(&expected))
 		require.Equal(t, expected, videos[id])
 	}
 }

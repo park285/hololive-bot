@@ -107,7 +107,6 @@ write_host_env() {
     printf 'HOLOLIVE_METRICS_ADDR=%s:30096\n' "$AP_SSH_HOST"
     printf 'HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HEALTHCHECK_SERVER_NAME=127.0.0.1\n'
-    printf 'PHOTO_SYNC_ENABLED=false\n'
     printf 'YOUTUBEJS_NODE=/usr/bin/node\n'
     printf 'YOUTUBEJS_SCRIPT=/opt/hololive-bot/youtube-collector/current/youtubejs/src/server.mjs\n'
     printf 'YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS=90\n'

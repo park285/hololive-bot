@@ -11,9 +11,9 @@ import (
 	"github.com/park285/shared-go/v2/pkg/reflectutil"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/sharedcache"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
@@ -124,7 +124,7 @@ func (f *cachedCelebrationCalendarFinder) loadEntriesSnapshot(ctx context.Contex
 
 	// 공유 조회는 첫 요청의 취소와 분리하되 기존 봇 요청 예산(10초) 안에서 끝낸다.
 	// 모든 호출자가 이탈해도 이 예산 안에서 캐시를 채울 수 있다.
-	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), constants.RequestTimeout.BotCommand)
+	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), transport.CommandTimeout)
 	defer cancel()
 
 	entries, err := f.base.FindMembersWithCelebrationsInMonth(loadCtx, month, referenceYear)

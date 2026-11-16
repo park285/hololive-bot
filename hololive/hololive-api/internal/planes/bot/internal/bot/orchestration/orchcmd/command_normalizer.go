@@ -41,13 +41,6 @@ func NormalizeCommandKey(cmdType botcommand.CommandType, params map[string]any) 
 		return CommandKeyAlarm, newParams
 	}
 
-	if typeStr == CommandKeyAlarm {
-		if _, hasAction := params["action"]; !hasAction {
-			newParams := cloneParamsWithAction(params, "list")
-			return CommandKeyAlarm, newParams
-		}
-	}
-
 	return typeStr, params
 }
 

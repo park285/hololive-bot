@@ -28,7 +28,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -53,7 +52,7 @@ func (h *MemberHandler) updateMemberField(c *gin.Context, value string, maxLengt
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), adminRequestTimeout)
 
 	defer cancel()
 

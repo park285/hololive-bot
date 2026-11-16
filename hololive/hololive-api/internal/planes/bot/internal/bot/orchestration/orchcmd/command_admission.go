@@ -37,11 +37,10 @@ import (
 )
 
 const (
-	expensiveHistoryUserLimit        = 3
-	expensiveHistoryRoomLimit        = 12
-	expensiveHistoryWindow           = time.Minute
-	expensiveHistoryRateLimitMessage = "방송 조회 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."
-	unstableCommandUserID            = "unknown"
+	expensiveHistoryUserLimit = 3
+	expensiveHistoryRoomLimit = 12
+	expensiveHistoryWindow    = time.Minute
+	unstableCommandUserID     = "unknown"
 )
 
 var (

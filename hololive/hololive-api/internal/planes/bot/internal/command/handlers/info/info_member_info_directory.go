@@ -24,8 +24,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
-
-	"github.com/park285/shared-go/v2/pkg/stringutil"
+	"strings"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -75,7 +74,7 @@ func (c *MemberInfoCommand) memberDirectoryMessage(ctx context.Context) (string,
 	ordered := c.sortGroupsByPreference(groupEntries)
 	message := c.Deps().Formatter.MemberDirectory(ctx, ordered, len(activeMembers))
 
-	if stringutil.TrimSpace(message) == "" {
+	if strings.TrimSpace(message) == "" {
 		return "", messaging.ErrCannotDisplayMemberInfo, nil
 	}
 

@@ -10,7 +10,6 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 func (s *Service) MarkAsNotified(ctx context.Context, streamID string, startScheduled time.Time, minutesUntil int) error {
@@ -59,7 +58,7 @@ func (s *Service) writeNotifiedHashFields(ctx context.Context, key, scheduledStr
 		return fmt.Errorf("mark as notified: hmset fields: %w", err)
 	}
 
-	if err := s.cache.Expire(ctx, key, constants.CacheTTL.NotificationSent); err != nil {
+	if err := s.cache.Expire(ctx, key, NotificationSentTTL); err != nil {
 		return fmt.Errorf("mark as notified: set expiration: %w", err)
 	}
 

@@ -30,7 +30,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -70,7 +69,7 @@ func (h *MemberHandler) handleAliasOperation(
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), adminRequestTimeout)
 	defer cancel()
 
 	result, err := repoFunc(ctx, memberID, req.Type, req.Alias)

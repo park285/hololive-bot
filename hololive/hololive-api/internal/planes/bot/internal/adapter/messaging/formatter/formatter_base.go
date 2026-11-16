@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -95,7 +94,7 @@ func (f *ResponseFormatter) render(ctx context.Context, key domain.TemplateKey, 
 }
 
 func NewResponseFormatter(prefix string, renderer *template.Renderer, opts ...Option) *ResponseFormatter {
-	if stringutil.TrimSpace(prefix) == "" {
+	if strings.TrimSpace(prefix) == "" {
 		prefix = "!"
 	}
 
@@ -113,7 +112,7 @@ func (f *ResponseFormatter) Prefix() string {
 		return "!"
 	}
 
-	if trimmed := stringutil.TrimSpace(f.prefix); trimmed != "" {
+	if trimmed := strings.TrimSpace(f.prefix); trimmed != "" {
 		return trimmed
 	}
 

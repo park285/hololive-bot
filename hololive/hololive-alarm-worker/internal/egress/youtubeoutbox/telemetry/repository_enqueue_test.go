@@ -75,12 +75,12 @@ func mustNewTestRepository(t *testing.T, db dbx.Querier) *Repository {
 	return repository
 }
 
-func makeEnqueueTestRow(outboxID, deliveryID int64, ordinal int) domain.YouTubeNotificationDeliveryTelemetry {
+func makeEnqueueTestRow(outboxID, deliveryID int64, ordinal int) YouTubeNotificationDeliveryTelemetry {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	latency := int64(1500)
 	sentAt := now.Add(-time.Minute)
 
-	return domain.YouTubeNotificationDeliveryTelemetry{
+	return YouTubeNotificationDeliveryTelemetry{
 		DeliveryID:         deliveryID,
 		AttemptOrdinal:     ordinal,
 		OutboxID:           outboxID,
@@ -105,7 +105,7 @@ func TestEnqueuePreparedInsertsBatchInSingleRoundTrip(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
 	ctx := t.Context()
 
-	rows := []domain.YouTubeNotificationDeliveryTelemetry{
+	rows := []YouTubeNotificationDeliveryTelemetry{
 		makeEnqueueTestRow(outboxID, 101, 1),
 		makeEnqueueTestRow(outboxID, 102, 1),
 		makeEnqueueTestRow(outboxID, 103, 2),
@@ -167,7 +167,7 @@ func TestEnqueuePreparedChunkBoundaries(t *testing.T) {
 
 		counting.execCalls = 0
 
-		rows := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, size)
+		rows := make([]YouTubeNotificationDeliveryTelemetry, 0, size)
 		for i := range size {
 			rows = append(rows, makeEnqueueTestRow(outboxID, int64(1000+i), 1))
 		}
@@ -197,7 +197,7 @@ func TestEnqueuePreparedRejectsDuplicateAttemptWithinBatch(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
 	ctx := t.Context()
 
-	rows := []domain.YouTubeNotificationDeliveryTelemetry{
+	rows := []YouTubeNotificationDeliveryTelemetry{
 		makeEnqueueTestRow(outboxID, 301, 1),
 		makeEnqueueTestRow(outboxID, 301, 1),
 		makeEnqueueTestRow(outboxID, 302, 1),
@@ -222,7 +222,7 @@ func TestTelemetrySurvivesOutboxRetentionDelete(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
 	ctx := t.Context()
 
-	if err := repo.EnqueuePrepared(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
+	if err := repo.EnqueuePrepared(ctx, []YouTubeNotificationDeliveryTelemetry{
 		makeEnqueueTestRow(outboxID, 401, 1),
 	}); err != nil {
 		t.Fatalf("EnqueuePrepared() error = %v", err)
@@ -252,7 +252,7 @@ func TestEnqueuePreparedChunkFailureRollsBackOnlyThatChunk(t *testing.T) {
 	ctx := t.Context()
 
 	size := enqueueTelemetryChunkSize + 2
-	rows := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, size)
+	rows := make([]YouTubeNotificationDeliveryTelemetry, 0, size)
 
 	for i := range size {
 		rows = append(rows, makeEnqueueTestRow(outboxID, int64(2000+i), 1))
@@ -279,7 +279,7 @@ func TestEnqueuePreparedRejectsExistingAttemptIdentity(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
 	ctx := t.Context()
 
-	first := []domain.YouTubeNotificationDeliveryTelemetry{
+	first := []YouTubeNotificationDeliveryTelemetry{
 		makeEnqueueTestRow(outboxID, 201, 1),
 		makeEnqueueTestRow(outboxID, 202, 1),
 	}
@@ -287,7 +287,7 @@ func TestEnqueuePreparedRejectsExistingAttemptIdentity(t *testing.T) {
 		t.Fatalf("EnqueuePrepared(first) error = %v", err)
 	}
 
-	second := []domain.YouTubeNotificationDeliveryTelemetry{
+	second := []YouTubeNotificationDeliveryTelemetry{
 		makeEnqueueTestRow(outboxID, 201, 1),
 		makeEnqueueTestRow(outboxID, 203, 1),
 	}

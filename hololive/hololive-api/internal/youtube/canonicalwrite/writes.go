@@ -74,7 +74,7 @@ func upsertVideosChunk(ctx context.Context, tx dbx.Querier, videos []*domain.You
 			sb.WriteByte(',')
 		}
 
-		writeRowPlaceholders(&sb, i, columnsPerRow)
+		dbx.WriteRowPlaceholders(&sb, i, columnsPerRow)
 
 		args = append(
 			args,
@@ -137,7 +137,7 @@ func upsertCommunityPostsChunk(ctx context.Context, tx dbx.Querier, posts []*dom
 			sb.WriteByte(',')
 		}
 
-		writeRowPlaceholders(&sb, i, columnsPerRow)
+		dbx.WriteRowPlaceholders(&sb, i, columnsPerRow)
 
 		args = append(
 			args,
@@ -296,7 +296,7 @@ func appendNotificationInsertArgs(
 		createdAt = now
 	}
 
-	writeRowPlaceholders(sb, index, notificationInsertColumns)
+	dbx.WriteRowPlaceholders(sb, index, notificationInsertColumns)
 
 	*args = append(
 		*args,

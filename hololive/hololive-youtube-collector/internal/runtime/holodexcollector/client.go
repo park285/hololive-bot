@@ -86,7 +86,7 @@ func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 	body, err := providerhttp.ReadProviderJSONDocument(ctx, resp, c.policy, contract.ProviderHolodex)
 
 	if redactErr2 := providerhttp.RedactError(err, c.apiKey); redactErr2 != nil {
-		return body, fmt.Errorf("redact error: %w", redactErr2)
+		return body, fmt.Errorf("read holodex response: %w", redactErr2)
 	}
 
 	return body, nil
@@ -94,17 +94,10 @@ func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 
 func (c *Client) redactedBuildRequestError(cause error) error {
 	err := collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassProtocol, fmt.Errorf("build holodex request: %w", cause))
-	if redacted := providerhttp.RedactError(err, c.apiKey); redacted != nil {
-		return fmt.Errorf("redact error: %w", redacted)
-	}
 
-	return nil
+	return fmt.Errorf("prepare holodex request: %w", providerhttp.RedactError(err, c.apiKey))
 }
 
 func (c *Client) mappedRequestError(cause error) error {
-	if err := providerhttp.MapRequestError("request holodex live", cause, c.apiKey); err != nil {
-		return fmt.Errorf("map request error: %w", err)
-	}
-
-	return nil
+	return fmt.Errorf("send holodex request: %w", providerhttp.MapRequestError("request holodex live", cause, c.apiKey))
 }

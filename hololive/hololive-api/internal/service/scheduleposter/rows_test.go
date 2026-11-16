@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 const tsuzuriChannel = "UCy9mgxB8pn2C4aNK_MPthDQ"

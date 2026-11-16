@@ -24,7 +24,7 @@ Volume=/opt/hololive-bot/compose/current/backups:/backups
 Volume=/opt/hololive-bot/compose/current/hololive/hololive-api/scripts/init-db:/docker-entrypoint-initdb.d:ro
 Volume=/opt/hololive-bot/compose/current/deploy/postgres/pg_hba.conf:/run/hololive-bot/postgres/pg_hba.conf:ro
 Volume=/etc/stack-secrets/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro,idmap
-# fence 뒤 재시드한 구 primary를 unfence helper가 이 unit으로 넘기면 --replace가 수동 container를 교체한다.
+# fence 뒤 재시드한 구 primary를 이 unit으로 넘기면 --replace가 수동 container를 교체한다.
 # 그 standby의 primary_conninfo(sslrootcert)가 이 unit에서도 읽히도록 CA를 둔다. passfile은 data volume 안에 둔다
 # (docs/current/runbooks/postgres-replication.md "Reactivation and retirement reference").
 Volume=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro

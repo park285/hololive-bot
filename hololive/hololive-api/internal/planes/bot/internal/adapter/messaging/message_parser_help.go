@@ -21,7 +21,7 @@
 package messaging
 
 import (
-	"github.com/park285/shared-go/v2/pkg/stringutil"
+	"slices"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
@@ -37,5 +37,5 @@ func (ma *MessageAdapter) tryHelpCommand(command, raw string) (*ParsedCommand, b
 var helpCommandAliases = []string{"도움말", "도움", "help", "명령어", "commands"}
 
 func (ma *MessageAdapter) isHelpCommand(cmd string) bool {
-	return stringutil.ContainsString(helpCommandAliases, cmd)
+	return slices.Contains(helpCommandAliases, cmd)
 }

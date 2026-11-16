@@ -64,7 +64,7 @@ func infrastructureConfig(t *testing.T) *apiconfig.RuntimeConfig {
 
 	return &apiconfig.RuntimeConfig{
 		Bot: &apiconfig.BotPlaneConfig{
-			Postgres: postgres, Valkey: valkey, Kakao: settings.KakaoConfig{ACLEnabled: true, ACLMode: "whitelist"},
+			Postgres: postgres, Valkey: valkey, Kakao: apiconfig.KakaoConfig{ACLEnabled: true, ACLMode: "whitelist"},
 			Holodex: holodex, OfficialSchedule: officialSchedule,
 		},
 		Admin: &apiconfig.AdminPlaneConfig{Postgres: postgres},

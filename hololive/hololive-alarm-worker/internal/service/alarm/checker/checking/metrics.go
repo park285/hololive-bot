@@ -10,54 +10,49 @@ import (
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 )
 
-var (
-	checkerMetricsInitOnce sync.Once
+type checkerMetricSet struct {
+	upcomingDecisionTotal *prometheus.CounterVec
+	liveCatchupTotal      *prometheus.CounterVec
+	persistedLiveTotal    *prometheus.CounterVec
+	liveGuardrailTotal    *prometheus.CounterVec
+}
 
-	youtubeUpcomingDecisionTotal *prometheus.CounterVec
-	youtubeLiveCatchupTotal      *prometheus.CounterVec
-	youtubePersistedLiveTotal    *prometheus.CounterVec
-	youtubeLiveGuardrailTotal    *prometheus.CounterVec
-)
-
-func initCheckerMetrics() {
-	checkerMetricsInitOnce.Do(func() {
-		youtubeUpcomingDecisionTotal = promauto.NewCounterVec(
+// checkerMetrics는 YouTubeChecker 생성자가 먼저 호출해, 등록 실패 panic이 첫 관측이 아니라 기동에서 드러난다.
+var checkerMetrics = sync.OnceValue(func() *checkerMetricSet {
+	return &checkerMetricSet{
+		upcomingDecisionTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "hololive_alarm_youtube_upcoming_decisions_total",
 				Help: "Total YouTube upcoming alarm decisions by result, minute, selection, and evaluation window flags.",
 			},
 			[]string{"result", "minute", "selection", "window_capped", "initial_observation"},
-		)
-
-		youtubeLiveCatchupTotal = promauto.NewCounterVec(
+		),
+		liveCatchupTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "hololive_alarm_youtube_live_catchup_decisions_total",
 				Help: "Total YouTube live catchup alarm decisions by result.",
 			},
 			[]string{"result"},
-		)
-
-		youtubePersistedLiveTotal = promauto.NewCounterVec(
+		),
+		persistedLiveTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "hololive_alarm_youtube_persisted_live_sessions_total",
 				Help: "Total YouTube persisted live session fallback observations by result and stream status.",
 			},
 			[]string{"result", "status"},
-		)
-
-		youtubeLiveGuardrailTotal = promauto.NewCounterVec(
+		),
+		liveGuardrailTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "hololive_alarm_youtube_live_guardrail_total",
 				Help: "Total YouTube live dispatch guardrail observations by result.",
 			},
 			[]string{"result"},
-		)
-	})
-}
+		),
+	}
+})
 
 func observeYouTubeUpcomingDecision(result string, minute int, selection string, window targetpolicy.EvaluationWindow) {
-	initCheckerMetrics()
-	youtubeUpcomingDecisionTotal.WithLabelValues(
+	checkerMetrics().upcomingDecisionTotal.WithLabelValues(
 		result,
 		alarmMinuteLabel(minute),
 		selection,
@@ -67,8 +62,7 @@ func observeYouTubeUpcomingDecision(result string, minute int, selection string,
 }
 
 func observeYouTubeUpcomingNoMinuteDecision(result string, window targetpolicy.EvaluationWindow) {
-	initCheckerMetrics()
-	youtubeUpcomingDecisionTotal.WithLabelValues(
+	checkerMetrics().upcomingDecisionTotal.WithLabelValues(
 		result,
 		"none",
 		"none",
@@ -78,8 +72,7 @@ func observeYouTubeUpcomingNoMinuteDecision(result string, window targetpolicy.E
 }
 
 func observeYouTubeLiveCatchup(result string) {
-	initCheckerMetrics()
-	youtubeLiveCatchupTotal.WithLabelValues(result).Inc()
+	checkerMetrics().liveCatchupTotal.WithLabelValues(result).Inc()
 }
 
 func observeYouTubePersistedLiveSessions(result, status string, count int) {
@@ -87,13 +80,11 @@ func observeYouTubePersistedLiveSessions(result, status string, count int) {
 		return
 	}
 
-	initCheckerMetrics()
-	youtubePersistedLiveTotal.WithLabelValues(result, status).Add(float64(count))
+	checkerMetrics().persistedLiveTotal.WithLabelValues(result, status).Add(float64(count))
 }
 
 func observeYouTubeLiveGuardrail(result string) {
-	initCheckerMetrics()
-	youtubeLiveGuardrailTotal.WithLabelValues(result).Inc()
+	checkerMetrics().liveGuardrailTotal.WithLabelValues(result).Inc()
 }
 
 func alarmMinuteLabel(minute int) string {

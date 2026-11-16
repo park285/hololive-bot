@@ -21,6 +21,7 @@
 package messaging
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -37,7 +38,7 @@ func (ma *MessageAdapter) tryLiveCommand(command string, args []string, raw stri
 	params := make(map[string]any)
 
 	if len(args) > 0 {
-		member := stringutil.TrimSpace(strings.Join(args, " "))
+		member := strings.TrimSpace(strings.Join(args, " "))
 		if member != "" {
 			params[paramMember] = member
 		}
@@ -49,7 +50,7 @@ func (ma *MessageAdapter) tryLiveCommand(command string, args []string, raw stri
 var liveCommandAliases = []string{"라이브", "live", "방송중", "생방송"}
 
 func (ma *MessageAdapter) isLiveCommand(cmd string) bool {
-	return stringutil.ContainsString(liveCommandAliases, cmd)
+	return slices.Contains(liveCommandAliases, cmd)
 }
 
 func (ma *MessageAdapter) tryUpcomingCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
@@ -67,7 +68,7 @@ func (ma *MessageAdapter) tryUpcomingCommand(command string, args []string, raw 
 var upcomingCommandAliases = []string{"예정", "upcoming"}
 
 func (ma *MessageAdapter) isUpcomingCommand(cmd string) bool {
-	return stringutil.ContainsString(upcomingCommandAliases, cmd)
+	return slices.Contains(upcomingCommandAliases, cmd)
 }
 
 func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
@@ -76,7 +77,7 @@ func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
 	all := false
 
 	for _, arg := range args {
-		token := stringutil.TrimSpace(arg)
+		token := strings.TrimSpace(arg)
 		if token == "" {
 			continue
 		}
@@ -102,7 +103,7 @@ func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
 var allUpcomingTokens = []string{"전체", "전부", "모두", "all"}
 
 func isAllUpcomingToken(token string) bool {
-	return stringutil.ContainsString(allUpcomingTokens, stringutil.Normalize(token))
+	return slices.Contains(allUpcomingTokens, stringutil.Normalize(token))
 }
 
 func applyUpcomingLimit(params map[string]any, token string) bool {
@@ -130,7 +131,7 @@ func applyUpcomingAll(params map[string]any, all bool) {
 }
 
 func applyUpcomingMember(params map[string]any, memberTokens []string) {
-	member := stringutil.TrimSpace(strings.Join(memberTokens, " "))
+	member := strings.TrimSpace(strings.Join(memberTokens, " "))
 	if member != "" {
 		params[paramMember] = member
 	}
@@ -143,7 +144,7 @@ func (ma *MessageAdapter) tryScheduleCommand(command string, args []string, raw 
 		return nil, false
 	}
 
-	if len(args) == 0 && stringutil.ContainsString(scheduleMemberCommandAliases, command) {
+	if len(args) == 0 && slices.Contains(scheduleMemberCommandAliases, command) {
 		return nil, false
 	}
 
@@ -164,13 +165,13 @@ var scheduleCommandAliases = []string{"일정", "스케줄", "schedule", "멤버
 var schedulePosterCommandAliases = []string{"스케쥴"}
 
 func (ma *MessageAdapter) trySchedulePosterCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
-	if !stringutil.ContainsString(schedulePosterCommandAliases, command) {
+	if !slices.Contains(schedulePosterCommandAliases, command) {
 		return nil, false
 	}
 
 	params := make(map[string]any)
 
-	if member := stringutil.TrimSpace(strings.Join(args, " ")); member != "" {
+	if member := strings.TrimSpace(strings.Join(args, " ")); member != "" {
 		params[paramMember] = member
 	}
 
@@ -178,7 +179,7 @@ func (ma *MessageAdapter) trySchedulePosterCommand(command string, args []string
 }
 
 func (ma *MessageAdapter) isScheduleCommand(cmd string) bool {
-	return stringutil.ContainsString(scheduleCommandAliases, cmd)
+	return slices.Contains(scheduleCommandAliases, cmd)
 }
 
 func (ma *MessageAdapter) parseScheduleArgs(args []string) map[string]any {

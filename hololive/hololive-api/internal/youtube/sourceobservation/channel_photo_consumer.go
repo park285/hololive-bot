@@ -24,7 +24,7 @@ func (c *Consumer) reconcilePhoto(
 			return photo.Reduce(state, evidence, c.photoPolicy())
 		},
 		persist:      persistPhotoDecision,
-		applications: func(decision photo.Decision) []Application { return mapPhotoApplications(decision.Applications) },
+		applications: func(decision photo.Decision) []Application { return applicationsOf(decision.Applications) },
 	}
 
 	result, err := steps.reconcile(ctx, tx, claimed)
@@ -75,17 +75,4 @@ func photoEvidenceFromObservation(observation *Observation) (photo.Evidence, err
 			ReceivedAt:    observation.ReceivedAt,
 		},
 	}, nil
-}
-
-func mapPhotoApplications(items []photo.Application) []Application {
-	applications := make([]Application, len(items))
-	for i := range items {
-		applications[i] = Application{
-			EntityKind: items[i].EntityKind,
-			EntityKey:  items[i].EntityKey,
-			Decision:   items[i].Decision,
-		}
-	}
-
-	return applications
 }

@@ -171,7 +171,7 @@ func validateCheckpointTextFields(entry *CheckpointEntry, index int) error {
 
 func validateCheckpointTextField(name, value string, index int) error {
 	if name == "scope sha256" || name == "evidence sha256" {
-		if !lowercaseHexToken(value) {
+		if !contract.ValidSHA256Hex(value) {
 			return fmt.Errorf("%w: checkpoint %d %s is invalid", ErrInvalidEnvelope, index, name)
 		}
 

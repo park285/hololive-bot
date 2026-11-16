@@ -368,13 +368,13 @@ func insertDeliveryTestTelemetryRowsContext(ctx context.Context, pool *pgxpool.P
 	)
 
 	switch rows := value.(type) {
-	case *domain.YouTubeNotificationDeliveryTelemetry:
+	case *telemetry.YouTubeNotificationDeliveryTelemetry:
 		affected, err = insertDomainTelemetry(ctx, pool, rows)
-	case domain.YouTubeNotificationDeliveryTelemetry:
+	case telemetry.YouTubeNotificationDeliveryTelemetry:
 		affected, err = insertDomainTelemetry(ctx, pool, &rows)
-	case []domain.YouTubeNotificationDeliveryTelemetry:
+	case []telemetry.YouTubeNotificationDeliveryTelemetry:
 		affected, err = insertDeliveryTestValueSlice(ctx, pool, rows, insertDomainTelemetry)
-	case *[]domain.YouTubeNotificationDeliveryTelemetry:
+	case *[]telemetry.YouTubeNotificationDeliveryTelemetry:
 		affected, err = insertDeliveryTestValueSlice(ctx, pool, *rows, insertDomainTelemetry)
 	default:
 		return 0, false, nil
@@ -652,7 +652,7 @@ func insertDomainAlarmState(ctx context.Context, pool *pgxpool.Pool, row *domain
 	return tag.RowsAffected(), err
 }
 
-func insertDomainTelemetry(ctx context.Context, pool *pgxpool.Pool, row *domain.YouTubeNotificationDeliveryTelemetry) (int64, error) {
+func insertDomainTelemetry(ctx context.Context, pool *pgxpool.Pool, row *telemetry.YouTubeNotificationDeliveryTelemetry) (int64, error) {
 	if row == nil {
 		return 0, nil
 	}
@@ -718,7 +718,7 @@ func deliveryTestTableForDest(dest any) string {
 		return testTableContentAlarmTracking
 	case *domain.YouTubeCommunityShortsAlarmState, *[]domain.YouTubeCommunityShortsAlarmState:
 		return "youtube_community_shorts_alarm_states"
-	case *domain.YouTubeNotificationDeliveryTelemetry, *[]domain.YouTubeNotificationDeliveryTelemetry:
+	case *telemetry.YouTubeNotificationDeliveryTelemetry, *[]telemetry.YouTubeNotificationDeliveryTelemetry:
 		return testTableDeliveryTelemetry
 	default:
 		return deliveryTestTableName(dest)
@@ -735,7 +735,7 @@ func deliveryTestTableForModel(model any) string {
 		return testTableContentAlarmTracking
 	case *domain.YouTubeCommunityShortsAlarmState, domain.YouTubeCommunityShortsAlarmState:
 		return "youtube_community_shorts_alarm_states"
-	case *domain.YouTubeNotificationDeliveryTelemetry, domain.YouTubeNotificationDeliveryTelemetry:
+	case *telemetry.YouTubeNotificationDeliveryTelemetry, telemetry.YouTubeNotificationDeliveryTelemetry:
 		return testTableDeliveryTelemetry
 	case *domain.Alarm, domain.Alarm:
 		return "alarms"

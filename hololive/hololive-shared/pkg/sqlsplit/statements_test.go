@@ -111,3 +111,50 @@ SELECT 3;`,
 		})
 	}
 }
+
+func TestStripComments(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "block comment between keywords becomes a space",
+			in:   "DROP/* x */INDEX foo",
+			want: "DROP INDEX foo",
+		},
+		{
+			name: "line comment keeps its newline",
+			in:   "CREATE -- note\nINDEX foo ON t (c)",
+			want: "CREATE \nINDEX foo ON t (c)",
+		},
+		{
+			name: "nested block comment is removed as one comment",
+			in:   "CREATE /* a /* b */ c */ INDEX CONCURRENTLY foo ON t (c)",
+			want: "CREATE   INDEX CONCURRENTLY foo ON t (c)",
+		},
+		{
+			name: "comment markers inside dollar quote are kept",
+			in:   "DO $body$ BEGIN -- keep\n/* keep */ END $body$; -- drop",
+			want: "DO $body$ BEGIN -- keep\n/* keep */ END $body$; ",
+		},
+		{
+			name: "escape string keeps escaped quote before comment marker",
+			in:   `SELECT E'a\'--b' -- drop`,
+			want: `SELECT E'a\'--b' `,
+		},
+		{
+			name: "standard string treats backslash as a literal character",
+			in:   `SELECT 'a\' -- drop`,
+			want: `SELECT 'a\' `,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StripComments(tt.in); got != tt.want {
+				t.Fatalf("StripComments mismatch\n in:   %q\n got:  %q\n want: %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}

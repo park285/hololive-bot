@@ -54,9 +54,11 @@ unit의 `NRestarts`(`systemctl show <SERVICE>.service -p NRestarts`)를 확인�
 `profile_file_changed`는 정상적인 차이 표시이며 reload/fallback 사유가 아닙니다.
 backup pair와 실패한 release는 원인 분석이 끝날 때까지 보존합니다.
 
-Collector Quadlet(c)·Compose(b)·native(a/d)는 [collector runbook](youtube-collector.md#rollback)의
+Collector Quadlet(c·b)·native(a)는 [collector runbook](youtube-collector.md#rollback)의
 binary/image·Node helper·issuer·프로필 짝을 사용합니다. PO issuer는
 [`RestartCount`가 아닌 issuer 수용 기준](youtube-collector.md#issuer-generation-교체와-재시작-카운트)으로 판정합니다.
+kapu Quadlet d는 [kapu README](../../../deploy/podman/kapu/README.md)의 `SHA256SUMS` release profile과
+`runtime-before-<날짜>` image tag로 되돌립니다.
 
 migration 006(`idx_bot_reply_outbox_message` 삭제)과 007(발송 route CHECK를 `text`·`richtext`로 좁히고
 `alarms.alarm_types` 빈 배열 거절)은 v15.0.0 image와 함께 동작합니다. v15.0.0은 그 인덱스를 조회 계획에만 쓰고,

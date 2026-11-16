@@ -22,3 +22,4 @@
 022 022_drop_birthday_stream_template.sql
 023 023_schedule_poster_not_found_text.sql
 024 024_schedule_poster_image.sql
+025 025_bot_command_error_message_strings.sql

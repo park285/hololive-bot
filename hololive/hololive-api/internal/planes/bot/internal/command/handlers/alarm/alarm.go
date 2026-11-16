@@ -386,13 +386,8 @@ func (c *AlarmCommand) parseAlarmTypes(params map[string]any) domain.AlarmTypes 
 }
 
 var alarmTypesByName = map[string]domain.AlarmTypes{
-	"방송":        {domain.AlarmTypeLive},
-	"라이브":       {domain.AlarmTypeLive},
-	"live":      {domain.AlarmTypeLive},
-	"커뮤니티":      {domain.AlarmTypeCommunity},
-	"community": {domain.AlarmTypeCommunity},
-	"쇼츠":        {domain.AlarmTypeShorts},
-	"shorts":    {domain.AlarmTypeShorts},
-	"전체":        domain.AllAlarmTypes,
-	"all":       domain.AllAlarmTypes,
+	"방송":   {domain.AlarmTypeLive},
+	"커뮤니티": {domain.AlarmTypeCommunity},
+	"쇼츠":   {domain.AlarmTypeShorts},
+	"전체":   domain.AllAlarmTypes,
 }

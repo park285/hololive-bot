@@ -26,8 +26,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/park285/shared-go/v2/pkg/stringutil"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -53,10 +51,8 @@ func (c *MemberInfoCommand) Description() string {
 
 func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
 	rawQuery := getStringParam(params, "query")
-	englishCandidate := getStringParam(params, "member")
-	channelID := getStringParam(params, "channel_id")
 
-	if hasNoMemberInfoQuery(rawQuery, englishCandidate, channelID) {
+	if hasNoMemberInfoQuery(rawQuery) {
 		if err := c.renderMemberDirectory(ctx, cmdCtx); err != nil {
 			return fmt.Errorf("render member directory: %w", err)
 		}
@@ -64,7 +60,7 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *botcommand.Comm
 		return nil
 	}
 
-	member, err := c.resolveRequestedMember(ctx, cmdCtx.Room, channelID, englishCandidate, rawQuery)
+	member, err := c.resolveRequestedMember(ctx, cmdCtx.Room, rawQuery)
 	if errors.Is(err, handlercore.ErrMemberLookupHandled) {
 		return nil
 	}
@@ -84,8 +80,8 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *botcommand.Comm
 	return nil
 }
 
-func (c *MemberInfoCommand) resolveRequestedMember(ctx context.Context, room, channelID, englishCandidate, rawQuery string) (*domain.Member, error) {
-	member, err := c.resolveMember(ctx, channelID, englishCandidate, rawQuery)
+func (c *MemberInfoCommand) resolveRequestedMember(ctx context.Context, room, rawQuery string) (*domain.Member, error) {
+	member, err := c.resolveMember(ctx, rawQuery)
 	if ambiguous, ok := errors.AsType[*matcher.AmbiguousMatchError](err); ok {
 		message := c.Deps().Formatter.FormatAmbiguousMembers(ctx, ambiguous.Candidates, "정보")
 		if sendErr := c.Deps().SendMessage(ctx, room, message); sendErr != nil {
@@ -103,7 +99,7 @@ func (c *MemberInfoCommand) resolveRequestedMember(ctx context.Context, room, ch
 		return member, nil
 	}
 
-	if err := c.sendMemberNotFound(ctx, room, englishCandidate, rawQuery); err != nil {
+	if err := c.sendMemberNotFound(ctx, room, rawQuery); err != nil {
 		return nil, fmt.Errorf("send member not found: %w", err)
 	}
 
@@ -131,19 +127,12 @@ func (c *MemberInfoCommand) sendMemberProfile(ctx context.Context, room string, 
 	return nil
 }
 
-func hasNoMemberInfoQuery(rawQuery, englishCandidate, channelID string) bool {
-	return stringutil.TrimSpace(rawQuery) == "" &&
-		stringutil.TrimSpace(englishCandidate) == "" &&
-		stringutil.TrimSpace(channelID) == ""
+func hasNoMemberInfoQuery(rawQuery string) bool {
+	return strings.TrimSpace(rawQuery) == ""
 }
 
-func (c *MemberInfoCommand) sendMemberNotFound(ctx context.Context, room, englishCandidate, rawQuery string) error {
-	target := englishCandidate
-	if target == "" {
-		target = rawQuery
-	}
-
-	if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.MemberNotFound(ctx, target)); err != nil {
+func (c *MemberInfoCommand) sendMemberNotFound(ctx context.Context, room, rawQuery string) error {
+	if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.MemberNotFound(ctx, rawQuery)); err != nil {
 		return fmt.Errorf("send message: %w", err)
 	}
 
@@ -163,43 +152,24 @@ func (c *MemberInfoCommand) CheckDependencies() error {
 	return nil
 }
 
-func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englishName, query string) (*domain.Member, error) {
+func (c *MemberInfoCommand) resolveMember(ctx context.Context, query string) (*domain.Member, error) {
 	members, err := c.Deps().MembersData.LoadAllMembers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load member information snapshot: %w", err)
 	}
 
 	query = strings.TrimSpace(query)
-	if query == "" {
-		query = englishName
+
+	candidates := memberInfoCandidates(members, query)
+	if len(candidates) > 1 {
+		return nil, matcher.NewAmbiguousMatchError(query, candidates)
 	}
 
-	if query != "" {
-		candidates := memberInfoCandidates(members, query)
-		if len(candidates) > 1 {
-			return nil, matcher.NewAmbiguousMatchError(query, candidates)
-		}
-
-		if len(candidates) == 1 {
-			return candidates[0], nil
-		}
-
-		return nil, domain.ErrMemberNotFound
+	if len(candidates) == 1 {
+		return candidates[0], nil
 	}
 
-	var representative *domain.Member
-
-	for _, member := range members {
-		if member != nil && member.ChannelID == channelID && (representative == nil || member.ID < representative.ID) {
-			representative = member
-		}
-	}
-
-	if representative == nil {
-		return nil, domain.ErrMemberNotFound
-	}
-
-	return representative, nil
+	return nil, domain.ErrMemberNotFound
 }
 
 // 개인 이름 조회는 채널 매처의 중복 채널 병합을 거치지 않는다. 부분 일치도 개인 ID를 보존한다.
@@ -280,8 +250,8 @@ func getStringParam(params map[string]any, key string) string {
 
 	switch v := val.(type) {
 	case string:
-		return stringutil.TrimSpace(v)
+		return strings.TrimSpace(v)
 	default:
-		return stringutil.TrimSpace(fmt.Sprintf("%v", v))
+		return strings.TrimSpace(fmt.Sprintf("%v", v))
 	}
 }

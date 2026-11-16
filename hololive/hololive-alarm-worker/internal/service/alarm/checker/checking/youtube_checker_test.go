@@ -820,15 +820,13 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing
 	_, err = cache.SAdd(ctx, alarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
-	initCheckerMetrics()
-
-	continuedBefore := testutil.ToFloat64(youtubePersistedLiveTotal.WithLabelValues("holodex_error_continued", "all"))
+	continuedBefore := testutil.ToFloat64(checkerMetrics().persistedLiveTotal.WithLabelValues("holodex_error_continued", "all"))
 
 	notifications, err := checker.Check(ctx, testTargetPolicy(5, 3, 1))
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, streamID, notifications[0].Stream.ID)
-	assert.InDelta(t, continuedBefore+1, testutil.ToFloat64(youtubePersistedLiveTotal.WithLabelValues("holodex_error_continued", "all")), 0)
+	assert.InDelta(t, continuedBefore+1, testutil.ToFloat64(checkerMetrics().persistedLiveTotal.WithLabelValues("holodex_error_continued", "all")), 0)
 }
 
 func TestYouTubeCheckerCheck_SelectsHolodexUpcomingAsConfirmedPremiere(t *testing.T) {

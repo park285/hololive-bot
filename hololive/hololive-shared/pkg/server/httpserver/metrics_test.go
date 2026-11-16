@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
 )
 
 func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
@@ -21,7 +21,7 @@ func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
 	}
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
-	req.Header.Set(common.APIKeyHeader, "test-key")
+	req.Header.Set(httputil.HeaderAPIKey, "test-key")
 
 	recorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(recorder, req)
@@ -93,7 +93,7 @@ func TestNewRuntimeHTTPServersForwardsWorkerRegistryToMetricsServer(t *testing.T
 	}
 
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
-	request.Header.Set(common.APIKeyHeader, "test-key")
+	request.Header.Set(httputil.HeaderAPIKey, "test-key")
 
 	recorder := httptest.NewRecorder()
 	servers.Metrics.Handler.ServeHTTP(recorder, request)
@@ -120,7 +120,7 @@ func TestNewMetricsServerRejectsMissingAndWrongAPIKey(t *testing.T) {
 	}
 
 	wrong := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
-	wrong.Header.Set(common.APIKeyHeader, "wrong-key")
+	wrong.Header.Set(httputil.HeaderAPIKey, "wrong-key")
 
 	wrongRecorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(wrongRecorder, wrong)
@@ -134,7 +134,7 @@ func TestNewMetricsServerRejectsAdminKeyWhenMetricsKeyDiffers(t *testing.T) {
 	server := NewMetricsServer(t.Context(), testLoopbackAddr, "metrics-key", nil)
 
 	adminRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
-	adminRequest.Header.Set(common.APIKeyHeader, "admin-key")
+	adminRequest.Header.Set(httputil.HeaderAPIKey, "admin-key")
 
 	adminRecorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(adminRecorder, adminRequest)
@@ -144,7 +144,7 @@ func TestNewMetricsServerRejectsAdminKeyWhenMetricsKeyDiffers(t *testing.T) {
 	}
 
 	metricsRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
-	metricsRequest.Header.Set(common.APIKeyHeader, "metrics-key")
+	metricsRequest.Header.Set(httputil.HeaderAPIKey, "metrics-key")
 
 	metricsRecorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(metricsRecorder, metricsRequest)

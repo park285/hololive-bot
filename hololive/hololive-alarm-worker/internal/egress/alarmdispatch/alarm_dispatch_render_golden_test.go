@@ -180,7 +180,7 @@ func TestAlarmProducerPreservesLiteralFields(t *testing.T) {
 	single, err := renderAlarmDispatchNotification(t.Context(), renderer, store, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, &notification)
 	require.NoError(t, err)
 
-	grouped, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, "", alarmDispatchGroup{
+	grouped, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, &alarmDispatchMembers{provider: alarmGoldenMembers{}}, shortlinkservice.YouTubeBuilder{}, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{notification, notification},
 	})

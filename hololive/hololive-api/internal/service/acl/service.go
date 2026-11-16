@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
@@ -123,7 +124,7 @@ func normalizeRoomList(input []string) []string {
 	rooms := make([]string, 0, len(input))
 
 	for _, roomID := range input {
-		roomID = stringutil.TrimSpace(roomID)
+		roomID = strings.TrimSpace(roomID)
 		if roomID == "" {
 			continue
 		}
@@ -255,7 +256,7 @@ func (s *Service) roomsMapForMode(mode ACLMode) map[string]struct{} {
 }
 
 func (s *Service) IsRoomAllowed(chatID string) bool {
-	chatID = stringutil.TrimSpace(chatID)
+	chatID = strings.TrimSpace(chatID)
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()

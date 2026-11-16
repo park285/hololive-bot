@@ -27,8 +27,8 @@ deployment facts below until an approved rollout records fresh image/profile,
 render, SQL transport/role, capacity and readiness evidence.
 
 Accept the pairing baseline before incompatible profile settings; the final binary
-has no legacy settings shim. Preserve the full upstream migration manifest through
-324 and already-applied stream-time work; this cutover adds no data migration.
+has no legacy settings shim. Preserve the full current (epoch-3) migration manifest
+and already-applied stream-time work; this cutover adds no data migration.
 Master/manifest and password-file preparation, role/owner/HBA changes, server
 recreation, `postgresql.auto.conf` cleanup, retired-role deletion, and noeviction
 activation are separate approved operations. Only the rollout owner activates role
@@ -104,11 +104,12 @@ timer·service·apply drop-in과 Osaka의 `iris_seoul_standby` physical slot을 
 당시 제거한 `svc:hololive-postgres` serve route는 이번 이전에서도 재생성하지 않았습니다.
 주소를 승계한 새 primary에 consumer들이 직접 재접속하며 TLS `verify-full`을 유지합니다.
 
-`deploy/quadlet/hololive-bot-standby/` unit과 failover 구현은 재활성화 참고 자료로만
-유지합니다. 다시 사용하려면 대상·데이터 비용·fencing·route 영향에 대한 명시적 승인을 새로
-받고, 당시의 현재 primary에서 새 `pg_basebackup`을 생성해 standby를 재시딩한 뒤
-`runbooks/postgres-replication.md`의 전체 검증을 통과해야 합니다. 삭제한 PGDATA나 예전
-timeline을 그대로 재기동하지 않습니다.
+대기 서버 unit(`deploy/quadlet/hololive-bot-standby/`)과 failover controller·fence·route 구현
+(`scripts/ops/`, failover·fence·route sysusers, `scripts/maintenance/postgres-failover-db-role.sql`)은
+저장소에서 지웠습니다. 참고가 필요하면 그 파일이 남아 있는 커밋 `bb000290e`에서 읽습니다. 다시 사용하려면
+대상·데이터 비용·fencing·route 영향에 대한 명시적 승인과 새 정의를 받고, 당시의 현재 primary에서 새
+`pg_basebackup`을 생성해 standby를 재시딩한 뒤 [`runbooks/postgres-replication.md`](runbooks/postgres-replication.md)의
+재활성화 전제를 충족해야 합니다. 삭제한 PGDATA나 예전 timeline을 그대로 재기동하지 않습니다.
 
 호스트마다 달라지는 배포 값은 unit 기본값이 아니라 각 호스트의
 `/etc/stack-secrets/hololive-bot/compose.env`가 소유합니다: `HOLOLIVE_*_PORT_BIND_IP`,
@@ -130,8 +131,8 @@ timeline을 그대로 재기동하지 않습니다.
 | Service | Purpose | Current notes |
 |---|---|---|
 | `holo-postgres` | Primary PostgreSQL | Bridge-networked; unit `PublishPort=${POSTGRES_PORT_BIND_IP}:5433:5432` publishes `<tailnet-central>:5433`; TLS `ssl=on`; server certificate mounted read-only from `/etc/stack-secrets/hololive-bot/postgres-tls/` |
-| `holo-postgres-standby` | 재활성화 참고용 Quadlet 대상(`deploy/quadlet/hololive-bot-standby/`) | Production에서 제거했습니다. 재도입하려면 새 base backup과 명시적 승인이 필요합니다. |
-| `postgres-failover.service` | 재활성화 참고용 fail-closed controller | Production unit과 timer는 제거했습니다. 저장소의 코드·unit template은 재구축 참고용으로 보존하며 자동 실행하지 않습니다. iris-seoul에 남아 있던 route 계정·sudoers·sshd Match·helper·설정은 2026-11-13에 제거했습니다. |
+| `holo-postgres-standby` | 퇴역 | Production과 저장소에서 제거했습니다(정의는 커밋 `bb000290e`에 남아 있음). 재도입하려면 새 정의·base backup과 명시적 승인이 필요합니다. |
+| `postgres-failover.service` | 퇴역 | Production unit과 timer, 저장소의 코드·unit template을 제거했습니다(커밋 `bb000290e`에 남아 있음). iris-seoul에 남아 있던 route 계정·sudoers·sshd Match·helper·설정은 2026-11-13에 제거했습니다. |
 | `hololive-db-migrate` | Migration job | `[Install]`이 없어 부팅 때 실행하지 않고 배포 helper가 app 활성화 전에 실행합니다; uses `PGSSLMODE=verify-full` and `/run/hololive-bot/certs/postgres-ca.pem` |
 | `valkey-cache` | Cache, outbox wakeup 신호, Pub/Sub | TCP and Unix socket, password required |
 | `admin-dashboard-ingress` | 중앙 shortlink ingress | `admin-dashboard-ingress.container`가 정의합니다. 30192의 source-restricted shortlink와 loopback 30193의 health를 제공하며 관리자 웹을 호스팅하지 않습니다. |
@@ -177,7 +178,7 @@ WAL 버퍼, 캐시 추정치를 아래 값으로 조정하고 같은 ARM64 이�
 | `shared_buffers` | 1GB | `holo-postgres.container` 시작 인자; 컨테이너 한도의 25%를 배정하고 프로세스·파일 캐시 여유 유지 |
 | `wal_buffers` | 64MB | `holo-postgres.container` 시작 인자; 피크의 WAL 버퍼 포화에 대비 |
 | `effective_cache_size` | 3GB | `holo-postgres.container` 시작 인자; 공유 버퍼와 파일 캐시를 고려한 planner 추정치이며 별도 메모리 할당 아님 |
-| `random_page_cost` / `jit` | 1.1 / off | `holo-postgres.container` 시작 인자(운영에 없는 참고용 `holo-postgres-standby.container`도 같은 값); NVMe SSD 기반 OCI Block Volume과 짧은 OLTP 쿼리 기준. 2026-11-13 02:36 UTC `holo-postgres` 재시작부터 운영에 적용됐고 이전 값은 4 / on(기본값)입니다. unit 설치 뒤 첫 재시작부터 적용되므로 설치와 재시작을 같은 창에서 합니다 |
+| `random_page_cost` / `jit` | 1.1 / off | `holo-postgres.container` 시작 인자; NVMe SSD 기반 OCI Block Volume과 짧은 OLTP 쿼리 기준. 2026-11-13 02:36 UTC `holo-postgres` 재시작부터 운영에 적용됐고 이전 값은 4 / on(기본값)입니다. unit 설치 뒤 첫 재시작부터 적용되므로 설치와 재시작을 같은 창에서 합니다 |
 | `work_mem` / `maintenance_work_mem` | 4MB / 128MB | `holo-postgres.container` 시작 인자; 동시 쿼리·autovacuum의 메모리 배수를 고려 |
 | `max_wal_size` | 2GB | 기존 `holo-pg-data`의 `pgdata/postgresql.auto.conf`; `ALTER SYSTEM`과 설정 reload로 적용 |
 | `checkpoint_timeout` / `checkpoint_completion_target` | 15min / 0.9 | 기존 `postgresql.auto.conf` / PostgreSQL 기본값 유지 |
@@ -255,6 +256,5 @@ domain socket monitor connection remained outside the TCP TLS scope.
 - `deploy/quadlet/hololive-bot/`
 - `deploy/podman/iris-seoul/`
 - `scripts/deploy/ap-hosts/osaka.conf`
-- `deploy/quadlet/hololive-bot-standby/`
 - `docs/current/PROJECT_MAP.md`
 - `docs/current/runbooks/postgres-replication.md`

@@ -113,7 +113,7 @@ func TestDeliveryTelemetryRepository_EnqueueRejectsDuplicateDeliveryAttempt(t *t
 	db := newDeliveryPool(t)
 
 	repository := newDeliveryTelemetryRepository(t, db)
-	event := domain.YouTubeNotificationDeliveryTelemetry{
+	event := telemetry.YouTubeNotificationDeliveryTelemetry{
 		DeliveryID:     101,
 		AttemptOrdinal: 1,
 		OutboxID:       201,
@@ -129,8 +129,8 @@ func TestDeliveryTelemetryRepository_EnqueueRejectsDuplicateDeliveryAttempt(t *t
 		EventAt:        time.Now().UTC(),
 	}
 
-	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{event}))
-	require.Error(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{event}))
+	require.NoError(t, repository.Enqueue(ctx, []telemetry.YouTubeNotificationDeliveryTelemetry{event}))
+	require.Error(t, repository.Enqueue(ctx, []telemetry.YouTubeNotificationDeliveryTelemetry{event}))
 
 	var count int64
 
@@ -262,7 +262,7 @@ func enqueueEmittedShortAttempt(
 ) {
 	t.Helper()
 
-	require.NoError(t, newDeliveryTelemetryRepository(t, db).Enqueue(t.Context(), []domain.YouTubeNotificationDeliveryTelemetry{{
+	require.NoError(t, newDeliveryTelemetryRepository(t, db).Enqueue(t.Context(), []telemetry.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     delivery.ID,
 		AttemptOrdinal: 1,
 		OutboxID:       outbox.ID,
@@ -287,7 +287,7 @@ func TestDeliveryTelemetryRepository_MarkRetryReleasesLock(t *testing.T) {
 
 	repository := newDeliveryTelemetryRepository(t, db)
 	now := time.Now().UTC()
-	require.NoError(t, repository.Enqueue(ctx, []domain.YouTubeNotificationDeliveryTelemetry{{
+	require.NoError(t, repository.Enqueue(ctx, []telemetry.YouTubeNotificationDeliveryTelemetry{{
 		DeliveryID:     501,
 		AttemptOrdinal: 1,
 		OutboxID:       601,

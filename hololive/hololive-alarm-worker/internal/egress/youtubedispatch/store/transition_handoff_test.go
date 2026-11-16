@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	dbtest "github.com/kapu/hololive-dbtest"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -276,7 +277,7 @@ func TestHandoffReissueRevertsLogicalUnitAndResendsFrozenBody(t *testing.T) {
 	unit := sendHandoffTestUnit(t, pool, transition, "video-handoff-reissue", testHandoffHorizon)
 	claim := claimDueHandoff(t, pool, transition, unit.admission.RequestBaseID)
 
-	result, err := transition.ReissueAfterHandoff(ctx, &claim, handoffcheck.CodeFailed, "iris reply status failed")
+	result, err := transition.ReissueAfterHandoff(ctx, &claim, contractsalarm.HandoffCodeFailed, "iris reply status failed")
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, result.Outcome)
 	require.Len(t, result.TouchedOutboxIDs, 2)
@@ -285,7 +286,7 @@ func TestHandoffReissueRevertsLogicalUnitAndResendsFrozenBody(t *testing.T) {
 	require.Equal(t, domain.OutboxStatusPending, owner.status)
 	require.Equal(t, 1, owner.attempt)
 	require.Nil(t, owner.sentAt)
-	require.Equal(t, handoffcheck.CodeFailed+": iris reply status failed", owner.err)
+	require.Equal(t, contractsalarm.HandoffCodeFailed+": iris reply status failed", owner.err)
 
 	follower := loadHandoffTestDelivery(t, pool, unit.followerID)
 	require.Equal(t, domain.OutboxStatusPending, follower.status)
@@ -366,7 +367,7 @@ func TestHandoffExhaustFailsLogicalUnitWithoutLedger(t *testing.T) {
 	unit := sendHandoffTestUnit(t, pool, transition, "video-handoff-exhaust", testHandoffHorizon)
 	claim := claimDueHandoff(t, pool, transition, unit.admission.RequestBaseID)
 
-	result, err := transition.ExhaustAfterHandoff(t.Context(), &claim, handoffcheck.CodeFailed, "iris reply status failed")
+	result, err := transition.ExhaustAfterHandoff(t.Context(), &claim, contractsalarm.HandoffCodeFailed, "iris reply status failed")
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, result.Outcome)
 
@@ -401,7 +402,7 @@ func TestHandoffQuarantineReplacesSentLedger(t *testing.T) {
 	unit := sendHandoffTestUnit(t, pool, transition, "video-handoff-quarantine", testHandoffHorizon)
 	claim := claimDueHandoff(t, pool, transition, unit.admission.RequestBaseID)
 
-	result, err := transition.QuarantineAfterHandoff(t.Context(), &claim, handoffcheck.CodeOutcomeUnknown, "iris reply status outcome_unknown")
+	result, err := transition.QuarantineAfterHandoff(t.Context(), &claim, contractsalarm.HandoffCodeOutcomeUnknown, "iris reply status outcome_unknown")
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, result.Outcome)
 
@@ -425,7 +426,7 @@ func TestHandoffSettlementRejectsStaleClaimToken(t *testing.T) {
 	stale := claimDueHandoff(t, pool, transition, unit.admission.RequestBaseID)
 	claimDueHandoff(t, pool, transition, unit.admission.RequestBaseID)
 
-	result, err := transition.ReissueAfterHandoff(t.Context(), &stale, handoffcheck.CodeFailed, "iris reply status failed")
+	result, err := transition.ReissueAfterHandoff(t.Context(), &stale, contractsalarm.HandoffCodeFailed, "iris reply status failed")
 
 	miss, ok := errors.AsType[*sendfence.MissError](err)
 	require.True(t, ok, "error %v is not a send fence miss", err)
@@ -449,7 +450,7 @@ func TestHandoffSettlementClosesCheckWhenLedgerSourceChanged(t *testing.T) {
 	`, unit.followerID, domain.OutboxKindNewVideo, unit.contentID, unit.roomID)
 	require.NoError(t, err)
 
-	result, err := transition.QuarantineAfterHandoff(t.Context(), &claim, handoffcheck.CodeOutcomeUnknown, "iris reply status outcome_unknown")
+	result, err := transition.QuarantineAfterHandoff(t.Context(), &claim, contractsalarm.HandoffCodeOutcomeUnknown, "iris reply status outcome_unknown")
 	require.ErrorIs(t, err, ErrHandoffCheckClosed)
 	require.Equal(t, ApplyConflict, result.Outcome)
 
@@ -486,12 +487,12 @@ func TestHandoffConcurrentSettlementsApplyOnce(t *testing.T) {
 	wg.Go(func() {
 		reissueClaim := claim
 
-		results[0], errs[0] = transition.ReissueAfterHandoff(t.Context(), &reissueClaim, handoffcheck.CodeFailed, "iris reply status failed")
+		results[0], errs[0] = transition.ReissueAfterHandoff(t.Context(), &reissueClaim, contractsalarm.HandoffCodeFailed, "iris reply status failed")
 	})
 	wg.Go(func() {
 		quarantineClaim := claim
 
-		results[1], errs[1] = transition.QuarantineAfterHandoff(t.Context(), &quarantineClaim, handoffcheck.CodeOutcomeUnknown, "iris reply status outcome_unknown")
+		results[1], errs[1] = transition.QuarantineAfterHandoff(t.Context(), &quarantineClaim, contractsalarm.HandoffCodeOutcomeUnknown, "iris reply status outcome_unknown")
 	})
 	wg.Wait()
 
@@ -527,7 +528,7 @@ func TestHandoffReissueConfirmsLostCommitResponse(t *testing.T) {
 		return nil
 	}
 
-	result, err := transition.ReissueAfterHandoff(t.Context(), &claim, handoffcheck.CodeFailed, "iris reply status failed")
+	result, err := transition.ReissueAfterHandoff(t.Context(), &claim, contractsalarm.HandoffCodeFailed, "iris reply status failed")
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, result.Outcome)
 	require.Equal(t, CommitConfirmedPost, result.CommitAdjudication)

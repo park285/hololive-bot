@@ -35,8 +35,6 @@ import (
 	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-const irisMessageTypeText = "1"
-
 type Envelope struct {
 	CommandType string
 	ChatID      string
@@ -155,7 +153,7 @@ func (i *MessageIngress) canHandleMessage(ctx context.Context, message *webhook.
 		return false
 	}
 
-	if message.JSON != nil && message.JSON.Type != "" && message.JSON.Type != irisMessageTypeText {
+	if message.JSON != nil && message.JSON.Type != "" && message.JSON.Type != webhook.MessageTypeText {
 		return false
 	}
 

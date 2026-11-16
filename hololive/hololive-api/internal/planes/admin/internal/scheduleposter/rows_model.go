@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/genai"
 
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 // 모델 응답은 신뢰할 수 없는 데이터라 디코드 전에 크기를 막는다.

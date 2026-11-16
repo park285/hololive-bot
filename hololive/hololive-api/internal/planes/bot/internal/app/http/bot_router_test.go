@@ -29,9 +29,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
+
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
 
@@ -72,7 +73,7 @@ func TestProvideBotRouter_InternalReadyReportsProbeWithoutDiagnostics(t *testing
 			}
 
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/ready", http.NoBody)
-			req.Header.Set(common.APIKeyHeader, "test-key")
+			req.Header.Set(httputil.HeaderAPIKey, "test-key")
 
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)

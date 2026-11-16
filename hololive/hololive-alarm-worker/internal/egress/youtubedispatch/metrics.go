@@ -32,39 +32,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 )
 
-var (
-	outboxMetricsInitOnce sync.Once
-
-	outboxEnqueueOutboxesTotal    *prometheus.CounterVec
-	outboxEnqueueTargetRoomsTotal prometheus.Counter
-	outboxEnqueueDuration         prometheus.Histogram
-
-	outboxDeliveryClaimedTotal    prometheus.Counter
-	outboxDeliveryProcessedTotal  *prometheus.CounterVec
-	outboxDispatchDuration        prometheus.Histogram
-	outboxDispatchBatchSize       prometheus.Histogram
-	outboxDispatchTouchedOutboxes prometheus.Histogram
-
-	outboxRevivedTotal      prometheus.Counter
-	outboxReviveErrorsTotal prometheus.Counter
-
-	outboxDeliveryRetryAfterClampedTotal prometheus.Counter
-	outboxLiveCatchupSuppressionTotal    *prometheus.CounterVec
-	outboxGroupedSendFallbackTotal       *prometheus.CounterVec
-
-	youtubeDeliveryTransitionTotal      *prometheus.CounterVec
-	youtubeDeliveryRuleTotal            *prometheus.CounterVec
-	youtubeDeliveryLogicalGroupTotal    *prometheus.CounterVec
-	youtubeDeliveryOutcomeUnknownTotal  *prometheus.CounterVec
-	youtubeDeliveryCommitAdjudication   *prometheus.CounterVec
-	youtubeDeliveryAtomicityBreachTotal *prometheus.CounterVec
-	youtubeDeliveryLedgerOperationTotal *prometheus.CounterVec
-	youtubeDeliveryCleanupGuardTotal    *prometheus.CounterVec
-	youtubeOutboxFanoutTotal            *prometheus.CounterVec
-	youtubeOutboxAggregateProjection    *prometheus.CounterVec
-	youtubeOutboxAggregateLag           prometheus.Histogram
-)
-
 const (
 	metricLabelResult                         = "result"
 	liveCatchupSuppressionResultSuppressed    = "suppressed"
@@ -78,287 +45,253 @@ const (
 	groupedSendFallbackResultFreezeFailed  = "freeze_failed"
 )
 
-func initOutboxMetrics() {
-	outboxMetricsInitOnce.Do(func() {
-		initOutboxEnqueueMetrics()
-		initOutboxDispatchMetrics()
-	})
+type outboxMetricSet struct {
+	enqueueOutboxesTotal    *prometheus.CounterVec
+	enqueueTargetRoomsTotal prometheus.Counter
+	enqueueDuration         prometheus.Histogram
+
+	deliveryClaimedTotal    prometheus.Counter
+	deliveryProcessedTotal  *prometheus.CounterVec
+	dispatchDuration        prometheus.Histogram
+	dispatchBatchSize       prometheus.Histogram
+	dispatchTouchedOutboxes prometheus.Histogram
+
+	revivedTotal      prometheus.Counter
+	reviveErrorsTotal prometheus.Counter
+
+	deliveryRetryAfterClampedTotal prometheus.Counter
+	liveCatchupSuppressionTotal    *prometheus.CounterVec
+	groupedSendFallbackTotal       *prometheus.CounterVec
+
+	deliveryTransitionTotal      *prometheus.CounterVec
+	deliveryRuleTotal            *prometheus.CounterVec
+	deliveryLogicalGroupTotal    *prometheus.CounterVec
+	deliveryOutcomeUnknownTotal  *prometheus.CounterVec
+	deliveryCommitAdjudication   *prometheus.CounterVec
+	deliveryAtomicityBreachTotal *prometheus.CounterVec
+	deliveryLedgerOperationTotal *prometheus.CounterVec
+	deliveryCleanupGuardTotal    *prometheus.CounterVec
+	outboxFanoutTotal            *prometheus.CounterVec
+	outboxAggregateProjection    *prometheus.CounterVec
+	outboxAggregateLag           prometheus.Histogram
 }
 
-func initOutboxEnqueueMetrics() {
-	outboxEnqueueOutboxesTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_enqueue_outboxes_total",
-			Help: "Total YouTube outbox enqueue outcomes by result.",
-		},
-		[]string{metricLabelResult},
-	)
-
-	outboxEnqueueTargetRoomsTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_enqueue_target_rooms_total",
-			Help: "Total target rooms enqueued for YouTube outbox delivery rows.",
-		},
-	)
-
-	outboxEnqueueDuration = promauto.NewHistogram(
-		prometheus.HistogramOpts{
-			Name:    "hololive_youtube_outbox_enqueue_duration_seconds",
-			Help:    "YouTube outbox enqueue batch duration in seconds.",
+// outboxMetrics는 NewDispatcher와 handoff reconciler 생성자가 먼저 호출해, label 없는 counter·histogram을 기동부터
+// 0으로 노출한다.
+var outboxMetrics = sync.OnceValue(func() *outboxMetricSet {
+	return &outboxMetricSet{
+		enqueueOutboxesTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "hololive_youtube_outbox_enqueue_outboxes_total",
+				Help: "Total YouTube outbox enqueue outcomes by result.",
+			},
+			[]string{metricLabelResult},
+		),
+		enqueueTargetRoomsTotal: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "hololive_youtube_outbox_enqueue_target_rooms_total",
+				Help: "Total target rooms enqueued for YouTube outbox delivery rows.",
+			},
+		),
+		enqueueDuration: promauto.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "hololive_youtube_outbox_enqueue_duration_seconds",
+				Help:    "YouTube outbox enqueue batch duration in seconds.",
+				Buckets: prometheus.DefBuckets,
+			},
+		),
+		deliveryClaimedTotal: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "hololive_youtube_outbox_delivery_claimed_total",
+				Help: "Total claimed YouTube outbox delivery rows.",
+			},
+		),
+		deliveryProcessedTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "hololive_youtube_outbox_delivery_processed_total",
+				Help: "Total processed YouTube outbox delivery rows by result.",
+			},
+			[]string{metricLabelResult},
+		),
+		dispatchDuration: promauto.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "hololive_youtube_outbox_dispatch_duration_seconds",
+				Help:    "YouTube outbox per-room dispatch duration in seconds.",
+				Buckets: prometheus.DefBuckets,
+			},
+		),
+		dispatchBatchSize: promauto.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "hololive_youtube_outbox_dispatch_batch_size",
+				Help:    "Claimed YouTube outbox delivery row count per dispatch batch.",
+				Buckets: []float64{1, 2, 5, 10, 20, 50, 100, 200},
+			},
+		),
+		dispatchTouchedOutboxes: promauto.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "hololive_youtube_outbox_dispatch_touched_outboxes",
+				Help:    "Unique outbox rows touched per YouTube outbox dispatch batch.",
+				Buckets: []float64{1, 2, 5, 10, 20, 50, 100, 200},
+			},
+		),
+		revivedTotal: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "hololive_youtube_outbox_revived_total",
+				Help: "Total fresh never-sent FAILED YouTube outbox rows revived for redelivery.",
+			},
+		),
+		reviveErrorsTotal: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "hololive_youtube_outbox_revive_errors_total",
+				Help: "Total stale-failed revival sweep transaction errors.",
+			},
+		),
+		deliveryRetryAfterClampedTotal: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "hololive_youtube_outbox_delivery_retry_after_clamped_total",
+				Help: "Total YouTube outbox delivery HTTP Retry-After hints clamped to the maximum bound.",
+			},
+		),
+		liveCatchupSuppressionTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "hololive_youtube_outbox_live_catchup_suppression_total",
+				Help: "YouTube outbox live catch-up suppression marker lookups by result (suppressed, cache_error, invalid_marker).",
+			},
+			[]string{metricLabelResult},
+		),
+		groupedSendFallbackTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "hololive_youtube_outbox_grouped_send_fallback_total",
+				Help: "YouTube grouped deliveries that fell back to individual sends after a known-not-accepted permanent failure, by result (started, prepare_failed, freeze_failed).",
+			},
+			[]string{metricLabelResult},
+		),
+		deliveryTransitionTotal: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "hololive_youtube_delivery_transition_total",
+			Help: "Version-fenced YouTube delivery lifecycle operations by operation and durable outcome.",
+		}, []string{"operation", metricLabelResult}),
+		deliveryRuleTotal: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "hololive_youtube_delivery_rule_total",
+			Help: "Applied YouTube delivery lifecycle policy decisions by stable rule ID.",
+		}, []string{"rule", metricLabelResult}),
+		deliveryLogicalGroupTotal: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "hololive_youtube_delivery_logical_group_total",
+			Help: "Ledger-first YouTube logical delivery group resolutions.",
+		}, []string{"resolution", metricLabelResult}),
+		deliveryOutcomeUnknownTotal: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "hololive_youtube_delivery_outcome_unknown_total",
+			Help: "YouTube provider effects whose delivery outcome must remain unknown.",
+		}, []string{"transport"}),
+		deliveryCommitAdjudication: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "hololive_youtube_delivery_commit_adjudication_total",
+			Help: "Primary read-back results after an ambiguous lifecycle commit response.",
+		}, []string{"operation", metricLabelResult}),
+		deliveryAtomicityBreachTotal: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "hololive_youtube_delivery_atomicity_breach_total",
+			Help: "Detected mixed lifecycle command envelopes by bounded operation name.",
+		}, []string{"operation"}),
+		deliveryLedgerOperationTotal: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "hololive_youtube_delivery_ledger_operation_total",
+			Help: "Logical delivery ledger operations by operation and durable result.",
+		}, []string{"operation", metricLabelResult}),
+		deliveryCleanupGuardTotal: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "hololive_youtube_delivery_cleanup_guard_total",
+			Help: "Terminal outbox cleanup decisions by bounded guard reason and result.",
+		}, []string{"reason", metricLabelResult}),
+		outboxFanoutTotal: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_fanout_total",
+			Help: "Canonical YouTube outbox fanout materialization outcomes.",
+		}, []string{metricLabelResult}),
+		outboxAggregateProjection: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_aggregate_projection_total",
+			Help: "YouTube outbox aggregate projection outcomes.",
+		}, []string{metricLabelResult}),
+		outboxAggregateLag: promauto.NewHistogram(prometheus.HistogramOpts{
+			Name:    "hololive_youtube_outbox_aggregate_lag_seconds",
+			Help:    "Observed delay from a terminal envelope projection attempt to aggregate convergence.",
 			Buckets: prometheus.DefBuckets,
-		},
-	)
-}
-
-func initOutboxDispatchMetrics() {
-	outboxDeliveryClaimedTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_delivery_claimed_total",
-			Help: "Total claimed YouTube outbox delivery rows.",
-		},
-	)
-
-	outboxDeliveryProcessedTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_delivery_processed_total",
-			Help: "Total processed YouTube outbox delivery rows by result.",
-		},
-		[]string{metricLabelResult},
-	)
-
-	initOutboxDispatchHistograms()
-
-	outboxRevivedTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_revived_total",
-			Help: "Total fresh never-sent FAILED YouTube outbox rows revived for redelivery.",
-		},
-	)
-
-	outboxReviveErrorsTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_revive_errors_total",
-			Help: "Total stale-failed revival sweep transaction errors.",
-		},
-	)
-
-	outboxDeliveryRetryAfterClampedTotal = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_delivery_retry_after_clamped_total",
-			Help: "Total YouTube outbox delivery HTTP Retry-After hints clamped to the maximum bound.",
-		},
-	)
-	outboxLiveCatchupSuppressionTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_live_catchup_suppression_total",
-			Help: "YouTube outbox live catch-up suppression marker lookups by result (suppressed, cache_error, invalid_marker).",
-		},
-		[]string{metricLabelResult},
-	)
-	outboxGroupedSendFallbackTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "hololive_youtube_outbox_grouped_send_fallback_total",
-			Help: "YouTube grouped deliveries that fell back to individual sends after a known-not-accepted permanent failure, by result (started, prepare_failed, freeze_failed).",
-		},
-		[]string{metricLabelResult},
-	)
-
-	initOutboxLifecycleMetrics()
-}
-
-func initOutboxLifecycleMetrics() {
-	youtubeDeliveryTransitionTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "hololive_youtube_delivery_transition_total",
-		Help: "Version-fenced YouTube delivery lifecycle operations by operation and durable outcome.",
-	}, []string{"operation", metricLabelResult})
-	youtubeDeliveryRuleTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "hololive_youtube_delivery_rule_total",
-		Help: "Applied YouTube delivery lifecycle policy decisions by stable rule ID.",
-	}, []string{"rule", metricLabelResult})
-	youtubeDeliveryLogicalGroupTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "hololive_youtube_delivery_logical_group_total",
-		Help: "Ledger-first YouTube logical delivery group resolutions.",
-	}, []string{"resolution", metricLabelResult})
-	youtubeDeliveryOutcomeUnknownTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "hololive_youtube_delivery_outcome_unknown_total",
-		Help: "YouTube provider effects whose delivery outcome must remain unknown.",
-	}, []string{"transport"})
-	youtubeDeliveryCommitAdjudication = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "hololive_youtube_delivery_commit_adjudication_total",
-		Help: "Primary read-back results after an ambiguous lifecycle commit response.",
-	}, []string{"operation", metricLabelResult})
-	youtubeDeliveryAtomicityBreachTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "hololive_youtube_delivery_atomicity_breach_total",
-		Help: "Detected mixed lifecycle command envelopes by bounded operation name.",
-	}, []string{"operation"})
-	youtubeDeliveryLedgerOperationTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "hololive_youtube_delivery_ledger_operation_total",
-		Help: "Logical delivery ledger operations by operation and durable result.",
-	}, []string{"operation", metricLabelResult})
-	youtubeDeliveryCleanupGuardTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "hololive_youtube_delivery_cleanup_guard_total",
-		Help: "Terminal outbox cleanup decisions by bounded guard reason and result.",
-	}, []string{"reason", metricLabelResult})
-	youtubeOutboxFanoutTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "hololive_youtube_outbox_fanout_total",
-		Help: "Canonical YouTube outbox fanout materialization outcomes.",
-	}, []string{metricLabelResult})
-	youtubeOutboxAggregateProjection = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "hololive_youtube_outbox_aggregate_projection_total",
-		Help: "YouTube outbox aggregate projection outcomes.",
-	}, []string{metricLabelResult})
-	youtubeOutboxAggregateLag = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "hololive_youtube_outbox_aggregate_lag_seconds",
-		Help:    "Observed delay from a terminal envelope projection attempt to aggregate convergence.",
-		Buckets: prometheus.DefBuckets,
-	})
-}
+		}),
+	}
+})
 
 func observeLiveCatchupSuppression(result string) {
-	initOutboxMetrics()
-
-	if outboxLiveCatchupSuppressionTotal == nil {
-		return
-	}
-
-	outboxLiveCatchupSuppressionTotal.WithLabelValues(result).Inc()
+	outboxMetrics().liveCatchupSuppressionTotal.WithLabelValues(result).Inc()
 }
 
 func observeGroupedSendFallback(result string) {
-	initOutboxMetrics()
-
-	if outboxGroupedSendFallbackTotal == nil {
-		return
-	}
-
-	outboxGroupedSendFallbackTotal.WithLabelValues(result).Inc()
+	outboxMetrics().groupedSendFallbackTotal.WithLabelValues(result).Inc()
 }
 
-func initOutboxDispatchHistograms() {
-	outboxDispatchDuration = promauto.NewHistogram(
-		prometheus.HistogramOpts{
-			Name:    "hololive_youtube_outbox_dispatch_duration_seconds",
-			Help:    "YouTube outbox per-room dispatch duration in seconds.",
-			Buckets: prometheus.DefBuckets,
-		},
-	)
-
-	outboxDispatchBatchSize = promauto.NewHistogram(
-		prometheus.HistogramOpts{
-			Name:    "hololive_youtube_outbox_dispatch_batch_size",
-			Help:    "Claimed YouTube outbox delivery row count per dispatch batch.",
-			Buckets: []float64{1, 2, 5, 10, 20, 50, 100, 200},
-		},
-	)
-
-	outboxDispatchTouchedOutboxes = promauto.NewHistogram(
-		prometheus.HistogramOpts{
-			Name:    "hololive_youtube_outbox_dispatch_touched_outboxes",
-			Help:    "Unique outbox rows touched per YouTube outbox dispatch batch.",
-			Buckets: []float64{1, 2, 5, 10, 20, 50, 100, 200},
-		},
-	)
-}
-
-// 메트릭 미초기화(NewDispatcher 미경유 단위 테스트 등) 시 no-op.
 func observeOutboxRevived(n int64) {
-	if outboxRevivedTotal == nil || n <= 0 {
+	if n <= 0 {
 		return
 	}
 
-	outboxRevivedTotal.Add(float64(n))
+	outboxMetrics().revivedTotal.Add(float64(n))
 }
 
 func observeOutboxReviveError() {
-	if outboxReviveErrorsTotal == nil {
-		return
-	}
-
-	outboxReviveErrorsTotal.Inc()
+	outboxMetrics().reviveErrorsTotal.Inc()
 }
 
 func observeDeliveryRetryAfterClamped() {
-	initOutboxMetrics()
-
-	if outboxDeliveryRetryAfterClampedTotal == nil {
-		return
-	}
-
-	outboxDeliveryRetryAfterClampedTotal.Inc()
+	outboxMetrics().deliveryRetryAfterClampedTotal.Inc()
 }
 
 func observeOutboxEnqueueOutboxes(result string, n int) {
-	initOutboxMetrics()
-
-	if outboxEnqueueOutboxesTotal == nil || n <= 0 {
+	if n <= 0 {
 		return
 	}
 
-	outboxEnqueueOutboxesTotal.WithLabelValues(result).Add(float64(n))
+	outboxMetrics().enqueueOutboxesTotal.WithLabelValues(result).Add(float64(n))
 }
 
 func observeOutboxEnqueueTargetRooms(n int) {
-	initOutboxMetrics()
-
-	if outboxEnqueueTargetRoomsTotal == nil || n <= 0 {
+	if n <= 0 {
 		return
 	}
 
-	outboxEnqueueTargetRoomsTotal.Add(float64(n))
+	outboxMetrics().enqueueTargetRoomsTotal.Add(float64(n))
 }
 
 func observeOutboxDispatchDuration(duration time.Duration) {
-	initOutboxMetrics()
-
-	if outboxDispatchDuration == nil {
-		return
-	}
-
-	outboxDispatchDuration.Observe(duration.Seconds())
+	outboxMetrics().dispatchDuration.Observe(duration.Seconds())
 }
 
 func observeOutboxDeliveryClaimed(n int) {
-	initOutboxMetrics()
-
-	if outboxDeliveryClaimedTotal == nil || n <= 0 {
+	if n <= 0 {
 		return
 	}
 
-	outboxDeliveryClaimedTotal.Add(float64(n))
+	outboxMetrics().deliveryClaimedTotal.Add(float64(n))
 }
 
 func observeOutboxDispatchBatchSize(n int) {
-	initOutboxMetrics()
-
-	if outboxDispatchBatchSize == nil || n <= 0 {
+	if n <= 0 {
 		return
 	}
 
-	outboxDispatchBatchSize.Observe(float64(n))
+	outboxMetrics().dispatchBatchSize.Observe(float64(n))
 }
 
 func observeOutboxDeliveryProcessed(result string, n int) {
-	initOutboxMetrics()
-
-	if outboxDeliveryProcessedTotal == nil || n <= 0 {
+	if n <= 0 {
 		return
 	}
 
-	outboxDeliveryProcessedTotal.WithLabelValues(result).Add(float64(n))
+	outboxMetrics().deliveryProcessedTotal.WithLabelValues(result).Add(float64(n))
 }
 
 func observeOutboxDispatchTouchedOutboxes(n int) {
-	initOutboxMetrics()
-
-	if outboxDispatchTouchedOutboxes == nil || n <= 0 {
+	if n <= 0 {
 		return
 	}
 
-	outboxDispatchTouchedOutboxes.Observe(float64(n))
+	outboxMetrics().dispatchTouchedOutboxes.Observe(float64(n))
 }
 
 func observeLifecycleApply(operation string, result store.ApplyResult, err error, count int) {
-	initOutboxMetrics()
+	metrics := outboxMetrics()
 
 	if count <= 0 {
 		count = 1
@@ -369,23 +302,23 @@ func observeLifecycleApply(operation string, result store.ApplyResult, err error
 		outcome = "error"
 	}
 
-	youtubeDeliveryTransitionTotal.WithLabelValues(operation, outcome).Add(float64(count))
+	metrics.deliveryTransitionTotal.WithLabelValues(operation, outcome).Add(float64(count))
 
 	for _, rule := range result.Rules {
-		youtubeDeliveryRuleTotal.WithLabelValues(string(rule), outcome).Inc()
+		metrics.deliveryRuleTotal.WithLabelValues(string(rule), outcome).Inc()
 	}
 
 	if result.CommitAdjudication != "" {
-		youtubeDeliveryCommitAdjudication.WithLabelValues(operation, string(result.CommitAdjudication)).Inc()
+		metrics.deliveryCommitAdjudication.WithLabelValues(operation, string(result.CommitAdjudication)).Inc()
 	}
 
 	if _, ok := errors.AsType[*store.AtomicityBreachError](err); ok {
-		youtubeDeliveryAtomicityBreachTotal.WithLabelValues(operation).Inc()
+		metrics.deliveryAtomicityBreachTotal.WithLabelValues(operation).Inc()
 	}
 }
 
 func observeLogicalResolutions(kinds []preparation.ResolutionKind) {
-	initOutboxMetrics()
+	metrics := outboxMetrics()
 
 	for _, kind := range kinds {
 		result := "resolved"
@@ -394,48 +327,44 @@ func observeLogicalResolutions(kinds []preparation.ResolutionKind) {
 			result = "blocked"
 		}
 
-		youtubeDeliveryLogicalGroupTotal.WithLabelValues(kind.String(), result).Inc()
+		metrics.deliveryLogicalGroupTotal.WithLabelValues(kind.String(), result).Inc()
 	}
 }
 
 func observeDeliveryOutcomeUnknown(transport string) {
-	initOutboxMetrics()
-	youtubeDeliveryOutcomeUnknownTotal.WithLabelValues(transport).Inc()
+	outboxMetrics().deliveryOutcomeUnknownTotal.WithLabelValues(transport).Inc()
 }
 
 func observeLedgerOperation(operation string, result store.ApplyResult, count int) {
-	initOutboxMetrics()
-
 	if count <= 0 {
 		return
 	}
 
-	youtubeDeliveryLedgerOperationTotal.WithLabelValues(operation, result.Outcome.String()).Add(float64(count))
+	outboxMetrics().deliveryLedgerOperationTotal.WithLabelValues(operation, result.Outcome.String()).Add(float64(count))
 }
 
 func observeCleanupResult(result store.CleanupResult) {
-	initOutboxMetrics()
+	metrics := outboxMetrics()
 
 	if result.DeletedOutboxes > 0 {
-		youtubeDeliveryCleanupGuardTotal.WithLabelValues("ledger_backed", "deleted").Add(float64(result.DeletedOutboxes))
+		metrics.deliveryCleanupGuardTotal.WithLabelValues("ledger_backed", "deleted").Add(float64(result.DeletedOutboxes))
 	}
 
 	for reason, count := range result.Guards {
-		youtubeDeliveryCleanupGuardTotal.WithLabelValues(string(reason), "guarded").Add(float64(count))
+		metrics.deliveryCleanupGuardTotal.WithLabelValues(string(reason), "guarded").Add(float64(count))
 	}
 }
 
 func observeFanoutResult(result store.FanoutResult, err error) {
-	initOutboxMetrics()
 	observeLifecycleApply("materialize_fanout", result.ApplyResult, err, 1)
-	youtubeOutboxFanoutTotal.WithLabelValues(result.Outcome.String()).Inc()
+	outboxMetrics().outboxFanoutTotal.WithLabelValues(result.Outcome.String()).Inc()
 }
 
 func observeAggregateProjection(result string, lag time.Duration) {
-	initOutboxMetrics()
-	youtubeOutboxAggregateProjection.WithLabelValues(result).Inc()
+	metrics := outboxMetrics()
+	metrics.outboxAggregateProjection.WithLabelValues(result).Inc()
 
-	if result == "applied" && youtubeOutboxAggregateLag != nil {
-		youtubeOutboxAggregateLag.Observe(lag.Seconds())
+	if result == "applied" {
+		metrics.outboxAggregateLag.Observe(lag.Seconds())
 	}
 }

@@ -23,7 +23,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 const roomsPath = "/api/holo/rooms"

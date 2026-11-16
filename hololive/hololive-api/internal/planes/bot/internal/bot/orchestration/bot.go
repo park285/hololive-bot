@@ -38,10 +38,10 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/sharedcache"
 	"github.com/kapu/hololive-api/internal/service/acl"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 type Bot struct {

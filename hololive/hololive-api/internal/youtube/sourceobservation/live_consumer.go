@@ -43,7 +43,7 @@ func (c *Consumer) reconcileLive(
 	}
 
 	return ReconcileResult{
-		Applications:        mapLiveApplications(decision.Applications),
+		Applications:        applicationsOf(decision.Applications),
 		LiveRuntimeVideoIDs: liveDecisionRuntimeVideoIDs(&decision),
 	}, nil
 }
@@ -112,17 +112,4 @@ func videoIDsOf(evidence *live.Evidence) []string {
 	}
 
 	return ids
-}
-
-func mapLiveApplications(items []live.Application) []Application {
-	applications := make([]Application, len(items))
-	for i := range items {
-		applications[i] = Application{
-			EntityKind: items[i].EntityKind,
-			EntityKey:  items[i].EntityKey,
-			Decision:   items[i].Decision,
-		}
-	}
-
-	return applications
 }

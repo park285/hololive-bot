@@ -15,8 +15,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/retry"
 	"github.com/stretchr/testify/require"
 
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 const (

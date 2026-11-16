@@ -33,9 +33,12 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 const (
@@ -136,12 +139,22 @@ func TestCommandRouterRejectsRateLimitedHistoryWithoutExecutingHandler(t *testin
 
 	limiter := &stubCommandRateLimiter{decisions: []commandAdmissionDecision{{Allowed: false, RetryAfter: 10 * time.Second}}}
 
+	store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
+	if err := store.Load(t.Context()); err != nil {
+		t.Fatalf("load message strings: %v", err)
+	}
+
+	want := store.Text(messagestrings.Key{Namespace: messagestrings.NamespaceError, Name: messaging.ErrCommandRateLimited})
+	if want == "" {
+		t.Fatal("seed has no error/command_rate_limited")
+	}
+
 	var sent string
 
 	router := NewCommandRouter(registry, nil, func(_ context.Context, _, message string) error {
 		sent = message
 		return nil
-	}, nil, nil)
+	}, store, nil)
 
 	router.admission = &commandAdmissionPolicy{limiter: limiter}
 
@@ -154,8 +167,32 @@ func TestCommandRouterRejectsRateLimitedHistoryWithoutExecutingHandler(t *testin
 		t.Fatalf("handler executions = %d, want 0", handler.executed)
 	}
 
-	if sent != expensiveHistoryRateLimitMessage {
-		t.Fatalf("sent message = %q, want %q", sent, expensiveHistoryRateLimitMessage)
+	if sent != want {
+		t.Fatalf("sent message = %q, want %q", sent, want)
+	}
+}
+
+func TestCommandRouterRateLimitWithoutLoadedStringsFailsWithoutSending(t *testing.T) {
+	registry := command.NewRegistry()
+	registry.Register(&trackedRouterCommand{name: "broadcast_history"})
+
+	limiter := &stubCommandRateLimiter{decisions: []commandAdmissionDecision{{Allowed: false, RetryAfter: 10 * time.Second}}}
+	sent := false
+
+	router := NewCommandRouter(registry, nil, func(context.Context, string, string) error {
+		sent = true
+		return nil
+	}, nil, nil)
+
+	router.admission = &commandAdmissionPolicy{limiter: limiter}
+
+	err := router.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}, botcommand.CommandBroadcastHistory, nil)
+	if err == nil {
+		t.Fatal("Execute() error = nil, want missing rate limit message error")
+	}
+
+	if sent {
+		t.Fatal("empty rate limit message must not be sent")
 	}
 }
 

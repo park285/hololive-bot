@@ -111,7 +111,7 @@ func buildTrackingUpsertQuery(
 			sb.WriteByte(',')
 		}
 
-		writeRowPlaceholders(&sb, i, columnsPerRow)
+		dbx.WriteRowPlaceholders(&sb, i, columnsPerRow)
 
 		args = appendTrackingUpsertValues(args, record, now)
 	}

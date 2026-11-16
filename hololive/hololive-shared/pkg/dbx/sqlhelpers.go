@@ -23,6 +23,8 @@ package dbx
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 )
@@ -58,4 +60,22 @@ func GetSQL(ctx context.Context, db Querier, dest any, action, query string, arg
 	}
 
 	return false, fmt.Errorf("%s: %w", action, err)
+}
+
+// WriteRowPlaceholders는 0부터 센 rowIndex번째 행의 placeholder 묶음 "($n, ...)"을 쓴다. 번호는 rowIndex*columns+1부터 columns개다.
+func WriteRowPlaceholders(sb *strings.Builder, rowIndex, columns int) {
+	base := rowIndex * columns
+
+	sb.WriteByte('(')
+
+	for j := range columns {
+		if j > 0 {
+			sb.WriteString(", ")
+		}
+
+		sb.WriteByte('$')
+		sb.WriteString(strconv.Itoa(base + j + 1))
+	}
+
+	sb.WriteByte(')')
 }

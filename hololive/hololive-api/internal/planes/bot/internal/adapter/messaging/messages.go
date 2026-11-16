@@ -47,6 +47,14 @@ const (
 
 	ErrCalendarQueryFailed = "calendar_query_failed"
 
+	ErrBroadcastHistoryQueryFailed      = "broadcast_history_query_failed"
+	ErrBroadcastTimeQueryFailed         = "broadcast_time_query_failed"
+	ErrBroadcastTypeUnknown             = "broadcast_type_unknown"
+	ErrBroadcastThumbnailUsage          = "broadcast_thumbnail_usage"
+	ErrBroadcastThumbnailNotFound       = "broadcast_thumbnail_not_found"
+	ErrBroadcastThumbnailDownloadFailed = "broadcast_thumbnail_download_failed"
+	ErrCommandRateLimited               = "command_rate_limited"
+
 	ErrUnknownCommand          = "unknown_command"
 	ErrIrisConnectionFailed    = "iris_connection_failed"
 	ErrCommandProcessingFailed = "command_processing_failed"
@@ -62,6 +70,9 @@ func ErrorMessageKeys() []string {
 		ErrLiveStreamQueryFailed, ErrUpcomingStreamQueryFailed, ErrScheduleQueryFailed, ErrScheduleNeedMemberName,
 		ErrSchedulePosterNeedMemberName, ErrSchedulePosterQueryFailed,
 		ErrCalendarQueryFailed,
+		ErrBroadcastHistoryQueryFailed, ErrBroadcastTimeQueryFailed, ErrBroadcastTypeUnknown,
+		ErrBroadcastThumbnailUsage, ErrBroadcastThumbnailNotFound, ErrBroadcastThumbnailDownloadFailed,
+		ErrCommandRateLimited,
 		ErrUnknownCommand, ErrIrisConnectionFailed,
 		ErrCommandProcessingFailed,
 	}

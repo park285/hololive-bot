@@ -42,7 +42,7 @@ func insertFetchLockTelemetryRow(t *testing.T, pool *pgxpool.Pool, seed fetchLoc
 	return id
 }
 
-func fetchedTelemetryIDs(rows []domain.YouTubeNotificationDeliveryTelemetry) []int64 {
+func fetchedTelemetryIDs(rows []YouTubeNotificationDeliveryTelemetry) []int64 {
 	ids := make([]int64, 0, len(rows))
 	for i := range rows {
 		ids = append(ids, rows[i].ID)

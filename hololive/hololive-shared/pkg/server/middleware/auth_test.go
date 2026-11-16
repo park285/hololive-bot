@@ -27,8 +27,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-
-	common "github.com/kapu/hololive-shared/pkg/contracts/common"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const testAPIKey = "test-key"
@@ -82,7 +81,7 @@ func TestAPIKeyAuthMiddleware(t *testing.T) {
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/test", http.NoBody)
 
 			if tt.headerVal != "" {
-				req.Header.Set(common.APIKeyHeader, tt.headerVal)
+				req.Header.Set(httputil.HeaderAPIKey, tt.headerVal)
 			}
 
 			rec := httptest.NewRecorder()
@@ -175,7 +174,7 @@ func TestNoRouteAuthHandler(t *testing.T) {
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nonexistent", http.NoBody)
 
 			if tt.headerVal != "" {
-				req.Header.Set(common.APIKeyHeader, tt.headerVal)
+				req.Header.Set(httputil.HeaderAPIKey, tt.headerVal)
 			}
 
 			rec := httptest.NewRecorder()
@@ -196,7 +195,7 @@ func TestNoRouteAuthHandler_ResponseBodyContract(t *testing.T) {
 	router.NoRoute(NoRouteAuthHandler(testAPIKey))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nonexistent", http.NoBody)
-	req.Header.Set(common.APIKeyHeader, "wrong-key")
+	req.Header.Set(httputil.HeaderAPIKey, "wrong-key")
 
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

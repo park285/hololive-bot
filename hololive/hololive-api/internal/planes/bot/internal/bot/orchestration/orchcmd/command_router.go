@@ -157,7 +157,13 @@ func (r *CommandRouter) handleAdmissionError(ctx context.Context, cmdCtx *botcom
 		return fmt.Errorf("report command rate limit: %w", err)
 	}
 
-	if sendErr := r.sendMessage(ctx, cmdCtx.Room, expensiveHistoryRateLimitMessage); sendErr != nil {
+	rateLimitMessage := r.messageStrings.Text(messagestrings.Key{Namespace: messagestrings.NamespaceError, Name: messaging.ErrCommandRateLimited})
+	if rateLimitMessage == "" {
+		// bot plane 기동 검증이 error/command_rate_limited를 보장한다. 빈 문구를 보내지 않고 조립 결함으로 드러낸다.
+		return errors.New("command rate limit message is not loaded")
+	}
+
+	if sendErr := r.sendMessage(ctx, cmdCtx.Room, rateLimitMessage); sendErr != nil {
 		return fmt.Errorf("send command rate limit message: %w", sendErr)
 	}
 

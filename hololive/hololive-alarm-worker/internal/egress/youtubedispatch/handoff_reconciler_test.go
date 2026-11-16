@@ -14,6 +14,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -197,14 +198,14 @@ func TestYouTubeHandoffReconcilerSettlesFrozenRequest(t *testing.T) {
 			name: "queued at horizon quarantines", state: "queued", age: testYouTubeHandoffHorizon, maxRetries: 3,
 			check: func(t *testing.T, state youtubeHandoffState) {
 				t.Helper()
-				requireYouTubeHandoffQuarantined(t, state, handoffcheck.CodeUnconfirmed)
+				requireYouTubeHandoffQuarantined(t, state, contractsalarm.HandoffCodeUnconfirmed)
 			},
 		},
 		{
 			name: "outcome unknown quarantines", state: "outcome_unknown", maxRetries: 3,
 			check: func(t *testing.T, state youtubeHandoffState) {
 				t.Helper()
-				requireYouTubeHandoffQuarantined(t, state, handoffcheck.CodeOutcomeUnknown)
+				requireYouTubeHandoffQuarantined(t, state, contractsalarm.HandoffCodeOutcomeUnknown)
 			},
 		},
 		{

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"slices"
 
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 type kindCriteria struct {

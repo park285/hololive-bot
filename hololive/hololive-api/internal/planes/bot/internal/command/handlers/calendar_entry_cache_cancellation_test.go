@@ -9,7 +9,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -179,7 +179,7 @@ func TestCachedCalendarFinderAbandonedLookupHasOwnedDeadline(t *testing.T) {
 			t.Fatalf("caller error = %v", err)
 		}
 
-		time.Sleep(constants.RequestTimeout.BotCommand)
+		time.Sleep(transport.CommandTimeout)
 
 		if err := <-finished; !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("abandoned shared lookup error = %v", err)

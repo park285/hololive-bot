@@ -12,9 +12,9 @@ import (
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops"
 	"github.com/kapu/hololive-api/internal/service/activity"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
-	"github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 

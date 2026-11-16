@@ -8,7 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 const maxChangePages = 10

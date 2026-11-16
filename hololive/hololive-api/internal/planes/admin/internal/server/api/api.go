@@ -22,11 +22,14 @@ package api
 
 import (
 	"context"
+	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+const adminRequestTimeout = 10 * time.Second
 
 type statusMessageResponse struct {
 	Status  string `json:"status"`

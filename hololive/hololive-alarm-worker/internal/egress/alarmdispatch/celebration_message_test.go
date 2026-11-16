@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -169,7 +170,7 @@ func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
 		envelopes: []dispatchoutbox.AlarmQueueEnvelope{envelope},
 	}
 
-	variants, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, &alarmDispatchMembers{}, "", group)
+	variants, err := renderAlarmDispatchGroup(t.Context(), renderer, nil, &alarmDispatchMembers{}, shortlinkservice.YouTubeBuilder{}, group)
 	require.NoError(t, err)
 
 	for _, msg := range messageTexts(variants) {

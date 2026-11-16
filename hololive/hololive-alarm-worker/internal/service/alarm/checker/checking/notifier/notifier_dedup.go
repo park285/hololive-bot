@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 func (n *Notifier) claimDedup(
@@ -19,7 +19,7 @@ func (n *Notifier) claimDedup(
 	notifyKey, logicalKey := notificationDedupKeys(payload, targetPolicy)
 
 	notifyClaimed, logicalClaimed, err := n.dedupService.TryClaimPair(
-		ctx, notifyKey, logicalKey, constants.CacheTTL.NotificationSent,
+		ctx, notifyKey, logicalKey, dedup.NotificationSentTTL,
 	)
 	if err != nil {
 		// 저장소 오류는 skip이 아니라 실패다. 이미 잡은 key1은 풀어 다음 시도가 다시 선점할 수 있게 한다.

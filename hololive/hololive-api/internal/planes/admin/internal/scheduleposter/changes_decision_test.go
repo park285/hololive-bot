@@ -17,7 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 const decisionTestKey = "test-key-0123456789abcdef"

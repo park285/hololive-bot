@@ -21,6 +21,7 @@
 package messaging
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
@@ -62,7 +63,7 @@ func (ma *MessageAdapter) tryAlarmCommand(command string, args []string, raw str
 var alarmCommandAliases = []string{"알람", "알림", "알림설정", "알람설정", "alarm"}
 
 func (ma *MessageAdapter) isAlarmCommand(cmd string) bool {
-	return stringutil.ContainsString(alarmCommandAliases, cmd)
+	return slices.Contains(alarmCommandAliases, cmd)
 }
 
 var (
@@ -80,21 +81,21 @@ func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage 
 	subCmd := stringutil.Normalize(args[0])
 	restArgs := args[1:]
 
-	if stringutil.ContainsString(alarmAddSubCommandAliases, subCmd) {
+	if slices.Contains(alarmAddSubCommandAliases, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
 		return alarmMemberCommand(botcommand.CommandAlarmAdd, "add", member, alarmType, rawMessage)
 	}
 
-	if stringutil.ContainsString(alarmRemoveSubCommandAliases, subCmd) {
+	if slices.Contains(alarmRemoveSubCommandAliases, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
 		return alarmMemberCommand(botcommand.CommandAlarmRemove, "remove", member, alarmType, rawMessage)
 	}
 
-	if stringutil.ContainsString(alarmListSubCommandAliases, subCmd) {
+	if slices.Contains(alarmListSubCommandAliases, subCmd) {
 		return alarmListCommand(rawMessage)
 	}
 
-	if stringutil.ContainsString(alarmClearSubCommandAliases, subCmd) {
+	if slices.Contains(alarmClearSubCommandAliases, subCmd) {
 		return alarmClearCommand(rawMessage)
 	}
 

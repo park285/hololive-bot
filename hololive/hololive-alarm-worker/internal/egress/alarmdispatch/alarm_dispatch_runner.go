@@ -18,6 +18,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -63,7 +64,7 @@ type Runner struct {
 	renderer          *template.Renderer
 	messageStrings    *messagestrings.Store
 	idleWaiter        IdleWaiter
-	shortLinkBaseURL  string
+	shortLinks        shortlinkservice.YouTubeBuilder
 	maxBatch          int
 	maxBatchesPerWake int
 	batchesSinceWake  int
@@ -77,7 +78,7 @@ type Runner struct {
 }
 
 type RunnerConfig struct {
-	ShortLinkBaseURL  string
+	ShortLinks        shortlinkservice.YouTubeBuilder
 	MaxBatch          int
 	MaxBatchesPerWake int
 	Members           domain.MemberDataProvider
@@ -110,7 +111,7 @@ func NewRunner(
 		renderer:          renderer,
 		messageStrings:    messageStrings,
 		idleWaiter:        idleWaiter,
-		shortLinkBaseURL:  config.ShortLinkBaseURL,
+		shortLinks:        config.ShortLinks,
 		maxBatch:          config.MaxBatch,
 		maxBatchesPerWake: config.MaxBatchesPerWake,
 		logger:            logger,
@@ -313,7 +314,7 @@ func (r *Runner) prepareGroupRequest(ctx context.Context, group alarmDispatchGro
 		}
 	}
 
-	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, members, r.shortLinkBaseURL, group)
+	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, members, r.shortLinks, group)
 	if err != nil {
 		return nil, fmt.Errorf("render request: %w", err)
 	}

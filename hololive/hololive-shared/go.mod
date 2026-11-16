@@ -10,7 +10,6 @@ require (
 	github.com/gin-contrib/gzip v1.2.10
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.13.0
-	github.com/joho/godotenv v1.5.1
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/park285/iris-client-go/v5 v5.1.0
 	github.com/park285/shared-go/v2 v2.21.0

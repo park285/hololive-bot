@@ -20,6 +20,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	dbtest "github.com/kapu/hololive-dbtest"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
 const (
@@ -346,7 +347,7 @@ func TestHandoffFailedReissuesUntilGenerationsRunOut(t *testing.T) {
 		require.Equal(t, generation, claim.Generation)
 		require.Equal(t, generation, claim.AttemptCount)
 
-		require.NoError(t, repo.ReissueAfterHandoff(t.Context(), &claim, 5*time.Second, handoffcheck.CodeFailed, "iris reply status failed"))
+		require.NoError(t, repo.ReissueAfterHandoff(t.Context(), &claim, 5*time.Second, contractsalarm.HandoffCodeFailed, "iris reply status failed"))
 
 		nextID, err := iris.ReissuedClientRequestID(base, generation+1)
 		require.NoError(t, err)
@@ -357,19 +358,19 @@ func TestHandoffFailedReissuesUntilGenerationsRunOut(t *testing.T) {
 	}
 
 	claim := claimOneHandoff(t, repo)
-	require.ErrorIs(t, repo.ReissueAfterHandoff(t.Context(), &claim, 5*time.Second, handoffcheck.CodeFailed, "failed"), sendfence.ErrGenerationExhausted)
+	require.ErrorIs(t, repo.ReissueAfterHandoff(t.Context(), &claim, 5*time.Second, contractsalarm.HandoffCodeFailed, "failed"), sendfence.ErrGenerationExhausted)
 	require.Equal(t, []string{string(StatusSent), string(StatusSent)}, memberStatuses(t, pool, unit.id))
 
 	releaser := &fakeClaimKeyReleaser{}
 	consumer, err := NewHandoffConsumer(repo, releaser)
 	require.NoError(t, err)
-	require.NoError(t, consumer.DLQAfterHandoff(t.Context(), &claim, handoffcheck.CodeFailed, "iris reply status failed; reissue budget exhausted"))
+	require.NoError(t, consumer.DLQAfterHandoff(t.Context(), &claim, contractsalarm.HandoffCodeFailed, "iris reply status failed; reissue budget exhausted"))
 
 	var dlq int
 
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(id) FROM alarm_dispatch_deliveries
 		WHERE send_unit_id = $1 AND status = 'dlq' AND dlq_at IS NOT NULL AND attempt_count = $2 AND last_error_code = $3`,
-		unit.id, iris.ReplyReissueMaxGenerations+1, handoffcheck.CodeFailed).Scan(&dlq))
+		unit.id, iris.ReplyReissueMaxGenerations+1, contractsalarm.HandoffCodeFailed).Scan(&dlq))
 	require.Len(t, unit.members, dlq)
 	require.ElementsMatch(t, unit.claimKeys, releaser.lastKeys)
 
@@ -390,7 +391,7 @@ func assertHandoffReissuedMembers(t *testing.T, pool *pgxpool.Pool, unit handoff
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(id), count(DISTINCT next_attempt_at - updated_at), max(next_attempt_at - updated_at)
 		FROM alarm_dispatch_deliveries
 		WHERE send_unit_id = $1 AND status = 'retry' AND sent_at IS NULL AND attempt_count = $2 AND last_error_code = $3`,
-		unit.id, attempt, handoffcheck.CodeFailed).Scan(&retried, &distinctDelays, &delay))
+		unit.id, attempt, contractsalarm.HandoffCodeFailed).Scan(&retried, &distinctDelays, &delay))
 	require.Len(t, unit.members, retried)
 	require.Equal(t, 1, distinctDelays, "unit members must share one next_attempt_at")
 	require.Equal(t, 5*time.Second, delay)
@@ -430,7 +431,7 @@ func TestHandoffMemberMismatchClosesCheckWithoutTransition(t *testing.T) {
 		SET status = 'quarantined', quarantined_at = clock_timestamp(), last_error_code = 'ops_review' WHERE id = $1`, unit.members[1])
 	require.NoError(t, err)
 
-	closeErr := repo.ReissueAfterHandoff(t.Context(), &claim, 5*time.Second, handoffcheck.CodeFailed, "failed")
+	closeErr := repo.ReissueAfterHandoff(t.Context(), &claim, 5*time.Second, contractsalarm.HandoffCodeFailed, "failed")
 	miss := requireFenceMiss(t, closeErr, sendfence.ReasonStatusChanged)
 	require.Zero(t, miss.Applied)
 	require.ErrorIs(t, closeErr, ErrHandoffCheckClosed)
@@ -468,7 +469,7 @@ func TestHandoffClosesCheckWhenAllMembersAreGone(t *testing.T) {
 	require.False(t, state.checked)
 	require.True(t, current.CheckToken.Equal(*state.nextCheck))
 
-	closeErr := repo.QuarantineAfterHandoff(t.Context(), &current, handoffcheck.CodeStatusMissing, "iris reply status missing")
+	closeErr := repo.QuarantineAfterHandoff(t.Context(), &current, contractsalarm.HandoffCodeStatusMissing, "iris reply status missing")
 	miss := requireFenceMiss(t, closeErr, sendfence.ReasonMissing)
 	require.Zero(t, miss.Applied)
 	require.ErrorIs(t, closeErr, ErrHandoffCheckClosed)
@@ -509,13 +510,13 @@ func TestHandoffRescheduleStopsAtHorizonThenQuarantines(t *testing.T) {
 		RequestID: claim.IrisRequestID, Snapshot: &iris.ReplyStatusSnapshot{RequestID: claim.IrisRequestID, State: "queued"},
 		Elapsed: claim.Elapsed, Horizon: horizon,
 	}).Action)
-	require.NoError(t, repo.QuarantineAfterHandoff(t.Context(), &claim, handoffcheck.CodeUnconfirmed, "iris handoff unconfirmed at horizon: iris reply status queued"))
+	require.NoError(t, repo.QuarantineAfterHandoff(t.Context(), &claim, contractsalarm.HandoffCodeUnconfirmed, "iris handoff unconfirmed at horizon: iris reply status queued"))
 
 	var quarantined int
 
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(id) FROM alarm_dispatch_deliveries
 		WHERE send_unit_id = $1 AND status = 'quarantined' AND quarantined_at IS NOT NULL AND last_error_code = $2`,
-		unit.id, handoffcheck.CodeUnconfirmed).Scan(&quarantined))
+		unit.id, contractsalarm.HandoffCodeUnconfirmed).Scan(&quarantined))
 	require.Len(t, unit.members, quarantined)
 	require.True(t, loadHandoffUnit(t, pool, unit.id).checked)
 }
@@ -563,7 +564,7 @@ func TestHandoffDLQReleasesClaimKeysOutsideSettlementBudget(t *testing.T) {
 			settleCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 
-			require.NoError(t, consumer.DLQAfterHandoff(settleCtx, claim(), handoffcheck.CodeFailed, "failed"))
+			require.NoError(t, consumer.DLQAfterHandoff(settleCtx, claim(), contractsalarm.HandoffCodeFailed, "failed"))
 			require.Equal(t, claim().ClaimKeys, releaser.released)
 		})
 	})
@@ -576,7 +577,7 @@ func TestHandoffDLQReleasesClaimKeysOutsideSettlementBudget(t *testing.T) {
 		settleCtx, cancel := context.WithCancel(t.Context())
 		cancel()
 
-		err = consumer.DLQAfterHandoff(settleCtx, claim(), handoffcheck.CodeFailed, "failed")
+		err = consumer.DLQAfterHandoff(settleCtx, claim(), contractsalarm.HandoffCodeFailed, "failed")
 		require.ErrorIs(t, err, ErrHandoffClaimKeysNotReleased)
 		require.ErrorIs(t, err, releaseErr)
 	})

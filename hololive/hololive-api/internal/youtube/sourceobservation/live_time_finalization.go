@@ -37,8 +37,11 @@ const (
 	finalizationRuleEndBeforePositive = "end_before_live_positive"
 	finalizationRuleStartMismatch     = "start_mismatch"
 
-	// 신규 종료는 종료 관측 뒤 이 기간 안에만 진행 행 없이 대기열에 들어간다.
-	finalizationNewWindow    = 48 * time.Hour
+	// TimeFinalizationNewWindow는 신규 종료가 진행 행 없이 대기열에 들어갈 수 있는 종료 관측 뒤 기간이다.
+	TimeFinalizationNewWindow = 48 * time.Hour
+	// TimeFinalizationFirstAttemptDelay는 진행 행이 없는 신규 종료의 첫 시도를 종료 관측 뒤로 미루는 간격이다.
+	TimeFinalizationFirstAttemptDelay = 3 * time.Minute
+
 	finalizationMaxAttempts  = 4
 	finalizationMaxDeferrals = 12
 	finalizationDeferral     = 10 * time.Minute
@@ -49,7 +52,7 @@ const (
 
 // finalizationRetryDelays[n]은 응답 수준 UNKNOWN n회 뒤 다음 시도까지의 retry_base_at 기준 간격이다.
 var finalizationRetryDelays = [finalizationMaxAttempts]time.Duration{
-	3 * time.Minute, 30 * time.Minute, 3 * time.Hour, 24 * time.Hour,
+	TimeFinalizationFirstAttemptDelay, 30 * time.Minute, 3 * time.Hour, 24 * time.Hour,
 }
 
 type timeFinalizationRow struct {
@@ -199,7 +202,7 @@ func timeFinalizationCandidate(session *live.SessionState, state *timeFinalizati
 		return state.Row.Outcome == finalizationPending
 	}
 
-	return session.StatusObservedAt != nil && !session.StatusObservedAt.Before(observedAt.Add(-finalizationNewWindow))
+	return session.StatusObservedAt != nil && !session.StatusObservedAt.Before(observedAt.Add(-TimeFinalizationNewWindow))
 }
 
 func evaluateTimeFinalization(payload *contract.VideoLiveCheckV1, session *live.SessionState) finalizationVerdict {

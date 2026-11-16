@@ -30,15 +30,6 @@ func ValidateServerRuntime(environment string, server *ServerConfig) error {
 	return nil
 }
 
-// ValidateKakaoRooms는 room ACL seed가 비어 있는 기동을 거절한다.
-func ValidateKakaoRooms(rooms []string) error {
-	if len(rooms) == 0 {
-		return errors.New("KAKAO_ROOMS is required")
-	}
-
-	return nil
-}
-
 // ValidateIrisEgressInputs는 Iris webhook을 받아 Iris로 직접 응답하는 runtime이 webhook·bot 토큰과 base URL 원천을
 // 모두 받았는지 검사한다.
 func ValidateIrisEgressInputs(iris *IrisConfig) error {

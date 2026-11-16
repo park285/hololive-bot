@@ -21,8 +21,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
 
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
 )
 
 type fakeRowStore struct {

@@ -13,7 +13,6 @@ Quadlet으로 운영합니다. iris-seoul collector b는 같은 방식의 별도
 | `optional/schedule-poster/` | `HOLOLIVE_SCHEDULE_POSTER_ENABLED=1`일 때만 설치하는 hololive-api drop-in(`41-schedule-poster.conf`) |
 | `optional/schedule-poster-review/` | `HOLOLIVE_SCHEDULE_POSTER_REVIEW_ENABLED=1`일 때만 설치하는 hololive-api drop-in(`42-schedule-poster-review.conf`, 후보 자동 검토용 Gemini API 키) |
 | `optional/broadcast-type-decision/` | `HOLOLIVE_BROADCAST_TYPE_DECISION_ENABLED=1`일 때만 설치하는 hololive-api drop-in(`43-broadcast-type-decision.conf`, 미분류 방송 유형 판정용 Gemini API 키) |
-| `hololive-bot-standby/` | 비활성 PostgreSQL 대기 서버 참고 unit. 중앙 설치 대상이 아니며 `[Install]`이 없습니다 |
 
 `optional/`은 설치 트리 밖에 둡니다. Quadlet은 같은 검색 루트 아래 형제 디렉터리의
 `<unit>.container.d/` drop-in도 적용하므로, 선택 drop-in을 `hololive-bot/` 옆에 두면 항상 적용됩니다.
@@ -115,14 +114,12 @@ API·worker의 image 교체와 migration은 아래 '배포 helper'로만 합니�
 ## Primary fence
 
 모든 unit은 `/var/lib/hololive-postgres-fence/fence.intent`·`fenced` 중 하나라도 있으면 시작하지 않습니다
-(`ConditionPathExists=!`). `scripts/ops/postgres-primary-fence.sh`는 이 조건이 loaded unit에 있는지 확인하고,
-intent를 기록한 뒤 Tailscale Service를 drain하고 `holo-postgres.service`만 멈춥니다.
-`postgres-primary-unfence.sh`는 수동 기동한 standby(`holo-postgres`, restart `no`, systemd 라벨 없음,
-`hololive-bot_holo-pg-data` volume)를 검증한 뒤 표식을 치우고 `holo-postgres.service`로 넘기며,
-다시 standby인지 확인하지 못하면 unit을 멈추고 같은 표식을 되돌립니다.
+(`ConditionPathExists=!`). `quadlet-redeploy-service.sh`와 `quadlet-rollback-service.sh`도 표식이 있으면 진행을
+거부합니다. 표식을 쓰고 치우던 failover fence·unfence helper는 저장소에서 지웠으므로(커밋
+`bb000290e`에 남아 있는 git 이력) 지금은 표식을 만드는 운영 경로가 없습니다. 표식이 보이면 직접 지우지 말고 원인을
+확인한 뒤 별도 승인으로 처리합니다.
 
-`holo-postgres.service`만 멈추는 일은 이 fence 절차로만 합니다. 표식 없이 `systemctl stop holo-postgres.service`만
-하면, `Wants=`로 묶인 소비자(`hololive-api`, `hololive-alarm-worker`, `hololive-youtube-collector-c`)가 crash나
+표식 없이 `systemctl stop holo-postgres.service`만 하면, `Wants=`로 묶인 소비자(`hololive-api`, `hololive-alarm-worker`, `hololive-youtube-collector-c`)가 crash나
 `HealthOnFailure=stop`으로 자동 재시작할 때 `holo-postgres` start job도 함께 걸려 DB가 다시 기동됩니다.
 표식 조건이 막는 것은 명시적 start와 이런 의존 start job입니다(`skipped because of an unmet condition check`).
 `Restart=always`의 자동 재시작은 `ConditionPathExists=`를 다시 평가하지 않으므로, 표식이 있어도 fence 중 죽은

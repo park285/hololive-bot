@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -198,7 +199,7 @@ func replaceReasonsIfChanged(ctx context.Context, tx dbx.Tx, generation int64, r
 		return fmt.Errorf("load reasons: %w", err)
 	}
 
-	if sameReasons(storedReasons, reasons) {
+	if slices.Equal(storedReasons, reasons) {
 		return nil
 	}
 
@@ -292,7 +293,7 @@ func verifyStagingProjection(
 	}
 
 	_, _, storedHash, err := normalize(loadedTargets, reasons)
-	if err != nil || len(loadedTargets) != len(targets) || storedHash != hash || !sameReasons(loadedReasons, reasons) {
+	if err != nil || len(loadedTargets) != len(targets) || storedHash != hash || !slices.Equal(loadedReasons, reasons) {
 		return fmt.Errorf("refresh youtube target projection: staging verification failed: %w", ErrInvalidProjection)
 	}
 

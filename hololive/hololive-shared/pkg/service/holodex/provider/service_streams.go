@@ -31,8 +31,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/stringutil"
-
 	streammapping "github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -212,7 +210,7 @@ func resolveStreamOrg(org string) (string, error) {
 		return resolvedOrg, nil
 	}
 
-	return "", fmt.Errorf("%w: %s", ErrInvalidStreamOrg, stringutil.TrimSpace(org))
+	return "", fmt.Errorf("%w: %s", ErrInvalidStreamOrg, strings.TrimSpace(org))
 }
 
 var streamOrgAliases = map[string]string{
@@ -295,7 +293,7 @@ func limitStreamList(streams []*domain.Stream) []*domain.Stream {
 }
 
 func normalizeStreamOrg(org string) string {
-	normalized := strings.ToLower(stringutil.TrimSpace(org))
+	normalized := strings.ToLower(strings.TrimSpace(org))
 	return strings.TrimSuffix(normalized, "!")
 }
 

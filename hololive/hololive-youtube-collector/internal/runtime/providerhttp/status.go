@@ -45,19 +45,11 @@ func mapProviderStatus(provider contract.Provider, status int, retryAfter, diagn
 	}
 
 	if status == http.StatusTooManyRequests {
-		if err := withRetryHint(collecterr.New(contract.ErrorCooldown, contract.ClassCooldown, message), retryAfter); err != nil {
-			return fmt.Errorf("with retry hint: %w", err)
-		}
-
-		return nil
+		return withRetryHint(collecterr.New(contract.ErrorCooldown, contract.ClassCooldown, message), retryAfter)
 	}
 
 	if status == http.StatusServiceUnavailable {
-		if err := mapServiceUnavailable(message, retryAfter); err != nil {
-			return fmt.Errorf("map service unavailable: %w", err)
-		}
-
-		return nil
+		return mapServiceUnavailable(message, retryAfter)
 	}
 
 	if classification, ok := fixedProviderStatuses[status]; ok {
@@ -81,19 +73,11 @@ func mapServiceUnavailable(message, retryAfter string) error {
 		return collecterr.New(contract.ErrorCollectionFailed, contract.ClassTransient, message)
 	}
 
-	if err := collecterr.WithRetry(collecterr.New(contract.ErrorCooldown, contract.ClassCooldown, message), hint); err != nil {
-		return fmt.Errorf("with retry: %w", err)
-	}
-
-	return nil
+	return collecterr.WithRetry(collecterr.New(contract.ErrorCooldown, contract.ClassCooldown, message), hint)
 }
 
 func withRetryHint(err error, retryAfter string) error {
-	if withErr := collecterr.WithRetry(err, collecterr.ParseRetryAfter(retryAfter)); withErr != nil {
-		return fmt.Errorf("with retry: %w", withErr)
-	}
-
-	return nil
+	return collecterr.WithRetry(err, collecterr.ParseRetryAfter(retryAfter))
 }
 
 func statusMessage(provider contract.Provider, status int, diagnostic string) string {
@@ -154,11 +138,7 @@ func RedactError(err error, secrets ...string) error {
 		base = unclassifiedRedacted(redactedErr)
 	}
 
-	if withRetryErr := collecterr.WithRetry(base, collecterr.RetryOf(err)); withRetryErr != nil {
-		return fmt.Errorf("with retry: %w", withRetryErr)
-	}
-
-	return nil
+	return collecterr.WithRetry(base, collecterr.RetryOf(err))
 }
 
 // collecterr는 미분류 생성자를 노출하지 않는다. 평문 문자열 오류는 context/transient 판정에

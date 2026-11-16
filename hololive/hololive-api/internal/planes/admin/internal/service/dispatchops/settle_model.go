@@ -1,6 +1,10 @@
 package dispatchops
 
-import "fmt"
+import (
+	"fmt"
+
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
+)
 
 // SettleRequest는 외부 발송 없이 실패 묶음을 취소하거나 격리합니다.
 // OperatorID는 인증된 gateway 세션에서만 결합합니다.
@@ -32,11 +36,12 @@ func validateSettlement(group []Delivery, request SettleRequest) error {
 
 	for index := range group {
 		item := &group[index]
-		if (item.Status != "dlq" && item.Status != statusQuarantined) || item.SentAt != nil || item.CancelledAt != nil {
+		if (item.Status != contractsalarm.DispatchStatusDLQ && item.Status != contractsalarm.DispatchStatusQuarantined) ||
+			item.SentAt != nil || item.CancelledAt != nil {
 			return ErrConflict
 		}
 
-		if request.Action == "cancel" || item.Status == "dlq" {
+		if request.Action == "cancel" || item.Status == contractsalarm.DispatchStatusDLQ {
 			changed = true
 		}
 	}

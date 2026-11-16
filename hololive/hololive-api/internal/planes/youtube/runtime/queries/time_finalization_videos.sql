@@ -9,11 +9,11 @@ WITH candidates AS MATERIALIZED (
     WHERE s.status = 'ENDED' AND s.times_source = 'observed'
       AND COALESCE(h.end_reason, '') <> 'CANCELLED_BEFORE_LIVE'
       AND (s.started_at IS NOT NULL OR h.last_live_positive_at IS NOT NULL)
-      AND ((f.video_id IS NULL AND s.status_observed_at >= statement_timestamp() - interval '48 hours')
+      AND ((f.video_id IS NULL AND s.status_observed_at >= statement_timestamp() - $4::interval)
            OR f.outcome = 'pending')
 ), new_videos AS (
     SELECT video_id, channel_id,
-           COALESCE(next_attempt_at, status_observed_at + interval '3 minutes') AS not_before
+           COALESCE(next_attempt_at, status_observed_at + $5::interval) AS not_before
     FROM candidates
     WHERE queue IS NULL OR queue = 'new'
     ORDER BY status_observed_at DESC, video_id

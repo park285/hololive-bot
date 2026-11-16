@@ -105,9 +105,6 @@ Environment=ALARM_DISPATCH_RETENTION_EVENT_DAYS=${ALARM_DISPATCH_RETENTION_EVENT
 Environment=LOG_DIR=/app/logs
 Environment=GOMEMLIMIT=320MiB
 Environment=APP_ENV=production
-Environment=KAKAO_ROOMS=${KAKAO_ROOMS}
-Environment=KAKAO_ACL_ENABLED=${KAKAO_ACL_ENABLED}
-Environment=KAKAO_ACL_MODE=${KAKAO_ACL_MODE}
 Environment=IRIS_BASE_URL_ALLOWED_HOSTS=${IRIS_BASE_URL_ALLOWED_HOSTS}
 Environment=CACHE_SENTINEL_MASTER_SET=hololive
 Environment=CACHE_SENTINEL_ADDRS=${VALKEY_SENTINEL_ADDRS}
@@ -169,9 +166,6 @@ Environment=ALARM_DISPATCH_RETENTION_DLQ_DAYS=180
 Environment=ALARM_DISPATCH_RETENTION_QUARANTINED_DAYS=180
 Environment=ALARM_DISPATCH_RETENTION_CANCELLED_DAYS=90
 Environment=ALARM_DISPATCH_RETENTION_EVENT_DAYS=90
-Environment=KAKAO_ROOMS=
-Environment=KAKAO_ACL_ENABLED=true
-Environment=KAKAO_ACL_MODE=whitelist
 Environment=IRIS_BASE_URL_ALLOWED_HOSTS=100.100.1.5
 EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
 ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart hololive-alarm-worker

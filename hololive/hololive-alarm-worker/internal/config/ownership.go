@@ -34,11 +34,11 @@ func validateOwnership(environment string, roles NotificationRoles) error {
 		return nil
 	}
 
-	if err := runtimepolicy.RequireNotificationRoleEnv(runtimepolicy.NotificationEgressRoleEnv, roles.Egress, runtimepolicy.NotificationEgressRoleOwner); err != nil {
+	if err := runtimepolicy.RequireNotificationRoleEnv(runtimepolicy.RuntimeAlarmWorker, runtimepolicy.NotificationEgressRoleEnv, roles.Egress, runtimepolicy.NotificationEgressRoleOwner); err != nil {
 		return fmt.Errorf("require notification egress role env: %w", err)
 	}
 
-	if err := runtimepolicy.RequireNotificationRoleEnv(runtimepolicy.NotificationSchedulerRoleEnv, roles.Scheduler, runtimepolicy.NotificationSchedulerRoleWorker, runtimepolicy.NotificationSchedulerRoleOff); err != nil {
+	if err := runtimepolicy.RequireNotificationRoleEnv(runtimepolicy.RuntimeAlarmWorker, runtimepolicy.NotificationSchedulerRoleEnv, roles.Scheduler, runtimepolicy.NotificationSchedulerRoleWorker, runtimepolicy.NotificationSchedulerRoleOff); err != nil {
 		return fmt.Errorf("require notification scheduler role env: %w", err)
 	}
 

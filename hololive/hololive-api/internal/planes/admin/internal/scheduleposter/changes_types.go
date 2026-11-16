@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	posterstore "github.com/kapu/hololive-shared/pkg/service/scheduleposter"
+	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 type changeStore interface {

@@ -24,8 +24,6 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
-
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 func parseIntList(value string) []int {
@@ -37,7 +35,7 @@ func parseIntList(value string) []int {
 	result := make([]int, 0, len(parts))
 
 	for _, part := range parts {
-		trimmed := stringutil.TrimSpace(part)
+		trimmed := strings.TrimSpace(part)
 		if trimmed == "" {
 			continue
 		}

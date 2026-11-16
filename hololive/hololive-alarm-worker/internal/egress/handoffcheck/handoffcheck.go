@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
+
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
 // FirstCheckDelay는 admission부터 첫 확인까지의 간격이다. Iris 같은 ID 재시도 창(약 2초)보다 길게 두어 첫 확인에서
@@ -37,14 +39,6 @@ func NextStep(elapsed time.Duration) time.Duration {
 
 	return checkSteps[len(checkSteps)-1]
 }
-
-// 원장 last_error_code에 남는 handoff 결과 코드다.
-const (
-	CodeFailed         = "handoff_failed"
-	CodeOutcomeUnknown = "handoff_outcome_unknown"
-	CodeStatusMissing  = "handoff_status_missing"
-	CodeUnconfirmed    = "handoff_unconfirmed"
-)
 
 // Action은 관측 하나에 대한 원장의 다음 행동이다.
 type Action uint8
@@ -111,18 +105,18 @@ type Decision struct {
 func Decide(in Input) Decision {
 	if in.QueryErr != nil {
 		if httpErr, ok := errors.AsType[*iris.HTTPError](in.QueryErr); ok && httpErr.StatusCode == http.StatusNotFound {
-			return Decision{Action: ActionQuarantine, Code: CodeStatusMissing, Detail: "iris reply status not found"}
+			return Decision{Action: ActionQuarantine, Code: contractsalarm.HandoffCodeStatusMissing, Detail: "iris reply status not found"}
 		}
 
 		return pending(in, QueryErrorDetail(in.QueryErr))
 	}
 
 	if in.Snapshot == nil {
-		return Decision{Action: ActionQuarantine, Code: CodeOutcomeUnknown, Detail: "iris reply status response is empty"}
+		return Decision{Action: ActionQuarantine, Code: contractsalarm.HandoffCodeOutcomeUnknown, Detail: "iris reply status response is empty"}
 	}
 
 	if strings.TrimSpace(in.Snapshot.RequestID) != in.RequestID {
-		return Decision{Action: ActionQuarantine, Code: CodeOutcomeUnknown, Detail: "iris reply status request id does not match"}
+		return Decision{Action: ActionQuarantine, Code: contractsalarm.HandoffCodeOutcomeUnknown, Detail: "iris reply status request id does not match"}
 	}
 
 	state := in.Snapshot.State
@@ -132,10 +126,10 @@ func Decide(in Input) Decision {
 		return Decision{Action: ActionComplete}
 	case iris.ReplyStatusFailed:
 		if in.Generation < iris.ReplyReissueMaxGenerations && in.RetryBudgetLeft {
-			return Decision{Action: ActionReissue, Code: CodeFailed, Detail: "iris reply status failed"}
+			return Decision{Action: ActionReissue, Code: contractsalarm.HandoffCodeFailed, Detail: "iris reply status failed"}
 		}
 
-		return Decision{Action: ActionExhausted, Code: CodeFailed, Detail: "iris reply status failed; reissue budget exhausted"}
+		return Decision{Action: ActionExhausted, Code: contractsalarm.HandoffCodeFailed, Detail: "iris reply status failed; reissue budget exhausted"}
 	case iris.ReplyStatusPending:
 		return pending(in, "iris reply status "+state)
 	case iris.ReplyStatusUnknown:
@@ -143,15 +137,15 @@ func Decide(in Input) Decision {
 	}
 
 	if state == "outcome_unknown" {
-		return Decision{Action: ActionQuarantine, Code: CodeOutcomeUnknown, Detail: "iris reply status outcome_unknown"}
+		return Decision{Action: ActionQuarantine, Code: contractsalarm.HandoffCodeOutcomeUnknown, Detail: "iris reply status outcome_unknown"}
 	}
 
-	return Decision{Action: ActionQuarantine, Code: CodeOutcomeUnknown, Detail: "iris reply status is not recognized"}
+	return Decision{Action: ActionQuarantine, Code: contractsalarm.HandoffCodeOutcomeUnknown, Detail: "iris reply status is not recognized"}
 }
 
 func pending(in Input, last string) Decision {
 	if in.Elapsed >= in.Horizon {
-		return Decision{Action: ActionQuarantine, Code: CodeUnconfirmed, Detail: "iris handoff unconfirmed at horizon: " + last}
+		return Decision{Action: ActionQuarantine, Code: contractsalarm.HandoffCodeUnconfirmed, Detail: "iris handoff unconfirmed at horizon: " + last}
 	}
 
 	return Decision{Action: ActionReschedule}

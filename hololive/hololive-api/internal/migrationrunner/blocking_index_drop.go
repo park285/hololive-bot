@@ -36,7 +36,7 @@ func (e *guardedExecer) validateMigrationSource(name, content string) error {
 	}
 
 	for _, statement := range sqlsplit.Statements(content) {
-		normalized := strings.TrimSpace(stripMigrationComments(statement))
+		normalized := strings.TrimSpace(sqlsplit.StripComments(statement))
 		if !dropIndexPattern.MatchString(normalized) || dropIndexConcurrentlyPattern.MatchString(normalized) {
 			continue
 		}

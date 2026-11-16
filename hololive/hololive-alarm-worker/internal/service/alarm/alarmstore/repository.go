@@ -144,23 +144,6 @@ func (r *Repository) HasChannelSubscriptions(ctx context.Context, channelID stri
 	return exists, nil
 }
 
-func (r *Repository) FindByChannel(ctx context.Context, channelID string) ([]*domain.Alarm, error) {
-	query := findByChannelSQL
-
-	rows, err := r.pool.Query(ctx, query, channelID)
-	if err != nil {
-		return nil, fmt.Errorf("find alarms by channel: %w", err)
-	}
-	defer rows.Close()
-
-	out, err := r.scanAlarms(rows)
-	if err != nil {
-		return out, fmt.Errorf("scan alarms: %w", err)
-	}
-
-	return out, nil
-}
-
 func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
 	query := findByChannelAndTypeSQL
 

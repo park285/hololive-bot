@@ -146,7 +146,7 @@ export GOAMD64="${goamd64}"
 (
   cd "${collector_dir}"
   go build -pgo=off -trimpath -buildvcs=false \
-    -ldflags="-w -buildid=${collector_build_id} -X main.Version=${version} -X main.Revision=${revision}" \
+    -ldflags="-w -buildid=${collector_build_id} -X main.Version=${version}" \
     -o "${tmp_dir}/youtube-collector" ./cmd/runtime/youtube-collector
   go build -pgo=off -trimpath -buildvcs=false \
     -ldflags="-w -buildid=${healthcheck_build_id}" \

@@ -23,7 +23,6 @@ package activity
 import "log/slog"
 
 // Logger는 관리 작업 활동을 process logger(stdout)에 구조화 기록으로 남긴다.
-// 파일 저장과 최근 기록 조회(GET /api/holo/logs)는 소비자가 없어 지웠다.
 type Logger struct {
 	logger *slog.Logger
 }

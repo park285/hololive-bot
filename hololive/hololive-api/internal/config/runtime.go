@@ -18,10 +18,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-const (
-	defaultBotPort      = 30001
-	defaultAdminAPIPort = 30006
-)
+const defaultAdminAPIPort = 30006
 
 // RuntimeConfig는 단일 hololive-api 프로세스가 호스팅하는 bot/admin HTTP plane과
 // YouTube background plane을 담는다. 각 plane은 자체 bounded DB pool을 explicit bulkhead로
@@ -99,26 +96,16 @@ func configurePlanes(botConfig *BotPlaneConfig, adminConfig *AdminPlaneConfig) e
 	adminConfig.Server.Port = adminPort
 	adminConfig.Server.HTTPTransports = envload.CommaSeparated(sharedenv.String("HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS", "h3"))
 	adminConfig.Server.H3Addr = sharedenv.String("HOLOLIVE_ADMIN_API_H3_ADDR", fmt.Sprintf(":%d", adminPort))
-	adminConfig.Server.H3CertFile = botConfig.Server.H3CertFile
-	adminConfig.Server.H3KeyFile = botConfig.Server.H3KeyFile
 	adminConfig.Server.MetricsAddr = ""
 	adminConfig.Server.PprofAddr = ""
 	adminConfig.AlarmServiceURL = botConfig.AlarmServiceURL
 	adminConfig.Postgres.PoolMinConns = env.Int("ADMIN_API_POSTGRES_POOL_MIN_CONNS", 1)
 	adminConfig.Postgres.PoolMaxConns = env.Int("ADMIN_API_POSTGRES_POOL_MAX_CONNS", 4)
 
-	botPort := env.Int("SERVER_PORT", defaultBotPort)
-
-	botConfig.Server.Port = botPort
 	botConfig.Postgres.PoolMinConns = env.Int("BOT_POSTGRES_POOL_MIN_CONNS", 1)
 	botConfig.Postgres.PoolMaxConns = env.Int("BOT_POSTGRES_POOL_MAX_CONNS", 4)
 
-	// 포트 파싱이 실패하면 아래 loopback URL이 기본 포트로 만들어지므로, URL을 조립하기 전에 멈춘다.
-	if err := env.Err(); err != nil {
-		return err
-	}
-
-	return nil
+	return env.Err()
 }
 
 func (c *RuntimeConfig) Validate() error {

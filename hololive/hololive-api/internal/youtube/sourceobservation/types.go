@@ -165,6 +165,15 @@ type Application struct {
 	Decision   string
 }
 
+func applicationsOf[T ~struct{ EntityKind, EntityKey, Decision string }](items []T) []Application {
+	applications := make([]Application, len(items))
+	for i, item := range items {
+		applications[i] = Application(item)
+	}
+
+	return applications
+}
+
 type ReconcileResult struct {
 	Applications []Application
 	// LiveRuntimeVideoIDs는 이 관측 저장이 youtube_live_runtime_state 입력을 바꿨을 수 있는 영상 key다.

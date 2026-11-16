@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // DeliveryMode는 발송 방식(per_room/grouped)이다. TransitionStore가 lifecycle 전이와 함께 시도를 기록한다.
@@ -73,7 +72,7 @@ func recordAttemptTelemetry(
 	attempts []deliveryAttempt,
 	at time.Time,
 ) error {
-	rows := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, len(attempts))
+	rows := make([]telemetry.YouTubeNotificationDeliveryTelemetry, 0, len(attempts))
 	for i := range attempts {
 		if row, ok := attemptTelemetryRow(mode, attempts[i], at); ok {
 			rows = append(rows, row)
@@ -104,10 +103,10 @@ func attemptTelemetryRow(
 	mode DeliveryMode,
 	attempt deliveryAttempt,
 	at time.Time,
-) (domain.YouTubeNotificationDeliveryTelemetry, bool) {
+) (telemetry.YouTubeNotificationDeliveryTelemetry, bool) {
 	owner := attempt.group.ownerAfter
 	if !telemetry.IsCommunityShortsDeliveryAuditKind(owner.Kind) {
-		return domain.YouTubeNotificationDeliveryTelemetry{}, false
+		return telemetry.YouTubeNotificationDeliveryTelemetry{}, false
 	}
 
 	outbox := owner.domainOutbox()
@@ -119,7 +118,7 @@ func attemptTelemetryRow(
 		failureReason = deliverysql.TruncateString(string(attempt.reason), 100)
 	}
 
-	return domain.YouTubeNotificationDeliveryTelemetry{
+	return telemetry.YouTubeNotificationDeliveryTelemetry{
 		DeliveryID: owner.ID,
 		OutboxID:   owner.OutboxID,
 		ChannelID:  owner.ChannelID,
@@ -142,7 +141,7 @@ func attemptTelemetryRow(
 	}, true
 }
 
-func assignAttemptOrdinals(ctx context.Context, tx dbx.Querier, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
+func assignAttemptOrdinals(ctx context.Context, tx dbx.Querier, rows []telemetry.YouTubeNotificationDeliveryTelemetry) error {
 	deliveryIDs := make([]int64, 0, len(rows))
 	for i := range rows {
 		deliveryIDs = append(deliveryIDs, rows[i].DeliveryID)

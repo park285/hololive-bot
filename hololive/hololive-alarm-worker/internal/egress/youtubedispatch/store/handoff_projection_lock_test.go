@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	dbtest "github.com/kapu/hololive-dbtest"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -40,7 +40,7 @@ func TestHandoffSettlementWaitsForParentBeforeLockingChildren(t *testing.T) {
 	done := make(chan error, 1)
 
 	workers.Go(func() {
-		_, settleErr := transition.ExhaustAfterHandoff(ctx, &claim, handoffcheck.CodeFailed, "failed without budget")
+		_, settleErr := transition.ExhaustAfterHandoff(ctx, &claim, contractsalarm.HandoffCodeFailed, "failed without budget")
 		done <- settleErr
 	})
 
@@ -82,7 +82,7 @@ func TestHandoffSettlementDefersWhenLogicalGroupGainsParent(t *testing.T) {
 	done := make(chan settled, 1)
 
 	workers.Go(func() {
-		result, settleErr := transition.ExhaustAfterHandoff(ctx, &claim, handoffcheck.CodeFailed, "failed without budget")
+		result, settleErr := transition.ExhaustAfterHandoff(ctx, &claim, contractsalarm.HandoffCodeFailed, "failed without budget")
 		done <- settled{result: result, err: settleErr}
 	})
 
@@ -101,7 +101,7 @@ func TestHandoffSettlementDefersWhenLogicalGroupGainsParent(t *testing.T) {
 	requireHandoffGroupGrowthDeferred(t, pool, unit, claim, addedID, deferred.err)
 
 	next := claimDueHandoff(t, pool, transition, unit.admission.RequestBaseID)
-	result, err := transition.ExhaustAfterHandoff(t.Context(), &next, handoffcheck.CodeFailed, "failed without budget")
+	result, err := transition.ExhaustAfterHandoff(t.Context(), &next, contractsalarm.HandoffCodeFailed, "failed without budget")
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, result.Outcome)
 	require.Contains(t, result.TouchedOutboxIDs, addedOutboxID)
@@ -208,7 +208,7 @@ func TestHandoffInvalidLocalMembershipClosesWithoutLedgerLock(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
-	result, err := transition.ExhaustAfterHandoff(ctx, &claim, handoffcheck.CodeFailed, "failed without budget")
+	result, err := transition.ExhaustAfterHandoff(ctx, &claim, contractsalarm.HandoffCodeFailed, "failed without budget")
 	require.ErrorIs(t, err, ErrHandoffCheckClosed)
 	require.Equal(t, ApplyConflict, result.Outcome)
 	require.Equal(t, domain.OutboxStatusSent, loadHandoffTestDelivery(t, pool, unit.ownerID).status)

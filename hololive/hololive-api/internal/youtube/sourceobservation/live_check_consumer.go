@@ -171,7 +171,7 @@ func (c *Consumer) reduceVideoLiveCheck(
 	}
 
 	return ReconcileResult{
-		Applications:        append(applications, mapLiveApplications(decision.Applications)...),
+		Applications:        append(applications, applicationsOf(decision.Applications)...),
 		LiveRuntimeVideoIDs: liveDecisionRuntimeVideoIDs(&decision),
 	}, nil
 }
