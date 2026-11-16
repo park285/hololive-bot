@@ -30,6 +30,7 @@ var (
 	lockChannelConfirmSQL        = mustSQL("lock_channel_confirm.sql")
 	lockUnreviewedCandidateSQL   = mustSQL("lock_unreviewed_candidate.sql")
 	memoSQL                      = mustSQL("memo.sql")
+	officialStreamsSQL           = mustSQL("official_streams.sql")
 	pendingRowsSQL               = mustSQL("pending_rows.sql")
 	polishChangeSQL              = mustSQL("polish_change.sql")
 	polishRowSQL                 = mustSQL("polish_row.sql")

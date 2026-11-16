@@ -616,13 +616,13 @@ func (fx *posterChangesFixture) seedChangesAndOtherPosts(t *testing.T, pool *pgx
 	t.Helper()
 
 	_, err := pool.Exec(t.Context(),
-		`INSERT INTO schedule_poster_changes (post_id, item, kind, reason, slot, day, start_time, status, source_text, title_ko)
-		VALUES ($1, 1, 'time_changed', '', 1, $3, '21:00', NULL, '21時から', NULL),
-		       ($1, 2, 'rejected', 'past_time', 2, NULL, NULL, NULL, '', NULL),
-		       ($1, 3, 'same', '', NULL, $3, '25:00', 'planned', '25時もいつも通り', NULL),
-		       ($1, 4, 'added', '', NULL, $4, '', 'off', '明日は休み', '휴방'),
-		       ($2, 1, 'cancelled', '', 2, NULL, NULL, 'cancelled', '雑談はなし', NULL)`,
-		fx.matched, fx.stale, fx.weekStart, fx.weekStart.AddDate(0, 0, 1))
+		`INSERT INTO schedule_poster_changes (post_id, channel_id, item, kind, reason, slot, day, start_time, status, source_text, title_ko)
+		VALUES ($1, $5, 1, 'time_changed', '', 1, $3, '21:00', NULL, '21時から', NULL),
+		       ($1, $5, 2, 'rejected', 'past_time', 2, NULL, NULL, NULL, '', NULL),
+		       ($1, $5, 3, 'same', '', NULL, $3, '25:00', 'planned', '25時もいつも通り', NULL),
+		       ($1, $5, 4, 'added', '', NULL, $4, '', 'off', '明日は休み', '휴방'),
+		       ($2, $5, 1, 'cancelled', '', 2, NULL, NULL, 'cancelled', '雑談はなし', NULL)`,
+		fx.matched, fx.stale, fx.weekStart, fx.weekStart.AddDate(0, 0, 1), channel)
 	require.NoError(t, err)
 
 	fx.judgeFailed, fx.matchFailed, fx.nextWeek = 2119784604752343360, 2119784604752343370, 2119784604752343380
@@ -952,8 +952,9 @@ func (fx *posterChangesFixture) seedSlotDetails(t *testing.T, pool *pgxpool.Pool
 			[]any{fx.posterID, fx.movedOut, fx.postedAt[fx.movedOut]},
 		},
 		{
-			`INSERT INTO schedule_poster_changes (post_id, item, kind, slot, day, source_text) VALUES ($1, 1, 'moved_out', 2, $2, '雑談は来週に')`,
-			[]any{fx.movedOut, fx.weekStart.AddDate(0, 0, 8)},
+			`INSERT INTO schedule_poster_changes (post_id, channel_id, item, kind, slot, day, source_text)
+			SELECT $2, channel_id, 1, 'moved_out', 2, $3::date, '雑談は来週に' FROM schedule_posters WHERE id = $1`,
+			[]any{fx.posterID, fx.movedOut, fx.weekStart.AddDate(0, 0, 8)},
 		},
 		{`UPDATE schedule_poster_changes SET created_at = $1`, []any{fx.changesAt}},
 	}

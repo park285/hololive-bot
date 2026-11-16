@@ -31,6 +31,7 @@ const changeUser = "1001"
 type ledgerPost struct {
 	posterstore.Post
 
+	poster  int64
 	stamp   time.Time
 	reason  string
 	changes []posterstore.Change
@@ -50,6 +51,10 @@ type fakeChangeStore struct {
 	channels     []string
 	inserts      [][]posterstore.Post
 	insertErr    error
+	posters      map[string]int64
+	streams      map[string]posterstore.OfficialStream
+	streamErr    error
+	streamCalls  [][]string
 	decisions    map[int64]posterstore.PostDecision
 	decisionErr  error
 	matches      []matchRecord
@@ -62,13 +67,39 @@ type fakeChangeStore struct {
 }
 
 func (f *fakeChangeStore) find(id int64) *ledgerPost {
+	return f.findFor(f.schedule.PosterID, id)
+}
+
+func (f *fakeChangeStore) findFor(posterID, id int64) *ledgerPost {
 	for _, post := range f.posts {
-		if post.ID == id {
+		if post.poster == posterID && post.ID == id {
 			return post
 		}
 	}
 
 	return nil
+}
+
+func (f *fakeChangeStore) posterOf(channelID string) int64 {
+	return cmp.Or(f.posters[channelID], f.schedule.PosterID)
+}
+
+func (f *fakeChangeStore) OfficialStreams(_ context.Context, videoIDs []string) (map[string]posterstore.OfficialStream, error) {
+	f.streamCalls = append(f.streamCalls, videoIDs)
+
+	if f.streamErr != nil {
+		return nil, f.streamErr
+	}
+
+	found := map[string]posterstore.OfficialStream{}
+
+	for _, id := range videoIDs {
+		if stream, ok := f.streams[id]; ok {
+			found[id] = stream
+		}
+	}
+
+	return found, nil
 }
 
 func (f *fakeChangeStore) PublishedRows(_ context.Context, channelID string, _ time.Time) (posterstore.PublishedSchedule, bool, error) {
@@ -84,10 +115,11 @@ func (f *fakeChangeStore) PublishedRows(_ context.Context, channelID string, _ t
 
 	schedule := f.schedule
 
+	schedule.PosterID = f.posterOf(channelID)
 	schedule.Changes = []posterstore.Change{}
 
 	for _, post := range f.ordered() {
-		if post.Status != posterstore.PostMatched || !post.stamp.Equal(schedule.ExtractedAt) {
+		if post.poster != schedule.PosterID || post.Status != posterstore.PostMatched || !post.stamp.Equal(schedule.ExtractedAt) {
 			continue
 		}
 
@@ -112,6 +144,10 @@ func (f *fakeChangeStore) PendingPosts(_ context.Context, schedule posterstore.P
 	var pending []posterstore.Post
 
 	for _, post := range f.ordered() {
+		if post.poster != schedule.PosterID {
+			continue
+		}
+
 		rematch := (post.Status == posterstore.PostMatched || post.Status == posterstore.PostMatchFailed) && !post.stamp.Equal(schedule.ExtractedAt)
 		waiting := post.Status == posterstore.PostUnjudged || !f.schedule.RowsPending && (post.Status == posterstore.PostRelevant || rematch)
 
@@ -126,7 +162,7 @@ func (f *fakeChangeStore) PendingPosts(_ context.Context, schedule posterstore.P
 	return pending, nil
 }
 
-func (f *fakeChangeStore) InsertPosts(_ context.Context, _ int64, posts []posterstore.Post) (int64, error) {
+func (f *fakeChangeStore) InsertPosts(_ context.Context, posterID int64, posts []posterstore.Post) (int64, error) {
 	if f.insertErr != nil {
 		return 0, f.insertErr
 	}
@@ -136,9 +172,9 @@ func (f *fakeChangeStore) InsertPosts(_ context.Context, _ int64, posts []poster
 	var inserted int64
 
 	for _, post := range posts {
-		if f.find(post.ID) == nil {
+		if f.findFor(posterID, post.ID) == nil {
 			post.Status, post.CreatedAt = posterstore.PostUnjudged, f.now
-			f.posts = append(f.posts, &ledgerPost{Post: post})
+			f.posts = append(f.posts, &ledgerPost{Post: post, poster: posterID})
 			inserted++
 		}
 	}
@@ -146,12 +182,12 @@ func (f *fakeChangeStore) InsertPosts(_ context.Context, _ int64, posts []poster
 	return inserted, nil
 }
 
-func (f *fakeChangeStore) RecordDecision(_ context.Context, postID int64, decision posterstore.PostDecision) (bool, error) {
+func (f *fakeChangeStore) RecordDecision(_ context.Context, channelID string, postID int64, decision posterstore.PostDecision) (bool, error) {
 	if f.decisionErr != nil {
 		return false, f.decisionErr
 	}
 
-	post := f.find(postID)
+	post := f.findFor(f.posterOf(channelID), postID)
 	if post == nil || post.Status != posterstore.PostUnjudged {
 		return false, nil
 	}
@@ -185,7 +221,7 @@ func (f *fakeChangeStore) RecordMatch(_ context.Context, schedule posterstore.Pu
 		f.beforeRecord(f)
 	}
 
-	post := f.find(postID)
+	post := f.findFor(schedule.PosterID, postID)
 	if f.refuseMatch || post == nil || !slices.Contains([]posterstore.PostStatus{posterstore.PostRelevant, posterstore.PostMatched, posterstore.PostMatchFailed}, post.Status) ||
 		!schedule.ExtractedAt.Equal(f.schedule.ExtractedAt) || post.stamp.Equal(schedule.ExtractedAt) ||
 		post.Status != read.Status || !post.stamp.Equal(read.MatchedRowsAt) {
@@ -209,7 +245,7 @@ func (f *fakeChangeStore) RecordMatch(_ context.Context, schedule posterstore.Pu
 func (f *fakeChangeStore) requeueAfter(post *ledgerPost) {
 	for _, later := range f.posts {
 		after := cmp.Or(later.PostedAt.Compare(post.PostedAt), cmp.Compare(later.ID, post.ID)) > 0
-		if after && later.stamp.Equal(post.stamp) && (later.Status == posterstore.PostMatched || later.Status == posterstore.PostMatchFailed) {
+		if after && later.poster == post.poster && later.stamp.Equal(post.stamp) && (later.Status == posterstore.PostMatched || later.Status == posterstore.PostMatchFailed) {
 			later.Status, later.reason, later.stamp = posterstore.PostRelevant, "", time.Time{}
 		}
 	}
@@ -241,7 +277,7 @@ func (f *fakeChangeStore) setStatus(id int64, status posterstore.PostStatus) {
 
 func (f *fakeChangeStore) seed(status posterstore.PostStatus, createdAt time.Time, post posterstore.Post) {
 	post.Status, post.CreatedAt = status, createdAt
-	f.posts = append(f.posts, &ledgerPost{Post: post})
+	f.posts = append(f.posts, &ledgerPost{Post: post, poster: f.schedule.PosterID})
 }
 
 type fakeClassifier struct {
@@ -690,7 +726,7 @@ func TestDetectChangesDoesNotReuseAKeptMatchAfterEarlierChangesAreReplaced(t *te
 	middle := posterstore.Post{ID: 103, PostedAt: at("2026-11-11 11:00"), Body: "明後日の歌枠は23時から", Status: posterstore.PostMatched}
 	f := newChangeFixture()
 
-	f.store.posts = append(f.store.posts, &ledgerPost{Post: middle, stamp: f.store.schedule.ExtractedAt, changes: []posterstore.Change{{
+	f.store.posts = append(f.store.posts, &ledgerPost{Post: middle, poster: f.store.schedule.PosterID, stamp: f.store.schedule.ExtractedAt, changes: []posterstore.Change{{
 		PostID: middle.ID, Item: 1, PostedAt: middle.PostedAt, Kind: posterstore.ChangeTimeChanged, Slot: 2, Start: new("23:00"),
 	}}})
 	f.store.seed(posterstore.PostRelevant, changeNow, postB)
@@ -717,7 +753,7 @@ func TestDetectChangesMatchesRequeuedPostsBeforeLaterOnesInTheSameTick(t *testin
 	f := newChangeFixture()
 
 	f.matcher.items[middle.Body] = []matchItem{{Row: new(2), Date: songDate, Start: new("23:00"), Status: posterstore.RowPlanned, Evidence: "23時から"}}
-	f.store.posts = append(f.store.posts, &ledgerPost{Post: middle, stamp: f.store.schedule.ExtractedAt, changes: []posterstore.Change{{
+	f.store.posts = append(f.store.posts, &ledgerPost{Post: middle, poster: f.store.schedule.PosterID, stamp: f.store.schedule.ExtractedAt, changes: []posterstore.Change{{
 		PostID: middle.ID, Item: 1, PostedAt: middle.PostedAt, Kind: posterstore.ChangeTimeChanged, Slot: 2, Start: new("23:00"),
 	}}})
 	f.store.seed(posterstore.PostRelevant, changeNow, postA)

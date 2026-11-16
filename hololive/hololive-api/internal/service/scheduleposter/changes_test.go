@@ -83,7 +83,7 @@ func storedPost(t *testing.T, pool *pgxpool.Pool, postID int64) scheduleposter.P
 func decide(t *testing.T, store *scheduleposter.Store, postID int64, decision scheduleposter.PostDecision) {
 	t.Helper()
 
-	recorded, err := store.RecordDecision(t.Context(), postID, decision)
+	recorded, err := store.RecordDecision(t.Context(), sophiaChannel, postID, decision)
 	require.NoError(t, err)
 	require.True(t, recorded)
 }
@@ -187,7 +187,7 @@ func TestStorePostsAreJudgedOnceWithoutTouchingThePoster(t *testing.T) {
 	decide(t, store, 14, scheduleposter.PostDecision{Status: scheduleposter.PostNotRelevant, ScheduleInfo: 0.25, Kind: "other"})
 	decide(t, store, 15, scheduleposter.PostDecision{Status: scheduleposter.PostJudgeFailed, Reason: "blocked"})
 
-	recorded, err := store.RecordDecision(ctx, 13, scheduleposter.PostDecision{Status: scheduleposter.PostNotRelevant, ScheduleInfo: 0.1, Kind: "other"})
+	recorded, err := store.RecordDecision(ctx, sophiaChannel, 13, scheduleposter.PostDecision{Status: scheduleposter.PostNotRelevant, ScheduleInfo: 0.1, Kind: "other"})
 	require.NoError(t, err)
 	require.False(t, recorded, "판별한 글은 다시 판별하지 않는다")
 	require.Equal(t, []int64{13}, pendingPostIDs(t, store, schedule), "종단한 글은 대기열에 없다")
@@ -446,7 +446,7 @@ func TestStoreChangeWritesRejectInvalidInputBeforeWriting(t *testing.T) {
 		"대응 상태":  {Status: scheduleposter.PostMatched, ScheduleInfo: 0.9, Kind: "change"},
 		"미판별 상태": {Status: scheduleposter.PostUnjudged},
 	} {
-		_, err = store.RecordDecision(ctx, 13, decision)
+		_, err = store.RecordDecision(ctx, sophiaChannel, 13, decision)
 		require.Error(t, err, name)
 	}
 

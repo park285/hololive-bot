@@ -29,6 +29,7 @@ type matchCandidate struct {
 type itemJudge struct {
 	posted  string
 	body    string
+	own     string
 	lower   time.Time
 	weekEnd time.Time
 	base    []posterstore.Slot
@@ -40,7 +41,7 @@ func judgeItems(
 	post posterstore.Post, weekStart, weekEnd time.Time, rows []posterstore.Row, prior []posterstore.Change, items []matchItem,
 ) []posterstore.Change {
 	judge := itemJudge{
-		posted: post.PostedAt.In(jst).Format(matchClockLayout), body: dropSpaces(post.Body), lower: later(postedDate(post.PostedAt), weekStart), weekEnd: weekEnd,
+		posted: post.PostedAt.In(jst).Format(matchClockLayout), body: dropSpaces(post.Body), own: dropSpaces(ownWords(post.Body)), lower: later(postedDate(post.PostedAt), weekStart), weekEnd: weekEnd,
 		base: posterstore.ApplyChanges(rows, prior),
 	}
 	changes := make([]posterstore.Change, len(items))
@@ -158,7 +159,7 @@ func (j *itemJudge) redirect(_ *matchItem, candidate *matchCandidate) string {
 	return ""
 }
 
-func (j *itemJudge) checkTime(_ *matchItem, candidate *matchCandidate) string {
+func (j *itemJudge) checkTime(item *matchItem, candidate *matchCandidate) string {
 	start := optional(candidate.start)
 	if candidate.start == nil && candidate.target >= 0 && j.base[candidate.target].Day.Equal(candidate.day) {
 		start = j.base[candidate.target].Start
@@ -186,7 +187,23 @@ func (j *itemJudge) checkTime(_ *matchItem, candidate *matchCandidate) string {
 		return rejectPastTime
 	}
 
+	if kind == posterstore.ChangeContentChanged && j.staleQuote(item, &j.base[candidate.target]) {
+		return rejectPastTime
+	}
+
 	return ""
+}
+
+func (j *itemJudge) staleQuote(item *matchItem, slot *posterstore.Slot) bool {
+	return slot.Start != "" && clockStamp(slot.Day, slot.Start) < j.posted && !strings.Contains(j.own, dropSpaces(item.Evidence))
+}
+
+func ownWords(body string) string {
+	for _, head := range [...]string{quoteHead, "\n\n" + entryHead} {
+		body, _, _ = strings.Cut(body, head)
+	}
+
+	return body
 }
 
 func (j *itemJudge) place(_ *matchItem, candidate *matchCandidate) string {

@@ -1,6 +1,7 @@
 package scheduleposter
 
 import (
+	"cmp"
 	"context"
 	"strconv"
 	"strings"
@@ -13,11 +14,18 @@ import (
 
 const (
 	maxChangePages      = 10
-	maxQuoteAuthorRunes = 60
+	maxAuthorNameRunes  = 60
+	maxPostVideos       = 3
+	maxStreamTitleRunes = 200
+	maxStreamCast       = 8
+	quoteHead           = "\n\nQuoted post by "
+	entryHead           = "Official schedule entry (this streamer is "
 )
 
 type collectedPosts struct {
 	posts   []posterstore.Post
+	videos  map[int64][]string
+	author  string
 	seen    map[int64]bool
 	newest  time.Time
 	reached bool
@@ -36,7 +44,7 @@ func (s *Service) collectPosts(ctx context.Context, target Target, schedule *pos
 		floor = later(floor, mark.newest)
 	}
 
-	collected := collectedPosts{seen: map[int64]bool{}}
+	collected := collectedPosts{seen: map[int64]bool{}, videos: map[int64][]string{}}
 	cursor := ""
 
 	for range maxChangePages {
@@ -89,12 +97,17 @@ func (c *collectedPosts) take(page *statusPage, target Target, schedule *posters
 			continue
 		}
 
+		texts := []string{item.Text}
+
 		if quote, ok := item.quoted(); ok {
 			body = withQuote(body, &quote)
+			texts = append(texts, quote.Text)
 		}
 
 		c.seen[id] = true
 		c.posts = append(c.posts, posterstore.Post{ID: id, PostedAt: postedAt, Body: body})
+		c.videos[id] = linkedVideos(texts...)
+		c.author = cmp.Or(c.author, displayName(item.Author.Name))
 	}
 
 	return last
@@ -124,10 +137,13 @@ func cleanPostText(text string, limit int) string {
 	return string([]rune(text)[:limit])
 }
 
+func displayName(name string) string {
+	return strings.Join(strings.Fields(cleanPostText(name, maxAuthorNameRunes)), " ")
+}
+
 // withQuote는 인용한 글을 본문 뒤에 붙인다. 머리 줄의 문구와 시각 형식은 대응 지시문(match.txt)이 읽는 형식이다.
 func withQuote(body string, quote *quotedStatus) string {
-	author := strings.Join(strings.Fields(cleanPostText(quote.Author.Name, maxQuoteAuthorRunes)), " ")
-	header := "\n\nQuoted post by " + author + " at " + time.Unix(quote.CreatedTimestamp, 0).In(jst).Format(matchClockLayout) + " JST:\n"
+	header := quoteHead + displayName(quote.Author.Name) + " at " + time.Unix(quote.CreatedTimestamp, 0).In(jst).Format(matchClockLayout) + " JST:\n"
 
 	room := posterstore.MaxPostChars - utf8.RuneCountInString(body) - utf8.RuneCountInString(header)
 	if room <= 0 {

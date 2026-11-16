@@ -133,7 +133,7 @@ func polish(ctx context.Context, tx pgx.Tx, posterID int64, slot *Slot, korean K
 
 	if change, ok := slot.koreanStep(); ok {
 		query, target = polishChangeSQL, []any{change.PostID, change.Item}
-		fields = append(fields, change.RecordedAt)
+		fields = append(fields, change.RecordedAt, posterID)
 	}
 
 	tag, err := tx.Exec(ctx, query, append(target, fields...)...)

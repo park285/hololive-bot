@@ -38,7 +38,8 @@ type status struct {
 	Text             string `json:"text"`
 	CreatedTimestamp int64  `json:"created_timestamp"`
 	Author           struct {
-		ID string `json:"id"`
+		ID   string `json:"id"`
+		Name string `json:"name"`
 	} `json:"author"`
 	// 해당 없음은 null이고, 미디어 없음은 객체 대신 빈 배열로 온다.
 	RepostedBy jsontext.Value `json:"reposted_by"`
