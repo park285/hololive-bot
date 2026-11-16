@@ -8,6 +8,9 @@
 
 ## 미출시
 
+## v18.6.1 - 2026-11-16
+
+- **일정표 번역 단계 기본 모델 되돌림:** 설정 `translation.rows.translate`의 기본값을 `gemini-4-carbon` `LOW`에서 `gemini-4-hydrogen` `MEDIUM`으로 되돌립니다(타임아웃 180초 그대로, v18.5.0 이전 값). 행 번역과 변경 글의 재번역이 이 단계를 씁니다. 운영 지시문으로 두 모델을 같은 131행(포스터 12장 95행, 변경 글 36행)에 실호출해 견준 결과, carbon `LOW`는 변경 글의 함께하는 사람 칸에 구조 문자가 섞인 값(`미오 선배 (게스트)'], `)을 4회 중 4회 냈고, 두 모델이 다르게 옮긴 45행 가운데 분명히 나쁜 행이 8 대 3이었으며(행에 없는 제목·사람을 채움), 180초 타임아웃이 47회 중 5회였습니다(hydrogen 0회). 번역 메모는 157줄(3830자)까지 두 모델 모두 대상 칸을 전부 따라, 긴 메모에서 carbon이 낫다는 근거는 나오지 않았습니다. 설정 파일에 `translation.rows.translate`의 `model`이나 `thinking_level`을 적어 둔 배포는 그 값을 계속 씁니다. 이미 저장한 번역은 그대로이고, 행을 다시 뽑거나 변경 글을 새로 번역할 때부터 적용됩니다. Fallback delta: none.
 - **PostgreSQL 18.7 이미지:** 커스텀 PostgreSQL의 확장 빌드·런타임 base를 공식 `18.7-alpine`의 고정 digest로 갱신합니다. `pg_stat_kcache`·`pg_wait_sampling`은 새 PGXS·헤더로 재빌드하며 기존 확장 버전·preload·PGDATA·UID와 보안 패키지 고정값은 유지합니다. dbtest·통합 테스트·live-head 복구 시험도 같은 18.7 base를 사용하고, 이미지 기동·접근 정책 검사는 18.7을 확인합니다. 운영 반영은 ARM64 검증 후 `POSTGRES_IMAGE` identity 동기화와 DB 재시작으로 하며 앱 마이그레이션·새 백업·자동 REINDEX는 실행하지 않습니다. Fallback delta: none.
 
 ## v18.6.0 - 2026-11-16
