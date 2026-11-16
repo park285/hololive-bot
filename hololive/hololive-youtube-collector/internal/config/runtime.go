@@ -267,6 +267,10 @@ func (c *RuntimeConfig) validatePostgres() error {
 		return errors.New("POSTGRES_POOL_MIN_CONNS must be between 0 and POSTGRES_POOL_MAX_CONNS")
 	}
 
+	if err := c.Collector.validateInstanceID(); err != nil {
+		return fmt.Errorf("validate youtube collector postgres user: %w", err)
+	}
+
 	if err := validatePostgresUser(c.Postgres.User, c.Collector.InstanceID); err != nil {
 		return fmt.Errorf("validate youtube collector postgres user: %w", err)
 	}
