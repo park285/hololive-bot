@@ -8,6 +8,9 @@
 
 ## 미출시
 
+## v18.4.0 - 2026-11-16
+
+- **의존성:** 다섯 Go 모듈을 shared-go v2.22.0과 iris-client-go v5.2.0으로 올렸습니다. 이 저장소가 쓰지 않는 shared-go export 삭제(`healthprobe --smoke`·`CheckURL` 포함)와 iris-client-go의 H3 CA 파일 엄격 해석·unspecified 주소 거절이 들어 있습니다. 운영 `iris-ca.pem`은 2026-11-16에 `CERTIFICATE` 블록 하나만 담고 있음을 확인했습니다. 최소 버전 선택으로 quic-go v0.65.0, pgx v5.13.0과 golang.org/x 모듈도 함께 올라갑니다.
 - **migration advisory lock 해제 실패:** `db-migrate`가 advisory lock 해제에 실패하거나 해제 결과가 불확실하면, lock을 쥔 pooled connection을 pool에서 떼어 닫습니다. 예전에는 그 connection이 lock을 쥔 채 pool로 돌아갔습니다. 정상 해제 경로와 오류 문구는 같고, 해제 실패 오류에는 닫기 실패가 있으면 `evict after unlock failure` 오류가 함께 붙습니다. Fallback delta: none.
 - **alarm-worker Quadlet env:** `hololive-alarm-worker.container`의 `[Container]`·`[Service]` `Environment=` 줄에서 worker가 읽지 않는 `KAKAO_ROOMS`·`KAKAO_ACL_ENABLED`·`KAKAO_ACL_MODE`를 뺐습니다. 방 ACL은 hololive-api만 읽고, api unit의 같은 줄은 그대로입니다. 이 변경은 unit을 다시 배포해야 반영됩니다. Fallback delta: none.
 - **youtube-collector `PHOTO_SYNC_ENABLED`:** collector가 hololive-api 전용 키 `PHOTO_SYNC_ENABLED`를 더는 읽지 않습니다. 예전에는 값이 `true`이거나 bool이 아니면 기동을 거부했고, 이제 어떤 값이 들어와도 collector 동작은 같습니다. collector unit 세 개(`hololive-youtube-collector-{b,c,d}.container`)와 Osaka native 배포 스크립트가 넣던 `PHOTO_SYNC_ENABLED=false`, collector 문서의 필수 env 행도 지웠습니다. unit 변경은 다시 배포해야 반영됩니다. Fallback delta: none.
