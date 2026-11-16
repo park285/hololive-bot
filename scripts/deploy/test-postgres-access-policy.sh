@@ -59,6 +59,7 @@ podman exec "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 -
 podman exec -i "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
 CREATE ROLE hololive_migrator LOGIN PASSWORD 'fixture';
 CREATE ROLE hololive_runtime LOGIN PASSWORD 'fixture';
+CREATE ROLE hololive_alarm_worker LOGIN PASSWORD 'fixture';
 CREATE ROLE hololive_scraper NOLOGIN;
 CREATE ROLE hololive_collector_a LOGIN PASSWORD 'fixture';
 CREATE ROLE hololive_collector_b LOGIN PASSWORD 'fixture';
@@ -75,7 +76,7 @@ podman exec -i "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=
 podman exec "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 -Atc \
   "SELECT count(*) = 0 FROM pg_hba_file_rules WHERE error IS NOT NULL" | grep -qx t
 podman exec "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 -Atc \
-  "SELECT count(*) = 9 AND bool_and(r.rolconnlimit = expected.maximum) AND bool_and(r.rolcanlogin = expected.can_login) FROM (VALUES ('hololive_runtime',25,true),('hololive_scraper',0,false),('hololive_collector_a',7,true),('hololive_collector_b',7,true),('hololive_collector_c',7,true),('hololive_collector_d',7,true),('hololive_migrator',1,true),('postgres_exporter',2,true),('iris_db_nightly',2,true)) expected(name,maximum,can_login) JOIN pg_roles r ON r.rolname=expected.name" | grep -qx t
+  "SELECT count(*) = 10 AND bool_and(r.rolconnlimit = expected.maximum) AND bool_and(r.rolcanlogin = expected.can_login) FROM (VALUES ('hololive_runtime',17,true),('hololive_alarm_worker',8,true),('hololive_scraper',0,false),('hololive_collector_a',7,true),('hololive_collector_b',7,true),('hololive_collector_c',7,true),('hololive_collector_d',7,true),('hololive_migrator',1,true),('postgres_exporter',2,true),('iris_db_nightly',2,true)) expected(name,maximum,can_login) JOIN pg_roles r ON r.rolname=expected.name" | grep -qx t
 client() {
   local role="$1" mode="$2" database="${3:-hololive}"
   podman run --rm --pull never --security-opt label=disable --network "$network" \
@@ -84,7 +85,7 @@ client() {
     "host=holo-postgres dbname=$database user=$role sslmode=$mode sslrootcert=/ca.pem" \
     -X -v ON_ERROR_STOP=1 -Atc 'SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()'
 }
-for role in hololive_runtime hololive_collector_c postgres_exporter; do
+for role in hololive_runtime hololive_alarm_worker hololive_collector_c postgres_exporter; do
   [[ "$(client "$role" verify-full)" == t ]]
   if client "$role" disable >"$fixture/rejected" 2>&1; then
     echo "plaintext TCP unexpectedly accepted: $role" >&2; exit 1

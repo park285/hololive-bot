@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
 func TestQuoteSQLLiteral(t *testing.T) {
@@ -35,31 +37,58 @@ func TestQuoteSQLLiteral(t *testing.T) {
 	}
 }
 
-func TestBootstrapScraperRoleRequiresEveryCollectorPassword(t *testing.T) {
+func setLoginRolePasswords(t *testing.T) {
+	t.Helper()
+
 	t.Setenv("POSTGRES_ADMIN_PASSWORD", "admin-secret")
-	t.Setenv("HOLOLIVE_COLLECTOR_A_PASSWORD", "collector-a-secret")
-	t.Setenv("HOLOLIVE_COLLECTOR_B_PASSWORD", "collector-b-secret")
-	t.Setenv("HOLOLIVE_COLLECTOR_C_PASSWORD", "")
-	t.Setenv("HOLOLIVE_COLLECTOR_D_PASSWORD", "collector-d-secret")
 	t.Setenv("PGHOST", t.TempDir())
 	t.Setenv("PGPORT", "1")
 	t.Setenv("PGSSLMODE", "disable")
 
-	err := bootstrapCollectorRoles(t.Context())
-	if err == nil {
-		t.Fatal("missing collector password accepted")
+	for _, role := range loginRoles {
+		t.Setenv(role.env, role.user+"-secret")
+	}
+}
+
+func TestBootstrapLoginRolesRejectUnusablePasswordsBeforeDial(t *testing.T) {
+	incompatible := t.Name() + "-\uff26"
+	cases := map[string]struct {
+		env, value, want string
+	}{
+		"missing collector":    {"HOLOLIVE_COLLECTOR_C_PASSWORD", "", "HOLOLIVE_COLLECTOR_C_PASSWORD is required"},
+		"missing alarm worker": {"HOLOLIVE_ALARM_WORKER_PASSWORD", " ", "HOLOLIVE_ALARM_WORKER_PASSWORD is required"},
+		"missing API":          {"HOLOLIVE_DB_PASSWORD", "", "HOLOLIVE_DB_PASSWORD is required"},
+		"shared with API":      {"HOLOLIVE_ALARM_WORKER_PASSWORD", runtimepolicy.PostgresRuntimeRoleUser + "-secret", "HOLOLIVE_ALARM_WORKER_PASSWORD and HOLOLIVE_DB_PASSWORD must be distinct"},
+		"incompatible":         {"HOLOLIVE_DB_PASSWORD", incompatible, "HOLOLIVE_DB_PASSWORD is not a compatible PostgreSQL password"},
+		"shared with admin":    {"HOLOLIVE_COLLECTOR_A_PASSWORD", "admin-secret", "POSTGRES_ADMIN_PASSWORD and HOLOLIVE_COLLECTOR_A_PASSWORD must be distinct"},
 	}
 
-	if _, dialed := errors.AsType[*pgconn.ConnectError](err); dialed {
-		t.Fatal("missing scraper password reached database connection")
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			setLoginRolePasswords(t)
+			t.Setenv(tc.env, tc.value)
+
+			err := bootstrapLoginRoles(t.Context())
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("bootstrapLoginRoles() error = %v, want %q", err, tc.want)
+			}
+
+			if strings.Contains(err.Error(), incompatible) {
+				t.Fatal("password rejection disclosed the input")
+			}
+
+			if _, dialed := errors.AsType[*pgconn.ConnectError](err); dialed {
+				t.Fatal("unusable password reached database connection")
+			}
+		})
 	}
 }
 
 func TestBootstrapConnectionsRejectUnsafeConfigurationBeforeDial(t *testing.T) {
 	paths := map[string]func(context.Context, string) error{
 		"admin": func(ctx context.Context, dsn string) error {
-			return ensureCollectorRoles(ctx, dsn, "scraper", []collectorRoleCredential{
-				{user: "collector", password: "collector-password"},
+			return ensureLoginRoles(ctx, dsn, "scraper", []loginCredential{
+				{user: "collector", connectionLimit: 7, collector: true, password: "collector-password"},
 			}, "hololive")
 		},
 		"database": func(ctx context.Context, dsn string) error {
@@ -161,7 +190,7 @@ func TestScraperRoleSQLUsesOnlySCRAMVerifier(t *testing.T) {
 
 	for _, exists := range []bool{false, true} {
 		recorder := &roleRecorder{exists: exists}
-		if err := upsertCollectorRole(t.Context(), recorder, `scraper"name`, password); err != nil {
+		if err := upsertLoginRole(t.Context(), recorder, `scraper"name`, password); err != nil {
 			t.Fatal(err)
 		}
 
@@ -189,7 +218,7 @@ func TestScraperRoleSQLUsesOnlySCRAMVerifier(t *testing.T) {
 	failure := errors.New("statement rejected")
 	recorder := &roleRecorder{fail: failure}
 
-	if err := upsertCollectorRole(t.Context(), recorder, "scraper", password); err == nil || !errors.Is(err, failure) || strings.Contains(err.Error(), password) {
+	if err := upsertLoginRole(t.Context(), recorder, "scraper", password); err == nil || !errors.Is(err, failure) || strings.Contains(err.Error(), password) {
 		t.Fatal("role failure lost cause or exposed password")
 	}
 }
@@ -201,7 +230,7 @@ func TestScraperRoleRejectsIncompatiblePasswordsBeforeMutation(t *testing.T) {
 		for _, exists := range []bool{false, true} {
 			recorder := &roleRecorder{exists: exists}
 
-			err := upsertCollectorRole(t.Context(), recorder, "scraper", password)
+			err := upsertLoginRole(t.Context(), recorder, "scraper", password)
 			if err == nil {
 				t.Fatal("expected password compatibility rejection")
 			}

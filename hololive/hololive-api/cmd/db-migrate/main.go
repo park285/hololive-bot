@@ -62,8 +62,8 @@ func run() error {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 
-	if bootstrapErr := bootstrapCollectorRoles(ctx); bootstrapErr != nil {
-		return fmt.Errorf("bootstrap collector roles: %w", bootstrapErr)
+	if bootstrapErr := bootstrapLoginRoles(ctx); bootstrapErr != nil {
+		return fmt.Errorf("bootstrap login roles: %w", bootstrapErr)
 	}
 
 	connString, err := postgresConnString()
