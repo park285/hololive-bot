@@ -1237,7 +1237,8 @@ shorts claim은 활성 queue partial index를 사용합니다. 현재 live slot 
 
 ### 9.8 Grants
 
-`hololive_scraper` 최소 권한은 다음과 같다.
+`hololive_scraper`는 로그인할 수 없는 grant group이며, collector는 instance와 같은 suffix의
+`hololive_collector_a`/`b`/`c`/`d` login으로만 접속한다. group 최소 권한은 다음과 같다.
 
 - `SELECT`: current contract generation, current target generation과 targets
 - `SELECT, INSERT, UPDATE`: collection checkpoint, DB job lease
@@ -1245,6 +1246,12 @@ shorts claim은 활성 queue partial index를 사용합니다. 현재 live slot 
 - `INSERT`: collision audit
 - 필요한 sequence `USAGE, SELECT`
 - canonical table, notification outbox, replay request, queue claim/finalize UPDATE 권한 없음
+
+migration 028의 trigger는 collector login을 instance에 묶는다. lease 변경과 provenance·collision 기록은
+같은 instance여야 하고, 만료 전인 다른 instance의 lease는 바꿀 수 없다. observation insert는 자기 ACTIVE
+lease의 owner·fence·projection generation과, queue insert는 그 observation의 fence와 자기 ACTIVE lease가
+맞아야 한다. membership·target·job 계약 검증은 앱이 맡는다. 자기 이름의 새 lease 행 생성, owner가 없는
+다른 lease의 일정 열 변경, checkpoint와 payload 기록은 instance에 묶이지 않는다.
 
 `hololive_runtime`은 target generation write, observation read, queue claim/finalize, replay/retention, canonical write 권한을 가진다. `alarm-worker` role에는 observation DML 권한을 추가하지 않는다.
 

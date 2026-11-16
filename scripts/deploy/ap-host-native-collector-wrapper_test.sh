@@ -47,12 +47,12 @@ credential_case() {
 
 [[ -x "$COLLECTOR_WRAPPER" ]] || fail "collector wrapper must be executable"
 pass "collector wrapper is an executable shared artifact"
-credential_case "default scraper role" "hololive_scraper|hololive|scraper" \
-  HOLOLIVE_SCRAPER_PASSWORD=scraper HOLOLIVE_DB_PASSWORD=runtime DB_PASSWORD=legacy
-credential_case "explicit scraper role" "hololive_scraper|hololive|scraper" \
-  POSTGRES_USER=hololive_scraper HOLOLIVE_SCRAPER_PASSWORD=scraper HOLOLIVE_DB_PASSWORD=runtime
-credential_case "explicit password wins" "hololive_scraper|hololive|explicit" \
-  POSTGRES_USER=hololive_scraper POSTGRES_PASSWORD=explicit HOLOLIVE_SCRAPER_PASSWORD=scraper HOLOLIVE_DB_PASSWORD=runtime
+credential_case "default collector role" "hololive_collector_a|hololive|collector" \
+  HOLOLIVE_COLLECTOR_A_PASSWORD=collector HOLOLIVE_DB_PASSWORD=runtime DB_PASSWORD=legacy
+credential_case "explicit collector role" "hololive_collector_a|hololive|collector" \
+  POSTGRES_USER=hololive_collector_a HOLOLIVE_COLLECTOR_A_PASSWORD=collector HOLOLIVE_DB_PASSWORD=runtime
+credential_case "explicit password wins" "hololive_collector_a|hololive|explicit" \
+  POSTGRES_USER=hololive_collector_a POSTGRES_PASSWORD=explicit HOLOLIVE_COLLECTOR_A_PASSWORD=collector HOLOLIVE_DB_PASSWORD=runtime
 # 역할별 비밀번호가 없으면 다른 역할이나 admin(DB_PASSWORD) 비밀번호로 내려가지 않고 실행 전에 실패한다.
 credential_rejected_case() {
   local name="$1"
@@ -64,16 +64,16 @@ credential_rejected_case() {
 }
 
 credential_rejected_case "noncanonical role is not a collector credential" \
-  POSTGRES_USER=custom_scraper POSTGRES_PASSWORD=explicit HOLOLIVE_SCRAPER_PASSWORD=scraper
+  POSTGRES_USER=custom_scraper POSTGRES_PASSWORD=explicit HOLOLIVE_COLLECTOR_A_PASSWORD=collector
 
 credential_rejected_case "admin database password is not a role credential" \
   POSTGRES_USER=other DB_PASSWORD=legacy
-credential_rejected_case "scraper role does not borrow runtime credential" \
+credential_rejected_case "collector role does not borrow runtime credential" \
   POSTGRES_USER=hololive_scraper HOLOLIVE_DB_PASSWORD=runtime DB_PASSWORD=legacy
-credential_rejected_case "missing scraper password" \
-  POSTGRES_USER=hololive_scraper
+credential_rejected_case "missing collector password" \
+  POSTGRES_USER=hololive_collector_a
 
-if env -i PATH="$PATH" HOLOLIVE_SCRAPER_PASSWORD=scraper "$COLLECTOR_WRAPPER" "$credential_failure"; then
+if env -i PATH="$PATH" HOLOLIVE_COLLECTOR_A_PASSWORD=collector "$COLLECTOR_WRAPPER" "$credential_failure"; then
   fail "collector wrapper must preserve target command failure"
 else
   failure_status="$?"

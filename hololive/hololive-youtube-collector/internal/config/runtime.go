@@ -267,7 +267,11 @@ func (c *RuntimeConfig) validatePostgres() error {
 		return errors.New("POSTGRES_POOL_MIN_CONNS must be between 0 and POSTGRES_POOL_MAX_CONNS")
 	}
 
-	if err := validatePostgresUser(c.Postgres.User); err != nil {
+	if err := c.Collector.validateInstanceID(); err != nil {
+		return fmt.Errorf("validate youtube collector postgres user: %w", err)
+	}
+
+	if err := validatePostgresUser(c.Postgres.User, c.Collector.InstanceID); err != nil {
 		return fmt.Errorf("validate youtube collector postgres user: %w", err)
 	}
 
@@ -336,8 +340,12 @@ func validateReadablePostgresSSLRootCert(path string) error {
 	return nil
 }
 
-func validatePostgresUser(user string) error {
-	want := runtimepolicy.PostgresScraperRoleUser
+func validatePostgresUser(user, instanceID string) error {
+	want, ok := runtimepolicy.PostgresCollectorRoleUser(instanceID)
+	if !ok {
+		return errors.New("youtube-collector requires a supported collector database identity")
+	}
+
 	if strings.TrimSpace(user) != want {
 		return fmt.Errorf("%s requires POSTGRES_USER=%s", runtimepolicy.RuntimeYouTubeCollector, want)
 	}

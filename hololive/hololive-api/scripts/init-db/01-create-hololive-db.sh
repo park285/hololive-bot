@@ -45,12 +45,16 @@ HOLOLIVE_MIGRATOR_USER="${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}"
 # 두지 않는다.
 HOLOLIVE_DB_PASSWORD="${HOLOLIVE_DB_PASSWORD:-}"
 HOLOLIVE_MIGRATOR_PASSWORD="${HOLOLIVE_MIGRATOR_PASSWORD:-}"
-HOLOLIVE_SCRAPER_PASSWORD="${HOLOLIVE_SCRAPER_PASSWORD:-}"
+HOLOLIVE_COLLECTOR_A_PASSWORD="${HOLOLIVE_COLLECTOR_A_PASSWORD:-}"
+HOLOLIVE_COLLECTOR_B_PASSWORD="${HOLOLIVE_COLLECTOR_B_PASSWORD:-}"
+HOLOLIVE_COLLECTOR_C_PASSWORD="${HOLOLIVE_COLLECTOR_C_PASSWORD:-}"
+HOLOLIVE_COLLECTOR_D_PASSWORD="${HOLOLIVE_COLLECTOR_D_PASSWORD:-}"
 
 HOLOLIVE_REPLICATOR_USER="${HOLOLIVE_REPLICATOR_USER:-hololive_replicator}"
 HOLOLIVE_REPLICATOR_PASSWORD="${HOLOLIVE_REPLICATOR_PASSWORD:-}"
 export POSTGRES_ADMIN_PASSWORD HOLOLIVE_DB_PASSWORD HOLOLIVE_MIGRATOR_PASSWORD
-export HOLOLIVE_SCRAPER_PASSWORD HOLOLIVE_REPLICATOR_PASSWORD
+export HOLOLIVE_COLLECTOR_A_PASSWORD HOLOLIVE_COLLECTOR_B_PASSWORD
+export HOLOLIVE_COLLECTOR_C_PASSWORD HOLOLIVE_COLLECTOR_D_PASSWORD HOLOLIVE_REPLICATOR_PASSWORD
 
 require_role_password() {
   if [ -z "$2" ]; then
@@ -61,7 +65,10 @@ require_role_password() {
 
 require_role_password HOLOLIVE_DB_PASSWORD "${HOLOLIVE_DB_PASSWORD}"
 require_role_password HOLOLIVE_MIGRATOR_PASSWORD "${HOLOLIVE_MIGRATOR_PASSWORD}"
-require_role_password HOLOLIVE_SCRAPER_PASSWORD "${HOLOLIVE_SCRAPER_PASSWORD}"
+require_role_password HOLOLIVE_COLLECTOR_A_PASSWORD "${HOLOLIVE_COLLECTOR_A_PASSWORD}"
+require_role_password HOLOLIVE_COLLECTOR_B_PASSWORD "${HOLOLIVE_COLLECTOR_B_PASSWORD}"
+require_role_password HOLOLIVE_COLLECTOR_C_PASSWORD "${HOLOLIVE_COLLECTOR_C_PASSWORD}"
+require_role_password HOLOLIVE_COLLECTOR_D_PASSWORD "${HOLOLIVE_COLLECTOR_D_PASSWORD}"
 
 if [ -z "${POSTGRES_ADMIN_PASSWORD}" ]; then
   echo "POSTGRES_ADMIN_PASSWORD is required." >&2
@@ -77,11 +84,18 @@ psql -X -v ON_ERROR_STOP=1 -v ECHO=none -v ECHO_HIDDEN=off -v VERBOSITY=sqlstate
   --set=hololive_db="${HOLOLIVE_DB_NAME}" \
   --set=hololive_user=hololive_runtime \
   --set=hololive_migrator="${HOLOLIVE_MIGRATOR_USER}" \
-  --set=hololive_scraper=hololive_scraper <<'EOSQL'
+  --set=hololive_scraper=hololive_scraper \
+  --set=hololive_collector_a=hololive_collector_a \
+  --set=hololive_collector_b=hololive_collector_b \
+  --set=hololive_collector_c=hololive_collector_c \
+  --set=hololive_collector_d=hololive_collector_d <<'EOSQL'
 \getenv postgres_admin_password POSTGRES_ADMIN_PASSWORD
 \getenv hololive_user_password HOLOLIVE_DB_PASSWORD
 \getenv hololive_migrator_password HOLOLIVE_MIGRATOR_PASSWORD
-\getenv hololive_scraper_password HOLOLIVE_SCRAPER_PASSWORD
+\getenv hololive_collector_a_password HOLOLIVE_COLLECTOR_A_PASSWORD
+\getenv hololive_collector_b_password HOLOLIVE_COLLECTOR_B_PASSWORD
+\getenv hololive_collector_c_password HOLOLIVE_COLLECTOR_C_PASSWORD
+\getenv hololive_collector_d_password HOLOLIVE_COLLECTOR_D_PASSWORD
 
 SELECT format(
   'CREATE ROLE %I LOGIN SUPERUSER CREATEDB CREATEROLE INHERIT PASSWORD %L',
@@ -102,8 +116,17 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_user') \gexe
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_migrator', :'hololive_migrator_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_migrator') \gexec
 
-SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_scraper', :'hololive_scraper_password')
+SELECT format('CREATE ROLE %I NOLOGIN', :'hololive_scraper')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_scraper') \gexec
+
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_collector_a', :'hololive_collector_a_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_collector_a') \gexec
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_collector_b', :'hololive_collector_b_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_collector_b') \gexec
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_collector_c', :'hololive_collector_c_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_collector_c') \gexec
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'hololive_collector_d', :'hololive_collector_d_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_collector_d') \gexec
 
 SELECT format(
   'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD %L',
@@ -116,15 +139,41 @@ SELECT format(
 ) \gexec
 
 SELECT format(
+  'ALTER ROLE %I WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT CONNECTION LIMIT 0',
+  :'hololive_scraper'
+) \gexec
+
+SELECT format(
   'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD %L',
-  :'hololive_scraper', :'hololive_scraper_password'
+  :'hololive_collector_a', :'hololive_collector_a_password'
+) \gexec
+SELECT format(
+  'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD %L',
+  :'hololive_collector_b', :'hololive_collector_b_password'
+) \gexec
+SELECT format(
+  'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD %L',
+  :'hololive_collector_c', :'hololive_collector_c_password'
+) \gexec
+SELECT format(
+  'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD %L',
+  :'hololive_collector_d', :'hololive_collector_d_password'
+) \gexec
+
+SELECT format(
+  'GRANT %I TO %I, %I, %I, %I',
+  :'hololive_scraper', :'hololive_collector_a', :'hololive_collector_b',
+  :'hololive_collector_c', :'hololive_collector_d'
 ) \gexec
 
 -- Aggregate role limits, not per-process limits; runtime includes 3 control slots.
 -- Keep aligned with scripts/ci/postgres-capacity-policy.tsv and role-limits.sql.
 SELECT format('ALTER ROLE %I CONNECTION LIMIT 25', :'hololive_user') \gexec
 SELECT format('ALTER ROLE %I CONNECTION LIMIT 1', :'hololive_migrator') \gexec
-SELECT format('ALTER ROLE %I CONNECTION LIMIT 28', :'hololive_scraper') \gexec
+SELECT format('ALTER ROLE %I CONNECTION LIMIT 7', :'hololive_collector_a') \gexec
+SELECT format('ALTER ROLE %I CONNECTION LIMIT 7', :'hololive_collector_b') \gexec
+SELECT format('ALTER ROLE %I CONNECTION LIMIT 7', :'hololive_collector_c') \gexec
+SELECT format('ALTER ROLE %I CONNECTION LIMIT 7', :'hololive_collector_d') \gexec
 
 SELECT format('CREATE DATABASE %I OWNER %I', :'hololive_db', :'hololive_migrator')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'hololive_db') \gexec

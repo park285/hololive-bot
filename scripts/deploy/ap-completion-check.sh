@@ -93,7 +93,7 @@ if [[ -n "$change_started_at" ]]; then
 fi
 
 sudo -n grep -qx 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true' /etc/hololive-bot/youtube-collector-host.env
-sudo -n grep -qx 'POSTGRES_USER=hololive_scraper' /etc/hololive-bot/youtube-collector-host.env
+sudo -n grep -qx 'POSTGRES_USER=hololive_collector_a' /etc/hololive-bot/youtube-collector-host.env
 
 collector_readiness_fetch() {
   systemctl is-active --quiet "$unit" || return 1

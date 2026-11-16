@@ -9,6 +9,7 @@
 ## 미출시
 
 - **봇 명령 한도 완화:** 방송 이력·썸네일·시간, `!라이브`, `!스케쥴`의 1분 한도를 사용자당 3회에서 10회로, 방당 12회에서 40회로 올립니다. 세 묶음이 버킷을 따로 쓰는 것과 초과 시 제한 안내, Valkey 판정 실패 시 명령을 실행하지 않는 동작은 그대로입니다. Fallback delta: none.
+- **수집기 DB 계정 분리 (migration 028):** 수집기 a~d가 공용 로그인 `hololive_scraper` 대신 slot마다 `hololive_collector_a`~`d`로 접속합니다. `hololive_scraper`는 grant를 담는 그룹으로만 남고, db-migrate가 migration 전에 네 계정(SCRAM 비밀번호, 연결 한도 7, 그룹 멤버십)을 맞춘 뒤 `hololive_scraper`를 `NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL`로 바꾸고 남은 세션을 끊습니다. migration 028의 trigger는 수집기 세션을 자기 instance에 묶어, 만료 전인 다른 slot lease의 변경·인수, 다른 instance 이름의 lease·provenance·collision 기록, 자기 ACTIVE lease의 fence·projection generation과 맞지 않는 관측·queue 기록을 `42501`로 거부합니다. 예전에는 수집기 하나의 비밀번호로 다른 수집기의 lease를 빼앗거나 그 이름으로 관측을 쓸 수 있었습니다. 다만 한 slot의 계정으로 자기 이름의 새 lease 행을 만들어 target 관측을 쓰는 것, owner가 없는 다른 lease의 일정 열 변경, checkpoint와 payload 기록은 여전히 막지 않습니다(관측 subject·kind와 lease membership의 대조는 앱만 합니다). 운영 반영에는 비밀값 `HOLOLIVE_COLLECTOR_A_PASSWORD`~`D_PASSWORD`, 새 `pg_hba.conf`의 적용(단일 파일 mount라 `holo-postgres` 재시작이 필요할 수 있음), 중앙 db-migrate, collector 네 곳의 재배포가 필요하며, db-migrate부터 각 collector 재배포까지 해당 slot의 수집이 멈춥니다. 순서는 [collector runbook](docs/current/runbooks/youtube-collector.md#collector-db-계정-분리-컷오버)을 따릅니다. 이전 revision의 collector는 028이 있는 DB에 쓰지 못하므로 되돌리기는 fix-forward만 가능합니다. Fallback delta: none.
 
 ## v18.7.0 - 2026-11-16
 
