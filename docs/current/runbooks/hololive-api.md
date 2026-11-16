@@ -225,6 +225,9 @@ sudo podman exec holo-postgres psql -U postgres_admin -d hololive -c \
 비밀번호는 argv·호스트 process list에 남지 않도록 호스트의 원본 파일(`/etc/stack-secrets/valkey/hololive/operator-password`)을 stdin으로 넘깁니다.
 컨테이너 안의 마운트(`/run/valkey/operator-password`)는 root 0600이어서 컨테이너 사용자 `valkey`도, capability가 없는 컨테이너 root도 읽지 못합니다.
 
+앱 ACL 사용자 `hololive-api`와 `hololive-worker`는 각자 쓰는 key 접두어에만 접근합니다. 허용 접두어는 메타 저장소 `tools/ops/prepare-valkey-ha.py`의 `KEYS`에 있습니다.
+새 접두어를 쓰는 코드는 배포 전에 그 `KEYS`, stack-secrets 세 노드(hololive-seoul, kapu, iris-seoul)의 `valkey/hololive/users.acl`, 노드 런타임(`ACL SETUSER`)에 접두어를 넣어야 합니다. 빠지면 그 명령이 `NOPERM`으로 실패하고 `vk info stats`의 `acl_access_denied_key`가 늘어납니다.
+
 ```bash
 vk() { sudo cat /etc/stack-secrets/valkey/hololive/operator-password | sudo podman exec -i valkey-cache sh -c 'IFS= read -r p; VALKEYCLI_AUTH="$p" exec valkey-cli --no-auth-warning --tls --cacert /run/valkey-certs/ca.pem --user operator -h 127.0.0.1 -p 16379 "$@"' vk "$@"; }
 vk slowlog get 25
