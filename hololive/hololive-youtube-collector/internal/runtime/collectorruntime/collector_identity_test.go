@@ -81,7 +81,9 @@ func TestCollectorSessionPublishesPartialAndDefers(t *testing.T) {
 	})
 
 	content := stubJob(contract.ProviderYouTubeJS, "youtubejs_content", contract.KindVideoList, contract.KindShortsList)
+
 	content.collect = collectYouTubeJSPartialVideoList
+
 	spec := joblease.JobSpec{
 		JobKey: "collector:youtubejs:youtubejs_content:UC_TEST", Provider: contract.ProviderYouTubeJS, Class: testJobClassSubject,
 		CollectionJobKind: "youtubejs_content", SubjectKey: testSubjectKey, PollInterval: time.Minute,
@@ -91,19 +93,19 @@ func TestCollectorSessionPublishesPartialAndDefers(t *testing.T) {
 	runAdmittedSpec(ctx, t, newIdentityExecutor(t, collectorC, collectorCInstance, content), &spec)
 
 	var (
-		count int
-		state string
+		count    int
+		deferred bool
 	)
 
 	if err := pool.QueryRow(ctx, `
-		SELECT (SELECT count(*) FROM source_observations WHERE observation_kind = 'video_list'), slot_state
+		SELECT (SELECT count(*) FROM source_observations WHERE observation_kind = 'video_list'), slot_state = 'DEFERRED'
 		FROM youtube_collection_job_leases WHERE job_key = $1
-	`, spec.JobKey).Scan(&count, &state); err != nil {
+	`, spec.JobKey).Scan(&count, &deferred); err != nil {
 		t.Fatal(err)
 	}
 
-	if count != 1 || state != "DEFERRED" {
-		t.Fatalf("partial terminal state count=%d state=%s", count, state)
+	if count != 1 || !deferred {
+		t.Fatalf("partial terminal state count=%d deferred=%t", count, deferred)
 	}
 }
 
@@ -122,6 +124,7 @@ func TestCollectorSessionCannotActForAnotherCollector(t *testing.T) {
 	runAdmittedSpec(ctx, t, newIdentityExecutor(t, collectorC, collectorCInstance, metadataRunner()), &spec)
 
 	var observationID int64
+
 	if err := pool.QueryRow(ctx, `SELECT min(id) FROM source_observations`).Scan(&observationID); err != nil {
 		t.Fatal(err)
 	}
@@ -141,49 +144,7 @@ func TestCollectorSessionCannotActForAnotherCollector(t *testing.T) {
 		t.Fatalf("collector c renew own lease: %v", err)
 	}
 
-	for name, run := range map[string]func(*pgxpool.Pool) error{
-		"renew another collector's lease": func(session *pgxpool.Pool) error {
-			_, err := session.Exec(ctx, `
-				UPDATE youtube_collection_job_leases SET lease_expires_at = lease_expires_at + INTERVAL '1 minute'
-				WHERE job_key = $1`, spec.JobKey)
-
-			return err
-		},
-		"take over a live lease": func(session *pgxpool.Pool) error {
-			_, err := session.Exec(ctx, `
-				UPDATE youtube_collection_job_leases SET owner_instance = $2, fence_epoch = fence_epoch + 1
-				WHERE job_key = $1`, spec.JobKey, collectorDInstance)
-
-			return err
-		},
-		"insert a lease owned by another collector": func(session *pgxpool.Pool) error {
-			_, err := session.Exec(ctx, `
-				INSERT INTO youtube_collection_job_leases (
-					job_key, provider, job_class, collection_job_kind, subject_key, projection_generation,
-					poll_interval_ms, slot_state, scheduled_for, next_due_at, fence_epoch, owner_instance,
-					lease_expires_at, membership_kinds, membership_exact_subject, membership_target_count)
-				SELECT 'collector:youtubejs:youtubejs_channel_metadata:UC_OTHER', provider, job_class, collection_job_kind,
-				       'UC_OTHER', projection_generation, poll_interval_ms, 'ACTIVE', scheduled_for, next_due_at, 1, $2,
-				       lease_expires_at, membership_kinds, membership_exact_subject, membership_target_count
-				FROM youtube_collection_job_leases WHERE job_key = $1`, spec.JobKey, collectorCInstance)
-
-			return err
-		},
-		"resolve another collector's provenance": func(session *pgxpool.Pool) error {
-			_, err := session.Exec(ctx, `SELECT source_observation_provenance_id($1, $2, $3)`,
-				"collector:youtubejs:youtubejs_channel_metadata:UC_OTHER", collectorCInstance, metadataJobKind)
-
-			return err
-		},
-		"insert an observation under another collector's provenance": func(session *pgxpool.Pool) error {
-			return copyObservation(ctx, session, observationID)
-		},
-		"queue another collector's observation": func(session *pgxpool.Pool) error {
-			_, err := session.Exec(ctx, `INSERT INTO source_observation_queue (observation_id) VALUES ($1)`, observationID)
-
-			return err
-		},
-	} {
+	for name, run := range crossCollectorWrites(ctx, spec.JobKey, observationID) {
 		requireInsufficientPrivilege(t, run(collectorD), "collector d "+name)
 	}
 
@@ -213,6 +174,52 @@ func TestUnboundScraperSessionsCannotWrite(t *testing.T) {
 	}
 }
 
+func crossCollectorWrites(ctx context.Context, jobKey string, observationID int64) map[string]func(*pgxpool.Pool) error {
+	return map[string]func(*pgxpool.Pool) error{
+		"renew another collector's lease": func(session *pgxpool.Pool) error {
+			_, err := session.Exec(ctx, `
+				UPDATE youtube_collection_job_leases SET lease_expires_at = lease_expires_at + INTERVAL '1 minute'
+				WHERE job_key = $1`, jobKey)
+
+			return err
+		},
+		"take over a live lease": func(session *pgxpool.Pool) error {
+			_, err := session.Exec(ctx, `
+				UPDATE youtube_collection_job_leases SET owner_instance = $2, fence_epoch = fence_epoch + 1
+				WHERE job_key = $1`, jobKey, collectorDInstance)
+
+			return err
+		},
+		"insert a lease owned by another collector": func(session *pgxpool.Pool) error {
+			_, err := session.Exec(ctx, `
+				INSERT INTO youtube_collection_job_leases (
+					job_key, provider, job_class, collection_job_kind, subject_key, projection_generation,
+					poll_interval_ms, slot_state, scheduled_for, next_due_at, fence_epoch, owner_instance,
+					lease_expires_at, membership_kinds, membership_exact_subject, membership_target_count)
+				SELECT 'collector:youtubejs:youtubejs_channel_metadata:UC_OTHER', provider, job_class, collection_job_kind,
+				       'UC_OTHER', projection_generation, poll_interval_ms, 'ACTIVE', scheduled_for, next_due_at, 1, $2,
+				       lease_expires_at, membership_kinds, membership_exact_subject, membership_target_count
+				FROM youtube_collection_job_leases WHERE job_key = $1`, jobKey, collectorCInstance)
+
+			return err
+		},
+		"resolve another collector's provenance": func(session *pgxpool.Pool) error {
+			_, err := session.Exec(ctx, `SELECT source_observation_provenance_id($1, $2, $3)`,
+				"collector:youtubejs:youtubejs_channel_metadata:UC_OTHER", collectorCInstance, metadataJobKind)
+
+			return err
+		},
+		"insert an observation under another collector's provenance": func(session *pgxpool.Pool) error {
+			return copyObservation(ctx, session, observationID)
+		},
+		"queue another collector's observation": func(session *pgxpool.Pool) error {
+			_, err := session.Exec(ctx, `INSERT INTO source_observation_queue (observation_id) VALUES ($1)`, observationID)
+
+			return err
+		},
+	}
+}
+
 func metadataSpec() joblease.JobSpec {
 	return joblease.JobSpec{
 		JobKey: "collector:youtubejs:youtubejs_channel_metadata:UC_TEST", Provider: contract.ProviderYouTubeJS, Class: testJobClassSubject,
@@ -222,6 +229,7 @@ func metadataSpec() joblease.JobSpec {
 
 func metadataRunner() *stubRunner {
 	runner := stubJob(contract.ProviderYouTubeJS, metadataJobKind, contract.KindChannelProfile, contract.KindChannelPhoto)
+
 	runner.collect = collectYouTubeJSMetadata
 
 	return runner

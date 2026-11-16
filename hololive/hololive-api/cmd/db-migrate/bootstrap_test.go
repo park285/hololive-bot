@@ -100,9 +100,11 @@ func TestScraperGroupRoleIsNoLogin(t *testing.T) {
 		}
 
 		want := 3
+
 		if exists {
 			want = 2
 		}
+
 		if len(recorder.commands) != want {
 			t.Fatalf("commands=%d want=%d", len(recorder.commands), want)
 		}

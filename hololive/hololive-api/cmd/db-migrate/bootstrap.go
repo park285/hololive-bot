@@ -128,6 +128,7 @@ func upsertScraperGroupRole(ctx context.Context, conn roleConnection, scraperGro
 	}
 
 	roleIdent := pgx.Identifier{scraperGroup}.Sanitize()
+
 	if !exists {
 		if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("create_scraper_group_role.sql.tpl"), roleIdent)); err != nil {
 			return fmt.Errorf("bootstrap: create scraper group role: %w", err)

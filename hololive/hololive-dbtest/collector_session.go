@@ -12,7 +12,7 @@ import (
 )
 
 // NewCollectorSessionPool은 pool과 같은 데이터베이스에 붙되 연결마다 session_user를 role로 바꾼 pool을 돌려줍니다.
-// role은 이 데이터베이스의 public 객체 권한을 모두 받으므로, 이 pool의 거부는 권한이 아니라 trigger에서 나옵니다.
+// 이 role은 데이터베이스의 public 객체 권한을 모두 받으므로, 이 pool의 거부는 권한이 아니라 trigger에서 나옵니다.
 func NewCollectorSessionPool(tb testing.TB, pool *pgxpool.Pool, role string) *pgxpool.Pool {
 	tb.Helper()
 
@@ -22,6 +22,7 @@ func NewCollectorSessionPool(tb testing.TB, pool *pgxpool.Pool, role string) *pg
 
 	authorize := "SET SESSION AUTHORIZATION " + pgx.Identifier{role}.Sanitize()
 	cfg := pool.Config()
+
 	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		if _, err := conn.Exec(ctx, authorize); err != nil {
 			return fmt.Errorf("set collector session authorization: %w", err)
