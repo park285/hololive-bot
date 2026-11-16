@@ -168,7 +168,10 @@ case "$target" in
             'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' \
             'HOLOLIVE_DB_PASSWORD=HOLOLIVE_DB_PASSWORD!' \
             'HOLOLIVE_MIGRATOR_PASSWORD=HOLOLIVE_MIGRATOR_PASSWORD' \
-            'HOLOLIVE_SCRAPER_PASSWORD=HOLOLIVE_SCRAPER_PASSWORD!' \
+            'HOLOLIVE_COLLECTOR_A_PASSWORD=HOLOLIVE_COLLECTOR_A_PASSWORD!' \
+            'HOLOLIVE_COLLECTOR_B_PASSWORD=HOLOLIVE_COLLECTOR_B_PASSWORD!' \
+            'HOLOLIVE_COLLECTOR_C_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
+            'HOLOLIVE_COLLECTOR_D_PASSWORD=HOLOLIVE_COLLECTOR_D_PASSWORD!' \
             'HOLOLIVE_REPLICATOR_PASSWORD=HOLOLIVE_REPLICATOR_PASSWORD'
         ;;
     valkey-cache)
@@ -181,7 +184,10 @@ case "$target" in
         write_secret_env hololive-db-migrate \
             'PGPASSWORD=HOLOLIVE_MIGRATOR_PASSWORD' \
             'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' \
-            'HOLOLIVE_SCRAPER_PASSWORD=HOLOLIVE_SCRAPER_PASSWORD!'
+            'HOLOLIVE_COLLECTOR_A_PASSWORD=HOLOLIVE_COLLECTOR_A_PASSWORD!' \
+            'HOLOLIVE_COLLECTOR_B_PASSWORD=HOLOLIVE_COLLECTOR_B_PASSWORD!' \
+            'HOLOLIVE_COLLECTOR_C_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
+            'HOLOLIVE_COLLECTOR_D_PASSWORD=HOLOLIVE_COLLECTOR_D_PASSWORD!'
         ;;
     hololive-alarm-worker)
         validate_env_file_syntax "$compose_env"
@@ -215,7 +221,7 @@ case "$target" in
         validate_container_env_file "${secrets_dir}/youtube-collector.env"
         wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
         write_secret_env hololive-youtube-collector-c \
-            'POSTGRES_PASSWORD=HOLOLIVE_SCRAPER_PASSWORD!' \
+            'POSTGRES_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     admin-dashboard-ingress)

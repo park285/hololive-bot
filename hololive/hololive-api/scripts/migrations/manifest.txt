@@ -25,3 +25,4 @@
 025 025_bot_command_error_message_strings.sql
 026 026_schedule_poster_polish_memo.sql
 027 027_schedule_poster_post_channels.sql
+028 028_collector_database_identity_fence.sql

@@ -35,16 +35,19 @@ func TestQuoteSQLLiteral(t *testing.T) {
 	}
 }
 
-func TestBootstrapScraperRoleRequiresScraperPassword(t *testing.T) {
+func TestBootstrapScraperRoleRequiresEveryCollectorPassword(t *testing.T) {
 	t.Setenv("POSTGRES_ADMIN_PASSWORD", "admin-secret")
-	t.Setenv("HOLOLIVE_SCRAPER_PASSWORD", "")
+	t.Setenv("HOLOLIVE_COLLECTOR_A_PASSWORD", "collector-a-secret")
+	t.Setenv("HOLOLIVE_COLLECTOR_B_PASSWORD", "collector-b-secret")
+	t.Setenv("HOLOLIVE_COLLECTOR_C_PASSWORD", "")
+	t.Setenv("HOLOLIVE_COLLECTOR_D_PASSWORD", "collector-d-secret")
 	t.Setenv("PGHOST", t.TempDir())
 	t.Setenv("PGPORT", "1")
 	t.Setenv("PGSSLMODE", "disable")
 
 	err := bootstrapScraperRole(t.Context())
 	if err == nil {
-		t.Fatal("missing scraper password accepted")
+		t.Fatal("missing collector password accepted")
 	}
 
 	if _, dialed := errors.AsType[*pgconn.ConnectError](err); dialed {
@@ -55,7 +58,9 @@ func TestBootstrapScraperRoleRequiresScraperPassword(t *testing.T) {
 func TestBootstrapConnectionsRejectUnsafeConfigurationBeforeDial(t *testing.T) {
 	paths := map[string]func(context.Context, string) error{
 		"admin": func(ctx context.Context, dsn string) error {
-			return ensureScraperRole(ctx, dsn, "scraper", "scraper-password", "hololive")
+			return ensureCollectorRoles(ctx, dsn, "scraper", []collectorRoleCredential{
+				{user: "collector", password: "collector-password"},
+			}, "hololive")
 		},
 		"database": func(ctx context.Context, dsn string) error {
 			return grantScraperSchemaUsage(ctx, dsn, "scraper")
@@ -82,6 +87,31 @@ func TestBootstrapConnectionsRejectUnsafeConfigurationBeforeDial(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestScraperGroupRoleIsNoLogin(t *testing.T) {
+	t.Parallel()
+
+	for _, exists := range []bool{false, true} {
+		recorder := &scraperRoleRecorder{exists: exists}
+		if err := upsertScraperGroupRole(t.Context(), recorder, `scraper"group`); err != nil {
+			t.Fatal(err)
+		}
+
+		want := 2
+		if exists {
+			want = 1
+		}
+		if len(recorder.commands) != want {
+			t.Fatalf("commands=%d want=%d", len(recorder.commands), want)
+		}
+
+		for _, command := range recorder.commands {
+			if !strings.Contains(command, "NOLOGIN") || !strings.Contains(command, `"scraper""group"`) {
+				t.Fatal("scraper group SQL lost no-login or identifier quoting")
+			}
+		}
 	}
 }
 

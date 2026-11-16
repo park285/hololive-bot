@@ -19,9 +19,29 @@ const (
 	NotificationSchedulerRoleWorker = "worker"
 	NotificationSchedulerRoleOff    = "off"
 
-	PostgresScraperRoleUser = "hololive_scraper"
-	PostgresRuntimeRoleUser = "hololive_runtime"
+	PostgresScraperRoleUser    = "hololive_scraper"
+	PostgresRuntimeRoleUser    = "hololive_runtime"
+	PostgresCollectorARoleUser = "hololive_collector_a"
+	PostgresCollectorBRoleUser = "hololive_collector_b"
+	PostgresCollectorCRoleUser = "hololive_collector_c"
+	PostgresCollectorDRoleUser = "hololive_collector_d"
 )
+
+// PostgresCollectorRoleUser는 collector instance에 고정된 PostgreSQL login role을 반환합니다.
+func PostgresCollectorRoleUser(instanceID string) (string, bool) {
+	switch instanceID {
+	case "youtube-collector-a":
+		return PostgresCollectorARoleUser, true
+	case "youtube-collector-b":
+		return PostgresCollectorBRoleUser, true
+	case "youtube-collector-c":
+		return PostgresCollectorCRoleUser, true
+	case "youtube-collector-d":
+		return PostgresCollectorDRoleUser, true
+	default:
+		return "", false
+	}
+}
 
 // ValidateNoNotificationEgressOwnership: alarm-worker가 아닌 runtime이 proactive egress를 소유하지 못하게 한다.
 func ValidateNoNotificationEgressOwnership(runtime, egressRole, schedulerRole string) error {

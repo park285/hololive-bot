@@ -8,10 +8,10 @@
 
 | Host | Service | Runtime | Port | Ready | Env | DB role |
 |---|---|---|---:|---|---|---|
-| Osaka `a` | `youtube-collector-a` | host-native `hololive-youtube-collector@youtube-collector-a.service` | 30005 | `https://127.0.0.1:30005/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` + `youtube-collector-host.env` | `hololive_scraper` |
-| Seoul `b` | `youtube-collector-b` | iris-seoul Podman Quadlet `hololive-youtube-collector-b.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` | `hololive_scraper` |
-| Central `c` | `youtube-collector` | Podman Quadlet `hololive-youtube-collector-c.service` | 30025 | `https://127.0.0.1:30025/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` | `hololive_scraper` |
-| kapu `d` | `youtube-collector-d` | kapu Podman Quadlet `hololive-youtube-collector-d.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/collector-d/youtube-collector.env` | `hololive_scraper` |
+| Osaka `a` | `youtube-collector-a` | host-native `hololive-youtube-collector@youtube-collector-a.service` | 30005 | `https://127.0.0.1:30005/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` + `youtube-collector-host.env` | `hololive_collector_a` |
+| Seoul `b` | `youtube-collector-b` | iris-seoul Podman Quadlet `hololive-youtube-collector-b.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` | `hololive_collector_b` |
+| Central `c` | `youtube-collector` | Podman Quadlet `hololive-youtube-collector-c.service` | 30025 | `https://127.0.0.1:30025/ready` | `/etc/stack-secrets/hololive-bot/youtube-collector.env` | `hololive_collector_c` |
+| kapu `d` | `youtube-collector-d` | kapu Podman Quadlet `hololive-youtube-collector-d.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/collector-d/youtube-collector.env` | `hololive_collector_d` |
 
 Completion is `scripts/deploy/ap-completion-check.sh <host>` for host-native APs and `po-central-cutover.sh <c|b> check <backup>` (issuer·collector runtime, `/ready`, post-cutover logs) for Quadlet `c`·`b`. kapu `d` is a manually installed Quadlet ([deploy/podman/kapu](../../../deploy/podman/kapu/README.md)); check `hololive-youtube-collector-d.service` health and `/ready`.
 
@@ -104,7 +104,7 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 | `STACK_WORKER_PROFILE_FILE` | slot-specific strict `hololive/youtube-collector` profile; `collection.executor.enabled` owns worker enablement | yes |
 | `YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true` | must be true only on collector hosts | yes |
 | `YOUTUBE_COLLECTOR_INSTANCE_ID` | fleet identity `youtube-collector-a/b/c/d` | yes |
-| `POSTGRES_USER=hololive_scraper` | lease/observation insert only | yes |
+| `POSTGRES_USER=hololive_collector_<slot>` | slot-bound lease/observation identity | yes |
 | `POSTGRES_SSLMODE=verify-full` | required client verification | yes |
 | `HOLODEX_TIMEOUT_SECONDS` | Holodex request ceiling; must be positive | yes |
 | `OFFICIAL_SCHEDULE_TIMEOUT_SECONDS` | Official Schedule request ceiling; must be positive | yes |
@@ -296,7 +296,7 @@ Diagnosis:
 - 후보 탐색 실패 WARN은 같은 대상(projection 조회 또는 runner)의 연속 실패 동안 첫 건과 1분 간격 요약(`since`, `suppressed_cycles`)만 남습니다. cycle별 실패 빈도는 `youtube_collection_discovery_cycles_total`과 `/diagnostics/workers`로 보고, 복구는 `YouTube collection candidate discovery recovered` INFO(`failed_for`, `failed_cycles`)로 확인합니다.
 - DB 연결 거부·경로 없음과 PostgreSQL SQLSTATE class `08`·`57P01`~`57P03`은 `error_class=TRANSIENT`, 연결 dial 타임아웃은 `TIMEOUT`입니다. 인증 실패(`28P01`) 같은 다른 연결 오류는 `INTERNAL`로 남으므로 계정·grant 설정을 먼저 봅니다.
 - SSOT manifest의 migration `144`–`174` 적용 여부와 collection projection/target/lease 상태를 확인합니다.
-- `POSTGRES_USER=hololive_scraper` grant를 확인합니다.
+- instance와 같은 suffix의 `POSTGRES_USER=hololive_collector_<slot>` grant를 확인합니다.
 
 Mitigation:
 - fail-closed가 맞습니다. projection이나 lease 검증을 우회하지 않습니다.
@@ -305,10 +305,10 @@ Mitigation:
 
 Symptoms:
 - Publish errors
-- collector uses `hololive_runtime` instead of `hololive_scraper`
+- collector uses `hololive_runtime`, `hololive_scraper`, or another slot's collector role
 
 Diagnosis:
-- rendered `POSTGRES_USER` and `HOLOLIVE_SCRAPER_PASSWORD`를 확인합니다.
+- rendered `POSTGRES_USER` and the matching `HOLOLIVE_COLLECTOR_<slot>_PASSWORD`를 확인합니다.
 
 ### 4. Kernel Oops in `unix_fs_perm` on docker-default arm64 hosts
 

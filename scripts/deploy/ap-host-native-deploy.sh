@@ -14,7 +14,7 @@ done < "$REPO_ROOT/deploy/topology/hosts.conf"
 [[ -n "$AP_POSTGRES_HOST" ]] || { echo 'topology central address missing' >&2; exit 1; }
 AP_POSTGRES_POOL_MAX_CONNS=""
 while IFS='|' read -r owner _service _key _source _instances maximum _role; do
-  if [[ "$owner" == youtube-collector ]]; then AP_POSTGRES_POOL_MAX_CONNS="$maximum"; fi
+  if [[ "$owner" == youtube-collector-a ]]; then AP_POSTGRES_POOL_MAX_CONNS="$maximum"; fi
 done < "$REPO_ROOT/scripts/ci/postgres-capacity-policy.tsv"
 [[ "$AP_POSTGRES_POOL_MAX_CONNS" =~ ^[1-9][0-9]*$ ]] || { echo 'collector capacity policy missing' >&2; exit 1; }
 AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-5433}"
@@ -110,7 +110,7 @@ write_host_env() {
     printf 'YOUTUBEJS_NODE=/usr/bin/node\n'
     printf 'YOUTUBEJS_SCRIPT=/opt/hololive-bot/youtube-collector/current/youtubejs/src/server.mjs\n'
     printf 'YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS=90\n'
-    printf 'POSTGRES_USER=hololive_scraper\n'
+    printf 'POSTGRES_USER=hololive_collector_a\n'
     printf 'POSTGRES_HOST=%s\n' "$AP_POSTGRES_HOST"
     printf 'POSTGRES_PORT=%s\n' "$AP_POSTGRES_PORT"
     printf 'POSTGRES_DB=hololive\n'

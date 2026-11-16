@@ -20,7 +20,7 @@ func setYouTubeCollectorRuntimeLoadEnv(t *testing.T) {
 	t.Setenv("API_SECRET_KEY", "dummy-admin-secret")
 	t.Setenv("METRICS_API_KEY", "dummy-metrics-secret")
 	settingstest.SetRuntimeH3ServerEnv(t)
-	t.Setenv("POSTGRES_USER", runtimepolicy.PostgresScraperRoleUser)
+	t.Setenv("POSTGRES_USER", runtimepolicy.PostgresCollectorCRoleUser)
 	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", collectorInstanceC)
 	t.Setenv("YOUTUBE_COLLECTOR_RUNTIME_ALLOWED", "true")
 	useCollectorProfileFixture(t)
@@ -74,7 +74,7 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *RuntimeConfig {
 			H3KeyFile:      settingstest.HololiveH3KeyPath,
 		},
 		Postgres: settings.PostgresConfig{
-			User:         runtimepolicy.PostgresScraperRoleUser,
+			User:         runtimepolicy.PostgresCollectorCRoleUser,
 			Password:     "x",
 			SSLMode:      runtimepolicy.PostgresSSLModeVerifyFull,
 			SSLRootCert:  cert,
@@ -107,8 +107,8 @@ func TestCFG001CollectorLoaderSucceedsWithoutCacheEnv(t *testing.T) {
 		t.Fatalf("LoadRuntime() error = %v", err)
 	}
 
-	if cfg.Postgres.User != runtimepolicy.PostgresScraperRoleUser {
-		t.Fatalf("Postgres.User = %q, want %s", cfg.Postgres.User, runtimepolicy.PostgresScraperRoleUser)
+	if cfg.Postgres.User != runtimepolicy.PostgresCollectorCRoleUser {
+		t.Fatalf("Postgres.User = %q, want %s", cfg.Postgres.User, runtimepolicy.PostgresCollectorCRoleUser)
 	}
 
 	if cfg.Collector.InstanceID != collectorInstanceC {
@@ -406,7 +406,7 @@ func TestValidateYouTubeCollectorRuntimeRejectsInvalidCollectorBudget(t *testing
 	}
 }
 
-func TestValidateYouTubeCollectorRuntimeRequiresScraperPostgresUser(t *testing.T) {
+func TestValidateYouTubeCollectorRuntimeRequiresInstancePostgresUser(t *testing.T) {
 	settingstest.ClearRuntimeRoleEnv(t)
 
 	cfg := validYouTubeCollectorRuntimeConfig(t)
@@ -415,8 +415,8 @@ func TestValidateYouTubeCollectorRuntimeRequiresScraperPostgresUser(t *testing.T
 
 	err := cfg.Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "POSTGRES_USER="+runtimepolicy.PostgresScraperRoleUser) {
-		t.Fatalf("Validate() error = %v, want scraper postgres user", err)
+	if err == nil || !strings.Contains(err.Error(), "POSTGRES_USER="+runtimepolicy.PostgresCollectorCRoleUser) {
+		t.Fatalf("Validate() error = %v, want instance postgres user", err)
 	}
 }
 

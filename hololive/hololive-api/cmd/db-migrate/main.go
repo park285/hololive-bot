@@ -63,7 +63,7 @@ func run() error {
 	defer cancel()
 
 	if bootstrapErr := bootstrapScraperRole(ctx); bootstrapErr != nil {
-		return fmt.Errorf("bootstrap scraper role: %w", bootstrapErr)
+		return fmt.Errorf("bootstrap collector roles: %w", bootstrapErr)
 	}
 
 	connString, err := postgresConnString()

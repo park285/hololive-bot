@@ -47,6 +47,37 @@ func TestEmbeddedMigrationsFollowConventions(t *testing.T) {
 	}
 }
 
+func TestCollectorDatabaseIdentityFenceMigration(t *testing.T) {
+	t.Parallel()
+
+	content, err := fs.ReadFile(migrations.FS, "028_collector_database_identity_fence.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	source := string(content)
+	for _, required := range []string{
+		"session_user",
+		"collector database identity is not authorized",
+		"collector cannot acquire another active lease",
+		"collector payload requires an authorized observation in the same transaction",
+		"observation is not authorized by an active lease fence",
+		"observation target is not enabled for the lease generation",
+		"observation contract is not current",
+		"observation queue insert is not authorized by the active lease fence",
+		"target.observation_kind = ANY (contract.cadence_kinds)",
+		"BEFORE INSERT OR UPDATE ON public.youtube_collection_job_leases",
+		"CREATE CONSTRAINT TRIGGER enforce_source_observation_payload_identity_fence",
+		"DEFERRABLE INITIALLY DEFERRED",
+		"BEFORE INSERT ON public.source_observations",
+		"BEFORE INSERT ON public.source_observation_queue",
+	} {
+		if !strings.Contains(source, required) {
+			t.Errorf("collector database identity fence migration is missing %q", required)
+		}
+	}
+}
+
 func checkMigrationConventions(fsys fs.FS) error {
 	entries, err := dbmigrate.Manifest(fsys)
 	if err != nil {
