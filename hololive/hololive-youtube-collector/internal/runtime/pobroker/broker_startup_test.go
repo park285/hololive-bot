@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -185,6 +186,70 @@ func TestServeKeepsConnectionsUntilRetirementClosesThem(t *testing.T) {
 	}
 
 	require.Equal(t, ExitSessionClosed, broker.ExitReason())
+}
+
+func TestSessionCloseResponseHasContentLength(t *testing.T) {
+	broker, socket, _ := serveKeepAliveBroker(t)
+	c := dialBroker(t, socket)
+
+	require.Equal(t, http.StatusOK, roundTrip(t, c, http.MethodGet, "/health", ""))
+
+	body, err := json.Marshal(envelope{ProtocolVersion: protocolVersion, Generation: broker.Generation()})
+	require.NoError(t, err)
+
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, "http://po-broker/v1/session", strings.NewReader(string(body)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	require.NoError(t, c.conn.SetDeadline(time.Now().Add(10*time.Second)))
+	require.NoError(t, request.Write(c.conn))
+
+	response, err := http.ReadResponse(c.reader, request)
+	require.NoError(t, err)
+
+	defer response.Body.Close()
+
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Positive(t, response.ContentLength)
+	require.Empty(t, response.TransferEncoding)
+}
+
+func TestFlushedResponsesHaveContentLength(t *testing.T) {
+	tests := []struct {
+		name   string
+		write  func(http.ResponseWriter)
+		status int
+	}{
+		{"success", func(w http.ResponseWriter) { success(w, struct{ Closed bool }{true}) }, http.StatusOK},
+		{"failure", func(w http.ResponseWriter) { failure(w, http.StatusConflict, "expired") }, http.StatusConflict},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				tt.write(w)
+
+				if err := http.NewResponseController(w).Flush(); err != nil {
+					t.Errorf("Flush() error = %v", err)
+				}
+			}))
+			t.Cleanup(server.Close)
+
+			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)
+			require.NoError(t, err)
+
+			response, err := server.Client().Do(request)
+			require.NoError(t, err)
+
+			defer response.Body.Close()
+
+			data, err := io.ReadAll(response.Body)
+			require.NoError(t, err)
+			require.Equal(t, tt.status, response.StatusCode)
+			require.Equal(t, int64(len(data)), response.ContentLength)
+			require.Positive(t, response.ContentLength)
+			require.Empty(t, response.TransferEncoding)
+		})
+	}
 }
 
 // client(youtubejs/src/proof-broker.mjs)는 유휴 연결을 1초 뒤 닫지만 Node event loop가 멈추면 그보다 늦게 재사용할 수 있습니다.

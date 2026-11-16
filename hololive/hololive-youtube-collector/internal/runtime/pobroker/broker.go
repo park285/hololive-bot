@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -709,24 +710,34 @@ func success(w http.ResponseWriter, body any) bool {
 		return false
 	}
 
-	_, err = w.Write(encoded)
-
-	return err == nil
+	return writeBody(w, http.StatusOK, encoded)
 }
 
 func failure(w http.ResponseWriter, status int, code string) {
-	w.WriteHeader(status)
-
-	// 고정 본문의 인코딩은 실패하지 않으므로 오류는 연결 종료를 뜻한다.
-	// net/http가 연결을 닫으며, 상태 변경 실패는 본문 전달 여부와 관계없이 해당 세대를 종료한다.
-	if err := json.MarshalWrite(w, struct {
+	encoded, err := json.Marshal(struct {
 		ProtocolVersion int `json:"protocol_version"`
 		Error           struct {
 			Code string `json:"code"`
 		} `json:"error"`
 	}{ProtocolVersion: protocolVersion, Error: struct {
 		Code string `json:"code"`
-	}{code}}); err != nil {
+	}{code}})
+	if err != nil {
+		w.WriteHeader(status)
+
 		return
 	}
+
+	// 쓰기 오류는 연결이 끊겼다는 뜻이며, 상태 변경 실패는 본문 전달 여부와 관계없이 해당 세대를 종료한다.
+	writeBody(w, status, encoded)
+}
+
+// 퇴역 응답은 Flush 직후 server.Close가 연결을 닫으므로, chunked 종료 표시가 잘리지 않게 길이를 먼저 보낸다.
+func writeBody(w http.ResponseWriter, status int, encoded []byte) bool {
+	w.Header().Set("Content-Length", strconv.Itoa(len(encoded)))
+	w.WriteHeader(status)
+
+	_, err := w.Write(encoded)
+
+	return err == nil
 }
