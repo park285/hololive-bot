@@ -303,6 +303,10 @@ class ResolvedPairTest(unittest.TestCase):
         self.record = self.directory / self.module.UNIT_RECORD
         self.record.write_text("\n".join(lines) + "\n")
         self.pair = {"service": service, "image": IMAGE}
+        self.fragments = self.root / "generated"
+        self.fragments.mkdir()
+        self.fragment = self.fragments / (Path(unit).stem + ".service")
+        self.fragment.write_text("[X-Container]\n")
         return values
 
     def existing_volume(self, name):
@@ -315,6 +319,10 @@ class ResolvedPairTest(unittest.TestCase):
     def lifecycle(self, command, **kwargs):
         args = list(command)
         self.calls.append(args)
+        if args[:2] == ["systemctl", "show"]:
+            unit = Path(self.module.QUADLET_UNITS[self.pair["service"]]).stem
+            self.assertEqual(args[2:], [unit + ".service", "--property=FragmentPath", "--value"])
+            return subprocess.CompletedProcess(args, 0, str(self.fragment))
         if args[:3] == ["podman", "volume", "inspect"]:
             if args[3] not in self.volumes:
                 raise subprocess.CalledProcessError(1, args)
@@ -379,11 +387,17 @@ class ResolvedPairTest(unittest.TestCase):
                 fixture.setUp()
                 try:
                     fixture.case(service)
+                    # 기본 unit 밖의 호스트 MCS 정책도 실제 generator를 거친다.
+                    dropins = fixture.units / (fixture.module.QUADLET_UNITS[service] + ".d")
+                    dropins.mkdir()
+                    (dropins / "50-mcs-level.conf").write_text(
+                        "[Container]\nSecurityLabelLevel=s0:c900,c901\n")
                     mountpoint = fixture.existing_volume(name)
-                    generated = fixture.real_run(
-                        [str(QUADLET), "-dryrun"],
+                    fixture.real_run(
+                        [str(QUADLET), "-no-kmsg-log", str(fixture.fragments)],
                         env=dict(os.environ, QUADLET_UNIT_DIRS=str(fixture.units)),
-                        capture_output=True, text=True, timeout=30, check=True).stdout
+                        capture_output=True, text=True, timeout=30, check=True)
+                    generated = fixture.fragment.read_text()
                     unit = Path(fixture.module.QUADLET_UNITS[service]).stem
                     runtime = next(line for line in generated.splitlines()
                                    if line.startswith("ExecStart=") and f" --name {unit} " in line)
@@ -391,6 +405,8 @@ class ResolvedPairTest(unittest.TestCase):
                     fixture.check()
                     args, env, _ = fixture.consumed[-1]
                     self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:{flags}", args)
+                    level = next(value for value in shlex.split(runtime) if value.startswith("label=level:"))
+                    self.assertIn(level, args)
                     self.assertEqual(env["YOUTUBE_COLLECTOR_INSTANCE_ID"], unit.removeprefix("hololive-"))
                     self.assertEqual("--userns" in args, service == "youtube-collector")
                     if service == "youtube-collector":

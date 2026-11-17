@@ -8,6 +8,10 @@
 
 ## 미출시
 
+## v18.8.2 - 2026-11-18
+
+- **Pair 사전 점검:** 기본 unit 밖의 호스트 drop-in이 정한 SELinux MCS 레벨을 native Quadlet 생성 결과에서 읽어 후보 검사에 보존합니다. 실행 중 서비스와 다른 임의 레벨 때문에 읽기 전용 비밀 mount가 거부되던 문제를 수정하며, 파일 권한·비밀 원본·SELinux 강제 정책은 바꾸지 않습니다.
+
 ## v18.8.1 - 2026-11-18
 
 - **공통 라이브러리 경계:** 다섯 Go 모듈의 생산·fixture import를 shared-go core/postgres/transport로 이전했습니다. 게시·출처 검증을 완료한 root `v2.24.0`, postgres `v1.0.1`, core·transport `v1.0.0`을 사용하며 기존 업무 sibling replace만 production manifest에 유지합니다.
