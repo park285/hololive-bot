@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- **의존성:** 다섯 Go 모듈을 shared-go v2.22.2로 올렸습니다. shared-go 코드 변경은 없고, 함께 올라오는 puddle v2.2.4(pgx 연결 풀)는 `CreateResource`로 시작한 연결 생성이 `Close`·`Reset` 뒤에 끝나면 그 연결을 폐기해 풀 통계에 남거나 재사용되지 않게 합니다. Fallback delta: none.
 - **의존성:** 다섯 Go 모듈을 shared-go v2.22.1로 올렸습니다. shared-go `logging`이 `Authorization`·`Proxy-Authorization`·`cookie` 같은 헤더 자격 증명의 따옴표 없는 값을 줄 끝까지 가립니다. 이 저장소는 shared-go의 `llm`과 `irisdurable/pgstore`를 쓰지 않아 응답 상한·nonce prune 변경의 영향은 없습니다. Fallback delta: none.
 
 ## v18.8.0 - 2026-11-17

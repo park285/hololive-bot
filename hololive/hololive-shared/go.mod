@@ -12,7 +12,7 @@ require (
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/park285/iris-client-go/v5 v5.2.0
-	github.com/park285/shared-go/v2 v2.22.1
+	github.com/park285/shared-go/v2 v2.22.2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.65.0
 	github.com/stretchr/testify v1.12.1
@@ -55,7 +55,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/puddle/v2 v2.2.3 // indirect
+	github.com/jackc/puddle/v2 v2.2.4 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.20.4 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.2 // indirect
