@@ -8,6 +8,8 @@
 
 ## 미출시
 
+## v18.8.3 - 2026-11-18
+
 - **수집기 배포 payload:** paired cutover에 env 렌더러와 두 필수 라이브러리를 함께 전송합니다. 기존 profile fixture도 실제 전송 목록으로 만든 payload에서 렌더링하도록 바꿔 저장소 전체에서만 성공하고 원격에서 파일이 빠지는 회귀를 막습니다. 실행 코드·공개 dependency·runtime artifact 버전은 변경하지 않습니다.
 
 ## v18.8.2 - 2026-11-18
