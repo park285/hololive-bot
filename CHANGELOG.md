@@ -8,6 +8,8 @@
 
 ## 미출시
 
+- **의존성:** 다섯 Go 모듈을 shared-go v2.22.1로 올렸습니다. shared-go `logging`이 `Authorization`·`Proxy-Authorization`·`cookie` 같은 헤더 자격 증명의 따옴표 없는 값을 줄 끝까지 가립니다. 이 저장소는 shared-go의 `llm`과 `irisdurable/pgstore`를 쓰지 않아 응답 상한·nonce prune 변경의 영향은 없습니다. Fallback delta: none.
+
 ## v18.8.0 - 2026-11-17
 
 - **YouTube 응답 크기 제한:** 수집기 youtubejs helper의 공용 fetch transport가 성공 응답 body를 youtubei.js가 해석하기 전에 8 MiB로 제한합니다. 선언한 길이가 상한을 넘으면 body를 취소하고, 길이를 모르거나 압축된 응답은 해제한 누적 바이트로 끊습니다. 초과는 재시도하지 않고 기존 `response_too_large`(RESOURCE_LIMIT)로 보고하므로, 큰 응답 하나로 helper가 heap 고갈로 죽는 대신 그 수집만 실패합니다. 재시도·리다이렉트·단일 시도 경로가 같은 상한을 쓰며 status·header·URL·clone 동작은 그대로입니다. Fallback delta: none.

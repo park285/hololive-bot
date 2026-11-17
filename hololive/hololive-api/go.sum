@@ -169,8 +169,8 @@ github.com/pandatix/go-abnf v0.5.5 h1:EXex5KkRQx4Dm6GnpAcQnIMBs9KiK0uf8p/wq+4t9P
 github.com/pandatix/go-abnf v0.5.5/go.mod h1:AE0KD3/VNoCjGzc1gqetRKshbI4SYErXQ/8kPenR5mc=
 github.com/park285/iris-client-go/v5 v5.2.0 h1:eUyYjCZc0j4BUNatzZ8MIt/Vx1TXLEYcG9TD0CsL3WA=
 github.com/park285/iris-client-go/v5 v5.2.0/go.mod h1:Vzx5navxO3IXXiYrfUmtX4eOaRdMBYLjcR7XNF6rOv4=
-github.com/park285/shared-go/v2 v2.22.0 h1:oQuZJaBEi/h4awerSEzg0wqJhA+YuxEXRA5xjo454zM=
-github.com/park285/shared-go/v2 v2.22.0/go.mod h1:N/2chShvHc6DXCygxrXuPtyOEeE33N7j9ZZ+MjrBb+M=
+github.com/park285/shared-go/v2 v2.22.1 h1:+7nZKfzKciqrC8p+0mTsRdAXdDiu1/hs8/6m3tA8pPQ=
+github.com/park285/shared-go/v2 v2.22.1/go.mod h1:N/2chShvHc6DXCygxrXuPtyOEeE33N7j9ZZ+MjrBb+M=
 github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
 github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
