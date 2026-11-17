@@ -1,3 +1,6 @@
 scripts/deploy/lib/po-sandbox-image.sh
 hololive/hololive-api/scripts/migrations/001_schema_epoch3_baseline.sql
 scripts/deploy/lib/worker-profile-pair.py
+scripts/deploy/quadlet-prestart.sh
+scripts/deploy/lib/admin-bind.sh
+scripts/deploy/lib/public-bind-mounts.sh
