@@ -31,6 +31,7 @@ func TestRuntimeAndMaintenanceDatabasePoliciesStaySeparate(t *testing.T) {
 
 	config := settings.PostgresConfig{PoolMinConns: 0, PoolMaxConns: 2}
 	runtime := runtimePostgresConfig(&config, RuntimePool{Name: preflightBotPool, ReservedConns: 1})
+	require.NotNil(t, runtime)
 	require.Equal(t, "hololive-api/bot", runtime.RuntimeParams["application_name"])
 	require.Equal(t, "30000", runtime.RuntimeParams["statement_timeout"])
 	require.Equal(t, int32(1), runtime.AcquirePolicy.ReservedConns)
