@@ -25,6 +25,7 @@ LABEL org.opencontainers.image.title="iris-stack-pgbouncer" \
       io.hololive.pgbouncer.sha256="00886a2994b4844cd37110970df777772cfc42a74c400522c82fba509a3f42d9"
 COPY --from=build --chmod=0755 /src/pgbouncer/pgbouncer /usr/local/bin/pgbouncer
 COPY --from=build /src/pgbouncer/COPYRIGHT /usr/local/share/licenses/pgbouncer/COPYRIGHT
+COPY --chmod=0755 startup-health.sh /usr/local/bin/pgbouncer-startup-health
 USER 10001:10001
 EXPOSE 6432
 ENTRYPOINT ["/usr/local/bin/pgbouncer"]

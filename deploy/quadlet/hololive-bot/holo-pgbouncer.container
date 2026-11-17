@@ -37,7 +37,7 @@ HealthInterval=30s
 HealthTimeout=5s
 HealthRetries=3
 HealthStartPeriod=10s
-HealthStartupCmd=["psql","-X","-w","-h","/tmp","-p","6432","-U","pgbouncer","-d","pgbouncer","-v","ON_ERROR_STOP=1","-Atc","SHOW VERSION"]
+HealthStartupCmd=["/usr/local/bin/pgbouncer-startup-health","holo-pgbouncer","holo-postgres"]
 HealthStartupInterval=2s
 HealthStartupTimeout=5s
 HealthOnFailure=stop
