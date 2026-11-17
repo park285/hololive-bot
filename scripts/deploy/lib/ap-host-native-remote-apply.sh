@@ -159,7 +159,7 @@ sudo -n systemd-run --quiet --wait --pipe --collect \
   --property="WorkingDirectory=$release_dir" --property=ProtectHome=yes --property=ProtectSystem=strict \
   --property=PrivateTmp=yes \
   --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env \
-  --property="EnvironmentFile=$payload/youtube-collector-host.env" \
+  --property="EnvironmentFile=$release_dir/youtube-collector-host.env" \
   /usr/bin/env "STACK_WORKER_PROFILE_FILE=$release_dir/worker-profile.json" \
   "$release_dir/bin/youtube-collector-wrapper" "$release_dir/bin/youtube-collector" --check-worker-profile
 sudo -n sh -c 'cd "$1" && sha256sum bin/youtube-collector worker-profile.json > SHA256SUMS && chmod 0444 SHA256SUMS' sh "$release_dir"
