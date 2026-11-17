@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+	sharedh3 "github.com/park285/shared-go/transport/h3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

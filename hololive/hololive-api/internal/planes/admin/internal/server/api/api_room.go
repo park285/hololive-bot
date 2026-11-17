@@ -23,7 +23,6 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -203,7 +202,7 @@ func (h *RoomHandler) changeRoom(c *gin.Context, change roomChange) {
 	case !changed:
 		ginjson.Respond(c, http.StatusOK, roomChangeResponse{Status: "ok", Message: change.unchangedMessage, Changed: false})
 	default:
-		h.logActivity(change.activity, change.activityPrefix+req.Room, map[string]any{"room": req.Room})
+		h.logActivity(change.activity, change.activityPrefix, []slog.Attr{slog.String("room", req.Room)})
 		ginjson.Respond(c, http.StatusOK, roomChangeResponse{Status: "ok", Message: change.changedMessage, Changed: true})
 	}
 }
@@ -274,8 +273,8 @@ func (h *RoomHandler) logCommittedACLChange(beforeEnabled bool, beforeMode acl.A
 		return
 	}
 
-	h.logActivity("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s (later step failed)", enabled, mode),
-		map[string]any{"enabled": enabled, "mode": string(mode), "partial": true})
+	h.logActivity("acl_update", "Room ACL updated before later step failed",
+		[]slog.Attr{slog.Bool("enabled", enabled), slog.String("mode", string(mode)), slog.Bool("partial", true)})
 }
 
 func (h *RoomHandler) parseACLMode(c *gin.Context, rawMode *string) (acl.ACLMode, bool) {
@@ -326,7 +325,7 @@ func (h *RoomHandler) respondSetACL(c *gin.Context) {
 	enabled, mode, _ := h.acl.GetACLStatus()
 	h.safeLogger().Info("Room ACL updated", slog.Bool("enabled", enabled), slog.String("mode", string(mode)))
 
-	h.logActivity("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s", enabled, mode), map[string]any{"enabled": enabled, "mode": string(mode)})
+	h.logActivity("acl_update", "Room ACL updated", []slog.Attr{slog.Bool("enabled", enabled), slog.String("mode", string(mode))})
 	ginjson.Respond(c, http.StatusOK, setACLResponse{
 		Status:  "ok",
 		Message: "ACL setting updated successfully",

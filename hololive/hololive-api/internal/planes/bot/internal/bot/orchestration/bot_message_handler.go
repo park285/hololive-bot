@@ -69,11 +69,11 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 	defer func() {
 		if r := recover(); r != nil {
 			sharedlog.Error(ctx, b.logger, EventBotCommandPanic, "panic in command handler",
-				slog.Any("panic", r),
+				slog.Group("panic", slog.String("type", fmt.Sprintf("%T", r))),
 				slog.String("command", commandType),
 			)
 
-			resultErr = commandOutcomeUnknownError{cause: fmt.Errorf("process bot command: panic: %v", r)}
+			resultErr = commandOutcomeUnknownError{cause: fmt.Errorf("process bot command: panic type: %T", r)}
 		}
 	}()
 

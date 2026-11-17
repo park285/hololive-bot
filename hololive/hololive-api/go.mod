@@ -12,7 +12,10 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/kapu/hololive-youtube-collector v0.0.0
 	github.com/park285/iris-client-go/v5 v5.2.0
-	github.com/park285/shared-go/v2 v2.22.2
+	github.com/park285/shared-go/core v1.0.0
+	github.com/park285/shared-go/postgres v1.0.1
+	github.com/park285/shared-go/transport v1.0.0
+	github.com/park285/shared-go/v2 v2.24.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.65.0
 	github.com/stretchr/testify v1.12.1

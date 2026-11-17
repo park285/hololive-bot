@@ -3,7 +3,7 @@ package dbtest
 import (
 	"testing"
 
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 func TestTemplateRowVersionMigration(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -39,23 +39,42 @@ func ProvideDatabaseResources(
 	pool RuntimePool,
 	logger *slog.Logger,
 ) (*DatabaseResources, func(), error) {
-	return provideDatabaseResources(ctx, postgresConfig, pool.Name,
-		map[string]string{"statement_timeout": "30000", "application_name": runtimeApplicationName(pool.Name)},
-		&pgxdb.CancelRequestConfig{CancelRequestDelay: 0, DeadlineDelay: time.Second},
-		&pgxdb.AcquirePolicy{Timeout: 5 * time.Second, ReservedConns: pool.ReservedConns}, logger)
+	return provideDatabaseResources(ctx, runtimePostgresConfig(postgresConfig, pool), pool.Name, logger)
 }
 
 // ProvideMaintenanceDatabaseResources는 runtime statement/cancel 정책을 상속하지 않는다.
 func ProvideMaintenanceDatabaseResources(ctx context.Context, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
-	return provideDatabaseResources(ctx, postgresConfig, "", nil, nil, nil, logger)
+	return provideDatabaseResources(ctx, servicePostgresConfig(postgresConfig), "", logger)
 }
 
-func provideDatabaseResources(ctx context.Context, postgresConfig *settings.PostgresConfig, poolName string, runtimeParams map[string]string, cancelRequest *pgxdb.CancelRequestConfig, acquirePolicy *pgxdb.AcquirePolicy, logger *slog.Logger) (*DatabaseResources, func(), error) {
-	if postgresConfig == nil {
-		return nil, nil, errors.New("postgres config is nil")
+// Preflight는 runtime의 DB 옵션과 로컬 TLS 파일을 연결 없이 검사한다.
+func Preflight(postgresConfig *settings.PostgresConfig, pool RuntimePool) error {
+	if err := databasesvc.Preflight(runtimePostgresConfig(postgresConfig, pool)); err != nil {
+		return fmt.Errorf("preflight database %s: %w", pool.Name, err)
 	}
 
-	dbService, err := databasesvc.NewPostgresService(ctx, &databasesvc.PostgresConfig{
+	return nil
+}
+
+func runtimePostgresConfig(config *settings.PostgresConfig, pool RuntimePool) *databasesvc.PostgresConfig {
+	resolved := servicePostgresConfig(config)
+	if resolved == nil {
+		return nil
+	}
+
+	resolved.RuntimeParams = map[string]string{"statement_timeout": "30000", "application_name": runtimeApplicationName(pool.Name)}
+	resolved.CancelRequest = &pgxdb.CancelRequestConfig{CancelRequestDelay: 0, DeadlineDelay: time.Second}
+	resolved.AcquirePolicy = &pgxdb.AcquirePolicy{Timeout: 5 * time.Second, ReservedConns: pool.ReservedConns}
+
+	return resolved
+}
+
+func servicePostgresConfig(postgresConfig *settings.PostgresConfig) *databasesvc.PostgresConfig {
+	if postgresConfig == nil {
+		return nil
+	}
+
+	return &databasesvc.PostgresConfig{
 		Host:          postgresConfig.Host,
 		Port:          postgresConfig.Port,
 		SocketPath:    postgresConfig.SocketPath,
@@ -67,10 +86,11 @@ func provideDatabaseResources(ctx context.Context, postgresConfig *settings.Post
 		QueryExecMode: postgresConfig.QueryExecMode,
 		PoolMinConns:  postgresConfig.PoolMinConns,
 		PoolMaxConns:  postgresConfig.PoolMaxConns,
-		RuntimeParams: runtimeParams,
-		CancelRequest: cancelRequest,
-		AcquirePolicy: acquirePolicy,
-	}, logger)
+	}
+}
+
+func provideDatabaseResources(ctx context.Context, config *databasesvc.PostgresConfig, poolName string, logger *slog.Logger) (*DatabaseResources, func(), error) {
+	dbService, err := databasesvc.NewPostgresService(ctx, config, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create database resources: %w", err)
 	}

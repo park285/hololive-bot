@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+	sharedenv "github.com/park285/shared-go/core/envutil"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 )

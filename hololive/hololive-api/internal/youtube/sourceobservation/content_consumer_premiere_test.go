@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/content"
 	livereconcile "github.com/kapu/hololive-api/internal/youtube/reconcile/live"

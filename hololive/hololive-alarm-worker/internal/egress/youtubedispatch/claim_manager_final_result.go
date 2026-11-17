@@ -27,6 +27,6 @@ func appendLatencyClassificationLogAttr(attrs []any, classification *timeline.Po
 		slog.String("delay_source", string(classification.DelaySource)),
 		slog.String("internal_delay_cause", string(classification.InternalDelayCause)),
 		slog.String("reason_code", string(timeline.ClassifyPostLatencyReasonCode(classification))),
-		slog.Any("evidence", classification.Evidence),
+		slog.Group("evidence", slog.Int("count", len(classification.Evidence))),
 	))
 }

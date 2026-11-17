@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
-	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+	sharedenv "github.com/park285/shared-go/core/envutil"
+	sharedh3 "github.com/park285/shared-go/transport/h3"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"

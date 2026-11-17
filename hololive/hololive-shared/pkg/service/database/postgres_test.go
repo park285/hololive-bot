@@ -21,10 +21,11 @@
 package database
 
 import (
+	"context"
 	"testing"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -93,10 +94,62 @@ func TestNewPostgresServiceRejectsReserveWithoutOrdinaryCapacity(t *testing.T) {
 	t.Parallel()
 
 	service, err := NewPostgresService(t.Context(), &PostgresConfig{
-		Host: "127.0.0.1", Port: 1, User: "test", Database: "test", SSLMode: "disable",
+		Host: "127.0.0.1", Port: 1, User: "preflight_user", Database: "preflight_db", SSLMode: "disable",
 		PoolMinConns: 0, PoolMaxConns: 1,
 		AcquirePolicy: &pgxdb.AcquirePolicy{ReservedConns: 1, Timeout: 5 * time.Second},
 	}, nil)
 	require.ErrorContains(t, err, "acquire policy")
 	require.Nil(t, service)
+}
+
+func TestPreflightMatchesRejectedPoolPreparation(t *testing.T) {
+	t.Parallel()
+
+	base := PostgresConfig{
+		Host: "127.0.0.1", Port: 1, User: "preflight_user", Database: "preflight_db", SSLMode: "disable",
+		PoolMinConns: 0, PoolMaxConns: 2,
+		AcquirePolicy: &pgxdb.AcquirePolicy{ReservedConns: 1, Timeout: 5 * time.Second},
+	}
+
+	for _, test := range []struct {
+		name   string
+		mutate func(*PostgresConfig)
+	}{
+		{name: "음수 최소 연결", mutate: func(config *PostgresConfig) { config.PoolMinConns = -1 }},
+		{name: "일반 연결 용량 없음", mutate: func(config *PostgresConfig) { config.PoolMaxConns = 1 }},
+		{name: "잘못된 TLS 모드", mutate: func(config *PostgresConfig) { config.SSLMode = "invalid" }},
+		{name: "없는 CA 파일", mutate: func(config *PostgresConfig) {
+			config.SSLMode = "verify-full"
+			config.SSLRootCert = t.TempDir() + "/missing-ca.pem"
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			config := base
+			test.mutate(&config)
+
+			preflightErr := Preflight(&config)
+			require.Error(t, preflightErr)
+
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+
+			service, openErr := NewPostgresService(ctx, &config, nil)
+			require.Error(t, openErr)
+			require.NotErrorIs(t, openErr, context.Canceled)
+			assert.Nil(t, service)
+		})
+	}
+}
+
+func TestPreflightDoesNotRequireReachableDatabase(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, Preflight(&PostgresConfig{
+		Host: "database.invalid", Port: 1, User: "preflight_user", Database: "preflight_db", SSLMode: "disable",
+		PoolMinConns: 0, PoolMaxConns: 2,
+		AcquirePolicy: &pgxdb.AcquirePolicy{ReservedConns: 1, Timeout: 5 * time.Second},
+	}))
+	require.Error(t, Preflight(nil))
 }

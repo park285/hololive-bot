@@ -188,7 +188,7 @@ func (c *AlarmCommand) handleAlarmMutation(ctx context.Context, cmdCtx *botcomma
 	if logger := c.Deps().Logger; logger.Enabled(ctx, slog.LevelDebug) {
 		logger.Debug(mutation.requestedLog,
 			sharedprivacylog.RoomIDAttr(cmdCtx.Room),
-			slog.Any("types", alarmTypes))
+			slog.Group("types", slog.Int("count", len(alarmTypes))))
 	}
 
 	channel, err := mutation.resolve(ctx, cmdCtx.Room, memberName)

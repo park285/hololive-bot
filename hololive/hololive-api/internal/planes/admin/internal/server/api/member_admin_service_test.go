@@ -92,11 +92,16 @@ type recordingActivity struct {
 	entries []map[string]any
 }
 
-func (a *recordingActivity) Log(_, _ string, details map[string]any) {
+func (a *recordingActivity) Log(_, _ string, details []slog.Attr) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.entries = append(a.entries, details)
+	entry := make(map[string]any, len(details))
+	for _, attr := range details {
+		entry[attr.Key] = attr.Value.Any()
+	}
+
+	a.entries = append(a.entries, entry)
 }
 
 func assertMemberAuditCount(t *testing.T, audit *recordingActivity, want int) {

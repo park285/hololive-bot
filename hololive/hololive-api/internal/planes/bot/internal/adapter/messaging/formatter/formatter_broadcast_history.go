@@ -28,8 +28,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/park285/shared-go/core/stringutil"
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"

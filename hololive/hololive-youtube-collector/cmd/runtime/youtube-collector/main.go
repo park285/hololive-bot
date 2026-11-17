@@ -12,12 +12,13 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"github.com/park285/shared-go/v2/pkg/envutil"
+	"github.com/park285/shared-go/core/envutil"
 	"github.com/park285/shared-go/v2/pkg/health"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/entrypoint"
+	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime"
 )
@@ -26,7 +27,7 @@ var Version = "dev"
 
 func main() {
 	if handled, exitCode := entrypoint.RunWorkerProfileCheck(os.Args[1:], os.Stderr, "youtube collector", func() error {
-		if _, err := collectorconfig.LoadWorkerProfile(); err != nil {
+		if _, err := loadRuntime(); err != nil {
 			return fmt.Errorf("load youtube collector worker profile: %w", err)
 		}
 
@@ -45,7 +46,7 @@ func main() {
 		Initialize: func(version string) {
 			health.Init(version)
 		},
-		LoadConfig:             collectorconfig.LoadRuntime,
+		LoadConfig:             loadRuntime,
 		LoadConfigErrorMessage: "Failed to load youtube collector config",
 		NewLogger: func(appConfig *collectorconfig.RuntimeConfig) (*slog.Logger, io.Closer, error) {
 			logFileName, err := youtubeCollectorLogFileName()
@@ -72,6 +73,19 @@ func main() {
 		},
 		BuildErrorMessage: "Failed to build youtube collector runtime",
 	}.Run())
+}
+
+func loadRuntime() (*collectorconfig.RuntimeConfig, error) {
+	config, err := collectorconfig.LoadRuntime()
+	if err != nil {
+		return nil, fmt.Errorf("load collector runtime config: %w", err)
+	}
+
+	if err := databaseproviders.Preflight(&config.Postgres, databaseproviders.RuntimePool{Name: "collector", ReservedConns: 1}); err != nil {
+		return nil, fmt.Errorf("preflight collector database: %w", err)
+	}
+
+	return config, nil
 }
 
 type startupOptions struct {

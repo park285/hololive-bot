@@ -130,7 +130,7 @@ bootstrap은 migration보다 먼저 실행됩니다. 028 적용이 실패하면 
 
 Worker count, local queue capacity and fixed `queue.max_age`, acquisition cadence/batch, lease/renew/cleanup/publish budgets, retry/jitter, and provider in-flight limits are required fields of the `collection` profile. The runtime rejects their retired environment-variable forms instead of translating them.
 
-로컬 대기 시간이 `collection.queue.max_age.milliseconds`를 넘으면 lease 취득 전에 해당 항목을 버리고 다음 항목을 처리합니다. 경고와 stale discard를 기록하고 중복 방지 표식을 해제하므로 다음 discovery에서 다시 후보가 될 수 있습니다. 아직 lease를 취득하지 않았으므로 DB complete/defer/release는 수행하지 않습니다. `--check-worker-profile`은 `internal/config`의 runtime과 같은 profile 수치 정책(TTL 최대 30분 등)을 검증하며 DB·provider 환경 변수는 요구하지 않습니다.
+로컬 대기 시간이 `collection.queue.max_age.milliseconds`를 넘으면 lease 취득 전에 해당 항목을 버리고 다음 항목을 처리합니다. 경고와 stale discard를 기록하고 중복 방지 표식을 해제하므로 다음 discovery에서 다시 후보가 될 수 있습니다. 아직 lease를 취득하지 않았으므로 DB complete/defer/release는 수행하지 않습니다. `--check-worker-profile`은 runtime과 같은 profile 수치 정책(TTL 최대 30분 등)·환경 관계·DB 옵션을 검사하므로 runtime 환경 파일과 로컬 CA를 제공해야 합니다. 연결·listener·worker는 만들지 않으며 성공이 원격 TLS·권한·pooler 호환성을 증명하지는 않습니다.
 
 ### 수집 처리량과 대상 신선도
 

@@ -22,6 +22,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -60,7 +61,7 @@ func RecoveryMiddleware(ctx context.Context, logger *slog.Logger) gin.HandlerFun
 
 func logRecoveredPanic(ctx context.Context, logger *slog.Logger, c *gin.Context, recovered any) {
 	attrs := []slog.Attr{
-		slog.Any("panic", recovered),
+		slog.Group("panic", slog.String("type", fmt.Sprintf("%T", recovered))),
 		slog.String("stack", string(debug.Stack())),
 	}
 

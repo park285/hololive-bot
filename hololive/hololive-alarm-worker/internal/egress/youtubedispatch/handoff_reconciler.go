@@ -124,12 +124,21 @@ type handoffLedger struct {
 }
 
 func (l handoffLedger) Check(claim *store.HandoffClaim) handoffloop.Check {
+	subjectAttrs := [2]slog.Attr{slog.Int("count", len(claim.MemberIDs))}
+	attrCount := 1
+
+	// Iris request ID 대신 내부 delivery ID로 원장 행과 연결할 수 있게 한다.
+	if len(claim.MemberIDs) > 0 {
+		subjectAttrs[1] = slog.Int64("first_id", claim.MemberIDs[0])
+		attrCount++
+	}
+
 	return handoffloop.Check{
 		IrisRequestID:   claim.IrisRequestID,
 		Elapsed:         claim.Elapsed,
 		Generation:      claim.Generation,
 		RetryBudgetLeft: claim.AttemptCount+1 < l.maxRetries,
-		Subject:         slog.Any("delivery_ids", claim.MemberIDs),
+		Subject:         slog.GroupAttrs("delivery_ids", subjectAttrs[:attrCount]...),
 	}
 }
 

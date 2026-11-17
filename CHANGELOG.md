@@ -8,6 +8,12 @@
 
 ## 미출시
 
+- **공통 라이브러리 경계:** 다섯 Go 모듈의 생산·fixture import를 shared-go core/postgres/transport로 이전했습니다. 게시·출처 검증을 완료한 root `v2.24.0`, postgres `v1.0.1`, core·transport `v1.0.0`을 사용하며 기존 업무 sibling replace만 production manifest에 유지합니다.
+- **로그·사전 점검:** Activity·HTTP·작업/발송 진단의 aggregate를 최소 typed group·count로 투영합니다. profile CLI와 정상 기동은 같은 runtime 환경·CA·DB 옵션·예약 용량을 무접속으로 검사합니다. Pair/native 사전 검사는 runtime 환경과 읽기 전용 로컬 파일을 제공하며, 실제 배포나 데이터 변경은 하지 않았습니다. Fallback delta: 없음.
+- **Pair 사전 점검:** 기존 Quadlet named volume을 native 메타데이터로 확인하고 읽기 전용으로 사용합니다. 미설정 선택 변수는 systemd와 같이 빈 문자열로 확장합니다. 중앙의 파생 env는 기존 prestart 매핑으로 매번 0700/0600 사설 출력에 생성하며, 누락되거나 오래된 `/run` 파일에 의존하지 않습니다. 필수값 검증·retained API 버전·환경 우선순위와 idmap/UserNS는 유지합니다.
+- **handoff 진단:** `delivery_ids.count`와 승인된 내부 원장 식별자 `delivery_ids.first_id`를 함께 남겨 조회 지연·정산 로그를 대상에 연결합니다. Iris request ID나 원시 aggregate는 기록하지 않습니다.
+- **보안 CI:** shared-go checkout을 `postgres/v1.0.1`의 검증된 source commit `70918cf28874eb0f5fa64bee4a8f1030ca8ec045`로 고정했습니다. 소스 workspace와 production 공개 pin 검증은 계속 구분합니다.
+
 - **의존성:** 다섯 Go 모듈을 shared-go v2.22.2로 올렸습니다. shared-go 코드 변경은 없고, 함께 올라오는 puddle v2.2.4(pgx 연결 풀)는 `CreateResource`로 시작한 연결 생성이 `Close`·`Reset` 뒤에 끝나면 그 연결을 폐기해 풀 통계에 남거나 재사용되지 않게 합니다. Fallback delta: none.
 - **의존성:** 다섯 Go 모듈을 shared-go v2.22.1로 올렸습니다. shared-go `logging`이 `Authorization`·`Proxy-Authorization`·`cookie` 같은 헤더 자격 증명의 따옴표 없는 값을 줄 끝까지 가립니다. 이 저장소는 shared-go의 `llm`과 `irisdurable/pgstore`를 쓰지 않아 응답 상한·nonce prune 변경의 영향은 없습니다. Fallback delta: none.
 

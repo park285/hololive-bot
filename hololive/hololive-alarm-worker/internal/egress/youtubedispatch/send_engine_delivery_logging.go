@@ -10,12 +10,7 @@ import (
 )
 
 func dedupeKeyLogAttrForOutboxes(outboxes []domain.YouTubeNotificationOutbox) slog.Attr {
-	dedupeKeys := make([]string, 0, len(outboxes))
-	for i := range outboxes {
-		dedupeKeys = append(dedupeKeys, telemetry.DedupeKeyLogValue(&outboxes[i]))
-	}
-
-	return dedupeKeyLogAttr(dedupeKeys)
+	return slog.Group(FieldDedupeKey, slog.Int("count", len(outboxes)))
 }
 
 func deliveryAttemptOrdinal(row *domain.YouTubeNotificationDelivery) int {

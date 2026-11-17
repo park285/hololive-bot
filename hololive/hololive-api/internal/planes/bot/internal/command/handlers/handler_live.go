@@ -113,10 +113,23 @@ func (c *LiveCommand) sendLiveQuery(ctx context.Context, room string, request li
 	diagnostics := result.DiagnosticCounts()
 	if result.Status != livequery.Complete || diagnostics != (livequery.Diagnostics{}) {
 		// D1/D2 보존 증거는 조회를 막지 않지만 불일치 조사를 위해 기존 운영 로그에 남긴다.
+		reasons := result.ReasonCounts()
 		c.Deps().Logger.InfoContext(ctx, "live query incomplete",
 			slog.String("status", string(result.Status)),
-			slog.Any("reasons", result.ReasonCounts()),
-			slog.Any("nonblocking_diagnostics", diagnostics),
+			slog.Group("reasons",
+				slog.Int("covered", reasons[livequery.Covered]),
+				slog.Int("invalid_target", reasons[livequery.InvalidTarget]),
+				slog.Int("invalid_projection", reasons[livequery.InvalidProjection]),
+				slog.Int("uncollected", reasons[livequery.Uncollected]),
+				slog.Int("incomplete", reasons[livequery.Incomplete]),
+				slog.Int("stale", reasons[livequery.Stale]),
+				slog.Int("invalid_clock", reasons[livequery.InvalidClock]),
+				slog.Int("inconsistent", reasons[livequery.Inconsistent]),
+				slog.Int("confirming_end", reasons[livequery.ConfirmingEnd])),
+			slog.Group("nonblocking_diagnostics",
+				slog.Int("retained_orphan_ends", diagnostics.RetainedOrphanEnds),
+				slog.Int("ended_pending_ends", diagnostics.EndedPendingEnds),
+				slog.Int("ended_head_mismatches", diagnostics.EndedHeadMismatches)),
 			slog.Int("items", len(result.Items)),
 			slog.Time("as_of", result.AsOf),
 		)

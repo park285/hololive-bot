@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+	sharedenv "github.com/park285/shared-go/core/envutil"
 )
 
 // StrictEnv는 설정 로더 하나가 읽는 숫자·bool env를 shared-go 엄격 파서(*E)로 읽고 파싱 오류를 모은다.

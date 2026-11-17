@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+	sharedh3 "github.com/park285/shared-go/transport/h3"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

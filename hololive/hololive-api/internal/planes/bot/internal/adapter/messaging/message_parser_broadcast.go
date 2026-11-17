@@ -26,7 +26,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/park285/shared-go/v2/pkg/stringutil"
+	"github.com/park285/shared-go/core/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
