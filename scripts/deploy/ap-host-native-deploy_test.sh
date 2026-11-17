@@ -380,7 +380,14 @@ if grep -Fq INVALID_UNIT "${unit}"; then
   exit 1
 fi
 EOF
-chmod +x "${tmp}/rollback-bin/sudo" "${tmp}/rollback-bin/systemd-analyze"
+cat > "${tmp}/rollback-bin/systemd-run" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+# 이 fixture는 배포 산출물 무결성만 검사하며 Go의 전체 설정 검증을 대신하지 않는다.
+while [[ "${1:-}" == --* ]]; do shift; done
+exec "$@"
+EOF
+chmod +x "${tmp}/rollback-bin/sudo" "${tmp}/rollback-bin/systemd-analyze" "${tmp}/rollback-bin/systemd-run"
 
 rollback_fixture="${tmp}/rollback-fixture"
 printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/youtube-collector"

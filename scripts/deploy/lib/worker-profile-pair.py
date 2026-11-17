@@ -76,8 +76,13 @@ def validate_container_pair(container, before, directory):
     environment = dict(item.split("=", 1) for item in before["Config"]["Env"])
     environment["STACK_WORKER_PROFILE_FILE"] = RELEASE_TARGET + "/profile.json"
     environment.pop("STACK_WORKER_PROFILE_SOURCE_FILE", None)
-    command = [CLI, "run", "--rm", "--pull=never", "--network", "none", "--volumes-from", container + ":ro",
-               "--mount", "type=bind,src=" + str(directory) + ",dst=" + RELEASE_TARGET + ",readonly"]
+    command = [CLI, "run", "--rm", "--pull=never", "--network", "none", "--read-only",
+               "--cap-drop", "all", "--security-opt", "no-new-privileges",
+               "--volumes-from", container + ":ro",
+               "--mount", "type=bind,src=" + str(directory) + ",dst=" + RELEASE_TARGET + ",readonly",
+               "--user", before["Config"]["User"]]
+    for group in before["HostConfig"]["GroupAdd"] or []:
+        command.extend(("--group-add", group))
     for key in environment:
         command.extend(("--env", key))
     entrypoint = before["Config"].get("Entrypoint") or []
@@ -88,15 +93,129 @@ def validate_container_pair(container, before, directory):
 
 
 def check_pair(directory, pair):
-    # 옛 `compose run --rm --no-deps <service> --check-worker-profile`에 해당하는 후보 검사다.
-    # --check-worker-profile은 STACK_WORKER_PROFILE_FILE만 읽으므로(workercontract.LoadProfileFromEnv) 운영 env·
-    # network·다른 mount 없이 pair image와 release 디렉터리만 붙인다. drop-in이 실행 unit에 붙이는 것과 같은
-    # bind 원본이라 SELinux label 판정도 같다. 실행 중인 container가 없어도(정지·첫 도입) 검사할 수 있다.
-    subprocess.run([CLI, "run", "--rm", "--pull=never", "--network", "none", "--read-only",
-                    "--cap-drop", "all", "--security-opt", "no-new-privileges",
-                    "--mount", "type=bind,src=" + str(directory) + ",dst=" + RELEASE_TARGET + ",readonly",
-                    "--env", "STACK_WORKER_PROFILE_FILE=" + RELEASE_TARGET + "/profile.json",
-                    pair["image"], "--check-worker-profile"], check=True, timeout=60)
+    # 보존한 unit의 환경과 로컬 파일을 그대로 읽되 네트워크·쓰기·worker 시작은 허용하지 않는다.
+    values = unit_values(directory / UNIT_RECORD)
+    command = ["systemd-run", "--quiet", "--wait", "--pipe", "--collect",
+               "--property=RuntimeMaxSec=60s"]
+    for key, value in values["Service"]:
+        if key == "EnvironmentFile":
+            command.append("--property=EnvironmentFile=" + value)
+        elif key == "Environment":
+            command.append("--setenv=" + value)
+    command.extend((sys.executable, str(Path(__file__).resolve()), "check-resolved",
+                    pair["service"], str(directory)))
+    subprocess.run(command, check=True, timeout=65)
+
+
+def unit_values(path, sections=("Container", "Service")):
+    values = {section: [] for section in sections}
+    section = ""
+    seen = set()
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1]
+            if section in values:
+                seen.add(section)
+            continue
+        if section in values:
+            if "=" not in line or line.endswith("\\"):
+                raise ValueError("profile preflight requires explicit single-line unit settings")
+            values[section].append(line.split("=", 1))
+    if seen != set(sections) or (sections == ("Container", "Service") and not all(values.values())):
+        raise ValueError("profile preflight requires the retained runtime unit")
+    return values
+
+
+def expand_unit_value(value):
+    # ExecStart의 ${VAR}는 한 인자 안에서 치환되고, 미정의 변수는 빈 문자열이다.
+    # $$와 그 밖의 리터럴 $는 보존하며 치환 결과를 다시 확장하지 않는다.
+    return re.sub(r"\$\$|\$\{([A-Za-z_][A-Za-z0-9_]*)\}",
+                  lambda match: "$" if match.group(0) == "$$" else os.environ.get(match.group(1), ""),
+                  value)
+
+
+def volume_source(source):
+    if source.startswith("/"):
+        path = Path(source)
+    else:
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", source) is None:
+            raise ValueError("profile preflight volume source is invalid")
+        if source.endswith(".volume"):
+            # 설치된 선언이 실제 이름의 소유자다. 서비스별 이름 표를 따로 유지하지 않는다.
+            values = unit_values(QUADLET_DIR / source, ("Volume",))["Volume"]
+            name = next((value for key, value in reversed(values) if key == "VolumeName"), "")
+            source = expand_unit_value(name or "systemd-" + source.removesuffix(".volume"))
+        volume = inspect("volume", source)
+        if volume["Name"] != source or not volume.get("Mountpoint"):
+            raise ValueError("profile preflight native volume is unavailable")
+        # 이름으로 run하면 Podman이 없는 볼륨을 만들거나 첫 mount의 copy-up/chown을 수행할 수 있다.
+        # inspect가 증명한 기존 저장 경로를 bind하므로 검사는 볼륨 생명주기를 변경하지 않는다.
+        path = Path(volume["Mountpoint"])
+    if not path.is_absolute() or not path.exists():
+        raise ValueError("profile preflight bind source is unavailable")
+    return str(path)
+
+
+def check_resolved_pair(directory, pair):
+    values = unit_values(directory / UNIT_RECORD)["Container"]
+    environment = dict(os.environ)
+    command = [CLI, "run", "--rm", "--pull=never", "--network", "none", "--read-only",
+               "--cap-drop", "all", "--security-opt", "no-new-privileges"]
+    unit = Path(QUADLET_UNITS[pair["service"]]).stem
+    generated_env = "/run/hololive-bot/quadlet-env/" + unit + ".env"
+    user, group = "", ""
+    with tempfile.TemporaryDirectory(prefix="hololive-profile-env-") as output:
+        rendered = None
+        for key, raw in values:
+            value = expand_unit_value(raw)
+            if key == "EnvironmentFile":
+                if value == generated_env:
+                    if rendered is None:
+                        renderer = ["bash", str(Path(__file__).resolve().parents[1] / "quadlet-prestart.sh"),
+                                    "--render-env", unit, output]
+                        if pair["service"] == "hololive-api" and "app_version" in pair:
+                            renderer.extend(("--app-version", pair["app_version"]))
+                        subprocess.run(renderer, check=True, timeout=30)
+                        rendered = str(Path(output) / (unit + ".env"))
+                    value = rendered
+                command.extend(("--env-file", value))
+            elif key == "Environment":
+                name, content = value.split("=", 1)
+                environment[name] = content
+                command.extend(("--env", name))
+            elif key == "Volume":
+                source, target, *options = value.split(":")
+                source = volume_source(source)
+                flags = [flag for option in options for flag in option.split(",") if flag not in ("rw", "ro")]
+                command.extend(("--volume", ":".join((source, target, ",".join(["ro", *flags])))))
+            elif key == "User":
+                user = value
+            elif key == "Group":
+                group = value
+            elif key == "GroupAdd":
+                command.extend(("--group-add", value))
+            elif key == "UserNS":
+                command.extend(("--userns", value))
+        if not user or not group:
+            raise ValueError("profile preflight requires the runtime user and group")
+        if pair["service"] == "hololive-api" and "app_version" in pair:
+            environment["APP_VERSION"] = pair["app_version"]
+            command.extend(("--env", "APP_VERSION"))
+        # 호스트의 MCS drop-in은 기본 unit 스냅샷 밖에 있으므로 Quadlet이 합성한 정책을 따른다.
+        fragment = run("systemctl", "show", unit + ".service", "--property=FragmentPath", "--value")
+        native = unit_values(Path(fragment), sections=("X-Container",))["X-Container"]
+        level = dict(native).get("SecurityLabelLevel")
+        if level:
+            command.extend(("--security-opt", "label=level:" + expand_unit_value(level)))
+        command.extend(("--user", user + ":" + group,
+                        "--mount", "type=bind,src=" + str(directory) + ",dst=" + RELEASE_TARGET + ",readonly",
+                        "--env", "STACK_WORKER_PROFILE_FILE=" + RELEASE_TARGET + "/profile.json",
+                        "--unsetenv", "STACK_WORKER_PROFILE_SOURCE_FILE",
+                        pair["image"], "--check-worker-profile"))
+        subprocess.run(command, env=environment, check=True, timeout=60)
 
 
 def prepare_native(service, release, host_env, unit):
@@ -126,8 +245,16 @@ def prepare_native(service, release, host_env, unit):
     temporary.chmod(0o444)
     if loaded_hash(diagnostics) != digest(temporary):
         raise ValueError("native loaded profile does not match available bytes")
-    subprocess.run(["sudo", "-n", "-u", "hololive", "env", "STACK_WORKER_PROFILE_FILE=" + str(temporary),
-                    str(release / "bin/youtube-collector"), "--check-worker-profile"], check=True, timeout=30)
+    subprocess.run(["systemd-run", "--quiet", "--wait", "--pipe", "--collect",
+                    "--property=User=hololive", "--property=Group=opc", "--property=PrivateNetwork=yes",
+                    "--property=NoNewPrivileges=yes", "--property=RuntimeMaxSec=30s",
+                    "--property=WorkingDirectory=" + str(release), "--property=ProtectHome=yes",
+                    "--property=ProtectSystem=strict", "--property=PrivateTmp=yes",
+                    "--property=EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env",
+                    "--property=EnvironmentFile=" + str(host_env),
+                    "/usr/bin/env", "STACK_WORKER_PROFILE_FILE=" + str(temporary),
+                    str(release / "bin/youtube-collector-wrapper"),
+                    str(release / "bin/youtube-collector"), "--check-worker-profile"], check=True, timeout=35)
     if run("systemctl", "show", unit, "-p", "MainPID", "--value") != pid or (process / "stat").read_text().split(")", 1)[1].split()[19] != start:
         raise ValueError("native process changed during preparation")
     final = release / "worker-profile.json"
@@ -449,6 +576,8 @@ def main():
         verify_dropin(directory, service, verify(directory, service))
     elif action == "check":
         check_pair(directory, verify(directory, service))
+    elif action == "check-resolved":
+        check_resolved_pair(directory, verify(directory, service))
     elif action == "verify-live":
         before = inspect("container", rest[0])
         pair = verify(directory, service, before["Image"])

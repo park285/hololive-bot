@@ -37,6 +37,39 @@ else
     quadlet_dir="${test_root}/units"
 fi
 
+render_env=false
+app_version_override=
+target="${1:-}"
+if [[ "$target" == --render-env ]]; then
+    [[ "$#" -eq 3 || "$#" -eq 5 ]] \
+        || die "usage: --render-env <unit-name> <private-output-directory> [--app-version <version>]"
+    render_env=true
+    target="$2"
+    case "$target" in
+        hololive-api|hololive-alarm-worker|hololive-youtube-collector-c) ;;
+        *) die "unsupported render-env unit" ;;
+    esac
+    if [[ "$#" -eq 5 ]]; then
+        [[ "$4" == --app-version && "$target" == hololive-api ]] \
+            || die "--app-version is only supported for hololive-api"
+        # retained pair의 dropin_contents와 같은 허용 문자 계약을 쓴다.
+        [[ "$5" =~ ^[0-9A-Za-z.+-]+$ ]] || die "retained APP_VERSION is not safe for a Quadlet drop-in"
+        app_version_override="$5"
+    fi
+    [[ -d "$3" && ! -L "$3" && -O "$3" ]] \
+        || die "render-env output must be a caller-owned private directory"
+    [[ "$(stat -c '%a' -- "$3")" == 700 ]] \
+        || die "render-env output directory mode must be 0700"
+    env_dir="$(cd -- "$3" && pwd -P)"
+    case "$env_dir/" in
+        /run/hololive-bot/*|"$run_dir/"*) die "render-env output must not use the runtime directory" ;;
+    esac
+    # 새 전용 디렉터리만 받으며 숨김 파일·끊어진 symlink도 기존 출력으로 본다.
+    if ! (shopt -s nullglob dotglob; entries=("$env_dir/"*); [[ "${#entries[@]}" -eq 0 ]]); then
+        die "render-env output directory must be empty"
+    fi
+fi
+
 # systemd EnvironmentFile로 읽히는 compose.env의 형식(KEY=VALUE, 유효한 key, 중복 없음, 앞뒤 공백 없음)을 확인한다.
 # 메시지에는 key 이름만 남긴다.
 validate_env_file_syntax() {
@@ -116,7 +149,9 @@ require_secret_file() {
 write_secret_env() {
     local container="$1" target tmp spec key source required value
     shift
-    install -d -m 0700 -- "$env_dir"
+    if [[ "$render_env" == false ]]; then
+        install -d -m 0700 -- "$env_dir"
+    fi
     target="${env_dir}/${container}.env"
     tmp="$(mktemp "${env_dir}/.${container}.env.XXXXXX")"
     chmod 0600 -- "$tmp"
@@ -135,7 +170,16 @@ write_secret_env() {
         fi
         printf '%s=%s\n' "$key" "$value" >> "$tmp"
     done
-    mv -f -- "$tmp" "$target"
+    if [[ "$render_env" == true ]]; then
+        # 같은 디렉터리의 완성된 파일만 공개하고 경합 중 생긴 출력도 덮어쓰지 않는다.
+        if ! ln -T -- "$tmp" "$target"; then
+            rm -f -- "$tmp"
+            die "render-env output already exists or cannot be published"
+        fi
+        rm -f -- "$tmp"
+    else
+        mv -f -- "$tmp" "$target"
+    fi
 }
 
 # 이미지 label이 아니라 배포 트리의 VERSION이 APP_VERSION이다(compose.sh가 HOLO_API_VERSION으로 넘기던 값).
@@ -149,11 +193,12 @@ api_release_version() {
     printf '%s\n' "${lines[0]}"
 }
 
-target="${1:-}"
 case "$target" in
     hololive-api|hololive-alarm-worker|hololive-youtube-collector-c)
         validate_env_file_syntax "$compose_env"
-        postgres_capacity_assert_service "$deploy_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
+        if [[ "$render_env" != true ]]; then
+            postgres_capacity_assert_service "$deploy_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
+        fi
         ;;
 esac
 case "$target" in
@@ -221,7 +266,9 @@ case "$target" in
         validate_env_file_syntax "$compose_env"
         require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS
         validate_container_env_file "${secrets_dir}/alarm-worker.env"
-        wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
+        if [[ "$render_env" == false ]]; then
+            wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
+        fi
         write_secret_env hololive-alarm-worker \
             'POSTGRES_PASSWORD=HOLOLIVE_ALARM_WORKER_PASSWORD!' \
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
@@ -231,12 +278,18 @@ case "$target" in
         require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS \
             HOLOLIVE_API_PORT_BIND_IP HOLOLIVE_ADMIN_API_PORT_BIND_IP HOLOLIVE_H3_SERVER_NAME
         validate_container_env_file "${secrets_dir}/bot.env"
-        wait_for_tailnet_address HOLOLIVE_API_PORT_BIND_IP
-        wait_for_tailnet_address HOLOLIVE_ADMIN_API_PORT_BIND_IP
-        wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
-        admin_bind_assert_host "$HOLOLIVE_ADMIN_API_PORT_BIND_IP"
-        admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
-        APP_VERSION_VALUE="$(api_release_version)"
+        if [[ "$render_env" == false ]]; then
+            wait_for_tailnet_address HOLOLIVE_API_PORT_BIND_IP
+            wait_for_tailnet_address HOLOLIVE_ADMIN_API_PORT_BIND_IP
+            wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
+            admin_bind_assert_host "$HOLOLIVE_ADMIN_API_PORT_BIND_IP"
+            admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
+        fi
+        if [[ -n "$app_version_override" ]]; then
+            APP_VERSION_VALUE="$app_version_override"
+        else
+            APP_VERSION_VALUE="$(api_release_version)"
+        fi
         export APP_VERSION_VALUE
         write_secret_env hololive-api \
             'APP_VERSION=APP_VERSION_VALUE!' \
@@ -247,7 +300,9 @@ case "$target" in
         validate_env_file_syntax "$compose_env"
         require_values LIVE_LOGS_PATH
         validate_container_env_file "${secrets_dir}/youtube-collector.env"
-        wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
+        if [[ "$render_env" == false ]]; then
+            wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
+        fi
         write_secret_env hololive-youtube-collector-c \
             'POSTGRES_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
             'HOLODEX_API_KEY=HOLODEX_API_KEY'

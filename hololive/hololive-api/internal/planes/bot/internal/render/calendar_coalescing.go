@@ -103,8 +103,8 @@ func (r *CalendarCardRenderer) runCalendarRenderCall(ctx context.Context, call *
 
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			err = fmt.Errorf("render calendar image: panic: %v", recovered)
-			slog.Default().Error("Calendar render panicked", slog.Any("panic", recovered), slog.String("stack", string(debug.Stack())))
+			err = fmt.Errorf("render calendar image: panic type: %T", recovered)
+			slog.Default().Error("Calendar render panicked", slog.Group("panic", slog.String("type", fmt.Sprintf("%T", recovered))), slog.String("stack", string(debug.Stack())))
 		}
 
 		call.cancel()

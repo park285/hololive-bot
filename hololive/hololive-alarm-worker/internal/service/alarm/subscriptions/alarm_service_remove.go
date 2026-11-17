@@ -178,8 +178,8 @@ func (as *AlarmService) logAlarmRemoved(roomID, channelID string, mutation remov
 		as.logger.Info("Alarm removed",
 			privacylog.RoomIDAttr(roomID),
 			slog.String("channel_id", channelID),
-			slog.Any("alarm_types", mutation.effectiveRemovalTypes),
-			slog.Any("remaining_alarm_types", mutation.remainingTypes),
+			slog.Group("alarm_types", slog.Int("count", len(mutation.effectiveRemovalTypes))),
+			slog.Group("remaining_alarm_types", slog.Int("count", len(mutation.remainingTypes))),
 		)
 	}
 }

@@ -26,7 +26,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 var appRoles = []string{"hololive_runtime", "hololive_alarm_worker", "hololive_collector_a", "hololive_collector_b", "hololive_collector_c", "hololive_collector_d"}

@@ -36,7 +36,7 @@ func (testSettingsApplier) SettingsRuntimeState() adminsettings.SettingsRuntimeS
 
 type testActivityLogger struct{}
 
-func (testActivityLogger) Log(string, string, map[string]any) {}
+func (testActivityLogger) Log(string, string, []slog.Attr) {}
 
 type roomNameRecordingAlarm struct {
 	stubAlarmCRUDForServer

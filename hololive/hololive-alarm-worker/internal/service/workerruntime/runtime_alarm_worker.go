@@ -124,14 +124,9 @@ func (r youtubeOutboxDispatcherRunner) Start(ctx context.Context) error {
 
 func (r notificationEgressRunner) startRunners(ctx context.Context, runners []NamedScheduler) error {
 	if r.logger != nil {
-		names := make([]string, 0, len(runners))
-		for _, runner := range runners {
-			names = append(names, runner.Name)
-		}
-
 		r.logger.Info("Notification egress owned by this alarm-worker instance",
 			slog.String("event", "notification_egress_started"),
-			slog.Any("runners", names),
+			slog.Group("runners", slog.Int("count", len(runners))),
 		)
 	}
 

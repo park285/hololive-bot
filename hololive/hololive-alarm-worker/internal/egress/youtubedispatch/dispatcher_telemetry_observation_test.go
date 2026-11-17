@@ -2,6 +2,7 @@ package youtubedispatch
 
 import (
 	"bytes"
+	jsonv2 "encoding/json/v2"
 	"log/slog"
 	"testing"
 	"time"
@@ -90,13 +91,26 @@ func TestBuildDeliveryAuditLogAttrsWithClassificationIncludesLatencyClassificati
 	logger := slog.New(slog.NewJSONHandler(buffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	logger.Info(CommunityShortsDeliveryAuditMessage, buildDeliveryAuditLogAttrsWithClassification(&row, &classification)...)
 
-	logLine := buffer.String()
-	require.Contains(t, logLine, `"latency_classification":{"status":"exceeded"`)
-	require.Contains(t, logLine, `"threshold_millis":120000`)
-	require.Contains(t, logLine, `"delay_source":"internal_delivery"`)
-	require.Contains(t, logLine, `"internal_delay_cause":"retry_accumulation"`)
-	require.Contains(t, logLine, `"reason_code":"retry_accumulation"`)
-	require.Contains(t, logLine, `"evidence":[{`)
+	var record struct {
+		Classification struct {
+			Status             string `json:"status"`
+			ThresholdMillis    int64  `json:"threshold_millis"`
+			DelaySource        string `json:"delay_source"`
+			InternalDelayCause string `json:"internal_delay_cause"`
+			ReasonCode         string `json:"reason_code"`
+			Evidence           struct {
+				Count int `json:"count"`
+			} `json:"evidence"`
+		} `json:"latency_classification"`
+	}
+
+	require.NoError(t, jsonv2.Unmarshal(buffer.Bytes(), &record))
+	require.Equal(t, "exceeded", record.Classification.Status)
+	require.Equal(t, int64(120000), record.Classification.ThresholdMillis)
+	require.Equal(t, "internal_delivery", record.Classification.DelaySource)
+	require.Equal(t, "retry_accumulation", record.Classification.InternalDelayCause)
+	require.Equal(t, "retry_accumulation", record.Classification.ReasonCode)
+	require.Equal(t, 1, record.Classification.Evidence.Count)
 }
 
 func TestAppendLatencyClassificationLogAttrAcceptsMissingClassification(t *testing.T) {

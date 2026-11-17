@@ -377,11 +377,11 @@ func (s *Service) translateRows(
 }
 
 func (s *Service) logRows(posterID int64, recorded bool, rows []posterstore.Row) {
-	warnings := make([]int, len(rows))
+	warnings := 0
 	doubts, terms := 0, 0
 
 	for i := range rows {
-		warnings[i] = len(rows[i].Warnings)
+		warnings += len(rows[i].Warnings)
 
 		terms += len(rows[i].Terms)
 
@@ -394,7 +394,7 @@ func (s *Service) logRows(posterID int64, recorded bool, rows []posterstore.Row)
 		slog.Int64("poster_id", posterID),
 		slog.Bool("recorded", recorded),
 		slog.Int("rows", len(rows)),
-		slog.Any("row_warnings", warnings),
+		slog.Group("row_warnings", slog.Int("count", warnings)),
 		slog.Int("doubt_rows", doubts),
 		slog.Int("terms", terms))
 }

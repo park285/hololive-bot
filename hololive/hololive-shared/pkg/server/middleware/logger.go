@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/core/stringutil"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 // 요청 로그 한 줄이 헤더 값에 끌려 커지지 않게 rune 단위로 자른다. 잘린 값 끝에는 "..."가 붙는다.

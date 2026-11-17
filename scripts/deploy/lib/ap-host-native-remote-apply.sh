@@ -153,8 +153,15 @@ po_validate_release "$release_dir"
 sudo -n chmod 0755 "$release_dir" "$release_dir/bin" "$release_dir/bin/youtube-collector" "$release_dir/bin/healthcheck" "$release_dir/bin/youtube-collector-wrapper"
 # 검증한 사본만 release에 고정한다. mirror 갱신은 실행 중인 binary/profile pair를 바꾸지 않는다.
 sudo -n install -m 0444 -o root -g root "$worker_profile" "$release_dir/worker-profile.json"
-sudo -n -u hololive env STACK_WORKER_PROFILE_FILE="$release_dir/worker-profile.json" \
-  "$release_dir/bin/youtube-collector" --check-worker-profile
+sudo -n systemd-run --quiet --wait --pipe --collect \
+  --property=User=hololive --property=Group=opc --property=PrivateNetwork=yes \
+  --property=NoNewPrivileges=yes --property=RuntimeMaxSec=30s \
+  --property="WorkingDirectory=$release_dir" --property=ProtectHome=yes --property=ProtectSystem=strict \
+  --property=PrivateTmp=yes \
+  --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env \
+  --property="EnvironmentFile=$payload/youtube-collector-host.env" \
+  /usr/bin/env "STACK_WORKER_PROFILE_FILE=$release_dir/worker-profile.json" \
+  "$release_dir/bin/youtube-collector-wrapper" "$release_dir/bin/youtube-collector" --check-worker-profile
 sudo -n sh -c 'cd "$1" && sha256sum bin/youtube-collector worker-profile.json > SHA256SUMS && chmod 0444 SHA256SUMS' sh "$release_dir"
 
 if [[ -n "$old_target" && -d "$old_target" ]]; then

@@ -8,6 +8,19 @@
 
 ## 미출시
 
+## v18.8.2 - 2026-11-18
+
+- **Pair 사전 점검:** 기본 unit 밖의 호스트 drop-in이 정한 SELinux MCS 레벨을 native Quadlet 생성 결과에서 읽어 후보 검사에 보존합니다. 실행 중 서비스와 다른 임의 레벨 때문에 읽기 전용 비밀 mount가 거부되던 문제를 수정하며, 파일 권한·비밀 원본·SELinux 강제 정책은 바꾸지 않습니다.
+
+## v18.8.1 - 2026-11-18
+
+- **공통 라이브러리 경계:** 다섯 Go 모듈의 생산·fixture import를 shared-go core/postgres/transport로 이전했습니다. 게시·출처 검증을 완료한 root `v2.24.0`, postgres `v1.0.1`, core·transport `v1.0.0`을 사용하며 기존 업무 sibling replace만 production manifest에 유지합니다.
+- **로그·사전 점검:** Activity·HTTP·작업/발송 진단의 aggregate를 최소 typed group·count로 투영합니다. profile CLI와 정상 기동은 같은 runtime 환경·CA·DB 옵션·예약 용량을 무접속으로 검사합니다. Pair/native 사전 검사는 runtime 환경과 읽기 전용 로컬 파일을 제공하며, 실제 배포·원격 DB 검증·데이터 변경을 실행하지 않습니다. Fallback delta: 없음.
+- **Pair 사전 점검:** 기존 Quadlet named volume을 native 메타데이터로 확인하고 읽기 전용으로 사용합니다. 미설정 선택 변수는 systemd와 같이 빈 문자열로 확장합니다. 중앙의 파생 env는 기존 prestart 매핑으로 매번 0700/0600 사설 출력에 생성하며, 누락되거나 오래된 `/run` 파일에 의존하지 않습니다. 필수값 검증·retained API 버전·환경 우선순위와 idmap/UserNS는 유지합니다.
+- **handoff 진단:** `delivery_ids.count`와 승인된 내부 원장 식별자 `delivery_ids.first_id`를 함께 남겨 조회 지연·정산 로그를 대상에 연결합니다. Iris request ID나 원시 aggregate는 기록하지 않습니다.
+- **보안 CI:** shared-go checkout을 `postgres/v1.0.1`의 검증된 source commit `70918cf28874eb0f5fa64bee4a8f1030ca8ec045`로 고정했습니다. 소스 workspace와 production 공개 pin 검증은 계속 구분합니다.
+
+- **의존성:** 다섯 Go 모듈을 shared-go v2.22.2로 올렸습니다. shared-go 코드 변경은 없고, 함께 올라오는 puddle v2.2.4(pgx 연결 풀)는 `CreateResource`로 시작한 연결 생성이 `Close`·`Reset` 뒤에 끝나면 그 연결을 폐기해 풀 통계에 남거나 재사용되지 않게 합니다. Fallback delta: none.
 - **의존성:** 다섯 Go 모듈을 shared-go v2.22.1로 올렸습니다. shared-go `logging`이 `Authorization`·`Proxy-Authorization`·`cookie` 같은 헤더 자격 증명의 따옴표 없는 값을 줄 끝까지 가립니다. 이 저장소는 shared-go의 `llm`과 `irisdurable/pgstore`를 쓰지 않아 응답 상한·nonce prune 변경의 영향은 없습니다. Fallback delta: none.
 - **PostgreSQL transaction pooling:** 중앙/API/worker/c와 AP a·b·d를 역할별 상한을 유지한 PgBouncer 경로로 전환하는 소스를 추가했습니다. DB의 현재 SCRAM verifier를 cert-only `auth_query`로 읽어 앱 비밀번호를 pooler 파일에 복제하지 않고, 같은 비밀번호 bootstrap은 verifier를 유지합니다. PgBouncer 1.26.1의 startup timeout 오염은 upstream `22d0aa1`을 backport한 공통 `1.26.1-guc1` 이미지로 수정했습니다. pgx prepared backend 교체·동명 동시 사용·재연결, timeout/cancel, control 예약, 실제 암호 회전과 장애 복구를 격리 환경에서 검증했습니다. direct↔pooler rollback은 HBA·endpoint의 조정 복구 전 재기동을 거부합니다. ChatBotGo는 같은 native 이미지에 별도 인스턴스·인증 DB·연결 예산을 사용합니다. 운영 인증서·DB/HBA·방화벽·서비스 전환은 별도 승인 사항입니다. Fallback delta: none.
 - PgBouncer 기동 health에 frontend/backend DNS 공개 확인을 추가했습니다. 정상 상태의 peer health와 별도 SQL 수용 검사는 유지하며, DNS 준비 전 성공 판정을 차단합니다.

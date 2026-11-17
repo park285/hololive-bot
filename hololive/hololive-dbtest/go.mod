@@ -7,7 +7,8 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/moby/moby/api v1.57.0
 	github.com/moby/moby/client v0.6.3
-	github.com/park285/shared-go/v2 v2.22.1
+	github.com/park285/shared-go/postgres v1.0.1
+	github.com/park285/shared-go/v2 v2.24.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.45.0
@@ -36,7 +37,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/puddle/v2 v2.2.3 // indirect
+	github.com/jackc/puddle/v2 v2.2.4 // indirect
 	github.com/klauspost/compress v1.20.4 // indirect
 	github.com/lufia/plan9stats v0.0.0-20261101121723-be84dd9509a0 // indirect
 	github.com/magiconair/properties v1.18.13 // indirect

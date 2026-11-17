@@ -14,13 +14,14 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/entrypoint"
+	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 )
 
 var Version = "dev"
 
 func main() {
 	if handled, exitCode := entrypoint.RunWorkerProfileCheck(os.Args[1:], os.Stderr, "hololive-api", func() error {
-		if _, err := apiconfig.LoadAPIWorkerProfile(); err != nil {
+		if _, err := loadRuntime(); err != nil {
 			return fmt.Errorf("load api worker profile: %w", err)
 		}
 
@@ -30,7 +31,7 @@ func main() {
 	}
 
 	if handled, exitCode := runConfigCheck(os.Args[1:], os.Stderr, func() error {
-		if _, err := apiconfig.LoadRuntime(); err != nil {
+		if _, err := loadRuntime(); err != nil {
 			return fmt.Errorf("load hololive api runtime: %w", err)
 		}
 
@@ -44,7 +45,7 @@ func main() {
 		Initialize: func(version string) {
 			health.Init(version)
 		},
-		LoadConfig:             apiconfig.LoadRuntime,
+		LoadConfig:             loadRuntime,
 		LoadConfigErrorMessage: "Failed to load hololive-api config",
 		NewLogger: func(config *apiconfig.RuntimeConfig) (*slog.Logger, io.Closer, error) {
 			return entrypoint.NewFileLogger(config.Logging, "hololive-api.log")
@@ -63,6 +64,32 @@ func main() {
 		BuildRuntime:      runtimeapp.BuildRuntime,
 		BuildErrorMessage: "Failed to assemble hololive-api runtime",
 	}.Run())
+}
+
+func loadRuntime() (*apiconfig.RuntimeConfig, error) {
+	config, err := apiconfig.LoadRuntime()
+	if err != nil {
+		return nil, fmt.Errorf("load API runtime config: %w", err)
+	}
+
+	if err := databaseproviders.Preflight(&config.Bot.Postgres, databaseproviders.RuntimePool{Name: "bot", ReservedConns: 1}); err != nil {
+		return nil, fmt.Errorf("preflight bot database: %w", err)
+	}
+
+	if err := databaseproviders.Preflight(&config.Admin.Postgres, databaseproviders.RuntimePool{Name: "admin"}); err != nil {
+		return nil, fmt.Errorf("preflight admin database: %w", err)
+	}
+
+	youtubePostgres := config.Bot.Postgres
+
+	youtubePostgres.PoolMinConns = config.YouTube.PostgresPoolMinConns
+	youtubePostgres.PoolMaxConns = config.YouTube.PostgresPoolMaxConns
+
+	if err := databaseproviders.Preflight(&youtubePostgres, databaseproviders.RuntimePool{Name: "youtube_plane", ReservedConns: 1}); err != nil {
+		return nil, fmt.Errorf("preflight YouTube database: %w", err)
+	}
+
+	return config, nil
 }
 
 func runConfigCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {

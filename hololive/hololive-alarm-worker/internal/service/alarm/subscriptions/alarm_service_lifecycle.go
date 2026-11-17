@@ -107,7 +107,7 @@ func (as *AlarmService) UpdateAlarmAdvanceMinutes(ctx context.Context, alarmAdva
 	if as.logger != nil {
 		as.logger.Info("Alarm advance minutes updated",
 			slog.Int("alarm_advance_minutes", alarmAdvanceMinutes),
-			slog.Any("target_minutes", normalized.Clone()),
+			slog.Group("target_minutes", slog.Int("primary", normalized.PrimaryAdvanceMinute())),
 		)
 	}
 

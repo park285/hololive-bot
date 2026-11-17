@@ -34,7 +34,7 @@ type settingsUpdateResponse struct {
 }
 
 type SettingsActivityLogger interface {
-	Log(entryType, summary string, details map[string]any)
+	Log(entryType, summary string, details []slog.Attr)
 }
 
 // RoomNameSetter는 관리 화면이 알림 서비스에 요구하는 방 이름 변경 작업만 제공한다.
@@ -73,7 +73,7 @@ func (h *SettingsHandler) safeLogger() *slog.Logger {
 	return loggerOrDefault(h.Logger)
 }
 
-func (h *SettingsHandler) logActivity(entryType, summary string, details map[string]any) {
+func (h *SettingsHandler) logActivity(entryType, summary string, details []slog.Attr) {
 	if h != nil && h.Activity != nil {
 		h.Activity.Log(entryType, summary, details)
 	}
@@ -128,7 +128,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 		h.safeLogger().Info("Room name cleared", sharedprivacylog.RoomIDAttr(roomID))
 
 		roomToken := sharedprivacylog.IdentifierToken(roomID)
-		h.logActivity("name_update", "Room name cleared", map[string]any{"room_id": roomToken})
+		h.logActivity("name_update", "Room name cleared", []slog.Attr{slog.String("room_id", roomToken)})
 
 		ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room name cleared"})
 
@@ -142,9 +142,9 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 
 	// activity는 운영에서 같은 logger의 stdout으로 나가므로 room_id도 privacylog 규칙으로 기록한다.
 	roomToken := sharedprivacylog.IdentifierToken(roomID)
-	h.logActivity("name_update", "Room name set", map[string]any{
-		"room_id":   roomToken,
-		"room_name": sharedprivacylog.Pseudonym(roomName),
+	h.logActivity("name_update", "Room name set", []slog.Attr{
+		slog.String("room_id", roomToken),
+		slog.String("room_name", sharedprivacylog.Pseudonym(roomName)),
 	})
 
 	ginjson.Respond(c, http.StatusOK, statusMessageResponse{Status: "ok", Message: "Room name set successfully"})
@@ -233,10 +233,6 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 
 	runtime := h.applySettingsRuntime(ctx, current, alarmAdvanceUpdated)
 
-	if alarmAdvanceUpdated {
-		h.logSettingsUpdate(current, runtime)
-	}
-
 	ginjson.Respond(c, http.StatusOK, settingsUpdateResponse{Status: "ok", Message: "Settings updated", Settings: current, Runtime: runtime})
 }
 
@@ -291,14 +287,19 @@ func (h *SettingsHandler) applySettingsRuntime(ctx context.Context, current sett
 		}
 
 		maps.Copy(runtime, alarmAdvanceResult.AsMap())
+		h.logSettingsUpdate(current, alarmAdvanceResult)
 	}
 
 	return runtime
 }
 
-func (h *SettingsHandler) logSettingsUpdate(current settingssvc.Settings, runtime map[string]any) {
-	h.logActivity("settings_update", "Settings updated", map[string]any{
-		"alarm_advance_minutes": current.AlarmAdvanceMinutes,
-		"runtime_status":        runtime,
+func (h *SettingsHandler) logSettingsUpdate(current settingssvc.Settings, runtime adminsettings.AlarmAdvanceMinutesApplyResult) {
+	h.logActivity("settings_update", "Settings updated", []slog.Attr{
+		slog.Int("alarm_advance_minutes", current.AlarmAdvanceMinutes),
+		slog.Group("runtime_status",
+			slog.Int("alarm_requested_advance_minutes", runtime.AlarmRequestedAdvanceMinutes),
+			slog.Bool("alarm_applied", runtime.AlarmApplied),
+			slog.String("alarm_reason", runtime.AlarmReason),
+			slog.Group("alarm_target_minutes", slog.Int("count", len(runtime.AlarmTargetMinutes)))),
 	})
 }

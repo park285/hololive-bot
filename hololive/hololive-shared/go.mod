@@ -2,8 +2,6 @@ module github.com/kapu/hololive-shared
 
 go 1.27.4
 
-replace github.com/kapu/hololive-dbtest => ../hololive-dbtest
-
 require (
 	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/georgysavva/scany/v2 v2.1.4
@@ -12,7 +10,10 @@ require (
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/park285/iris-client-go/v5 v5.2.0
-	github.com/park285/shared-go/v2 v2.22.1
+	github.com/park285/shared-go/core v1.0.0
+	github.com/park285/shared-go/postgres v1.0.1
+	github.com/park285/shared-go/transport v1.0.0
+	github.com/park285/shared-go/v2 v2.24.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.65.0
 	github.com/stretchr/testify v1.12.1
@@ -55,7 +56,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/puddle/v2 v2.2.3 // indirect
+	github.com/jackc/puddle/v2 v2.2.4 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.20.4 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.2 // indirect
@@ -112,3 +113,5 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
+
+replace github.com/kapu/hololive-dbtest => ../hololive-dbtest

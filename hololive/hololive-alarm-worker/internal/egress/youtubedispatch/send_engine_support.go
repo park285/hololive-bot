@@ -223,8 +223,8 @@ func (d *SendEngine) recordGroupedSendOutcomeUnknown(
 		slog.String("channel_id", channelID),
 		slog.String("kind", string(kind)),
 		slog.Int("count", len(validRows)),
-		slog.Any("delivery_ids", collectDeliveryIDs(validRows)),
-		slog.Any("outbox_ids", collectDeliveryOutboxIDs(validRows)),
+		slog.Group("delivery_ids", slog.Int("count", len(validRows))),
+		slog.Group("outbox_ids", slog.Int("delivery_count", len(validRows))),
 		dedupeKeyLogAttr(sendReq.dedupeKeys),
 		slog.Any("error", sendErr))
 }

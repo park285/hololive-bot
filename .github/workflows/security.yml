@@ -35,12 +35,12 @@ jobs:
           path: hololive-bot
           persist-credentials: false
 
-      # 스택에서 검증·게시한 sibling snapshot을 고정합니다. 과거 release tag의 취약한 의존성으로 되돌리지 않습니다.
+      # postgres v1.0.1을 포함한 공개 모듈과 같은 코드의 검증된 소스를 고정한다.
       - name: Checkout shared-go
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: 6e4bba6a1468b09bd1494f9488715388b20d1c68 # v2.20.1, 릴리스 provenance 검증 완료
+          ref: 70918cf28874eb0f5fa64bee4a8f1030ca8ec045 # postgres/v1.0.1
           path: shared-go
           persist-credentials: false
 
@@ -59,7 +59,7 @@ jobs:
           cache-dependency-path: |
             hololive-bot/go.work.sum
             hololive-bot/hololive/*/go.sum
-            shared-go/go.sum
+            shared-go/**/go.sum
             iris-client-go/go.sum
 
       - name: Install security tools
