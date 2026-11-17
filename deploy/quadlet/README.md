@@ -109,6 +109,8 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 6. `holo-pgbouncer`를 시작하고 startup health의 frontend/backend DNS 조회, peer `SHOW VERSION`, mount된 용량 설정을 확인합니다. Netavark의 DNS 등록은 [reload 완료 ACK 없이 반환](https://github.com/containers/aardvark-dns/issues/338)하므로 `/etc/hosts`를 거치지 않는 실제 DNS 조회를 기존 startup health에 포함합니다. 이는 DNS 공개와 프로세스 준비만 증명합니다. 최초 인증 역할/함수는 다음 API coordinator의 private-socket bootstrap이 만들므로 아직 앱 SQL 준비 완료로 판정하지 않습니다. 정상 상태 health는 기존 Unix peer 검사이며 SQL 재시도·timeout 증가는 없습니다.
 7. API·worker는 보존한 두 release로 `--resume`합니다. coordinator가 private socket에서 인증 bootstrap·migration을 완료한 뒤 후보 앱을 시작합니다. 실제 앱 SCRAM·verify-full·역할·DB 한도·pooler 경유 SQL과 readiness를 확인한 뒤 같은 source의 `po-central-cutover.sh c resume <backup>`, 이어서 b를 재개합니다. native a는 기존 host-native 배포를 실행하며, d는 새 image/profile/unit·endpoint를 모두 설치한 뒤 이번 작업의 mask만 해제하고 issuer부터 시작합니다. frontend의 실제 AP source와 PostgreSQL의 pooler source, control/lease 진행을 확인합니다. 실패하면 추가 재개를 중단하고 관련 writer의 hold·복구점을 보존합니다. 이전 direct unit을 새 HBA 위에서 자동 재기동하지 않습니다.
 
+`b/c quiesce`는 자기 mask의 inode와 두 컨테이너의 부재를 함께 확인합니다. `po-broker`는 의도적으로 SIGTERM을 다시 보내므로 Podman이 143, systemd가 `failed`를 기록할 수 있습니다. 성공한 `stop` 직전에 실행 중이던 바로 그 issuer invocation이고 두 PID가 0인 경우에만 이 상태를 차단으로 인정합니다. 실패 이력을 지우거나 collector의 오류를 정상 종료로 취급하지 않습니다. 종료 영수증이 없는 기존 hold에 영수증을 소급 작성하지 않습니다. `[OUTCOME] unconfirmed`이면 DB 변경·추가 기동을 중단하고 mask·원래 journal·복구점을 보존합니다.
+
 ### 복구와 자격 증명 변경
 
 - 중앙·b·native rollback은 현재 env/drop-in까지 반영한 endpoint를 이전 복구점과 비교합니다. 다르거나 해석되지 않으면 재기동 전에 거부합니다. 이전 HBA/DB 설정·effective endpoint를 별도 승인 아래 정합화한 뒤 기존 `--check`/`--apply`를 다시 실행합니다. native recovery guard도 기존 복구 절차로 해제하며 우회 flag는 없습니다.

@@ -332,6 +332,12 @@ podman() {
       [[ "$fixture_case" != inventory_failure ]] || return 125
       [[ -f "$(ref_file "$3")" ]]
       ;;
+    'container exists')
+      [[ ! -f "$fixture_root/inventory-unavailable" ]] || return 125
+      kind=collector
+      [[ "$3" != "$issuer_container" ]] || kind=issuer
+      [[ "$(cat "$fixture_root/$kind.running")" == true || -e "$fixture_root/$kind.leftover" ]]
+      ;;
     'image rm') rm "$(ref_file "$3")" ;;
     'tag '*)
       if [[ "$fixture_case" == restore_failure && "$2" == *:rollback-* ]]; then return 9; fi
@@ -398,7 +404,14 @@ systemctl() {
         LoadState)
           if [[ -L "$system_unit_dir/${*: -1}" ]]; then printf 'masked\n'; else printf 'loaded\n'; fi ;;
         ActiveState)
-          if [[ "$(cat "$fixture_root/$kind.running")" == true ]]; then printf 'active\n'; else printf 'inactive\n'; fi ;;
+          if [[ "$(cat "$fixture_root/$kind.running")" == true ]]; then printf 'active\n'
+          elif [[ -f "$fixture_root/$kind.exit" ]]; then printf 'failed\n'; else printf 'inactive\n'; fi ;;
+        InvocationID)
+          if [[ -f "$fixture_root/replaced-invocation" ]]; then printf '%032x\n' 2; else printf '%032x\n' 1; fi ;;
+        Result) printf 'exit-code\n' ;;
+        ExecMainCode) printf '1\n' ;;
+        ExecMainStatus) cat "$fixture_root/$kind.exit" ;;
+        MainPID|ControlPID) printf '0\n' ;;
         *) return 2 ;;
       esac ;;
     mask)
@@ -441,6 +454,7 @@ systemctl() {
       ;;
     stop)
       [[ "$fixture_case" != *stop_failure || "$kind" != collector ]] || return 8
+      if [[ "$kind" == issuer && "$mode" == quiesce ]]; then printf '143\n' > "$fixture_root/issuer.exit"; fi
       printf absent > "$fixture_root/$kind.runtime"; printf false > "$fixture_root/$kind.running" ;;
     *) return 2 ;;
   esac
@@ -482,6 +496,7 @@ slots = {
 runs = [('c', case) for case in central_cases] + [('b', case) for case in ('success', 'rollback', 'check_success', 'transition_success', 'transition_error_log', 'transition_wrong_endpoint', 'rollback_cross')]
 maintenance_cases = (
     'success', 'reboot', 'mask_failure', 'stop_failure', 'activation_failure',
+    'other_exit', 'other_invocation', 'leftover_container', 'inventory_unavailable',
     'candidate_check_failure', 'substitution_failure', 'error_log', 'unmask_failure',
     'source_changed', 'identity_changed', 'inputs_changed', 'foreign_hold', 'lock_busy',
     'operator_mask', 'incomplete_hold', 'candidate_unit_changed', 'candidate_profile_changed', 'wrong_endpoint',
@@ -667,6 +682,14 @@ for slot, case in runs:
                 require(unit_path.read_text() == candidate_definition and not (current / '.source-revision').exists(),
                         'b: actual staged candidate installed without source marker', result)
             (state / 'db.stopped').unlink()
+            if scenario == 'other_exit':
+                (state / 'issuer.exit').write_text('137\n')
+            elif scenario == 'other_invocation':
+                (state / 'replaced-invocation').touch()
+            elif scenario == 'leftover_container':
+                (state / 'collector.leftover').touch()
+            elif scenario == 'inventory_unavailable':
+                (state / 'inventory-unavailable').touch()
             if scenario == 'capacity_drift':
                 (state / 'compose.env').write_text('YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=6\n')
             elif scenario == 'capacity_missing':

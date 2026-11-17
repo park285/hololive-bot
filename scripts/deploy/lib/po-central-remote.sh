@@ -91,24 +91,42 @@ require_owned_hold() {
 }
 
 require_held_units() {
-  local unit
+  local unit state invocation exists
   require_owned_hold || return
   for unit in "$issuer_unit" "$collector_unit"; do
     [[ -s "$hold/$unit" && "$(readlink "$system_unit_dir/$unit")" == /dev/null &&
        "$(<"$hold/$unit")" == "$(stat -c '%d:%i' "$system_unit_dir/$unit")" ]] || return 1
     [[ "$(systemctl show -p LoadState --value "$unit")" == masked ]] || return 1
-    [[ "$(systemctl show -p ActiveState --value "$unit")" == inactive ]] || return 1
+    state="$(systemctl show -p ActiveState --value "$unit")" || return
+    if [[ "$state" != inactive ]]; then
+      # po-broker는 SIGTERM을 다시 보내 종료한다. Podman의 143을 일반 기동 성공으로 바꾸지 않는다.
+      [[ "$unit" == "$issuer_unit" && "$state" == failed && -s "$hold/issuer-stop.invocation" ]] || return 1
+      invocation="$(<"$hold/issuer-stop.invocation")"
+      [[ "$invocation" =~ ^[0-9a-f]{32}$ &&
+         "$(systemctl show -p InvocationID --value "$unit")" == "$invocation" &&
+         "$(systemctl show -p Result --value "$unit")" == exit-code &&
+         "$(systemctl show -p ExecMainCode --value "$unit")" == 1 &&
+         "$(systemctl show -p ExecMainStatus --value "$unit")" == 143 &&
+         "$(systemctl show -p MainPID --value "$unit")" == 0 &&
+         "$(systemctl show -p ControlPID --value "$unit")" == 0 ]] || return 1
+    fi
+    exists=0
+    podman container exists "${unit%.service}" || exists=$?
+    [[ "$exists" == 1 ]] || { echo "container absence unconfirmed for $unit (status=$exists)" >&2; return 1; }
   done
 }
 
 hold_units() {
-  local unit status=0
+  local unit status=0 issuer_invocation=''
   for unit in "$issuer_unit" "$collector_unit"; do
     if [[ ! -f "$hold/$unit" ]]; then
       echo "missing mask ownership for $unit" >&2
       status=1
       systemctl stop "$unit" || status=1
       continue
+    fi
+    if [[ "$unit" == "$issuer_unit" ]] && systemctl is-active --quiet "$unit"; then
+      issuer_invocation="$(systemctl show -p InvocationID --value "$unit")" || status=1
     fi
     if [[ ! -e "$system_unit_dir/$unit" && ! -L "$system_unit_dir/$unit" ]]; then
       if systemctl mask "$unit"; then
@@ -121,7 +139,13 @@ hold_units() {
       echo "refusing unrelated unit at $system_unit_dir/$unit" >&2
       status=1
     fi
-    systemctl stop "$unit" || status=1
+    if systemctl stop "$unit"; then
+      if [[ "$unit" == "$issuer_unit" && "$issuer_invocation" =~ ^[0-9a-f]{32}$ ]]; then
+        printf '%s\n' "$issuer_invocation" > "$hold/issuer-stop.invocation" || status=1
+      fi
+    else
+      status=1
+    fi
   done
   require_held_units || status=1
   return "$status"
@@ -137,6 +161,7 @@ release_unit() {
 
 clear_hold() {
   rm -- "$hold/$issuer_unit" "$hold/$collector_unit" "$hold/backup"
+  rm -f -- "$hold/issuer-stop.invocation"
   rmdir -- "$hold"
   hold_owned=false
 }
