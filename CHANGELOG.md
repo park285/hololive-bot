@@ -8,6 +8,16 @@
 
 ## 미출시
 
+- **PostgreSQL transaction pooling:** 중앙/API/worker/c와 AP a·b·d를 역할별 상한을 유지한 PgBouncer 경로로 전환하는 소스를 추가했습니다. DB의 현재 SCRAM verifier를 cert-only `auth_query`로 읽어 앱 비밀번호를 pooler 파일에 복제하지 않고, 같은 비밀번호 bootstrap은 verifier를 유지합니다. PgBouncer 1.26.1의 startup timeout 오염은 upstream `22d0aa1`을 backport한 공통 `1.26.1-guc1` 이미지로 수정했습니다. pgx prepared backend 교체·동명 동시 사용·재연결, timeout/cancel, control 예약, 실제 암호 회전과 장애 복구를 격리 환경에서 검증했습니다. direct↔pooler rollback은 HBA·endpoint의 조정 복구 전 재기동을 거부합니다. ChatBotGo는 같은 native 이미지에 별도 인스턴스·인증 DB·연결 예산을 사용합니다. 운영 인증서·DB/HBA·방화벽·서비스 전환은 별도 승인 사항입니다. Fallback delta: none.
+- PgBouncer 기동 health에 frontend/backend DNS 공개 확인을 추가했습니다. 정상 상태의 peer health와 별도 SQL 수용 검사는 유지하며, DNS 준비 전 성공 판정을 차단합니다.
+- **Pooler 전환·복구 안전성:** collector c·b에 이전 실행 pair를 보존하는 `quiesce/resume`과 영속 hold를 추가합니다. 재개 전 보관 drop-in과 실제 설치 후보를 검증하며 실패 시 direct writer를 자동 시작하지 않습니다. 중앙 앱의 effective pool 크기와 실행 pooler의 mount된 설정이 다르면 배포·재기동·복구를 거부하여 앱만 증설했을 때 예약 control이 backend 대기에 막히는 경로를 차단합니다. Fallback delta: none.
+- **SCRAM 역할 격리:** 원문이 달라도 pgx의 SCRAM 암호 준비 후 같아지는 역할 간·관리자 암호 중복을 DB 연결 전에 거부합니다. PostgreSQL/pgx 호환성 검사와 같은 비밀번호의 verifier 보존은 유지합니다. Fallback delta: none.
+
+## v18.8.3 - 2026-11-18
+
+- **수집기 배포 payload:** paired cutover에 env 렌더러와 두 필수 라이브러리를 함께 전송합니다. 기존 profile fixture도 실제 전송 목록으로 만든 payload에서 렌더링하도록 바꿔 저장소 전체에서만 성공하고 원격에서 파일이 빠지는 회귀를 막습니다. 실행 코드·공개 dependency·runtime artifact 버전은 변경하지 않습니다.
+- **Native 후보 검사:** 업로드한 사용자 홈 대신 이미 복사·권한 정규화를 마친 release의 host env를 systemd에 전달합니다. 후보 값과 기존 격리 정책은 유지하며, 서비스 관리자가 홈 파일을 읽을 수 없는 호스트에서도 활성화 전에 동일 profile을 검사합니다.
+
 ## v18.8.2 - 2026-11-18
 
 - **Pair 사전 점검:** 기본 unit 밖의 호스트 drop-in이 정한 SELinux MCS 레벨을 native Quadlet 생성 결과에서 읽어 후보 검사에 보존합니다. 실행 중 서비스와 다른 임의 레벨 때문에 읽기 전용 비밀 mount가 거부되던 문제를 수정하며, 파일 권한·비밀 원본·SELinux 강제 정책은 바꾸지 않습니다.
@@ -22,10 +32,6 @@
 
 - **의존성:** 다섯 Go 모듈을 shared-go v2.22.2로 올렸습니다. shared-go 코드 변경은 없고, 함께 올라오는 puddle v2.2.4(pgx 연결 풀)는 `CreateResource`로 시작한 연결 생성이 `Close`·`Reset` 뒤에 끝나면 그 연결을 폐기해 풀 통계에 남거나 재사용되지 않게 합니다. Fallback delta: none.
 - **의존성:** 다섯 Go 모듈을 shared-go v2.22.1로 올렸습니다. shared-go `logging`이 `Authorization`·`Proxy-Authorization`·`cookie` 같은 헤더 자격 증명의 따옴표 없는 값을 줄 끝까지 가립니다. 이 저장소는 shared-go의 `llm`과 `irisdurable/pgstore`를 쓰지 않아 응답 상한·nonce prune 변경의 영향은 없습니다. Fallback delta: none.
-- **PostgreSQL transaction pooling:** 중앙/API/worker/c와 AP a·b·d를 역할별 상한을 유지한 PgBouncer 경로로 전환하는 소스를 추가했습니다. DB의 현재 SCRAM verifier를 cert-only `auth_query`로 읽어 앱 비밀번호를 pooler 파일에 복제하지 않고, 같은 비밀번호 bootstrap은 verifier를 유지합니다. PgBouncer 1.26.1의 startup timeout 오염은 upstream `22d0aa1`을 backport한 공통 `1.26.1-guc1` 이미지로 수정했습니다. pgx prepared backend 교체·동명 동시 사용·재연결, timeout/cancel, control 예약, 실제 암호 회전과 장애 복구를 격리 환경에서 검증했습니다. direct↔pooler rollback은 HBA·endpoint의 조정 복구 전 재기동을 거부합니다. ChatBotGo는 같은 native 이미지에 별도 인스턴스·인증 DB·연결 예산을 사용합니다. 운영 인증서·DB/HBA·방화벽·서비스 전환은 별도 승인 사항입니다. Fallback delta: none.
-- PgBouncer 기동 health에 frontend/backend DNS 공개 확인을 추가했습니다. 정상 상태의 peer health와 별도 SQL 수용 검사는 유지하며, DNS 준비 전 성공 판정을 차단합니다.
-- **Pooler 전환·복구 안전성:** collector c·b에 이전 실행 pair를 보존하는 `quiesce/resume`과 영속 hold를 추가합니다. 재개 전 보관 drop-in과 실제 설치 후보를 검증하며 실패 시 direct writer를 자동 시작하지 않습니다. 중앙 앱의 effective pool 크기와 실행 pooler의 mount된 설정이 다르면 배포·재기동·복구를 거부하여 앱만 증설했을 때 예약 control이 backend 대기에 막히는 경로를 차단합니다. Fallback delta: none.
-- **SCRAM 역할 격리:** 원문이 달라도 pgx의 SCRAM 암호 준비 후 같아지는 역할 간·관리자 암호 중복을 DB 연결 전에 거부합니다. PostgreSQL/pgx 호환성 검사와 같은 비밀번호의 verifier 보존은 유지합니다. Fallback delta: none.
 
 ## v18.8.0 - 2026-11-17
 

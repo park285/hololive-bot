@@ -268,7 +268,14 @@ class ResolvedPairTest(unittest.TestCase):
         for source in remote.iterdir():
             if source.is_file():
                 shutil.copy2(source, self.units / source.name)
-        spec = importlib.util.spec_from_file_location("resolved_worker_profile_pair", TOOL)
+        # 원격 배포와 같은 파일 목록으로 만든 payload에서 실제 렌더러를 실행한다.
+        payload = self.root / "payload"
+        payload.mkdir()
+        subprocess.run(["rsync", "-a", "--files-from=" + str(ROOT / "scripts/deploy/po-central-files.txt"),
+                        str(ROOT) + "/", str(payload) + "/"],
+                       check=True, capture_output=True, text=True)
+        self.tool = payload / "scripts/deploy/lib/worker-profile-pair.py"
+        spec = importlib.util.spec_from_file_location("resolved_worker_profile_pair", self.tool)
         self.module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.module)
         self.module.QUADLET_DIR = self.units
@@ -380,7 +387,7 @@ class ResolvedPairTest(unittest.TestCase):
             if self.check_status:
                 raise subprocess.CalledProcessError(self.check_status, args)
             return subprocess.CompletedProcess(args, 0)
-        self.assertEqual(args[:2], ["bash", str(TOOL.parent.parent / "quadlet-prestart.sh")])
+        self.assertEqual(args[:2], ["bash", str(self.tool.parent.parent / "quadlet-prestart.sh")])
         self.assertEqual(args[2], "--render-env")
         self.assertEqual(Path(args[4]).stat().st_mode & 0o777, 0o700)
         self.assertEqual(list(Path(args[4]).iterdir()), [])
