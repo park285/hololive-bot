@@ -216,7 +216,7 @@ done
 # 값은 compose.env를 source하지 않고 systemd가 제공한 현재 process 환경을 쓴다.
 mkdir -m 0700 "$fixture/service-input"
 (set -a; . "$test_root/compose.env"; set +a
- HOLOLIVE_DB_PASSWORD=service-override
+ export HOLOLIVE_DB_PASSWORD=service-override
  unset HOLODEX_API_KEY
  invoke_prestart --render-env hololive-api "$fixture/service-input") > "$fixture/render.log" 2>&1
 grep -qx 'POSTGRES_PASSWORD=service-override' "$fixture/service-input/hololive-api.env"
@@ -252,7 +252,7 @@ for unit in "${units[@]}"; do
     mkdir -m 0700 "$directory"
     reject_multiline_input() (
         set -a; . "$test_root/compose.env"; set +a
-        HOLODEX_API_KEY=$'injected-secret\nSECOND=value'
+        export HOLODEX_API_KEY=$'injected-secret\nSECOND=value'
         invoke_prestart --render-env "$unit" "$directory"
     )
     assert_rejected_render "$directory" reject_multiline_input
