@@ -8,8 +8,10 @@
 
 ## 미출시
 
+## v18.8.1 - 2026-11-18
+
 - **공통 라이브러리 경계:** 다섯 Go 모듈의 생산·fixture import를 shared-go core/postgres/transport로 이전했습니다. 게시·출처 검증을 완료한 root `v2.24.0`, postgres `v1.0.1`, core·transport `v1.0.0`을 사용하며 기존 업무 sibling replace만 production manifest에 유지합니다.
-- **로그·사전 점검:** Activity·HTTP·작업/발송 진단의 aggregate를 최소 typed group·count로 투영합니다. profile CLI와 정상 기동은 같은 runtime 환경·CA·DB 옵션·예약 용량을 무접속으로 검사합니다. Pair/native 사전 검사는 runtime 환경과 읽기 전용 로컬 파일을 제공하며, 실제 배포나 데이터 변경은 하지 않았습니다. Fallback delta: 없음.
+- **로그·사전 점검:** Activity·HTTP·작업/발송 진단의 aggregate를 최소 typed group·count로 투영합니다. profile CLI와 정상 기동은 같은 runtime 환경·CA·DB 옵션·예약 용량을 무접속으로 검사합니다. Pair/native 사전 검사는 runtime 환경과 읽기 전용 로컬 파일을 제공하며, 실제 배포·원격 DB 검증·데이터 변경을 실행하지 않습니다. Fallback delta: 없음.
 - **Pair 사전 점검:** 기존 Quadlet named volume을 native 메타데이터로 확인하고 읽기 전용으로 사용합니다. 미설정 선택 변수는 systemd와 같이 빈 문자열로 확장합니다. 중앙의 파생 env는 기존 prestart 매핑으로 매번 0700/0600 사설 출력에 생성하며, 누락되거나 오래된 `/run` 파일에 의존하지 않습니다. 필수값 검증·retained API 버전·환경 우선순위와 idmap/UserNS는 유지합니다.
 - **handoff 진단:** `delivery_ids.count`와 승인된 내부 원장 식별자 `delivery_ids.first_id`를 함께 남겨 조회 지연·정산 로그를 대상에 연결합니다. Iris request ID나 원시 aggregate는 기록하지 않습니다.
 - **보안 CI:** shared-go checkout을 `postgres/v1.0.1`의 검증된 source commit `70918cf28874eb0f5fa64bee4a8f1030ca8ec045`로 고정했습니다. 소스 workspace와 production 공개 pin 검증은 계속 구분합니다.
