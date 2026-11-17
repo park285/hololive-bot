@@ -204,6 +204,12 @@ def check_resolved_pair(directory, pair):
         if pair["service"] == "hololive-api" and "app_version" in pair:
             environment["APP_VERSION"] = pair["app_version"]
             command.extend(("--env", "APP_VERSION"))
+        # 호스트의 MCS drop-in은 기본 unit 스냅샷 밖에 있으므로 Quadlet이 합성한 정책을 따른다.
+        fragment = run("systemctl", "show", unit + ".service", "--property=FragmentPath", "--value")
+        native = unit_values(Path(fragment), sections=("X-Container",))["X-Container"]
+        level = dict(native).get("SecurityLabelLevel")
+        if level:
+            command.extend(("--security-opt", "label=level:" + expand_unit_value(level)))
         command.extend(("--user", user + ":" + group,
                         "--mount", "type=bind,src=" + str(directory) + ",dst=" + RELEASE_TARGET + ",readonly",
                         "--env", "STACK_WORKER_PROFILE_FILE=" + RELEASE_TARGET + "/profile.json",
