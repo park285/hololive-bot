@@ -145,10 +145,10 @@ podman run -d --name "$pooler" --pull=never --platform="linux/$architecture" --s
 namespace_address "$pooler" 100.100.1.8
 ready=false
 for _ in $(seq 1 30); do
-  if podman exec "$pooler" psql -X -w -h /tmp -p 6432 -U pgbouncer -d pgbouncer -v ON_ERROR_STOP=1 -Atc 'SHOW VERSION' >"$fixture/version" 2>"$fixture/health-error"; then ready=true; break; fi
+  if podman exec "$pooler" /usr/local/bin/pgbouncer-startup-health holo-pgbouncer holo-postgres >"$fixture/version" 2>"$fixture/health-error"; then ready=true; break; fi
   sleep 1
 done
-[[ "$ready" == true ]] || { echo 'PgBouncer peer health failed' >&2; exit 1; }
+[[ "$ready" == true ]] || { cat "$fixture/health-error" >&2; echo 'PgBouncer startup health failed' >&2; exit 1; }
 cat "$fixture/version"
 client "$central" 172.23.255.254 auth-client central
 client "$central" 172.23.10.9 wrong-auth-source central
