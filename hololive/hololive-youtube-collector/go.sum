@@ -90,8 +90,8 @@ github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7Ulw
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761/go.mod h1:5TJZWKEWniPve33vlWYSoGYefn3gLQRzjfDlhSJ9ZKM=
 github.com/jackc/pgx/v5 v5.13.0 h1:Hl08k64maU0nrRyVUEbwCnK6/gT0EhMrtAqBHz9/gA4=
 github.com/jackc/pgx/v5 v5.13.0/go.mod h1:u2Fi6no03HCSBYE+ZVdLxbwdu3xyi2vU+K/YNJioSds=
-github.com/jackc/puddle/v2 v2.2.3 h1:f8HoREISb3l5eO9coPgK7U3hKLhWGokOFVcThl5jrao=
-github.com/jackc/puddle/v2 v2.2.3/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
+github.com/jackc/puddle/v2 v2.2.4 h1:N6Mz6EGB9DL0bz3OEfxJ7eoOpjRHnnjpOh+G8kbLoG8=
+github.com/jackc/puddle/v2 v2.2.4/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/klauspost/compress v1.20.4 h1:dD0v/bvxtjCBqQu6sx1TNWkalEY5lNTIe+HY9w8TeNI=
@@ -149,8 +149,8 @@ github.com/pandatix/go-abnf v0.5.5 h1:EXex5KkRQx4Dm6GnpAcQnIMBs9KiK0uf8p/wq+4t9P
 github.com/pandatix/go-abnf v0.5.5/go.mod h1:AE0KD3/VNoCjGzc1gqetRKshbI4SYErXQ/8kPenR5mc=
 github.com/park285/iris-client-go/v5 v5.2.0 h1:eUyYjCZc0j4BUNatzZ8MIt/Vx1TXLEYcG9TD0CsL3WA=
 github.com/park285/iris-client-go/v5 v5.2.0/go.mod h1:Vzx5navxO3IXXiYrfUmtX4eOaRdMBYLjcR7XNF6rOv4=
-github.com/park285/shared-go/v2 v2.22.1 h1:+7nZKfzKciqrC8p+0mTsRdAXdDiu1/hs8/6m3tA8pPQ=
-github.com/park285/shared-go/v2 v2.22.1/go.mod h1:N/2chShvHc6DXCygxrXuPtyOEeE33N7j9ZZ+MjrBb+M=
+github.com/park285/shared-go/v2 v2.22.2 h1:YyyEHBpLUbuhK9T2flVnhxOCAegh6TZRyqlb7ZLUBKE=
+github.com/park285/shared-go/v2 v2.22.2/go.mod h1:cf8Xibx7ibMDisBSWMoQxtoi0WkeaFgRX3n3he6eH9I=
 github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
 github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
