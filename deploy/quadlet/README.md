@@ -61,7 +61,7 @@ sudo ./scripts/deploy/sync-opt-current.sh
 `sudo systemctl reload admin-dashboard-ingress-firewall.service`로 적용합니다(아래 '기동·정지·의존').
 이 규칙은 같은 호스트의 ChatBotGo(5432)·TwentyQ(5458) PostgreSQL 게시 포트도 loopback과 kapu(`bot_postgres_sources`)에서만 받습니다.
 Tailscale은 tailscale0에서 전달하는 패킷을 masquerade하므로, 규칙이 없으면 PostgreSQL은 원격 접속을 모두 bridge gateway(`172.23.0.1`)로 봅니다.
-`forward_preserve_postgres_source` 체인이 holo-postgres 게시(5433)로 들어오는 `postgres_sources` 접속에서만 그 표시를 지워 `pg_hba.conf`가 AP별 tailnet 주소로 판정합니다. 두 봇 DB 게시와 다른 게시 포트는 그대로 masquerade됩니다.
+`forward_preserve_postgres_source` 체인은 PostgreSQL 게시 `5433→5432`와 PgBouncer 게시 `6433→6432`의 `postgres_sources` 접속에만 그 표시를 지웁니다. 앱의 AP별 주소 판정은 PgBouncer frontend HBA가 맡고 PostgreSQL의 앱 접속은 고정 pooler 주소만 받습니다. exporter의 직접 접속과 두 봇 DB 게시·다른 게시 포트의 masquerade는 그대로 유지합니다.
 두 봇의 DB unit(`chatbotgo-postgres`·`twentyq-postgres`)도 holo-postgres처럼 이 방화벽 unit을 `Requires=`하므로, 방화벽 unit이 시작에 실패하면 기동하지 않고 멈추면 함께 멈춥니다. reload는 두 DB에 영향을 주지 않습니다.
 
 prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)로 설치됩니다.
@@ -79,10 +79,41 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 - PostgreSQL 로그인 비밀번호는 API `HOLOLIVE_DB_PASSWORD`, alarm-worker `HOLOLIVE_ALARM_WORKER_PASSWORD`,
   collector slot별 `HOLOLIVE_COLLECTOR_A_PASSWORD`~`D_PASSWORD`로 나누고 서로·`DB_PASSWORD`와 다르게 둡니다.
   db-migrate는 admin socket에서 이 역할들의 비밀번호와 연결 한도를 맞추고(API는 마지막) migration을 적용합니다.
+  같은 비밀번호이면 기존 SCRAM verifier를 유지합니다. 실제 비밀번호를 바꿀 때는 해당 역할의 모든 앱 frontend를 먼저 drain·종료해야 하며, 비밀번호 변경 자체가 기존 세션을 폐기하지는 않습니다.
 - compose에서 `:?`였던 필수 값(`VALKEY_SENTINEL_ADDRS`, `LIVE_LOGS_PATH`,
   `POSTGRES_PORT_BIND_IP`, `VALKEY_BIND_IP`, `HOLOLIVE_API_PORT_BIND_IP`, `HOLOLIVE_ADMIN_API_PORT_BIND_IP`,
   `HOLOLIVE_BOT_PORT_BIND_IP`)은 prestart가 확인합니다. tailnet publish 주소는 `tailscale0`에 붙을 때까지 90초 기다립니다.
 - `hololive-api`의 `APP_VERSION`은 배포 트리 `hololive/hololive-api/VERSION`에서 읽습니다.
+
+## Transaction pooling
+
+이 절은 소스의 전환 계약입니다. 운영 적용 여부는 배포 baseline의 별도 수용 기록으로 판단합니다.
+
+- 중앙 앱은 `holo-pgbouncer:6432`, AP a·b·d는 `100.100.1.8:6433`을 사용합니다. `compose.env`와 native host env의 host/port override도 함께 바꿉니다.
+- `holo-pgbouncer`의 bridge 주소는 `172.23.255.254`입니다. PostgreSQL은 이 `/32`에서 오는 여섯 앱 역할의 SCRAM과 `hololive_pgbouncer_auth`의 인증서 로그인만 받습니다. 앱 비밀번호·verifier를 pooler 파일에 복제하거나 backend 공용 user로 강제하지 않습니다.
+- `hololive_pooler_auth.lookup(text)`는 앱 DB의 관리자 소유 함수입니다. cert-only auth 역할의 연결 한도는 1이며, 현재 SCRAM verifier만 조회합니다. 함수는 LOGIN·만료·특권을 검사하고 HBA는 DB·역할·source·인증서를 제한합니다. 기존 인증 객체의 잘못된 owner/ACL·예상 밖 객체는 자동 수정하지 않고 bootstrap을 거부합니다.
+- 관리·migration·nightly Unix socket과 exporter의 직접 `5433` 경로는 유지합니다. migrator의 session advisory lock은 pooler를 통과하지 않습니다.
+- 공통 native 이미지는 `localhost/iris-stack-pgbouncer:1.26.1-guc1`이며 기존 native 이미지와 같이 `zlib=1.4-r0`을 고정합니다. 정식 1.26.1에서 재현한 미보고 startup GUC 오염을 [upstream commit `22d0aa1`](https://github.com/pgbouncer/pgbouncer/commit/22d0aa1ce20cf3a29eb8ed267caa5570a76a812f)으로 수정했습니다. 이 수정이 포함된 정식 버전으로 전환할 때 patch를 제거하고 통합 검사를 유지합니다. ChatBotGo는 같은 바이너리 이미지만 재사용하며 인스턴스·인증서·DB·예산은 별개입니다.
+- `pool_mode=transaction`, `max_prepared_statements=200`, pgx `cache_statement`를 유지합니다. `track_extra_parameters=statement_timeout`로 startup의 30초 제한을 보존합니다. 임의 session `SET`, SQL-level `PREPARE`, session advisory lock을 transaction pooling 지원 기능으로 간주하지 않습니다.
+- backend 대기 `query_wait_timeout=5`는 pgxdb의 local acquire 5초와 별도입니다. backend idle은 600초이며 통합 시험을 이유로 운영 값을 1초로 줄이지 않습니다.
+- `scripts/deploy/lib/postgres-capacity.sh`가 compose.env·설치 unit·drop-in의 effective 값으로 비밀 없는 `pgbouncer.ini`를 생성합니다. 역할별 backend 상한은 해당 앱 풀 최대값의 합이고 reserve pool은 0입니다. 기본값은 앱46+auth1, 정비 포함52/일반58로 여유6입니다. admin pool max3이면 앱45+auth1, 전체51로 여유7입니다. 앱 활성화·재기동·복구에서는 실행 pooler가 mount한 설정과 대조합니다. 풀 크기만 바꾸고 앱만 재배포하면 사전에 거부되므로, 용량 변경은 writer를 보존·정지한 뒤 pooler 설정 재생성과 재기동까지 같은 창에서 처리합니다.
+- 예약 control 진행 보장은 정상 단일 배포와 선언된 풀 상한 안에서의 계약입니다. 중복 writer나 임의 추가 frontend까지 무기아를 보장하지 않습니다.
+
+### 최초 운영 전환
+
+1. 별도 운영 승인을 받고 이전 image/profile/unit·effective endpoint·HBA·방화벽·DB 설정·secret master의 복구 입력을 보존합니다. 기존 API·worker의 profile 고정이 없다면 unit 교체 전에 현행 소스로 [첫 고정](#컷오버-직후-첫-고정)을 완료합니다. `172.23.255.254`와 host `6433`의 충돌, 필수 역할/비밀 준비 상태를 확인합니다. 깨끗한 commit에서 kapu가 arm64 image를 빌드·검증하고 중앙에는 no-build 산출물만 전송합니다.
+2. 플랫폼 소유자가 기존 CA로 frontend 인증서(SAN `DNS:holo-pgbouncer`, `IP:100.100.1.8`)와 backend client 인증서(CN `hololive_pgbouncer_auth`)를 발급합니다. master `hosts/hololive-seoul/hololive-bot/pgbouncer/`의 `server.crt`, `server.key`, `backend-client.crt`, `backend-client.key`를 승인된 절차로 `/etc/stack-secrets/hololive-bot/pgbouncer/`에 동기화합니다. private key의 uid10001·0600, directory 탐색 권한·idmap·SELinux label을 확인합니다. 기존 CA는 `certs/postgres-ca.pem`입니다.
+3. 기존 unit을 교체하기 전에 kapu의 `po-central-cutover.sh c quiesce`와 `b quiesce`로 실행 중 이전 collector/issuer pair를 보존하고 영속 hold합니다. 각각 기존 `PO_<SLOT>_SSH_TARGET`·`APPROVE_PO_<SLOT>_DEPLOY=true` 승인을 사용하며 출력한 backup 경로를 보존합니다. 정지 뒤 일반 `deploy`로 새 복구점을 만들지 않습니다. native a는 이전 release를 보존하고 issuer/socket·collector를 순서대로 정지·disable하며, d는 이전 image/profile/unit을 보존한 뒤 issuer·collector를 영속 mask하고 정지합니다. 기존 타 작업의 mask는 변경하지 않습니다.
+4. 승인된 새 배포 트리·unit·env·방화벽을 설치하되 앱을 재시작하지 않습니다. 배포 트리의 `quadlet-redeploy-service.sh --quiesce <api-image> <worker-image>`로 API·worker의 이전 pair와 후보를 보존하고 두 release 경로를 기록합니다. 모든 writer의 정지와 재부팅 후 기동 차단을 확인한 뒤에만 DB/HBA를 바꿉니다.
+5. PostgreSQL을 새 HBA·CA mount·`ssl_ca_file`·`max_connections=61`로 재기동합니다. 미적용 migration의 영향을 먼저 검토하고, 별도 `db-migrate` 실행으로 coordinator의 순서를 우회하지 않습니다. 앱 역할 비밀번호를 불필요하게 회전하지 않습니다.
+6. `holo-pgbouncer`를 시작하고 peer `SHOW VERSION`과 mount된 용량 설정을 확인합니다. 이는 프로세스 준비만 증명합니다. 최초 인증 역할/함수는 다음 API coordinator의 private-socket bootstrap이 만들므로 아직 앱 SQL 준비 완료로 판정하지 않습니다.
+7. API·worker는 보존한 두 release로 `--resume`합니다. coordinator가 private socket에서 인증 bootstrap·migration을 완료한 뒤 후보 앱을 시작합니다. 실제 앱 SCRAM·verify-full·역할·DB 한도·pooler 경유 SQL과 readiness를 확인한 뒤 같은 source의 `po-central-cutover.sh c resume <backup>`, 이어서 b를 재개합니다. native a는 기존 host-native 배포를 실행하며, d는 새 image/profile/unit·endpoint를 모두 설치한 뒤 이번 작업의 mask만 해제하고 issuer부터 시작합니다. frontend의 실제 AP source와 PostgreSQL의 pooler source, control/lease 진행을 확인합니다. 실패하면 추가 재개를 중단하고 관련 writer의 hold·복구점을 보존합니다. 이전 direct unit을 새 HBA 위에서 자동 재기동하지 않습니다.
+
+### 복구와 자격 증명 변경
+
+- 중앙·b·native rollback은 현재 env/drop-in까지 반영한 endpoint를 이전 복구점과 비교합니다. 다르거나 해석되지 않으면 재기동 전에 거부합니다. 이전 HBA/DB 설정·effective endpoint를 별도 승인 아래 정합화한 뒤 기존 `--check`/`--apply`를 다시 실행합니다. native recovery guard도 기존 복구 절차로 해제하며 우회 flag는 없습니다.
+- 실제 비밀번호 회전은 그 역할의 frontend를 먼저 종료하고 bootstrap한 뒤 새 비밀번호로 재접속합니다. 다른 역할은 verifier를 유지하므로 정상 재배포가 fleet 전체의 SCRAM 키를 무효화하지 않습니다. 만료/NOLOGIN도 새 인증 거부와 기존 세션 종료를 구분합니다.
+- 로컬 `PGBOUNCER_TEST_IMAGE=<host-arch image> bash scripts/deploy/test-pgbouncer.sh`는 양방향 TLS, 역할/source 거부, pgx prepared backend 교체·동명 동시 사용·재연결, timeout 격리, 예약 control, 강제 backend 종료의 오류/rollback/후속 연결, 동일 비밀번호 재bootstrap과 실제 회전을 검사합니다. native fixture의 PAUSE/RESUME·강제 종료는 임시 컨테이너에만 적용합니다.
 
 ## 기동·정지·의존
 

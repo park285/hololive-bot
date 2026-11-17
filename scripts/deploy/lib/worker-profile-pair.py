@@ -275,6 +275,16 @@ def dropin(directory, service, pair, output=None, app_version=None):
     atomic_publish([(output or directory / DROPIN, dropin_contents(directory, service, pair, app_version))])
 
 
+def verify_dropin(directory, service, pair, overlay=None):
+    contents = profile_bytes(overlay or directory / DROPIN)
+    expected = [dropin_contents(directory, service, pair)]
+    if service == "hololive-api" and "app_version" in pair:
+        expected.append(dropin_contents(directory, service, pair, pair["app_version"]))
+    if contents not in expected:
+        raise ValueError("retained drop-in changed")
+    return contents
+
+
 def quadlet_slot(service, unit):
     # 후보 profile은 기본 unit이 원본 mirror를 읽기 전용으로 붙이고 서비스 slot 파일을 가리킬 때만 고정한다.
     lines = [line.strip() for line in unit.splitlines()]
@@ -347,8 +357,8 @@ def activate(directory, service, root, prepared_overlay=None):
     releases = (Path(root) / "artifacts/worker-profile/releases").resolve()
     if not directory.resolve().is_relative_to(releases):
         raise ValueError("active profile pair must live under artifacts/worker-profile/releases")
-    verify(directory, service)
-    contents = (prepared_overlay or directory / DROPIN).read_bytes()
+    pair = verify(directory, service)
+    contents = verify_dropin(directory, service, pair, prepared_overlay)
     active = Path(root) / "artifacts/worker-profile/active"
     active.mkdir(mode=0o755, parents=True, exist_ok=True)
     files = [(directory / DROPIN, contents)] if prepared_overlay is not None else []
@@ -435,6 +445,8 @@ def main():
         verify_retained(directory, service, Path(rest[0]).resolve(), rest[1])
     elif action == "verify":
         verify(directory, service, rest[0] if rest else None)
+    elif action == "verify-dropin":
+        verify_dropin(directory, service, verify(directory, service))
     elif action == "check":
         check_pair(directory, verify(directory, service))
     elif action == "verify-live":

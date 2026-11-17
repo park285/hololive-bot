@@ -1,3 +1,8 @@
 scripts/deploy/lib/po-sandbox-image.sh
 hololive/hololive-api/scripts/migrations/001_schema_epoch3_baseline.sql
 scripts/deploy/lib/worker-profile-pair.py
+scripts/deploy/lib/compose-env.sh
+scripts/deploy/lib/postgres-endpoint.sh
+scripts/deploy/lib/postgres-capacity.sh
+scripts/ci/postgres-capacity-policy.tsv
+deploy/podman/iris-seoul/hololive-youtube-collector-b.container

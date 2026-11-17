@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
@@ -79,6 +81,34 @@ func TestBootstrapLoginRolesRejectUnusablePasswordsBeforeDial(t *testing.T) {
 
 			if _, dialed := errors.AsType[*pgconn.ConnectError](err); dialed {
 				t.Fatal("unusable password reached database connection")
+			}
+		})
+	}
+}
+
+func TestBootstrapRejectsEquivalentSCRAMPasswordsBeforeDial(t *testing.T) {
+	const (
+		plain  = "isolated equivalent password"
+		mapped = "isolated\u00a0equivalent password"
+	)
+
+	if _, err := pgxdb.SCRAMVerifier(mapped); err != nil {
+		t.Fatal("normalization fixture is not PostgreSQL-compatible")
+	}
+
+	for _, peer := range []string{"POSTGRES_ADMIN_PASSWORD", "HOLOLIVE_COLLECTOR_A_PASSWORD"} {
+		t.Run(peer, func(t *testing.T) {
+			setLoginRolePasswords(t)
+			t.Setenv(peer, plain)
+			t.Setenv("HOLOLIVE_DB_PASSWORD", mapped)
+
+			err := bootstrapLoginRoles(t.Context())
+			if err == nil {
+				t.Fatal("equivalent SCRAM credentials were accepted")
+			}
+
+			if _, dialed := errors.AsType[*pgconn.ConnectError](err); dialed {
+				t.Fatal("equivalent SCRAM credentials reached the database")
 			}
 		})
 	}
@@ -164,12 +194,14 @@ func (r scraperRoleRow) Scan(dest ...any) error {
 		return errors.New("scraper role row requires one destination")
 	}
 
-	exists, ok := dest[0].(*bool)
-	if !ok || exists == nil {
-		return errors.New("scraper role row requires a boolean destination")
+	switch value := dest[0].(type) {
+	case *bool:
+		*value = bool(r)
+	case *string:
+		*value = ""
+	default:
+		return errors.New("unexpected role row destination")
 	}
-
-	*exists = bool(r)
 
 	return nil
 }
@@ -264,5 +296,44 @@ func TestPrivilegedTransportRequiresSocketOrVerifiedTLS(t *testing.T) {
 		if err := validatePrivilegedTransport(); (err == nil) != test.valid {
 			t.Fatalf("host=%s mode=%s error=%v", test.host, test.mode, err)
 		}
+	}
+}
+
+func TestBootstrapLoginRolesSkipsPureMigration(t *testing.T) {
+	t.Setenv("POSTGRES_ADMIN_PASSWORD", "")
+	t.Setenv("PGPASSWORD", "migrator-fixture-password")
+	t.Setenv("PGHOST", t.TempDir())
+	t.Setenv("PGPORT", "1")
+
+	for _, role := range loginRoles {
+		t.Setenv(role.env, "")
+	}
+
+	if err := bootstrapLoginRoles(t.Context()); err != nil {
+		t.Fatalf("pure migration attempted privileged bootstrap: %v", err)
+	}
+}
+
+func TestStoredSCRAMRequiresServerKeyAndBoundedCost(t *testing.T) {
+	t.Parallel()
+
+	const password = "fixture-authentication-password"
+
+	verifier, err := pgxdb.SCRAMVerifier(password)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var invalidServerKey [32]byte
+
+	tampered := verifier[:strings.LastIndexByte(verifier, ':')+1] + base64.StdEncoding.EncodeToString(invalidServerKey[:])
+
+	if matches, err := matchesValidatedSCRAMPassword(password, tampered); err != nil || matches {
+		t.Fatalf("invalid server signature key was reusable: match=%t err=%v", matches, err)
+	}
+
+	excessive := strings.Replace(verifier, "$4096:", "$10000001:", 1)
+	if _, err := matchesValidatedSCRAMPassword(password, excessive); err == nil {
+		t.Fatal("stored SCRAM cost exceeded the client authentication bound")
 	}
 }

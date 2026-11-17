@@ -17,6 +17,8 @@ pass() { echo "[PASS] $*"; }
 . "${RELEASE_PATH_LIB}"
 # shellcheck source=scripts/deploy/lib/ap-host-native-rollback-check.sh
 . "${ROLLBACK_CHECK_LIB}"
+. "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/postgres-endpoint.sh"
 
 
 write_host_env_fn="$(awk '/^write_host_env\(\) \{/,/^}$/' "${DEPLOY}")"
@@ -28,9 +30,9 @@ elif (
   export service="youtube-collector-a"
   export port="30005"
   export release_id="profile-pair-fixture"
-  export AP_POSTGRES_HOST="100.100.1.8"
-  export AP_POSTGRES_PORT="5433"
-  export AP_POSTGRES_POOL_MAX_CONNS=7
+  export REPO_ROOT="${ROOT_DIR}"
+  unset AP_POSTGRES_PORT
+  eval "$(awk '/^AP_POSTGRES_HOST=""/,/^AP_POSTGRES_PORT=/' "${DEPLOY}")"
   export AP_SSH_HOST="100.100.1.6"
   eval "${write_host_env_fn}"
   write_host_env "${generated_env}"
@@ -40,8 +42,8 @@ elif (
   elif grep -Eq '^SETTINGS_DIR=' "${generated_env}"; then
     record_fail "generated host env contents still include SETTINGS_DIR"
   elif ! grep -Fxq 'POSTGRES_HOST=100.100.1.8' "${generated_env}" ||
-       ! grep -Fxq 'POSTGRES_PORT=5433' "${generated_env}"; then
-    record_fail "generated host env must use the current Seoul primary endpoint"
+       ! grep -Fxq 'POSTGRES_PORT=6433' "${generated_env}"; then
+    record_fail "generated host env must use the central pooler endpoint"
   else
     pass "generated host env contents have 0 CACHE lines"
     pass "generated host env contents have 0 SETTINGS_DIR lines"
@@ -144,6 +146,11 @@ run_native_units() (
   # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 경로입니다.
   releases_root="${state}/releases" previous_link="${state}/previous"
   mkdir -p "${old_target}"
+  payload="${state}/payload" release_dir="${state}/new-release"
+  mkdir -p "${old_target}/rollback-contract" "${payload}"
+  printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n' > "${payload}/youtube-collector-host.env"
+  cp "${payload}/youtube-collector-host.env" "${old_target}/rollback-contract/youtube-collector-host.env"
+  cp "${payload}/youtube-collector-host.env" "${host_env}"
   # 기존 unit 순서 fixture는 실제 명령 완료를 동기 실행합니다. 신호/receipt는 별도 실제 child 회귀가 소유합니다.
   native_cutover_run() {
     shift
@@ -157,7 +164,7 @@ run_native_units() (
   native_rollback_validate() { [[ -d "$1" ]]; }
   sudo() {
     [[ "${1:-}" != "-n" ]] || shift
-    if [[ "$1" == systemctl ]]; then
+    if [[ "$1" == systemctl || "$1" == bash ]]; then
       "$@"
     else
       printf 'sudo %s\n' "$*" >>"${state}/calls"
@@ -385,6 +392,7 @@ chmod +x "${rollback_fixture}/bin/youtube-collector" \
   "${rollback_fixture}/bin/youtube-collector-wrapper" \
   "${rollback_fixture}/bin/healthcheck"
 printf 'APP_ENV=production\nSTACK_WORKER_PROFILE_FILE=%s/worker-profile.json\n' "$rollback_fixture" > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
+printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n' >> "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
 printf '{}\n' > "$rollback_fixture/worker-profile.json"
 (cd "$rollback_fixture" && sha256sum bin/youtube-collector worker-profile.json > SHA256SUMS)
 printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
@@ -403,6 +411,16 @@ printf 'absent\n' > "${rollback_fixture}/rollback-contract/po-unit-presence"
     rollback-contract/po-unit-presence \
     > rollback-contract/SHA256SUMS
 )
+native_current_env="${tmp}/native-current.env"
+for native_port in 5433 6433 invalid ''; do
+  printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=%s\n' "${native_port}" > "${native_current_env}"
+  if [[ "${native_port}" == 6433 ]]; then
+    PATH="${tmp}/rollback-bin:${PATH}" native_rollback_endpoint_validate "${rollback_fixture}" "${native_current_env}" ||
+      record_fail "native same-endpoint rollback was rejected"
+  elif PATH="${tmp}/rollback-bin:${PATH}" native_rollback_endpoint_validate "${rollback_fixture}" "${native_current_env}" >"${tmp}/endpoint.err" 2>&1; then
+    record_fail "native unsafe endpoint rollback accepted"
+  fi
+done
 
 if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}"; then
   pass "native rollback validation accepts a complete integrity fixture"
@@ -486,7 +504,7 @@ fi
 restore_payload="${tmp}/success/call-2.stdin"
 
 # 수동 rollback이 원격에 보낸 payload에서 검증 뒤 첫 복원 변경 전까지의 정지 단계를 같은 가짜 systemctl로 실행한다.
-rollback_stop_step="$(awk '/^native_rollback_validate "[$]previous_target"$/ { on = 1; next } on && /^sudo -n install / { exit } on' "${restore_payload}")"
+rollback_stop_step="$(awk '/^native_rollback_endpoint_validate "[$]previous_target" "[$]host_env"$/ { on = 1; next } on && /^sudo -n install / { exit } on' "${restore_payload}")"
 rollback_state="$(stop_case rollback "${running_units[@]}")"
 run_native_case "${rollback_state}" "set -euo pipefail; ${rollback_stop_step}"
 if [[ -n "${rollback_stop_step}" ]] && (( native_rc == 0 )) &&

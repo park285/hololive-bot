@@ -52,8 +52,10 @@ make_repo() {
     scripts/deploy/lib/compose-env.sh scripts/deploy/quadlet-prestart.sh \
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     scripts/deploy/lib/admin-bind.sh scripts/deploy/lib/public-bind-mounts.sh \
+    scripts/deploy/lib/postgres-endpoint.sh \
     scripts/systemd/admin-dashboard-ingress-firewall.service scripts/systemd/admin-dashboard-ingress.nft \
     deploy/postgres/pg_hba.conf deploy/nginx/admin-dashboard-ingress.conf.template \
+    deploy/pgbouncer/pg_hba.conf deploy/pgbouncer/stats-users.txt \
     deploy/quadlet/hololive-bot deploy/quadlet/optional; do
     mkdir -p "${repo}/$(dirname "${path}")"
     cp -R "${ROOT_DIR}/${path}" "${repo}/${path}"
@@ -149,6 +151,26 @@ for unit in hololive-api hololive-alarm-worker; do
     "${installed}/${unit}.container.d/40-x-spaces.conf" || fail "x-spaces drop-in not installed for ${unit}"
 done
 [[ -x "${host}/usr-local-libexec/hololive-bot/quadlet-prestart" ]] || fail "prestart helper not installed"
+for lib in admin-bind.sh public-bind-mounts.sh postgres-capacity.sh compose-env.sh postgres-endpoint.sh; do
+  cmp -s "${base_repo}/scripts/deploy/lib/${lib}" "${host}/usr-local-libexec/hololive-bot/lib/${lib}" ||
+    fail "prestart dependency not installed: ${lib}"
+done
+bash -c 'source "$1"; source "$2"; postgres_endpoint_quadlet "$3" "$4"' _ \
+  "${host}/usr-local-libexec/hololive-bot/lib/compose-env.sh" \
+  "${host}/usr-local-libexec/hololive-bot/lib/postgres-endpoint.sh" \
+  "${installed}/hololive-api.container" "${host}/etc-stack-secrets/hololive-bot/compose.env" >/dev/null ||
+  fail "installed endpoint library cannot resolve the effective application endpoint"
+bash -c 'source "$1"; postgres_capacity_write_pgbouncer_config "$2" "$3" "$4"' _ \
+  "${host}/usr-local-libexec/hololive-bot/lib/postgres-capacity.sh" \
+  "${host}/opt/current/scripts/ci/postgres-capacity-policy.tsv" \
+  "${host}/etc-stack-secrets/hololive-bot/compose.env" "${host}/pgbouncer.ini" ||
+  fail "installed capacity library cannot generate the pooler configuration"
+[[ -s "${host}/pgbouncer.ini" && "$(stat -c '%a' "${host}/pgbouncer.ini")" == 644 ]] ||
+  fail "pooler configuration is missing or unreadable by the container"
+for config in pg_hba.conf stats-users.txt; do
+  cmp -s "${base_repo}/deploy/pgbouncer/${config}" "${host}/opt/current/deploy/pgbouncer/${config}" ||
+    fail "pooler configuration not installed: ${config}"
+done
 [[ -f "${host}/etc-systemd-system/admin-dashboard-ingress-firewall.service" ]] || fail "firewall unit not installed"
 [[ ! -e "${host}/opt/current/marker" && -f "${host}/opt/current/deploy/postgres/pg_hba.conf" ]] ||
   fail "current tree was not replaced by the staged tree"

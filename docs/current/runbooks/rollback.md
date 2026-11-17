@@ -60,6 +60,7 @@ binary/image·Node helper·issuer·프로필 짝을 사용합니다. PO issuer�
 kapu Quadlet d는 [kapu README](../../../deploy/podman/kapu/README.md)의 `SHA256SUMS` release profile과
 `runtime-before-<날짜>` image tag로 되돌립니다.
 
+
 migration 006(`idx_bot_reply_outbox_message` 삭제)과 007(발송 route CHECK를 `text`·`richtext`로 좁히고
 `alarms.alarm_types` 빈 배열 거절)은 v15.0.0 image와 함께 동작합니다. v15.0.0은 그 인덱스를 조회 계획에만 쓰고,
 `markdown`·`sender` route나 빈 `alarm_types`를 저장하지 않습니다. 이 두 migration은 image rollback 때 되돌리지 않습니다.
@@ -94,6 +95,12 @@ migration 231~233 이전 image의 image-only rollback, session 일괄 삭제, sy
 정지한 peer unit의 연쇄 기동으로 dependencies를 다시 기동하지 않으며, 실패한 migration은
 소유자의 검증·복구 절차로 처리합니다. 데이터/세션 파괴나 서비스 자동 기동 정책 변경을
 routine rollback에 묶지 않습니다. 호환성이 입증되지 않으면 현재 revision으로 fix-forward합니다.
+
+### 직접 DB와 pooler 경로 사이의 복구
+
+이전 image/profile만으로는 접속 경로를 복구할 수 없습니다. 중앙·b·native helper는 현재 env/drop-in의 effective host·port와 복구점의 값을 비교하고, 다르면 재기동 전에 거절합니다. 자동 복원 중 교차 경로를 발견한 경우 collector/issuer 정지와 복구 입력을 유지합니다.
+
+별도 승인 아래 영향받는 writer 전체를 정지·hold하고 pooler도 정지한 뒤, 이전 HBA·DB 설정과 앱 endpoint를 함께 정합화합니다. 단일 파일 bind의 이전 inode가 남지 않도록 PostgreSQL을 재생성하고 pooler backend 세션이 남지 않았는지 확인한 다음 기존 `--check`/`--apply`를 다시 실행합니다. frontend만 닫아서는 pooler의 idle backend가 즉시 없어지지 않으므로 직접 접속 복구와 겹치게 두지 않습니다. native recovery guard도 기존 절차로 처리합니다. 새 pooler-only HBA에 이전 direct 앱을 먼저 띄우거나 임시 direct 허용·우회 flag를 추가하지 않습니다. kapu d의 수동 복구도 같은 순서를 따릅니다. [상세 계약](../../../deploy/quadlet/README.md#복구와-자격-증명-변경)을 확인합니다.
 
 ## Contract Rollback
 

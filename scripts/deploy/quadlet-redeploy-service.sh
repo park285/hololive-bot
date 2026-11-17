@@ -2,7 +2,7 @@
 # 중앙(hololive-seoul) hololive-api·hololive-alarm-worker의 image 교체 helper다. 아래 순서를 Quadlet drop-in으로
 # 지킨다. collector c는 po-central-cutover.sh가 소유한다.
 #  1. preflight: root, 배포 트리 revision(sync-opt-current.sh의 .source-revision)과 image revision label 일치,
-#     image 존재·platform, primary fence 부재, unit 실행 중, PostgreSQL 연결 예산
+#     image 존재·platform, primary fence 부재, unit 실행 중, PostgreSQL 연결 예산·실행 중 풀러 설정
 #  2. 실행 중 이전 pair 보존(capture). drop-in이 없는 첫 도입은 prepare로 실행 중 image를 먼저 고정해 이후 자동
 #     재시작이 tag 이동을 따라가지 않게 한다. 이어서 rollback drop-in과 이전 image의 --check-worker-profile
 #  3. candidate pair·--check-worker-profile·verify-source
@@ -207,6 +207,9 @@ for service in "${services[@]}"; do
 done
 migrator_id="$(resolve_image "$migrator_ref" hololive-api)"
 postgres_capacity_assert_target "$ROOT_DIR" "$compose_env"
+if [[ "$mode" != quiesce ]]; then
+  postgres_capacity_assert_live "$ROOT_DIR" "$compose_env" "$quadlet_dir"
+fi
 
 prepare_slot() {
   stage=previous-pair

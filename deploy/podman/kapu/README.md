@@ -26,5 +26,5 @@ sudo systemctl start hololive-youtube-po-d.service hololive-youtube-collector-d.
 - 네트워크: Podman 빅뱅 전환으로 kapu에서 Docker를 걷어 내 netavark는 기본 nftables driver를 쓴다(Docker FORWARD DROP과
   공존하려던 `50-kapu-netavark-iptables.conf`는 제거). metrics는 게시하지 않고 Prometheus(`obs-prometheus`)가 고정 IP
   (`10.89.15.<slot>`)로 수집한다.
-- DB: 중앙 `pg_hba.conf`의 `hololive_collector_d 100.100.1.3/32`.
+- DB: `100.100.1.8:6433`의 PgBouncer frontend HBA가 `hololive_collector_d`와 source `100.100.1.3/32`를 함께 제한합니다. PostgreSQL에는 pooler 주소가 보입니다. 최초 전환·direct 경로 복구는 [중앙 전환 절차](../../quadlet/README.md#최초-운영-전환)와 함께 수행하며, 이전 image만 새 HBA 위에서 시작하지 않습니다.
 - HealthCmd는 distroless 이미지라 JSON 배열로 쓴다(문자열은 `/bin/sh -c`로 감싸져 실패한다).

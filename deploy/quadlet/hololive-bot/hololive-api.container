@@ -4,9 +4,9 @@
 Description=Hololive API (bot/admin/YouTube planes)
 # 런타임 peer는 Wants=로만 끌어온다. Requires=는 명시적 stop/restart를 전파해 primary fence(소비자 유지)와
 # Sentinel HA(로컬 노드 교체)를 깨뜨린다. 방화벽은 보안 전제라 Requires=로 둔다.
-Wants=holo-postgres.service valkey-cache.service hololive-alarm-worker.service
+Wants=holo-pgbouncer.service valkey-cache.service hololive-alarm-worker.service
 Requires=admin-dashboard-ingress-firewall.service
-After=holo-postgres.service valkey-cache.service hololive-alarm-worker.service admin-dashboard-ingress-firewall.service tailscaled.service
+After=holo-pgbouncer.service valkey-cache.service hololive-alarm-worker.service admin-dashboard-ingress-firewall.service tailscaled.service
 ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent
 ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced
 StartLimitIntervalSec=0
@@ -166,8 +166,8 @@ Environment=HOLOLIVE_API_IMAGE=localhost/hololive-api:prod
 Environment=HOLOLIVE_RUNTIME_GID=1002
 Environment=HOLOLIVE_METRICS_PORT_BIND_IP=127.0.0.1
 Environment=TAILSCALE_DNS_RESOLVER=100.100.100.100
-Environment=HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres
-Environment=HOLOLIVE_CENTRAL_POSTGRES_PORT=5432
+Environment=HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-pgbouncer
+Environment=HOLOLIVE_CENTRAL_POSTGRES_PORT=6432
 Environment=POSTGRES_SSLMODE=verify-full
 Environment=POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
 Environment=POSTGRES_QUERY_EXEC_MODE=cache_statement

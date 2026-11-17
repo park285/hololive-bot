@@ -71,6 +71,15 @@
 - `hololive_runtime`은 migrator 기본 권한으로 새 표·sequence·함수 권한을 받지만 `hololive_alarm_worker`는 받지 않습니다.
   alarm-worker 코드가 새 표나 sequence를 쓰면 같은 migration에서 필요한 동사만 GRANT하고 worker 권한 시험에 더합니다.
 
+## 특권 pooler 인증 bootstrap
+
+- `hololive_pooler_auth`와 `lookup(text)`는 앱 DB의 관리자 소유 보안 객체이며 migrator 소유권으로 넘기지 않습니다. 설치·정합의 소유자는 `cmd/db-migrate/queries/bootstrap_pooler_auth.sql`입니다.
+- 관리자 credential이 없는 순수 migration은 이 bootstrap을 생략합니다. migrator에 `pg_authid` 조회나 인증 함수 EXECUTE를 주지 않으며 historical migration/manifest를 바꾸지 않습니다.
+- `hololive_pgbouncer_auth`는 PASSWORD NULL인 cert-only 역할로 현재 앱 verifier를 제한 조회합니다. 기존 owner·ACL·예상 밖 schema 객체가 다르면 그 상태를 보존하고 실패합니다.
+- 동일 비밀번호 bootstrap은 기존 SCRAM verifier를 유지합니다. 실제 회전은 해당 앱 frontend drain·종료 후 수행하며, 기존 세션이 암호 변경만으로 폐기된다고 가정하지 않습니다.
+- session advisory lock·DDL·migration timeout은 기존 private direct socket 경로에 남습니다. [pooler 전환·복구 절차](../../../../deploy/quadlet/README.md#transaction-pooling)는 별도 운영 승인이 필요합니다.
+
+
 ## 스키마와 시험
 
 - `hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql`은 catalog 직렬화 문서입니다.

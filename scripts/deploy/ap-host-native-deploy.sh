@@ -17,7 +17,7 @@ while IFS='|' read -r owner _service _key _source _instances maximum _role; do
   if [[ "$owner" == youtube-collector-a ]]; then AP_POSTGRES_POOL_MAX_CONNS="$maximum"; fi
 done < "$REPO_ROOT/scripts/ci/postgres-capacity-policy.tsv"
 [[ "$AP_POSTGRES_POOL_MAX_CONNS" =~ ^[1-9][0-9]*$ ]] || { echo 'collector capacity policy missing' >&2; exit 1; }
-AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-5433}"
+AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-6433}"
 
 case "$MODE" in
   --dry-run|--apply|--prepare-profile) ;;
@@ -141,6 +141,8 @@ cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh" "$artifact_dir
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh" "$artifact_dir/bin/ap-host-native-po.sh"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh" "$artifact_dir/bin/ap-host-native-cutover.sh"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-rollback-check.sh" "$artifact_dir/bin/ap-host-native-rollback-check.sh"
+cp "$REPO_ROOT/scripts/deploy/lib/compose-env.sh" "$artifact_dir/bin/compose-env.sh"
+cp "$REPO_ROOT/scripts/deploy/lib/postgres-endpoint.sh" "$artifact_dir/bin/postgres-endpoint.sh"
 cp "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py" "$artifact_dir/bin/worker-profile-pair.py"
 
 native_revision="$(deploy_source_revision "$REPO_ROOT")"
@@ -197,6 +199,8 @@ REMOTE
 )"
 
 {
+  cat "$REPO_ROOT/scripts/deploy/lib/compose-env.sh"
+  cat "$REPO_ROOT/scripts/deploy/lib/postgres-endpoint.sh"
   cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
   cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
   cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh"

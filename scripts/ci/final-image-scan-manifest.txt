@@ -1,5 +1,6 @@
 local|linux/arm64|localhost/hololive-alarm-worker:prod
 local|linux/arm64|localhost/hololive-api:prod
+local|linux/arm64|localhost/iris-stack-pgbouncer:1.26.1-guc1
 local|linux/arm64|localhost/hololive-postgres:prod
 local|linux/arm64|localhost/hololive-youtube-collector:prod
 local|linux/arm64|localhost/hololive-youtube-po-sandbox:prod

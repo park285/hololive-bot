@@ -28,8 +28,8 @@ sudo systemctl daemon-reload
 - 배포 루트: `/opt/hololive-bot/collector-b/{current,backups,po-current-b}`. `current/artifacts/worker-profile/`에
   release pair와 활성 포인터가 있고, `po-current-b/`는 실행 중 issuer의 검토 영수증이다.
 - 쓰기 경로: `/var/lib/hololive-collectors/b/{data,logs}`(1000:1000). UserNS 없이 호스트 uid·gid로 실행한다.
-- 네트워크: `hololive-collector-b`(10.89.16.0/24). 중앙 PostgreSQL은 tailnet 출처(`100.100.1.5`)로 접속하므로
-  컨테이너 대역은 `pg_hba`와 무관하다. metrics는 `100.100.1.5:30096`에 게시한다.
+- 네트워크: Podman `hololive-collector-b`(10.89.16.0/24)에서 중앙 PgBouncer `100.100.1.8:6433`으로 접속합니다.
+  frontend HBA가 역할 `hololive_collector_b`와 tailnet source `100.100.1.5/32`를 제한하며 PostgreSQL에는 pooler 주소가 보입니다. metrics는 `100.100.1.5:30096`에 게시합니다.
 - issuer는 collector session이 끝나면 generation을 바꾸려고 스스로 종료한다. collector는 issuer를 `Wants=`로만 끌어온다.
 
 ## 배포
@@ -41,6 +41,30 @@ PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cu
 PO_B_SSH_TARGET=iris-seoul scripts/deploy/po-central-cutover.sh b check /opt/hololive-bot/collector-b/backups/po-b-<TIMESTAMP>
 PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_ROLLBACK=true scripts/deploy/po-central-cutover.sh b rollback /opt/hololive-bot/collector-b/backups/po-b-<TIMESTAMP>
 ```
+
+DB/HBA 최초 전환은 [중앙 전환 절차](../../quadlet/README.md#최초-운영-전환)를 따릅니다. unit 교체 전에 `b quiesce`로 실행 중 이전 pair를 보존·정지하고, 설치된 후보와 pooler가 준비된 뒤 `b resume <backup>`으로 재개합니다. 정지된 collector에 일반 `deploy`를 적용하지 않습니다. 실패 시 hold와 backup을 보존하고, direct 경로 복구는 HBA·effective endpoint를 함께 정합화한 뒤 승인된 `rollback`으로 진행합니다.
+
+`b/current`는 source checkout이 아니라 release pair 저장소이므로 `.source-revision`을 만들지 않습니다.
+`quiesce`는 동일 full revision으로 빌드한 image/manifest와 bounded source checksum을 전송하고 보존합니다.
+helper·migration·후보 collector unit도 checksum 대상입니다. `resume`은 helper를 실행하기 전에 이를 대조하고,
+설치된 기본 collector unit이 staged 후보와 바이트 단위로 같은지 확인합니다. 다른 unit을 설치하거나
+staging을 수정해 맞추지 말고 검토된 후보를 사용합니다.
+
+`quiesce` 성공 뒤 출력된 staging 경로에서 **collector 기본 unit만** 아래처럼 수동 설치합니다.
+network·volume·issuer unit과 worker-profile drop-in 소유권은 기존 절차대로 유지합니다.
+
+```bash
+# iris-seoul, 두 writer가 해당 backup의 persistent hold 아래에 있는 동안 실행
+sudo install -m 0644 /opt/hololive-bot/collector-b/po-staging-<TIMESTAMP>/deploy/podman/iris-seoul/hololive-youtube-collector-b.container \
+  /etc/containers/systemd/hololive-bot/hololive-youtube-collector-b.container
+sudo systemctl daemon-reload
+# kapu, 중앙 pooler와 같은 release의 c 수용 뒤 실행
+PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cutover.sh b resume /opt/hololive-bot/collector-b/backups/po-b-<TIMESTAMP>
+```
+
+이전 unit은 quiesce가 보존한 `current/artifacts/worker-profile/releases/po-b-<TIMESTAMP>/youtube-collector-b/previous/unit.container`에
+남습니다. 재개 검증 실패는 mask를 해제하지 않으며, 재개 후 실패도 두 writer를 다시 hold합니다.
+롤백은 먼저 중앙 HBA와 설치 unit의 effective endpoint를 이전 경로로 정합화한 뒤 수행해야 합니다.
 
 ## 2026-11-06 전환 기록
 

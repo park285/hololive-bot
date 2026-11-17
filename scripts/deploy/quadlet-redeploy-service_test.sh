@@ -8,10 +8,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 HELPER="${ROOT_DIR}/scripts/deploy/quadlet-redeploy-service.sh"
 ROLLBACK="${ROOT_DIR}/scripts/deploy/quadlet-rollback-service.sh"
+REAL_PYTHON3="$(command -v python3)"
 QUADLET_BIN=/usr/libexec/podman/quadlet
 REVISION=0123456789abcdef0123456789abcdef01234567
 API_HEX="$(printf 'a%.0s' {1..64})"
 WORKER_HEX="$(printf 'b%.0s' {1..64})"
+. "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
 
 fail() {
   echo "[FAIL] $*" >&2
@@ -42,6 +44,12 @@ printf 'podman %s\n' "$*" >>"${state}/calls"
 image_file() { printf '%s/images/%s' "${state}" "$(printf '%s' "$1" | tr '/:' '__')"; }
 case "$1 ${2:-}" in
   'info --format') printf 'arm64\n' ;;
+  'exec holo-pgbouncer')
+    [[ "$*" == 'exec holo-pgbouncer sha256sum /etc/pgbouncer/pgbouncer.ini' ]] || exit 2
+    [[ ! -e "${state}/pooler-query-failed" ]] || exit 125
+    digest="$(sha256sum "${state}/live-pgbouncer.ini")" || exit
+    printf '%s  /etc/pgbouncer/pgbouncer.ini\n' "${digest%% *}"
+    ;;
   'image exists') [[ -f "$(image_file "$3")" ]] ;;
   'image inspect')
     file="$(image_file "${*: -1}")"
@@ -63,6 +71,18 @@ EOF
 cat >"${fakebin}/systemctl" <<'EOF'
 #!/usr/bin/env bash
 state="${FAKE_STATE:?}"
+# 읽기 전용 manager 조회는 아래의 배포 변경 이벤트와 분리한다.
+case "$*" in
+  show-environment)
+    [[ ! -f "${state}/manager-environment" ]] || cat "${state}/manager-environment"
+    exit 0 ;;
+  'show --property=UnitPath --value')
+    printf '%s\n' "${HOLOLIVE_QUADLET_TEST_ROOT}/etc/systemd/system" "${HOLOLIVE_QUADLET_TEST_ROOT}/custom-systemd"
+    exit 0 ;;
+  show\ *.service\ --property=NeedDaemonReload\ --value)
+    if [[ -e "${state}/manager-reload-required" ]]; then echo yes; else echo no; fi
+    exit 0 ;;
+esac
 printf 'systemctl %s\n' "$*" >>"${state}/calls"
 state_dir() {
   if [[ "${FAKE_COORDINATED:-false}" == true ]]; then
@@ -168,7 +188,7 @@ EOF
 cat >"${fakebin}/python3" <<'EOF'
 #!/usr/bin/env bash
 state="${FAKE_STATE:?}"
-[[ "${1:-}" == "${FAKE_PAIR_TOOL}" ]] || { echo "unexpected python3 call: $*" >&2; exit 2; }
+[[ "${1:-}" == "${FAKE_PAIR_TOOL}" ]] || exec "${FAKE_REAL_PYTHON3:?}" "$@"
 shift
 action="$1" service="$2" dir="$3"
 printf 'pair %s %s %s\n' "${action}" "${service}" "${dir##*/}" >>"${state}/calls"
@@ -249,6 +269,8 @@ make_case() {
   printf '%s\n' "${REVISION}" >"${root}/opt/hololive-bot/compose/current/.source-revision"
   cp "${ROOT_DIR}/deploy/quadlet/hololive-bot/"*.container "${quadlet_dir}/"
   printf 'HOLOLIVE_VALKEY_HA_ENABLED=1\n' >"${root}/etc/stack-secrets/hololive-bot/compose.env"
+  postgres_capacity_write_pgbouncer_config "${ROOT_DIR}/scripts/ci/postgres-capacity-policy.tsv" \
+    "${root}/etc/stack-secrets/hololive-bot/compose.env" "${root}/state/live-pgbouncer.ini" >/dev/null
   if [[ "${with_dropin}" == true ]]; then
     mkdir -p "${quadlet_dir}/${service}.container.d"
     printf 'pair=baseline\n' >"${quadlet_dir}/${service}.container.d/50-worker-profile.conf"
@@ -266,6 +288,7 @@ run_tool() {
   shift 3
   env PATH="${fakebin}:${PATH}" HOLOLIVE_QUADLET_TEST_ROOT="${root}" FAKE_STATE="${root}/state" FAKE_CASE="${case_name}" \
     FAKE_PAIR_TOOL="${ROOT_DIR}/scripts/deploy/lib/worker-profile-pair.py" \
+    FAKE_REAL_PYTHON3="${REAL_PYTHON3}" \
     FAKE_QUADLET_DIR="${root}/etc/containers/systemd/hololive-bot" \
     FAKE_FENCE_DIR="${root}/var/lib/hololive-postgres-fence" \
     FAKE_DEPLOY_ROOT="$(realpath -m "${root}/opt/hololive-bot/compose/current")" \
@@ -405,6 +428,41 @@ cmp -s "$(release_of "${root}")/rollback-replaced-hololive-api.container" "${roo
   fail "unit changed: the replaced base unit was not retained in the release"
 pass "a rollback restores the base unit definition the previous image ran with"
 
+for endpoint_case in changed override restored missing invalid unresolved; do
+  root="${tmp}/rollback-endpoint-${endpoint_case}"
+  make_case "${root}" hololive-api true
+  unit_file="${root}/etc/containers/systemd/hololive-bot/hololive-api.container"
+  sed -e 's/^Environment=HOLOLIVE_CENTRAL_POSTGRES_HOST=.*/Environment=HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres/' \
+      -e 's/^Environment=HOLOLIVE_CENTRAL_POSTGRES_PORT=.*/Environment=HOLOLIVE_CENTRAL_POSTGRES_PORT=5432/' \
+      "${unit_file}" > "${root}/state/previous-unit"
+  if run_tool "${root}" health_failure "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate; then
+    fail "endpoint fixture unexpectedly deployed"
+  fi
+  case "${endpoint_case}" in
+    override) printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-pgbouncer\nHOLOLIVE_CENTRAL_POSTGRES_PORT=6432\n' >> "${root}/etc/stack-secrets/hololive-bot/compose.env" ;;
+    restored)
+      printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres\nHOLOLIVE_CENTRAL_POSTGRES_PORT=5432\n' >> "${root}/etc/stack-secrets/hololive-bot/compose.env"
+      rm "${root}/state/live-pgbouncer.ini" ;;
+    missing) printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=\n' >> "${root}/etc/stack-secrets/hololive-bot/compose.env" ;;
+    invalid) printf 'HOLOLIVE_CENTRAL_POSTGRES_PORT=65536\n' >> "${root}/etc/stack-secrets/hololive-bot/compose.env" ;;
+    unresolved) printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=${UNKNOWN_ENDPOINT}\n' >> "${root}/etc/stack-secrets/hololive-bot/compose.env" ;;
+  esac
+  for rollback_mode in --check --apply; do
+    : > "${root}/state/calls"
+    if [[ "${endpoint_case}" == override || "${endpoint_case}" == restored ]]; then
+      run_tool "${root}" health_failure "${API_HEX}" "${ROLLBACK}" "$(release_of "${root}")" "${rollback_mode}" ||
+        { cat "${root}/out" >&2; fail "same effective endpoint rollback rejected: ${endpoint_case}"; }
+    else
+      if run_tool "${root}" health_failure "${API_HEX}" "${ROLLBACK}" "$(release_of "${root}")" "${rollback_mode}"; then
+        fail "unsafe endpoint rollback accepted: ${endpoint_case}"
+      fi
+      assert_no_call "${root}" "endpoint rollback rejected" '^(pair activate |systemctl )'
+      [[ -f "$(release_of "${root}")/previous/unit.container" ]] || fail "rollback recovery unit lost"
+    fi
+  done
+done
+pass "rollback compares effective endpoints, preserves recovery pairs and honors coordinated configuration restoration"
+
 # 5-2. 다른 helper가 실행 중이면 아무것도 바꾸지 않고 멈춘다(migrator drop-in·daemon-reload·migration 경합 방지).
 root="${tmp}/concurrent"
 make_case "${root}" hololive-api true
@@ -452,6 +510,207 @@ for root in "${root}" "${root_capacity}"; do
   grep -q '^\[OUTCOME\] not_activated .* stage=preflight' "${root}/out" || fail "preflight: outcome line missing"
 done
 pass "preflight rejects a revision mismatch and an exhausted connection budget before any change"
+
+for capacity_case in compose unit_default container_override missing query_failed; do
+  root="${tmp}/live-capacity-${capacity_case}"
+  make_case "${root}" hololive-api true
+  unit_dir="${root}/etc/containers/systemd/hololive-bot"
+  case "${capacity_case}" in
+    compose) printf 'ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' >>"${root}/etc/stack-secrets/hololive-bot/compose.env" ;;
+    unit_default)
+      printf '[Service]\nEnvironment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' >"${unit_dir}/hololive-api.container.d/60-pool.conf" ;;
+    container_override)
+      printf '[Container]\nEnvironment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' >"${unit_dir}/hololive-api.container.d/60-pool.conf" ;;
+    missing) rm "${root}/state/live-pgbouncer.ini" ;;
+    query_failed) touch "${root}/state/pooler-query-failed" ;;
+  esac
+  if run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate; then
+    fail "${capacity_case}: live pooler mismatch accepted"
+  fi
+  assert_no_call "${root}" capacity '^(pair |systemctl (daemon-reload|start|restart|stop))'
+  [[ "$(installed_pair "${root}" hololive-api)" == baseline && ! -e "${root}/opt/hololive-bot/compose/current/artifacts" ]] ||
+    fail "${capacity_case}: capacity rejection changed deployment state"
+done
+pass "live capacity drift and failed inspection stop before deployment effects"
+
+# 정확한 unit drop-in 외의 유효 원천은 parser가 알던 예산으로 통과시키지 않는다.
+for origin in \
+  etc/containers/systemd/hololive-bot/container.d/60-pool.conf \
+  etc/containers/systemd/hololive-bot/hololive-.container.d/60-pool.conf \
+  etc/containers/systemd/hololive-bot/hololive-youtube-.container.d/60-pool.conf \
+  etc/containers/systemd/hololive-bot/holo-.container.d/60-pool.conf \
+  etc/containers/systemd/container.d/60-pool.conf \
+  run/containers/systemd/hololive-api.container.d/60-pool.conf \
+  run/containers/systemd/users/hololive-.container.d/60-pool.conf \
+  usr/share/containers/systemd/nested/hololive-.container.d/60-pool.conf \
+  run/containers/systemd/nested/hololive-api.container \
+  etc/systemd/system/hololive-api.service.d/60-pool.conf \
+  run/systemd/system/hololive-.service.d/60-pool.conf \
+  usr/lib/systemd/system/service.d/60-pool.conf \
+  run/systemd/generator/hololive-api.service.d/60-pool.conf \
+  run/systemd/generator.early/hololive-api.service \
+  custom-systemd/hololive-api.service.d/60-pool.conf \
+  etc/systemd/system/hololive-api.service; do
+  root="${tmp}/override-origin-${origin//\//_}"
+  make_case "${root}" hololive-api true
+  mkdir -p "$(dirname "${root}/${origin}")"
+  section=Container
+  case "${origin}" in
+    */systemd/system/*|*/systemd/generator*/*|custom-systemd/*) section=Service ;;
+  esac
+  printf '[%s]\nEnvironment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' "${section}" >"${root}/${origin}"
+  if run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate; then
+    fail "${origin}: unsupported effective origin accepted"
+  fi
+  grep -q 'unsupported Quadlet/systemd override origin:' "${root}/out" ||
+    { cat "${root}/out" >&2; fail "${origin}: origin diagnostic missing"; }
+  assert_no_call "${root}" origin '^(pair |systemctl (daemon-reload|start|restart|stop|mask|unmask))'
+  [[ "$(installed_pair "${root}" hololive-api)" == baseline &&
+    ! -e "${root}/state/migrated-with" &&
+    ! -e "${root}/opt/hololive-bot/compose/current/artifacts" ]] ||
+    fail "${origin}: origin rejection changed deployment state"
+done
+for manager_case in manager-environment manager-reload-required; do
+  root="${tmp}/override-${manager_case}"
+  make_case "${root}" hololive-api true
+  printf 'QUADLET_UNIT_DIRS=/unreviewed\n' >"${root}/state/${manager_case}"
+  if run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate; then
+    fail "${manager_case}: unknown manager state accepted"
+  fi
+  grep -q 'unsupported Quadlet/systemd override origin:' "${root}/out" ||
+    { cat "${root}/out" >&2; fail "manager origin diagnostic missing"; }
+  assert_no_call "${root}" origin '^(pair |systemctl (daemon-reload|start|restart|stop|mask|unmask))'
+  [[ ! -e "${root}/state/migrated-with" && ! -e "${root}/opt/hololive-bot/compose/current/artifacts" ]] ||
+    fail "${manager_case}: manager rejection changed deployment state"
+done
+pass "inherited, cross-root and generated-service origins fail before migration, stop or pair publication"
+
+for directive in \
+  'PodmanArgs=--env ADMIN_API_POSTGRES_POOL_MAX_CONNS=5' \
+  'GlobalArgs=--module=/unreviewed.conf' \
+  'EnvironmentHost=true'; do
+  root="${tmp}/override-directive-${directive%%=*}"
+  make_case "${root}" hololive-api true
+  printf '[Container]\n%s\n' "${directive}" \
+    >"${root}/etc/containers/systemd/hololive-bot/hololive-api.container.d/60-pool.conf"
+  if run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate; then
+    fail "${directive%%=*}: unknown execution environment accepted"
+  fi
+  grep -q 'unsupported Quadlet execution override:' "${root}/out" ||
+    { cat "${root}/out" >&2; fail "execution override diagnostic missing"; }
+  assert_no_call "${root}" origin '^(pair |systemctl (daemon-reload|start|restart|stop))'
+done
+
+for level in s0:c900,c901 s0:c902,c903; do
+  root="${tmp}/neutral-security-${level}"
+  make_case "${root}" hololive-api true
+  security_dir="${root}/etc/containers/systemd/hololive-api.container.d"
+  mkdir -p "${security_dir}"
+  printf '[Container]\nSecurityLabelLevel=%s\n' "${level}" >"${security_dir}/70-security.conf"
+  cp "${security_dir}/70-security.conf" "${root}/state/retained-security.conf"
+  run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate ||
+    { cat "${root}/out" >&2; fail "neutral cross-root MCS drop-in rejected"; }
+  cmp -s "${security_dir}/70-security.conf" "${root}/state/retained-security.conf" ||
+    fail "deployment rewrote the host MCS policy"
+  [[ "$(installed_pair "${root}" hololive-api)" == candidate ]] || fail "neutral MCS deployment did not activate"
+done
+root="${tmp}/mixed-security-capacity"
+make_case "${root}" hololive-api true
+security_dir="${root}/etc/containers/systemd/hololive-api.container.d"
+mkdir -p "${security_dir}"
+printf '[Container]\nSecurityLabelLevel=s0:c900,c901\nEnvironment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' \
+  >"${security_dir}/70-security.conf"
+if run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate; then
+  fail "mixed security/capacity cross-root drop-in accepted"
+fi
+grep -q 'unsupported Quadlet/systemd override origin:' "${root}/out" ||
+  { cat "${root}/out" >&2; fail "mixed security/capacity origin diagnostic missing"; }
+assert_no_call "${root}" origin '^(pair |systemctl (daemon-reload|start|restart|stop))'
+[[ ! -e "${root}/state/migrated-with" && ! -e "${root}/opt/hololive-bot/compose/current/artifacts" ]] ||
+  fail "mixed security/capacity rejection changed deployment state"
+pass "neutral cross-root MCS policies survive deployment unchanged; mixed capacity settings stop before mutations"
+
+for source in base dropin; do
+  for directive in 'Exec=/tmp/other.ini' 'Entrypoint=/bin/sh'; do
+    root="${tmp}/pooler-command-${source}-${directive%%=*}"
+    make_case "${root}" hololive-api true
+    pooler_unit="${root}/etc/containers/systemd/hololive-bot/holo-pgbouncer.container"
+    if [[ "${source}" == dropin ]]; then
+      mkdir -p "${pooler_unit}.d"
+      pooler_unit="${pooler_unit}.d/60-command.conf"
+    fi
+    printf '\n[Container]\n%s\n' "${directive}" >>"${pooler_unit}"
+    if run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate; then
+      fail "pooler ${source} ${directive%%=*} bypassed the fixed config command"
+    fi
+    grep -q 'unsupported Quadlet pooler command override:' "${root}/out" ||
+      { cat "${root}/out" >&2; fail "pooler command diagnostic missing"; }
+    assert_no_call "${root}" command '^(pair |systemctl (daemon-reload|start|restart|stop))'
+    [[ ! -e "${root}/state/migrated-with" && ! -e "${root}/opt/hololive-bot/compose/current/artifacts" ]] ||
+      fail "pooler command rejection changed deployment state"
+  done
+done
+pass "pooler base/drop-in command changes stop before migration or stop despite a matching live config hash"
+
+if [[ -x "${QUADLET_BIN}" ]]; then
+  # 실제 생성기의 결과가 5임을 확인하여 텍스트 유사성 검사가 아니라 구체적 우회를 재현한다.
+  units="${tmp}/inherited-capacity-units"
+  mkdir -p "${units}/hololive-.container.d"
+  cp "${ROOT_DIR}/deploy/quadlet/hololive-bot/"* "${units}/"
+  printf '[Container]\nEnvironment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' \
+    >"${units}/hololive-.container.d/60-pool.conf"
+  exec_start="$(QUADLET_UNIT_DIRS="${units}" "${QUADLET_BIN}" -dryrun 2>/dev/null |
+    grep -E '^ExecStart=.* --name hololive-api ')" || fail "inherited capacity unit did not generate"
+  [[ "${exec_start}" == *'ADMIN_API_POSTGRES_POOL_MAX_CONNS=5'* ]] ||
+    fail "actual Quadlet did not apply inherited capacity override"
+  printf '[Container]\nSecurityLabelLevel=s0:c900,c901\n' >"${units}/hololive-.container.d/60-pool.conf"
+  exec_start="$(QUADLET_UNIT_DIRS="${units}" "${QUADLET_BIN}" -dryrun 2>/dev/null |
+    grep -E '^ExecStart=.* --name hololive-api ')" || fail "neutral inherited MCS unit did not generate"
+  [[ "${exec_start}" == *'label=level:s0:c900,c901'* &&
+    "${exec_start}" != *'ADMIN_API_POSTGRES_POOL_MAX_CONNS=5'* ]] ||
+    fail "actual Quadlet did not retain only the neutral MCS setting"
+fi
+
+root="${tmp}/live-capacity-matching"
+make_case "${root}" hololive-api true
+printf 'ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' >>"${root}/etc/stack-secrets/hololive-bot/compose.env"
+postgres_capacity_write_pgbouncer_config "${ROOT_DIR}/scripts/ci/postgres-capacity-policy.tsv" \
+  "${root}/etc/stack-secrets/hololive-bot/compose.env" "${root}/state/live-pgbouncer.ini" >/dev/null
+run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate ||
+  { cat "${root}/out" >&2; fail "matching increased live capacity rejected"; }
+[[ "$(installed_pair "${root}" hololive-api)" == candidate ]] || fail "matching capacity did not activate"
+
+for capacity_case in unit_default compose_override dropin_override missing query_failed; do
+  root="${tmp}/rollback-capacity-${capacity_case}"
+  make_case "${root}" hololive-api true
+  unit_file="${root}/etc/containers/systemd/hololive-bot/hololive-api.container"
+  { cat "${unit_file}"; printf '\n[Service]\nEnvironment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n'; } >"${root}/state/previous-unit"
+  run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate ||
+    { cat "${root}/out" >&2; fail "rollback capacity fixture deployment failed"; }
+  release="$(release_of "${root}")"
+  case "${capacity_case}" in
+    compose_override) printf 'ADMIN_API_POSTGRES_POOL_MAX_CONNS=4\n' >>"${root}/etc/stack-secrets/hololive-bot/compose.env" ;;
+    dropin_override) printf '[Service]\nEnvironment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=4\n' >"${unit_file}.d/60-pool.conf" ;;
+    missing) rm "${root}/state/live-pgbouncer.ini" ;;
+    query_failed) touch "${root}/state/pooler-query-failed" ;;
+  esac
+  for rollback_mode in --check --apply; do
+    : >"${root}/state/calls"
+    if [[ "${capacity_case}" == compose_override || "${capacity_case}" == dropin_override ]]; then
+      run_tool "${root}" success "${API_HEX}" "${ROLLBACK}" "${release}" "${rollback_mode}" ||
+        { cat "${root}/out" >&2; fail "effective rollback override rejected"; }
+    else
+      if run_tool "${root}" success "${API_HEX}" "${ROLLBACK}" "${release}" "${rollback_mode}"; then
+        fail "${capacity_case}: unsafe rollback capacity accepted"
+      fi
+      assert_no_call "${root}" capacity '^(pair activate |systemctl )'
+      cmp -s "${unit_file}" "${release}/previous/unit.container" && fail "unsafe rollback replaced base unit"
+      [[ "$(installed_pair "${root}" hololive-api)" == candidate && -f "${release}/previous/profile.json" ]] ||
+        fail "capacity rejection lost current pair or recovery"
+    fi
+  done
+done
+pass "rollback validates retained unit caps with compose and installed drop-in precedence"
 
 # 9. rollback --check는 이전 pair 검증만 하고 아무것도 바꾸지 않는다.
 root="${tmp}/success"
@@ -520,7 +779,29 @@ assert_candidate_pair_running() {
 
 root="${tmp}/coordinated-success"
 make_coordinated_case "${root}"
+mv "${root}/state/live-pgbouncer.ini" "${root}/state/stopped-pgbouncer.ini"
 quiesce_case "${root}"
+assert_no_call "${root}" quiesce '^podman exec holo-pgbouncer '
+api_release="$(coordinated_release "${root}" hololive-api)"
+worker_release="$(coordinated_release "${root}" hololive-alarm-worker)"
+for capacity_case in missing drift query_failed; do
+  : >"${root}/state/calls"
+  case "${capacity_case}" in
+    drift)
+      cp "${root}/state/stopped-pgbouncer.ini" "${root}/state/live-pgbouncer.ini"
+      printf 'ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' >>"${root}/etc/stack-secrets/hololive-bot/compose.env" ;;
+    query_failed) touch "${root}/state/pooler-query-failed" ;;
+  esac
+  if run_tool "${root}" success "${API_HEX}" "${HELPER}" --resume "${api_release}" "${worker_release}"; then
+    fail "${capacity_case}: unsafe held resume accepted"
+  fi
+  assert_held_pair "${root}"
+  assert_no_call "${root}" capacity '^(pair activate |systemctl (unmask|start|restart|daemon-reload))'
+  [[ -f "${api_release}/previous/profile.json" && -f "${worker_release}/previous/profile.json" ]] ||
+    fail "capacity rejection discarded retained recovery pairs"
+done
+rm "${root}/state/pooler-query-failed"
+printf 'HOLOLIVE_VALKEY_HA_ENABLED=1\n' >"${root}/etc/stack-secrets/hololive-bot/compose.env"
 api_release="$(coordinated_release "${root}" hololive-api)"
 worker_release="$(coordinated_release "${root}" hololive-alarm-worker)"
 FAKE_SERVER_EPOCH=new

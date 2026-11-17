@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # quadlet-redeploy-service.sh가 release 디렉터리에 보존한 이전 image·worker profile pair로 중앙
 # hololive-api·hololive-alarm-worker를 되돌린다. DB migration·schema·secret mirror는 되돌리지 않는다. 호환성 판정은 docs/current/runbooks/rollback.md를 따른다.
-#   --check(기본): pair checksum·image identity 대조와 이전 image의 --check-worker-profile(network none)만 한다.
+#   --check(기본): pair checksum·image identity·이전 image profile과 유효 endpoint·실행 중 풀러 용량을 검증한다.
 #   --apply: 이전 pair drop-in을 게시하고 daemon-reload 뒤 unit을 재시작해 실행 중 profile과 NRestarts를 확인한다.
 # 배포 helper는 자동으로 호출하지 않는다. --apply는 호환성과 실제 unit 상태를 검토한 별도 승인 뒤에만 실행한다.
 set -Eeuo pipefail
@@ -29,6 +29,9 @@ if [[ -z "$prefix" && "$ROOT_DIR" != "$deploy_root" ]]; then
   die "run the deployed copy: $deploy_root/scripts/deploy/quadlet-rollback-service.sh"
 fi
 pair_tool="$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py"
+. "$ROOT_DIR/scripts/deploy/lib/compose-env.sh"
+. "$ROOT_DIR/scripts/deploy/lib/postgres-endpoint.sh"
+. "$ROOT_DIR/scripts/deploy/lib/postgres-capacity.sh"
 
 release="$(realpath -e -- "$1")" || die "release directory not found: $1"
 [[ "$release" == "$deploy_root/artifacts/worker-profile/releases/"* ]] ||
@@ -52,6 +55,14 @@ if [[ -f "$previous/unit.container" ]] && ! cmp -s -- "$previous/unit.container"
 elif [[ ! -f "$previous/unit.container" ]]; then
   echo "[WARN] $previous has no recorded base unit; the installed unit definition stays as is" >&2
 fi
+recorded_unit="$previous/unit.container"
+[[ -f "$recorded_unit" ]] || recorded_unit="$installed_unit"
+compose_env="$prefix/etc/stack-secrets/hololive-bot/compose.env"
+current_endpoint="$(postgres_endpoint_quadlet "$installed_unit" "$compose_env")" || die "cannot determine current effective PostgreSQL endpoint"
+previous_endpoint="$(postgres_endpoint_quadlet "$recorded_unit" "$compose_env" "$installed_unit")" || die "cannot determine rollback effective PostgreSQL endpoint"
+postgres_endpoint_require_same "$current_endpoint" "$previous_endpoint" ||
+  die "rollback not applied; current service state unchanged; recovery pair retained: $previous"
+postgres_capacity_assert_service "$ROOT_DIR" "$compose_env" "$(dirname "$installed_unit")" "$service" "$recorded_unit"
 if [[ "$mode" == --check ]]; then
   [[ "$restore_unit" != true ]] || echo "[CHECK] --apply also restores the base unit the previous image ran with: $installed_unit"
   echo "[CHECK] $service previous pair verified: $previous"

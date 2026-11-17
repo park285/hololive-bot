@@ -12,6 +12,8 @@ self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${self_dir}/lib/admin-bind.sh"
 # shellcheck source=scripts/deploy/lib/public-bind-mounts.sh
 . "${self_dir}/lib/public-bind-mounts.sh"
+# shellcheck source=scripts/deploy/lib/postgres-capacity.sh
+. "${self_dir}/lib/postgres-capacity.sh"
 
 die() { echo "[quadlet-prestart] $*" >&2; exit 1; }
 
@@ -23,6 +25,7 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     run_dir=/run/hololive-bot
     secrets_dir=/etc/stack-secrets/hololive-bot
     installed_firewall=/etc/nftables.d/admin-dashboard-ingress.nft
+    quadlet_dir=/etc/containers/systemd/hololive-bot
 else
     test_root="${HOLOLIVE_QUADLET_TEST_ROOT:?non-root execution is only for tests and requires HOLOLIVE_QUADLET_TEST_ROOT}"
     deploy_root="${test_root}/deploy"
@@ -31,6 +34,7 @@ else
     run_dir="${test_root}/run"
     secrets_dir="${test_root}/secrets"
     installed_firewall="${test_root}/installed.nft"
+    quadlet_dir="${test_root}/units"
 fi
 
 # systemd EnvironmentFile로 읽히는 compose.env의 형식(KEY=VALUE, 유효한 key, 중복 없음, 앞뒤 공백 없음)을 확인한다.
@@ -147,6 +151,12 @@ api_release_version() {
 
 target="${1:-}"
 case "$target" in
+    hololive-api|hololive-alarm-worker|hololive-youtube-collector-c)
+        validate_env_file_syntax "$compose_env"
+        postgres_capacity_assert_service "$deploy_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
+        ;;
+esac
+case "$target" in
     collector-enabled)
         # ExecCondition: 1이면 건너뛰고(unit 실패 아님), 잘못된 값은 255로 실패시킨다.
         case "${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}" in
@@ -160,6 +170,7 @@ case "$target" in
         require_values POSTGRES_PORT_BIND_IP
         require_secret_file "${secrets_dir}/postgres-tls/server.crt"
         require_secret_file "${secrets_dir}/postgres-tls/server.key"
+        require_secret_file "${secrets_dir}/certs/postgres-ca.pem"
         wait_for_tailnet_address POSTGRES_PORT_BIND_IP
         admin_postgres_bind_assert "$deploy_root" "$POSTGRES_PORT_BIND_IP"
         admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
@@ -174,6 +185,20 @@ case "$target" in
             'HOLOLIVE_COLLECTOR_C_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
             'HOLOLIVE_COLLECTOR_D_PASSWORD=HOLOLIVE_COLLECTOR_D_PASSWORD!' \
             'HOLOLIVE_REPLICATOR_PASSWORD=HOLOLIVE_REPLICATOR_PASSWORD'
+        ;;
+    holo-pgbouncer)
+        validate_env_file_syntax "$compose_env"
+        require_values POSTGRES_PORT_BIND_IP
+        require_secret_file "${secrets_dir}/certs/postgres-ca.pem"
+        for tls_file in server.crt server.key backend-client.crt backend-client.key; do
+            require_secret_file "${secrets_dir}/pgbouncer/${tls_file}"
+        done
+        wait_for_tailnet_address POSTGRES_PORT_BIND_IP
+        admin_postgres_bind_assert "$deploy_root" "$POSTGRES_PORT_BIND_IP"
+        admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
+        install -d -m 0755 -- "${run_dir}/pgbouncer"
+        postgres_capacity_write_quadlet_config "$deploy_root" "$compose_env" "$quadlet_dir" \
+            "${run_dir}/pgbouncer/pgbouncer.ini"
         ;;
     valkey-cache)
         validate_env_file_syntax "$compose_env"

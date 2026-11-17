@@ -23,9 +23,9 @@ table inet admin_dashboard_ingress {
 		iifname "lo" udp dport 30006 accept
 		iifname "tailscale0" ip saddr 100.100.1.5 udp dport 30006 accept
 		udp dport 30006 reject
-		iifname "lo" tcp dport 5433 accept
-		iifname "tailscale0" ip saddr @postgres_sources tcp dport 5433 accept
-		tcp dport 5433 reject with tcp reset
+		iifname "lo" tcp dport { 5433, 6433 } accept
+		iifname "tailscale0" ip saddr @postgres_sources tcp dport { 5433, 6433 } accept
+		tcp dport { 5433, 6433 } reject with tcp reset
 		iifname "lo" tcp dport { 5432, 5458 } accept
 		iifname "tailscale0" ip saddr @bot_postgres_sources tcp dport { 5432, 5458 } accept
 		tcp dport { 5432, 5458 } reject with tcp reset
@@ -41,16 +41,19 @@ table inet admin_dashboard_ingress {
 		ct status dnat ct original proto-dst 30006 udp dport 30006 reject
 		ct status dnat ct original proto-dst 5433 tcp dport 5432 iifname "tailscale0" ip saddr @postgres_sources accept
 		ct status dnat ct original proto-dst 5433 tcp dport 5432 reject with tcp reset
+		ct status dnat ct original proto-dst 6433 tcp dport 6432 iifname "tailscale0" ip saddr @postgres_sources accept
+		ct status dnat ct original proto-dst 6433 tcp dport 6432 reject with tcp reset
 		ct status dnat ct original proto-dst { 5432, 5458 } tcp dport 5432 iifname "tailscale0" ip saddr @bot_postgres_sources accept
 		ct status dnat ct original proto-dst { 5432, 5458 } tcp dport 5432 reject with tcp reset
 	}
 
 	# Tailscale은 tailscale0에서 전달하는 패킷에 SNAT 표시(mark 0x40000, mask 0xff0000)를 붙여 postrouting에서
-	# masquerade하므로 PostgreSQL은 AP를 bridge gateway(172.23.0.1)로 본다. holo-postgres publish만 이 표시를 지워
-	# pg_hba.conf가 AP별 tailnet 주소로 판정하게 한다. 표시를 붙이는 ts-forward(priority 0) 뒤에 돌아야 한다.
+	# masquerade하므로 PostgreSQL·PgBouncer는 AP를 bridge gateway(172.23.0.1)로 본다. 두 publish만 표시를 지워
+	# 각 pg_hba.conf가 AP별 tailnet 주소로 판정하게 한다. 표시를 붙이는 ts-forward(priority 0) 뒤에 돌아야 한다.
 	chain forward_preserve_postgres_source {
 		type filter hook forward priority 10; policy accept;
 
 		ct status dnat ct original proto-dst 5433 tcp dport 5432 iifname "tailscale0" ip saddr @postgres_sources meta mark set meta mark and 0xff00ffff
+		ct status dnat ct original proto-dst 6433 tcp dport 6432 iifname "tailscale0" ip saddr @postgres_sources meta mark set meta mark and 0xff00ffff
 	}
 }

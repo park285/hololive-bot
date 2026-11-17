@@ -205,6 +205,35 @@ class PairToolTest(unittest.TestCase):
         pointer = self.root / "artifacts/worker-profile/active/hololive-api.pair"
         self.assertEqual(pointer.read_text(), f"{unrelated}\n")
 
+    def test_collector_dropin_changes_are_refused_before_publication(self):
+        previous = self.root / "artifacts/worker-profile/releases/collector-old/previous"
+        candidate = self.root / "artifacts/worker-profile/releases/collector-new/candidate"
+        for directory in (previous, candidate):
+            write_pair(directory)
+            result = self.tool("rollback", SERVICE, str(directory))
+            self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.activate(previous)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        before = self.installed_dropin().read_bytes()
+        pointer = self.active_pair().read_bytes()
+        dropin = candidate / "50-worker-profile.conf"
+        canonical = dropin.read_bytes()
+        result = self.tool("verify-dropin", SERVICE, str(candidate))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for addition in (b"Image=unreviewed\n", b"Environment=POSTGRES_PORT=5432\n"):
+            with self.subTest(addition=addition):
+                dropin.chmod(0o644)
+                dropin.write_bytes(canonical + addition)
+                for result in (self.tool("verify-dropin", SERVICE, str(candidate)), self.activate(candidate)):
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(self.installed_dropin().read_bytes(), before)
+                    self.assertEqual(self.active_pair().read_bytes(), pointer)
+                    self.assertEqual(dropin.read_bytes(), canonical + addition)
+        dropin.write_bytes(canonical)
+        result = self.activate(candidate)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.installed_dropin().read_bytes(), canonical)
+
     @unittest.skipUnless(QUADLET.exists(), "podman quadlet generator is not installed")
     def test_partial_publication_resumes_to_the_candidate_unit(self):
         previous, candidate, units = self.retained_case()

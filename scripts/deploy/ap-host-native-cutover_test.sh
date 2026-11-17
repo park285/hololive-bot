@@ -16,6 +16,9 @@ helper = root / 'scripts/deploy/lib/ap-host-native-cutover.sh'
 if not helper.is_file():
     raise SystemExit('native cutover signal helper is missing')
 source = (root / 'scripts/deploy/lib/ap-host-native-remote-apply.sh').read_text()
+endpoint_libs = ''.join(f'. "{root / "scripts/deploy/lib" / name}"\n' for name in (
+    'compose-env.sh', 'postgres-endpoint.sh', 'ap-host-native-rollback-check.sh',
+))
 function_start = source.index('stop_collector_unit_and_require_inactive()')
 functions = source[function_start:source.index('\narm_native_cutover_restore\n', function_start)]
 log_check = source[source.index('native_post_cutover_log_check()'):source.index('\nnative_post_cutover_log_check\n')]
@@ -34,6 +37,10 @@ def run_case(name, action, target=None, signo=signal.SIGTERM, initial=True, mode
     case = work / name
     case.mkdir()
     (case / 'old/rollback-contract').mkdir(parents=True)
+    (case / 'payload').mkdir()
+    endpoint_env = 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n'
+    (case / 'payload/youtube-collector-host.env').write_text(endpoint_env)
+    (case / 'old/rollback-contract/youtube-collector-host.env').write_text(endpoint_env)
     (case / 'bin').mkdir()
     command = case / 'bin/systemctl'
     command.write_text('''#!/usr/bin/env bash
@@ -82,14 +89,15 @@ sudo() {
     *) "$@" ;;
   esac
 }
-''' + f'. "{helper}"\n' + '''
+''' + f'. "{helper}"\n' + endpoint_libs + '''
 native_recovery_dir="$CASE/recovery"
 release_dir="$CASE/new"
+payload="$CASE/payload"
 old_target="$CASE/old"
 [[ "$INITIAL" != false ]] || old_target=""
 host_env="$CASE/host.env" unit_file="$CASE/unit"
 current_link="$CASE/current" previous_link="$CASE/previous" releases_root="$CASE"
-printf 'new\\n' > "$host_env"
+cp "$payload/youtube-collector-host.env" "$host_env"
 printf 'new\\n' > "$unit_file"
 ln -s "$release_dir" "$current_link"
 unit=hololive-youtube-collector@youtube-collector-a.service

@@ -12,7 +12,7 @@ case "$slot" in
   b) remote_root=/opt/hololive-bot/collector-b service=youtube-collector-b port=30015 host_label=iris-seoul ;;
   *) exit 2 ;;
 esac
-[[ "$mode" == deploy || "$mode" == rollback || "$mode" == check ]] || exit 2
+[[ "$mode" == deploy || "$mode" == quiesce || "$mode" == resume || "$mode" == rollback || "$mode" == check ]] || exit 2
 [[ "$staging" =~ ^$remote_root/po-staging-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
 [[ "$backup" =~ ^$remote_root/backups/po-$slot-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
 [[ "$revision" =~ ^[0-9a-f]{40}$ && "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 2
@@ -35,11 +35,170 @@ collector_container="hololive-youtube-collector-$slot"
 issuer_container="hololive-youtube-po-$slot"
 collector_unit="$collector_container.service"
 issuer_unit="$issuer_container.service"
+hold="$remote_root/po-$slot.hold"
+lock="$remote_root/po-$slot.lock"
+system_unit_dir=/etc/systemd/system
+hold_owned=false
 [[ "$(stat -c '%u:%g %a' "$staging")" == '0:0 700' ]] || { echo "$host_label staged artifacts are not root-private" >&2; exit 1; }
 cd "$current"
+# 재개 입력 검증은 staged helper를 실행하기 전에 끝낸다. b의 current는 source checkout이 아니라
+# release pair 저장소다. provenance는 SSH로 전달한 source checksum과 quiesce 영수증이 소유한다.
+if [[ "$mode" == resume ]]; then
+  (cd "$staging" && sha256sum --check --strict "$backup/candidate-inputs.sha256")
+fi
+(cd "$staging" && sha256sum --check --strict source-files.sha256)
 . "$staging/scripts/deploy/lib/po-sandbox-image.sh"
+. "$staging/scripts/deploy/lib/compose-env.sh"
+. "$staging/scripts/deploy/lib/postgres-endpoint.sh"
+. "$staging/scripts/deploy/lib/postgres-capacity.sh"
+compose_env=/etc/stack-secrets/hololive-bot/compose.env
 pair_tool="$staging/scripts/deploy/lib/worker-profile-pair.py"
 cutover_started=false
+
+claim_slot() {
+  [[ ! -L "$lock" ]] || return 1
+  (umask 077; : >> "$lock")
+  [[ "$(stat -c '%u:%g %a' "$lock")" == '0:0 600' ]] || return 1
+  exec {slot_lock_fd}>>"$lock"
+  flock -n "$slot_lock_fd" || { echo "$host_label paired operation already running" >&2; return 1; }
+  if [[ -e "$hold" || -L "$hold" ]]; then
+    [[ ! -L "$hold" && "$(stat -c '%u:%g %a' "$hold")" == '0:0 700' &&
+       -f "$hold/backup" && ! -L "$hold/backup" && "$(<"$hold/backup")" == "$backup" ]] || {
+      echo "$host_label foreign maintenance hold; retain $hold" >&2; return 1;
+    }
+    [[ "$mode" == resume || "$mode" == rollback ]] || {
+      echo "$host_label maintenance held; use resume or approved rollback $backup" >&2; return 1;
+    }
+    hold_owned=true
+  else
+    [[ "$mode" != resume ]] || { echo "$host_label resume requires an owned hold" >&2; return 1; }
+  fi
+}
+
+require_unmasked_units() {
+  local unit state
+  for unit in "$issuer_unit" "$collector_unit"; do
+    [[ ! -e "$system_unit_dir/$unit" && ! -L "$system_unit_dir/$unit" ]] || return 1
+    state="$(systemctl show -p LoadState --value "$unit")" || return
+    [[ "$state" == loaded ]] || { echo "$unit is not an unmasked loaded unit" >&2; return 1; }
+  done
+}
+
+require_owned_hold() {
+  [[ "$hold_owned" == true && "$(<"$hold/backup")" == "$backup" ]] || return 1
+  [[ -r "$backup/snapshot-complete" && "$(<"$backup/candidate.revision")" == "$revision" &&
+     "$(<"$backup/candidate.version")" == "$version" ]] || return 1
+}
+
+require_held_units() {
+  local unit
+  require_owned_hold || return
+  for unit in "$issuer_unit" "$collector_unit"; do
+    [[ -s "$hold/$unit" && "$(readlink "$system_unit_dir/$unit")" == /dev/null &&
+       "$(<"$hold/$unit")" == "$(stat -c '%d:%i' "$system_unit_dir/$unit")" ]] || return 1
+    [[ "$(systemctl show -p LoadState --value "$unit")" == masked ]] || return 1
+    [[ "$(systemctl show -p ActiveState --value "$unit")" == inactive ]] || return 1
+  done
+}
+
+hold_units() {
+  local unit status=0
+  for unit in "$issuer_unit" "$collector_unit"; do
+    if [[ ! -f "$hold/$unit" ]]; then
+      echo "missing mask ownership for $unit" >&2
+      status=1
+      systemctl stop "$unit" || status=1
+      continue
+    fi
+    if [[ ! -e "$system_unit_dir/$unit" && ! -L "$system_unit_dir/$unit" ]]; then
+      if systemctl mask "$unit"; then
+        stat -c '%d:%i' "$system_unit_dir/$unit" > "$hold/$unit" || status=1
+      else
+        status=1
+      fi
+    elif [[ "$(readlink "$system_unit_dir/$unit")" != /dev/null ||
+            "$(<"$hold/$unit")" != "$(stat -c '%d:%i' "$system_unit_dir/$unit")" ]]; then
+      echo "refusing unrelated unit at $system_unit_dir/$unit" >&2
+      status=1
+    fi
+    systemctl stop "$unit" || status=1
+  done
+  require_held_units || status=1
+  return "$status"
+}
+
+release_unit() {
+  local unit="$1"
+  [[ "$hold_owned" == true && -s "$hold/$unit" &&
+     "$(readlink "$system_unit_dir/$unit")" == /dev/null &&
+     "$(<"$hold/$unit")" == "$(stat -c '%d:%i' "$system_unit_dir/$unit")" ]] || return 1
+  systemctl unmask "$unit"
+}
+
+clear_hold() {
+  rm -- "$hold/$issuer_unit" "$hold/$collector_unit" "$hold/backup"
+  rmdir -- "$hold"
+  hold_owned=false
+}
+
+maintenance_failed() {
+  local status="${1:-1}"
+  [[ "$BASHPID" == "$maintenance_owner_pid" ]] || exit "$status"
+  trap - ERR INT TERM HUP
+  set +e
+  if { [[ "${maintenance_released:-false}" == true ]] && hold_units; } ||
+     { [[ "${maintenance_released:-false}" != true ]] && require_held_units; }; then
+    echo "[OUTCOME] held: both writers inactive; retain $backup and $hold" >&2
+  else
+    echo "[OUTCOME] unconfirmed: maintenance hold incomplete; do not mutate DB; retain $backup and $hold" >&2
+  fi
+  exit "$status"
+}
+
+arm_maintenance_failure() {
+  maintenance_owner_pid="$BASHPID"
+  trap 'maintenance_failed $?' ERR
+  trap 'maintenance_failed 130' INT
+  trap 'maintenance_failed 143' TERM
+  trap 'maintenance_failed 129' HUP
+}
+
+verify_candidate_images() {
+  po_verify_image "$issuer_candidate" "$staging/rootfs-manifest.json" "$revision" arm64 "$staging/image-id"
+  verify_collector "$collector_candidate" "$staging/collector-manifest.json" "$revision" "$staging/collector-image-id"
+  [[ "$(image_label "$issuer_candidate" version)" == "$version" ]]
+  [[ "$(image_label "$collector_candidate" version)" == "$version" ]]
+}
+
+prepare_candidate_pair() {
+  local candidate_image env_file=- expected previous_revision
+  candidate_image="$(image_id "$collector_candidate")"
+  if [[ "$mode" == resume ]]; then
+    if [[ "$slot" == c ]]; then
+      [[ "$(<"$current/.source-revision")" == "$revision" ]] || return 1
+    else
+      cmp -- "$staging/deploy/podman/iris-seoul/$collector_container.container" \
+        "$unit_dir/$collector_container.container" || return
+    fi
+    [[ "$slot" != c ]] || env_file="${compose_env:-/etc/stack-secrets/hololive-bot/compose.env}"
+    if [[ "$slot" == c ]]; then expected='holo-pgbouncer|6432'; else expected='100.100.1.8|6433'; fi
+    postgres_endpoint_require_same "$(postgres_endpoint_quadlet "$unit_dir/$collector_container.container" "$env_file")" "$expected"
+    previous_revision="$(cat "$backup/collector.revision")"
+    verify_collector "$collector_rollback" "$backup/collector-prechange-manifest.json" "$previous_revision" "$backup/collector-prechange.image-id"
+    [[ "$(<"$backup/issuer.state")" == present ]]
+    po_verify_image "$issuer_rollback" "$backup/po-prechange-manifest.json" "$previous_revision" arm64 "$backup/po-prechange.image-id"
+    python3 "$pair_tool" verify "$service" "$profile_release/previous" "$collector_rollback"
+  fi
+  if [[ ! -e "$profile_release/candidate" ]]; then
+    python3 "$pair_tool" candidate "$service" "$profile_release/candidate" "$candidate_image" \
+      < "$unit_dir/$collector_container.container"
+  fi
+  python3 "$pair_tool" verify "$service" "$profile_release/candidate" "$candidate_image"
+  python3 "$pair_tool" verify-dropin "$service" "$profile_release/candidate"
+  cmp -- "$profile_release/candidate/unit.container" "$unit_dir/$collector_container.container"
+  python3 "$pair_tool" check "$service" "$profile_release/candidate"
+  python3 "$pair_tool" verify-source "$service" "$profile_release/candidate"
+}
 
 # Podman .Id·.Image는 접두어 없는 config digest다. 영수증과 drop-in의 identity는 sha256:<hex>다.
 # 두 조회를 비교할 때는 변수에 먼저 받는다. [[ "$(a)" == "$(b)" ]]는 둘 다 실패하면 빈 값끼리 같아 통과한다.
@@ -128,9 +287,22 @@ restore_collector_base_unit() {
   install -m 0644 -- "$recorded" "$tmp" && mv -f -- "$tmp" "$installed" || { rm -f -- "$tmp"; return 1; }
   echo "[ROLLBACK] restored the collector base unit the previous image ran with; reinstall the intended revision's unit before the next deployment" >&2
 }
+collector_rollback_endpoint_validate() {
+  local installed="$unit_dir/$collector_container.container" recorded="$profile_release/previous/unit.container"
+  local env_file=- current_endpoint previous_endpoint
+  [[ "$slot" != c ]] || env_file="${compose_env:-/etc/stack-secrets/hololive-bot/compose.env}"
+  [[ -f "$recorded" ]] || recorded="$installed"
+  current_endpoint="$(postgres_endpoint_quadlet "$installed" "$env_file")" || return
+  previous_endpoint="$(postgres_endpoint_quadlet "$recorded" "$env_file" "$installed")" || return
+  postgres_endpoint_require_same "$current_endpoint" "$previous_endpoint" || return
+  if [[ "$mode" != rollback ]]; then
+    [[ -s "$backup/collector.endpoint" ]] || return 1
+    postgres_endpoint_require_same "$current_endpoint" "$(<"$backup/collector.endpoint")" || return
+  fi
+}
 restore() {
   local old_revision old_po_revision state issuer_now
-  trap - ERR INT TERM HUP
+  if [[ "$hold_owned" != true ]]; then trap - ERR INT TERM HUP; fi
   [[ -r "$backup/snapshot-complete" ]] || { echo "$host_label rollback snapshot incomplete" >&2; return 1; }
   state="$(cat "$backup/issuer.state")"
   old_revision="$(cat "$backup/collector.revision")"
@@ -143,6 +315,29 @@ restore() {
   fi
   python3 "$pair_tool" verify "$service" "$profile_release/previous" "$collector_rollback"
   python3 "$pair_tool" check "$service" "$profile_release/previous"
+  if ! collector_rollback_endpoint_validate; then
+    if [[ "$mode" != rollback ]]; then
+      systemctl stop "$issuer_unit" || return
+      systemctl stop "$collector_unit" || return
+      if systemctl is-active --quiet "$collector_unit" || systemctl is-active --quiet "$issuer_unit"; then
+        echo "rollback refused; could not confirm both services stopped; retain $backup and $profile_release" >&2
+        return 1
+      fi
+      echo "[OUTCOME] stopped: endpoint transition prevents automatic rollback; retain $backup and $profile_release" >&2
+    else
+      echo "rollback refused before activation; current state unchanged; retain $backup and $profile_release" >&2
+    fi
+    return 1
+  fi
+  if [[ "$slot" == c ]]; then
+    local previous_unit="$profile_release/previous/unit.container"
+    [[ -f "$previous_unit" ]] || previous_unit="$unit_dir/$collector_container.container"
+    postgres_capacity_assert_service "$staging" "$compose_env" "$unit_dir" "$collector_container" "$previous_unit" || return
+  fi
+  if [[ "$hold_owned" == true ]]; then
+    arm_maintenance_failure
+    hold_units
+  fi
   # 복원 drop-in 게시가 실패하면 실행 중인 issuer·collector를 건드리지 않는다.
   python3 "$pair_tool" activate "$service" "$profile_release/previous" "$current" || return
   # pair는 이전 image가 돌던 기본 unit(unit.container, verify가 checksum 확인)도 보존한다. sync-opt-current.sh가 새
@@ -155,6 +350,10 @@ restore() {
     podman tag "$issuer_rollback" "$issuer"
     install -D -m 0644 "$backup/po-prechange-manifest.json" "$current/$manifest"
     install -D -m 0644 "$backup/po-prechange.image-id" "$current/$image_id_file"
+    if [[ "$hold_owned" == true ]]; then
+      maintenance_released=true
+      release_unit "$issuer_unit"
+    fi
     systemctl restart "$issuer_unit"
     verify_issuer_runtime "$old_po_revision"
   else
@@ -163,9 +362,26 @@ restore() {
     issuer_now="$(issuer_presence)" || return 1
     if [[ "$issuer_now" == present ]]; then podman image rm "$issuer" >/dev/null; fi
   fi
+  if [[ "$hold_owned" == true ]]; then release_unit "$collector_unit"; fi
   systemctl restart "$collector_unit" || return
   verify_collector_runtime "$old_revision" || return
+  if [[ "$hold_owned" == true ]]; then
+    if [[ "$state" == absent ]]; then release_unit "$issuer_unit"; fi
+    clear_hold
+    trap - ERR INT TERM HUP
+  fi
   echo "$host_label previous collector/issuer restored from $backup"
+}
+require_collector_pooler_endpoint() {
+  local collector_env host=holo-pgbouncer port=6432
+  if [[ "$slot" == b ]]; then host=100.100.1.8; port=6433; fi
+  collector_env="$(podman inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$collector_container")" || return 1
+  grep -Fxq "POSTGRES_HOST=$host" <<<"$collector_env" &&
+    grep -Fxq "POSTGRES_PORT=$port" <<<"$collector_env" &&
+    grep -Fxq 'POSTGRES_DB=hololive' <<<"$collector_env" || {
+      echo 'activated collector must use the reviewed pooler endpoint' >&2
+      return 1
+    }
 }
 require_collector_lease_migration() {
   local migration=001_schema_epoch3_baseline.sql expected observed collector_env
@@ -173,10 +389,11 @@ require_collector_lease_migration() {
   expected="$(sha256sum "$staging/hololive/hololive-api/scripts/migrations/$migration")"
   expected="${expected%% *}"
   [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || return 1
-  # 격리 소켓으로 원장을 보기 전에 수집기가 이 주 서버를 가리키는지 확인한다.
+  # 최초 전환 전 실행 상태에만 구 direct primary를 인정한다. 후보 기동 후에는 풀러 경로만 검사한다.
   collector_env="$(podman inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$collector_container")" || return 1
-  if ! grep -qx 'POSTGRES_HOST=holo-postgres' <<<"$collector_env" || ! grep -qx 'POSTGRES_PORT=5432' <<<"$collector_env" \
-      || ! grep -qx 'POSTGRES_DB=hololive' <<<"$collector_env"; then
+  if ! { { grep -Fxq 'POSTGRES_HOST=holo-pgbouncer' <<<"$collector_env" && grep -Fxq 'POSTGRES_PORT=6432' <<<"$collector_env"; } ||
+         { grep -Fxq 'POSTGRES_HOST=holo-postgres' <<<"$collector_env" && grep -Fxq 'POSTGRES_PORT=5432' <<<"$collector_env"; }; } ||
+      ! grep -Fxq 'POSTGRES_DB=hololive' <<<"$collector_env"; then
     echo 'collector migration proof requires the local primary route' >&2
     return 1
   fi
@@ -213,7 +430,9 @@ require_collector_lease_migration() {
 # 이 본문은 ssh bash -s의 stdin으로 도착한다. 실행 구간을 한 묶음으로 끝까지 읽은 뒤 실행해야
 # stdin을 읽는 자식 명령이 남은 본문을 소비해 교체 없이 exit 0으로 끝나지 않는다.
 {
+claim_slot
 if [[ "$mode" == rollback ]]; then
+  if [[ "$hold_owned" == true ]]; then require_owned_hold; fi
   restore
   exit 0
 fi
@@ -225,6 +444,7 @@ if [[ "$mode" == check ]]; then
   [[ "$(image_label "$collector" version)" == "$version" ]]
   verify_issuer_runtime "$revision"
   verify_collector_runtime "$revision"
+  require_collector_pooler_endpoint
   since="$(cat "$backup/change-started-at")"
   [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
   since_epoch="$(date -u -d "$since" +%s)"
@@ -235,8 +455,12 @@ if [[ "$mode" == check ]]; then
   echo "$host_label collector/issuer completion verified revision=$revision backup=$backup"
   exit 0
 fi
-# Quadlet은 정지한 unit의 container를 지운다(--rm). 이전 pair의 profile은 실행 중인 collector에서만 증명할 수 있어
-# collector를 멈춘 채 교체하는 점검 모드는 지원하지 않는다.
+if [[ "$slot" == c && "$mode" != quiesce ]]; then
+  postgres_capacity_assert_live "$staging" "$compose_env" "$unit_dir"
+fi
+if [[ "$mode" != resume ]]; then
+require_unmasked_units
+# 이전 pair는 실행 중인 collector에서만 증명한다. 정지 후에는 보존한 hold로만 재개한다.
 systemctl is-active --quiet "$collector_unit" || {
   echo "$host_label collector must be running for a paired cutover; $collector_unit is not active" >&2
   exit 1
@@ -250,6 +474,10 @@ fi
    -r "$staging/collector-image.tar" && -r "$staging/collector-image.tar.sha256" && -r "$staging/collector-image-id" &&
    -r "$staging/rootfs-manifest.json" && -r "$staging/collector-manifest.json" ]] || exit 1
 issuer_state="$(issuer_presence)"
+if [[ "$mode" == quiesce && "$issuer_state" != present ]]; then
+  echo 'quiesce requires the running previous issuer pair' >&2
+  exit 1
+fi
 # issuer 기준 영수증(po-current-<slot>)은 current 밖의 호스트 상태다. issuer 이미지가 있는데 영수증이 없으면 이전 pair를
 # 복원할 근거가 없으므로, 백업·rollback 태그를 만들기 전에 원인을 남기고 거절한다(호스트 교체 때 누락된 사례).
 if [[ "$issuer_state" == present ]] && [[ ! -r "$current/$manifest" || ! -r "$current/$image_id_file" ]]; then
@@ -270,6 +498,10 @@ json.dump({'schema_version': 1, 'source_revision': sys.argv[1], 'go': {'goarch':
 PY
 verify_collector "$collector" "$backup/collector-prechange-manifest.json" "$old_revision" "$backup/collector-prechange.image-id"
 python3 "$pair_tool" capture "$service" "$profile_release/previous" "$collector_container" "$current"
+if [[ "$mode" == quiesce ]]; then
+  [[ -f "$profile_release/previous/unit.container" ]] || { echo 'previous pair has no retained base unit' >&2; exit 1; }
+fi
+postgres_endpoint_container "$collector_container" > "$backup/collector.endpoint"
 python3 "$pair_tool" rollback "$service" "$profile_release/previous"
 python3 "$pair_tool" check "$service" "$profile_release/previous"
 printf '%s\n' "$old_revision" > "$backup/collector.revision"
@@ -280,6 +512,7 @@ if [[ "$issuer_state" == present ]]; then
   [[ "$running_issuer_id" == "$issuer_image_id" ]] || exit 1
   old_po_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_revision"])' "$current/$manifest")"
   po_verify_image "$issuer" "$current/$manifest" "$old_po_revision" arm64 "$current/$image_id_file"
+  if [[ "$mode" == quiesce ]]; then verify_issuer_runtime "$old_po_revision"; fi
   [[ "$old_po_revision" == "$old_revision" ]]
   old_po_version="$(image_label "$issuer" version)"
   old_version="$(image_label "$collector" version)"
@@ -295,6 +528,7 @@ fi
 printf '%s\n' "$revision" > "$backup/candidate.revision"
 printf '%s\n' "$version" > "$backup/candidate.version"
 : > "$backup/snapshot-complete"
+fi
 # 이전 pair snapshot을 확보한 뒤에만 복원을 무장합니다.
 restore_after_failed_cutover() {
   local status="${1:-1}" restore_status
@@ -317,42 +551,75 @@ restore_after_failed_cutover() {
   fi
   exit "$status"
 }
-cutover_restore_owner_pid="$BASHPID"
-trap 'restore_after_failed_cutover $?' ERR
-trap 'restore_after_failed_cutover 130' INT
-trap 'restore_after_failed_cutover 143' TERM
-trap 'restore_after_failed_cutover 129' HUP
+if [[ "$mode" != resume ]]; then
+  cutover_restore_owner_pid="$BASHPID"
+  trap 'restore_after_failed_cutover $?' ERR
+  trap 'restore_after_failed_cutover 130' INT
+  trap 'restore_after_failed_cutover 143' TERM
+  trap 'restore_after_failed_cutover 129' HUP
 (cd "$staging" && sha256sum --check --strict image.tar.sha256 collector-image.tar.sha256)
 podman load --input "$staging/image.tar"
 podman load --input "$staging/collector-image.tar"
-po_verify_image "$issuer_candidate" "$staging/rootfs-manifest.json" "$revision" arm64 "$staging/image-id"
-verify_collector "$collector_candidate" "$staging/collector-manifest.json" "$revision" "$staging/collector-image-id"
-[[ "$(image_label "$issuer_candidate" version)" == "$version" ]]
-[[ "$(image_label "$collector_candidate" version)" == "$version" ]]
-candidate_image="$(image_id "$collector_candidate")"
-python3 "$pair_tool" candidate "$service" "$profile_release/candidate" "$candidate_image" \
-  < "$unit_dir/$collector_container.container"
-python3 "$pair_tool" check "$service" "$profile_release/candidate"
-python3 "$pair_tool" verify-source "$service" "$profile_release/candidate"
+  verify_candidate_images
+fi
+if [[ "$mode" == quiesce ]]; then
+  (cd "$staging" && sha256sum image-id collector-image-id rootfs-manifest.json collector-manifest.json \
+    image.tar.sha256 collector-image.tar.sha256 source-files.sha256) \
+    > "$backup/candidate-inputs.sha256"
+  require_unmasked_units
+  install -d -m 0700 -o root -g root "$hold"
+  printf '%s\n' "$backup" > "$hold/backup"
+  : > "$hold/$issuer_unit"
+  : > "$hold/$collector_unit"
+  hold_owned=true
+  arm_maintenance_failure
+  hold_units
+  trap - ERR INT TERM HUP
+  printf '%s quiesced: both writers persistently held; backup=%s\n' "$host_label" "$backup"
+  exit 0
+fi
+if [[ "$mode" == resume ]]; then
+  require_held_units
+  arm_maintenance_failure
+  (cd "$staging" && sha256sum --check --strict "$backup/candidate-inputs.sha256")
+  (cd "$staging" && sha256sum --check --strict source-files.sha256)
+  (cd "$staging" && sha256sum --check --strict image.tar.sha256 collector-image.tar.sha256)
+  verify_candidate_images
+fi
+prepare_candidate_pair
 cutover_started=true
 python3 "$pair_tool" activate "$service" "$profile_release/candidate" "$current"
 podman tag "$issuer_candidate" "$issuer"
 podman tag "$collector_candidate" "$collector"
+if [[ "$mode" == resume ]]; then
+  install -D -m 0644 "$staging/rootfs-manifest.json" "$current/$manifest"
+  install -D -m 0644 "$staging/image-id" "$current/$image_id_file"
+fi
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '%s\n' "$started_at" > "$backup/change-started-at"
 systemctl daemon-reload
+if [[ "$mode" == resume ]]; then
+  require_held_units
+  python3 "$pair_tool" verify-source "$service" "$profile_release/candidate"
+  cmp -- "$profile_release/candidate/unit.container" "$unit_dir/$collector_container.container"
+  maintenance_released=true
+  release_unit "$issuer_unit"
+fi
 systemctl restart "$issuer_unit"
 verify_issuer_runtime "$revision"
 install -D -m 0644 "$staging/rootfs-manifest.json" "$current/$manifest"
 install -D -m 0644 "$staging/image-id" "$current/$image_id_file"
+if [[ "$mode" == resume ]]; then release_unit "$collector_unit"; fi
 systemctl restart "$collector_unit"
 verify_collector_runtime "$revision"
+require_collector_pooler_endpoint
 python3 "$pair_tool" verify-live "$service" "$profile_release/candidate" "$collector_container"
 since_epoch="$(date -u -d "$started_at" +%s)"
 for container in "$issuer_container" "$collector_container"; do
   started_since "$since_epoch" "$container"
   require_post_cutover_logs "$started_at" "$container"
 done
+if [[ "$mode" == resume ]]; then clear_hold; fi
 trap - ERR INT TERM HUP
 printf '%s issuer-first cutover verified revision=%s backup=%s started_at=%s\n' "$host_label" "$revision" "$backup" "$started_at"
 }

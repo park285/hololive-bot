@@ -244,6 +244,11 @@ native_restore_recorded_runtime() {
   if [[ -n "$old_target" && -d "$old_target" ]]; then
     rollback_contract_dir="$old_target/rollback-contract"
     native_rollback_validate "$old_target"
+    native_rollback_endpoint_validate "$old_target" "$payload/youtube-collector-host.env" || {
+      echo "automatic rollback blocked; collector and issuer stopped; retain $old_target and $release_dir; recovery guard retained: $native_recovery_dir" >&2
+      return 1
+    }
+    native_rollback_endpoint_validate "$old_target" "$host_env" || return
     sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
     sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"
     sudo -n ln -sfn "$old_target" "$current_link"
