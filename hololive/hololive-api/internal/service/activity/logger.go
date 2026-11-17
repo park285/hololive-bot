@@ -31,10 +31,11 @@ func NewActivityLogger(logger *slog.Logger) *Logger {
 	return &Logger{logger: logger}
 }
 
-func (l *Logger) Log(entryType, summary string, details map[string]any) {
+// Log는 호출자가 고른 스칼라·그룹 필드만 활동 상세로 기록한다.
+func (l *Logger) Log(entryType, summary string, details []slog.Attr) {
 	l.logger.Info("activity",
 		slog.String("type", entryType),
 		slog.String("summary", summary),
-		slog.Any("details", details),
+		slog.GroupAttrs("details", details...),
 	)
 }

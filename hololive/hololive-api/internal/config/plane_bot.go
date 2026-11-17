@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
-	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+	sharedenv "github.com/park285/shared-go/core/envutil"
+	sharedh3 "github.com/park285/shared-go/transport/h3"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/envload"

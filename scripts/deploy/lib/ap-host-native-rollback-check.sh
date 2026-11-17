@@ -10,8 +10,15 @@ native_profile_pair_validate() {
   sudo -n test ! -L "$release/worker-profile.json" || return 1
   sudo -n grep -Fxq "STACK_WORKER_PROFILE_FILE=$release/worker-profile.json" "$env_file" || return 1
   sudo -n sh -c 'cd "$1" && sha256sum --check --strict SHA256SUMS >/dev/null' sh "$release" || return 1
-  sudo -n -u hololive env STACK_WORKER_PROFILE_FILE="$release/worker-profile.json" \
-    "$release/bin/youtube-collector" --check-worker-profile
+  sudo -n systemd-run --quiet --wait --pipe --collect \
+    --property=User=hololive --property=Group=opc --property=PrivateNetwork=yes \
+    --property=NoNewPrivileges=yes --property=RuntimeMaxSec=30s \
+    --property="WorkingDirectory=$release" --property=ProtectHome=yes --property=ProtectSystem=strict \
+    --property=PrivateTmp=yes \
+    --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env \
+    --property="EnvironmentFile=$env_file" \
+    /usr/bin/env "STACK_WORKER_PROFILE_FILE=$release/worker-profile.json" \
+    "$release/bin/youtube-collector-wrapper" "$release/bin/youtube-collector" --check-worker-profile
 }
 
 native_rollback_validate() {

@@ -675,14 +675,12 @@ func (s *Service) logPostFailure(
 func (s *Service) logMatched(
 	post *posterstore.Post, schedule *posterstore.PublishedSchedule, recorded bool, changes []posterstore.Change, report translationReport,
 ) {
-	kinds, reasons := make([]string, len(changes)), []string{}
+	reasons := 0
 	warnings, doubts := 0, 0
 
 	for i := range changes {
-		kinds[i] = string(changes[i].Kind)
-
 		if changes[i].Reason != "" {
-			reasons = append(reasons, changes[i].Reason)
+			reasons++
 		}
 
 		warnings += len(changes[i].Warnings)
@@ -694,6 +692,6 @@ func (s *Service) logMatched(
 
 	s.logger.Info("Schedule poster post matched",
 		slog.Int64("post_id", post.ID), slog.Int64("poster_id", schedule.PosterID), slog.Bool("recorded", recorded),
-		slog.Any("kinds", kinds), slog.Any("reasons", reasons), slog.Int("translated", report.translated),
+		slog.Group("kinds", slog.Int("count", len(changes))), slog.Group("reasons", slog.Int("count", reasons)), slog.Int("translated", report.translated),
 		slog.Bool("translation_failed", report.failed), slog.Int("warnings", warnings), slog.Int("doubts", doubts))
 }

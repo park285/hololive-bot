@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 )

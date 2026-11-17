@@ -26,8 +26,8 @@ import (
 	"strings"
 
 	"github.com/park285/iris-client-go/v5/webhook"
+	"github.com/park285/shared-go/core/stringutil"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

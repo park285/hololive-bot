@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"

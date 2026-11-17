@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+	sharedh3 "github.com/park285/shared-go/transport/h3"
 )
 
 const testInternalH3ServerName = "127.0.0.1"

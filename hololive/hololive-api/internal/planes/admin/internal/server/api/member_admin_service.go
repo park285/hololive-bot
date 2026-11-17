@@ -40,7 +40,7 @@ func (s *MemberAdminService) create(ctx context.Context, m *domain.Member) (Memb
 		return MemberMutationResult{}, fmt.Errorf("create admin member: %w", err)
 	}
 
-	return s.committed(ctx, m.ID, replayed, "member_add", "Member added", map[string]any{"name": m.Name}, ""), nil
+	return s.committed(ctx, m.ID, replayed, "member_add", "Member added", []slog.Attr{slog.String("name", m.Name)}, ""), nil
 }
 
 func (s *MemberAdminService) SetGraduation(ctx context.Context, id int, graduated bool) (MemberMutationResult, error) {
@@ -48,7 +48,7 @@ func (s *MemberAdminService) SetGraduation(ctx context.Context, id int, graduate
 		return MemberMutationResult{}, fmt.Errorf("set member graduation: %w", err)
 	}
 
-	return s.committed(ctx, id, false, "member_graduation", "Member graduation status updated", map[string]any{"is_graduated": graduated}, ""), nil
+	return s.committed(ctx, id, false, "member_graduation", "Member graduation status updated", []slog.Attr{slog.Bool("is_graduated", graduated)}, ""), nil
 }
 
 func (s *MemberAdminService) UpdateChannelID(ctx context.Context, id int, value string) (MemberMutationResult, error) {
@@ -56,7 +56,7 @@ func (s *MemberAdminService) UpdateChannelID(ctx context.Context, id int, value 
 		return MemberMutationResult{}, fmt.Errorf("update member channel: %w", err)
 	}
 
-	return s.committed(ctx, id, false, "member_channel_update", "Member channel ID updated", map[string]any{"channel_id": value}, ""), nil
+	return s.committed(ctx, id, false, "member_channel_update", "Member channel ID updated", []slog.Attr{slog.String("channel_id", value)}, ""), nil
 }
 
 func (s *MemberAdminService) UpdateMemberName(ctx context.Context, id int, value string) (MemberMutationResult, error) {
@@ -64,7 +64,7 @@ func (s *MemberAdminService) UpdateMemberName(ctx context.Context, id int, value
 		return MemberMutationResult{}, fmt.Errorf("update member name: %w", err)
 	}
 
-	return s.committed(ctx, id, false, "member_name_update", "Member name updated", map[string]any{"name": value}, ""), nil
+	return s.committed(ctx, id, false, "member_name_update", "Member name updated", []slog.Attr{slog.String("name", value)}, ""), nil
 }
 
 func (s *MemberAdminService) AddAlias(ctx context.Context, id int, kind, value string) (MemberMutationResult, error) {
@@ -72,7 +72,7 @@ func (s *MemberAdminService) AddAlias(ctx context.Context, id int, kind, value s
 		return MemberMutationResult{}, fmt.Errorf("add member alias: %w", err)
 	}
 
-	return s.committed(ctx, id, false, "member_alias_add", "Member alias added", map[string]any{"type": kind, "alias": value}, value), nil
+	return s.committed(ctx, id, false, "member_alias_add", "Member alias added", []slog.Attr{slog.String("type", kind), slog.String("alias", value)}, value), nil
 }
 
 func (s *MemberAdminService) RemoveAlias(ctx context.Context, id int, kind, value string) (MemberMutationResult, error) {
@@ -80,15 +80,14 @@ func (s *MemberAdminService) RemoveAlias(ctx context.Context, id int, kind, valu
 		return MemberMutationResult{}, fmt.Errorf("remove member alias: %w", err)
 	}
 
-	return s.committed(ctx, id, false, "member_alias_remove", "Member alias removed", map[string]any{"type": kind, "alias": value}, value), nil
+	return s.committed(ctx, id, false, "member_alias_remove", "Member alias removed", []slog.Attr{slog.String("type", kind), slog.String("alias", value)}, value), nil
 }
 
-func (s *MemberAdminService) committed(ctx context.Context, id int, replayed bool, kind, summary string, details map[string]any, alias string) MemberMutationResult {
+func (s *MemberAdminService) committed(ctx context.Context, id int, replayed bool, kind, summary string, details []slog.Attr, alias string) MemberMutationResult {
 	result := MemberMutationResult{Persisted: true, MemberID: id, Replayed: replayed}
 	// 캐시 오류나 요청 취소가 이미 커밋된 변경의 활동 기록을 건너뛰게 하지 않는다.
 	if !replayed && s.activity != nil {
-		details["member_id"] = id
-		details["persisted"] = true
+		details = append(details, slog.Int("member_id", id), slog.Bool("persisted", true))
 		s.activity.Log(kind, summary, details)
 	}
 

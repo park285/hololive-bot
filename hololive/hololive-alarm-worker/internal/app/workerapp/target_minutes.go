@@ -33,6 +33,6 @@ func logResolvedTargetMinutes(logger *slog.Logger, source string, resolved []int
 
 	logger.Info("Resolved target minutes",
 		slog.String("source", source),
-		slog.Any("resolved_target_minutes", resolved),
+		slog.Group("resolved_target_minutes", slog.Int("count", len(resolved))),
 	)
 }

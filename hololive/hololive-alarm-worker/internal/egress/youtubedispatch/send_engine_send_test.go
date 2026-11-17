@@ -1673,24 +1673,12 @@ func assertLogDedupeKeys(t *testing.T, entry map[string]any, want []string) {
 		t.Fatalf("log entry missing %q: %#v", FieldDedupeKey, entry)
 	}
 
-	values, ok := raw.([]any)
+	values, ok := raw.(map[string]any)
 	if !ok {
-		t.Fatalf("dedupe_key type = %T, want []any", raw)
+		t.Fatalf("dedupe_key type = %T, want group", raw)
 	}
 
-	got := make([]string, 0, len(values))
-	for i := range values {
-		value, ok := values[i].(string)
-		if !ok {
-			t.Fatalf("dedupe_key[%d] type = %T, want string", i, values[i])
-		}
-
-		got = append(got, value)
-	}
-
-	if !sameStrings(got, want) {
-		t.Fatalf("dedupe_key = %#v, want %#v", got, want)
-	}
+	assertSendLogIntField(t, values, "count", len(want))
 }
 
 type blockingSender struct{}

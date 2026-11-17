@@ -3,7 +3,7 @@ package api
 import (
 	"testing"
 
-	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+	sharedh3 "github.com/park285/shared-go/transport/h3"
 
 	"github.com/kapu/hololive-shared/pkg/service/alarmhttp"
 )

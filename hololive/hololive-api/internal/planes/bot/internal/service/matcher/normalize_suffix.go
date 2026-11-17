@@ -3,7 +3,7 @@ package matcher
 import (
 	"strings"
 
-	"github.com/park285/shared-go/v2/pkg/stringutil"
+	"github.com/park285/shared-go/core/stringutil"
 )
 
 // NormalizeSuffix는 멤버 이름 검색어를 정규화하고 애칭 접미사 "짱"·"쨩"을 떼어 낸다.

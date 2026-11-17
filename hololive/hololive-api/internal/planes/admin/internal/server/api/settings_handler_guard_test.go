@@ -14,7 +14,7 @@ type recordingSettingsActivityLogger struct {
 	calls int
 }
 
-func (r *recordingSettingsActivityLogger) Log(string, string, map[string]any) {
+func (r *recordingSettingsActivityLogger) Log(string, string, []slog.Attr) {
 	r.calls++
 }
 
@@ -86,7 +86,7 @@ func TestSettingsHandler_SafeLogger(t *testing.T) {
 
 func TestSettingsHandler_LogActivity(t *testing.T) {
 	rec := &recordingSettingsActivityLogger{}
-	(&SettingsHandler{Activity: rec}).logActivity("t", "s", map[string]any{"k": "v"})
+	(&SettingsHandler{Activity: rec}).logActivity("t", "s", []slog.Attr{slog.String("k", "v")})
 
 	if rec.calls != 1 {
 		t.Fatalf("logActivity calls=%d want=1", rec.calls)

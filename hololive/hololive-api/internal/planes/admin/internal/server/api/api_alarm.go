@@ -22,7 +22,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -83,9 +82,9 @@ func (h *AlarmHandler) DeleteAlarm(c *gin.Context) {
 	}
 
 	roomToken := sharedprivacylog.IdentifierToken(req.RoomID)
-	h.logActivity("alarm_delete", fmt.Sprintf("Alarm deleted: room=%s channel=%s", roomToken, req.ChannelID), map[string]any{
-		"room_id":    roomToken,
-		"channel_id": req.ChannelID,
+	h.logActivity("alarm_delete", "Alarm deleted", []slog.Attr{
+		slog.String("room_id", roomToken),
+		slog.String("channel_id", req.ChannelID),
 	})
 
 	ginjson.Respond(c, http.StatusOK, alarmDeleteResponse{Status: "ok", Removed: removed})

@@ -5,11 +5,13 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 TOOL = ROOT / "scripts/deploy/lib/worker-profile-pair.py"
@@ -223,6 +225,315 @@ class PairToolTest(unittest.TestCase):
                        if line.startswith("ExecStart=") and " --name hololive-api " in line)
         self.assertIn(f"{candidate}:/run/hololive-bot/worker-profile-release:ro", command.split())
         self.assertEqual(command.split()[-1], IMAGE)
+
+
+@unittest.skipIf(os.geteuid() == 0, "renderer fixtures require the non-root test path contract")
+class ResolvedPairTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.units = self.root / "units"
+        shutil.copytree(UNITS, self.units)
+        remote = ROOT / "deploy/podman/iris-seoul"
+        for source in remote.iterdir():
+            if source.is_file():
+                shutil.copy2(source, self.units / source.name)
+        spec = importlib.util.spec_from_file_location("resolved_worker_profile_pair", TOOL)
+        self.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.module)
+        self.module.QUADLET_DIR = self.units
+        self.real_run = subprocess.run
+        self.volumes = {}
+        self.calls = []
+        self.consumed = []
+        self.rendered = []
+        self.check_status = 0
+        self.host = {
+            "PATH": os.environ["PATH"],
+            "HOLOLIVE_QUADLET_TEST_ROOT": str(self.root),
+            "LIVE_LOGS_PATH": str(self.root / "logs"),
+            "VALKEY_SENTINEL_ADDRS": "sentinel.invalid:26379",
+            "HOLOLIVE_API_PORT_BIND_IP": "127.0.0.1",
+            "HOLOLIVE_ADMIN_API_PORT_BIND_IP": "127.0.0.1",
+            "HOLOLIVE_H3_SERVER_NAME": "api.example.test",
+            "HOLOLIVE_DB_PASSWORD": "synthetic-api-$password",
+            "HOLOLIVE_ALARM_WORKER_PASSWORD": "synthetic-worker-password",
+            "HOLOLIVE_COLLECTOR_C_PASSWORD": "synthetic-collector-password",
+            "HOLODEX_API_KEY": "synthetic-holodex-key",
+        }
+        (self.root / "logs").mkdir()
+        (self.root / "secrets").mkdir()
+        for name in ("bot.env", "alarm-worker.env", "youtube-collector.env"):
+            (self.root / "secrets" / name).write_text(
+                "POSTGRES_PASSWORD=obsolete-file-password\nHOLODEX_API_KEY=obsolete-file-key\n")
+        version = self.root / "deploy/hololive/hololive-api/VERSION"
+        version.parent.mkdir(parents=True)
+        version.write_text("13.4.0\n")
+        # 실제 렌더러가 서비스·네트워크 경계를 넘으면 즉시 실패한다.
+        binary = self.root / "bin"
+        binary.mkdir()
+        for name in ("podman", "systemctl", "ip", "nft", "tailscale"):
+            command = binary / name
+            command.write_text("#!/bin/sh\nexit 99\n")
+            command.chmod(0o755)
+        self.host["PATH"] = f"{binary}:{self.host['PATH']}"
+
+    def case(self, service):
+        unit = self.module.QUADLET_UNITS[service]
+        original = self.units / unit
+        values = self.module.unit_values(original)
+        defaults = dict(value.split("=", 1) for key, value in values["Service"] if key == "Environment")
+        self.host = {**defaults, **self.host}
+        self.directory = self.root / "pair"
+        self.directory.mkdir()
+        (self.directory / "profile.json").write_text('{"workers":{}}\n')
+        lines = []
+        for line in original.read_text().splitlines():
+            if line.startswith("Volume=/"):
+                source, target = line.removeprefix("Volume=").split(":", 1)
+                path = self.root / "binds" / source.removeprefix("/")
+                path.mkdir(parents=True, exist_ok=True)
+                line = f"Volume={path}:{target}"
+            elif line.startswith("EnvironmentFile=/etc/"):
+                name = Path(line.split("=", 1)[1]).name
+                path = self.root / ("compose.env" if name == "compose.env" else "secrets/" + name)
+                line = f"EnvironmentFile={path}"
+            lines.append(line)
+        self.record = self.directory / self.module.UNIT_RECORD
+        self.record.write_text("\n".join(lines) + "\n")
+        self.pair = {"service": service, "image": IMAGE}
+        return values
+
+    def existing_volume(self, name):
+        mountpoint = self.root / "storage/volumes" / name / "_data"
+        mountpoint.mkdir(parents=True)
+        (mountpoint / "socket-fixture").write_bytes(b"unchanged")
+        self.volumes[name] = {"Name": name, "Mountpoint": str(mountpoint)}
+        return mountpoint
+
+    def lifecycle(self, command, **kwargs):
+        args = list(command)
+        self.calls.append(args)
+        if args[:3] == ["podman", "volume", "inspect"]:
+            if args[3] not in self.volumes:
+                raise subprocess.CalledProcessError(1, args)
+            return subprocess.CompletedProcess(args, 0, json.dumps([self.volumes[args[3]]]))
+        if args[:2] == ["podman", "run"]:
+            env = {}
+            files = [args[index + 1] for index, arg in enumerate(args) if arg == "--env-file"]
+            for name in files:
+                path = Path(name)
+                # 회귀가 생겨도 운영 /run 파일은 읽지 않고 합성 live 경로에서만 재현한다.
+                if path.parent == Path("/run/hololive-bot/quadlet-env"):
+                    path = self.root / "run/quadlet-env" / path.name
+                content = path.read_text()
+                env.update(line.split("=", 1) for line in content.splitlines() if line and not line.startswith("#"))
+                if path.parent.name.startswith("hololive-profile-env-"):
+                    self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                    self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+                    self.rendered.append((path, content))
+            for index, arg in enumerate(args):
+                if arg == "--env":
+                    name, separator, value = args[index + 1].partition("=")
+                    env[name] = value if separator else kwargs["env"][name]
+                elif arg == "--unsetenv":
+                    env.pop(args[index + 1], None)
+            self.consumed.append((args, env, files))
+            if self.check_status:
+                raise subprocess.CalledProcessError(self.check_status, args)
+            return subprocess.CompletedProcess(args, 0)
+        self.assertEqual(args[:2], ["bash", str(TOOL.parent.parent / "quadlet-prestart.sh")])
+        self.assertEqual(args[2], "--render-env")
+        self.assertEqual(Path(args[4]).stat().st_mode & 0o777, 0o700)
+        self.assertEqual(list(Path(args[4]).iterdir()), [])
+        result = self.real_run(args, capture_output=True, text=True, **kwargs)
+        for key in ("HOLOLIVE_DB_PASSWORD", "HOLOLIVE_ALARM_WORKER_PASSWORD",
+                    "HOLOLIVE_COLLECTOR_C_PASSWORD", "HOLODEX_API_KEY"):
+            if self.host.get(key):
+                self.assertNotIn(self.host[key], result.stdout + result.stderr)
+        return result
+
+    def check(self):
+        (self.root / "compose.env").write_text("SYNTHETIC_FIXTURE=1\n")
+        with mock.patch.dict(os.environ, self.host, clear=True), \
+                mock.patch.object(self.module.subprocess, "run", side_effect=self.lifecycle):
+            self.module.check_resolved_pair(self.directory, self.pair)
+
+    def assert_private_inputs(self):
+        for args in self.calls:
+            for secret in ("synthetic-api-$password", "synthetic-worker-password",
+                           "synthetic-collector-password", "synthetic-holodex-key"):
+                self.assertNotIn(secret, "\0".join(args))
+        for path, _ in self.rendered:
+            self.assertFalse(path.exists())
+
+    @unittest.skipUnless(QUADLET.exists(), "podman quadlet generator is not installed")
+    def test_current_collector_volumes_match_native_quadlet_without_volume_lifecycle(self):
+        for service, name, flags in (
+                ("youtube-collector", "hololive-bot_youtube-po-c-socket", "ro,idmap"),
+                ("youtube-collector-b", "hololive-youtube-po-b-socket", "ro")):
+            with self.subTest(service=service):
+                # 각 사례는 별도 fixture에서 실제 unit과 .volume 선언을 사용한다.
+                fixture = ResolvedPairTest()
+                fixture.setUp()
+                try:
+                    fixture.case(service)
+                    mountpoint = fixture.existing_volume(name)
+                    generated = fixture.real_run(
+                        [str(QUADLET), "-dryrun"],
+                        env=dict(os.environ, QUADLET_UNIT_DIRS=str(fixture.units)),
+                        capture_output=True, text=True, timeout=30, check=True).stdout
+                    unit = Path(fixture.module.QUADLET_UNITS[service]).stem
+                    runtime = next(line for line in generated.splitlines()
+                                   if line.startswith("ExecStart=") and f" --name {unit} " in line)
+                    self.assertIn(f"{name}:/run/hololive-youtube-po:{flags}", shlex.split(runtime))
+                    fixture.check()
+                    args, env, _ = fixture.consumed[-1]
+                    self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:{flags}", args)
+                    self.assertEqual(env["YOUTUBE_COLLECTOR_INSTANCE_ID"], unit.removeprefix("hololive-"))
+                    self.assertEqual("--userns" in args, service == "youtube-collector")
+                    if service == "youtube-collector":
+                        self.assertIn("auto:size=65536,gidmapping=1002:1002:1", args)
+                        self.assertEqual(env["POSTGRES_PASSWORD"], fixture.host["HOLOLIVE_COLLECTOR_C_PASSWORD"])
+                    self.assertEqual((mountpoint / "socket-fixture").read_bytes(), b"unchanged")
+                    self.assertEqual([call[1:3] for call in fixture.calls if call[0] == "podman"],
+                                     [["volume", "inspect"], ["run", "--rm"]])
+                    fixture.assert_private_inputs()
+                finally:
+                    fixture.doCleanups()
+
+    def test_ordinary_named_volume_uses_existing_storage_readonly(self):
+        self.case("youtube-collector-b")
+        self.record.write_text(self.record.read_text().replace("hololive-youtube-po-b.volume:", "ordinary-volume:"))
+        mountpoint = self.existing_volume("ordinary-volume")
+        self.check()
+        args, env, _ = self.consumed[-1]
+        self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:ro", args)
+        self.assertEqual(env["POSTGRES_USER"], "hololive_collector_b")
+        self.assertEqual((mountpoint / "socket-fixture").read_bytes(), b"unchanged")
+
+    @unittest.skipUnless(QUADLET.exists(), "podman quadlet generator is not installed")
+    def test_default_volume_name_matches_native_quadlet(self):
+        self.case("youtube-collector-b")
+        (self.units / "hololive-youtube-po-b.volume").write_text("[Volume]\n")
+        name = "systemd-hololive-youtube-po-b"
+        generated = self.real_run(
+            [str(QUADLET), "-dryrun"], env=dict(os.environ, QUADLET_UNIT_DIRS=str(self.units)),
+            capture_output=True, text=True, timeout=30, check=True).stdout
+        runtime = next(line for line in generated.splitlines()
+                       if line.startswith("ExecStart=") and " --name hololive-youtube-collector-b " in line)
+        self.assertIn(f"{name}:/run/hololive-youtube-po:ro", shlex.split(runtime))
+        mountpoint = self.existing_volume(name)
+        self.check()
+        self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:ro", self.consumed[-1][0])
+
+    def test_missing_volume_declaration_cannot_fall_back_to_a_named_volume(self):
+        self.case("youtube-collector-b")
+        (self.units / "hololive-youtube-po-b.volume").unlink()
+        self.existing_volume("hololive-youtube-po-b.volume")
+        with self.assertRaises(FileNotFoundError):
+            self.check()
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.consumed, [])
+
+    def test_missing_named_volume_rejects_before_container_creation(self):
+        self.case("youtube-collector-b")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.check()
+        self.assertEqual(self.consumed, [])
+        self.assertEqual(self.calls, [["podman", "volume", "inspect", "hololive-youtube-po-b-socket"]])
+
+    def test_missing_bind_rejects_before_container_creation(self):
+        self.case("hololive-api")
+        self.host["LIVE_LOGS_PATH"] = str(self.root / "absent")
+        with self.assertRaisesRegex(ValueError, "bind source is unavailable"):
+            self.check()
+        self.assertEqual(self.consumed, [])
+
+    def test_optional_settings_are_empty_and_dollars_are_not_recursively_expanded(self):
+        self.case("hololive-api")
+        self.record.write_text(self.record.read_text().replace(
+            "[Container]\n", "[Container]\nEnvironment=LITERAL=$${NOT_EXPANDED}/$5/$NAME\n"
+            "Environment=SUBSTITUTED=${PRESENT}/${ABSENT}\n"))
+        self.host["PRESENT"] = "spaces and $dollars"
+        self.host["NAME"] = "must-not-expand-inside-a-word"
+        self.check()
+        _, env, _ = self.consumed[-1]
+        self.assertEqual(env["BOT_POSTGRES_POOL_MIN_CONNS"], "")
+        self.assertEqual(env["ADMIN_API_POSTGRES_POOL_MIN_CONNS"], "")
+        self.assertEqual(env["SUBSTITUTED"], "spaces and $dollars/")
+        self.assertEqual(env["LITERAL"], "${NOT_EXPANDED}/$5/$NAME")
+        self.assertEqual(env["APP_VERSION"], "13.4.0")
+        self.assertEqual(env["POSTGRES_PASSWORD"], self.host["HOLOLIVE_DB_PASSWORD"])
+        self.assert_private_inputs()
+
+    def test_generated_env_is_fresh_when_live_output_is_absent_or_stale(self):
+        self.case("hololive-alarm-worker")
+        self.check()
+        self.assertEqual(self.consumed[-1][1]["POSTGRES_PASSWORD"], self.host["HOLOLIVE_ALARM_WORKER_PASSWORD"])
+        self.assertFalse((self.root / "run").exists())
+        live = self.root / "run/quadlet-env/hololive-alarm-worker.env"
+        live.parent.mkdir(parents=True)
+        stale = b"POSTGRES_PASSWORD=stale\nHOLODEX_API_KEY=stale-key\n"
+        live.write_bytes(stale)
+        self.host["HOLOLIVE_ALARM_WORKER_PASSWORD"] = "rotated-synthetic-password"
+        self.check()
+        self.assertEqual(self.consumed[-1][1]["POSTGRES_PASSWORD"], "rotated-synthetic-password")
+        self.assertEqual(live.read_bytes(), stale)
+        self.assertNotEqual(self.rendered[0][0], self.rendered[1][0])
+        self.assert_private_inputs()
+
+    def test_retained_version_and_environment_precedence_match_runtime(self):
+        self.case("hololive-api")
+        self.pair["app_version"] = "12.3.0+retained"
+        later = self.root / "later.env"
+        later.write_text("HOLODEX_API_KEY=later-file-key\nPOSTGRES_PASSWORD=later-file-password\n")
+        self.record.write_text(self.record.read_text().replace(
+            "[Container]\n", "[Container]\nEnvironment=HOLODEX_API_KEY=explicit-key\n"
+            "Environment=APP_VERSION=overridden-by-retained-dropin\n").replace(
+            "EnvironmentFile=/run/hololive-bot/quadlet-env/hololive-api.env\n",
+            "EnvironmentFile=/run/hololive-bot/quadlet-env/hololive-api.env\n"
+            f"EnvironmentFile={later}\n"))
+        self.check()
+        _, env, files = self.consumed[-1]
+        self.assertEqual(env["APP_VERSION"], "12.3.0+retained")
+        self.assertIn("APP_VERSION=12.3.0+retained\n", self.rendered[-1][1])
+        self.assertEqual(env["HOLODEX_API_KEY"], "explicit-key")
+        self.assertEqual(env["POSTGRES_PASSWORD"], "later-file-password")
+        self.assertEqual(files[-1], str(later))
+        self.assert_private_inputs()
+
+    def test_missing_required_secret_rejects_even_with_stale_generated_file(self):
+        self.case("hololive-api")
+        self.host.pop("HOLOLIVE_DB_PASSWORD")
+        live = self.root / "run/quadlet-env/hololive-api.env"
+        live.parent.mkdir(parents=True)
+        stale = b"POSTGRES_PASSWORD=stale-but-nonempty\n"
+        live.write_bytes(stale)
+        with self.assertRaises(subprocess.CalledProcessError) as failure:
+            self.check()
+        self.assertIn("HOLOLIVE_DB_PASSWORD", failure.exception.stderr)
+        self.assertEqual(self.consumed, [])
+        self.assertEqual(live.read_bytes(), stale)
+
+    def test_arbitrary_missing_environment_file_is_not_rendered_or_replaced(self):
+        self.case("hololive-api")
+        self.record.write_text(self.record.read_text().replace(
+            "/run/hololive-bot/quadlet-env/hololive-api.env", str(self.root / "missing.env")))
+        with self.assertRaises(FileNotFoundError):
+            self.check()
+        self.assertFalse(any(call[0] == "bash" for call in self.calls))
+        self.assertEqual(self.consumed, [])
+
+    def test_image_checker_failure_is_propagated_with_private_inputs_removed(self):
+        self.case("hololive-api")
+        self.check_status = 23
+        with self.assertRaises(subprocess.CalledProcessError) as failure:
+            self.check()
+        self.assertEqual(failure.exception.returncode, 23)
+        self.assertEqual(self.consumed[-1][1]["POSTGRES_PASSWORD"], self.host["HOLOLIVE_DB_PASSWORD"])
+        self.assert_private_inputs()
 
 
 if __name__ == "__main__":

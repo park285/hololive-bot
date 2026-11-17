@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -59,8 +59,38 @@ type PostgresConfig struct {
 }
 
 func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slog.Logger) (*PostgresService, error) {
+	cfg, opts, err := postgresOptions(config)
+	if err != nil {
+		return nil, err
+	}
+
+	opts.Logger = logger
+
+	pool, err := pgxdb.OpenPool(ctx, cfg, opts)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+
+	return &PostgresService{pool: pool, logger: logger}, nil
+}
+
+// Preflight는 연결 없이 실제 pool과 같은 설정·TLS 파일·예약 용량을 검사한다.
+func Preflight(config *PostgresConfig) error {
+	cfg, opts, err := postgresOptions(config)
+	if err != nil {
+		return err
+	}
+
+	if preflightErr := pgxdb.Preflight(cfg, opts); preflightErr != nil {
+		return fmt.Errorf("preflight database config: %w", preflightErr)
+	}
+
+	return nil
+}
+
+func postgresOptions(config *PostgresConfig) (pgxdb.Config, pgxdb.Options, error) {
 	if config == nil {
-		return nil, errors.New("postgres config is nil")
+		return pgxdb.Config{}, pgxdb.Options{}, errors.New("postgres config is nil")
 	}
 
 	// pgxdb는 빈 sslmode를 거부(fail-closed)하므로, 설정이 비면 verify-full 기본값을
@@ -72,10 +102,10 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 
 	minConns, maxConns, err := resolvePoolConns(config)
 	if err != nil {
-		return nil, fmt.Errorf("resolve pool conns: %w", err)
+		return pgxdb.Config{}, pgxdb.Options{}, fmt.Errorf("resolve pool conns: %w", err)
 	}
 
-	pool, err := pgxdb.OpenPool(ctx, pgxdb.Config{
+	return pgxdb.Config{
 		Host:          config.Host,
 		Port:          config.Port,
 		SocketPath:    config.SocketPath,
@@ -86,7 +116,6 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 		SSLRootCert:   config.SSLRootCert,
 		QueryExecMode: config.QueryExecMode,
 	}, pgxdb.Options{
-		Logger:        logger,
 		RuntimeParams: config.RuntimeParams,
 		CancelRequest: config.CancelRequest,
 		AcquirePolicy: config.AcquirePolicy,
@@ -101,14 +130,6 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 		Ping: pgxdb.PingConfig{
 			PingTimeout: constants.RequestTimeout.DatabasePing,
 		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("open database: %w", err)
-	}
-
-	return &PostgresService{
-		pool:   pool,
-		logger: logger,
 	}, nil
 }
 

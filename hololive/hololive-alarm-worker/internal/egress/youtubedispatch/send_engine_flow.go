@@ -86,12 +86,7 @@ func buildDeliverySendRequest(roomID string, message messagedelivery.MessageVari
 }
 
 func dedupeKeyLogAttr(dedupeKeys []string) slog.Attr {
-	cloned := make([]string, 0, len(dedupeKeys))
-	for i := range dedupeKeys {
-		cloned = append(cloned, strings.TrimSpace(dedupeKeys[i]))
-	}
-
-	return slog.Any(FieldDedupeKey, cloned)
+	return slog.Group(FieldDedupeKey, slog.Int("count", len(dedupeKeys)))
 }
 
 func validateDeliverySendRequest(req deliverySendRequest) error {

@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"

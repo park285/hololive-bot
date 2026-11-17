@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"

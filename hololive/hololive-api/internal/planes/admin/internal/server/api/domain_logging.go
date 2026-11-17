@@ -42,13 +42,13 @@ func (h *StatsHandler) safeLogger() *slog.Logger {
 	return loggerOrDefault(h.logger)
 }
 
-func (h *AlarmHandler) logActivity(kind, summary string, details map[string]any) {
+func (h *AlarmHandler) logActivity(kind, summary string, details []slog.Attr) {
 	if h != nil && h.activity != nil {
 		h.activity.Log(kind, summary, details)
 	}
 }
 
-func (h *RoomHandler) logActivity(kind, summary string, details map[string]any) {
+func (h *RoomHandler) logActivity(kind, summary string, details []slog.Attr) {
 	if h != nil && h.activity != nil {
 		h.activity.Log(kind, summary, details)
 	}

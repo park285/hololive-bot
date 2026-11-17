@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 func (r *InboxRepository) beginLockedMessageTx(ctx context.Context, messageID string) (pgx.Tx, error) {

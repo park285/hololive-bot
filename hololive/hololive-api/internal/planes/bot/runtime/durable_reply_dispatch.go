@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"

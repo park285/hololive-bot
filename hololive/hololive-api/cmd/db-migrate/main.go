@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/migrationrunner"
 	"github.com/kapu/hololive-api/scripts/migrations"
@@ -56,6 +56,16 @@ func run() error {
 		return fmt.Errorf("statement-timeout must be between 0 and %s", migrationrunner.MaxStatementTimeout)
 	}
 
+	connString, err := postgresConnString()
+	if err != nil {
+		return fmt.Errorf("postgres conn string: %w", err)
+	}
+
+	options := migrationPoolOptions()
+	if preflightErr := pgxdb.PreflightDSN(connString, options); preflightErr != nil {
+		return fmt.Errorf("preflight postgres pool: %w", preflightErr)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -66,12 +76,7 @@ func run() error {
 		return fmt.Errorf("bootstrap login roles: %w", bootstrapErr)
 	}
 
-	connString, err := postgresConnString()
-	if err != nil {
-		return fmt.Errorf("postgres conn string: %w", err)
-	}
-
-	pool, err := pgxdb.OpenPoolDSN(ctx, connString, migrationPoolOptions())
+	pool, err := pgxdb.OpenPoolDSN(ctx, connString, options)
 	if err != nil {
 		return fmt.Errorf("open postgres pool: %w", err)
 	}

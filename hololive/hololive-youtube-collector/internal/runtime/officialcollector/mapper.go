@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/stringutil"
+	"github.com/park285/shared-go/core/stringutil"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"

@@ -106,7 +106,7 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 
 성능 검증은 격리 PG의 `joblease.TestProjectionCandidateTraffic`으로 epoch-3 baseline의 힌트 도입 전 함수와 현재 함수에 같은 620/1,240/10,000 target을 넣어 비교합니다. 양쪽 모두 독립 pool 4개의 동시 120-cycle·동일 예열·header 조회를 사용합니다. 신규·not-due·동일 due·혼합·서로 다른 due 시각·매 cycle eligibility 변경에서 `Jobs`/`Truncated` 일치를 검사하고 실제 수신·송신 byte를 기록합니다. 대상 수와 무관하게 이 fixture의 AP당 cycle 전송은 header·최대 11개 sentinel 포함 후보의 8 KiB 예산 안에 있어야 합니다. 다음 due 열을 추가했으므로 이전 함수 대비 byte 비증가는 계약이 아닙니다. PREPARE/EXECUTE의 custom/generic 카운터와 EXPLAIN 실행시간·buffer I/O도 기록합니다. `paired_elapsed`는 양쪽 실행을 합친 시간이며 개별 AP/버전 지연 비교값이 아닙니다. 이 합성 결과는 운영 CPU/RSS/TLS 지연이나 보존 기간 전체의 관측을 대신하지 않습니다.
 
-`collection.queue.max_age`의 fixed 상한을 넘긴 로컬 항목은 dequeue 시 lease 취득 전에 폐기합니다. stale discard·경고를 기록하고 queue 표식을 해제한 뒤 다음 항목을 계속 처리하며, DB terminal이나 즉시 재시도는 만들지 않습니다. Collector `internal/config`는 profile-only preflight와 runtime이 동일한 profile 수치 정책을 적용하도록 소유합니다.
+`collection.queue.max_age`의 fixed 상한을 넘긴 로컬 항목은 dequeue 시 lease 취득 전에 폐기합니다. stale discard·경고를 기록하고 queue 표식을 해제한 뒤 다음 항목을 계속 처리하며, DB terminal이나 즉시 재시도는 만들지 않습니다. Collector `internal/config`는 CLI 사전 점검과 runtime에 같은 profile 수치 정책·환경 관계·무접속 DB 옵션 검증을 적용합니다.
 
 Scheduler가 queue·discovery·lifecycle과 worker·queue·batch·cadence 정책을 소유하고, executor는 단일 collector 설정과 검증된 retry bounds로 수집·발행을 실행합니다. Provider gate는 lease 취득 뒤 snapshot 조회와 수집 동안만 점유하며, 수집 함수가 반환하면 검증·DB publish 전에 정확히 한 번 반환합니다. 반환하지 않은 수집 함수는 계속 슬롯을 점유합니다. Admission timeout의 durable 실패·retry 정책은 그대로입니다. Typed defer는 직접 실패와 PARTIAL 발행에 같은 `joblease` defer 문장을 쓰며, 두 경로 모두 저장 adapter에서 진단 detail을 마스킹합니다.
 

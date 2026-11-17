@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+	sharedh3 "github.com/park285/shared-go/transport/h3"
 )
 
 func TestNewClientForURLStrictReturnsErrorWhenH3ClientConfigFails(t *testing.T) {
