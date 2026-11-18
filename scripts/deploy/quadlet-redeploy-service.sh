@@ -813,11 +813,14 @@ if [[ "$mode" == resume ]]; then
       die "$service changed before release completion"
   done
   owns_hold || die "coordinated hold owner changed"
+  assert_infrastructure
   defer_signal=true
   (trap '' INT TERM HUP; exec rm -- "$owner_marker")
   opening_owned=false
   sync_paths "$releases"
   end_defer
+else
+  assert_infrastructure
 fi
 for service in "${services[@]}"; do
   echo "[OUTCOME] deployed service=$service revision=$revision image=${candidate_ids[$service]} release=${release_paths[$service]}"

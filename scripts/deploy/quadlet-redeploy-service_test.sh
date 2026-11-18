@@ -545,6 +545,7 @@ case "${action}" in
     [[ "${FAKE_CASE}" != "verify_failure_${service}" ]] || exit 1
     [[ "${FAKE_CASE}" != failed_rehold || "$service" != hololive-alarm-worker ]] || exit 1
     [[ "$FAKE_CASE" != rehold_evidence_unwritable || "$service" != hololive-alarm-worker ]] || exit 1
+    if [[ "$service" == hololive-api && "$FAKE_CASE" == last_pool_restart ]]; then printf '1794960722000000000\n' >"$state/pool-started"; fi
     expected="${dir##*/}"
     if [[ "${FAKE_COORDINATED:-false}" == true && "${expected}" == previous ]]; then expected=baseline; fi
     [[ "$4" == "${service}" && "$(cat "${current}/active")" == true &&
@@ -1362,6 +1363,17 @@ for reason in sql_failure_hololive_runtime sql_failure_hololive_alarm_worker mig
   fi
   assert_no_call "$root" "$reason" '^(pair activate |systemctl (start|restart|unmask))'
 done
+
+root="$tmp/final-api-infra-change"
+make_coordinated_case "$root"
+quiesce_case "$root"
+api_release="$(coordinated_release "$root" hololive-api)"
+worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
+if run_tool "$root" last_pool_restart "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release"; then
+  fail "마지막 API 기동 중 풀러 세대 교체를 성공으로 게시함"
+fi
+assert_held_pair "$root"
+[[ -f "${api_release%/*}/.central-writer-hold" ]] || fail "마지막 인프라 검사 전에 hold 해제"
 
 for writer in hololive-api hololive-alarm-worker; do
   root="${tmp}/reject-start-${writer}"
