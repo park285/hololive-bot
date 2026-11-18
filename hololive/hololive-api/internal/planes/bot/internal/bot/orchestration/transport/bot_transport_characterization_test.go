@@ -74,6 +74,8 @@ func sendOptionStringField(t *testing.T, box reflect.Value, name string) string 
 }
 
 type stubBotClient struct {
+	iris.FileSender
+
 	acceptErr   error
 	sendErr     error
 	richTextErr error

@@ -42,6 +42,8 @@ const (
 )
 
 type fakeIrisClient struct {
+	iris.FileSender
+
 	failCount int
 	pingCalls int
 }

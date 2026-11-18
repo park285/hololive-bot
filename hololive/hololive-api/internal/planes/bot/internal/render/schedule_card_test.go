@@ -15,6 +15,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/schedulecard"
 	"github.com/kapu/hololive-api/internal/service/scheduleposter"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -30,7 +31,7 @@ type recordingCardDrawer struct {
 	err     error
 }
 
-func (d *recordingCardDrawer) draw(card schedulecard.Card, format schedulecard.Format) ([]byte, error) {
+func (d *recordingCardDrawer) draw(_ context.Context, card schedulecard.Card, format schedulecard.Format, _ cardtemplate.ID) ([][]byte, error) {
 	d.cards = append(d.cards, card)
 	d.formats = append(d.formats, format)
 
@@ -38,7 +39,7 @@ func (d *recordingCardDrawer) draw(card schedulecard.Card, format schedulecard.F
 		return nil, d.err
 	}
 
-	return slices.Concat(pngSignature, []byte(card.ExtractedAt.Format(time.RFC3339Nano))), nil
+	return [][]byte{slices.Concat(pngSignature, []byte(card.ExtractedAt.Format(time.RFC3339Nano)))}, nil
 }
 
 func scheduleCardMember() *domain.Member {
@@ -70,9 +71,9 @@ func TestScheduleCardRendererCopiesRowsIntoCard(t *testing.T) {
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
 	schedule := scheduleCardSchedule(1)
 
-	data, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), schedule)
-	if err != nil || !isPNGData(data) {
-		t.Fatalf("RenderScheduleCard() = %q, %v; want PNG", data, err)
+	data, err := renderer.RenderScheduleCards(t.Context(), scheduleCardMember(), schedule, cardtemplate.Classic)
+	if err != nil || len(data) != 1 || !isPNGData(data[0]) {
+		t.Fatalf("RenderScheduleCards() = %q, %v; want PNG", data, err)
 	}
 
 	if len(drawer.cards) != 1 || drawer.formats[0] != schedulecard.Format3x4 {
@@ -173,8 +174,8 @@ func TestScheduleCardShowsChangedSlots(t *testing.T) {
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
 	schedule := changedSchedule()
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), schedule); err != nil {
-		t.Fatalf("RenderScheduleCard() error = %v", err)
+	if _, err := renderer.RenderScheduleCards(t.Context(), scheduleCardMember(), schedule, cardtemplate.Classic); err != nil {
+		t.Fatalf("RenderScheduleCards() error = %v", err)
 	}
 
 	card := drawer.cards[0]
@@ -219,8 +220,8 @@ func TestScheduleCardMarksSlotsThatPostsAnnounced(t *testing.T) {
 	drawer := &recordingCardDrawer{}
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), schedule); err != nil {
-		t.Fatalf("RenderScheduleCard() error = %v", err)
+	if _, err := renderer.RenderScheduleCards(t.Context(), scheduleCardMember(), schedule, cardtemplate.Classic); err != nil {
+		t.Fatalf("RenderScheduleCards() error = %v", err)
 	}
 
 	want := []schedulecard.Item{
@@ -268,13 +269,13 @@ func TestScheduleCardRendererRedrawsAfterRevokedChange(t *testing.T) {
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
 	schedule := changedSchedule()
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), schedule); err != nil {
-		t.Fatalf("RenderScheduleCard() error = %v", err)
+	if _, err := renderer.RenderScheduleCards(t.Context(), scheduleCardMember(), schedule, cardtemplate.Classic); err != nil {
+		t.Fatalf("RenderScheduleCards() error = %v", err)
 	}
 
 	schedule.Changes = slices.DeleteFunc(schedule.Changes, func(c scheduleposter.Change) bool { return c.PostID == 102 })
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), schedule); err != nil || len(drawer.cards) != 2 {
+	if _, err := renderer.RenderScheduleCards(t.Context(), scheduleCardMember(), schedule, cardtemplate.Classic); err != nil || len(drawer.cards) != 2 {
 		t.Fatalf("after revoking an earlier post: %v, draws = %d; want a new draw", err, len(drawer.cards))
 	}
 
@@ -292,8 +293,8 @@ func TestScheduleCardRendererRedrawsAfterPolish(t *testing.T) {
 	render := func(wantDraws int, what string) {
 		t.Helper()
 
-		if _, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), schedule); err != nil || len(drawer.cards) != wantDraws {
-			t.Fatalf("%s: RenderScheduleCard() = %v, draws = %d; want %d", what, err, len(drawer.cards), wantDraws)
+		if _, err := renderer.RenderScheduleCards(t.Context(), scheduleCardMember(), schedule, cardtemplate.Classic); err != nil || len(drawer.cards) != wantDraws {
+			t.Fatalf("%s: RenderScheduleCards() = %v, draws = %d; want %d", what, err, len(drawer.cards), wantDraws)
 		}
 	}
 
@@ -332,27 +333,27 @@ func TestScheduleCardRendererDoesNotShareInFlightDrawAcrossChanges(t *testing.T)
 		synctest.Test(t, func(t *testing.T) {
 			release := make(chan struct{})
 			draws := 0
-			renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, func(card schedulecard.Card, _ schedulecard.Format) ([]byte, error) {
+			renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, func(_ context.Context, card schedulecard.Card, _ schedulecard.Format, _ cardtemplate.ID) ([][]byte, error) {
 				draws++
 
 				<-release
 
-				return slices.Concat(pngSignature, []byte(card.Items[0].Title), []byte(card.Items[2].Status)), nil
+				return [][]byte{slices.Concat(pngSignature, []byte(card.Items[0].Title), []byte(card.Items[2].Status))}, nil
 			})
 			member := scheduleCardMember()
-			firstDone, nextDone := make(chan error, 1), make(chan []byte, 1)
+			firstDone, nextDone := make(chan error, 1), make(chan [][]byte, 1)
 
 			go func() {
-				_, err := renderer.RenderScheduleCard(t.Context(), member, base)
+				_, err := renderer.RenderScheduleCards(t.Context(), member, base, cardtemplate.Classic)
 				firstDone <- err
 			}()
 
 			synctest.Wait()
 
 			go func() {
-				data, err := renderer.RenderScheduleCard(t.Context(), member, next)
+				data, err := renderer.RenderScheduleCards(t.Context(), member, next, cardtemplate.Classic)
 				if err != nil {
-					t.Errorf("%s: next RenderScheduleCard() error = %v", name, err)
+					t.Errorf("%s: next RenderScheduleCards() error = %v", name, err)
 				}
 
 				nextDone <- data
@@ -365,13 +366,13 @@ func TestScheduleCardRendererDoesNotShareInFlightDrawAcrossChanges(t *testing.T)
 			close(release)
 
 			if err := <-firstDone; err != nil {
-				t.Fatalf("%s: first RenderScheduleCard() error = %v", name, err)
+				t.Fatalf("%s: first RenderScheduleCards() error = %v", name, err)
 			}
 
 			got := <-nextDone
 			want := newScheduleCard(member, next, nil)
 
-			if startedDraws != 2 || !slices.Equal(got, slices.Concat(pngSignature, []byte(want.Items[0].Title), []byte(want.Items[2].Status))) {
+			if startedDraws != 2 || len(got) != 1 || !bytes.Equal(got[0], slices.Concat(pngSignature, []byte(want.Items[0].Title), []byte(want.Items[2].Status))) {
 				t.Fatalf("%s: draws in flight = %d, next card = %q; want its own draw of its own changes", name, startedDraws, got)
 			}
 		})
@@ -388,8 +389,8 @@ func TestScheduleCardRendererRedrawsAfterAppliedChange(t *testing.T) {
 	render := func(wantDraws int, what string) {
 		t.Helper()
 
-		if _, err := renderer.RenderScheduleCard(t.Context(), member, schedule); err != nil || len(drawer.cards) != wantDraws {
-			t.Fatalf("%s: RenderScheduleCard() = %v, draws = %d; want %d", what, err, len(drawer.cards), wantDraws)
+		if _, err := renderer.RenderScheduleCards(t.Context(), member, schedule, cardtemplate.Classic); err != nil || len(drawer.cards) != wantDraws {
+			t.Fatalf("%s: RenderScheduleCards() = %v, draws = %d; want %d", what, err, len(drawer.cards), wantDraws)
 		}
 	}
 
@@ -432,13 +433,13 @@ func TestScheduleCardRendererRedrawsAfterRevokedSameChange(t *testing.T) {
 
 	schedule.Changes = []scheduleposter.Change{earlierPost, laterPost}
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), member, schedule); err != nil || drawer.cards[0].Items[0].Start != "21:00" {
-		t.Fatalf("RenderScheduleCard() error = %v, start = %q; want the later post's 21:00", err, drawer.cards[0].Items[0].Start)
+	if _, err := renderer.RenderScheduleCards(t.Context(), member, schedule, cardtemplate.Classic); err != nil || drawer.cards[0].Items[0].Start != "21:00" {
+		t.Fatalf("RenderScheduleCards() error = %v, start = %q; want the later post's 21:00", err, drawer.cards[0].Items[0].Start)
 	}
 
 	schedule.Changes = schedule.Changes[:1]
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), member, schedule); err != nil || len(drawer.cards) != 2 {
+	if _, err := renderer.RenderScheduleCards(t.Context(), member, schedule, cardtemplate.Classic); err != nil || len(drawer.cards) != 2 {
 		t.Fatalf("after revoking the same change: %v, draws = %d; want a new draw", err, len(drawer.cards))
 	}
 
@@ -477,8 +478,8 @@ func TestScheduleCardRendererRedrawsWhileLaterPostIsRequeued(t *testing.T) {
 	for i, step := range steps {
 		schedule.Changes = step.changes
 
-		if _, err := renderer.RenderScheduleCard(t.Context(), member, schedule); err != nil || len(drawer.cards) != i+1 {
-			t.Fatalf("%s: RenderScheduleCard() = %v, draws = %d; want %d", step.name, err, len(drawer.cards), i+1)
+		if _, err := renderer.RenderScheduleCards(t.Context(), member, schedule, cardtemplate.Classic); err != nil || len(drawer.cards) != i+1 {
+			t.Fatalf("%s: RenderScheduleCards() = %v, draws = %d; want %d", step.name, err, len(drawer.cards), i+1)
 		}
 
 		if card := drawer.cards[i]; card.Items[0].Start != step.start || !card.ExtractedAt.Equal(step.updated) {
@@ -493,19 +494,19 @@ func TestScheduleCardRendererDrawsEachKeyOnce(t *testing.T) {
 	schedule := scheduleCardSchedule(1)
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
 
-	first, err := renderer.RenderScheduleCard(t.Context(), member, schedule)
+	first, err := renderer.RenderScheduleCards(t.Context(), member, schedule, cardtemplate.Classic)
 	if err != nil {
-		t.Fatalf("first RenderScheduleCard() error = %v", err)
+		t.Fatalf("first RenderScheduleCards() error = %v", err)
 	}
 
-	second, err := renderer.RenderScheduleCard(t.Context(), member, schedule)
-	if err != nil || !slices.Equal(first, second) || len(drawer.cards) != 1 {
+	second, err := renderer.RenderScheduleCards(t.Context(), member, schedule, cardtemplate.Classic)
+	if err != nil || !slices.EqualFunc(first, second, bytes.Equal) || len(drawer.cards) != 1 {
 		t.Fatalf("second render = %v, draws = %d; want cached bytes and one draw", err, len(drawer.cards))
 	}
 
 	schedule.ExtractedAt = schedule.ExtractedAt.Add(time.Minute)
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), member, schedule); err != nil || len(drawer.cards) != 2 {
+	if _, err := renderer.RenderScheduleCards(t.Context(), member, schedule, cardtemplate.Classic); err != nil || len(drawer.cards) != 2 {
 		t.Fatalf("re-extracted render = %v, draws = %d; want a new draw", err, len(drawer.cards))
 	}
 
@@ -513,7 +514,7 @@ func TestScheduleCardRendererDrawsEachKeyOnce(t *testing.T) {
 
 	other.cache = renderer.cache
 
-	if _, err := other.RenderScheduleCard(t.Context(), member, schedule); err != nil || len(drawer.cards) != 3 || drawer.formats[2] != schedulecard.Format16x9 {
+	if _, err := other.RenderScheduleCards(t.Context(), member, schedule, cardtemplate.Classic); err != nil || len(drawer.cards) != 3 || drawer.formats[2] != schedulecard.Format16x9 {
 		t.Fatalf("other format render = %v, draws = %d; want a new 16:9 draw", err, len(drawer.cards))
 	}
 }
@@ -524,8 +525,8 @@ func TestScheduleCardRendererEvictsOldestBeyondLimit(t *testing.T) {
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 2, drawer.draw)
 
 	for _, posterID := range []int64{1, 2, 3, 3, 2, 1} {
-		if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(posterID)); err != nil {
-			t.Fatalf("RenderScheduleCard(%d) error = %v", posterID, err)
+		if _, err := renderer.RenderScheduleCards(t.Context(), member, scheduleCardSchedule(posterID), cardtemplate.Classic); err != nil {
+			t.Fatalf("RenderScheduleCards(%d) error = %v", posterID, err)
 		}
 	}
 
@@ -540,8 +541,8 @@ func TestScheduleCardRendererKeepsRecentlyReadCard(t *testing.T) {
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 2, drawer.draw)
 
 	for _, posterID := range []int64{1, 2, 1, 3, 1} {
-		if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(posterID)); err != nil {
-			t.Fatalf("RenderScheduleCard(%d) error = %v", posterID, err)
+		if _, err := renderer.RenderScheduleCards(t.Context(), member, scheduleCardSchedule(posterID), cardtemplate.Classic); err != nil {
+			t.Fatalf("RenderScheduleCards(%d) error = %v", posterID, err)
 		}
 	}
 
@@ -555,14 +556,14 @@ func TestScheduleCardRendererRedrawsWhenMemberNameChanges(t *testing.T) {
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
 	member := scheduleCardMember()
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1)); err != nil {
-		t.Fatalf("RenderScheduleCard() error = %v", err)
+	if _, err := renderer.RenderScheduleCards(t.Context(), member, scheduleCardSchedule(1), cardtemplate.Classic); err != nil {
+		t.Fatalf("RenderScheduleCards() error = %v", err)
 	}
 
 	member.ShortKoreanName = "쿄코쨩"
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1)); err != nil {
-		t.Fatalf("renamed RenderScheduleCard() error = %v", err)
+	if _, err := renderer.RenderScheduleCards(t.Context(), member, scheduleCardSchedule(1), cardtemplate.Classic); err != nil {
+		t.Fatalf("renamed RenderScheduleCards() error = %v", err)
 	}
 
 	if len(drawer.cards) != 2 || drawer.cards[1].MemberName != "쿄코쨩" {
@@ -575,16 +576,16 @@ func TestScheduleCardRendererSharesCardsAcrossRenderers(t *testing.T) {
 	drawer := &recordingCardDrawer{}
 	member := scheduleCardMember()
 
-	render := func(schedule scheduleposter.PublishedSchedule) []byte {
+	render := func(schedule scheduleposter.PublishedSchedule) [][]byte {
 		t.Helper()
 
 		renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
 
 		renderer.shared = newScheduleCardSharedCache(store)
 
-		data, err := renderer.RenderScheduleCard(t.Context(), member, schedule)
+		data, err := renderer.RenderScheduleCards(t.Context(), member, schedule, cardtemplate.Classic)
 		if err != nil {
-			t.Fatalf("RenderScheduleCard() error = %v", err)
+			t.Fatalf("RenderScheduleCards() error = %v", err)
 		}
 
 		return data
@@ -592,8 +593,8 @@ func TestScheduleCardRendererSharesCardsAcrossRenderers(t *testing.T) {
 
 	first := render(scheduleCardSchedule(1))
 
-	if again := render(scheduleCardSchedule(1)); !bytes.Equal(again, first) || len(drawer.cards) != 1 {
-		t.Fatalf("second renderer draws = %d, same bytes = %v; want the shared card without a draw", len(drawer.cards), bytes.Equal(again, first))
+	if again := render(scheduleCardSchedule(1)); !slices.EqualFunc(again, first, bytes.Equal) || len(drawer.cards) != 1 {
+		t.Fatalf("second renderer draws = %d, same pages = %v; want the shared card without a draw", len(drawer.cards), slices.EqualFunc(again, first, bytes.Equal))
 	}
 
 	changed := scheduleCardSchedule(1)
@@ -624,8 +625,8 @@ func TestScheduleCardRendererDoesNotShareCardWithoutPhoto(t *testing.T) {
 
 		renderer.shared = newScheduleCardSharedCache(store)
 
-		if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1)); err != nil {
-			t.Fatalf("RenderScheduleCard() error = %v", err)
+		if _, err := renderer.RenderScheduleCards(t.Context(), member, scheduleCardSchedule(1), cardtemplate.Classic); err != nil {
+			t.Fatalf("RenderScheduleCards() error = %v", err)
 		}
 	}
 
@@ -639,8 +640,8 @@ func TestScheduleCardRendererDoesNotCacheFailures(t *testing.T) {
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
 
 	for range 2 {
-		if _, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), scheduleCardSchedule(1)); !errors.Is(err, schedulecard.ErrInvalidCard) {
-			t.Fatalf("RenderScheduleCard() error = %v, want ErrInvalidCard", err)
+		if _, err := renderer.RenderScheduleCards(t.Context(), scheduleCardMember(), scheduleCardSchedule(1), cardtemplate.Classic); !errors.Is(err, schedulecard.ErrInvalidCard) {
+			t.Fatalf("RenderScheduleCards() error = %v, want ErrInvalidCard", err)
 		}
 	}
 
@@ -662,8 +663,8 @@ func TestScheduleCardRendererUsesCalendarPhotoLoader(t *testing.T) {
 	drawer := &recordingCardDrawer{}
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1)); err != nil {
-		t.Fatalf("RenderScheduleCard() error = %v", err)
+	if _, err := renderer.RenderScheduleCards(t.Context(), member, scheduleCardSchedule(1), cardtemplate.Classic); err != nil {
+		t.Fatalf("RenderScheduleCards() error = %v", err)
 	}
 
 	if drawer.cards[0].Photo == nil {
@@ -683,8 +684,8 @@ func TestScheduleCardRendererDrawsWithoutRejectedPhoto(t *testing.T) {
 	drawer := &recordingCardDrawer{}
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1)); err != nil {
-		t.Fatalf("RenderScheduleCard() error = %v", err)
+	if _, err := renderer.RenderScheduleCards(t.Context(), member, scheduleCardSchedule(1), cardtemplate.Classic); err != nil {
+		t.Fatalf("RenderScheduleCards() error = %v", err)
 	}
 
 	if len(drawer.cards) != 1 || drawer.cards[0].Photo != nil {
@@ -712,8 +713,8 @@ func TestScheduleCardRendererRedrawsAfterTransientPhotoFailure(t *testing.T) {
 	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
 
 	for range 3 {
-		if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1)); err != nil {
-			t.Fatalf("RenderScheduleCard() error = %v", err)
+		if _, err := renderer.RenderScheduleCards(t.Context(), member, scheduleCardSchedule(1), cardtemplate.Classic); err != nil {
+			t.Fatalf("RenderScheduleCards() error = %v", err)
 		}
 	}
 
@@ -742,8 +743,8 @@ func TestScheduleCardRendererDoesNotCacheAfterPhotoBudget(t *testing.T) {
 		withCalendarPhotoClient(t, client)
 
 		for range 2 {
-			if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1)); err != nil {
-				t.Fatalf("RenderScheduleCard() error = %v", err)
+			if _, err := renderer.RenderScheduleCards(t.Context(), member, scheduleCardSchedule(1), cardtemplate.Classic); err != nil {
+				t.Fatalf("RenderScheduleCards() error = %v", err)
 			}
 		}
 	})
@@ -759,14 +760,14 @@ func TestScheduleCardRendererSharesOneDrawAcrossWaiters(t *testing.T) {
 
 	var draws atomic.Int32
 
-	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, func(card schedulecard.Card, _ schedulecard.Format) ([]byte, error) {
+	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, func(_ context.Context, card schedulecard.Card, _ schedulecard.Format, _ cardtemplate.ID) ([][]byte, error) {
 		if draws.Add(1) == 1 {
 			close(started)
 		}
 
 		<-release
 
-		return slices.Concat(pngSignature, []byte(card.MemberName)), nil
+		return [][]byte{slices.Concat(pngSignature, []byte(card.MemberName))}, nil
 	})
 	member := scheduleCardMember()
 
@@ -774,7 +775,7 @@ func TestScheduleCardRendererSharesOneDrawAcrossWaiters(t *testing.T) {
 	firstErr := make(chan error, 1)
 
 	go func() {
-		_, err := renderer.RenderScheduleCard(firstCtx, member, scheduleCardSchedule(1))
+		_, err := renderer.RenderScheduleCards(firstCtx, member, scheduleCardSchedule(1), cardtemplate.Classic)
 		firstErr <- err
 	}()
 
@@ -782,15 +783,15 @@ func TestScheduleCardRendererSharesOneDrawAcrossWaiters(t *testing.T) {
 
 	const waiters = 8
 
-	results := make(chan []byte, waiters)
+	results := make(chan [][]byte, waiters)
 
 	var wg sync.WaitGroup
 
 	for range waiters {
 		wg.Go(func() {
-			data, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1))
+			data, err := renderer.RenderScheduleCards(t.Context(), member, scheduleCardSchedule(1), cardtemplate.Classic)
 			if err != nil {
-				t.Errorf("waiter RenderScheduleCard() error = %v", err)
+				t.Errorf("waiter RenderScheduleCards() error = %v", err)
 			}
 
 			results <- data
@@ -800,7 +801,7 @@ func TestScheduleCardRendererSharesOneDrawAcrossWaiters(t *testing.T) {
 	cancelFirst()
 
 	if err := <-firstErr; !errors.Is(err, context.Canceled) {
-		t.Fatalf("first RenderScheduleCard() error = %v, want context.Canceled", err)
+		t.Fatalf("first RenderScheduleCards() error = %v, want context.Canceled", err)
 	}
 
 	close(release)
@@ -808,12 +809,12 @@ func TestScheduleCardRendererSharesOneDrawAcrossWaiters(t *testing.T) {
 	close(results)
 
 	for data := range results {
-		if !isPNGData(data) {
+		if len(data) != 1 || !isPNGData(data[0]) {
 			t.Fatalf("waiter data = %q, want the shared PNG", data)
 		}
 	}
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), member, scheduleCardSchedule(1)); err != nil || draws.Load() != 1 {
+	if _, err := renderer.RenderScheduleCards(t.Context(), member, scheduleCardSchedule(1), cardtemplate.Classic); err != nil || draws.Load() != 1 {
 		t.Fatalf("after shared render = %v, draws = %d; want one cached draw", err, draws.Load())
 	}
 }
@@ -821,21 +822,21 @@ func TestScheduleCardRendererSharesOneDrawAcrossWaiters(t *testing.T) {
 func TestScheduleCardRendererReturnsDrawPanicAsError(t *testing.T) {
 	drawer := &recordingCardDrawer{}
 	panicked := false
-	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, func(card schedulecard.Card, format schedulecard.Format) ([]byte, error) {
+	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, func(ctx context.Context, card schedulecard.Card, format schedulecard.Format, template cardtemplate.ID) ([][]byte, error) {
 		if !panicked {
 			panicked = true
 
 			panic("draw exploded")
 		}
 
-		return drawer.draw(card, format)
+		return drawer.draw(ctx, card, format, template)
 	})
 
-	if _, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), scheduleCardSchedule(1)); err == nil {
-		t.Fatal("RenderScheduleCard() error = nil, want the recovered draw panic")
+	if _, err := renderer.RenderScheduleCards(t.Context(), scheduleCardMember(), scheduleCardSchedule(1), cardtemplate.Classic); err == nil {
+		t.Fatal("RenderScheduleCards() error = nil, want the recovered draw panic")
 	}
 
-	if data, err := renderer.RenderScheduleCard(t.Context(), scheduleCardMember(), scheduleCardSchedule(1)); err != nil || !isPNGData(data) || len(drawer.cards) != 1 {
+	if data, err := renderer.RenderScheduleCards(t.Context(), scheduleCardMember(), scheduleCardSchedule(1), cardtemplate.Classic); err != nil || len(data) != 1 || !isPNGData(data[0]) || len(drawer.cards) != 1 {
 		t.Fatalf("after panic = %q, %v, draws = %d; want a fresh draw", data, err, len(drawer.cards))
 	}
 }

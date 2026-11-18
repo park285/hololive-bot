@@ -393,6 +393,13 @@ TABLE kakao_rooms
   CONSTRAINT kakao_rooms_room_type_len CHECK ((length((room_type)::text) <= 64))
   CONSTRAINT kakao_rooms_pkey PRIMARY KEY (room_id)
 
+TABLE member_schedule_card_templates
+  COLUMN member_id integer NOT NULL
+  COLUMN template text NOT NULL
+  CONSTRAINT member_schedule_card_templates_template_check CHECK ((template = ANY (ARRAY['classic'::text, 'orbit'::text])))
+  CONSTRAINT member_schedule_card_templates_member_id_fkey FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+  CONSTRAINT member_schedule_card_templates_pkey PRIMARY KEY (member_id)
+
 TABLE members
   COLUMN id integer NOT NULL DEFAULT nextval('members_id_seq'::regclass)
   COLUMN slug character varying(100) NOT NULL

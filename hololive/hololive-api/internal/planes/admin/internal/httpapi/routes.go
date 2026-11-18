@@ -66,6 +66,8 @@ func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *api.SettingsHandl
 }
 
 func registerSchedulePosterRoutes(holoAPI *gin.RouterGroup, handler *api.SchedulePosterHandler) {
+	holoAPI.GET("/members/:id/schedule-card-template", handler.MemberScheduleCardTemplate)
+	holoAPI.PATCH("/members/:id/schedule-card-template", handler.MemberScheduleCardTemplate)
 	holoAPI.GET("/schedule-posters/summary", handler.GetSchedulePosterSummary)
 	holoAPI.POST("/schedule-posters/collect", handler.CollectSchedulePosters)
 	holoAPI.GET("/schedule-posters/memo", handler.GetSchedulePosterMemo)

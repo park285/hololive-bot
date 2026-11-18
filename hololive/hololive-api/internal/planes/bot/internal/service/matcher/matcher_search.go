@@ -171,6 +171,16 @@ func (mm *Matcher) GetMemberByChannelID(ctx context.Context, channelID string) (
 // "이름 (그룹)" 형식을 파싱하고, 동명이인 발생 시 AmbiguousMatchError를 반환합니다.
 // 매칭에 실패하면 (nil, false, nil)을 반환합니다.
 func (mm *Matcher) FindBestMatchWithCandidates(ctx context.Context, query string) (*domain.Channel, bool, error) {
+	member, _, err := mm.FindMemberProfile(ctx, query)
+	if err != nil || member == nil {
+		return nil, false, err
+	}
+
+	return mm.memberToChannel(member), true, nil
+}
+
+// FindMemberProfile은 채널을 공유하는 멤버도 개별 프로필로 구분한다.
+func (mm *Matcher) FindMemberProfile(ctx context.Context, query string) (*domain.Member, bool, error) {
 	name, org := ParseNameWithOrg(query)
 
 	name = mm.normalizeQuery(name)
@@ -185,23 +195,20 @@ func (mm *Matcher) FindBestMatchWithCandidates(ctx context.Context, query string
 	candidates := mm.exactNameMembers(snapshot, nameNorm, org)
 
 	if len(candidates) == 0 {
-		out, found, err := mm.FindBestMatch(ctx, query)
-		if err != nil {
-			return nil, false, fmt.Errorf("find best match: %w", err)
-		}
+		member := mm.resolveSnapshotCandidate(snapshot, normalizeMatcherTerm(query)).member()
 
-		return out, found, nil
+		return member, member != nil, nil
 	}
 
 	if len(candidates) == 1 {
-		return mm.memberToChannel(candidates[0]), true, nil
+		return candidates[0], true, nil
 	}
 
 	if org == "" {
 		return nil, false, NewAmbiguousMatchError(query, candidates)
 	}
 
-	return mm.memberToChannel(candidates[0]), true, nil
+	return candidates[0], true, nil
 }
 
 func (mm *Matcher) memberToChannel(m *domain.Member) *domain.Channel {

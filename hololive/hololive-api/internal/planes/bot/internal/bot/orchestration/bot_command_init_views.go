@@ -48,6 +48,7 @@ type commandInitView struct {
 	formatter             *formatter.ResponseFormatter
 	sendMessage           func(ctx context.Context, room, message string) error
 	sendImage             func(ctx context.Context, room string, imageData []byte) error
+	sendTextFile          func(ctx context.Context, room, fileName, text string) error
 	sendImages            func(ctx context.Context, room string, images [][]byte) error
 	sendError             func(ctx context.Context, room, message string) error
 	logger                *slog.Logger
@@ -67,6 +68,7 @@ func (b *Bot) commandInitView(deps *Dependencies, calendarFinder handlercore.Cel
 		formatter:             b.formatter,
 		sendMessage:           b.sendMessage,
 		sendImage:             b.sendImage,
+		sendTextFile:          b.transport.SendTextFile,
 		sendImages:            b.sendImages,
 		sendError:             b.sendError,
 		logger:                b.logger,
@@ -92,6 +94,7 @@ func (v *commandInitView) toCommandDependencies() *handlercore.Dependencies {
 		ScheduleCards:       v.scheduleCards,
 		SendMessage:         v.sendMessage,
 		SendImage:           v.sendImage,
+		SendTextFile:        v.sendTextFile,
 		SendImages:          v.sendImages,
 		SendError:           v.sendError,
 		Logger:              v.logger,

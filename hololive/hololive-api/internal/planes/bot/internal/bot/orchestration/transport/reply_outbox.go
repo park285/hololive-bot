@@ -39,6 +39,7 @@ const (
 	StoredReplyKindRichText StoredReplyKind = "richtext"
 	StoredReplyKindImage    StoredReplyKind = "image"
 	StoredReplyKindImages   StoredReplyKind = "images"
+	StoredReplyKindTextFile StoredReplyKind = "text_file"
 )
 
 var (
@@ -57,6 +58,7 @@ type ReplyOutboxEntry struct {
 
 // ReplyClient는 저장된 bot 응답 발송에 필요한 로컬 계약이다. SDK의 공개 BotClient는 확장하지 않는다.
 type ReplyClient interface {
+	iris.FileSender
 	SendMessageAccepted(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	SendRichText(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	SendImage(context.Context, string, []byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
@@ -128,6 +130,10 @@ func postStoredReply(ctx context.Context, client ReplyClient, room string, reply
 	}
 
 	senders := map[StoredReplyKind]func() (*iris.ReplyAcceptedResponse, error){
+		StoredReplyKindTextFile: func() (*iris.ReplyAcceptedResponse, error) {
+			file := iris.NewReplyFile(reply.FileName, "text/plain", int64(len(reply.Message)), strings.NewReader(reply.Message))
+			return client.SendFile(ctx, room, file, opts...)
+		},
 		StoredReplyKindRichText: func() (*iris.ReplyAcceptedResponse, error) {
 			return client.SendRichText(ctx, room, reply.Message, opts...)
 		},
@@ -160,6 +166,7 @@ func postStoredReply(ctx context.Context, client ReplyClient, room string, reply
 }
 
 type StoredReply struct {
+	FileName         string          `json:"file_name,omitempty"`
 	Kind             StoredReplyKind `json:"kind"`
 	Message          string          `json:"message,omitempty"`
 	Image            []byte          `json:"image,omitempty"`

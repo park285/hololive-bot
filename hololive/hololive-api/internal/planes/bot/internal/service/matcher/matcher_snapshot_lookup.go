@@ -2,28 +2,19 @@ package matcher
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
-
-func chooseSnapshotString(current, next string) string {
-	if current != "" {
-		return current
-	}
-
-	return next
-}
 
 func appendSnapshotEntry(target map[string][]*snapshotEntry, key string, entry *snapshotEntry) {
 	if key == "" || entry == nil {
 		return
 	}
 
-	for _, existing := range target[key] {
-		if existing == entry || (existing.candidate != nil && entry.candidate != nil && existing.candidate.channelID == entry.candidate.channelID) {
-			return
-		}
+	if slices.Contains(target[key], entry) {
+		return
 	}
 
 	target[key] = append(target[key], entry)
