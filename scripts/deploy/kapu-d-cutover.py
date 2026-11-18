@@ -45,6 +45,7 @@ PROFILE_ENV = {'STACK_WORKER_PROFILE_FILE': DEST + '/profile.json',
                'STACK_WORKER_PROFILE_SOURCE_FILE': SOURCE + '/youtube-collector-d.json'}
 HEX = r'[0-9a-f]{64}'
 LEVEL = r's0:c[0-9]+(?:,c[0-9]+)*'
+COMMAND_ENV = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C', 'HOME': '/root'}
 
 
 class Refused(ValueError):
@@ -59,7 +60,7 @@ def need(ok, reason):
 def run(*args, timeout=35, status=False):
     # 명령 stderr와 진단 응답에는 비밀이 섞일 수 있다. 정해진 필드 외의 값을 영수증에 쓰지 않는다.
     proc = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                          timeout=timeout, env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C', 'HOME': '/root'})
+                          timeout=timeout, env=COMMAND_ENV)
     if status:
         return proc.returncode
     need(not proc.returncode, f'{args[0]} {args[1]} 실패 ({proc.returncode})')
@@ -192,6 +193,7 @@ def generation(name):
     g.update(main=main, cgroup=group)
     g['inv'] = inv
     need(inspect('container', g['cid'], '{{.HostConfig.RestartPolicy.Name}}') in ('', 'no'), '독립 Podman restart 정책')
+    need(prop(name,'InvocationID') == inv, '조회 중 실행 세대 교체: ' + name)
     return g
 
 
@@ -383,6 +385,11 @@ def healthy(name, g, wait=False):
          '비정상/교체된 컨테이너: ' + name)
 
 
+def journal_since():
+    seconds, micros = divmod(time.time_ns() // 1000, 1_000_000)
+    return f'@{seconds}.{micros:06}'
+
+
 def stop_invocation(name, invocation, since):
     # issuer의 역방향 Requires=가 collector까지 먼저 정지시키지 않게 단일 job으로 요청한다.
     options = ('--job-mode=ignore-dependencies',) if name == I else ()
@@ -427,8 +434,7 @@ def guarded_stop(h, name, g, candidate=False):
     need(generation(name) == g, '정지 직전 세대 변경')
     event = False
     code = None
-    seconds, micros = divmod(time.time_ns() // 1000, 1_000_000)
-    since = f'@{seconds}.{micros:06}'
+    since = journal_since()
     try:
         stop_invocation(name, g['inv'], since)
         event = True
@@ -592,9 +598,59 @@ def gate(image_id, level):
     run(*args, image_id, '--check-pooled-database', timeout=65)
 
 
-def acceptance(h, s, ids, n):
+def start_once(n, requested):
+    unit_name = n + '.service'
+    since = journal_since()
+    # 클라이언트가 timeout/예외로 끝나도 manager의 원래 anchor job 번호를 잃지 않는다.
+    with os.fdopen(os.memfd_create('cutover-start'), 'w+b') as log:
+        requested[n] = (since, None)
+        try:
+            p = subprocess.run(['systemctl','start','--show-transaction',unit_name], stdin=subprocess.DEVNULL,
+                               stdout=log, stderr=subprocess.STDOUT, timeout=245,
+                               env={**COMMAND_ENV,'SYSTEMD_LOG_TARGET':'console','SYSTEMD_LOG_LEVEL':'info'})
+        finally:
+            log.seek(0)
+            pattern = rb'Enqueued anchor job ([1-9][0-9]*) ' + re.escape(unit_name.encode()) + rb'/start\.\n?'
+            jobs = [m[1].decode() for line in log if (m := re.fullmatch(pattern,line))]
+            if len(jobs) == 1:
+                requested[n] = (since, jobs[0])
+        need(p.returncode == 0 and requested[n][1], '원래 start job 미확인: ' + n)
+
+
+def candidate(n, request, old, image_id, *, settle=False):
+    since, job = request
+    need(job, '요청한 start job 번호 미확인: ' + n)
+    result = terminal(n)
+    inv = None
+    if settle and result['Job'] == job:
+        # arm은 이미 진행 중인 notify 기동을 취소하지 않는다. 다른 job/invocation을 따라가지 않는다.
+        limit = time.monotonic() + 245
+        while result['Job'] == job:
+            current = result['InvocationID']
+            if inv is not None or (result['ActiveState'] == 'activating' and current):
+                need(re.fullmatch('[0-9a-f]{32}',current) and current != old['inv'] and inv in (None,current),
+                     '진행 중인 start invocation 변경: ' + n)
+                inv = current
+            need(time.monotonic() < limit, '원래 start job 완료 미확인: ' + n)
+            time.sleep(0.25)
+            result = terminal(n)
+    need(result['ActiveState'] == 'active' and not result['Job'], '원래 후보 기동 완료 미확인: ' + n)
+    # 첫 세대 조회보다 앞서 재기동된 경우에도 같은 이미지의 교체 세대를 인수하지 않는다.
+    if inv is None:
+        evidence = run('journalctl','--boot','--quiet','--no-pager','-o','json','--output-fields=INVOCATION_ID',
+                       '--since=' + since,'_PID=1','UNIT=' + n + '.service','JOB_ID=' + job,'JOB_TYPE=start',
+                       'MESSAGE_ID=39f53479d3a045ac8e11786248231fbf')
+        rows = evidence.splitlines()
+        need(len(rows) == 1, '원래 start job 완료 기록 미확인: ' + n)
+        inv = json.loads(rows[0]).get('INVOCATION_ID')
+    need(inv and inv == result['InvocationID'], '원래 start job의 실행 세대 미확인: ' + n)
     g = generation(n)
-    need(g['cid'] != s['old'][n]['cid'] and g['inv'] != s['old'][n]['inv'] and 'sha256:' + g['image'] == ids[n], '새 실행 세대 불일치')
+    need(g['inv'] == result['InvocationID'] and g['inv'] != old['inv'] and g['cid'] != old['cid'] and
+         'sha256:' + g['image'] == image_id, '새 실행 세대 불일치: ' + n)
+    return g
+
+
+def acceptance(h, s, n, g):
     healthy(n,g,wait=True)
     if n == I:
         issuer(g)
@@ -605,27 +661,23 @@ def acceptance(h, s, ids, n):
              result['first_success'] is True and result['handoff_status'] == 'PROCESSED' and result['handoff_processed'] is True and
              prop(C,'NRestarts') == '0', 'collector handoff/NRestarts 불일치')
     healthy(n,g)
-    return g
 
 
-def rehold(h, s, ids, opened, requested, started):
+def rehold(h, s, ids, opened, requested, started, receipt_failed):
     errors = (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError)
     damaged = False
-    before, active, armed, stops = {}, {}, set(), {}
+    before, armed, stops = {}, set(), {}
     # 어느 가드의 reload라도 다른 실패 세대의 종료 상태를 지울 수 있다.
     for n in opened:
         try:
             before[n] = terminal(n)
-            metadata(h/(n+'.before-rehold.json'), before[n])
-            if before[n]['ActiveState'] == 'active':
-                g = generation(n)
-                need(g['inv'] == before[n]['InvocationID'] and 'sha256:' + g['image'] == ids[n] and
-                     g['cid'] != s['old'][n]['cid'] and g['inv'] != s['old'][n]['inv'] and
-                     (n not in started or g == started[n]), '보호할 후보 세대 불일치')
-                active[n] = g
         except errors:
-            before.pop(n,None)
             damaged = True
+            continue
+        try:
+            metadata(h/(n+'.before-rehold.json'), before[n])
+        except errors:
+            receipt_failed = True
     protected = set()
     for n in (I,C):
         try:
@@ -633,7 +685,6 @@ def rehold(h, s, ids, opened, requested, started):
                 held_one(h,s,n)
             else:
                 p = mask(n)
-                anchor, _ = owned_anchor(h,n)
                 need(not os.path.lexists(p), '외부 mask/서비스 충돌')
                 if n not in requested and prop(n,'LoadState') == 'masked':
                     # unlink만 반영됐고 manager는 아직 열리지 않았다. 실행된 후보에는 적용하지 않는다.
@@ -641,9 +692,9 @@ def rehold(h, s, ids, opened, requested, started):
                     need(n in before and before[n] == result and
                          (result['ActiveState'] == 'inactive' or issuer_exit(n,result,s['old'][n]['inv'])) and
                          prop(n,'FragmentPath') == str(p), '원 mask 유지 미확인')
+                    require_direct_stop(h,n,s['old'][n])
                     no_process(n,result,s['old'][n]['cid'])
-                    os.link(anchor,p,follow_symlinks=False)
-                    sync_dir(SYSTEM)
+                    guard('undo-unmask',h,n)
                     held_one(h,s,n)
                     origin(n,True)
                 else:
@@ -658,31 +709,34 @@ def rehold(h, s, ids, opened, requested, started):
             continue
         try:
             need(len(protected) == len(NAMES), '다른 unit 차단 미확인')
-            if n in active:
-                guarded_stop(h,n,active[n],candidate=True)
-                stops[n] = active[n]['inv']
+            if n in requested:
+                if n not in started:
+                    started[n] = candidate(n,requested[n],s['old'][n],ids[n],settle=True)
+                guarded_stop(h,n,started[n],candidate=True)
+                stops[n] = started[n]['inv']
             else:
                 # 실제 후보 stop 증거 없이 이미 failed인 unit(예전 issuer 143 포함)은 수용하지 않는다.
                 guard('check',h,n)
                 origin(n,False,True)
                 result = terminal(n)
-                need(n in before and before[n]['ActiveState'] == result['ActiveState'] == 'inactive' and
-                     n not in requested, '후보 종료 미확인')
+                need(n in before and before[n]['ActiveState'] == result['ActiveState'] == 'inactive', '후보 종료 미확인')
                 no_process(n,result,s['old'][n]['cid'])
                 stops[n] = ''
+        except OSError:
+            receipt_failed = True
         except errors:
             damaged = True
     for n in (I,C):
         try:
             if n in armed:
-                need(n in stops, '미확인 종료: 보호 가드 유지')
+                need(not receipt_failed and n in stops, '미확인 종료/영수증: 보호 가드 유지')
                 guard('seal',h,n)
             held_one(h,s,n,stops.get(n))
-            if n in active:
-                absent('container',active[n]['cid'])
+            if n in started:
+                absent('container',started[n]['cid'])
         except errors:
             damaged = True
-    need(not damaged, '양쪽 소유 mask 복원 미확인: 증거와 잔여 가드 유지')
+    need(not damaged and not receipt_failed, '양쪽 소유 mask 복원 미확인: 증거와 잔여 가드 유지')
 
 
 def resume(h, revision, ids, digests):
@@ -719,9 +773,10 @@ def resume(h, revision, ids, digests):
     gate(ids[C],s['level'])
     record(h/'sql-passed',b'kapu-d-v1\n')
     opened = []
-    requested = set()
+    requested = {}
     started = {}
     published = False
+    receipt_failed = False
     try:
         for n in (I,C):
             inputs()
@@ -746,26 +801,37 @@ def resume(h, revision, ids, digests):
             else:
                 healthy(I,started[I])
             inputs()
-            requested.add(n)
-            run('systemctl','start',n+'.service',timeout=245)
-            started[n] = acceptance(h,s,ids,n)
+            with defer_interrupts():
+                start_once(n,requested)
+                started[n] = candidate(n,requested[n],s['old'][n],ids[n])
+            acceptance(h,s,n,started[n])
         inputs()
         healthy(I,started[I]); issuer(started[I]); healthy(C,started[C])
         need(prop(C,'NRestarts') == '0' and generation(I) == started[I], '최종 실행 세대 변경')
         pending = h/'.accepted-pending.json'
-        metadata(pending, {'generations':started, 'revision':revision, 'profile':s['profile'],
-                           'host':DB['POSTGRES_HOST'], 'port':6433, 'role':DB['POSTGRES_USER'],
-                           'first_success':True, 'handoff':'PROCESSED', 'collector_restarts':0})
-        # 확정 영수증의 일부만 보이거나 발행 직후 신호로 후보를 정지하는 일을 피한다.
-        with defer_interrupts():
-            os.link(pending,h/'accepted.json',follow_symlinks=False)
-            published = True
-            sync_dir(h)
-            pending.unlink()
+        accepted = h/'accepted.json'
+        try:
+            metadata(pending, {'generations':started, 'revision':revision, 'profile':s['profile'],
+                               'host':DB['POSTGRES_HOST'], 'port':6433, 'role':DB['POSTGRES_USER'],
+                               'first_success':True, 'handoff':'PROCESSED', 'collector_restarts':0})
+            with defer_interrupts():
+                os.link(pending,accepted,follow_symlinks=False)
+                try:
+                    sync_dir(h)
+                    pending.unlink()
+                except OSError:
+                    if os.path.samestat(pending.lstat(),accepted.lstat()):
+                        accepted.unlink()
+                        sync_dir(h)
+                    raise
+                published = True
+        except OSError:
+            receipt_failed = True
+            raise
     except BaseException:
         if not published:
             with defer_interrupts():
-                rehold(h,s,ids,opened,requested,started)
+                rehold(h,s,ids,opened,requested,started,receipt_failed)
             print('후보 거부: 재기동 없이 소유 mask 유지', file=sys.stderr)
         raise
     for n in opened:
@@ -801,9 +867,13 @@ def main():
     trusted(Path(__file__).resolve())
     os.umask(0o077)
     prepare_store(STORE, create=a.action == 'quiesce')
+    cancelled = False
     def interrupted(signum, frame):
-        raise InterruptedError('실행 중단')
-    for sig in (signal.SIGTERM,signal.SIGHUP):
+        nonlocal cancelled
+        if not cancelled:
+            cancelled = True
+            raise InterruptedError('실행 중단')
+    for sig in (signal.SIGINT,signal.SIGTERM,signal.SIGHUP):
         signal.signal(sig,interrupted)
     with contextlib.ExitStack() as stack:
         fd = os.open(STORE, os.O_DIRECTORY | os.O_NOFOLLOW)

@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import signal
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -89,6 +90,8 @@ class Cutover(unittest.TestCase):
         self.outcomes = {}
         self.exits = {}
         self.executions = {}
+        self.start_events = {}
+        self.on_start = lambda n:None
         self.journal = {}
         self.tags = {}
         for k,v in [('UNIT',self.units),('INPUT',self.input),('SYSTEM',self.system)]:
@@ -98,7 +101,8 @@ class Cutover(unittest.TestCase):
             self.tags[d.prod(n)] = self.state['images'][n] = ident
             self.tags[self.ids[n]] = {'id':self.ids[n],'rev':self.rev}
             self.state['old'][n] = {'cid':str(i+6)*64,'inv':'b'*32,'image':ident['id'][7:]}
-            self.executions[n] = {'cid':str(i+8)*64,'inv':'e'*32,'image':self.ids[n][7:]}
+            self.executions[n] = {'cid':str(i+8)*64,'inv':'e'*32,'image':self.ids[n][7:],
+                                  'started':'120','main':'123','pid':'124','cgroup':'/system.slice/'+n+'.service'}
             data = (n + '-candidate').encode()
             (self.input / d.unit(n)).write_bytes(data)
             (self.units / d.unit(n)).write_bytes(b'old')
@@ -121,17 +125,32 @@ class Cutover(unittest.TestCase):
         self.patch('generation', self.generation)
         self.calls = []
         self.patch('run', self.command)
+        self.stack.enter_context(patch.object(d.subprocess,'run',self.start_client))
 
     def patch(self, name, value):
         self.stack.enter_context(patch.object(d,name,value))
 
     def generation(self, n):
         self.assertEqual(self.props[n]['ActiveState'],'active')
-        return self.executions[n]
+        return dict(self.executions[n])
 
     def reload(self):
         for n in d.NAMES:
             self.props[n]['LoadState'] = 'masked' if os.path.lexists(d.mask(n)) else 'loaded'
+
+    def start_client(self, argv, *, stdout, **kwargs):
+        self.assertEqual(argv[:3],['systemctl','start','--show-transaction'])
+        n = argv[-1].removesuffix('.service')
+        self.assertNotIn(n,self.guards)
+        self.assertEqual(self.props[n]['LoadState'],'loaded')
+        self.calls.append(tuple(argv))
+        job = str(100 + len(self.start_events))
+        stdout.write(f'Enqueued anchor job {job} {argv[-1]}/start.\n'.encode())
+        self.start_events[job] = (n,self.executions[n]['inv'])
+        self.props[n].update(ActiveState='activating',MainPID='123',InvocationID=self.executions[n]['inv'],Job=job)
+        self.on_start(n)
+        self.props[n].update(ActiveState='active',Job='')
+        return d.subprocess.CompletedProcess(argv,0)
 
     def command(self, *args, **kwargs):
         if args[:3] == ('systemctl','show','--all'):
@@ -150,6 +169,12 @@ class Cutover(unittest.TestCase):
             action, unit, path, identity = args[4:]
             n, anchor = unit.removesuffix('.service'), Path(path)
             self.assertEqual(identity, ':'.join(map(str,d.number(anchor))))
+            if action == 'undo-unmask':
+                self.assertFalse(os.path.lexists(d.mask(n)))
+                self.assertEqual(self.props[n]['LoadState'],'masked')
+                os.link(anchor,d.mask(n),follow_symlinks=False)
+                self.reload()
+                return
             d.need(not os.path.lexists(d.mask(n)) and self.props[n]['LoadState'] == 'loaded', '가드 충돌')
             if action == 'arm':
                 d.need(n not in self.guards, '이전 가드')
@@ -170,20 +195,21 @@ class Cutover(unittest.TestCase):
             self.reload()
         if args[:2] == ('podman','tag'):
             self.tags[args[3]] = self.tags[args[2]]
-        if args[:2] in [('systemctl','start'),('systemctl','stop')]:
+        if args[:2] == ('systemctl','stop'):
             n = args[-1].removesuffix('.service')
-            if args[1] == 'start':
-                self.assertNotIn(n,self.guards)
-                self.props[n].update(ActiveState='active', MainPID='123', InvocationID=self.executions[n]['inv'])
-            else:
-                self.assertIn(n,self.guards)
-                self.assertTrue(all(peer in self.guards or os.path.lexists(d.mask(peer)) for peer in d.NAMES))
-                self.assertEqual('--job-mode=ignore-dependencies' in args, n == d.I)
-                self.journal[n] = self.props[n]['InvocationID']
-                self.props[n].update(ActiveState='inactive', MainPID='0', ControlPID='0')
-                self.props[n].update(self.outcomes.get(n,{}))
+            self.assertIn(n,self.guards)
+            self.assertTrue(all(peer in self.guards or os.path.lexists(d.mask(peer)) for peer in d.NAMES))
+            self.assertEqual('--job-mode=ignore-dependencies' in args, n == d.I)
+            self.journal[n] = self.props[n]['InvocationID']
+            self.props[n].update(ActiveState='inactive', MainPID='0', ControlPID='0')
+            self.props[n].update(self.outcomes.get(n,{}))
         if args[0] == 'journalctl':
             n = next(x[5:-8] for x in args if x.startswith('UNIT='))
+            if 'JOB_TYPE=start' in args:
+                job = next(x[7:] for x in args if x.startswith('JOB_ID='))
+                unit, inv = self.start_events[job]
+                self.assertEqual(unit,n)
+                return json.dumps({'INVOCATION_ID':inv})
             return json.dumps({'INVOCATION_ID': self.journal[n]})
 
     def resume(self):
@@ -267,15 +293,159 @@ class Cutover(unittest.TestCase):
         self.assertEqual(self.guards,set(d.NAMES))
         self.assertFalse((h/'quiesced').exists())
 
-    def test_accepted_candidate_is_not_reheld(self):
+    def resume_inputs(self):
         self.patch('gate',lambda *args:None)
         self.patch('healthy',lambda *args:None)
         self.patch('issuer',lambda *args:None)
-        self.patch('acceptance',lambda h,s,ids,n:self.executions[n])
+        self.patch('acceptance',lambda *args:None)
+
+    def test_accepted_candidate_is_not_reheld(self):
+        self.resume_inputs()
         self.resume()
         self.assertEqual(json.loads((self.h/'accepted.json').read_bytes())['generations'],self.executions)
         self.assertTrue(all(not os.path.lexists(d.mask(n)) for n in d.NAMES))
         self.assertFalse(any(c[:2] == ('systemctl','stop') or c[4:5] == ('arm',) for c in self.calls))
+
+    def starts_and_stops(self, stops):
+        for action,names in (('start',(d.I,d.C)),('stop',stops)):
+            self.assertEqual([c[-1] for c in self.calls if c[:2] == ('systemctl',action)],
+                             [n+'.service' for n in names])
+        self.assertFalse((self.h/'accepted.json').exists())
+
+    def interrupted_notify(self, sig):
+        self.resume_inputs()
+        captures, checks = [], []
+        def generation(n):
+            captures.append((n,n in self.guards))
+            return self.generation(n)
+        def interrupt(signum,frame):
+            self.assertIn((d.C,False),captures)
+            raise InterruptedError('cancelled')
+        def notify(n):
+            if n == d.C:
+                self.assertEqual(self.props[n]['ActiveState'],'activating')
+                signal.raise_signal(sig)
+        self.addCleanup(signal.signal,sig,signal.signal(sig,interrupt))
+        self.on_start = notify
+        self.patch('generation',generation)
+        self.patch('acceptance',lambda h,s,n,g:checks.append(n))
+        with self.assertRaisesRegex(InterruptedError,'cancelled'):
+            self.resume()
+        self.assertEqual(checks,[d.I])
+        self.starts_and_stops((d.I,d.C))
+        for n in d.NAMES:
+            self.assertEqual((self.h/(n+'.candidate-stop')).read_bytes(),self.executions[n]['inv'].encode())
+            self.assertTrue(d.mask(n).is_symlink())
+
+    def test_term_during_notify_keeps_original_start_until_capture(self):
+        self.interrupted_notify(signal.SIGTERM)
+
+    def test_hup_during_notify_keeps_original_start_until_capture(self):
+        self.interrupted_notify(signal.SIGHUP)
+
+    def lost_client(self, exc):
+        self.resume_inputs()
+        def lost(n):
+            if n == d.C:
+                raise exc
+        self.on_start = lost
+
+    def test_timeout_observes_same_notify_job_under_guard(self):
+        self.lost_client(d.subprocess.TimeoutExpired('systemctl',245))
+        def settle(delay):
+            self.assertIn(d.C,self.guards)
+            self.assertEqual(self.props[d.C]['ActiveState'],'activating')
+            self.props[d.C].update(ActiveState='active',Job='')
+        with patch.object(d.time,'sleep',settle), self.assertRaises(d.subprocess.TimeoutExpired):
+            self.resume()
+        self.starts_and_stops((d.I,d.C))
+        self.assertEqual((self.h/(d.C+'.candidate-stop')).read_bytes(),self.executions[d.C]['inv'].encode())
+
+    def test_client_loss_does_not_follow_replacement_job(self):
+        self.lost_client(OSError('client gone'))
+        def replace(delay):
+            self.assertIn(d.C,self.guards)
+            self.executions[d.C].update(inv='f'*32,cid='f'*64)
+            self.props[d.C].update(ActiveState='active',Job='',InvocationID='f'*32)
+        with patch.object(d.time,'sleep',replace), self.assertRaisesRegex(d.Refused,'복원 미확인'):
+            self.resume()
+        self.starts_and_stops((d.I,))
+        self.assertEqual(self.guards,{d.C})
+        self.assertFalse((self.h/(d.C+'.candidate-stop.json')).exists())
+
+    def test_surviving_notify_observation_is_bounded(self):
+        self.lost_client(d.subprocess.TimeoutExpired('systemctl',245))
+        with patch.object(d.time,'monotonic',side_effect=[100,346]), self.assertRaisesRegex(d.Refused,'복원 미확인'):
+            self.resume()
+        self.starts_and_stops((d.I,))
+        self.assertEqual(self.guards,{d.C})
+        self.assertFalse((self.h/(d.C+'.candidate-stop.json')).exists())
+
+    def test_first_capture_rejects_active_replacement_of_completed_job(self):
+        self.resume_inputs()
+        checks = []
+        self.patch('acceptance',lambda h,s,n,g:checks.append(n))
+        def replace(n):
+            if n == d.C:
+                self.executions[n].update(inv='f'*32,cid='f'*64)
+                self.props[n]['InvocationID'] = 'f'*32
+        self.on_start = replace
+        with self.assertRaisesRegex(d.Refused,'복원 미확인'):
+            self.resume()
+        self.assertEqual(checks,[d.I])
+        self.starts_and_stops((d.I,))
+        self.assertEqual(self.guards,{d.C})
+
+    def test_business_failure_cannot_authorize_changed_candidate_cid(self):
+        self.resume_inputs()
+        def reject(h,s,n,g):
+            if n == d.C:
+                self.executions[n].update(cid='f'*64,started='480',pid='125')
+                self.fail_candidate()
+        self.patch('acceptance',reject)
+        with self.assertRaisesRegex(d.Refused,'복원 미확인'):
+            self.resume()
+        self.starts_and_stops((d.I,))
+        self.assertEqual(self.guards,{d.C})
+
+    def fail_write(self, filename):
+        metadata = d.metadata
+        def full(path,value):
+            if path.name == filename:
+                raise OSError('disk full')
+            metadata(path,value)
+        self.patch('metadata',full)
+
+    def rejected_but_stopped(self):
+        with self.assertRaisesRegex(d.Refused,'복원 미확인'):
+            self.resume()
+        self.starts_and_stops((d.I,d.C))
+        self.assertEqual(self.guards,set(d.NAMES))
+        self.assertTrue(all(self.props[n]['ActiveState'] == 'inactive' for n in d.NAMES))
+        self.assertFalse(any(c[4:5] == ('seal',) for c in self.calls))
+
+    def test_before_rehold_write_alone_does_not_skip_physical_stop(self):
+        self.resume_inputs()
+        self.patch('acceptance',lambda h,s,n,g:None if n == d.I else self.fail_candidate())
+        self.fail_write(d.C+'.before-rehold.json')
+        self.rejected_but_stopped()
+        self.assertFalse((self.h/(d.C+'.before-rehold.json')).exists())
+        self.assertTrue((self.h/(d.I+'.before-rehold.json')).is_file())
+
+    def test_acceptance_receipt_write_failure_does_not_skip_physical_stop(self):
+        self.resume_inputs()
+        self.fail_write('.accepted-pending.json')
+        self.rejected_but_stopped()
+
+    def test_accepted_directory_sync_failure_retracts_only_owned_link(self):
+        self.resume_inputs()
+        sync = d.sync_dir
+        def fail_publish(path):
+            if path == self.h and (self.h/'accepted.json').exists():
+                raise OSError('sync failed')
+            sync(path)
+        self.patch('sync_dir',fail_publish)
+        self.rejected_but_stopped()
 
     def test_static_receipt_cannot_open_candidates(self):
         (self.h/'quiesced').write_bytes(b'kapu-d-v1\n')
@@ -292,13 +462,16 @@ class Cutover(unittest.TestCase):
             self.resume()
         self.assertFalse(self.calls)
 
-    def test_unapplied_unlink_restores_only_same_mask_without_stop(self):
+    def interrupt_unapplied_unlink(self):
         self.patch('gate',lambda *args:None)
         def interrupt(*args, **kwargs):
             if args == ('systemctl','daemon-reload') and not os.path.lexists(d.mask(d.I)):
                 raise InterruptedError()
             return self.command(*args,**kwargs)
         self.patch('run',interrupt)
+
+    def test_unapplied_unlink_restores_only_same_mask_without_stop(self):
+        self.interrupt_unapplied_unlink()
         with self.assertRaises(InterruptedError):
             self.resume()
         self.assertFalse(any(x[:2] in (('systemctl','stop'),('systemctl','start')) or x[4:5] == ('arm',)
@@ -306,6 +479,25 @@ class Cutover(unittest.TestCase):
         for n in d.NAMES:
             self.assertEqual(d.number(d.mask(n)), d.number(d.mask_anchor(self.h,n)))
         self.assertFalse((self.h/(d.C+'.before-rehold.json')).exists())
+
+    def partial_unlink_with_container(self, subject):
+        self.interrupt_unapplied_unlink()
+        def absent(kind,name):
+            if not os.path.lexists(d.mask(d.I)) and name == subject:
+                raise d.Refused('컨테이너가 남음')
+        self.patch('absent',absent)
+        with self.assertRaisesRegex(d.Refused,'복원 미확인'):
+            self.resume()
+        self.assertFalse(os.path.lexists(d.mask(d.I)))
+        self.assertTrue(d.mask_anchor(self.h,d.I).is_symlink())
+        self.assertFalse(any(x[:2] in (('systemctl','stop'),('systemctl','start')) or x[4:5] == ('undo-unmask',)
+                             for x in self.calls))
+
+    def test_partial_unlink_cannot_seal_over_retained_cid(self):
+        self.partial_unlink_with_container(self.state['old'][d.I]['cid'])
+
+    def test_partial_unlink_cannot_seal_over_occupied_name(self):
+        self.partial_unlink_with_container(d.I)
 
     def test_candidate_stop_cannot_reuse_direct_issuer_143(self):
         self.patch('gate',lambda *args:None)
@@ -327,7 +519,7 @@ class Cutover(unittest.TestCase):
         self.patch('gate',lambda *args:None)
         self.patch('healthy',lambda *args:None)
         self.patch('issuer',lambda *args:None)
-        self.patch('acceptance',lambda h,s,ids,n: self.executions[n] if n == d.I else self.fail_candidate())
+        self.patch('acceptance',lambda h,s,n,g:None if n == d.I else self.fail_candidate())
         self.outcomes[d.C] = {'ActiveState':'failed','Result':'exit-code','ExecMainStatus':'143'}
         with self.assertRaisesRegex(ValueError,'복원 미확인'):
             self.resume()
@@ -369,7 +561,8 @@ class Cutover(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'issuer'):
             self.resume()
         self.assertFalse((self.h/'accepted.json').exists())
-        self.assertEqual([c for c in self.calls if c[:2] == ('systemctl','start')], [('systemctl','start', d.I+'.service')])
+        self.assertEqual([c for c in self.calls if c[:2] == ('systemctl','start')],
+                         [('systemctl','start','--show-transaction',d.I+'.service')])
         self.assertEqual([x[5] for x in self.calls if x[4:5] == ('arm',)], [d.I+'.service'])
         for n in d.NAMES:
             self.assertEqual(d.number(d.mask(n)), json.loads((self.h/(n+'.mask')).read_bytes()))
