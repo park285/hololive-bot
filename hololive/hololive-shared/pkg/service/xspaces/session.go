@@ -204,7 +204,7 @@ func (s *Store) Status(ctx context.Context) (Status, error) {
 	return status, nil
 }
 
-// False는 충돌을 뜻하며 기존 인증을 바꾸지 않는다. 저장 성공은 X 인증 검증 성공과 다르다.
+// Submit은 후보를 저장한다. False는 충돌을 뜻하며 기존 인증을 바꾸지 않고, 저장 성공은 X 인증 검증 성공과 다르다.
 func (s *Store) Submit(ctx context.Context, c Cookies, expected string) (bool, error) {
 	revision, err := strconv.ParseInt(expected, 10, 64)
 	if err != nil || revision < 0 || strconv.FormatInt(revision, 10) != expected {
@@ -228,7 +228,7 @@ func (s *Store) Submit(ctx context.Context, c Cookies, expected string) (bool, e
 	return result.RowsAffected() == 1, nil
 }
 
-// 호출자는 이를 로그·응답에 넣지 않는다.
+// Snapshot은 복호화한 세션을 반환한다. 호출자는 이를 로그·응답에 넣지 않는다.
 func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 	var (
 		snapshot          Snapshot
@@ -321,7 +321,7 @@ func ValidErrorCode(code string) bool {
 	}
 }
 
-// 네트워크 장애는 인증 거부가 아니므로 후보와 활성 인증 모두 보존한다.
+// CandidateFailure는 후보의 조회 실패를 기록한다. 네트워크 장애는 인증 거부가 아니므로 후보와 활성 인증 모두 보존한다.
 func (s *Store) CandidateFailure(ctx context.Context, revision int64, code string, next time.Time) error {
 	if code == "" || !ValidErrorCode(code) {
 		return errors.New("invalid candidate failure code")

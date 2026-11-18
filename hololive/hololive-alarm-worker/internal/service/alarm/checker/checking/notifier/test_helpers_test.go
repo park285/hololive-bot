@@ -11,11 +11,8 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
-
-type SendResult = delivery.SendResult
 
 func newCheckerTestLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 const (
@@ -85,10 +85,14 @@ func decideReplyHandoff(
 			return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: contractsalarm.HandoffCodeStatusMissing}
 		}
 
+		if delivery.ReplyStatusIdentityMismatch(queryErr) {
+			return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: contractsalarm.HandoffCodeOutcomeUnknown}
+		}
+
 		return pendingReplyHandoffDecision(claim, horizon)
 	}
 
-	if snapshot == nil || strings.TrimSpace(snapshot.RequestID) != claim.IrisRequestID {
+	if snapshot == nil || snapshot.RequestID != claim.IrisRequestID {
 		return replyHandoffDecision{status: durability.ReplyOutboxManualReview, lastError: contractsalarm.HandoffCodeOutcomeUnknown}
 	}
 

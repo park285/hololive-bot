@@ -47,6 +47,7 @@ func TestDecideRoutesEveryObservation(t *testing.T) {
 		{"pending at horizon", Input{Snapshot: snapshot("prepared"), Elapsed: horizon}, ActionQuarantine, contractsalarm.HandoffCodeUnconfirmed},
 		{"server error before horizon", Input{QueryErr: unavailable, Elapsed: 20 * time.Second}, ActionReschedule, ""},
 		{"transport error before horizon", Input{QueryErr: transport, Elapsed: 20 * time.Second}, ActionReschedule, ""},
+		{"response size limit before horizon", Input{QueryErr: &iris.TransportError{Err: iris.ErrResponseTooLarge}}, ActionReschedule, ""},
 		{"query error at horizon", Input{QueryErr: unavailable, Elapsed: horizon}, ActionQuarantine, contractsalarm.HandoffCodeUnconfirmed},
 		{"not found beats pending horizon", Input{QueryErr: notFound, Elapsed: time.Second}, ActionQuarantine, contractsalarm.HandoffCodeStatusMissing},
 	}

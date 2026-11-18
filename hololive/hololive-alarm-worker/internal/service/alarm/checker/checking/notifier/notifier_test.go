@@ -39,6 +39,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type notifierBatchOutbox struct {
@@ -211,7 +212,7 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	assertNotifiedHashCache(t, cacheClient, stream.ID)
 }
 
-func assertPublishQueueOutboxState(t *testing.T, result SendResult, outbox *notifierBatchOutbox) {
+func assertPublishQueueOutboxState(t *testing.T, result delivery.SendResult, outbox *notifierBatchOutbox) {
 	t.Helper()
 
 	if result.Sent != 1 || result.Skipped != 0 || result.Failed != 0 {
@@ -333,7 +334,7 @@ func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {
 			require.Error(t, sendErr)
 			assert.Contains(t, sendErr.Error(), "live alarm route does not support alarm type")
 			assert.Contains(t, sendErr.Error(), string(alarmType))
-			assert.Equal(t, SendResult{Failed: 1}, result)
+			assert.Equal(t, delivery.SendResult{Failed: 1}, result)
 		})
 	}
 }
@@ -470,7 +471,7 @@ func TestNotifierSend_PublishBatchPayloadPreservesNotificationAndClaimKeys(t *te
 
 	result, sendErr := notifier.Send(t.Context(), []*domain.AlarmNotification{notification}, testTargetPolicy(10))
 	require.NoError(t, sendErr)
-	assert.Equal(t, SendResult{Sent: 1}, result)
+	assert.Equal(t, delivery.SendResult{Sent: 1}, result)
 	require.Equal(t, 1, outbox.insertBatchCalls)
 	require.Len(t, outbox.lastBatchInput.Envelopes, 1)
 
@@ -533,7 +534,7 @@ func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testin
 	result, sendErr := notifier.Send(t.Context(), notifications, testTargetPolicy(10))
 	require.Error(t, sendErr)
 
-	assert.Equal(t, SendResult{Sent: 1, Failed: 1}, result)
+	assert.Equal(t, delivery.SendResult{Sent: 1, Failed: 1}, result)
 	assert.Equal(t, 2, outbox.insertBatchCalls)
 
 	claimAgain := func(notification *domain.AlarmNotification) bool {

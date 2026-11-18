@@ -414,10 +414,15 @@ flock 8
 if run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate; then
   fail "concurrent: helper ran while another held the lock"
 fi
-exec 8>&-
-grep -q 'another quadlet-redeploy-service.sh is running' "${root}/out" || { cat "${root}/out" >&2; fail "concurrent: lock message missing"; }
+grep -q 'another central Quadlet writer is running' "${root}/out" || { cat "${root}/out" >&2; fail "concurrent: lock message missing"; }
 [[ ! -s "${root}/state/calls" ]] || { cat "${root}/state/calls" >&2; fail "concurrent: helper made calls while locked out"; }
 pass "a second helper refuses to run while another holds the redeploy lock"
+if run_tool "${root}" success "${API_HEX}" "${ROLLBACK}" "${root}/opt/hololive-bot/compose/current/artifacts/worker-profile/releases/missing" --apply; then
+  fail "concurrent: rollback ran while another writer held the lock"
+fi
+grep -q 'another central Quadlet writer is running' "${root}/out" || fail "concurrent: rollback lock message missing"
+[[ ! -s "${root}/state/calls" ]] || fail "concurrent: rollback made calls while locked out"
+exec 8>&-
 
 # 6. 승인된 되돌리기도 실패: rollback이 실패로 끝나고 release pair를 남긴다.
 root="${tmp}/restore-failure"

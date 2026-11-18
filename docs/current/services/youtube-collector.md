@@ -196,3 +196,15 @@ Holodex와 Official Schedule fetch는 collector-owned `providerhttp` transport�
 ## Discovery 오류의 진행 범위
 
 후보 조회에서 명시적인 runner/target 계약 오류(`joblease.ErrCandidateContract`)가 발생하면 그 runner의 페이지를 거절하고 독립 runner 조회를 계속합니다. mixed poll interval bundle은 실행하지 않습니다. 실제 조회 지점과 잔여 capacity를 기준으로 cursor를 진행시키되 cycle 실패와 runner 진단은 유지합니다. 취소·stale projection·DB/조회 스트림 오류는 전역 중단하며, local 오류 표식으로 완화하지 않습니다. 기존 queue capacity·enqueue dedup·projection generation·lease/fence·원자적 publish 예산은 그대로 적용합니다.
+
+Holodex metadata는 `channel_photo`만 발행하며 `channel_profile`은 YouTube.js가 소유합니다.
+API는 Holodex profile 계약을 수용하지 않습니다. Migration 031은 원본 payload·관측·현재 profile projection과 역사 FK registry를 보존하며,
+미처리 Holodex profile만 `unsupported_contract` DEAD_LETTER로 종결합니다. DB는 구 collector의 신규 profile 발행을 거부하고,
+보존 관측의 replay도 DEAD_LETTER로 종결합니다. `holodex_metadata` job과 photo 발행은 유지합니다.
+전환 작업창에는 collector와 API YouTube plane의 writer를 먼저 중지하고 진행 중 트랜잭션 종료를 확인한 뒤,
+신규 migrator로 031을 적용하고 신규 API·collector 순서로 시작합니다. 이미 처리·커밋된 profile projection은 되돌리지 않으며,
+정지 전에 구 worker가 처리한 profile도 그대로 보존합니다. 과거 payload·관측·처리 완료 기록은 삭제하지 않습니다.
+
+031은 추가 trigger만 설치하며 이전 스키마를 제거하지 않습니다. 되돌릴 때도 migration은 취소하지 않고,
+직전 image/profile pair가 Holodex profile을 발행하지 않는지 확인한 뒤 owning rollback helper의 검사·승인 절차를 따릅니다.
+퇴역 profile을 다시 발행하는 image는 사용할 수 없으며 fix-forward합니다.
