@@ -287,8 +287,54 @@ esac
 ref_file() { printf '%s/images/%s\n' "$fixture_root" "${1//[\/:]/_}"; }
 hex_of() { if [[ "$1" == old ]]; then printf '%064d\n' 0 | tr 0 a; else printf '%064d\n' 0 | tr 0 b; fi; }
 revision_of() { if [[ "$1" == old ]]; then printf '%040d\n' 0 | tr 0 a; else printf '%040d\n' 0 | tr 0 b; fi; }
+fixture_exit_status() {
+  local unit="$1" cid="$2" since="$3" until="$EPOCHREALTIME" id at code found=''
+  [[ "$since" =~ ^@[0-9]+\.[0-9]{6}$ && "$cid" =~ ^[0-9a-f]{64}$ &&
+     -f "$fixture_root/$unit.died" && "$(<"$fixture_root/$unit.since")" == "$since" ]] || return 8
+  if [[ "$slot" == b && "$fixture_case" == maintenance_quiesce ]]; then until=1794975991.020000; fi
+  while read -r id at code; do
+    [[ "$id" == "$cid" && ! "$at" < "${since#@}" && ! "$at" > "$until" ]] || continue
+    [[ -z "$found" && "$code" =~ ^(0|[1-9][0-9]{0,2})$ && "$code" -le 255 ]] || return 8
+    found="$code"
+  done < "$fixture_root/$unit.died"
+  [[ -n "$found" ]] && printf '%s\n' "$found"
+}
+guard_cli() {
+  local op="$1" unit="$2" anchor="$3" inode="$4" mask="$system_unit_dir/$2" guard="$system_unit_dir/$2.guard"
+  printf 'guard %s %s\n' "$op" "$unit" >> "$fixture_root/calls"
+  if [[ "$op" == exit-status ]]; then fixture_exit_status "$unit" "$3" "$4"; return; fi
+  [[ "$(readlink "$anchor")" == /dev/null && "$(command stat -c '%d:%i' "$anchor")" == "$inode" ]] || return 8
+  if [[ "$op" == arm && "$fixture_case" == maintenance_quiesce_mask_race && "$unit" == "$collector_unit" ]]; then
+    command ln -s /dev/null "$mask" || return 8
+  fi
+  [[ ! -e "$mask" && ! -L "$mask" ]] || return 8
+  case "$op" in
+    arm)
+      (set -C; printf '%s\n' "$anchor" > "$guard") || return 8
+      systemctl daemon-reload || return 8
+      if [[ "$unit" == "$collector_unit" && "$fixture_case" == *arm_collector_profile ]]; then
+        printf 'other profile\n' > "$fixture_root/loaded.profile"
+      fi
+      [[ "$unit" != "$collector_unit" || "$fixture_case" != *guard_failure ]] ;;
+    check|seal)
+      [[ -f "$guard" && "$(<"$guard")" == "$anchor" ]] || return 8
+      [[ "$unit" != "$collector_unit" || "$fixture_case" != *guard_check_failure ]] || return 8
+      if [[ "$op" == seal ]]; then
+        [[ "$(systemctl show -p ActiveState --value "$unit")" =~ ^(inactive|failed)$ &&
+           "$(systemctl show -p MainPID --value "$unit")" == 0 && "$(systemctl show -p ControlPID --value "$unit")" == 0 ]] || return 8
+        ln -PT -- "$anchor" "$mask" && systemctl daemon-reload && rm -- "$guard" || return 8
+      fi ;;
+    *) return 2 ;;
+  esac
+}
+admitted() {
+  local mask="$system_unit_dir/$1" guard="$system_unit_dir/$1.guard"
+  [[ ! -L "$mask" ]] && [[ ! -f "$guard" || ! -e "$(<"$guard")" ]]
+}
 python3() {
-  if [[ "${1:-}" == "$pair_tool" ]]; then
+  if [[ "${1-} ${2-} ${3-}" == "-I -B $staging/scripts/deploy/lib/systemd-stop-guard.py" ]]; then
+    shift 3; guard_cli "$@"
+  elif [[ "${1:-}" == "$pair_tool" ]]; then
     printf 'pair %s %s\n' "$2" "$4" >>"$fixture_root/calls"
     case "$2" in
       capture)
@@ -314,7 +360,8 @@ python3() {
       verify-live)
         [[ "$5" == "$collector_container" ]] && cmp -s "$4/profile.json" "$fixture_root/loaded.profile" ;;
       verify-captured)
-        [[ "$5" == "$collector_container" ]] && cmp -s "$4/pair.json" "$fixture_root/collector.generation" ;;
+        [[ "$5" == "$collector_container" ]] && cmp -s "$4/pair.json" "$fixture_root/collector.generation" &&
+          cmp -s "$4/profile.json" "$fixture_root/loaded.profile" ;;
       check-pooled)
         [[ "$fixture_case" != *pooled_query_failure && "$3" == "$service" && "$4" == "$profile_release/candidate" ]] ;;
       verify-dropin)
@@ -343,16 +390,14 @@ install() {
 ln() {
   printf 'mask link %s\n' "${*: -1}" >>"$fixture_root/calls"
   if [[ "$1" == -PT && "$4" == "$system_unit_dir/$collector_unit" ]]; then
-    [[ "$fixture_case" != maintenance_quiesce_mask_failure ]] || return 8
-    if [[ "$fixture_case" == maintenance_quiesce_mask_race ]]; then
-      command ln -s /dev/null "$4"
-    fi
+    [[ "$fixture_case" != maintenance_quiesce_mask_failure && "$fixture_case" != *error_log_seal_failure ]] || return 8
   fi
   command ln "$@"
 }
 stat() {
   case "$2:${*: -1}" in
     '%d:%i:'*) command stat "$@" ;;
+    '%u:%g:'*) printf '0:0\n' ;;
     *:"$fixture_root/socket") printf '65532:1000 770\n' ;;
     *) printf '0:0 %s\n' "$(command stat -c '%a' "${*: -1}")" ;;
   esac
@@ -383,8 +428,9 @@ podman() {
       ;;
     'container exists')
       [[ ! -f "$fixture_root/inventory-unavailable" ]] || return 125
+      if [[ "$fixture_case" == *stop_leftover_id && "$3" == "$(printf '%064d' 3)" ]]; then return 0; fi
       kind=collector
-      [[ "$3" != "$issuer_container" ]] || kind=issuer
+      [[ "$3" != "$issuer_container" && "$3" != "$(printf '%064d' 4)" ]] || kind=issuer
       [[ "$(cat "$fixture_root/$kind.running")" == true || -e "$fixture_root/$kind.leftover" ]]
       ;;
     'image rm') rm "$(ref_file "$3")" ;;
@@ -432,7 +478,8 @@ podman() {
         *State.Health*)
           if [[ -e "$fixture_root/$kind.unhealthy" ]]; then printf 'unhealthy\n'; else printf 'healthy\n'; fi ;;
         *State.StartedAt.UnixNano*)
-          printf '%064d %s %s 42\n' 3 "$(hex_of "$value")" "$(<"$fixture_root/$kind.started")" ;;
+          local cid=3; [[ "$kind" != issuer ]] || cid=4
+          printf '%064d %s %s 42\n' "$cid" "$(hex_of "$value")" "$(<"$fixture_root/$kind.started")" ;;
         *image.revision*) revision_of "$value" ;;
         '{{.Image}}') hex_of "$value" ;;
         *Mounts*) printf '%s/socket\n' "$fixture_root" ;;
@@ -469,6 +516,7 @@ podman() {
 journalctl() {
   local unit="${11#UNIT=}" invocation="${12#INVOCATION_ID=}" since="${9#--since=}" id at
   [[ "${10}" == _PID=1 ]] || return 2
+  printf '%s\n' "$since" > "$fixture_root/$unit.since"
   since="$(command date -u -d "$since" +%s.%N)" || return 2
   since="${since%???}"
   [[ "$unit" == "$issuer_unit" || "$unit" == "$collector_unit" ]] || return 2
@@ -483,8 +531,21 @@ systemctl() {
   printf 'systemctl %s\n' "$*" >>"$fixture_root/calls"
   [[ "${*: -1}" != "$issuer_unit" ]] || kind=issuer
   case "$1" in
-    daemon-reload) ;;
+    daemon-reload)
+      if [[ "$fixture_case" == *collector_143 && -L "$system_unit_dir/$collector_unit" ]]; then
+        rm -f "$fixture_root/collector.exit"
+      fi ;;
     show)
+      if [[ "$2" == --all ]]; then
+        local prop answer unit="${*: -1}"
+        shift 2
+        while [[ "$1" == -p ]]; do
+          prop="$2"; shift 2
+          answer="$(systemctl show -p "$prop" --value "$unit")" || return
+          printf '%s=%s\n' "$prop" "$answer"
+        done
+        return 0
+      fi
       case "$3" in
         LoadState)
           if [[ -L "$system_unit_dir/${*: -1}" ]]; then printf 'masked\n'; else printf 'loaded\n'; fi ;;
@@ -493,18 +554,24 @@ systemctl() {
           elif [[ -f "$fixture_root/$kind.exit" ]]; then printf 'failed\n'; else printf 'inactive\n'; fi ;;
         InvocationID)
           cat "$fixture_root/$kind.invocation" ;;
-        Result) printf 'exit-code\n' ;;
-        ExecMainCode) printf '1\n' ;;
-        ExecMainStatus) cat "$fixture_root/$kind.exit" ;;
-        MainPID|ControlPID) printf '0\n' ;;
+        Result) if [[ -f "$fixture_root/$kind.exit" ]]; then printf 'exit-code\n'; else printf 'success\n'; fi ;;
+        ExecMainCode) if [[ -s "$fixture_root/$kind.invocation" ]]; then printf '1\n'; else printf '0\n'; fi ;;
+        ExecMainStatus) if [[ -f "$fixture_root/$kind.exit" ]]; then cat "$fixture_root/$kind.exit"; else printf '0\n'; fi ;;
+        MainPID|ControlPID)
+          if [[ "$3" == ControlPID && "$fixture_case" == *stop_control_pid && "$kind" == collector ]]; then printf '42\n'
+          elif [[ "$3" == MainPID && "$(<"$fixture_root/$kind.running")" == true ]]; then printf '42\n'
+          else printf '0\n'; fi ;;
         *) return 2 ;;
       esac ;;
     unmask)
       [[ "$fixture_case" != *unmask_failure || "$kind" != collector ]] || return 8
       rm "$system_unit_dir/$2" ;;
     is-active) [[ "$(cat "$fixture_root/$kind.running")" == true ]] ;;
+    start)
+      admitted "$2" || return 8
+      printf true > "$fixture_root/$kind.running" ;;
     restart)
-      [[ ! -L "$system_unit_dir/$2" ]] || return 8
+      admitted "$2" || return 8
       rm -f "$fixture_root/$kind.exit"
       printf '%032x\n' 2 > "$fixture_root/$kind.invocation"
       if [[ "$fixture_case" == maintenance_* ]]; then
@@ -537,11 +604,17 @@ systemctl() {
         return 1
       fi
       printf true > "$fixture_root/$kind.running"
+      if [[ "$fixture_case" == *rollback_issuer_failure && "$kind" == issuer ]]; then touch "$fixture_root/issuer.socket-failed"; fi
+      if [[ "$fixture_case" == maintenance_resume_signal_TERM && "$kind" == issuer ]]; then kill -TERM "$maintenance_owner_pid"; fi
       if [[ "$fixture_case" == signal_* && "$kind" == collector && "$value" == new ]]; then
         kill -s "${fixture_case#signal_}" "$cutover_restore_owner_pid"
       fi
       ;;
     stop)
+      if [[ "$fixture_case" == maintenance_* || "$fixture_case" == transition_* ]]; then
+        [[ ! -L "$system_unit_dir/$2" && -f "$system_unit_dir/$2.guard" ]] || return 8
+        if admitted "$issuer_unit" || admitted "$collector_unit"; then return 8; fi
+      fi
       [[ "$fixture_case" != *stop_failure || "$kind" != collector ]] || return 8
       if [[ "$fixture_case" == *stop_peer_restarted && "$kind" == issuer ]]; then
         printf 2 > "$fixture_root/collector.started"
@@ -549,13 +622,30 @@ systemctl() {
       if [[ "$fixture_case" == *stop_other_invocation && "$kind" == collector ]]; then
         printf '%032x\n' 2 > "$fixture_root/$kind.invocation"
       fi
+      local at="$EPOCHREALTIME" cid=3 code=0
+      if [[ "$slot" == b && "$fixture_case" == maintenance_quiesce ]]; then at=1794975991.019117; fi
       if [[ "$fixture_case" != *stop_missing_job || "$kind" != issuer ]]; then
-        local at="$EPOCHREALTIME"
-        if [[ "$slot" == b && "$fixture_case" == maintenance_quiesce ]]; then at=1794975991.019117; fi
         if [[ "$fixture_case" == *stop_stale_job && "$kind" == issuer ]]; then at=0; fi
         printf '%s %s\n' "$(<"$fixture_root/$kind.invocation")" "$at" > "$fixture_root/$2.stopping"
       fi
       if [[ "$kind" == issuer && "$mode" == quiesce ]]; then printf '143\n' > "$fixture_root/issuer.exit"; fi
+      if [[ "$fixture_case" == *collector_143 && "$kind" == collector ]]; then printf '143\n' > "$fixture_root/collector.exit"; fi
+      if [[ "$kind" == issuer ]]; then cid=4; fi
+      if [[ -f "$fixture_root/$kind.exit" ]]; then code="$(<"$fixture_root/$kind.exit")"; fi
+      if [[ "$kind" == collector ]]; then
+        case "$fixture_case" in
+          *died_stale) at=0 ;;
+          *died_other_cid) cid=9 ;;
+          *died_duplicate) printf '%064d %s %s\n' "$cid" "$at" "$code" >> "$fixture_root/$2.died" ;;
+          *collected_143) code=143 ;;
+        esac
+      fi
+      printf '%064d %s %s\n' "$cid" "$at" "$code" >> "$fixture_root/$2.died"
+      if [[ "$fixture_case" == *stop_terminal_invocation && "$kind" == collector ]]; then
+        printf '%032x\n' 2 > "$fixture_root/$kind.invocation"
+      elif [[ ! -f "$fixture_root/$kind.exit" ]]; then
+        : > "$fixture_root/$kind.invocation"
+      fi
       printf absent > "$fixture_root/$kind.runtime"; printf false > "$fixture_root/$kind.running" ;;
     *) return 2 ;;
   esac
@@ -575,7 +665,7 @@ def image_file(state, ref):
 collector_prod, issuer_prod = 'localhost/hololive-youtube-collector:prod', 'localhost/hololive-youtube-po-sandbox:prod'
 collector_rollback = f'localhost/hololive-youtube-collector:rollback-{change}'
 issuer_rollback = f'localhost/hololive-youtube-po-sandbox:rollback-{change}'
-mutations = ('podman tag ', 'podman load ', 'podman image rm ', 'systemctl restart ', 'systemctl stop ', 'mask link ', 'systemctl unmask ', 'systemctl daemon-reload', 'pair activate ')
+mutations = ('podman tag ', 'podman load ', 'podman image rm ', 'systemctl restart ', 'systemctl stop ', 'mask link ', 'guard arm ', 'guard seal ', 'systemctl unmask ', 'systemctl daemon-reload', 'pair activate ')
 central_cases = {
     # case: (exit status, restored to previous pair)
     'success': (0, False), 'absent_success': (0, False),
@@ -603,6 +693,9 @@ runs = [('c', case) for case in central_cases] + [('b', case) for case in (
     'transition_error_log', 'transition_wrong_endpoint', 'rollback_cross', 'rollback_masked_endpoint', 'rollback_missing_endpoint')]
 maintenance_cases = (
     'success', 'reboot', 'mask_failure', 'stop_failure', 'activation_failure',
+    'collector_143', 'guard_failure', 'guard_check_failure', 'foreign_guard', 'stop_control_pid', 'legacy_receipt',
+    'collected_143', 'died_duplicate', 'died_other_cid', 'died_stale', 'stop_terminal_invocation', 'stop_leftover_id',
+    'signal_TERM', 'error_log_seal_failure', 'rollback_issuer_failure', 'arm_collector_profile',
     'other_exit', 'other_invocation', 'leftover_container', 'inventory_unavailable',
     'load_collector_replaced', 'load_collector_restarted', 'load_issuer_invocation', 'load_issuer_image',
     'load_issuer_restarted', 'load_issuer_unhealthy', 'load_issuer_socket', 'stop_other_invocation', 'stop_missing_job',
@@ -716,12 +809,14 @@ for slot, case in runs:
             (backup / 'po-prechange-manifest.json').write_text(manifest(old_revision, old_id))
             (backup / 'po-prechange.image-id').write_text(old_id)
             (backup / 'change-started-at').write_text('2026-10-03T00:00:00Z')
-        body = slot_vars + central_setup + central_config + '\nsystem_unit_dir="$fixture_root/system-units"\n' + central_functions + '\n' + central_source_gate + '\n' + central_main
+        manager = slot_vars + central_setup + central_config + '\nsystem_unit_dir="$fixture_root/system-units"\n'
+        body = manager + central_functions + '\n' + central_source_gate + '\n' + central_main
         (state / 'system-units').mkdir()
         if case.startswith('maintenance_'):
             scenario = case.removeprefix('maintenance_')
             hold = state / f'po-{slot}.hold'
             masks = [state / 'system-units' / name for name in (issuer_unit, collector_unit)]
+            guards = [mask.with_suffix('.service.guard') for mask in masks]
             release = current / 'artifacts/worker-profile/releases' / backup.name / service
             (state / 'source.profile').write_text('reviewed candidate profile\n')
             if slot == 'c':
@@ -732,6 +827,11 @@ for slot, case in runs:
 
             def calls_now():
                 return (state / 'calls').read_text().splitlines() if (state / 'calls').exists() else []
+
+            def assert_new_manager_blocks():
+                for unit in (issuer_unit, collector_unit):
+                    attempted = run(manager + f'\nsystemctl start {unit}\n', state, 'maintenance_boot')
+                    require(attempted.returncode == 8, f'{slot} {scenario}: persistent admission denied after reboot', attempted)
 
             def assert_held(result):
                 require(hold.is_dir() and (hold / 'backup').read_text().strip() == str(backup),
@@ -757,16 +857,38 @@ for slot, case in runs:
                     require(result.returncode != 0 and not backup.exists() and not calls_now(),
                             f'{slot}: competing operation rejected by slot lock', result)
                 continue
+            if scenario == 'foreign_guard':
+                guards[1].write_text('operator guard\n')
             (state / 'live-pgbouncer.ini').rename(state / 'stopped-pgbouncer.ini')
             fail_quiesce = scenario.startswith('load_') or scenario in (
-                'mask_failure', 'stop_failure', 'stop_other_invocation', 'stop_missing_job', 'stop_stale_job', 'stop_peer_restarted', 'mask_race')
+                'mask_failure', 'stop_failure', 'stop_other_invocation', 'stop_missing_job', 'stop_stale_job',
+                'stop_peer_restarted', 'mask_race', 'guard_failure', 'guard_check_failure', 'foreign_guard', 'arm_collector_profile',
+                'stop_control_pid', 'collector_143', 'collected_143', 'died_duplicate', 'died_other_cid', 'died_stale',
+                'stop_terminal_invocation', 'stop_leftover_id')
             result = invoke('quiesce', scenario if fail_quiesce else '')
             if scenario.startswith('load_'):
                 require(result.returncode != 0 and not hold.exists() and
                         not any(c.startswith(('mask link ', 'systemctl stop ', 'systemctl restart ')) for c in calls_now()),
                         f'{slot} {scenario}: changed live pair rejected before hold', result)
                 continue
-            if scenario in ('stop_other_invocation', 'stop_missing_job', 'stop_stale_job', 'stop_peer_restarted', 'mask_race'):
+            if scenario in ('guard_failure', 'guard_check_failure', 'foreign_guard', 'arm_collector_profile'):
+                require(result.returncode != 0 and '[OUTCOME] unconfirmed:' in result.stderr and
+                        not (hold / 'quiesced').exists() and not any(c.startswith(('systemctl stop ', 'guard seal ', 'systemctl restart ')) for c in calls_now()),
+                        f'{slot} {scenario}: no writer stop without both effective reviewed guards', result)
+                if scenario == 'foreign_guard':
+                    require(guards[1].read_text() == 'operator guard\n' and not any(m.is_symlink() for m in masks),
+                            f'{slot}: foreign guard not replaced or adopted', result)
+                continue
+            if scenario in ('collector_143', 'collected_143'):
+                evidence = (backup / 'guarded-stop.log').read_text()
+                outcome = evidence.split(f'unit={collector_unit} stop=true invocation={"1".zfill(32)}', 1)
+                require(len(outcome) == 2 and 'exit_status=143' in outcome[1].splitlines()[0] and
+                        f'unit={collector_unit} unconfirmed' in outcome[1] and
+                        ('ActiveState=inactive' if scenario == 'collected_143' else 'ExecMainStatus=143') in outcome[1] and
+                        masks[1].is_symlink() and not (state / 'collector.exit').exists(),
+                        f'{slot}: matched manager stop and abnormal collector result survive manager collection', result)
+            if scenario in ('stop_other_invocation', 'stop_missing_job', 'stop_stale_job', 'stop_peer_restarted', 'mask_race',
+                            'collector_143', 'collected_143', 'died_duplicate', 'died_stale', 'died_other_cid', 'stop_terminal_invocation'):
                 if scenario in ('stop_peer_restarted', 'mask_race'):
                     require(f'systemctl stop {collector_unit}' not in calls_now(),
                             f'{slot}: changed peer not accepted as captured after issuer stop', result)
@@ -778,7 +900,7 @@ for slot, case in runs:
                     require(refused.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
                             f'{slot}: incomplete stop cannot release the pair', refused)
                 continue
-            if scenario in ('mask_failure', 'stop_failure'):
+            if scenario in ('mask_failure', 'stop_failure', 'stop_control_pid', 'stop_leftover_id'):
                 require(result.returncode != 0 and hold.exists() and (backup / 'snapshot-complete').exists(),
                         f'{slot} {scenario}: partial failure retains recovery', result)
                 require(not any(c.startswith('systemctl restart ') for c in calls_now()),
@@ -787,8 +909,9 @@ for slot, case in runs:
                         f'{slot} {scenario}: issuer stopped first', result)
                 require((state / 'collector.running').read_text() == ('true' if scenario == 'stop_failure' else 'false'),
                         f'{slot} {scenario}: stop outcome preserved', result)
-                require(masks[1].is_symlink() == (scenario == 'stop_failure'),
-                        f'{slot} {scenario}: mask outcome preserved', result)
+                require(not masks[1].is_symlink() and guards[1].is_file() and not (hold / 'quiesced').exists() and
+                        '[OUTCOME] unconfirmed:' in result.stderr, f'{slot} {scenario}: persistent guard retained, no receipt', result)
+                assert_new_manager_blocks()
                 before = len(calls_now())
                 rejected = invoke('resume')
                 require(rejected.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
@@ -799,6 +922,8 @@ for slot, case in runs:
                     f'{slot}: first quiesce does not require a pooler', result)
             (state / 'stopped-pgbouncer.ini').rename(state / 'live-pgbouncer.ini')
             assert_held(result)
+            require((hold / 'quiesced').read_text() == 'guarded-stop-v1\n' and not any(g.exists() for g in guards),
+                    f'{slot}: both guards sealed before versioned receipt', result)
             require((release / 'previous/unit.container').read_text() == installed_definition and not (release / 'candidate').exists(),
                     f'{slot} {scenario}: old unit preserved without premature candidate', result)
             require(image_file(state, collector_prod).read_text() == 'old' and (state / 'dropin').read_text() == 'initial',
@@ -806,6 +931,10 @@ for slot, case in runs:
             stops = [c for c in calls_now() if c.startswith('systemctl stop ')]
             require(stops == [f'systemctl stop {u}' for u in (issuer_unit, collector_unit)],
                     f'{slot} {scenario}: issuer-first stop', result)
+            calls = calls_now()
+            require(max(calls.index(f'guard arm {u}') for u in (issuer_unit, collector_unit)) < calls.index(stops[0]) and
+                    calls.index(stops[-1]) < min(calls.index(f'guard seal {u}') for u in (issuer_unit, collector_unit)),
+                    f'{slot}: both guards before stop and both stop outcomes before mask reload', result)
             (state / 'db.stopped').touch()
             before = len(calls_now())
             checked = invoke('check')
@@ -815,9 +944,7 @@ for slot, case in runs:
                     f'{slot} {scenario}: held state is not completed or replaceable', checked)
             if scenario == 'reboot':
                 (state / 'issuer.exit').unlink()
-                # 새 supervisor가 디스크의 persistent mask로 기동 여부를 결정한다.
-                for kind, mask in zip(('issuer', 'collector'), masks):
-                    (state / f'{kind}.running').write_text('false' if mask.is_symlink() else 'true')
+                assert_new_manager_blocks()
                 assert_held(result)
             pool_host, pool_port = ('holo-pgbouncer', 6432) if slot == 'c' else ('100.100.1.8', 6433)
             candidate_definition = installed_definition.replace(f'POSTGRES_HOST={host}', f'POSTGRES_HOST={pool_host}').replace(f'POSTGRES_PORT={db_port}', f'POSTGRES_PORT={pool_port}')
@@ -837,6 +964,12 @@ for slot, case in runs:
                 (state / 'issuer.invocation').write_text('2'.zfill(32))
             elif scenario == 'missing_stop_receipt':
                 (hold / 'quiesced').unlink()
+            elif scenario == 'legacy_receipt':
+                (hold / 'quiesced').write_text('')
+                before = len(calls_now())
+                refused = invoke('rollback')
+                require(refused.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
+                        f'{slot}: old static receipt cannot release masks on rollback', refused)
             elif scenario == 'leftover_container':
                 (state / 'collector.leftover').touch()
             elif scenario == 'inventory_unavailable':
@@ -900,11 +1033,17 @@ for slot, case in runs:
                     continue
                 unit_path.write_text(installed_definition)
                 (state / 'live-pgbouncer.ini').unlink()
-                result = invoke('rollback', scenario if scenario in ('rollback_image', 'rollback_profile', 'rollback_unhealthy') else '')
-                if scenario in ('rollback_image', 'rollback_profile', 'rollback_unhealthy'):
+                failed_restore = scenario in ('rollback_image', 'rollback_profile', 'rollback_unhealthy', 'rollback_issuer_failure')
+                before = len(calls_now())
+                result = invoke('rollback', scenario if failed_restore else '')
+                if failed_restore:
                     require(result.returncode != 0 and 'previous collector/issuer restored' not in result.stdout,
                             f'{slot}: ready does not hide the failed restored runtime check', result)
                     assert_held(result)
+                    reopened = [issuer_unit] if scenario == 'rollback_issuer_failure' else [issuer_unit, collector_unit]
+                    require([c for c in calls_now()[before:] if c.startswith('guard arm ')] == [f'guard arm {u}' for u in reopened] and
+                            (hold / 'quiesced').read_text() == 'guarded-stop-v1\n',
+                            f'{slot}: failed manual rollback re-holds only opened units', result)
                     continue
                 require(result.returncode == 0 and not hold.exists() and all(not m.is_symlink() for m in masks),
                         f'{slot}: coordinated rollback releases owned masks', result)
@@ -915,7 +1054,7 @@ for slot, case in runs:
                         f'{slot}: coordinated rollback retains the exact previous unit', result)
             else:
                 failure = scenario if scenario in ('activation_failure', 'candidate_check_failure', 'pooled_query_failure',
-                                                    'substitution_failure', 'error_log', 'unmask_failure') else ''
+                                                   'substitution_failure', 'error_log', 'unmask_failure', 'signal_TERM', 'error_log_seal_failure') else ''
                 result = invoke('resume', failure)
                 success = scenario in ('success', 'reboot')
                 require((result.returncode == 0) == success, f'{slot} {scenario}: resume outcome', result)
@@ -943,10 +1082,21 @@ for slot, case in runs:
                     if scenario == 'substitution_failure':
                         require('[OUTCOME] unconfirmed:' in result.stderr and not (hold / 'quiesced').exists(),
                                 f'{slot}: failed start with exit 143 is not a managed stop', result)
+                    if scenario in ('substitution_failure', 'unmask_failure', 'signal_TERM', 'error_log', 'error_log_seal_failure'):
+                        reopened = [issuer_unit, collector_unit] if scenario.startswith('error_log') else [issuer_unit]
+                        require([c for c in subsequent if c.startswith('guard arm ')] == [f'guard arm {u}' for u in reopened],
+                                f'{slot}: only reopened units acquire fresh admission guards', result)
+                        if scenario == 'error_log_seal_failure':
+                            require(not (hold / 'quiesced').exists() and guards[1].is_file() and not masks[1].is_symlink(),
+                                    f'{slot}: incomplete protective seal does not reissue a receipt', result)
+                        elif scenario != 'substitution_failure':
+                            require((hold / 'quiesced').read_text() == 'guarded-stop-v1\n',
+                                    f'{slot}: protective stop outcomes confirmed', result)
+                        assert_new_manager_blocks()
                     if scenario == 'pooled_query_failure':
                         require(not any(c.startswith(mutations) for c in subsequent),
                                 f'{slot}: failed pooled SQL before activation retains the hold', result)
-                    if scenario not in ('foreign_hold', 'incomplete_hold'):
+                    if scenario not in ('foreign_hold', 'incomplete_hold', 'error_log_seal_failure'):
                         assert_held(result)
                     if scenario in ('candidate_image_overlay_changed', 'candidate_endpoint_overlay_changed'):
                         require(not any(c.startswith(mutations) for c in subsequent) and
@@ -955,7 +1105,7 @@ for slot, case in runs:
                     if scenario.startswith('capacity_'):
                         require(not any(c.startswith(mutations) for c in subsequent) and (release / 'previous/profile.json').exists(),
                                 f'{slot}: capacity refusal preserves hold and recovery before effects', result)
-                    if scenario not in ('substitution_failure', 'error_log', 'unmask_failure'):
+                    if scenario not in ('substitution_failure', 'error_log', 'unmask_failure', 'signal_TERM', 'error_log_seal_failure'):
                         require(not any(c.startswith(('systemctl restart ', 'systemctl unmask ')) for c in subsequent),
                                 f'{slot} {scenario}: validation fails before unmask or activation', result)
             print(f'[PASS] {slot} maintenance {scenario}')
@@ -969,6 +1119,9 @@ for slot, case in runs:
         if endpoint_blocked:
             require((state / 'collector.running').read_text() == 'false' and (state / 'issuer.running').read_text() == 'false',
                     f'{label}: both services stopped', result)
+            require(all((state / 'system-units' / u).is_symlink() for u in (issuer_unit, collector_unit)) and
+                    (state / f'po-{slot}.hold/quiesced').read_text() == 'guarded-stop-v1\n',
+                    f'{label}: prohibited restore keeps writers durably held', result)
             require((backup / 'snapshot-complete').exists() and (backup / 'collector.endpoint').exists(),
                     f'{label}: recovery records retained', result)
             require(not any(call.startswith('pair activate ') and call.endswith('/previous') for call in calls),
