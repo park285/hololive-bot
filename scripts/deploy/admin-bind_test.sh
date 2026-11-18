@@ -554,6 +554,28 @@ postgres_capacity_write_pgbouncer_config "${root}/scripts/ci/postgres-capacity-p
 run_offline_render
 cmp -s "$fixture/offline.ini" "$fixture/offline-expected.ini"
 [[ ! -e "$fixture/offline-manager-called" ]]
+(
+    unset HOLOLIVE_QUADLET_TEST_ROOT
+    units="$fixture/before-pooler"
+    cp -R "$offline_units" "$units"
+    rm "$units/holo-pgbouncer.container"
+    service=hololive-youtube-collector-c
+    direct_env="$fixture/direct.env"
+    printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres\nHOLOLIVE_CENTRAL_POSTGRES_PORT=5432\n' > "$direct_env"
+    postgres_capacity_assert_service "$root" "$direct_env" "$units" "$service" "$units/$service.container"
+    if postgres_capacity_write_quadlet_config "$root" "$direct_env" "$units" "$fixture/absent-pooler.ini" > "$fixture/rejected.log" 2>&1; then
+        echo 'pooled configuration accepted without its installed pooler unit' >&2
+        exit 1
+    fi
+    mkdir "$units/$service.container.d"
+    printf '[Container]\nEnvironment=POSTGRES_POOL_MAX_CONNS=8\n' > "$units/$service.container.d/60-pool.conf"
+    if postgres_capacity_assert_service "$root" "$direct_env" "$units" "$service" "$units/$service.container" > "$fixture/rejected.log" 2>&1; then
+        echo 'direct recovery accepted an installed pool cap above the role limit' >&2
+        exit 1
+    fi
+    grep -Fq 'aggregate pools exceed role limit: hololive_collector_c' "$fixture/rejected.log"
+    echo 'pre-sync direct recovery validates effective writer budgets without an installed pooler'
+)
 mkdir -p "$offline_units/hololive-.container.d"
 cp "$foreign_roots/hololive-.container.d/60-pool.conf" "$offline_units/hololive-.container.d/"
 if run_offline_render > "$fixture/rejected.log" 2>&1; then

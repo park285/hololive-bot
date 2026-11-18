@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+POSTGRES_CAPACITY_POOLED_ROLES=(
+    hololive_runtime hololive_alarm_worker
+    hololive_collector_a hololive_collector_b hololive_collector_c hololive_collector_d
+    hololive_pgbouncer_auth
+)
+
 postgres_capacity_trim() {
     local value="$1"
     value="${value#"${value%%[![:space:]]*}"}"
@@ -164,6 +170,12 @@ postgres_capacity_parse_policy_target() {
         echo "[pg-capacity] policy must reserve and limit one PgBouncer authentication connection" >&2
         return 1
     fi
+    for role in "${POSTGRES_CAPACITY_POOLED_ROLES[@]}"; do
+        if [[ -z "${role_used[$role]:-}" ]]; then
+            echo "[pg-capacity] missing pooled role allocation: ${role}" >&2
+            return 1
+        fi
+    done
 
     # superuser 예약 슬롯은 비슈퍼유저 앱 역할이 쓸 수 없으므로 reserve에서 뺀다(PG 거부 조건과 같은 기준).
     reserve=$((server_limit - superuser_reserved - used))
@@ -193,17 +205,8 @@ postgres_capacity_write_pgbouncer_config() (
     fi
     local output_file="$3" temporary_file role database_capacity=0
     local -A capacities=()
-    local -a pooled_roles=(
-        hololive_runtime hololive_alarm_worker
-        hololive_collector_a hololive_collector_b hololive_collector_c hololive_collector_d
-        hololive_pgbouncer_auth
-    )
     postgres_capacity_parse_policy_target "$1" "$2" capacities || return
-    for role in "${pooled_roles[@]}"; do
-        if [[ -z "${capacities[${role}]:-}" ]]; then
-            echo "[pg-capacity] missing pooled role allocation: ${role}" >&2
-            return 1
-        fi
+    for role in "${POSTGRES_CAPACITY_POOLED_ROLES[@]}"; do
         ((database_capacity += capacities[${role}]))
     done
 
@@ -249,7 +252,7 @@ server_tls_key_file = /run/hololive-bot/pgbouncer/backend-client.key
 
 [users]
 INI
-        for role in "${pooled_roles[@]}"; do
+        for role in "${POSTGRES_CAPACITY_POOLED_ROLES[@]}"; do
             printf '%s = pool_size=%s max_user_connections=%s\n' \
                 "${role}" "${capacities[${role}]}" "${capacities[${role}]}"
         done
@@ -275,12 +278,7 @@ postgres_capacity_assert_target() {
 postgres_capacity_effective_env() {
     local policy="$1" compose="$2" units="$3" replacement_service="${4:-}" replacement_unit="${5:-}"
     local owner service key source instances maximum role unit values
-    . "$(dirname "${BASH_SOURCE[0]}")/compose-env.sh"
-    . "$(dirname "${BASH_SOURCE[0]}")/postgres-endpoint.sh"
     postgres_capacity_assert_policy_target "$policy" "$compose" >&2 || return
-    # pooler 자체의 별도 Quadlet/systemd 원천도 config 게시 전에 차단한다.
-    postgres_quadlet_environment "$units/holo-pgbouncer.container" "$compose" \
-        "$units/holo-pgbouncer.container" >/dev/null || return
     while IFS='|' read -r owner service key source instances maximum role; do
         [[ -n "$source" && "$owner" != \#* && "$owner" != @* ]] || continue
         unit="$units/$service.container"
@@ -292,6 +290,11 @@ postgres_capacity_effective_env() {
 
 postgres_capacity_write_quadlet_config() (
     local repo="$1" compose="$2" units="$3" output="$4" temporary
+    . "$(dirname "${BASH_SOURCE[0]}")/compose-env.sh"
+    . "$(dirname "${BASH_SOURCE[0]}")/postgres-endpoint.sh"
+    # pooler 자체의 별도 Quadlet/systemd 원천도 config 게시 전에 차단한다.
+    postgres_quadlet_environment "$units/holo-pgbouncer.container" "$compose" \
+        "$units/holo-pgbouncer.container" >/dev/null || return
     temporary="$(mktemp)" || return
     trap 'rm -f -- "$temporary"' EXIT
     postgres_capacity_effective_env "$repo/scripts/ci/postgres-capacity-policy.tsv" "$compose" "$units" \
@@ -369,9 +372,11 @@ postgres_capacity_assert_service() (
             postgres_capacity_assert_live "$repo" "$compose" "$units" "$service" "$unit"
             ;;
         'holo-postgres|5432')
-            temporary="$(mktemp -d)" || return
-            trap 'rm -rf -- "$temporary"' EXIT
-            postgres_capacity_write_quadlet_config "$repo" "$compose" "$units" "$temporary/pgbouncer.ini" "$service" "$unit"
+            temporary="$(mktemp)" || return
+            trap 'rm -f -- "$temporary"' EXIT
+            local policy="$repo/scripts/ci/postgres-capacity-policy.tsv"
+            postgres_capacity_effective_env "$policy" "$compose" "$units" "$service" "$unit" >"$temporary" || return
+            postgres_capacity_assert_policy_target "$policy" "$temporary"
             ;;
         *)
             echo '[pg-capacity] unreviewed application PostgreSQL endpoint; activation refused' >&2
