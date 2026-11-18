@@ -337,9 +337,10 @@ release_lib = root / 'scripts/deploy/lib/ap-host-native-release-path.sh'
 release_window, old_port = 'W2', 6433
 def window_case(name, args, scenario):
     case = work / name
-    case.mkdir()
+    case.mkdir(mode=0o700)
     script = f'. "{helper}"\n. "{release_lib}"\n. "{window_lib}"\n' + endpoint_libs + r'''
 set -Eeuo pipefail
+umask 077
 cd "$CASE"
 releases_root="$PWD/releases" release_id=new window_old=old
 old_target="$releases_root/old" current_link="$PWD/current" previous_link="$PWD/previous"
@@ -418,8 +419,10 @@ journalctl() {
     local n job id
     for n in "${window_units[@]}"; do [[ " $* " != *" UNIT=$n "* ]] || break; done
     case "$n" in "$po_socket") job=101 ;; "$po_service") job=102 ;; "$unit") job=103 ;; esac
-    [[ " $* " == *" JOB_ID=$job "* && " $* " == *" --boot=$(native_window_boot) "* ]]
     id="$(cat "live-$n")"
+    [[ " $* " == *" --boot=$(native_window_boot) "* ]]
+    if [[ " $* " == *' JOB_ID='* ]]; then [[ " $* " == *" JOB_ID=$job "* ]]; fi
+    if [[ "$fault" == competing_start ]]; then printf '{"_BOOT_ID":"%s","INVOCATION_ID":"%s","JOB_ID":"98"}\n' "$(native_window_boot)" "$gen"; fi
     if [[ "$fault" == wrong_start_job ]]; then job=777; fi
     if [[ "$fault" == foreign_start ]]; then id="$gen"; fi
     printf '{"_BOOT_ID":"%s","INVOCATION_ID":"%s","JOB_ID":"%s"}\n' "$(native_window_boot)" "$id" "$job"
@@ -436,6 +439,15 @@ native_window_verify_original() { test -L "$current_link"; }
 native_snapshot_before_cutover() { mkdir "$old_target/rollback-contract"; cp "$host_env" "$old_target/rollback-contract/SHA256SUMS"; }
 native_window_inputs() { sudo -n sha256sum --strict --check --status "$window/inputs.sha256"; }
 native_window_process_endpoint() { [[ "$2" == 6433 ]]; }
+
+seed_accepted() (
+  native_release_window="$1"
+  mkdir -m 0700 "$native_recovery_dir"
+  native_window_identity stage old "$(cat "$old_target/po-sandbox/revision")"
+  mv "$native_recovery_dir" "$old_target/seed-guard"
+  ln "$old_target/seed-guard/accepted-window" "$old_target/accepted-window"
+)
+if [[ "$native_release_window" == W2 ]]; then seed_accepted W1; fi
 
 ''' + scenario
     result = subprocess.run(['bash', '-c', script, 'test', *args], env=dict(os.environ, CASE=str(case)),
@@ -492,6 +504,7 @@ native_window_quiesce
 window_nonce="$native_claim_nonce"
 native_window_resume_claim
 release_dir="$releases_root/new"; mkdir "$release_dir"; ln -sfn "$release_dir" "$current_link"
+mkdir "$release_dir/po-sandbox"; echo "$EXPECTED_REVISION" > "$release_dir/po-sandbox/revision"
 po_socket_file="$PWD/system/$po_socket"; touch "$po_socket_file"; cp "$po_socket_file" "$release_dir/$po_socket"
 rm "$window/blocked"
 for target in "$po_socket" "$po_service"; do native_cutover_run issuer native_window_start "$target"; done
@@ -514,6 +527,7 @@ for name, action, mutation, expected in (
     hold = case/'releases/old/native-window'
     assert (result.returncode == 0) == (expected in ('accepted','stopped')), (name, result.stderr)
     assert (hold/'accepted-guard').is_dir() == (expected == 'accepted')
+    assert (case/'current/accepted-window').is_file() == (expected == 'accepted')
     assert (case/'recovery').is_dir() != (expected == 'accepted')
     assert (case/'recovery/outcome').exists() == (expected == 'unknown')
     assert (hold/'blocked').exists() == (expected in ('unknown','stopped'))
@@ -524,6 +538,80 @@ for fault in ('wrong_start_job','foreign_start','missing_anchor'):
     case, result = window_case(fault, [release_window, str(old_port), fault], candidate_stage)
     assert result.returncode != 0 and not (case/'releases/old/native-window/await-observation').exists(), (fault, result.stderr)
     assert not (case/'releases/old/native-window/issuer.socket.started').exists()
+
+for name, mutation, valid in (
+    ('same', '', True),
+    ('different', 'native_release_window="$other"', False),
+    ('unaccepted', 'rm "$old_target/accepted-window"', False),
+    ('no-current', 'rm "$current_link"', False),
+    ('guard', 'mkdir "$native_recovery_dir"', False),
+    ('broken-guard', 'ln -s missing "$native_recovery_dir"', False),
+    ('retired', 'mkdir "$old_target/native-window"', False),
+    ('copied', 'cp -a "$old_target" "$releases_root/other"; ln -sfn "$releases_root/other" "$current_link"', False),
+    ('recreated', 'mv "$old_target" "$releases_root/moved"; cp -a "$releases_root/moved" "$old_target"', False),
+    ('copied-file', 'cp -p "$old_target/accepted-window" "$old_target/copy"; mv -T "$old_target/copy" "$old_target/accepted-window"', False),
+    ('old-revision', 'echo "$EXPECTED_REVISION" > "$old_target/po-sandbox/revision"', False),
+    ('writable', 'chmod 0666 "$old_target/accepted-window"', False),
+):
+    case, result = window_case('apply-origin-' + name, [release_window, '6433', 'normal'], '''
+if [[ -e "$old_target/accepted-window" ]]; then rm -r "$old_target/seed-guard" "$old_target/accepted-window"; fi
+seed_accepted "$native_release_window"
+other=W1; if [[ "$native_release_window" == W1 ]]; then other=W2; fi
+''' + mutation + '\nnative_apply_preflight\n')
+    assert (result.returncode == 0) == valid and (not valid or result.stdout.split()[:2] == ['old', f'{1:040d}']), (name, result.stderr)
+
+for origin in ('direct', 'W1', 'W2'):
+    case, result = window_case('quiesce-origin-' + origin, [release_window, str(old_port), 'normal'], '''
+if [[ -e "$old_target/accepted-window" ]]; then rm -r "$old_target/seed-guard" "$old_target/accepted-window"; fi
+''' + ('' if origin == 'direct' else f'seed_accepted {origin}\n') + 'native_window_quiesce\n')
+    allowed = (origin == 'direct') == (release_window == 'W1')
+    assert (result.returncode == 0) == allowed and (case/'calls').exists() == allowed, (origin, result.stderr)
+
+apply_origin = '''
+if [[ -e "$old_target/accepted-window" ]]; then rm -r "$old_target/seed-guard" "$old_target/accepted-window"; fi
+seed_accepted "$native_release_window"
+apply_origin_pin="$(native_apply_preflight)"; window_old="${apply_origin_pin%% *}"
+release_dir="$releases_root/new"
+native_cutover_claim "$release_dir"
+window_units=("$po_socket" "$po_service" "$unit")
+po_socket_file="$PWD/system/$po_socket"; touch "$po_socket_file"; cp "$po_socket_file" "$old_target/$po_socket"
+for n in "${window_units[@]}"; do printf '%032d\n' 9 > "live-$n"; done
+'''
+for name, mutation in (
+    ('replaced', 'rm "$old_target/accepted-window"; mv "$old_target/seed-guard" "$old_target/first-guard"; mv "$native_recovery_dir" "$PWD/claim"; seed_accepted "$native_release_window"; mv "$PWD/claim" "$native_recovery_dir"'),
+    ('guard', 'echo foreign > "$native_recovery_dir/claim"'),
+    ('incomplete', 'touch "$native_recovery_dir/outcome"'),
+):
+    case, result = window_case('apply-stop-' + name, [release_window,'6433','normal'], apply_origin + mutation +
+                               '\nnative_apply_before_stop\ntouch stopped\n')
+    assert result.returncode != 0 and not (case/'stopped').exists(), (name, result.stderr)
+
+apply_stage = apply_origin + '''
+native_apply_before_stop
+mkdir -p "$release_dir/po-sandbox"; printf '%s\n' "$EXPECTED_REVISION" > "$release_dir/po-sandbox/revision"
+cp "$po_socket_file" "$release_dir/$po_socket"; ln -sfn "$release_dir" "$current_link"
+window="$release_dir/native-observation"; mkdir -m 0700 "$window"; apply_start_since=@1
+for n in "${window_units[@]}"; do printf '%032d\n' 10 > "live-$n"; done
+native_cutover_run collector-restart true
+native_apply_await_observation
+window_nonce="$native_claim_nonce"
+'''
+for name, mutation, fault, accepted in (
+    ('normal', '', 'normal', True),
+    ('unobserved', 'rm "$window/await-observation"', 'normal', False),
+    ('foreign-nonce', 'window_nonce=$(printf "%036d" 7)', 'normal', False),
+    ('new-release-old-nonce', 'release_id=other; release_dir="$releases_root/other"; cp -a "$releases_root/new" "$release_dir"; ln -sfn "$release_dir" "$current_link"; window="$release_dir/native-observation"', 'normal', False),
+    ('different-generation', 'printf "%032d\\n" 11 > "live-$po_socket"', 'normal', False),
+    ('different-family', 'if [[ "$native_release_window" == W1 ]]; then native_release_window=W2; else native_release_window=W1; fi', 'normal', False),
+    ('missing-start', 'rm "$window/$unit.started"', 'normal', False),
+    ('missing-journal', '', 'nojournal', False),
+    ('competing-start', '', 'competing_start', False),
+    ('foreign-start', '', 'foreign_start', False),
+):
+    case, result = window_case('apply-close-' + name, [release_window,'6433',fault], apply_stage + mutation +
+                               '\nnative_apply_close_observation\nnative_apply_preflight new\n')
+    assert (result.returncode == 0) == accepted, (name, result.stderr)
+    assert (case/'current/accepted-window').is_file() == accepted and (case/'recovery').exists() != accepted
 
 print('[PASS] native cutover owner/child/group/restore signals, first install, bounded unknown, supervisor errors, apply guards and grep errors')
 PY

@@ -353,6 +353,38 @@ else
   record_fail "invalid RELEASE_ID must report the safe component contract"
 fi
 
+if (
+  export NATIVE_TEST_ROOT="$ROOT_DIR" NATIVE_TEST_BASE="$tmp/no-active-release"
+  mkdir -p -m 0700 "$NATIVE_TEST_BASE/releases"
+  hostname() { echo kapu; }
+  git() { case "$3" in status) return 0 ;; rev-parse) printf '%040d\n' 1 ;; *) return 90 ;; esac; }
+  ssh() {
+    cat >/dev/null
+    case "${!#}" in
+      *' -- v3') return 0 ;;
+      *' apply-origin')
+        hostname() { echo osaka1; }
+        sudo() { shift; "$@"; }
+        . "$NATIVE_TEST_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh"
+        . "$NATIVE_TEST_ROOT/scripts/deploy/lib/ap-host-native-window.sh"
+        current_link="$NATIVE_TEST_BASE/current" releases_root="$NATIVE_TEST_BASE/releases"
+        native_recovery_dir="$NATIVE_TEST_BASE/recovery" service=youtube-collector-a
+        touch "$NATIVE_TEST_BASE/checked"
+        native_apply_preflight ;;
+      *) return 91 ;;
+    esac
+  }
+  sh() { return 92; }
+  rsync() { touch "$NATIVE_TEST_BASE/transferred"; return 93; }
+  export -f hostname git ssh sh rsync
+  SSH_KEY="$tmp/KR.key" RELEASE_ID=new HOLO_BOT_VERSION=123 ARTIFACT_DIR="$tmp/unadmitted-build" \
+    I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true "$DEPLOY" osaka --apply
+) >"$tmp/no-current.out" 2>&1 || [[ ! -e "$tmp/no-active-release/checked" || -e "$tmp/unadmitted-build" || -e "$tmp/no-active-release/transferred" ]]; then
+  record_fail '오사카 첫 일반 apply가 수용된 원점 없이 빌드·전송 입구를 통과했습니다.'
+else
+  pass '오사카 첫 일반 apply는 빌드·전송 전에 실제 원점 부재를 확인하고 거절합니다.'
+fi
+
 . "$ROOT_DIR/scripts/deploy/lib/ap-host-native-window.sh"
 mkdir -p "$tmp/payload/bin" "$tmp/transfer-home"
 printf 'qualified\n' > "$tmp/payload/bin/worker-profile-pair.py"

@@ -273,6 +273,12 @@ guard가 남으면 새 배포와 수동 rollback `--apply` 모두 거절합니�
 
 ### Osaka a: W1·W2 분리 정지 창
 
+Osaka의 일반 `--apply`는 최초 설치나 창 전환 명령이 아닙니다. kapu 빌드·staging 전송 전에 osaka1의 실제 `current/accepted-window`가 이 소스의 창과 같은지 확인합니다. 이 root 전용 파일은 창 이름, release ID, 설치된 `po-sandbox/revision`의 전체 SHA와 release 디렉터리 식별자를 묶습니다. 다른 release에 복사한 파일, 남은 복구 guard 또는 수용 기록이 없는 6433 endpoint는 증거가 아닙니다. 원격에서도 guard 선점 뒤, 이전 writer를 정지하기 전에 같은 원점과 실행 파일·DB endpoint를 다시 확인합니다.
+
+일반 배포도 새 socket·issuer·collector의 이번 부팅 및 기동 완료 job·invocation 영수증을 남깁니다. 두 외부 관찰이 성공한 뒤 같은 nonce·current·revision·실행 세대를 재확인한 경우에만 새 release에 `accepted-window`를 게시합니다. 관찰 실패나 인계 중단 시에는 새 창 수용을 추정하거나 marker를 복사·작성하지 않습니다. 전용 W1 정지는 수용 기록이 없는 실제 direct 원점만, 전용 W2 정지는 W1 또는 W2에서 수용된 실제 pool 원점만 대상으로 합니다.
+
+원격 staging에서 root 소유 후보로 복사한 직후에도 전체 payload를 확인합니다. 일반 배포는 kapu에서 방금 빌드한 digest, 전용 창은 별도 승인 기록의 digest와 같아야 합니다. `accepted-guard` 인계 뒤 `accepted-window` 게시가 중단되면 guard가 없어도 미수용입니다. 남은 영수증과 후보를 보존하고 자동으로 다시 시도하지 않습니다.
+
 아래는 **별도 운영 승인을 받은 뒤** kapu에서 실행할 절차입니다. 이 release의 `WINDOW=W2`만 허용합니다. 일반 `--apply`의 자동 복원을 쓰지 않습니다. `RELEASE_ID`(새 ID), `HOLO_BOT_VERSION`, `ARTIFACT_DIR`, `I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true`를 명시합니다. `OLD`는 osaka1의 실제 `current`가 가리키는 `releases/` 바로 아래 릴리스 이름입니다. 원 프로세스의 endpoint는 `100.100.1.8:6433`이며 이전 창의 OLD·nonce는 재사용할 수 없습니다.
 
 각 창에서 깨끗한 source의 `osaka --dry-run`은 빌드한 **전체** 디렉터리의 `HOLO_NATIVE_PAYLOAD_SHA256`을 출력합니다. qualification 완료 시 같은 `source scripts/deploy/lib/ap-host-native-window.sh; native_payload_digest "$ARTIFACT_DIR"`로 일치하는 값을 확인해 산출물 밖의 승인 기록에 revision·release ID와 함께 보존하십시오. `--quiesce`와 `--resume` 둘 다 그 **기록의 값**을 `export HOLO_NATIVE_PAYLOAD_SHA256=…`로 요구합니다. 실행 직전 디렉터리를 다시 해시해 입력을 대체하지 않습니다.
