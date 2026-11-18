@@ -29,6 +29,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=holo-postgres \
 chmod 0644 "$fixture/server.crt"
 # 서버 진입점이 합성 테스트 파일을 전용 데이터 tmpfs로 복사한다.
 chmod 0600 "$fixture/server.key"
+install -m 0644 "$root/deploy/postgres/pg_hba.conf" "$fixture/pg_hba.conf"
 podman network create --internal --subnet 172.31.249.0/24 "$network" >/dev/null
 podman volume create --driver local --opt type=tmpfs --opt device=tmpfs \
   --opt o=size=16m,mode=3775,uid=999,gid=999 "$socket" >/dev/null
@@ -36,7 +37,7 @@ podman run -d --name "$server" --pull never --security-opt label=disable --netwo
   --tmpfs /var/lib/postgresql:rw,size=512m \
   --mount "type=volume,src=$socket,dst=/var/run/postgresql" \
   --mount "type=bind,src=$fixture,dst=/fixture,readonly" \
-  --mount "type=bind,src=$root/deploy/postgres/pg_hba.conf,dst=/policy/pg_hba.conf,readonly" \
+  --mount "type=bind,src=$fixture/pg_hba.conf,dst=/policy/pg_hba.conf,readonly" \
   -e POSTGRES_USER=postgres_admin -e POSTGRES_PASSWORD=fixture -e POSTGRES_DB=hololive \
   -e PGDATA=/var/lib/postgresql/pgdata \
   --entrypoint /bin/sh "$image" -ec '

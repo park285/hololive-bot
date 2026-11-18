@@ -33,6 +33,7 @@ func main() {
 		}
 
 		fmt.Println("collector pooled database verified")
+
 		return
 	}
 

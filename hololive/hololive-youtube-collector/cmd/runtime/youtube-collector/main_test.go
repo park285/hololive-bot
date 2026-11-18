@@ -52,6 +52,7 @@ func TestPooledEndpointAllowed(t *testing.T) {
 			if !pooledEndpointAllowed(tc.instance, &db) {
 				t.Fatal("rejected collector's pooled configuration")
 			}
+
 			for name, change := range map[string]func(*settings.PostgresConfig){
 				"host":     func(p *settings.PostgresConfig) { p.Host = "holo-postgres" },
 				"port":     func(p *settings.PostgresConfig) { p.Port = 5433 },
@@ -66,6 +67,7 @@ func TestPooledEndpointAllowed(t *testing.T) {
 				t.Run(name, func(t *testing.T) {
 					invalid := db
 					change(&invalid)
+
 					if pooledEndpointAllowed(tc.instance, &invalid) {
 						t.Fatal("accepted invalid pooled configuration")
 					}
@@ -77,12 +79,15 @@ func TestPooledEndpointAllowed(t *testing.T) {
 
 func TestPooledDatabaseCheckRejectsLibpqOverrideWithoutDisclosure(t *testing.T) {
 	const marker = "test-only-sensitive-value"
+
 	t.Setenv("PGSERVICEFILE", marker)
 	t.Setenv("POSTGRES_PASSWORD", marker)
+
 	err := checkPooledDatabase(t.Context())
 	if !errors.Is(err, errUnexpectedLibpqEnv) {
 		t.Fatal("libpq override was not rejected before configuration or connection")
 	}
+
 	if strings.Contains(err.Error(), marker) {
 		t.Fatal("database check disclosed a service setting")
 	}
