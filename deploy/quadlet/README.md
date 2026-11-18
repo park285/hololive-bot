@@ -110,6 +110,7 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 7. 설치된 `current/scripts/deploy/quadlet-redeploy-service.sh --resume <api-release> <worker-release>`로 재개합니다. private socket에서 인증 bootstrap·migration을 마친 뒤, API와 worker의 실제 SCRAM·verify-full 읽기 전용 SQL이 PostgreSQL에 `172.23.255.254`에서 도달해야 합니다. worker를 먼저 수용하고 API를 기동합니다. 이어서 같은 source의 `po-central-cutover.sh c resume <backup>`, b, native a, kapu d 순으로 재개합니다. 각 슬롯은 자기 출발지에서 후보 바이너리의 `--check-pooled-database`, 실제 issuer 소켓·로드 프로필·`PROCESSED` handoff까지 확인합니다. 한 단계라도 실패하면 다음 슬롯을 열지 않고 해당 hold와 복구점을 보존합니다. 이전 direct writer를 자동 시작하지 않습니다.
 
 `b/c quiesce`는 자기 mask의 inode와 두 컨테이너의 부재를 함께 확인합니다. `po-broker`는 의도적으로 SIGTERM을 다시 보내므로 Podman이 143, systemd가 `failed`를 기록할 수 있습니다. 성공한 `stop` 직전에 실행 중이던 바로 그 issuer invocation이고 두 PID가 0인 경우에만 이 상태를 차단으로 인정합니다. 실패 이력을 지우거나 collector의 오류를 정상 종료로 취급하지 않습니다. 종료 영수증이 없는 기존 hold에 영수증을 소급 작성하지 않습니다. `[OUTCOME] unconfirmed`이면 DB 변경·추가 기동을 중단하고 mask·원래 journal·복구점을 보존합니다.
+정지 journal 조회가 실패하면 `[hold] stop journal unconfirmed`의 `unit`, `invocation`, `since`(epoch 마이크로초), `journal_status`를 보존합니다. 상태 0인데도 이 진단이 나오면 해당 범위에 일치한 이벤트가 없었다는 뜻입니다. 나중에 같은 이벤트를 찾더라도 원래 종료 결과나 영수증을 바꾸지 않습니다.
 
 ### 복구와 자격 증명 변경
 

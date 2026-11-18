@@ -255,6 +255,18 @@ change = '20261003T000000Z'
 central_setup = r'''
 set -Eeuo pipefail
 fixture_root="$1" fixture_case="$2"
+if [[ "$slot" == b && "$fixture_case" == maintenance_quiesce ]]; then
+  # 실제 b의 uutils date는 .018375123초를 %6N에서 .183751초로 렌더링한다.
+  unset EPOCHREALTIME
+  EPOCHREALTIME=1794975991.018375
+  date() {
+    if [[ "$*" == '-u +%Y-%m-%d %H:%M:%S.%6N UTC' ]]; then
+      printf '2026-11-18 04:26:31.183751 UTC\n'
+    else
+      command date "$@"
+    fi
+  }
+fi
 # staged helper는 원격 본문과 같은 checksum gate 뒤에서만 읽는다.
 compose_env="$fixture_root/compose.env"
 remote_root="$fixture_root"
@@ -456,7 +468,9 @@ podman() {
 }
 journalctl() {
   local unit="${11#UNIT=}" invocation="${12#INVOCATION_ID=}" since="${9#--since=}" id at
-  [[ "$since" == ????-??-??\ ??:??:??.??????\ UTC && "${10}" == _PID=1 ]] || return 2
+  [[ "${10}" == _PID=1 ]] || return 2
+  since="$(command date -u -d "$since" +%s.%N)" || return 2
+  since="${since%???}"
   [[ "$unit" == "$issuer_unit" || "$unit" == "$collector_unit" ]] || return 2
   [[ "${13}" == JOB_TYPE=stop && "${14}" == MESSAGE_ID=de5b426a63be47a7b6ac3eaac82e2f6f ]] || return 2
   if [[ -f "$fixture_root/$unit.stopping" ]] && read -r id at < "$fixture_root/$unit.stopping" &&
@@ -536,8 +550,8 @@ systemctl() {
         printf '%032x\n' 2 > "$fixture_root/$kind.invocation"
       fi
       if [[ "$fixture_case" != *stop_missing_job || "$kind" != issuer ]]; then
-        local at
-        at="$(date -u '+%Y-%m-%d %H:%M:%S.%6N UTC')"
+        local at="$EPOCHREALTIME"
+        if [[ "$slot" == b && "$fixture_case" == maintenance_quiesce ]]; then at=1794975991.019117; fi
         if [[ "$fixture_case" == *stop_stale_job && "$kind" == issuer ]]; then at=0; fi
         printf '%s %s\n' "$(<"$fixture_root/$kind.invocation")" "$at" > "$fixture_root/$2.stopping"
       fi

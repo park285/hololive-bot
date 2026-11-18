@@ -107,13 +107,18 @@ container_generation() {
 }
 
 stop_manager_invocation() {
-  local since record
-  since="$(date -u '+%Y-%m-%d %H:%M:%S.%6N UTC')" || return 1
+  local LC_ALL=C since record journal_status=0
+  # date의 축약 소수초 형식은 호스트에 따라 선행 0을 잃는다. journal에 epoch 마이크로초를 그대로 전달한다.
+  since="@$EPOCHREALTIME"
   systemctl stop "$1" || return 1
   # 비활성 unit의 stop도 성공할 수 있다. PID 1의 해당 invocation 정지 job이 실제로 시작됐는지 확인한다.
   record="$(journalctl --boot --quiet --no-pager -n 1 -o json --output-fields=INVOCATION_ID --since="$since" \
-    _PID=1 "UNIT=$1" "INVOCATION_ID=$2" JOB_TYPE=stop MESSAGE_ID=de5b426a63be47a7b6ac3eaac82e2f6f)" || return 1
-  [[ -n "$record" ]]
+    _PID=1 "UNIT=$1" "INVOCATION_ID=$2" JOB_TYPE=stop MESSAGE_ID=de5b426a63be47a7b6ac3eaac82e2f6f)" || journal_status=$?
+  if (( journal_status != 0 )) || [[ -z "$record" ]]; then
+    printf '[hold] stop journal unconfirmed: unit=%s invocation=%s since=%s journal_status=%d\n' \
+      "$1" "$2" "$since" "$journal_status" >&2
+    return 1
+  fi
 }
 
 mask_anchor() {
