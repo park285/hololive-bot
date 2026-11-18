@@ -7,10 +7,23 @@ osaka 호스트를 다시 설치하는 동안에도 a를 kapu에 임시로 띄�
 ## 설치
 
 ```bash
+set -euo pipefail
 sudo install -m 0644 deploy/podman/kapu/*.network deploy/podman/kapu/*.volume deploy/podman/kapu/*.container /etc/containers/systemd/
 sudo systemctl daemon-reload
-sudo systemctl start hololive-youtube-po-d.service hololive-youtube-collector-d.service
+wait_healthy() {
+  local name=$1 deadline=$2 id
+  id=$(sudo podman inspect -f '{{.Id}}' "$name")
+  sudo timeout "$deadline" podman wait --condition healthy --condition unhealthy --condition exited "$id" >/dev/null
+  [[ $(sudo podman inspect -f '{{.Id}} {{.State.Health.Status}}' "$name") == "$id healthy" ]]
+}
+sudo systemctl start hololive-youtube-po-d.service
+wait_healthy hololive-youtube-po-d 93s
+sudo podman exec hololive-youtube-po-d /app/bin/po-broker --healthcheck --socket /run/hololive-youtube-po/worker.sock
+sudo systemctl start hololive-youtube-collector-d.service
+wait_healthy hololive-youtube-collector-d 243s
 ```
+
+두 unit은 `--sdnotify=conmon`이므로 systemd의 `start` 성공 직후 Podman은 아직 `starting`일 수 있습니다. 시작 명령을 반복하지 말고 같은 컨테이너의 상태 전이를 기다립니다. `unhealthy`, 종료, ID 교체, 시간 초과는 실패입니다. 수집 완료는 별도로 `/ready`의 `first_success`, `handoff_status=PROCESSED`, `handoff_processed`와 실행 프로필 해시로 확인합니다.
 
 ## 호스트 전제
 
