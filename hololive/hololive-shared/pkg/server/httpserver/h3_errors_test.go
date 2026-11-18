@@ -26,8 +26,8 @@ func TestRuntimeServersReportOneTerminalError(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(listenerErrorLog{recorded: recorded}, nil))
 	servers := &RuntimeHTTPServers{
 		H3:      &http3.Server{Addr: "invalid"},
-		Metrics: &http.Server{Addr: "invalid"},
-		Pprof:   &http.Server{Addr: "invalid"},
+		Metrics: &http.Server{Addr: "invalid", ReadHeaderTimeout: serverReadHeaderTimeout},
+		Pprof:   &http.Server{Addr: "invalid", ReadHeaderTimeout: serverReadHeaderTimeout},
 	}
 	errors := make(chan error, 1)
 	servers.Start(logger, errors)

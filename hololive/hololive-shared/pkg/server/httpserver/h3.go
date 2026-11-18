@@ -141,17 +141,22 @@ func (s *RuntimeHTTPServers) Shutdown(ctx context.Context) error {
 
 type runtimeErrorServer struct {
 	runtimehttpserver.Server
+
 	errorText string
 	report    func(error)
 }
 
 func (s runtimeErrorServer) ListenAndServe() error {
 	err := s.Server.ListenAndServe()
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err == nil {
+		return nil
+	}
+
+	if !errors.Is(err, http.ErrServerClosed) {
 		s.report(fmt.Errorf("httpserver: listen: %s: %w", s.errorText, err))
 	}
 
-	return err
+	return fmt.Errorf("serve runtime listener: %w", err)
 }
 
 func startRuntimeServer(server runtimehttpserver.Server, errorText string, logger *slog.Logger, report func(error)) {
