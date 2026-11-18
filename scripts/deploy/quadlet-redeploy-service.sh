@@ -29,6 +29,7 @@ usage() {
 mode=deploy
 before_sync=false
 declare -A candidate_refs=() candidate_ids=() release_paths=() original_invocations=()
+declare -A original_cids=() opened_invocations=() opened_cids=()
 case "${1:-}" in
   hololive-api)
     [[ $# -eq 2 ]] || usage
@@ -66,10 +67,6 @@ case "${1:-}" in
   *) usage ;;
 esac
 service="${services[0]}"
-units=()
-for service in "${services[@]}"; do
-  units+=("$service.service")
-done
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 # 운영(root)은 경로를 고정하고 배포 트리의 사본만 실행한다. 테스트만 비root로 HOLOLIVE_QUADLET_TEST_ROOT 아래를 쓴다
@@ -96,13 +93,14 @@ if [[ "$before_sync" == true ]]; then
     die "pre-sync hold requires the prior installed deployment revision"
   if [[ -z "$prefix" ]]; then
     bash "$ROOT_DIR/scripts/deploy/verify-exec-tree-ownership.sh" "$source_stamp" "${BASH_SOURCE[0]}" \
-      "$ROOT_DIR/scripts/deploy/lib/"{worker-profile-pair.py,postgres-capacity.sh,postgres-endpoint.sh,compose-env.sh} \
+      "$ROOT_DIR/scripts/deploy/lib/"{worker-profile-pair.py,systemd-stop-guard.py,postgres-capacity.sh,postgres-endpoint.sh,compose-env.sh} \
       "$ROOT_DIR/scripts/ci/postgres-capacity-policy.tsv"
   fi
 elif [[ -z "$prefix" && "$ROOT_DIR" != "$deploy_root" ]]; then
   die "run the deployed copy: $deploy_root/scripts/deploy/quadlet-redeploy-service.sh"
 fi
 pair_tool="$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py"
+guard_tool="$ROOT_DIR/scripts/deploy/lib/systemd-stop-guard.py"
 releases="$deploy_root/artifacts/worker-profile/releases"
 # api·alarm-worker helper가 함께 돌면 migrator drop-in 쓰기, daemon-reload, migration이 서로 끼어든다. 하나씩만 실행한다.
 lock_dir="$prefix/run/lock"
@@ -135,7 +133,8 @@ activation_started=false
 quiescence_started=false
 on_exit() {
   local status="$1"
-  trap - EXIT INT TERM HUP
+  trap - EXIT
+  trap '' INT TERM HUP
   [[ "$status" -ne 0 ]] || return 0
   if (( ${#opened[@]} )); then
     if (restore_opened_hold); then
@@ -176,16 +175,27 @@ assert_no_fence_marker() {
 assert_no_fence_marker
 mask_path() { printf '%s/%s.service' "$mask_dir" "$1"; }
 mask_anchor() { local dir="${release_paths[$1]}"; printf '%s/.%s.mask' "$mask_dir" "${dir##*/}"; }
+anchor_identity() {
+  local anchor recorded="${release_paths[$1]}/mask.identity" identity
+  anchor="$(mask_anchor "$1")" && [[ -f "$recorded" && ! -L "$recorded" && -L "$anchor" &&
+    "$(readlink -- "$anchor")" == /dev/null ]] || return 1
+  identity="$(stat -c '%d:%i' -- "$anchor")" &&
+    cmp -s "$recorded" <(printf '%s\n' "$identity") && printf '%s\n' "$identity"
+}
+guard() {
+  local identity
+  identity="$(anchor_identity "$2")" || return 1
+  python3 -I -B "$guard_tool" "$1" "$2.service" "$(mask_anchor "$2")" "$identity"
+}
 owned_mask() {
-  local path anchor owner installed
+  local path owner installed
   path="$(mask_path "$1")"
-  anchor="$(mask_anchor "$1")"
-  [[ -L "$anchor" && -L "$path" && "$(readlink -- "$anchor")" == /dev/null ]] || return 1
-  owner="$(stat -c '%d:%i' -- "$anchor")" && installed="$(stat -c '%d:%i' -- "$path")" &&
+  [[ -L "$path" ]] || return 1
+  owner="$(anchor_identity "$1")" && installed="$(stat -c '%d:%i' -- "$path")" &&
     [[ "$owner" == "$installed" ]]
 }
 assert_stopped() {
-  local name="$1" unit="$1.service" rc=0
+  local name="$1" unit="$1.service"
   owned_mask "$name" &&
     [[ "$(systemctl show "$unit" -p LoadState --value)" == masked &&
       "$(systemctl show "$unit" -p UnitFileState --value)" == masked &&
@@ -193,8 +203,7 @@ assert_stopped() {
       "$(systemctl show "$unit" -p MainPID --value)" == 0 &&
       "$(systemctl show "$unit" -p ControlPID --value)" == 0 &&
       "$(systemctl show "$unit" -p Result --value)" == success ]] || return 1
-  podman container exists "$name" || rc=$?
-  [[ "$rc" == 1 ]]
+  container_absent "$name"
 }
 assert_coordinated_hold() {
   local name
@@ -202,29 +211,93 @@ assert_coordinated_hold() {
     assert_stopped "$name" || die "$name: owned persistent writer hold not confirmed"
   done
 }
+container_absent() {
+  local rc=0
+  podman container exists "$1" || rc=$?
+  [[ "$rc" == 1 ]]
+}
+active_invocation() {
+  local unit="$1.service" id
+  [[ "$(systemctl show "$unit" -p ActiveState --value)" == active ]] &&
+    id="$(systemctl show "$unit" -p InvocationID --value)" &&
+    [[ "$id" =~ ^[0-9a-f]{32}$ && "$id" != 00000000000000000000000000000000 ]] &&
+    printf '%s\n' "$id"
+}
+terminal_state() {
+  systemctl show "$1.service" --all -p LoadState,ActiveState,InvocationID,Result,ExecMainCode,ExecMainStatus,MainPID,ControlPID
+}
+stop_generation() {
+  local name="$1" id="$2" cid="$3" evidence="$4" since job=0 inventory=0 observed=true field LC_ALL=C
+  local start_id=de5b426a63be47a7b6ac3eaac82e2f6f done_id=9d1aaa27d60140bd96365438aad20286
+  guard check "$name" && [[ "$cid" =~ ^[0-9a-f]{64}$ && "$(podman inspect -f '{{.Id}}' "$name")" == "$cid" &&
+    "$(active_invocation "$name")" == "$id" ]] || return 1
+  since="@$EPOCHREALTIME"
+  printf '%s %s %s\n' "$since" "$id" "$cid" >"$evidence/request" || return 1
+  sync_paths "$evidence/request" "$evidence" || return 1
+  systemctl stop "$name.service" || job=$?
+  printf '%d\n' "$job" >"$evidence/job-status" || return 1
+  terminal_state "$name" >"$evidence/terminal" || observed=false
+  journalctl --boot --quiet --no-pager -o json --output-fields=INVOCATION_ID,MESSAGE_ID,JOB_ID,JOB_RESULT --since="$since" \
+    _PID=1 "UNIT=$name.service" "INVOCATION_ID=$id" JOB_TYPE=stop "MESSAGE_ID=$start_id" "MESSAGE_ID=$done_id" \
+    >"$evidence/journal" || observed=false
+  python3 -I -B "$guard_tool" exit-status "$name.service" "$cid" "$since" >"$evidence/container-exit" || observed=false
+  podman container exists "$name" || inventory=$?
+  printf '%d\n' "$inventory" >"$evidence/container-exists" || return 1
+  sync_paths "$evidence/"{job-status,terminal,journal,container-exit,container-exists} "$evidence" || return 1
+  [[ "$observed" == true && "$job" == 0 && "$inventory" == 1 ]] && cmp -s "$evidence/container-exit" <(printf '0\n') || return 1
+  python3 -I -B - "$evidence/journal" "$id" "$start_id" "$done_id" <<'PY' || return 1
+import json
+import sys
+
+path, invocation, started, stopped = sys.argv[1:]
+with open(path) as records:
+    first, last = map(json.loads, records)
+job = first["JOB_ID"]
+sys.exit(not (job.isdecimal() and int(job) > 0 and job == last["JOB_ID"]
+              and first["INVOCATION_ID"] == last["INVOCATION_ID"] == invocation
+              and first["MESSAGE_ID"] == started and last["MESSAGE_ID"] == stopped and last["JOB_RESULT"] == "done"))
+PY
+  for field in LoadState=loaded ActiveState=inactive Result=success ExecMainStatus=0 MainPID=0 ControlPID=0; do
+    grep -qxF "$field" "$evidence/terminal" || return 1
+  done
+  # 관리자가 정상 unit을 수거하면 ExecMainCode도 0으로 초기화된다. 실제 종료 0은 위의 개별 CID 사건으로 증명한다.
+  grep -qxF 'ExecMainCode=1' "$evidence/terminal" || grep -qxF 'ExecMainCode=0' "$evidence/terminal" || return 1
+  grep -qxF "InvocationID=$id" "$evidence/terminal" || grep -qxF 'InvocationID=' "$evidence/terminal" || return 1
+}
 restore_opened_hold() {
-  local name path anchor state failed=false
+  local name dir failed=false
+  local -A armed=() evidence=() clean=() needs_guard=()
+  # unmask 직전 신호도 처리한다. 아직 열지 않은 동료의 mask를 벗기거나 외부 mask를 인수하지 않는다.
   for name in "${opened[@]}"; do
-    path="$(mask_path "$name")"
-    anchor="$(mask_anchor "$name")"
-    if [[ ! -e "$path" && ! -L "$path" ]]; then
-      ln -PT -- "$anchor" "$path" || failed=true
+    if owned_mask "$name"; then
+      assert_stopped "$name" || failed=true
+      continue
     fi
-    owned_mask "$name" || failed=true
+    needs_guard[$name]=1
+    dir="$(mktemp -d "${release_paths[$name]}/rehold.XXXXXX")" || { failed=true; continue; }
+    evidence[$name]="$dir"
+    terminal_state "$name" >"$dir/before" && sync_paths "$dir/before" "$dir" "${release_paths[$name]}" || failed=true
   done
-  sync_paths "$mask_dir" || failed=true
-  systemctl daemon-reload || return 1
   for name in "${opened[@]}"; do
-    if ! owned_mask "$name"; then failed=true; continue; fi
-    state="$(systemctl show "$name.service" -p ActiveState --value)" || { failed=true; continue; }
-    case "$state" in
-      inactive) ;;
-      active|activating|deactivating|reloading) systemctl stop "$name.service" || failed=true ;;
-      *) failed=true ;;
-    esac
+    [[ -v "needs_guard[$name]" ]] || continue
+    if guard arm "$name"; then armed[$name]=1; else failed=true; fi
   done
+  for name in "${opened[@]}"; do
+    [[ -v "armed[$name]" ]] || continue
+    if [[ -v "evidence[$name]" && -n "${opened_invocations[$name]:-}" && -n "${opened_cids[$name]:-}" ]] &&
+      stop_generation "$name" "${opened_invocations[$name]}" "${opened_cids[$name]}" "${evidence[$name]}"; then
+      clean[$name]=1
+    else
+      failed=true
+    fi
+  done
+  for name in "${opened[@]}"; do
+    [[ -v "clean[$name]" ]] || continue
+    guard seal "$name" || failed=true
+  done
+  for name in "${services[@]}"; do assert_stopped "$name" || failed=true; done
   [[ "$failed" == false ]] || return 1
-  assert_coordinated_hold
+  rmdir -- "${release_paths[hololive-api]}/opening" && sync_paths "${release_paths[hololive-api]}"
 }
 if [[ "$mode" != resume ]]; then
   for service in "${services[@]}"; do
@@ -289,16 +362,17 @@ load_coordinated_release() {
 
 hold_receipt() {
   local name dir invocation inode endpoint
-  printf '%s\n' "$before_sync"
+  printf '%s\nguarded-stop-v1\n' "$before_sync"
   for name in "${services[@]}"; do
     dir="${release_paths[$name]}"
     invocation="$(<"$dir/captured.invocation")"
     [[ "$invocation" =~ ^[0-9a-f]{32}$ ]] || return 1
-    inode="$(stat -c %i -- "$(mask_anchor "$name")")" || return 1
+    inode="$(anchor_identity "$name")" || return 1
     endpoint="$(<"$dir/previous.endpoint")"
     [[ -n "$endpoint" && "$endpoint" != *$'\n'* ]] || return 1
     printf '%s %s %s %s %s\n' "$name" "$dir" "$invocation" "$inode" "$endpoint"
-    (cd "$dir" && sha256sum previous/pair.json candidate.image migrator.image candidate.revision) || return 1
+    (cd "$dir" && sha256sum previous/pair.json candidate.image migrator.image candidate.revision \
+      stop/{request,job-status,terminal,journal,container-exit,container-exists}) || return 1
     if [[ "$before_sync" == true ]]; then
       (cd "$dir" && sha256sum pooler.image pooler.platform pooler.revision) || return 1
     fi
@@ -306,7 +380,8 @@ hold_receipt() {
 }
 check_receipt() {
   local receipt="${release_paths[hololive-api]}/quiesced" expected
-  [[ -f "$receipt" && ! -L "$receipt" ]] && IFS= read -r before_sync <"$receipt" &&
+  [[ ! -e "${receipt%/*}/opening" && ! -L "${receipt%/*}/opening" &&
+    -f "$receipt" && ! -L "$receipt" ]] && IFS= read -r before_sync <"$receipt" &&
     [[ "$before_sync" == true || "$before_sync" == false ]] || die "missing or invalid quiescence receipt"
   expected="$(hold_receipt)" && cmp -s "$receipt" <(printf '%s\n' "$expected") ||
     die "release pair or mask does not belong to this quiescence receipt"
@@ -395,6 +470,7 @@ prepare_slot() {
   local captured_id endpoint
   captured_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["container_id"])' "$release/previous/pair.json")"
   [[ "$captured_id" =~ ^[0-9a-f]{64}$ ]] || die "$service has no captured container ID"
+  if [[ "$mode" == quiesce ]]; then original_cids[$service]="$captured_id"; fi
   endpoint="$(postgres_endpoint_container "$captured_id")"
   printf '%s\n' "$endpoint" >"$release/previous.endpoint"
   postgres_endpoint_require_same "$endpoint" "$(postgres_endpoint_quadlet "$quadlet_dir/$service.container" "$compose_env")" ||
@@ -447,25 +523,27 @@ if [[ "$mode" == quiesce ]]; then
   }
   for service in "${services[@]}"; do verify_original "$service"; done
   quiescence_started=true
-  # 같은 파일시스템의 별도 hard link가 mask inode의 재사용과 외부 mask의 인수를 막는다.
+  # 두 원본 정지 결과를 보존할 때까지 정식 mask를 설치하지 않는다.
   for service in "${services[@]}"; do
     anchor="$(mask_anchor "$service")"
     ln -sT -- /dev/null "$anchor"
-    ln -PT -- "$anchor" "$(mask_path "$service")"
+    stat -c '%d:%i' -- "$anchor" >"${release_paths[$service]}/mask.identity"
+    mkdir -- "${release_paths[$service]}/stop"
+    sync_paths "$mask_dir" "${release_paths[$service]}/mask.identity" "${release_paths[$service]}"
+    guard arm "$service"
   done
-  sync_paths "$mask_dir"
-  systemctl daemon-reload
   for service in "${services[@]}"; do
-    owned_mask "$service" && [[ "$(systemctl show "$service.service" -p LoadState --value)" == masked ]] ||
-      die "$service: persistent mask was not loaded"
+    guard check "$service"
     verify_original "$service"
   done
-  systemctl stop "${units[@]}"
   for service in "${services[@]}"; do
-    stopped_invocation="$(systemctl show "$service.service" -p InvocationID --value)"
-    # mask가 반영된 뒤 실행 세대를 대조했다. inactive unit이 수거되면 manager의 ID는 비지만 다른 ID일 수는 없다.
-    [[ -z "$stopped_invocation" || "$stopped_invocation" == "${original_invocations[$service]}" ]] ||
-      die "$service stop belongs to a different invocation"
+    verify_original "$service"
+    release="${release_paths[$service]}"
+    stop_generation "$service" "${original_invocations[$service]}" "${original_cids[$service]}" "$release/stop" ||
+      die "$service: original guarded stop unconfirmed; retain guard and evidence: $release/stop"
+  done
+  for service in "${services[@]}"; do
+    guard seal "$service"
   done
   assert_coordinated_hold
   receipt="${release_paths[hololive-api]}/quiesced"
@@ -518,6 +596,7 @@ fi
 stage=writer-sql
 assert_running_pooler_image
 for service in "${services[@]}"; do
+  [[ "$mode" != resume ]] || assert_coordinated_hold
   assert_writer_endpoint "$service"
   postgres_pooler_assert_writer_sql "$service"
 done
@@ -545,6 +624,16 @@ for service in "${services[@]}"; do
   unit="$service.service"
   assert_writer_endpoint "$service"
   if [[ "$mode" == resume ]]; then
+    if (( ${#opened[@]} == 0 )); then
+      check_receipt
+      mkdir -- "${release_paths[hololive-api]}/opening"
+      sync_paths "${release_paths[hololive-api]}"
+    fi
+    if [[ "$service" == hololive-api ]]; then
+      [[ "$(active_invocation hololive-alarm-worker)" == "${opened_invocations[hololive-alarm-worker]}" &&
+        "$(podman inspect -f '{{.Id}}' hololive-alarm-worker)" == "${opened_cids[hololive-alarm-worker]}" ]] ||
+        die "worker generation changed before API admission"
+    fi
     assert_stopped "$service" || die "$unit: refusing to release a foreign or incomplete hold"
     opened+=("$service")
     systemctl unmask "$unit"
@@ -554,6 +643,11 @@ for service in "${services[@]}"; do
   echo "[RESTART] $unit (NRestarts before=$restarts_before)"
   # worker를 먼저 기동하고 API를 뒤에 둬 Wants 관계에서도 같은 후보 쌍만 실행한다.
   systemctl restart "$unit"
+  if [[ "$mode" == resume ]]; then
+    opened_invocations[$service]="$(active_invocation "$service")"
+    opened_cids[$service]="$(podman inspect -f '{{.Id}}' "$service")"
+    [[ "${opened_cids[$service]}" =~ ^[0-9a-f]{64}$ ]] || die "$service has no running candidate container ID"
+  fi
   stage=verify
   systemctl is-active --quiet "$unit" || die "$unit is not active after restart"
   python3 "$pair_tool" verify-live "$service" "$release/candidate" "$service"
