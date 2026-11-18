@@ -10,8 +10,7 @@
 #  5. candidate drop-in 활성화, daemon-reload, restart(Notify=healthy가 health gate), verify-live·NRestarts
 # 활성화를 시작한 뒤 실패하면 자동으로 되돌리지 않고 failed_after_activation으로 보고한다. 이전 pair
 # 복원은 스키마·admission 호환성 승인 뒤 quadlet-rollback-service.sh --check·--apply로 한다. 어느 단계도 재시도하지 않는다.
-# --quiesce는 현재 세대의 두 writer를 한 작업의 영속 mask로 정지한다. 최초 endpoint 전환은
-# 검토한 staged archive의 --quiesce-before-sync로 기존 unit을 바꾸기 전에 정지하고 후보 준비는 sync 뒤로 미룬다.
+# 카드 창은 이미 pooled인 두 writer와 같은 PostgreSQL·풀러 실행 세대만 인수한다.
 # --resume은 migration과 역할별 pooled SQL 검증 뒤 두 후보를 설치하고 worker를 확인한 뒤에만 API를 연다.
 # 재개 시 start job·invocation·conmon PID·CID가 일치해야 원본이다. 클라이언트 실패는 보호 정지만 허용한다.
 set -Eeuo pipefail
@@ -21,14 +20,12 @@ usage() {
   echo "Usage: $0 hololive-api <api-image>" >&2
   echo "       $0 hololive-alarm-worker <alarm-worker-image> <api-image-for-migration>" >&2
   echo "       $0 --quiesce <api-image> <alarm-worker-image>" >&2
-  echo "       $0 --quiesce-before-sync <api-image> <alarm-worker-image> sha256:<pooler-id>   (verified staged archive only)" >&2
   echo "       $0 --resume <api-release-dir> <alarm-worker-release-dir>" >&2
   echo "Images are sha256:<id> (build host podman image inspect .Id) or a loaded reference." >&2
   exit 2
 }
 
 mode=deploy
-before_sync=false
 declare -A candidate_refs=() candidate_ids=() release_paths=() original_invocations=()
 declare -A original_cids=() opened_invocations=() opened_cids=()
 declare -A unmasked=()
@@ -46,14 +43,8 @@ case "${1:-}" in
     candidate_refs[hololive-alarm-worker]="$2"
     migrator_ref="$3"
     ;;
-  --quiesce|--quiesce-before-sync)
-    if [[ "$1" == --quiesce-before-sync ]]; then
-      [[ $# -eq 4 && "$4" =~ ^sha256:[0-9a-f]{64}$ ]] || usage
-      before_sync=true
-      pooler_id="$4"
-    else
-      [[ $# -eq 3 ]] || usage
-    fi
+  --quiesce)
+    [[ $# -eq 3 ]] || usage
     mode=quiesce
     services=(hololive-alarm-worker hololive-api)
     candidate_refs[hololive-api]="$2"
@@ -86,20 +77,7 @@ quadlet_dir="$prefix/etc/containers/systemd/hololive-bot"
 compose_env="$prefix/etc/stack-secrets/hololive-bot/compose.env"
 fence_dir="$prefix/var/lib/hololive-postgres-fence"
 source_stamp="$deploy_root/.source-revision"
-if [[ "$before_sync" == true ]]; then
-  source_stamp="$ROOT_DIR/.source-revision"
-  [[ "$ROOT_DIR" == "$prefix/opt/hololive-bot/compose/staged/${ROOT_DIR##*/}" &&
-    "${ROOT_DIR##*/}" =~ ^[0-9a-f]{40}$ && -f "$source_stamp" && ! -L "$source_stamp" &&
-    "$(<"$source_stamp")" == "${ROOT_DIR##*/}" ]] || die "run the verified revision-named staged archive before sync"
-  installed_revision="$(<"$deploy_root/.source-revision")"
-  [[ "$installed_revision" =~ ^[0-9a-f]{40}$ && "$installed_revision" != "${ROOT_DIR##*/}" ]] ||
-    die "pre-sync hold requires the prior installed deployment revision"
-  if [[ -z "$prefix" ]]; then
-    bash "$ROOT_DIR/scripts/deploy/verify-exec-tree-ownership.sh" "$source_stamp" "${BASH_SOURCE[0]}" \
-      "$ROOT_DIR/scripts/deploy/lib/"{worker-profile-pair.py,systemd-stop-guard.py,postgres-capacity.sh,postgres-endpoint.sh,compose-env.sh} \
-      "$ROOT_DIR/scripts/ci/postgres-capacity-policy.tsv"
-  fi
-elif [[ -z "$prefix" && "$ROOT_DIR" != "$deploy_root" ]]; then
+if [[ -z "$prefix" && "$ROOT_DIR" != "$deploy_root" ]]; then
   die "run the deployed copy: $deploy_root/scripts/deploy/quadlet-redeploy-service.sh"
 fi
 pair_tool="$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py"
@@ -493,7 +471,7 @@ load_coordinated_release() {
 
 hold_receipt() {
   local name dir invocation inode endpoint stop
-  printf '%s\nguarded-stop-v1\n' "$before_sync"
+  printf '%s\n' card-on-accepted-pool-v1
   for name in "${services[@]}"; do
     dir="${release_paths[$name]}"
     invocation="$(<"$dir/captured.invocation")"
@@ -508,9 +486,7 @@ hold_receipt() {
     if [[ "$stop" != stop ]]; then
       (cd "$dir" && sha256sum "$stop"/{request,job-status,terminal,journal,container-exit,container-exists}) || return 1
     fi
-    if [[ "$before_sync" == true ]]; then
-      (cd "$dir" && sha256sum pooler.image pooler.platform pooler.revision) || return 1
-    fi
+    (cd "$dir" && sha256sum infrastructure) || return 1
   done
 }
 publish_receipt() {
@@ -520,8 +496,7 @@ publish_receipt() {
 }
 verify_receipt() {
   local receipt="${release_paths[hololive-api]}/quiesced" expected
-  owns_hold && [[ -f "$receipt" && ! -L "$receipt" ]] && IFS= read -r before_sync <"$receipt" &&
-    [[ "$before_sync" == true || "$before_sync" == false ]] || die "missing owner or invalid quiescence receipt"
+  owns_hold && [[ -f "$receipt" && ! -L "$receipt" ]] || die "missing owner or invalid quiescence receipt"
   expected="$(hold_receipt)" && cmp -s "$receipt" <(printf '%s\n' "$expected") ||
     die "release pair or mask does not belong to this quiescence receipt"
 }
@@ -542,29 +517,27 @@ if [[ "$mode" == resume ]]; then
   check_receipt
   quiescence_started=true
   migrator_ref="${candidate_refs[hololive-api]}"
-  if [[ "$before_sync" == true ]]; then
-    pooler_id="$(<"${release_paths[hololive-api]}/pooler.image")"
-    for service in "${services[@]}"; do
-      release="${release_paths[$service]}"
-      cmp -s "$release/pooler.image" <(printf '%s\n' "$pooler_id") &&
-        cmp -s "$release/pooler.platform" <(printf 'linux/%s\n' "$host_arch") &&
-        cmp -s "$release/pooler.revision" <(printf '%s\n' "$revision") ||
-        die "$service retained pooler identity does not match the staged release"
-    done
-  fi
 fi
-assert_running_pooler_image() {
-  [[ "$before_sync" == true ]] || return 0
-  local actual
-  actual="$(podman container inspect --format '{{.State.Running}} {{.Image}}' holo-pgbouncer)"
-  [[ "$actual" == "true ${pooler_id#sha256:}" ]] || die "running pooler differs from the staged image"
+infrastructure_generation() {
+  local name state running cid image started
+  for name in holo-postgres holo-pgbouncer; do
+    state="$(podman container inspect --format '{{.State.Running}} {{.Id}} {{.Image}} {{.State.StartedAt.UnixNano}}' "$name")" || return 1
+    read -r running cid image started <<<"$state"
+    [[ "$running" == true && "$cid" =~ ^[0-9a-f]{64}$ && "$image" =~ ^[0-9a-f]{64}$ &&
+       "$started" =~ ^[1-9][0-9]*$ ]] || return 1
+    printf '%s %s %s %s\n' "$name" "$cid" "$image" "$started"
+  done
 }
-if [[ "$before_sync" == true ]]; then
-  [[ "$pooler_id" =~ ^sha256:[0-9a-f]{64}$ && "$host_arch" == arm64 ]] &&
-    [[ "$(resolve_image "$pooler_id" iris-stack-pgbouncer)" == "$pooler_id" ]] ||
-    die "staged pooler identity, platform or revision mismatch"
-  if [[ "$mode" == resume ]]; then assert_running_pooler_image; fi
+infrastructure="$(infrastructure_generation)" || die "cannot establish running PostgreSQL and pooler generations"
+if [[ "$mode" == resume ]]; then
+  for service in "${services[@]}"; do
+    cmp -s "${release_paths[$service]}/infrastructure" <(printf '%s\n' "$infrastructure") || die "infrastructure changed since the hold"
+  done
 fi
+assert_infrastructure() {
+  local actual
+  actual="$(infrastructure_generation)" && [[ "$actual" == "$infrastructure" ]] || die "accepted database or pooler generation changed"
+}
 for service in "${services[@]}"; do
   candidate_ids[$service]="$(resolve_image "${candidate_refs[$service]}" "$service")"
 done
@@ -612,13 +585,9 @@ prepare_slot() {
   printf '%s\n' "$revision" >"$release/candidate.revision"
   printf '%s\n' "${candidate_ids[$service]}" >"$release/candidate.image"
   printf '%s\n' "$migrator_id" >"$release/migrator.image"
-  if [[ "$before_sync" == true ]]; then
-    printf '%s\n' "$pooler_id" >"$release/pooler.image"
-    printf 'linux/%s\n' "$host_arch" >"$release/pooler.platform"
-    printf '%s\n' "$revision" >"$release/pooler.revision"
-  fi
   if [[ "$mode" == quiesce ]]; then
     printf '%s\n' "${original_invocations[$service]}" >"$release/captured.invocation"
+    printf '%s\n' "$infrastructure" >"$release/infrastructure"
   fi
   if [[ -e "$quadlet_dir/$service.container.d/50-worker-profile.conf" ]]; then
     python3 "$pair_tool" capture "$service" "$release/previous" "$service" "$deploy_root"
@@ -627,15 +596,12 @@ prepare_slot() {
     systemctl daemon-reload
     echo "[PREPARE] $service pinned to its running image before the change: $release/previous"
   fi
-  if [[ "$before_sync" == true ]]; then
-    cmp -s "$release/previous/unit.container" "$quadlet_dir/$service.container" ||
-      die "$service installed base unit differs from its retained running base"
-  fi
   local captured_id endpoint
   captured_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["container_id"])' "$release/previous/pair.json")"
   [[ "$captured_id" =~ ^[0-9a-f]{64}$ ]] || die "$service has no captured container ID"
   if [[ "$mode" == quiesce ]]; then original_cids[$service]="$captured_id"; fi
   endpoint="$(postgres_endpoint_container "$captured_id")"
+  [[ "$endpoint" == 'holo-pgbouncer|6432' ]] || die "card window requires a running pooled writer"
   printf '%s\n' "$endpoint" >"$release/previous.endpoint"
   postgres_endpoint_require_same "$endpoint" "$(postgres_endpoint_quadlet "$quadlet_dir/$service.container" "$compose_env")" ||
     die "$service installed endpoint differs from the captured running generation"
@@ -655,23 +621,14 @@ for service in "${services[@]}"; do
   echo "[INFO] service=$service revision=$revision candidate=${candidate_ids[$service]} migrator=$migrator_id"
   if [[ "$mode" == resume ]]; then
     release="${release_paths[$service]}"
-    if [[ "$before_sync" == true ]]; then
-      cmp -s "$deploy_root/deploy/quadlet/hololive-bot/$service.container" "$quadlet_dir/$service.container" ||
-        die "$service staged base unit is not installed"
-      if [[ ! -e "$release/candidate" ]]; then
-        prepare_candidate
-      else
-        python3 "$pair_tool" check "$service" "$release/candidate"
-      fi
-    fi
     cmp -s "$release/migrator.image" <(printf '%s\n' "$migrator_id") || die "retained migrator identity mismatch"
     python3 "$pair_tool" verify "$service" "$release/candidate" "${candidate_ids[$service]}"
     python3 "$pair_tool" verify-source "$service" "$release/candidate"
   else
     prepare_slot
-    if [[ "$before_sync" != true ]]; then prepare_candidate; fi
+    prepare_candidate
   fi
-  if [[ "$mode" == resume || ( "$mode" == quiesce && "$before_sync" != true ) ]]; then
+  if [[ "$mode" == resume || "$mode" == quiesce ]]; then
     python3 "$pair_tool" verify-retained "$service" "$release/previous" "$release/candidate" "$deploy_root"
   fi
 done
@@ -685,6 +642,7 @@ if [[ "$mode" == quiesce ]]; then
       "$(systemctl show "$name.service" -p InvocationID --value)" == "$(<"$dir/captured.invocation")" ]] ||
       die "$name changed invocation after capture"
   }
+  assert_infrastructure
   for service in "${services[@]}"; do verify_original "$service"; done
   quiescence_started=true
   ln -T -- "${release_paths[hololive-api]}/captured.invocation" "$owner_marker"
@@ -733,11 +691,15 @@ run_migration() {
   for service in "${services[@]}"; do assert_writer_endpoint "$service"; done
   if [[ "$mode" == resume ]]; then
     check_receipt
-    assert_running_pooler_image
+    assert_infrastructure
     mkdir -- "$migration"
     sync_paths "$migration" "${release_paths[hololive-api]}"
   fi
-  systemctl start hololive-db-migrate.service
+  if [[ "$mode" == resume ]]; then
+    python3 -I -B "$ROOT_DIR/scripts/deploy/lib/card-migration-guard.py"
+  else
+    systemctl start hololive-db-migrate.service
+  fi
   assert_no_fence_marker
   if [[ "$mode" == resume ]]; then
     printf '%s\n' "$migrator_id" >"$migration/completed"
@@ -758,13 +720,13 @@ else
 fi
 require_card_ledger
 stage=writer-sql
-assert_running_pooler_image
+assert_infrastructure
 for service in "${services[@]}"; do
   [[ "$mode" != resume ]] || assert_coordinated_hold
   assert_writer_endpoint "$service"
   postgres_pooler_assert_writer_sql "$service"
 done
-assert_running_pooler_image
+assert_infrastructure
 assert_no_fence_marker
 
 stage=activation
@@ -786,6 +748,7 @@ for service in "${services[@]}"; do
   release="${release_paths[$service]}"
   stage=activation
   unit="$service.service"
+  assert_infrastructure
   assert_writer_endpoint "$service"
   if [[ "$mode" == resume ]]; then
     if (( ${#opened[@]} == 0 )); then

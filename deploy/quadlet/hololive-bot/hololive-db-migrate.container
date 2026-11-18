@@ -5,8 +5,8 @@
 # 권한 있는 Unix socket만 쓰며 network는 없다.
 [Unit]
 Description=Hololive schema migration (one-shot)
-Requires=holo-postgres.service
-After=holo-postgres.service
+Requisite=holo-postgres.service holo-pgbouncer.service
+After=holo-postgres.service holo-pgbouncer.service
 ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent
 ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced
 
