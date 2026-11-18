@@ -6,39 +6,39 @@ osaka 호스트를 다시 설치하는 동안에도 a를 kapu에 임시로 띄�
 
 ## 기존 실행 pair의 수동 전환
 
-`scripts/deploy/kapu-d-cutover.py`는 **kapu rootful d의 기존 실행 pair**만 전환한다. 실행 전에 승인한 **동일 revision**의 `scripts/deploy/kapu-d-cutover.py`, `scripts/deploy/lib/systemd-stop-guard.py`, `deploy/podman/kapu/`를 root 전용 배포 트리에 **이 상대 경로 그대로** 준비하고 provenance를 검증한다. 단독 스크립트 복사나 다른 revision의 가드 대체는 지원하지 않는다. 아래 명령은 서명된 운영 변경 범위와 창을 별도로 확인한 경우에만 사용한다. 첫 설치, 호스트 복구, 타 슬롯, 이미지 구축·전송, PgBouncer/HBA/DB 변경은 별도 작업이다. 자동 시작/재시작을 먼저 하지 않는다.
+이 릴리스의 `scripts/deploy/kapu-d-cutover.py`는 **첫 창에서 풀링을 수용한 kapu rootful d**의 카드 마이그레이션 창(6433→6433) 전용이다. 최초 풀링(5433→6433)은 첫 창 릴리스의 checkout·helper·절차를 사용한다. 두 창의 hold와 배포 트리를 공유하지 않는다. 아래 명령은 운영 변경 범위와 창을 별도로 승인한 경우에만 사용한다. 첫 설치, 호스트 복구, 타 슬롯, 이미지 구축·전송, PgBouncer/HBA/DB 변경은 별도 작업이다.
 
-**최초 풀링 전환(5433→6433):** 옵션 없이 실행한다. 이미 6433이면 자동으로 다른 모드로 전환하지 않는다.
+**카드 창 입력 장착:** 검증을 마친 카드 릴리스 산출물에서 봉인한 오프라인 d custody tar의 출처와 무결성을 확인하고, 새 root 전용 디렉터리에 푼다. 아래 예에서 tar는 다음 경로들을 루트 기준으로 포함한다. 파일은 root 소유 일반 파일이어야 하며 부모 경로까지 root 외의 쓰기 권한이나 심볼릭 링크가 없어야 한다.
+
+- `.source-revision`: 검증된 카드 소스의 40자리 SHA 한 줄.
+- `d-card-candidate.json`: `revision`은 같은 SHA, `images`와 `units`의 키는 각각 `hololive-youtube-collector-d`와 `hololive-youtube-po-d`. 값은 해당 컨테이너의 검증된 `sha256:<64 hex>` 이미지 ID와 `.container` 원본의 SHA-256(접두사 없음)이다.
+- `scripts/deploy/kapu-d-cutover.py`, `scripts/deploy/lib/systemd-stop-guard.py`, `deploy/podman/kapu/`의 두 `.container`: 위 승인과 같은 소스 트리의 상대 경로를 유지한다.
 
 ```bash
-# quiesce가 root 전용 보관 디렉터리와 새 hold를 만든다. hold를 미리 만들지 않는다.
-hold=/var/lib/hololive-collector-d-cutover/d-cutover-CHANGE-ID
-sudo -n python3 -I scripts/deploy/kapu-d-cutover.py quiesce "$hold"
-# 양쪽 정지·소유 mask 증거가 확인된 뒤, 중앙 경로가 준비되면 같은 hold에서 딱 한 번:
-sudo -n python3 -I scripts/deploy/kapu-d-cutover.py resume "$hold" \
-  "$FULL_REVISION" "$COLLECTOR_SHA256_IMAGE_ID" "$ISSUER_SHA256_IMAGE_ID" \
-  "$COLLECTOR_CONTAINER_FILE_SHA256" "$ISSUER_CONTAINER_FILE_SHA256"
+release="/root/d-card-${FULL_REVISION:?}"
+sudo -n mkdir -m 0700 -- "$release" &&
+  sudo -n tar --extract --file="${D_CUSTODY_TAR:?}" --directory="$release" \
+    --no-same-owner --no-same-permissions --no-overwrite-dir
 ```
 
-**카드 창(6433→6433):** 첫 창의 풀링 수용 후에만 사용한다. 첫 창의 hold 대신 새 hold를 만들고, **정지 전에** 카드 창의 승인된 산출물 목록에서 full revision, 두 이미지 ID와 두 unit SHA-256을 가져온다. 두 명령에 `--already-pooled`와 같은 후보 식별자를 전달한다.
+기존 디렉터리에 덮어쓰거나 현장 checkout·실행 이미지·호출 인수로 두 파일을 다시 만들지 않는다. 아래 다섯 인수도 승인된 카드 산출물 목록에서 가져온다. 두 명령 모두 같은 트리·같은 인수와 `--already-pooled`가 필요하다. hold는 미리 만들지 않는다.
 
 ```bash
 hold="/var/lib/hololive-collector-d-cutover/d-cutover-card-${CHANGE_ID:?}"
 candidate=("$FULL_REVISION" "$COLLECTOR_SHA256_IMAGE_ID" "$ISSUER_SHA256_IMAGE_ID"
            "$COLLECTOR_CONTAINER_FILE_SHA256" "$ISSUER_CONTAINER_FILE_SHA256")
-sudo -n python3 -I scripts/deploy/kapu-d-cutover.py quiesce --already-pooled "$hold" "${candidate[@]}"
+sudo -n python3 -I -B "$release/scripts/deploy/kapu-d-cutover.py" quiesce --already-pooled "$hold" "${candidate[@]}"
 # 모든 writer 정지·복구 시점 확인과 승인된 카드 마이그레이션이 끝난 뒤:
-sudo -n python3 -I scripts/deploy/kapu-d-cutover.py resume --already-pooled "$hold" "${candidate[@]}"
+sudo -n python3 -I -B "$release/scripts/deploy/kapu-d-cutover.py" resume --already-pooled "$hold" "${candidate[@]}"
 ```
 
-카드 창은 두 후보 이미지가 각각 정지할 실행 이미지와 다른 ID이며 다른 revision인지 확인한다. 이미지에 기록된 revision·역할·아키텍처와 unit 원본 digest를 검증한 뒤에만 이 후보와 현재 실행 세대·hold inode를 `previous.json`에 함께 보존한다. 카드 창의 두 unit은 풀링 수용 시와 같은 바이트여도 된다. `resume`은 다른 hold, 정지 전 후보가 없는 영수증, 후보 인수 중 하나라도 달라진 요청을 거부한다. 새 태그나 재빌드 이미지를 같은 revision이라는 이유로 대체할 수 없다.
-revision은 40자리, image ID 두 개는 검증되어 rootful 저장소에 이미 있는 `sha256:<64 hex>`이고 마지막 두 값은 **해당 revision에서 승인한 두 `.container` 파일 원본의 SHA-256**(접두사 없음)이다. 실행 호스트 파일에서 기대 해시를 역산하지 않는다. helper 자체와 전달 파일의 provenance도 실행 전에 별도로 검증한다.
-root만 수정할 수 있는 배포 트리에서 실행한다. 후보 적재 때 실제 `:prod` 두 개를 먼저 이동하면 이전 실행 증거를 잃으므로 helper는 거부한다. hold에는 비밀 env/key가 아닌 파일 식별 metadata·profile·unit·보존 태그 식별자만 남긴다.
+`quiesce`는 새 hold를 만들거나 서비스를 정지하기 전에 배포 트리의 두 승인 파일과 인수를 대조한다. 실행 중인 pair와 ID·revision이 다른 과거 릴리스라도 승인한 카드 후보가 아니면 거부한다. 실행 pair와 다른 두 후보 이미지의 revision·역할·아키텍처와 unit 원본 digest를 확인한 뒤에만 후보와 실행 세대·hold inode를 `previous.json`에 함께 보존한다. 카드 창의 두 unit은 첫 창과 같은 바이트여도 된다.
+`resume`은 배포 트리의 두 파일을 다시 읽고, 요청한 후보가 이번 hold에서 정지 전에 보존한 후보와도 일치해야 진행한다. 같은 revision의 재빌드 이미지를 대체할 수 없다. 후보 적재 때 실제 `:prod` 두 개를 미리 이동하지 않는다. hold에는 비밀 env/key가 아닌 파일 식별 metadata·profile·unit·보존 태그 식별자만 남긴다.
 영수증은 `/var/lib/hololive-collector-d-cutover`(`root`, `0700`)에 보관한다. 이 경로의 소유권·권한이 맞지 않으면 인수하거나 고치지 않고 중단한다. `resume`은 없는 경로를 만들지 않는다. 수집기 데이터·로그가 있는 `/var/lib/hololive-collectors`의 권한은 바꾸지 않는다.
 
-- `quiesce`: 지금 d의 실제 `:prod`·실행 세대·선택한 원래 endpoint·사용자·읽기 전용 profile bind·인증된 loaded hash를 대조한다. 원본 unit·허용된 drop-in·비밀 없는 profile과 실이미지별 새 보존 태그를 남긴다. 두 unit 각각에 소유 inode를 기록한 `/dev/null` anchor를 만들고, **양쪽 모두** `ConditionPathExists=!<anchor>`가 manager에 반영된 뒤에만 정지한다. 이때 원래 `ExecStop`·`KillMode`가 그대로 로드돼 있어야 한다. issuer를 단일 manager job으로 먼저 정지해 `Requires=`에 의한 collector 동반 정지를 피한다. collector는 정지 직전에도 원래 실행 세대·endpoint·profile이어야 한다. 각 정지의 journal·종료 결과·두 PID 0·컨테이너 부재를 mask 설치 **전**에 증명한다. 두 결과를 모두 확인한 뒤에만 원 anchor의 hardlink로 최종 mask를 설치하고 모드가 명시된 `kapu-d-guarded-stop-v2` 영수증을 남긴다. 모드가 없는 v1·이전 실패 hold·타 슬롯 `pair.json`을 새 영수증으로 바꾸거나 다른 창에서 재사용하지 않는다.
+- `quiesce`: 지금 d의 실제 `:prod`·실행 세대·pooled endpoint·사용자·읽기 전용 profile bind·인증된 loaded hash를 대조한다. 원본 unit·허용된 drop-in·비밀 없는 profile과 실이미지별 새 보존 태그를 남긴다. 두 unit 각각에 소유 inode를 기록한 `/dev/null` anchor를 만들고, **양쪽 모두** `ConditionPathExists=!<anchor>`가 manager에 반영된 뒤에만 정지한다. 이때 원래 `ExecStop`·`KillMode`가 그대로 로드돼 있어야 한다. issuer를 단일 manager job으로 먼저 정지해 `Requires=`에 의한 collector 동반 정지를 피한다. collector는 정지 직전에도 원래 실행 세대·endpoint·profile이어야 한다. 각 정지의 journal·종료 결과·두 PID 0·컨테이너 부재를 mask 설치 **전**에 증명한다. 두 결과를 모두 확인한 뒤에만 원 anchor의 hardlink로 최종 mask를 설치하고 이 hold의 스냅샷에 결부된 `kapu-d-guarded-stop-v3 already-pooled` 영수증을 남긴다. 첫 창·이전 실패 hold·타 슬롯 영수증을 재사용하지 않는다.
   정상 종료에는 정지 요청 시각 이후 **그 CID 하나의 Podman `died` 이벤트와 exit 0**도 필요하다. manager가 비활성 unit을 수거해 `InvocationID`나 종료 필드를 비워도 이를 성공으로 추정하지 않는다. 예외인 issuer 143도 같은 CID의 exit 143과 아래 manager 증거가 모두 필요하다.
-- `resume`: `previous.json`의 원래 endpoint, 동일 부팅의 두 소유 mask와 기존 컨테이너 부재를 확인한다. 최초 전환에서는 direct→pooled port 외의 차이를, 카드 창에서는 **어떤 기본 unit 변경도** 허용하지 않는다. 양쪽 모두 profile/source drift와 숨은 override를 거부한다. 후보 unit과 **두 `docker.io/library/…:prod`**를 검증하고, issuer·collector가 계속 막혀 있는 상태에서 candidate의 profile 검사와 d 소스의 실제 `--check-pooled-database`를 수행한다. envfile은 Podman에만 주며 SQL probe에는 공개 DB CA만 읽기 전용으로 붙인다.
+- `resume`: `previous.json`의 pooled endpoint, 동일 부팅의 두 소유 mask와 기존 컨테이너 부재를 확인한다. 기본 unit 변경, profile/source drift, 숨은 override를 거부한다. 후보 unit과 **두 `docker.io/library/…:prod`**를 검증하고, issuer·collector가 계속 막혀 있는 상태에서 candidate의 profile 검사와 d 소스의 실제 `--check-pooled-database`를 수행한다. envfile은 Podman에만 주며 SQL probe에는 공개 DB CA만 읽기 전용으로 붙인다.
 - issuer와 collector를 순서대로 한 번씩 동기 시작한다. `Type=notify` 기동 중 TERM/HUP은 해당 요청이 끝나고 원래 start job의 InvocationID·CID·이미지·cgroup을 확보한 뒤 처리한다. issuer는 같은 세대의 healthy와 socket, collector는 같은 세대·profile/endpoint·`first_success`·양성 handoff·`NRestarts=0`이 필요하다. 운영 base unit의 `Restart=always`는 수정하지 않는다. hold 중 가드는 `[Service]`의 실효 `Restart=no`와 빈 `RestartForceExitStatus=`를 대조하며, 가드를 해제하면 base unit 정책이 다시 적용된다. 143은 해당 issuer의 이번 명시적 stop과 동일 invocation의 `failed/exit-code/1/143`일 때만 인정한다. 이전 실행 세대의 143은 후보 정지 증거가 아니며, **collector의 143은 job이 완료돼도 정상 종료가 아니다.**
 - 후보 실패 시 실제로 연 unit만 가드로 다시 차단한다. 열지 않은 peer는 기존 소유 mask와 부재만 확인한다. 예외적으로 mask unlink 직후 아직 manager에 원래 mask가 로드된 채 reload가 실패했고, 시작을 요청하지 않았으며 진행 중 job·PID·컨테이너가 없고 원 inode가 확인되면 같은 mask 링크만 복원한다. 그 외에는 원래 후보 unit이 로드된 상태에서 가드를 먼저 적용한다. 실행 세대·정상 종료를 증명할 수 없으면 가드를 유지하고 미확인으로 남긴다. 자동으로 후보나 이전 이미지를 시작하지 않는다.
   start 클라이언트가 먼저 끝나 manager에 job이 남으면 가드 아래에서 해당 unit의 실효 `TimeoutStartUSec` 안에 같은 job만 관찰한다. 같은 실행 세대가 확인되면 정지한다. 부분 unlink 후 이전 CID의 부재나 정지 영수증을 다시 입증하지 못하면 최종 mask 대신 재부팅 후에도 남는 기동 차단을 설치한다. 동료가 미확인이라도 이미 확인한 후보는 정지하되, 새 hold나 성공 영수증을 발행하지 않는다.

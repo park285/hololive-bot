@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import contextlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
 import signal
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -74,11 +76,12 @@ class Cutover(unittest.TestCase):
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
         self.h = self.root / 'd-cutover-new'
         self.h.mkdir(mode=0o700)
-        self.input = self.root / 'candidate'
+        self.release = self.root / 'custody-bundle'
+        self.input = self.release / 'deploy/podman/kapu'
         self.units = self.root / 'units'
         self.system = self.root / 'system'
         for path in self.input, self.units, self.system:
-            path.mkdir()
+            path.mkdir(parents=True)
         self.rev = 'a' * 40
         self.ids = {d.C:'sha256:'+'1'*64, d.I:'sha256:'+'2'*64}
         self.state = {'level':'s0:c908,c909','profile':'3'*64,'images':{},'old':{}}
@@ -95,7 +98,7 @@ class Cutover(unittest.TestCase):
         self.journal = {}
         self.tags = {}
         self.unit_source, self.origin, self.retained = d.INPUT, d.origin, d.retained
-        for k,v in [('UNIT',self.units),('INPUT',self.input),('SYSTEM',self.system)]:
+        for k,v in [('UNIT',self.units),('INPUT',self.input),('RELEASE_ROOT',self.release),('SYSTEM',self.system)]:
             self.patch(k,v)
         for i,n in enumerate(d.NAMES):
             ident = {'id':'sha256:' + str(i+3)*64, 'rev':'b'*40}
@@ -226,6 +229,19 @@ class Cutover(unittest.TestCase):
     def target(self):
         return d.release_candidate(self.rev, self.ids, self.digests)
 
+    def seal(self, target):
+        (self.release / '.source-revision').write_text(target['revision'] + '\n')
+        (self.release / 'd-card-candidate.json').write_text(json.dumps(target))
+
+    def cli(self, action, target, *, pooled=True):
+        args = ['kapu-d-cutover.py',action,*(['--already-pooled'] if pooled else []),str(self.h),
+                target['revision'],*(target[k][n] for k in ('images','units') for n in d.NAMES)]
+        with (patch.object(d.sys,'argv',args), patch.object(d,'STORE',self.root),
+              patch.object(d.os,'geteuid',return_value=0), patch.object(d.os,'umask'),
+              patch.object(d.os,'uname',return_value=SimpleNamespace(machine='x86_64')),
+              patch.object(d.socket,'gethostname',return_value='kapu'), patch.object(d.signal,'signal')):
+            d.main()
+
     def resume(self, source_port='5433'):
         d.resume(self.h,self.target(),source_port)
 
@@ -233,7 +249,6 @@ class Cutover(unittest.TestCase):
         self.h = self.root / 'd-cutover-running'
         self.patch('GEN',self.root / 'generator')
         d.GEN.mkdir()
-        self.patch('INPUT',self.unit_source)
         self.patch('origin',self.origin)
         self.patch('retained',self.retained)
         self.patch('prereqs',lambda:None)
@@ -260,7 +275,8 @@ class Cutover(unittest.TestCase):
                                          str(self.system / (n+'.service.d/90-hololive-stop-guard.conf')) if n in self.guards else ''))
         self.reload = reload
         for n in d.NAMES:
-            candidate = (d.INPUT / d.unit(n)).read_bytes()
+            candidate = (self.unit_source / d.unit(n)).read_bytes()
+            (self.input / d.unit(n)).write_bytes(candidate)
             self.digests[n] = d.sha(candidate)
             (self.units / d.unit(n)).write_bytes(candidate.replace(b'POSTGRES_PORT=6433', b'POSTGRES_PORT=' + installed_port.encode()))
             old_image = self.state['images'][n]
@@ -337,7 +353,11 @@ class Cutover(unittest.TestCase):
         candidates = dict(self.executions)
         h = self.running_pair(source_port)
         target = self.target() if source_port == '6433' else None
-        d.quiesce(h,source_port,target)
+        if target is None:
+            d.quiesce(h,source_port)
+        else:
+            self.seal(target)
+            self.cli('quiesce',target)
         previous = json.loads((h/'previous.json').read_bytes())
         self.assertEqual(previous['previous_endpoint']['port'],int(source_port))
         self.assertEqual(previous['old'],self.executions)
@@ -345,7 +365,10 @@ class Cutover(unittest.TestCase):
         collector_unit = self.units / d.unit(d.C)
         inode = d.number(collector_unit)
         self.executions = candidates
-        self.resume(source_port)
+        if target is None:
+            self.resume(source_port)
+        else:
+            self.cli('resume',target)
         self.assertEqual(d.number(collector_unit) == inode,source_port == '6433')
         self.assertEqual(collector_unit.read_bytes(),(d.INPUT / d.unit(d.C)).read_bytes())
         accepted = json.loads((h/'accepted.json').read_bytes())
@@ -402,6 +425,62 @@ class Cutover(unittest.TestCase):
                 d.quiesce(h,'6433',invalid)
             self.assertFalse(h.exists())
             self.assertFalse(self.calls)
+
+    def test_card_cli_rejects_earlier_complete_release_and_same_revision_rebuild(self):
+        h = self.running_pair('6433')
+        card = self.target()
+        self.seal(card)
+        prior_ids = {d.C:'sha256:'+'5'*64,d.I:'sha256:'+'6'*64}
+        prior = d.release_candidate('c'*40,prior_ids,self.digests)
+        rebuilt_id = 'sha256:'+'7'*64
+        rebuilt = d.release_candidate(self.rev,{**self.ids,d.C:rebuilt_id},self.digests)
+        for n in d.NAMES:
+            self.tags[prior_ids[n]] = {'id':prior_ids[n],'rev':prior['revision']}
+        self.tags[rebuilt_id] = {'id':rebuilt_id,'rev':self.rev}
+
+        for candidate,reason in ((prior,'source revision'),(rebuilt,'승인 후보')):
+            with self.subTest(reason=reason), self.assertRaisesRegex(d.Refused,reason):
+                self.cli('quiesce',candidate)
+            self.assertFalse(h.exists())
+            self.assertFalse(self.calls)
+
+        for action in ('quiesce','resume'):
+            with self.subTest(action=action), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as exc:
+                self.cli(action,card,pooled=False)
+            self.assertEqual(exc.exception.code,2)
+            self.assertFalse(h.exists())
+            self.assertFalse(self.calls)
+
+    def test_card_cli_requires_both_protected_files_before_quiesce(self):
+        h = self.running_pair('6433')
+        target = self.target()
+        for name in ('.source-revision','d-card-candidate.json'):
+            self.seal(target)
+            (self.release / name).unlink()
+            with self.subTest(missing=name), self.assertRaises(FileNotFoundError) as exc:
+                self.cli('quiesce',target)
+            self.assertEqual(Path(exc.exception.filename),self.release / name)
+            self.assertFalse(h.exists())
+            self.assertFalse(self.calls)
+
+    def test_card_cli_rechecks_protected_inputs_before_resume(self):
+        h = self.running_pair('6433')
+        target = self.target()
+        self.seal(target)
+        self.cli('quiesce',target)
+        self.calls.clear()
+        rebuilt = {**target,'images':{**self.ids,d.C:'sha256:'+'5'*64}}
+        (self.release / '.source-revision').write_text('c'*40 + '\n')
+        with self.assertRaisesRegex(d.Refused,'source revision'):
+            self.cli('resume',target)
+        self.seal(rebuilt)
+        for candidate,reason in ((target,'배포 트리의 승인 후보'),(rebuilt,'이 hold에서 정지 전에 승인한 후보')):
+            with self.subTest(reason=reason), self.assertRaisesRegex(d.Refused,reason):
+                self.cli('resume',candidate)
+        self.assertFalse(self.calls)
+        self.assertFalse((h/'resume-attempt.json').exists())
+        for n in d.NAMES:
+            self.assertEqual(d.number(d.mask(n)),d.number(d.mask_anchor(h,n)))
 
     def test_pooled_resume_only_opens_the_candidate_from_this_hold(self):
         h = self.running_pair('6433')

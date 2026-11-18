@@ -24,7 +24,8 @@ TITLE = {C: 'hololive-youtube-collector', I: 'hololive-youtube-po-sandbox'}
 UNIT = Path('/etc/containers/systemd')
 SYSTEM = Path('/etc/systemd/system')
 GEN = Path('/run/systemd/generator')
-INPUT = Path(__file__).resolve().parents[2] / 'deploy/podman/kapu'
+RELEASE_ROOT = Path(__file__).resolve().parents[2]
+INPUT = RELEASE_ROOT / 'deploy/podman/kapu'
 GUARD = Path(__file__).resolve().with_name('lib') / 'systemd-stop-guard.py'
 QUIESCED = {'5433': b'kapu-d-guarded-stop-v2 direct\n', '6433': b'kapu-d-guarded-stop-v3 already-pooled\n'}
 STORE = Path('/var/lib/hololive-collector-d-cutover')
@@ -903,23 +904,19 @@ def main():
     for cmd in ('quiesce','resume'):
         p = sub.add_parser(cmd, allow_abbrev=False)
         p.add_argument('hold', type=Path)
-        p.add_argument('--already-pooled', dest='source_port', action='store_const', const='6433', default='5433',
+        p.add_argument('--already-pooled', required=True, dest='source_port', action='store_const', const='6433',
                        help='이미 6433인 d를 정지하고 같은 pooled endpoint에서 교체')
         for arg in ('revision','collector_id','issuer_id','collector_unit_sha256','issuer_unit_sha256'):
-            p.add_argument(arg, nargs='?' if cmd == 'quiesce' else None)
+            p.add_argument(arg)
     a = parser.parse_args()
-    values = (a.revision, a.collector_id, a.issuer_id, a.collector_unit_sha256, a.issuer_unit_sha256)
-    target = None
-    if a.action == 'resume' or a.source_port == '6433':
-        if not all(values):
-            parser.error('후보 revision·양쪽 image ID·unit SHA-256을 모두 지정해야 합니다')
-        target = release_candidate(a.revision,{C:a.collector_id,I:a.issuer_id},
-                                   {C:a.collector_unit_sha256,I:a.issuer_unit_sha256})
-    elif any(v is not None for v in values):
-        parser.error('direct quiesce는 후보 인수를 받지 않습니다')
+    target = release_candidate(a.revision,{C:a.collector_id,I:a.issuer_id},
+                               {C:a.collector_unit_sha256,I:a.issuer_unit_sha256})
     need(os.geteuid() == 0 and socket.gethostname().split('.')[0] == 'kapu' and os.uname().machine == 'x86_64', 'kapu rootful amd64 전용')
     need(a.hold.parent == STORE and re.fullmatch('d-cutover-[a-zA-Z0-9][a-zA-Z0-9-]{0,63}',a.hold.name), 'hold 경로 불일치')
     trusted(Path(__file__).resolve())
+    need(raw(RELEASE_ROOT / '.source-revision').removesuffix(b'\n') == a.revision.encode(),
+         '배포 트리의 source revision과 불일치')
+    need(json.loads(raw(RELEASE_ROOT / 'd-card-candidate.json')) == target, '배포 트리의 승인 후보와 불일치')
     os.umask(0o077)
     prepare_store(STORE, create=a.action == 'quiesce')
     cancelled = False
