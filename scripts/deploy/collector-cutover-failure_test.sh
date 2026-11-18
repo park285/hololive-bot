@@ -40,6 +40,7 @@ def require(condition, message, result):
 proof_setup = r'''
 set -euo pipefail
 fixture_root="$1" fixture_case="$2" staging="$3" collector_container=youtube-collector
+. "$staging/scripts/deploy/lib/postgres-endpoint.sh"
 awk() {
   if [[ "${@: -1}" == /etc/stack-secrets/hololive-bot/compose.env ]]; then
     printf 'hololive_migrator\n'
@@ -71,6 +72,7 @@ podman() {
   esac
 }
 '''
+proof_setup += '\n' + function(central, 'collector_database_endpoint') + '\n'
 proof_function = function(central, 'require_collector_lease_migration')
 proof_checksum = hashlib.sha256(
     (root / 'hololive/hololive-api/scripts/migrations/001_schema_epoch3_baseline.sql').read_bytes()
@@ -81,6 +83,8 @@ for case, endpoint, success, queries in (
     ('foreign', ('other-pooler', '6432', 'hololive'), False, False),
     ('wrong_port', ('holo-pgbouncer', '5432', 'hololive'), False, False),
     ('wrong_database', ('holo-pgbouncer', '6432', 'other'), False, False),
+    ('socket_override', ('holo-pgbouncer', '6432', 'hololive'), False, False),
+    ('ambiguous_host', ('holo-postgres', '5432', 'hololive'), False, False),
     ('query_failure', ('holo-pgbouncer', '6432', 'hololive'), False, True),
     ('writable_proof', ('holo-pgbouncer', '6432', 'hololive'), False, True),
     ('wrong_checksum', ('holo-pgbouncer', '6432', 'hololive'), False, True),
@@ -91,6 +95,9 @@ for case, endpoint, success, queries in (
         (state / 'collector.env').write_text(
             f'POSTGRES_HOST={host}\nPOSTGRES_PORT={port}\nPOSTGRES_DB={database}\n'
         )
+        if case in ('socket_override', 'ambiguous_host'):
+            with (state / 'collector.env').open('a') as env_file:
+                env_file.write('POSTGRES_SOCKET_PATH=/other\n' if case == 'socket_override' else 'POSTGRES_HOST=other\n')
         (state / 'checksum').write_text(proof_checksum)
         result = run(proof_setup + proof_function + '\nrequire_collector_lease_migration\n', state, case)
         require((result.returncode == 0) == success, f'{case}: primary route proof outcome', result)
@@ -104,10 +111,15 @@ for case, endpoint, success, queries in (
                 ('--env', 'PGHOST=/var/run/postgresql'),
                 ('--env', 'PGPORT=5432'),
                 ('--env', 'PGUSER=hololive_migrator'),
-                ('--env', 'PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=5s -c lock_timeout=1s'),
+                ('--env', 'PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=30s -c lock_timeout=3s'),
+                ('-v', 'ON_ERROR_STOP=1'), ('-c', 'BEGIN READ ONLY'), ('-c', 'COMMIT'),
             ):
                 require(any(args[i:i + 2] == [flag, value] for i in range(len(args) - 1)),
                         f'{case}: private read-only ledger transport {value}', result)
+            statements = [args[i + 1] for i, flag in enumerate(args[:-1]) if flag == '-c']
+            require(len(statements) == 3 and statements[0] == 'BEGIN READ ONLY' and
+                    statements[1].startswith('SELECT ') and statements[2] == 'COMMIT',
+                    f'{case}: ledger query in the same read-only transaction', result)
         print(f'[PASS] collector migration proof: {case}')
 
 for slot, host, port, accepted in (
@@ -125,7 +137,7 @@ for slot, host, port, accepted in (
         require((result.returncode == 0) == accepted, 'post-activation pooler endpoint', result)
 
 native_functions = '\n'.join(function(native, name) for name in (
-    'stop_collector_unit_and_require_inactive', 'stop_native_units_and_require_inactive',
+    'stop_native_units_and_require_inactive',
     'native_restore_recorded_runtime', 'restore_native_after_failed_cutover', 'native_cutover_failed', 'arm_native_cutover_restore',
 ))
 native_journal = native[native.index('native_post_cutover_log_check()'):]
@@ -162,6 +174,13 @@ systemctl() {
   case "$1" in
     cat|daemon-reload) return 0 ;;
     is-active) [[ "${*: -1}" == "$unit" && "$(cat "$state/runtime")" != stopped ]] ;;
+    show)
+      case "$4" in
+        LoadState) printf 'loaded\n' ;;
+        ActiveState) if [[ "$(<"$state/runtime")" == stopped ]]; then printf 'inactive\n'; else printf 'active\n'; fi ;;
+        UnitFileState) printf 'disabled\n' ;;
+        *) return 2 ;;
+      esac ;;
     disable|stop) printf stopped >"$state/runtime" ;;
     enable) basename "$(readlink "$current_link")" >"$state/runtime" ;;
     *) return 1 ;;
@@ -193,6 +212,7 @@ for case in ('success', 'journal_failure', 'error_log', 'grep_failure', 'ordinar
         (contract / 'youtube-collector-host.env').write_text(old_env)
         (state / 'payload').mkdir()
         (state / 'payload/youtube-collector-host.env').write_text(new_env)
+        (state / 'releases/new/youtube-collector-host.env').write_text(new_env)
         (contract / 'previous-before-cutover').write_text(str(state / 'releases/older') + '\n')
         (state / 'current').symlink_to(state / 'releases/new')
         (state / 'previous').symlink_to(state / 'releases/old')
@@ -261,6 +281,7 @@ python3() {
     case "$2" in
       capture)
         mkdir -p "$4"; printf 'retained profile\n' > "$4/profile.json"
+        cp "$fixture_root/collector.generation" "$4/pair.json"
         cp "$unit_dir/$collector_container.container" "$4/unit.container" ;;
       candidate)
         mkdir -p "$4"
@@ -277,7 +298,13 @@ python3() {
       check)
         if [[ "$fixture_case" == *candidate_check_failure && "$4" == */candidate ]]; then return 7; fi
         test -f "$4/profile.json" ;;
-      verify|verify-live) test -f "$4/profile.json" ;;
+      verify) test -f "$4/profile.json" ;;
+      verify-live)
+        [[ "$5" == "$collector_container" ]] && cmp -s "$4/profile.json" "$fixture_root/loaded.profile" ;;
+      verify-captured)
+        [[ "$5" == "$collector_container" ]] && cmp -s "$4/pair.json" "$fixture_root/collector.generation" ;;
+      check-pooled)
+        [[ "$fixture_case" != *pooled_query_failure && "$3" == "$service" && "$4" == "$profile_release/candidate" ]] ;;
       verify-dropin)
         cmp "$4/50-worker-profile.conf" <(printf 'Image=sha256:%s\n' "$(hex_of new)") ;;
       verify-source)
@@ -301,10 +328,20 @@ install() {
   done
   command install "${args[@]}"
 }
+ln() {
+  printf 'mask link %s\n' "${*: -1}" >>"$fixture_root/calls"
+  if [[ "$1" == -PT && "$4" == "$system_unit_dir/$collector_unit" ]]; then
+    [[ "$fixture_case" != maintenance_quiesce_mask_failure ]] || return 8
+    if [[ "$fixture_case" == maintenance_quiesce_mask_race ]]; then
+      command ln -s /dev/null "$4"
+    fi
+  fi
+  command ln "$@"
+}
 stat() {
-  if [[ "$2" == '%d:%i' ]]; then command stat "$@"; return; fi
-  case "${*: -1}" in
-    "$fixture_root/socket") printf '65532:1000 770\n' ;;
+  case "$2:${*: -1}" in
+    '%d:%i:'*) command stat "$@" ;;
+    *:"$fixture_root/socket") printf '65532:1000 770\n' ;;
     *) printf '0:0 %s\n' "$(command stat -c '%a' "${*: -1}")" ;;
   esac
 }
@@ -347,6 +384,17 @@ podman() {
       kind=po-sandbox
       [[ "$3" != */collector-image.tar ]] || kind=collector
       printf new > "$(ref_file "localhost/hololive-youtube-$kind:candidate")"
+      if [[ "$kind" == collector ]]; then
+        case "$fixture_case" in
+          *load_collector_replaced) printf '{"container_id":"%064d","pid":42}\n' 2 > "$fixture_root/collector.generation" ;;
+          *load_collector_restarted) printf '{"container_id":"%064d","pid":43}\n' 1 > "$fixture_root/collector.generation" ;;
+          *load_issuer_invocation) printf '%032x\n' 2 > "$fixture_root/issuer.invocation" ;;
+          *load_issuer_image) printf new > "$fixture_root/issuer.runtime"; printf new > "$(ref_file "$issuer")" ;;
+          *load_issuer_restarted) printf 2 > "$fixture_root/issuer.started" ;;
+          *load_issuer_unhealthy) touch "$fixture_root/issuer.unhealthy" ;;
+          *load_issuer_socket) touch "$fixture_root/issuer.socket-failed" ;;
+        esac
+      fi
       ;;
     'inspect -f')
       object="${*: -1}" kind=collector format="$3"
@@ -369,7 +417,10 @@ podman() {
               printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\nPOSTGRES_DB=hololive\n'
             fi
           fi ;;
-        *State.Health*) printf 'healthy\n' ;;
+        *State.Health*)
+          if [[ -e "$fixture_root/$kind.unhealthy" ]]; then printf 'unhealthy\n'; else printf 'healthy\n'; fi ;;
+        *State.StartedAt.UnixNano*)
+          printf '%064d %s %s 42\n' 3 "$(hex_of "$value")" "$(<"$fixture_root/$kind.started")" ;;
         *image.revision*) revision_of "$value" ;;
         '{{.Image}}') hex_of "$value" ;;
         *Mounts*) printf '%s/socket\n' "$fixture_root" ;;
@@ -382,7 +433,17 @@ podman() {
       [[ ! -e "$fixture_root/pooler-query-failed" ]] || return 125
       value="$(sha256sum "$fixture_root/live-pgbouncer.ini")" || return
       printf '%s  /etc/pgbouncer/pgbouncer.ini\n' "${value%% *}" ;;
-    'exec '*) : ;;
+    'exec '*)
+      if [[ "$2" == "$issuer_container" ]]; then
+        [[ ! -e "$fixture_root/issuer.socket-failed" ]]
+      else
+        [[ "$2" == "$collector_container" && "$4" == --body ]] || return 2
+        local instance="youtube-collector-$slot" handoff=PROCESSED processed=true
+        if [[ "$fixture_case" == check_wrong_instance ]]; then instance=youtube-collector-a; fi
+        if [[ "$fixture_case" == check_waiting_handoff ]]; then handoff=PENDING; processed=false; fi
+        printf '{"status":"ready","instance_id":"%s","helper":"ok","first_success":true,"handoff_status":"%s","handoff_processed":%s,"pending_queue":0}\n' \
+          "$instance" "$handoff" "$processed"
+      fi ;;
     'logs --since')
       case "$fixture_case:${*: -1}" in
         *logs_collector*:"$collector_container") return 5 ;;
@@ -392,6 +453,16 @@ podman() {
       ;;
     *) return 2 ;;
   esac
+}
+journalctl() {
+  local unit="${11#UNIT=}" invocation="${12#INVOCATION_ID=}" since="${9#--since=}" id at
+  [[ "$since" == ????-??-??\ ??:??:??.??????\ UTC && "${10}" == _PID=1 ]] || return 2
+  [[ "$unit" == "$issuer_unit" || "$unit" == "$collector_unit" ]] || return 2
+  [[ "${13}" == JOB_TYPE=stop && "${14}" == MESSAGE_ID=de5b426a63be47a7b6ac3eaac82e2f6f ]] || return 2
+  if [[ -f "$fixture_root/$unit.stopping" ]] && read -r id at < "$fixture_root/$unit.stopping" &&
+     [[ "$id" == "$invocation" && ! "$at" < "$since" ]]; then
+    printf '{"INVOCATION_ID":"%s"}\n' "$id"
+  fi
 }
 systemctl() {
   local kind=collector value
@@ -407,22 +478,21 @@ systemctl() {
           if [[ "$(cat "$fixture_root/$kind.running")" == true ]]; then printf 'active\n'
           elif [[ -f "$fixture_root/$kind.exit" ]]; then printf 'failed\n'; else printf 'inactive\n'; fi ;;
         InvocationID)
-          if [[ -f "$fixture_root/replaced-invocation" ]]; then printf '%032x\n' 2; else printf '%032x\n' 1; fi ;;
+          cat "$fixture_root/$kind.invocation" ;;
         Result) printf 'exit-code\n' ;;
         ExecMainCode) printf '1\n' ;;
         ExecMainStatus) cat "$fixture_root/$kind.exit" ;;
         MainPID|ControlPID) printf '0\n' ;;
         *) return 2 ;;
       esac ;;
-    mask)
-      [[ "$fixture_case" != *mask_failure || "$kind" != collector ]] || return 8
-      ln -s /dev/null "$system_unit_dir/$2" ;;
     unmask)
       [[ "$fixture_case" != *unmask_failure || "$kind" != collector ]] || return 8
       rm "$system_unit_dir/$2" ;;
     is-active) [[ "$(cat "$fixture_root/$kind.running")" == true ]] ;;
     restart)
       [[ ! -L "$system_unit_dir/$2" ]] || return 8
+      rm -f "$fixture_root/$kind.exit"
+      printf '%032x\n' 2 > "$fixture_root/$kind.invocation"
       if [[ "$fixture_case" == maintenance_* ]]; then
         [[ ! -e "$fixture_root/db.stopped" ]] || return 9
         test -f "$profile_release/candidate/profile.json" || [[ "$mode" == rollback ]] || return 9
@@ -439,12 +509,17 @@ systemctl() {
           previous) value=old ;;
           *) value="$(cat "$(ref_file "$collector")")" ;;
         esac
+        cp "$profile_release/$(cat "$fixture_root/dropin")/profile.json" "$fixture_root/loaded.profile"
+        if [[ "$fixture_case" == *rollback_profile ]]; then printf 'other profile\n' > "$fixture_root/loaded.profile"; fi
+        if [[ "$fixture_case" == *rollback_unhealthy ]]; then touch "$fixture_root/collector.unhealthy"; fi
+        if [[ "$fixture_case" == *rollback_image ]]; then value=new; fi
       else
         value="$(cat "$(ref_file "$issuer")")"
       fi
       printf '%s' "$value" > "$fixture_root/$kind.runtime"
       if [[ "$fixture_case" == *substitution_failure || "$fixture_case" == restore_failure ]] && [[ "$kind" == issuer && "$value" == new ]]; then
         printf false > "$fixture_root/$kind.running"
+        printf '143\n' > "$fixture_root/issuer.exit"
         return 1
       fi
       printf true > "$fixture_root/$kind.running"
@@ -454,6 +529,18 @@ systemctl() {
       ;;
     stop)
       [[ "$fixture_case" != *stop_failure || "$kind" != collector ]] || return 8
+      if [[ "$fixture_case" == *stop_peer_restarted && "$kind" == issuer ]]; then
+        printf 2 > "$fixture_root/collector.started"
+      fi
+      if [[ "$fixture_case" == *stop_other_invocation && "$kind" == collector ]]; then
+        printf '%032x\n' 2 > "$fixture_root/$kind.invocation"
+      fi
+      if [[ "$fixture_case" != *stop_missing_job || "$kind" != issuer ]]; then
+        local at
+        at="$(date -u '+%Y-%m-%d %H:%M:%S.%6N UTC')"
+        if [[ "$fixture_case" == *stop_stale_job && "$kind" == issuer ]]; then at=0; fi
+        printf '%s %s\n' "$(<"$fixture_root/$kind.invocation")" "$at" > "$fixture_root/$2.stopping"
+      fi
       if [[ "$kind" == issuer && "$mode" == quiesce ]]; then printf '143\n' > "$fixture_root/issuer.exit"; fi
       printf absent > "$fixture_root/$kind.runtime"; printf false > "$fixture_root/$kind.running" ;;
     *) return 2 ;;
@@ -474,7 +561,7 @@ def image_file(state, ref):
 collector_prod, issuer_prod = 'localhost/hololive-youtube-collector:prod', 'localhost/hololive-youtube-po-sandbox:prod'
 collector_rollback = f'localhost/hololive-youtube-collector:rollback-{change}'
 issuer_rollback = f'localhost/hololive-youtube-po-sandbox:rollback-{change}'
-mutations = ('podman tag ', 'podman load ', 'podman image rm ', 'systemctl restart ', 'systemctl stop ', 'systemctl mask ', 'systemctl unmask ', 'systemctl daemon-reload', 'pair activate ')
+mutations = ('podman tag ', 'podman load ', 'podman image rm ', 'systemctl restart ', 'systemctl stop ', 'mask link ', 'systemctl unmask ', 'systemctl daemon-reload', 'pair activate ')
 central_cases = {
     # case: (exit status, restored to previous pair)
     'success': (0, False), 'absent_success': (0, False),
@@ -485,6 +572,9 @@ central_cases = {
     'missing_receipt': (1, False), 'collector_stopped': (1, False), 'inventory_failure': (1, False),
     'rollback': (0, True), 'check_success': (0, False), 'check_error_log': (1, False),
     'transition_success': (0, False), 'transition_error_log': (1, False),
+    'check_wrong_profile': (1, False), 'pooled_query_failure': (1, False),
+    'check_wrong_instance': (1, False), 'check_waiting_handoff': (1, False),
+    'rollback_masked_endpoint': (1, False), 'rollback_missing_endpoint': (1, False),
     'transition_wrong_endpoint': (1, False), 'rollback_cross': (1, False),
     'capacity_drift': (1, False), 'capacity_missing': (1, False), 'capacity_query_failed': (1, False),
     'rollback_capacity_drift': (1, False),
@@ -493,10 +583,18 @@ slots = {
     'c': ('youtube-collector', 30025, 'central'),
     'b': ('youtube-collector-b', 30015, 'iris-seoul'),
 }
-runs = [('c', case) for case in central_cases] + [('b', case) for case in ('success', 'rollback', 'check_success', 'transition_success', 'transition_error_log', 'transition_wrong_endpoint', 'rollback_cross')]
+runs = [('c', case) for case in central_cases] + [('b', case) for case in (
+    'success', 'rollback', 'check_success', 'check_wrong_profile', 'pooled_query_failure', 'transition_success',
+    'check_wrong_instance', 'check_waiting_handoff',
+    'transition_error_log', 'transition_wrong_endpoint', 'rollback_cross', 'rollback_masked_endpoint', 'rollback_missing_endpoint')]
 maintenance_cases = (
     'success', 'reboot', 'mask_failure', 'stop_failure', 'activation_failure',
     'other_exit', 'other_invocation', 'leftover_container', 'inventory_unavailable',
+    'load_collector_replaced', 'load_collector_restarted', 'load_issuer_invocation', 'load_issuer_image',
+    'load_issuer_restarted', 'load_issuer_unhealthy', 'load_issuer_socket', 'stop_other_invocation', 'stop_missing_job',
+    'stop_stale_job',
+    'stop_peer_restarted', 'mask_race', 'mask_replaced',
+    'missing_stop_receipt', 'pooled_query_failure', 'rollback_image', 'rollback_profile', 'rollback_unhealthy',
     'candidate_check_failure', 'substitution_failure', 'error_log', 'unmask_failure',
     'source_changed', 'identity_changed', 'inputs_changed', 'foreign_hold', 'lock_busy',
     'operator_mask', 'incomplete_hold', 'candidate_unit_changed', 'candidate_profile_changed', 'wrong_endpoint',
@@ -552,10 +650,16 @@ for slot, case in runs:
         issuer_absent = 'absent' in case
         initial = 'new' if is_check or is_rollback else 'old'
         image_file(state, collector_prod).write_text(initial)
+        image_file(state, old_id).write_text('old')
         if not issuer_absent:
             image_file(state, issuer_prod).write_text(initial)
+        (state / 'collector.generation').write_text('{"container_id":"' + '1'.zfill(64) + '","pid":42}\n')
+        (state / 'issuer.started').write_text('1')
+        (state / 'collector.started').write_text('1')
+        (state / 'loaded.profile').write_text('retained profile\n')
         for kind in ('collector', 'issuer'):
             absent = kind == 'issuer' and issuer_absent
+            (state / f'{kind}.invocation').write_text('1'.zfill(32) + '\n')
             (state / f'{kind}.runtime').write_text('absent' if absent else initial)
             (state / f'{kind}.running').write_text('false' if absent or (kind == 'collector' and case == 'collector_stopped') else 'true')
         (state / 'dropin').write_text('candidate' if is_check or is_rollback else 'initial')
@@ -577,7 +681,18 @@ for slot, case in runs:
             (backup / 'snapshot-complete').touch()
             previous_pair = current / 'artifacts/worker-profile/releases' / backup.name / service / 'previous'
             previous_pair.mkdir(parents=True)
-            (previous_pair / 'profile.json').write_text('retained profile')
+            (previous_pair / 'profile.json').write_text('retained profile\n')
+            if case != 'rollback_missing_endpoint':
+                captured_host, captured_port = host, db_port
+                if case in ('rollback_cross', 'rollback_masked_endpoint'):
+                    captured_host, captured_port = ('holo-postgres', 5432) if slot == 'c' else ('100.100.1.8', 5433)
+                (backup / 'collector.endpoint').write_text(f'{captured_host}|{captured_port}\n')
+            if is_check:
+                candidate = previous_pair.with_name('candidate')
+                candidate.mkdir()
+                (candidate / 'profile.json').write_text('candidate profile\n')
+                if case != 'check_wrong_profile':
+                    (state / 'loaded.profile').write_text('candidate profile\n')
             # 이전 image가 돌던 기본 unit. sync가 이미 새 revision의 unit을 설치한 상황을 만든다.
             (previous_pair / 'unit.container').write_text(previous_definition)
             (backup / 'issuer.state').write_text('present')
@@ -629,7 +744,26 @@ for slot, case in runs:
                             f'{slot}: competing operation rejected by slot lock', result)
                 continue
             (state / 'live-pgbouncer.ini').rename(state / 'stopped-pgbouncer.ini')
-            result = invoke('quiesce', scenario if scenario in ('mask_failure', 'stop_failure') else '')
+            fail_quiesce = scenario.startswith('load_') or scenario in (
+                'mask_failure', 'stop_failure', 'stop_other_invocation', 'stop_missing_job', 'stop_stale_job', 'stop_peer_restarted', 'mask_race')
+            result = invoke('quiesce', scenario if fail_quiesce else '')
+            if scenario.startswith('load_'):
+                require(result.returncode != 0 and not hold.exists() and
+                        not any(c.startswith(('mask link ', 'systemctl stop ', 'systemctl restart ')) for c in calls_now()),
+                        f'{slot} {scenario}: changed live pair rejected before hold', result)
+                continue
+            if scenario in ('stop_other_invocation', 'stop_missing_job', 'stop_stale_job', 'stop_peer_restarted', 'mask_race'):
+                if scenario in ('stop_peer_restarted', 'mask_race'):
+                    require(f'systemctl stop {collector_unit}' not in calls_now(),
+                            f'{slot}: changed peer not accepted as captured after issuer stop', result)
+                require(result.returncode != 0 and '[OUTCOME] unconfirmed:' in result.stderr and
+                        not (hold / 'quiesced').exists(), f'{slot}: no receipt for wrong or absent stop job', result)
+                before = len(calls_now())
+                for mode in ('resume', 'rollback'):
+                    refused = invoke(mode)
+                    require(refused.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
+                            f'{slot}: incomplete stop cannot release the pair', refused)
+                continue
             if scenario in ('mask_failure', 'stop_failure'):
                 require(result.returncode != 0 and hold.exists() and (backup / 'snapshot-complete').exists(),
                         f'{slot} {scenario}: partial failure retains recovery', result)
@@ -666,6 +800,7 @@ for slot, case in runs:
                     not any(c.startswith(mutations) for c in calls_now()[before:]),
                     f'{slot} {scenario}: held state is not completed or replaceable', checked)
             if scenario == 'reboot':
+                (state / 'issuer.exit').unlink()
                 # 새 supervisor가 디스크의 persistent mask로 기동 여부를 결정한다.
                 for kind, mask in zip(('issuer', 'collector'), masks):
                     (state / f'{kind}.running').write_text('false' if mask.is_symlink() else 'true')
@@ -685,7 +820,9 @@ for slot, case in runs:
             if scenario == 'other_exit':
                 (state / 'issuer.exit').write_text('137\n')
             elif scenario == 'other_invocation':
-                (state / 'replaced-invocation').touch()
+                (state / 'issuer.invocation').write_text('2'.zfill(32))
+            elif scenario == 'missing_stop_receipt':
+                (hold / 'quiesced').unlink()
             elif scenario == 'leftover_container':
                 (state / 'collector.leftover').touch()
             elif scenario == 'inventory_unavailable':
@@ -720,6 +857,9 @@ for slot, case in runs:
                 (staging / 'collector-image-id').write_text(old_id)
             elif scenario == 'foreign_hold':
                 (hold / 'backup').write_text(str(backup) + '-foreign\n')
+            elif scenario == 'mask_replaced':
+                masks[0].unlink()
+                masks[0].symlink_to('/dev/null')
             elif scenario == 'incomplete_hold':
                 masks[1].unlink()
             elif scenario in ('candidate_unit_changed', 'candidate_profile_changed',
@@ -746,7 +886,12 @@ for slot, case in runs:
                     continue
                 unit_path.write_text(installed_definition)
                 (state / 'live-pgbouncer.ini').unlink()
-                result = invoke('rollback')
+                result = invoke('rollback', scenario if scenario in ('rollback_image', 'rollback_profile', 'rollback_unhealthy') else '')
+                if scenario in ('rollback_image', 'rollback_profile', 'rollback_unhealthy'):
+                    require(result.returncode != 0 and 'previous collector/issuer restored' not in result.stdout,
+                            f'{slot}: ready does not hide the failed restored runtime check', result)
+                    assert_held(result)
+                    continue
                 require(result.returncode == 0 and not hold.exists() and all(not m.is_symlink() for m in masks),
                         f'{slot}: coordinated rollback releases owned masks', result)
                 require(all((state / f'{k}.runtime').read_text() == 'old' for k in ('issuer', 'collector')),
@@ -755,7 +900,8 @@ for slot, case in runs:
                         (release / 'previous/unit.container').read_text() == installed_definition,
                         f'{slot}: coordinated rollback retains the exact previous unit', result)
             else:
-                failure = scenario if scenario in ('activation_failure', 'candidate_check_failure', 'substitution_failure', 'error_log', 'unmask_failure') else ''
+                failure = scenario if scenario in ('activation_failure', 'candidate_check_failure', 'pooled_query_failure',
+                                                    'substitution_failure', 'error_log', 'unmask_failure') else ''
                 result = invoke('resume', failure)
                 success = scenario in ('success', 'reboot')
                 require((result.returncode == 0) == success, f'{slot} {scenario}: resume outcome', result)
@@ -780,6 +926,12 @@ for slot, case in runs:
                     require((release / 'previous/unit.container').read_text() == installed_definition and
                             not (state / 'unreviewed-helper-ran').exists(),
                             f'{slot}: recovery unit retained and unverified helper never executed', result)
+                    if scenario == 'substitution_failure':
+                        require('[OUTCOME] unconfirmed:' in result.stderr and not (hold / 'quiesced').exists(),
+                                f'{slot}: failed start with exit 143 is not a managed stop', result)
+                    if scenario == 'pooled_query_failure':
+                        require(not any(c.startswith(mutations) for c in subsequent),
+                                f'{slot}: failed pooled SQL before activation retains the hold', result)
                     if scenario not in ('foreign_hold', 'incomplete_hold'):
                         assert_held(result)
                     if scenario in ('candidate_image_overlay_changed', 'candidate_endpoint_overlay_changed'):
@@ -807,7 +959,7 @@ for slot, case in runs:
                     f'{label}: recovery records retained', result)
             require(not any(call.startswith('pair activate ') and call.endswith('/previous') for call in calls),
                     f'{label}: previous pair never activated', result)
-        if case == 'rollback_cross':
+        if case in ('rollback_cross', 'rollback_masked_endpoint', 'rollback_missing_endpoint'):
             require(not changed, f'{label}: manual cross-endpoint rollback has no runtime mutations', result)
         if case.startswith('capacity_') or case == 'rollback_capacity_drift':
             require(not changed, f'{label}: capacity rejection has no runtime mutations', result)
@@ -822,7 +974,9 @@ for slot, case in runs:
             require(not backup.exists() and not changed, f'{label}: no partial backup or runtime change', result)
         elif is_check:
             require(not changed, f'{label}: check has no mutations', result)
-        elif case in ('candidate_check_failure', 'absent_candidate_check_failure', 'activation_failure'):
+            require(('completion verified' in result.stdout) == (expected_status == 0),
+                    f'{label}: completion output requires the candidate loaded profile', result)
+        elif case in ('candidate_check_failure', 'absent_candidate_check_failure', 'activation_failure', 'pooled_query_failure'):
             # 후보 검사·drop-in 게시 실패는 :prod tag·drop-in·실행 중 pair를 바꾸지 않는다.
             require(not restarts, f'{label}: no unit restart', result)
             require(image_file(state, collector_prod).read_text() == 'old', f'{label}: collector tag baseline', result)
@@ -848,7 +1002,8 @@ for slot, case in runs:
             require((state / f'units/hololive-youtube-collector-{slot}.container').read_text() == previous_definition, f'{label}: previous base unit restored', result)
             require((release_dir / f'rollback-replaced-hololive-youtube-collector-{slot}.container').read_text() == installed_definition, f'{label}: replaced base unit retained', result)
             require(calls.index('systemctl daemon-reload') > -1, f'{label}: units reloaded', result)
-        expected_runtime = 'absent' if endpoint_blocked else 'new' if is_check or case in ('success', 'absent_success', 'transition_success', 'rollback_cross', 'rollback_capacity_drift') else 'old'
+        expected_runtime = 'absent' if endpoint_blocked else 'new' if is_check or is_rollback and not restored or case in (
+            'success', 'absent_success', 'transition_success') else 'old'
         require((state / 'collector.runtime').read_text() == expected_runtime, f'{label}: collector runtime', result)
         expected_issuer = 'new' if case == 'restore_failure' else 'absent' if case == 'absent_candidate_check_failure' else expected_runtime
         require((state / 'issuer.runtime').read_text() == expected_issuer, f'{label}: issuer runtime', result)

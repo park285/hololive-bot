@@ -7,5 +7,6 @@ scripts/deploy/lib/public-bind-mounts.sh
 scripts/deploy/lib/compose-env.sh
 scripts/deploy/lib/postgres-endpoint.sh
 scripts/deploy/lib/postgres-capacity.sh
+scripts/deploy/lib/ap-collector-readiness.sh
 scripts/ci/postgres-capacity-policy.tsv
 deploy/podman/iris-seoul/hololive-youtube-collector-b.container
