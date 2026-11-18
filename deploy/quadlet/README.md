@@ -203,6 +203,13 @@ helper는 다음 순서로 진행하며 어느 단계도 재시도하지 않습�
    스키마·admission 호환성 승인 뒤 `scripts/deploy/quadlet-rollback-service.sh <release> --check`와 `--apply`로 합니다.
    migration과 schema는 어느 경우에도 되돌리지 않습니다.
 
+`previous-pair`에서는 서로 다른 두 가지를 확인합니다.
+
+- `capture`·`prepare`는 **실행 중인 writer**의 불변 ID로 로드된 프로필 해시를 확인합니다. 이전 이미지로 네트워크 없는 읽기 전용 컨테이너를 만들고, `podman init` 뒤 실제 UID/GID 매핑·보조 그룹·SELinux MCS·환경과 bind inode를 대조한 후에만 `--check-worker-profile`을 실행합니다. 프로필만 이번에 보관할 바이트로 바꿉니다. 환경값은 호스트 명령행이나 env 파일에 기록하지 않습니다.
+- 이어지는 `check`는 **보존한 기본 unit으로도** 그 이미지와 프로필이 시작 가능한지 검사합니다. 이 검사가 첫 검사를 대체하지 않습니다. 원 writer의 정지·재시작·이름 교체, 바뀐 bind, 접근 거부는 새 pair로 게시하지 않습니다. 정지된 writer를 검사 목적으로 켜지 말고 이미 보존한 release로만 재개합니다.
+
+kapu의 SELinux Enforcing 실환경 회귀: `sudo python3 -I -B scripts/deploy/lib/worker-profile-capture_podman_test.py <로컬-host-arch-Alpine-이미지>`. rootful Podman에 이미 있는 이미지를 사용하며 운영 설정·비밀·서비스는 사용하지 않습니다.
+
 ### Iris 소비자 동시 전환
 
 인증 계약처럼 API·alarm-worker와 외부 Iris를 같은 창에서 바꿔야 하면 두 소비자를 먼저 보존·정지합니다.

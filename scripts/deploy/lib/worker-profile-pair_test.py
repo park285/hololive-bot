@@ -256,6 +256,127 @@ class PairToolTest(unittest.TestCase):
         self.assertEqual(command.split()[-1], IMAGE)
 
 
+class CaptureRaceTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        spec = importlib.util.spec_from_file_location("capture_worker_profile_pair", TOOL)
+        self.tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.tool)
+        self.tool.SOURCE = str(self.root / "mirror")
+        self.tool.QUADLET_DIR = self.root / "units"
+        self.release = self.root / "artifacts/worker-profile/releases/new/previous"
+        self.pointer = self.root / "artifacts/worker-profile/active" / (SERVICE + ".pair")
+        unit = self.tool.QUADLET_UNITS[SERVICE]
+        self.overlay = self.tool.QUADLET_DIR / (unit + ".d") / self.tool.DROPIN
+        self.tool.QUADLET_DIR.mkdir()
+        shutil.copyfile(UNITS / unit, self.tool.QUADLET_DIR / unit)
+        self.name = Path(unit).stem
+        profile = Path(self.tool.SOURCE) / self.tool.PROFILES[SERVICE]
+        profile.parent.mkdir()
+        profile.write_bytes(b'{"workers":{}}\n')
+        self.original, self.other = "c" * 64, "d" * 64
+        self.named = self.original
+        self.hashes = dict.fromkeys((self.original, self.other), hashlib.sha256(profile.read_bytes()).hexdigest())
+        self.state = {"Running": True, "Pid": 4242, "StartedAt": "2026-11-18T00:00:00Z"}
+        self.config = {"Labels": {}, "Env": ["HOLOLIVE_METRICS_ADDR=:8080",
+                       f"STACK_WORKER_PROFILE_FILE={self.tool.TARGET}/{profile.name}"]}
+        self.tags = set()
+        self.enterContext(mock.patch.object(self.tool, "run", side_effect=self.runtime))
+        self.checker = self.enterContext(mock.patch.object(self.tool, "validate_container_pair"))
+
+    def runtime(self, cli, action, *args):
+        if action == "container":
+            identity = self.named if args[-1] == self.name else args[-1]
+            self.assertIn(identity, self.hashes)
+            return json.dumps([{"Id": identity, "Image": IMAGE_HEX, "State": self.state, "Config": self.config,
+                                "Mounts": [{"Source": self.tool.SOURCE, "Destination": self.tool.TARGET}]}])
+        if action == "image":
+            return json.dumps([{"Id": IMAGE_HEX, "Architecture": "arm64", "Os": "linux",
+                                "Config": {"Labels": {"org.opencontainers.image.revision": "b" * 40}}}])
+        if action == "exec":
+            identity = self.named if args[0] == self.name else args[0]
+            return json.dumps({"contractVersion": 1, "profile": {"hash": self.hashes[identity]}})
+        if action == "tag":
+            self.tags.add(args[-1])
+            return ""
+        self.fail(f"예상 밖의 실행: {cli} {action}")
+
+    def retain(self, *, labelled):
+        prior = self.release.parents[1] / "old/previous"
+        # 라벨은 이전 세대의 receipt도 가리킬 수 있지만, prepare 포인터는 원 ID여야 한다.
+        write_pair(prior, extra={"container_id": self.other if labelled else self.original})
+        pair = json.loads((prior / "pair.json").read_text())
+        self.tool.dropin(prior, SERVICE, pair)
+        self.tool.activate(prior, SERVICE, self.root)
+        if labelled:
+            self.config["Labels"][self.tool.LABEL] = str(prior)
+
+    def assert_prepare_rejected(self):
+        def installed():
+            return [path.read_bytes() if path.exists() else None for path in (self.pointer, self.overlay)]
+
+        before = installed()
+        argv = [str(TOOL), "prepare", SERVICE, str(self.release), self.name, str(self.root)]
+        with mock.patch.object(sys, "argv", argv), self.assertRaises(ValueError):
+            self.tool.main()
+        self.assertEqual(installed(), before)
+        self.assertFalse(self.tags)
+        for name in ("pair.json", "SHA256SUMS", self.tool.DROPIN):
+            self.assertFalse((self.release / name).exists(), name)
+
+    def reject_change_during_check(self, change):
+        self.checker.side_effect = lambda *args, **kwargs: change()
+        self.assert_prepare_rejected()
+        self.checker.assert_called_once()
+
+    def test_named_replacement_cannot_publish_while_original_still_exists(self):
+        self.reject_change_during_check(lambda: setattr(self, "named", self.other))
+
+    def test_stopped_source_cannot_publish(self):
+        self.reject_change_during_check(lambda: self.state.update(Running=False, Pid=0))
+
+    def test_prepared_source_restart_cannot_replace_active_pair(self):
+        self.retain(labelled=False)
+        self.reject_change_during_check(lambda: self.state.update(StartedAt="2026-11-18T00:00:01Z"))
+
+    def test_labelled_source_replacement_cannot_replace_active_pair(self):
+        self.retain(labelled=True)
+        self.reject_change_during_check(lambda: setattr(self, "named", self.other))
+
+    def test_replaced_retained_bytes_cannot_attest_the_loaded_profile(self):
+        self.retain(labelled=True)
+        profile = Path(self.config["Labels"][self.tool.LABEL]) / "profile.json"
+
+        def during_diagnostics(cli, action, *args):
+            if action == "exec":
+                profile.write_bytes(b'{"workers":{"changed":{}}}\n')
+            return self.runtime(cli, action, *args)
+
+        self.tool.run.side_effect = during_diagnostics
+        self.assert_prepare_rejected()
+        self.checker.assert_not_called()
+
+    def test_diagnostics_from_temporary_name_owner_cannot_attest_original(self):
+        # 진단 때만 이름을 빌린 다른 컨테이너가 원본 파일과 일치하는 해시를 보고한다.
+        self.hashes[self.original] = "0" * 64
+        observed = []
+
+        def borrowed_name(cli, action, *args):
+            if action == "exec":
+                with mock.patch.object(self, "named", self.other):
+                    result = self.runtime(cli, action, *args)
+                    observed.append(json.loads(result)["profile"]["hash"])
+                    return result
+            return self.runtime(cli, action, *args)
+
+        self.tool.run.side_effect = borrowed_name
+        self.assert_prepare_rejected()
+        self.assertEqual(observed, [self.hashes[self.original]])
+        self.checker.assert_not_called()
+
+
 @unittest.skipIf(os.geteuid() == 0, "renderer fixtures require the non-root test path contract")
 class ResolvedPairTest(unittest.TestCase):
     def setUp(self):
@@ -454,6 +575,26 @@ class ResolvedPairTest(unittest.TestCase):
                     fixture.assert_private_inputs()
                 finally:
                     fixture.doCleanups()
+
+    def test_masked_unit_uses_only_its_generated_security_policy(self):
+        self.case("hololive-alarm-worker")
+        name = self.fragment.name
+        self.fragment = self.root / "etc/systemd/system" / name
+        self.fragment.parent.mkdir(parents=True)
+        self.fragment.symlink_to("/dev/null")
+        generated = self.root / "run/systemd/generator" / name
+        generated.parent.mkdir(parents=True)
+        source = self.units / self.module.QUADLET_UNITS[self.pair["service"]]
+        policy = "[X-Container]\nSecurityLabelLevel=s0:c900,c901\n"
+        generated.write_text(f"[Unit]\nSourcePath={source}\n{policy}")
+        self.check()
+        self.assertIn("label=level:s0:c900,c901", self.consumed[-1][0])
+        self.consumed.clear()
+        generated.write_text(f"[Unit]\nSourcePath={self.units}/foreign.container\n{policy}")
+        with self.assertRaisesRegex(ValueError, "unit source changed"):
+            self.check()
+        self.assertFalse(self.consumed)
+        self.assertEqual(self.fragment.readlink(), Path("/dev/null"))
 
     def test_ordinary_named_volume_uses_existing_storage_readonly(self):
         self.case("youtube-collector-b")

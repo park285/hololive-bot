@@ -72,24 +72,158 @@ def container_profile_hash(service, container, data):
                            "http://127.0.0.1:" + port + "/diagnostics/workers"))
 
 
-def validate_container_pair(container, before, directory):
-    environment = dict(item.split("=", 1) for item in before["Config"]["Env"])
+def running_generation(data):
+    state = data["State"]
+    if not state["Running"] or state.get("Paused") or state.get("Restarting") or state["Pid"] <= 0:
+        raise ValueError("profile capture requires the running writer; use its retained release after stopping")
+    return data["Id"], data["Image"], state["StartedAt"], state["Pid"]
+
+
+def oci_spec(container):
+    with Path(container["OCIConfigPath"]).open() as source:
+        return json.load(source)
+
+
+def bind_argument(source, destination, options):
+    if not Path(source).is_absolute() or not Path(destination).is_absolute() or any(
+            char in value for value in (source, destination) for char in (":", ",", "\n", "\r")):
+        raise ValueError("unsupported profile check bind path")
+    return source + ":" + destination + ":" + ",".join(["ro", "bind", *options])
+
+
+def check_mounts(pid, destinations):
+    # 내부 submount를 빠뜨리면 실제 파일 대신 그 아래의 다른 inode를 검증하게 된다.
+    table = {}
+    for line in Path(f"/proc/{pid}/mountinfo").read_text().splitlines():
+        _, _, _, _, path, flags, *_ = line.split()
+        if path in destinations:
+            if path in table:
+                raise ValueError("ambiguous profile check mount")
+            table[path] = set(flags.split(","))
+        elif any(path.startswith(parent + "/") for parent in destinations):
+            raise ValueError("unrecorded nested profile check mount")
+    if table.keys() != destinations:
+        raise ValueError("missing profile check mount")
+    return table
+
+
+def user_maps(proc):
+    # 커널은 동일한 매핑도 auto와 명시적 map에서 다른 순서로 표시할 수 있다.
+    return {kind: sorted(tuple(map(int, line.split())) for line in (proc / (kind + "_map")).read_text().splitlines())
+            for kind in ("uid", "gid")}
+
+
+def validate_container_pair(before, directory):
+    spec = oci_spec(before)
+    process, linux = spec["process"], spec["linux"]
+    user = process["user"]
+    entrypoint = before["Config"]["Entrypoint"]
+    if not entrypoint or len(entrypoint) != 1 or entrypoint[0] != process["args"][0]:
+        raise ValueError("previous image requires one binary entrypoint")
+    environment = dict(item.split("=", 1) for item in process["env"])
+    if len(environment) != len(process["env"]):
+        raise ValueError("previous process has duplicate environment keys")
     environment["STACK_WORKER_PROFILE_FILE"] = RELEASE_TARGET + "/profile.json"
     environment.pop("STACK_WORKER_PROFILE_SOURCE_FILE", None)
-    command = [CLI, "run", "--rm", "--pull=never", "--network", "none", "--read-only",
-               "--cap-drop", "all", "--security-opt", "no-new-privileges",
-               "--volumes-from", container + ":ro",
-               "--mount", "type=bind,src=" + str(directory) + ",dst=" + RELEASE_TARGET + ",readonly",
-               "--user", before["Config"]["User"]]
-    for group in before["HostConfig"]["GroupAdd"] or []:
-        command.extend(("--group-add", group))
-    for key in environment:
-        command.extend(("--env", key))
-    entrypoint = before["Config"].get("Entrypoint") or []
-    if len(entrypoint) != 1:
-        raise ValueError("previous image requires one binary entrypoint")
-    command.extend(("--entrypoint", entrypoint[0], before["Image"], "--check-worker-profile"))
-    subprocess.run(command, env={**os.environ, **environment}, check=True, timeout=30)
+    if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) or "\n" in value or "\r" in value
+           for key, value in environment.items()):
+        raise ValueError("previous environment cannot be passed losslessly to the profile check")
+    # 앱 환경은 stdin으로만 전달한다. PATH·LD_* 등도 호스트의 root Podman 실행에는 적용하지 않는다.
+    command = [CLI, "--runtime", before["OCIRuntime"], "create", "--rm", "--pull=never", "--no-healthcheck",
+               "--image-volume=ignore", "--log-driver=none", "--timeout=30", "--network=none",
+               "--read-only", "--read-only-tmpfs=false", "--cap-drop=all", "--security-opt=no-new-privileges",
+               "--http-proxy=false", "--unsetenv-all", "--env-file=/dev/stdin",
+               "--user", f'{user["uid"]}:{user["gid"]}', "--workdir", process["cwd"]]
+    for group in user.get("additionalGids", []):
+        command.extend(("--group-add", str(group)))
+    label = process.get("selinuxLabel", "")
+    if label:
+        command.extend(("--security-opt", "label=level:" + label.split(":", 3)[3]))
+    if process.get("apparmorProfile") and process["apparmorProfile"] != "unconfined":
+        command.extend(("--security-opt", "apparmor=" + process["apparmorProfile"]))
+    old_pid = before["State"]["Pid"]
+    old_proc = Path(f"/proc/{old_pid}")
+    mappings = user_maps(old_proc)
+    # 별도 user namespace에 같은 숫자 매핑만 재현한다. 원 컨테이너를 기동하는 Podman 의존성을 만들지 않는다.
+    if (old_proc / "ns/user").samefile("/proc/self/ns/user"):
+        command.append("--userns=host")
+    else:
+        for kind, ranges in mappings.items():
+            for start, host, size in ranges:
+                command.extend(("--" + kind + "map", f"{start}:{host}:{size}"))
+    destinations = {mount["Destination"] for mount in before["Mounts"] if mount["Type"] in ("bind", "volume")}
+    scratch = set(before["HostConfig"].get("Tmpfs") or {})
+    scratch.update(m["Destination"] for m in before["Mounts"] if m["Type"] == "tmpfs")
+    if scratch - {"/tmp"} or any(m["Type"] not in ("bind", "volume", "tmpfs") for m in before["Mounts"]):
+        raise ValueError("unsupported previous profile mount")
+    source_flags = check_mounts(old_pid, destinations)
+    mounts = {mount["destination"]: mount for mount in spec["mounts"]}
+    previous_release = (before["Config"].get("Labels") or {}).get(LABEL)
+    if previous_release:
+        mounted = old_proc / ("root" + RELEASE_TARGET)
+        if (RELEASE_TARGET not in destinations or "ro" not in source_flags[RELEASE_TARGET] or
+                mounts[RELEASE_TARGET]["source"] != previous_release or
+                not mounted.samefile(previous_release) or
+                digest(mounted / "profile.json") != digest(directory / "profile.json") or
+                "STACK_WORKER_PROFILE_FILE=" + RELEASE_TARGET + "/profile.json" not in process["env"]):
+            raise ValueError("previous release differs from the writer's active profile mount")
+    for dest in sorted(destinations - {RELEASE_TARGET}):
+        mount = mounts[dest]
+        if mount["type"] != "bind":
+            raise ValueError("previous volume has no resolved bind source")
+        flags = sorted(source_flags[dest] & {"nosuid", "nodev", "noexec"})
+        if mount.get("uidMappings") or mount.get("gidMappings"):
+            if any(mount.get(key) != linux.get(key) for key in ("uidMappings", "gidMappings")):
+                raise ValueError("unsupported custom mount ID mapping")
+            flags.append("idmap")
+        command.extend(("--volume", bind_argument(mount["source"], dest, flags)))
+    command.extend(("--volume", bind_argument(str(directory), RELEASE_TARGET, [])))
+
+    with tempfile.TemporaryDirectory(prefix="hololive-profile-check-") as temporary:
+        cidfile = Path(temporary) / "cid"
+        probe = None
+        command.extend(("--cidfile", str(cidfile), "--entrypoint", entrypoint[0], before["Image"], "--check-worker-profile"))
+        try:
+            subprocess.run(command, input="".join(f"{k}={v}\n" for k, v in environment.items()),
+                           text=True, stdout=subprocess.DEVNULL, check=True, timeout=30)
+            probe = cidfile.read_text().strip()
+            run(CLI, "init", probe)
+            # init은 mount를 고정하지만 entrypoint를 실행하지 않는다. 호스트 경로가 교체된 경우 새 파일로 통과시키지 않는다.
+            initialized = inspect("container", probe)
+            if initialized["State"]["Status"] != "initialized" or initialized["Image"] != before["Image"]:
+                raise ValueError("profile check was not initialized with the previous image")
+            actual = oci_spec(initialized)["process"]
+            if (actual["args"] != [entrypoint[0], "--check-worker-profile"] or actual["cwd"] != process["cwd"] or
+                    dict(item.split("=", 1) for item in actual["env"]) != environment or
+                    actual.get("selinuxLabel", "") != label or
+                    actual.get("apparmorProfile") != process.get("apparmorProfile") or
+                    any(actual["user"][key] != user[key] for key in ("uid", "gid")) or
+                    set(actual["user"].get("additionalGids", [])) != set(user.get("additionalGids", []))):
+                raise ValueError("profile check process credentials or environment differ from the writer")
+            pid = initialized["State"]["Pid"]
+            proc = Path(f"/proc/{pid}")
+            if user_maps(proc) != mappings:
+                raise ValueError("profile check user namespace mappings differ from the writer")
+            flags = check_mounts(pid, destinations | {RELEASE_TARGET})
+            for dest, options in flags.items():
+                original = directory if dest == RELEASE_TARGET else old_proc / ("root" + dest)
+                if "ro" not in options or not (proc / ("root" + dest)).samefile(original):
+                    raise ValueError("profile check bind differs from the mounted input")
+                if dest != RELEASE_TARGET and options & {"idmapped", "nosuid", "nodev", "noexec"} != (
+                        source_flags[dest] & {"idmapped", "nosuid", "nodev", "noexec"}):
+                    raise ValueError("profile check bind policy differs from the writer")
+            if running_generation(inspect("container", before["Id"])) != running_generation(before):
+                raise ValueError("previous process changed before the profile check")
+            # 설정 오류에는 입력값이 담길 수 있다. 로그에는 단계와 실제 종료 코드만 남긴다.
+            result = subprocess.run([CLI, "start", "--attach", probe], stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, timeout=35)
+            if result.returncode:
+                raise ValueError(f"previous image --check-worker-profile exited with status {result.returncode}")
+        finally:
+            if probe is None and cidfile.is_file():
+                probe = cidfile.read_text().strip()
+            if probe:
+                run(CLI, "rm", "--force", "--ignore", "--time=0", probe)
 
 
 def check_pair(directory, pair):
@@ -159,6 +293,26 @@ def volume_source(source):
     return str(path)
 
 
+def profile_security_level(unit):
+    service = unit + ".service"
+    fragment = Path(run("systemctl", "show", service, "--property=FragmentPath", "--value"))
+    if fragment.is_symlink() and fragment.readlink() == Path("/dev/null"):
+        # 영속 mask는 기동을 차단하지만 생성된 Quadlet 정책을 대체하지 않는다.
+        prefix = Path(os.environ.get("HOLOLIVE_QUADLET_TEST_ROOT") or "/")
+        if fragment != prefix / "etc/systemd/system" / service:
+            raise ValueError("unexpected profile preflight mask")
+        generated = prefix / "run/systemd/generator" / service
+        if generated.is_symlink() or not generated.is_file():
+            raise ValueError("masked profile preflight requires the generated unit")
+        values = unit_values(generated, ("Unit", "X-Container"))
+        if [v for k, v in values["Unit"] if k == "SourcePath"] != [str(QUADLET_DIR / (unit + ".container"))]:
+            raise ValueError("masked profile preflight unit source changed")
+        native = values["X-Container"]
+    else:
+        native = unit_values(fragment, ("X-Container",))["X-Container"]
+    return dict(native).get("SecurityLabelLevel")
+
+
 def check_resolved_pair(directory, pair):
     values = unit_values(directory / UNIT_RECORD)["Container"]
     environment = dict(os.environ)
@@ -205,9 +359,7 @@ def check_resolved_pair(directory, pair):
             environment["APP_VERSION"] = pair["app_version"]
             command.extend(("--env", "APP_VERSION"))
         # 호스트의 MCS drop-in은 기본 unit 스냅샷 밖에 있으므로 Quadlet이 합성한 정책을 따른다.
-        fragment = run("systemctl", "show", unit + ".service", "--property=FragmentPath", "--value")
-        native = unit_values(Path(fragment), sections=("X-Container",))["X-Container"]
-        level = dict(native).get("SecurityLabelLevel")
+        level = profile_security_level(unit)
         if level:
             command.extend(("--security-opt", "label=level:" + expand_unit_value(level)))
         command.extend(("--user", user + ":" + group,
@@ -422,34 +574,46 @@ def quadlet_slot(service, unit):
         raise ValueError("candidate profile directory does not match its service slot")
 
 
+def create_pair_directory(directory):
+    directory.mkdir(mode=0o755, parents=True, exist_ok=False)
+    # 새 비밀 없는 release의 bind 루트는 배포자의 umask와 관계없이 서비스 UID가 탐색할 수 있어야 한다.
+    directory.chmod(0o755)
+
+
 def capture(container, service, directory, root):
     before = inspect("container", container)
-    previous = (before["Config"].get("Labels") or {}).get(LABEL)
+    generation = running_generation(before)
+    labelled = (before["Config"].get("Labels") or {}).get(LABEL)
+    previous = labelled
     prepared = Path(root) / "artifacts/worker-profile/active" / (service + ".pair")
-    if not previous and prepared.is_file() and not prepared.is_symlink():
-        prepared_pair = Path(prepared.read_text().strip())
-        receipt = verify(prepared_pair, service, before["Image"])
-        if receipt.get("container_id") != before["Id"]:
-            raise ValueError("prepared profile belongs to a different container")
-        previous = str(prepared_pair)
-    directory.mkdir(mode=0o755, parents=True, exist_ok=False)
+    if not labelled and os.path.lexists(prepared):
+        previous = profile_bytes(prepared).decode().strip()
+        if not previous:
+            raise ValueError("empty prepared profile pointer")
+    create_pair_directory(directory)
     if previous:
-        prior = Path(previous)
+        prior = Path(previous).resolve()
+        if not prior.is_relative_to((Path(root) / "artifacts/worker-profile/releases").resolve()):
+            raise ValueError("previous profile escaped the release store")
         pair = verify(prior, service, before["Image"])
-        if before["State"]["Running"] and container_profile_hash(service, container, before) != pair["profile_hash"]:
-            raise ValueError("running process differs from its retained profile pair")
-        (directory / "profile.json").write_bytes(profile_bytes(prior / "profile.json"))
+        if not labelled:
+            installed = QUADLET_DIR / (QUADLET_UNITS[service] + ".d") / DROPIN
+            if pair.get("container_id") != before["Id"] or verify_dropin(prior, service, pair) != profile_bytes(installed):
+                raise ValueError("prepared profile does not belong to the running container")
+        loaded = container_profile_hash(service, before["Id"], before)
+        raw = profile_bytes(prior / "profile.json")
+        if loaded != pair["profile_hash"] or hashlib.sha256(raw).hexdigest() != loaded:
+            raise ValueError("retained profile bytes differ from the running process")
+        (directory / "profile.json").write_bytes(raw)
         if (prior / UNIT_RECORD).is_file():
             (directory / UNIT_RECORD).write_bytes((prior / UNIT_RECORD).read_bytes())
     else:
         # 첫 도입은 기존 프로세스가 로드한 바이트를 증명할 수 있을 때만 허용한다.
-        if not before["State"]["Running"]:
-            raise ValueError("prepare the previous profile pair before entering maintenance-stopped mode")
         env = dict(item.split("=", 1) for item in before["Config"]["Env"])
         profile_path = env["STACK_WORKER_PROFILE_FILE"]
         if profile_path != TARGET + "/" + PROFILES[service]:
             raise ValueError("unexpected previous profile path")
-        running_hash = container_profile_hash(service, container, before)
+        running_hash = container_profile_hash(service, before["Id"], before)
         # UserNS=auto container에서는 idmap 없는 bind의 root 소유 파일을 podman cp가 꺼내지 못한다
         # (host ID 0 cannot be mapped). profile 디렉터리는 bind라 그 host 원본이 container가 읽는 파일과 같다.
         sources = [mount.get("Source") for mount in before.get("Mounts") or [] if mount.get("Destination") == TARGET]
@@ -458,10 +622,6 @@ def capture(container, service, directory, root):
         (directory / "profile.json").write_bytes(profile_bytes(Path(SOURCE) / PROFILES[service]))
         if running_hash != digest(directory / "profile.json"):
             raise ValueError("previous profile bytes differ from the running process; writer unchanged")
-        after = inspect("container", container)
-        if (before["Id"], before["State"]["StartedAt"], before["Image"]) != (
-                after["Id"], after["State"]["StartedAt"], after["Image"]):
-            raise ValueError("previous process changed during profile capture")
         pair = image_identity(before["Image"])
         # 첫 도입은 설치된 기본 unit을 기록한다. 컷오버 직후처럼 실행 중 container가 그 unit으로 기동했을 때만 정확하므로
         # 첫 도입(prepare)은 기본 unit을 설치하고 기동한 직후에 한다.
@@ -469,7 +629,9 @@ def capture(container, service, directory, root):
         if installed.is_file():
             (directory / UNIT_RECORD).write_bytes(installed.read_bytes())
     (directory / "profile.json").chmod(0o444)
-    validate_container_pair(container, before, directory)
+    validate_container_pair(before, directory)
+    if running_generation(inspect("container", container)) != generation:
+        raise ValueError("previous process changed during profile capture")
     pair["retained_image"] = "hololive-worker-profile:pair-" + hashlib.sha256(str(directory).encode()).hexdigest()[:24]
     run(CLI, "tag", before["Image"], pair["retained_image"])
     pair["container_id"] = before["Id"]
@@ -546,7 +708,7 @@ def main():
         unit_text = sys.stdin.read()
         quadlet_slot(service, unit_text)
         image = rest[0]
-        directory.mkdir(mode=0o755, parents=True, exist_ok=False)
+        create_pair_directory(directory)
         # 이 candidate가 활성화되면 이 기본 unit으로 돈다. 다음 release의 capture가 롤백용으로 이어받는다.
         (directory / UNIT_RECORD).write_text(unit_text)
         source = Path(SOURCE) / PROFILES[service]
