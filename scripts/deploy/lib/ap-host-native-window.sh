@@ -7,6 +7,66 @@ native_payload_digest() (
     -cf - -C "$1" . | sha256sum | cut -d' ' -f1
 )
 
+native_window_identity() {
+  sudo -n python3 -I -B - "$current_link" "$releases_root" "$native_recovery_dir" "$native_release_window" "$@" <<'PY'
+from pathlib import Path
+import os, re, stat, sys
+
+current, root, guard = map(Path, sys.argv[1:4])
+family, action, expected_id, expected_rev = sys.argv[4:]
+
+def owned(path, kind):
+    s = path.lstat()
+    writable = s.st_mode & stat.S_IWOTH or (s.st_mode & stat.S_IWGRP and s.st_gid != os.getegid())
+    if not kind(s.st_mode) or s.st_uid != os.geteuid() or (not stat.S_ISLNK(s.st_mode) and writable):
+        sys.exit(f'수용 경로의 소유권·형식 불일치: {path}')
+    return s
+
+owned(root.parent, stat.S_ISDIR)
+owned(root, stat.S_ISDIR)
+owned(current, stat.S_ISLNK)
+release = current.resolve(strict=True)
+assert release.parent == root and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', release.name)
+assert Path(os.path.abspath(current.parent / os.readlink(current))) == release
+s = owned(release, stat.S_ISDIR)
+assert not expected_id or release.name == expected_id
+assert not os.path.lexists(release/'native-window')
+owned(release/'po-sandbox', stat.S_ISDIR)
+rev = release/'po-sandbox/revision'
+owned(rev, stat.S_ISREG)
+revision = rev.read_bytes().removesuffix(b'\n').decode('ascii')
+assert re.fullmatch('[0-9a-f]{40}', revision) and (not expected_rev or expected_rev == revision)
+marker = release/'accepted-window'
+
+def identity(w, record):
+    return f'{w}\n{release.name}\n{revision}\n{s.st_dev}:{s.st_ino}:{record.st_ino}\n'.encode('ascii')
+
+if action == 'stage':
+    assert family in ('W1','W2') and expected_id and expected_rev and not os.path.lexists(marker)
+    owned(guard, stat.S_ISDIR)
+    with os.fdopen(os.open(guard/'accepted-window', os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600), 'wb') as f:
+        f.write(identity(family, os.fstat(f.fileno())))
+        f.flush()
+        os.fsync(f.fileno())
+elif action == 'quiesce' and family == 'W1':
+    assert not os.path.lexists(marker) and not os.path.lexists(release/'native-observation')
+else:
+    assert action in ('apply','quiesce') and family in ('W1','W2')
+    record = owned(marker, stat.S_ISREG)
+    assert stat.S_IMODE(record.st_mode) == 0o600
+    families = ('W1','W2') if action == 'quiesce' else (family,)
+    data = marker.read_bytes()
+    assert data in [identity(w, record) for w in families], '현재 릴리스는 요청한 창에서 수용되지 않았습니다'
+    print(' '.join(data.decode('ascii').splitlines()[1:]))
+PY
+}
+
+native_apply_preflight() {
+  [[ "$(hostname -s)" == osaka1 && "$service" == youtube-collector-a ]] || return 1
+  native_recovery_require_clear && sudo -n test ! -L "$native_recovery_dir" || return 1
+  native_window_identity apply "${1:-}" ''
+}
+
 native_window_pins() {
   [[ "$window_name" == "$native_release_window" ]] || return 1
   [[ "$(hostname -s)" == osaka1 && "$service" == youtube-collector-a && "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ &&
@@ -246,6 +306,7 @@ native_window_quiesce() {
   local old_previous_target old_revision
   native_window_pins
   native_recovery_require_clear
+  native_window_identity quiesce "$window_old" '' >/dev/null
   native_release_dir_resolve "$releases_root" "$release_id" "$current_link" >/dev/null
   old_previous_target="$(native_window_previous)"
   [[ "$(native_root_endpoint "$host_env")" == "100.100.1.8|$original_port" &&
@@ -255,6 +316,7 @@ native_window_quiesce() {
   sudo -n test ! -e "$old_target/rollback-contract"
   sudo -n test ! -L "$old_target/rollback-contract"
   native_cutover_claim "$releases_root/$release_id"
+  native_window_identity quiesce "$window_old" '' >/dev/null
   sudo -n mkdir -m 0700 "$window"
   native_window_boot | sudo -n tee "$window/boot" >/dev/null
   native_window_record | sudo -n tee "$window/pins" >/dev/null
@@ -326,6 +388,15 @@ native_window_candidates() {
   for n in "$@"; do native_window_owned "$n" || { native_window_uncertain; return 1; }; done
 }
 
+native_window_start_receipt() {
+  local n="$1" boot="$2" since="$3" job="${4:-}" record
+  local -a filter=()
+  if [[ -n "$job" ]]; then filter=("JOB_ID=$job"); fi
+  record="$(sudo -n journalctl --boot="$boot" --quiet --no-pager -o json --output-fields=_BOOT_ID,INVOCATION_ID,JOB_ID \
+    --since="$since" _PID=1 "UNIT=$n" "${filter[@]}" JOB_TYPE=start JOB_RESULT=done MESSAGE_ID=39f53479d3a045ac8e11786248231fbf)" || return 1
+  python3 -I -B -c 'import json,re,sys; r=json.load(sys.stdin); i=r["INVOCATION_ID"]; j=r["JOB_ID"]; assert r["_BOOT_ID"]==sys.argv[1] and (not sys.argv[2] or j==sys.argv[2]) and re.fullmatch("[0-9a-f]{32}",i) and int(i,16) and re.fullmatch("[1-9][0-9]*",j); print(sys.argv[1],j,i)' "$boot" "$job" <<< "$record"
+}
+
 native_window_start() {
   local LC_ALL=C n="$1" boot since permit transaction line job='' record id client=0 client_unit
   boot="$(native_window_boot)"
@@ -357,9 +428,8 @@ native_window_start() {
   done <<< "$transaction"
   [[ -n "$job" ]]
   printf '%s\n' "$job" | sudo -n tee "$window/$n.job" >/dev/null
-  record="$(sudo -n journalctl --boot="$boot" --quiet --no-pager -o json --output-fields=_BOOT_ID,INVOCATION_ID,JOB_ID \
-    --since="$since" _PID=1 "UNIT=$n" "JOB_ID=$job" JOB_TYPE=start JOB_RESULT=done MESSAGE_ID=39f53479d3a045ac8e11786248231fbf)"
-  id="$(python3 -I -B -c 'import json,re,sys; r=json.load(sys.stdin); i=r["INVOCATION_ID"]; assert r["_BOOT_ID"]==sys.argv[1] and r["JOB_ID"]==sys.argv[2] and re.fullmatch("[0-9a-f]{32}",i) and int(i,16); print(i)' "$boot" "$job" <<< "$record")"
+  record="$(native_window_start_receipt "$n" "$boot" "$since" "$job")"
+  id="${record##* }"
   [[ "$(native_window_live_generation "$n")" == "$id" ]]
   sudo -n awk -F= -v id="$id" '$1=="InvocationID" {count++; old=$2} END {exit !(count==1 && ("id:" old)!=("id:" id))}' "$window/$n.before"
   printf '%s %s %s\n' "$boot" "$job" "$id" | sudo -n tee "$window/$n.started" >/dev/null
@@ -446,6 +516,81 @@ native_window_commit_policy() {
   native_window_candidates "${window_units[@]}"
 }
 
+native_apply_before_stop() {
+  local n
+  [[ "$(native_window_identity apply "$window_old" '')" == "$apply_origin_pin" && "$old_target" == "$releases_root/$window_old" &&
+     "$(sudo -n cat "$native_recovery_dir/claim")" == "$native_claim_nonce" &&
+     "$(sudo -n cat "$native_recovery_dir/owner-pid")" == "$BASHPID" && "$(sudo -n cat "$native_recovery_dir/release")" == "$release_dir" ]]
+  sudo -n test ! -e "$native_recovery_dir/outcome"
+  [[ "$(native_root_endpoint "$host_env")" == '100.100.1.8|6433' ]]
+  local release_dir="$old_target"
+  for n in "${window_units[@]}"; do native_window_candidate_runtime "$n"; done
+  native_window_process_endpoint "$(native_window_prop "$unit" MainPID)" 6433
+}
+
+native_apply_observation_record() { printf '%s\n' "$native_release_window" "$release_id" "$EXPECTED_REVISION" "$1"; }
+
+native_apply_await_observation() {
+  local n boot entry job
+  boot="$(native_window_boot)"
+  for n in "${window_units[@]}"; do
+    # 마지막 실행 세대로 journal을 좁히면 관찰 전의 추가 기동을 숨기므로 전체 구간의 단일 완료만 받는다.
+    entry="$(native_window_start_receipt "$n" "$boot" "$apply_start_since")"
+    read -r _ job _ <<< "$entry"
+    printf '%s\n' "$job" | sudo -n tee "$window/$n.job" >/dev/null
+    printf '%s\n' "$entry" | sudo -n tee "$window/$n.started" >/dev/null
+    native_window_candidate_runtime "$n"
+  done
+  native_window_candidates "${window_units[@]}"
+  native_apply_observation_record "$native_claim_nonce" | sudo -n tee "$window/await-observation" >/dev/null
+  sudo -n sync -f "$window"
+  printf '%s\n' "$native_claim_nonce"
+}
+
+native_apply_close_observation() {
+  local owner="$BASHPID" n
+  [[ "$(hostname -s)" == osaka1 && "$service" == youtube-collector-a && "$window_nonce" =~ ^[0-9a-f-]{36}$ &&
+     "$(realpath -e "$current_link")" == "$release_dir" && "$(sudo -n cat "$native_recovery_dir/claim")" == "$window_nonce" &&
+     "$(sudo -n cat "$native_recovery_dir/release")" == "$release_dir" && "$(sudo -n cat "$native_recovery_dir/step")" == collector-restart &&
+     "$(sudo -n cat "$native_recovery_dir/terminal")" == 0 ]]
+  sudo -n test ! -e "$native_recovery_dir/outcome"
+  native_apply_observation_record "$window_nonce" | sudo -n cmp -s - "$window/await-observation"
+  sudo -n mkdir -m 0700 "$window/closing"
+  native_claim_nonce="$window_nonce"
+  printf '%s\n' "$owner" | sudo -n tee "$native_recovery_dir/owner-pid" >/dev/null
+  for n in "${window_units[@]}"; do native_window_candidate_runtime "$n"; done
+  native_window_process_endpoint "$(native_window_prop "$unit" MainPID)" 6433
+  native_window_candidates "${window_units[@]}"
+  native_window_accept_guard collector-restart
+}
+
+native_window_accept_guard() {
+  local step="$1" dest="$window/accepted-guard"
+  native_window_identity stage "$release_id" "$EXPECTED_REVISION"
+  sudo -n python3 -I -B - "$native_recovery_dir" "$dest" "$native_claim_nonce" "$owner" "$release_dir" "$step" "$current_link" <<'PY'
+from pathlib import Path
+import os, sys
+g, dest = map(Path, sys.argv[1:3])
+nonce, owner, release, step, current = sys.argv[3:]
+assert Path(current).resolve(strict=True) == Path(release)
+assert not os.path.lexists(dest) and not g.is_symlink()
+files = {'owner-pid','worker-pid','claim','release','step','terminal','accepted-window'}
+if step == 'accept':
+    files.add('accepting')
+    assert (g/'accepting').is_dir()
+assert {p.name for p in g.iterdir()} == files and all(not p.is_symlink() for p in g.iterdir())
+for name, value in zip(('claim','owner-pid','release','step','terminal'), (nonce,owner,release,step,'0')):
+    assert (g/name).read_text() == value+'\n'
+os.rename(g,dest)
+for path in (dest.parent, g.parent):
+    fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+os.link(dest/'accepted-window', Path(release)/'accepted-window')
+PY
+  sudo -n sync -f "$release_dir"
+}
+
 native_window_close_observation() {
   local owner="$BASHPID"
   case "$window_action" in accepted|observation-failed) ;; *) return 2 ;; esac
@@ -487,20 +632,6 @@ native_window_close_observation() {
     fi
     native_window_candidates "${window_units[@]}"
     # 원자적 rename 한 번이 시작 권한과 guard를 함께 넘긴다. 중단된 수용은 accepting을 남긴다.
-    sudo -n python3 -I -B - "$native_recovery_dir" "$window/accepted-guard" "$window_nonce" "$owner" "$release_dir" <<'PY'
-from pathlib import Path
-import os, sys
-g, dest = map(Path, sys.argv[1:3])
-assert not dest.exists() and not dest.is_symlink() and not g.is_symlink()
-assert {p.name for p in g.iterdir()} == {'accepting','owner-pid','worker-pid','claim','release','step','terminal'}
-assert (g/'accepting').is_dir() and all(not p.is_symlink() for p in g.iterdir())
-for name, value in zip(('claim','owner-pid','release','step','terminal'), (*sys.argv[3:], 'accept', '0')):
-    assert (g/name).read_text() == value+'\n'
-os.rename(g,dest)
-for path in (dest.parent, g.parent):
-    fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY)
-    try: os.fsync(fd)
-    finally: os.close(fd)
-PY
+    native_window_accept_guard accept
   fi
 }

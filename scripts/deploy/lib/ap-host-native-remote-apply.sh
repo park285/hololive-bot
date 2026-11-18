@@ -27,11 +27,29 @@ worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
 swapfile="/swapfile"
 window_action="${9:?native command required}"
 window_name="${10:-}" window_old="${11:-}" window_digest="${12:-}" window_nonce="${13:-}"
+same_window=false
+if [[ "$window_action" == same-window || "$window_action" == apply-accepted ]]; then
+  [[ "$(hostname -s)" == osaka1 && "$service" == youtube-collector-a ]]
+  native_release_id_validate "$release_id"
+  release_dir="$releases_root/$release_id" window="$releases_root/$release_id/native-observation"
+  window_units=("$po_socket" "$po_service" "$unit")
+fi
 case "$window_action" in
   quiesce) [[ $# == 13 && -z "$window_nonce" ]]; native_window_quiesce; exit ;;
   resume) [[ $# == 13 && -n "$window_nonce" ]]; native_window_resume_claim ;;
   accepted|observation-failed) [[ $# == 13 && -n "$window_nonce" ]]; native_window_close_observation; exit ;;
-  deploy) [[ $# == 9 ]]; native_recovery_require_clear ;;
+  apply-origin) [[ $# == 9 ]]; native_apply_preflight; exit ;;
+  same-window)
+    [[ $# == 11 && "${11}" =~ ^[0-9a-f]{64}$ ]]; apply_origin_pin="${10}" window_digest="${11}"
+    window_old="${apply_origin_pin%% *}"
+    native_release_id_validate "$window_old"
+    [[ "$(native_apply_preflight "$window_old")" == "$apply_origin_pin" ]]
+    exec 3>&1 >&2
+    window_action=deploy same_window=true ;;
+  apply-accepted) [[ $# == 10 ]]; window_nonce="${10}"; native_apply_close_observation; exit ;;
+  deploy)
+    remote_host="$(hostname -s)"
+    [[ $# == 9 && -n "$remote_host" && "$remote_host" != osaka1 ]]; native_recovery_require_clear ;;
   *) exit 2 ;;
 esac
 
@@ -125,6 +143,7 @@ old_target=""
 if [[ -L "$current_link" ]]; then
   old_target="$(readlink -f "$current_link" || true)"
 fi
+if [[ "$same_window" == true ]]; then [[ "$(native_window_identity apply "$window_old" '')" == "$apply_origin_pin" ]]; fi
 old_previous_target=""
 if [[ -L "$previous_link" ]]; then
   old_previous_target="$(readlink -f "$previous_link" || true)"
@@ -150,7 +169,10 @@ release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$curre
 sudo -n mkdir "$release_dir"
 sudo -n rsync -a --delete "$payload/" "$release_dir/"
 sudo -n chown -R -P root:root "$release_dir"
-if [[ "$window_action" == resume ]]; then
+if [[ "$window_action" == resume || "$same_window" == true ]]; then
+  for reserved in accepted-window native-window native-observation; do
+    sudo -n test ! -e "$release_dir/$reserved" && sudo -n test ! -L "$release_dir/$reserved" || exit 1
+  done
   copied_digest="$(sudo -n bash -c "$(declare -f native_payload_digest); native_payload_digest \"\$1\"" _ "$release_dir")"
   [[ "$copied_digest" == "$window_digest" ]]
 fi
@@ -197,6 +219,10 @@ if [[ "$candidate_endpoint" != '100.100.1.8|6433' ]]; then
   exit 1
 fi
 
+if [[ "$same_window" == true ]]; then
+  native_apply_before_stop
+  sudo -n mkdir -m 0700 "$window"
+fi
 # PO issuer를 collector보다 먼저 멈춘다. collector는 종료하면서 소유 generation을 DELETE로 반납하는데, broker가 살아
 # 있으면 retire 뒤 exit 0하고 Restart=always(RestartSec=1s)로 다시 떠서 곧바로 이 스크립트에 다시 멈춰진다.
 # broker가 먼저 멈추면 그 DELETE는 broker_unavailable로 끝나고 collector는 재전송 없이 무시한다(proof-controller.mjs retireOwned).
@@ -344,6 +370,7 @@ native_cutover_run host-env sudo -n install -m 0640 -o root -g root "$release_di
 native_cutover_run collector-unit sudo -n install -m 0644 -o root -g root "$release_dir/hololive-youtube-collector@.service" "$unit_file"
 native_cutover_run current-link sudo -n ln -sfn "$release_dir" "$current_link"
 
+if [[ "$same_window" == true ]]; then apply_start_since="@$EPOCHREALTIME"; fi
 native_pool_check_pending=true
 native_cutover_run pooled-database sudo -n systemd-run --quiet --wait --pipe --collect \
   --property=User=hololive --property=Group=opc --property=NoNewPrivileges=yes --property=RuntimeMaxSec=40s \
@@ -429,6 +456,9 @@ fi
 native_post_cutover_log_check
 if [[ "${window_action:-deploy}" == resume ]]; then
   native_window_await_observation
+elif [[ "${same_window:-false}" == true ]]; then
+  trap - ERR HUP INT TERM
+  native_apply_await_observation >&3
 else
   trap - ERR HUP INT TERM
   native_cutover_release_guard

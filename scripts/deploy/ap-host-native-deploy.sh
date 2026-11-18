@@ -191,7 +191,36 @@ verify_native_collector() {
     --version "$version" --revision "$native_revision" --goos linux --goarch amd64 --goamd64 "$AP_GOAMD64"
 }
 
+apply_remote() {
+  {
+    if [[ "$AP_NAME" == osaka ]]; then
+      local base=/opt/hololive-bot/youtube-collector oldroot
+      local -a custody=("$base")
+      if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then
+        oldroot="$base/releases/${window_args[1]}"
+        custody+=("$oldroot" "$oldroot/bin/"{po-sandbox-manifest,worker-profile-pair}.py \
+          "$base/cutover-recovery" "$oldroot/native-window" "$base/releases/$release_id" \
+          /etc/systemd/system/hololive-youtube-{collector@youtube-collector-a.service,po.service,po.socket}.d)
+      fi
+      printf 'set -euo pipefail\nsudo -n bash -s --'
+      printf ' %q' "${custody[@]}"
+      printf " <<'NATIVE_CUSTODY'\n"
+      cat "$REPO_ROOT/scripts/deploy/verify-exec-tree-ownership.sh" || return
+      printf '\nNATIVE_CUSTODY\n'
+    fi
+    cat "$REPO_ROOT/scripts/deploy/lib/"{compose-env,postgres-endpoint,ap-host-native-release-path,ap-host-native-po,ap-host-native-cutover,ap-host-native-window,ap-host-native-rollback-check}.sh \
+      "$NODE_VERSION_LIB" "$READINESS_LIB" "$REMOTE_APPLY_LIB"
+  } |
+    ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "${change_started_at:-}" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" "$native_revision" "$1" "${window_args[@]}"
+}
+
 window_args=()
+if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
+  origin="$(apply_remote apply-origin)"
+  native_release_id_validate "${origin%% *}"
+  [[ "${origin#* }" =~ ^[0-9a-f]{40}\ [0-9]+:[0-9]+:[0-9]+$ ]]
+  window_args=("$origin")
+fi
 if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then
   verify_native_collector
   cmp -s "$COLLECTOR_WRAPPER_LIB" "$artifact_dir/bin/youtube-collector-wrapper"
@@ -205,6 +234,10 @@ if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then
   window_args=("$3" "$4" "$HOLO_NATIVE_PAYLOAD_SHA256" "${5:-}")
 else
   build_native_payload
+  if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
+    digest="$(native_payload_digest "$artifact_dir")"
+    window_args+=("$digest")
+  fi
 fi
 
 RSYNC_RSH="$(ap_rsync_rsh)"
@@ -230,27 +263,19 @@ date -u +%Y-%m-%dT%H:%M:%SZ
 REMOTE
 )"
 
-apply_remote() {
-  {
-    if [[ ${#window_args[@]} -ne 0 ]]; then
-      local base=/opt/hololive-bot/youtube-collector oldroot
-      oldroot="$base/releases/${window_args[1]}"
-      printf 'set -euo pipefail\nsudo -n bash -s --'
-      printf ' %q' "$oldroot" "$oldroot/bin/"{po-sandbox-manifest,worker-profile-pair}.py \
-        "$base/cutover-recovery" "$oldroot/native-window" "$base/releases/$release_id" \
-        /etc/systemd/system/hololive-youtube-{collector@youtube-collector-a.service,po.service,po.socket}.d
-      printf " <<'NATIVE_CUSTODY'\n"
-      cat "$REPO_ROOT/scripts/deploy/verify-exec-tree-ownership.sh" || return
-      printf '\nNATIVE_CUSTODY\n'
-    fi
-    cat "$REPO_ROOT/scripts/deploy/lib/"{compose-env,postgres-endpoint,ap-host-native-release-path,ap-host-native-po,ap-host-native-cutover,ap-host-native-window,ap-host-native-rollback-check}.sh \
-      "$NODE_VERSION_LIB" "$READINESS_LIB" "$REMOTE_APPLY_LIB"
-  } |
-    ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" "$native_revision" "$1" "${window_args[@]}"
-}
 action=deploy
 if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then action="${MODE#--}"; fi
-apply_remote "$action" || {
+apply_cutover() {
+  if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
+    local nonce
+    nonce="$(apply_remote same-window)" || return
+    [[ "$nonce" =~ ^[0-9a-f-]{36}$ ]] || return 1
+    window_args=("$nonce")
+  else
+    apply_remote "$action"
+  fi
+}
+apply_cutover || {
   status=$?
   if (( status == 255 )); then
     echo 'native cutover outcome unknown after transport loss; do not retry or release a guard' >&2
@@ -271,3 +296,4 @@ for observer in "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$REPO_ROOT/s
   }
 done
 if [[ "$MODE" == --resume ]]; then apply_remote accepted; fi
+if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then apply_remote apply-accepted; fi
