@@ -53,13 +53,17 @@ class ReceiptStore(unittest.TestCase):
 
 
 class Cutover(unittest.TestCase):
-    def test_sql_runs_once_with_only_public_ca_and_runtime_isolation(self):
+    def test_profile_and_sql_isolate_runtime_inputs(self):
         image = 'sha256:' + 'a' * 64
         with patch.object(d, 'run') as run:
             d.gate(image, 's0:c908,c909')
         profile, sql = [call.args for call in run.call_args_list]
         self.assertEqual(profile[-2:], (image, '--check-worker-profile'))
-        self.assertNotIn('--env-file=' + str(d.ENVFILE), profile)
+        self.assertIn('--network=none', profile)
+        self.assertIn('--env-file=' + str(d.ENVFILE), profile)
+        self.assertEqual([arg for arg in profile if arg.startswith(('--volume=', '--mount='))],
+                         ['--volume=' + str(d.CA) + ':' + d.CERT + ':ro',
+                          '--volume=' + str(d.D/'profile.json') + ':' + d.PROFILE_ENV['STACK_WORKER_PROFILE_FILE'] + ':ro'])
         self.assertEqual(sql[-2:], (image, '--check-pooled-database'))
         self.assertEqual([arg for arg in sql if arg.startswith(('--volume=', '--mount='))],
                          ['--volume=' + str(d.CA) + ':' + d.CERT + ':ro'])
@@ -107,7 +111,7 @@ class Cutover(unittest.TestCase):
             self.state['old'][n] = {'cid':str(i+6)*64,'inv':'b'*32,'image':ident['id'][7:]}
             self.executions[n] = {'cid':str(i+8)*64,'inv':'e'*32,'image':self.ids[n][7:],
                                   'started':'120','main':'123','pid':'124','cgroup':'/system.slice/'+n+'.service'}
-            data = (n + '-candidate').encode()
+            data = f'[Container]\nContainerName={n}\nEnvironment=POSTGRES_PORT=6433\n'.encode()
             (self.input / d.unit(n)).write_bytes(data)
             (self.units / d.unit(n)).write_bytes(b'old')
             self.digests[n] = d.sha(data)

@@ -619,12 +619,15 @@ def gate(image_id, level):
               '--no-healthcheck','--image-volume=ignore','--cap-drop=ALL','--security-opt=no-new-privileges',
               '--security-opt=label=level:' + level,'--user=1000:1000','--group-add=1002',
               '--userns=auto:size=65536,gidmapping=1002:1002:1','--pids-limit=32']
-    run(*common, '--name=' + C + '-profile-check', '--network=none',
+    runtime = container_settings(raw(INPUT / unit(C)).decode(), '[Container]')
+    envfile = '--env-file=' + str(ENVFILE)
+    ca = '--volume=' + str(CA) + ':' + CERT + ':ro'
+    # 이 CLI는 profile뿐 아니라 실제 runtime env와 CA를 검사한다. 비밀값은 Podman만 읽고 외부 접속은 막는다.
+    run(*common, '--name=' + C + '-profile-check', '--network=none', envfile, ca,
         '--volume=' + str(D/'profile.json') + ':' + PROFILE_ENV['STACK_WORKER_PROFILE_FILE'] + ':ro',
-        '--env=STACK_WORKER_PROFILE_FILE=' + PROFILE_ENV['STACK_WORKER_PROFILE_FILE'], image_id, '--check-worker-profile', timeout=65)
+        *('--env=' + item for item in runtime['Environment']), image_id, '--check-worker-profile', timeout=65)
     # SQL 한 번: envfile의 값은 Podman만 소비한다. H3 개인키·소켓·data/log·profile은 필요 없다.
-    args = [*common,'--name=' + C + '-database-check','--network=hololive-collector','--ip=10.89.15.14','--env-file=' + str(ENVFILE),
-            '--volume=' + str(CA) + ':' + CERT + ':ro']
+    args = [*common,'--name=' + C + '-database-check','--network=hololive-collector','--ip=10.89.15.14',envfile,ca]
     args.extend('--env=' + k + '=' + v for k,v in {**DB,'POSTGRES_PORT':'6433'}.items())
     run(*args, image_id, '--check-pooled-database', timeout=65)
 
