@@ -42,6 +42,7 @@ func run() error {
 		return fmt.Errorf("env bool: %w", err)
 	}
 
+	schemaOnly := flag.Bool("schema-only", false, "apply business migrations without changing login roles or pooler authentication")
 	baselineThrough := flag.String("baseline-through", os.Getenv("MIGRATION_BASELINE_THROUGH"), "baseline watermark")
 	statementTimeout := flag.Duration("statement-timeout", 0, "per-statement maintenance limit (0 uses 4m; maximum 10m; command limit remains 15m)")
 	allowBlockingIndexDrop := flag.Bool(
@@ -52,10 +53,32 @@ func run() error {
 
 	flag.Parse()
 
+	if *schemaOnly && (*baselineThrough != "" || *allowBlockingIndexDrop || flag.NArg() != 0) {
+		return errors.New("schema-only does not accept baseline or blocking maintenance overrides")
+	}
+
 	if *statementTimeout < 0 || *statementTimeout > migrationrunner.MaxStatementTimeout {
 		return fmt.Errorf("statement-timeout must be between 0 and %s", migrationrunner.MaxStatementTimeout)
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
+	defer cancel()
+
+	cfg := migrationrunner.Config{
+		BaselineThrough:        *baselineThrough,
+		CardWindow:             *schemaOnly,
+		AllowBlockingIndexDrop: *allowBlockingIndexDrop,
+		StatementTimeout:       *statementTimeout,
+		Logf:                   log.New(os.Stdout, "", 0).Printf,
+	}
+
+	return runMigrations(ctx, cfg)
+}
+
+func runMigrations(ctx context.Context, cfg migrationrunner.Config) error {
 	connString, err := postgresConnString()
 	if err != nil {
 		return fmt.Errorf("postgres conn string: %w", err)
@@ -66,14 +89,10 @@ func run() error {
 		return fmt.Errorf("preflight postgres pool: %w", preflightErr)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
-	defer cancel()
-
-	if bootstrapErr := bootstrapLoginRoles(ctx); bootstrapErr != nil {
-		return fmt.Errorf("bootstrap login roles: %w", bootstrapErr)
+	if !cfg.CardWindow {
+		if bootstrapErr := bootstrapLoginRoles(ctx); bootstrapErr != nil {
+			return fmt.Errorf("bootstrap login roles: %w", bootstrapErr)
+		}
 	}
 
 	pool, err := pgxdb.OpenPoolDSN(ctx, connString, options)
@@ -82,14 +101,7 @@ func run() error {
 	}
 	defer pool.Close()
 
-	stdout := log.New(os.Stdout, "", 0)
-
-	result, err := migrationrunner.Run(ctx, pool, migrations.FS, migrationrunner.Config{
-		BaselineThrough:        *baselineThrough,
-		AllowBlockingIndexDrop: *allowBlockingIndexDrop,
-		StatementTimeout:       *statementTimeout,
-		Logf:                   stdout.Printf,
-	})
+	result, err := migrationrunner.Run(ctx, pool, migrations.FS, cfg)
 	if err != nil {
 		return fmt.Errorf("run: %w", err)
 	}

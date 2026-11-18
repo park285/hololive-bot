@@ -32,6 +32,7 @@ type Config struct {
 	BaselineThrough        string
 	LockKey                int64
 	AllowBlockingIndexDrop bool
+	CardWindow             bool
 	// StatementTimeout이 0이면 기존 4분 제한을 유지한다.
 	StatementTimeout time.Duration
 	Logf             func(format string, args ...any)
@@ -101,6 +102,11 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 
 func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, cfg Config) (Result, error) {
 	ledger := dbmigrate.Ledger{}
+
+	if cfg.CardWindow {
+		return applyCardWindow(ctx, conn, fsys, exec, ledger, cfg)
+	}
+
 	if err := ledger.Ensure(ctx, exec.Exec); err != nil {
 		return Result{}, fmt.Errorf("ensure: %w", err)
 	}
@@ -137,6 +143,39 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guar
 
 	if err := assertNoInvalidIndexes(ctx, conn); err != nil {
 		return Result{}, fmt.Errorf("assert no invalid indexes: %w", err)
+	}
+
+	return result, nil
+}
+
+func applyCardWindow(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, cfg Config) (Result, error) {
+	entries, err := dbmigrate.Manifest(fsys)
+	if err != nil {
+		return Result{}, fmt.Errorf("load card manifest: %w", err)
+	}
+
+	if len(entries) != 32 || entries[30] != "031_retire_holodex_channel_profile.sql" || entries[31] != "032_schedule_poster_template.sql" {
+		return Result{}, errors.New("card window requires the reviewed 031/032 manifest")
+	}
+
+	var admitted bool
+
+	if checkErr := conn.QueryRow(ctx, mustSQL("card_window_state.sql"), entries).Scan(&admitted); checkErr != nil {
+		return Result{}, fmt.Errorf("inspect card window: %w", checkErr)
+	}
+
+	if !admitted {
+		return Result{}, errors.New("card window refused: pool authentication, writer drain, schema or ledger not confirmed")
+	}
+
+	// 완전한 030/032만 들어온다. 앞선 30개 체크섬을 확인한 뒤에만 다음 파일을 실행한다.
+	result, err := applyManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
+	if err != nil {
+		return Result{}, fmt.Errorf("apply card manifest: %w", err)
+	}
+
+	if err := assertNoInvalidIndexes(ctx, conn); err != nil {
+		return Result{}, fmt.Errorf("check card schema indexes: %w", err)
 	}
 
 	return result, nil

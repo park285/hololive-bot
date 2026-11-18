@@ -576,10 +576,27 @@ assert_writer_endpoint() {
   [[ "$values" == $'POSTGRES_HOST=holo-pgbouncer\nPOSTGRES_PORT=6432\nPOSTGRES_SOCKET_PATH=\nPOSTGRES_SSLMODE=verify-full' ]] ||
     die "$1: pooled TCP endpoint and verify-full are required"
 }
+require_card_ledger() {
+  local result
+  result="$(podman exec -i holo-postgres env 'PGOPTIONS=-c default_transaction_read_only=on -c lock_timeout=3s -c statement_timeout=30s' \
+    psql -XqAtw -v ON_ERROR_STOP=1 -h /var/run/postgresql -U postgres_admin -d hololive <<'SQL'
+BEGIN READ ONLY;
+SELECT current_database() = 'hololive' AND current_user = 'postgres_admin' AND inet_server_addr() IS NULL
+  AND current_setting('transaction_read_only') = 'on' AND current_setting('default_transaction_read_only') = 'on'
+  AND current_setting('lock_timeout') = '3s' AND current_setting('statement_timeout') = '30s'
+  AND (SELECT count(*) = 2 FROM public.schema_migrations JOIN public.schema_migration_checksums USING (filename)
+       WHERE filename IN ('031_retire_holodex_channel_profile.sql','032_schedule_poster_template.sql'))
+  AND to_regclass('public.member_schedule_card_templates') IS NOT NULL;
+ROLLBACK;
+SQL
+  )" && [[ "$result" == t ]] || die "031/032 not confirmed; no single-writer migration or new writer activation"
+}
+
 if [[ "$mode" != quiesce ]]; then
   postgres_capacity_assert_live "$ROOT_DIR" "$compose_env" "$quadlet_dir"
   for service in "${services[@]}"; do assert_writer_endpoint "$service"; done
   if [[ "$mode" == deploy ]]; then
+    require_card_ledger
     postgres_endpoint_require_same "$(postgres_endpoint_container "$service")" 'holo-pgbouncer|6432' ||
       die "single-writer endpoint change refused; use the coordinated pre-sync hold"
   fi
@@ -739,6 +756,7 @@ if [[ "$mode" == resume ]]; then
 else
   run_migration
 fi
+require_card_ledger
 stage=writer-sql
 assert_running_pooler_image
 for service in "${services[@]}"; do

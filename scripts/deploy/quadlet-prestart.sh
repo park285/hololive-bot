@@ -233,15 +233,11 @@ case "$target" in
         ;;
     hololive-db-migrate)
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
-        write_secret_env hololive-db-migrate \
-            'PGPASSWORD=HOLOLIVE_MIGRATOR_PASSWORD' \
-            'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_A_PASSWORD=HOLOLIVE_COLLECTOR_A_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_B_PASSWORD=HOLOLIVE_COLLECTOR_B_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_C_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_D_PASSWORD=HOLOLIVE_COLLECTOR_D_PASSWORD!' \
-            'HOLOLIVE_ALARM_WORKER_PASSWORD=HOLOLIVE_ALARM_WORKER_PASSWORD!' \
-            'HOLOLIVE_DB_PASSWORD=HOLOLIVE_DB_PASSWORD!'
+        case "${2:-}" in
+            pool-auth) write_secret_env hololive-db-migrate 'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' ;;
+            schema) write_secret_env hololive-db-migrate 'PGPASSWORD=HOLOLIVE_MIGRATOR_PASSWORD!' ;;
+            *) die "hololive-db-migrate requires pool-auth or schema" ;;
+        esac
         ;;
     hololive-alarm-worker)
         require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS

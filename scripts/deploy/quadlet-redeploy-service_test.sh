@@ -54,6 +54,12 @@ cat >"${fakebin}/podman" <<'EOF'
 state="${FAKE_STATE:?}"
 if [[ "$1 $2" == 'exec -i' ]]; then
   [[ "$3" == holo-postgres ]] || exit 2
+  if [[ "$4" == env ]]; then
+    cat >/dev/null
+    [[ "$FAKE_CASE" != single_before_card ]] || { printf 'f\n'; exit 0; }
+    printf 't\n'
+    exit 0
+  fi
   role="${*: -1}"
   printf 'writer-sql %s\n' "$role" >>"$state/calls"
   [[ "${FAKE_CASE}" != "sql_failure_$role" ]] || exit 1
@@ -639,7 +645,7 @@ if [[ -x "${QUADLET_BIN}" ]]; then
   cp -R "${root}/etc/containers/systemd/hololive-bot/hololive-db-migrate.container.d" "${units}/"
   exec_start="$(QUADLET_UNIT_DIRS="${units}" "${QUADLET_BIN}" -dryrun 2>/dev/null |
     grep -E '^ExecStart=.* --name hololive-db-migrate ')" || fail "success: hololive-db-migrate did not generate"
-  [[ "${exec_start##* }" == "sha256:${API_HEX}" ]] || fail "success: generated migrator image is ${exec_start##* }"
+  [[ "$exec_start" == *" sha256:${API_HEX} --schema-only" ]] || fail "card migrator image or mode differs"
 fi
 pass "deploy retains the previous pair, migrates with the candidate image before activation and verifies the live pair"
 
@@ -790,6 +796,13 @@ fi
 pass "a failed restoration fails visibly and retains the release pairs"
 
 # 7·8. preflight 거부(배포 트리와 다른 migrator revision, 연결 예산 초과): pair·unit·release 저장소를 건드리지 않는다.
+root="${tmp}/single-before-card"
+make_case "$root" hololive-api true
+if run_tool "$root" single_before_card "$API_HEX" "$HELPER" hololive-api localhost/hololive-api:candidate; then
+  fail "단일 writer 배포가 030에서 카드 창을 열었음"
+fi
+assert_no_call "$root" single_before_card '^(pair |systemctl (stop|start|restart|daemon-reload))'
+
 root="${tmp}/revision-mismatch"
 make_case "${root}" hololive-alarm-worker true fedcba9876543210fedcba9876543210fedcba98
 if run_tool "${root}" revision_mismatch "${WORKER_HEX}" "${HELPER}" hololive-alarm-worker \

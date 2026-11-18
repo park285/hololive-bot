@@ -20,6 +20,7 @@ Group=1000
 UserNS=auto:size=65536
 Network=none
 Entrypoint=/app/bin/db-migrate
+Exec=--schema-only
 Volume=/opt/hololive-bot/compose/current/hololive/hololive-api/scripts/migrations:/migrations:ro
 Volume=holo-pg-admin-socket.volume:/var/run/postgresql:ro
 Tmpfs=/tmp:size=64m,mode=1777,noexec,nosuid,nodev
@@ -37,7 +38,6 @@ Environment=PGDATABASE=hololive
 Environment=PGUSER=${HOLOLIVE_MIGRATOR_USER}
 Environment=PGSSLMODE=disable
 Environment=PGAPPNAME=hololive-db-migrate
-Environment=POSTGRES_ADMIN_USER=${POSTGRES_ADMIN_USER}
 Environment=MIGRATION_BASELINE_THROUGH=${MIGRATION_BASELINE_THROUGH}
 Environment=MIGRATION_ALLOW_BLOCKING_INDEX_DROP=${MIGRATION_ALLOW_BLOCKING_INDEX_DROP}
 EnvironmentFile=/run/hololive-bot/quadlet-env/hololive-db-migrate.env
@@ -46,9 +46,8 @@ EnvironmentFile=/run/hololive-bot/quadlet-env/hololive-db-migrate.env
 Type=oneshot
 Environment=HOLOLIVE_API_IMAGE=localhost/hololive-api:prod
 Environment=HOLOLIVE_MIGRATOR_USER=hololive_migrator
-Environment=POSTGRES_ADMIN_USER=postgres_admin
 Environment=MIGRATION_BASELINE_THROUGH=
 Environment=MIGRATION_ALLOW_BLOCKING_INDEX_DROP=false
 EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
-ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart hololive-db-migrate
+ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart hololive-db-migrate schema
 LogRateLimitIntervalSec=0
