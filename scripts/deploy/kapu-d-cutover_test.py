@@ -82,7 +82,14 @@ class Cutover(unittest.TestCase):
         self.ids = {d.C:'sha256:'+'1'*64, d.I:'sha256:'+'2'*64}
         self.state = {'level':'s0:c908,c909','profile':'3'*64,'images':{},'old':{}}
         self.digests = {}
-        self.props = {n:{'ActiveState':'inactive', 'NRestarts':'0', 'MainPID':'0', 'ControlPID':'0'} for n in d.NAMES}
+        self.props = {n:{'ActiveState':'inactive','InvocationID':'','Result':'success','ExecMainCode':'1',
+                         'ExecMainStatus':'0','NRestarts':'0','MainPID':'0','ControlPID':'0','Job':'',
+                         'LoadState':'masked','FragmentPath':str(self.system / (n + '.service'))} for n in d.NAMES}
+        self.guards = set()
+        self.outcomes = {}
+        self.exits = {}
+        self.executions = {}
+        self.journal = {}
         self.tags = {}
         for k,v in [('UNIT',self.units),('INPUT',self.input),('SYSTEM',self.system)]:
             self.patch(k,v)
@@ -90,7 +97,8 @@ class Cutover(unittest.TestCase):
             ident = {'id':'sha256:' + str(i+3)*64, 'rev':'b'*40}
             self.tags[d.prod(n)] = self.state['images'][n] = ident
             self.tags[self.ids[n]] = {'id':self.ids[n],'rev':self.rev}
-            self.state['old'][n] = {'cid':str(i+6)*64}
+            self.state['old'][n] = {'cid':str(i+6)*64,'inv':'b'*32,'image':ident['id'][7:]}
+            self.executions[n] = {'cid':str(i+8)*64,'inv':'e'*32,'image':self.ids[n][7:]}
             data = (n + '-candidate').encode()
             (self.input / d.unit(n)).write_bytes(data)
             (self.units / d.unit(n)).write_bytes(b'old')
@@ -99,33 +107,238 @@ class Cutover(unittest.TestCase):
             os.link(d.mask(n),d.mask_anchor(self.h,n),follow_symlinks=False)
             d.metadata(self.h / (n + '.mask'), d.number(d.mask(n)))
             d.record(self.h / (n + '.stopped'), b'b'*32)
-        d.record(self.h/'quiesced', b'kapu-d-v1\n')
+            d.metadata(self.h / (n + '.stopped.json'), {**self.props[n],'cid':self.state['old'][n]['cid'],
+                       'invocation':'b'*32,'since':'@1234.000056','manager_stop':True,'container_exit':'0'})
+        d.record(self.h/'quiesced', d.QUIESCED)
         d.metadata(self.h/'previous.json',self.state)
         self.patch('trusted', lambda *args:None)
         self.patch('raw', Path.read_bytes)
         self.patch('retained', lambda *args,**kwargs:None)
-        self.patch('origin', lambda *args:None)
+        self.patch('origin', lambda *args,**kwargs:None)
         self.patch('absent', lambda *args:None)
         self.patch('image', lambda name,tag:self.tags[tag])
-        self.patch('prop', lambda n,k: ('masked' if d.mask(n).is_symlink() else 'loaded') if k == 'LoadState' else self.props[n][k])
+        self.patch('prop', lambda n,k:self.props[n][k])
+        self.patch('generation', self.generation)
         self.calls = []
         self.patch('run', self.command)
 
     def patch(self, name, value):
         self.stack.enter_context(patch.object(d,name,value))
 
+    def generation(self, n):
+        self.assertEqual(self.props[n]['ActiveState'],'active')
+        return self.executions[n]
+
+    def reload(self):
+        for n in d.NAMES:
+            self.props[n]['LoadState'] = 'masked' if os.path.lexists(d.mask(n)) else 'loaded'
+
     def command(self, *args, **kwargs):
+        if args[:3] == ('systemctl','show','--all'):
+            props = self.props[args[-1].removesuffix('.service')]
+            return '\n'.join(k + '=' + props[k] for k in args[3].removeprefix('--property=').split(','))
         self.calls.append(args)
+        if args[:4] == ('python3','-I','-B',str(d.GUARD)):
+            if args[4] == 'exit-status':
+                unit, cid, since = args[5:]
+                n = unit.removesuffix('.service')
+                self.assertEqual(cid,self.executions[n]['cid'])
+                journal = next(c for c in reversed(self.calls) if c[0] == 'journalctl')
+                self.assertIn('--since=' + since, journal)
+                self.assertIn('UNIT=' + unit, journal)
+                return self.exits.get(n,self.props[n]['ExecMainStatus'])
+            action, unit, path, identity = args[4:]
+            n, anchor = unit.removesuffix('.service'), Path(path)
+            self.assertEqual(identity, ':'.join(map(str,d.number(anchor))))
+            d.need(not os.path.lexists(d.mask(n)) and self.props[n]['LoadState'] == 'loaded', '가드 충돌')
+            if action == 'arm':
+                d.need(n not in self.guards, '이전 가드')
+                self.guards.add(n)
+            else:
+                self.assertIn(n,self.guards)
+            if action == 'seal':
+                self.assertIn(self.props[n]['ActiveState'], ('inactive','failed'))
+                self.assertEqual((self.props[n]['MainPID'],self.props[n]['ControlPID']), ('0','0'))
+                os.link(anchor,d.mask(n),follow_symlinks=False)
+                self.guards.remove(n)
+                self.props[n].update(ActiveState='inactive', Result='success', ExecMainStatus='0', InvocationID='')
+            elif action != 'arm':
+                self.assertEqual(action,'check')
+            if action != 'check':
+                self.reload()
+        if args == ('systemctl','daemon-reload'):
+            self.reload()
         if args[:2] == ('podman','tag'):
             self.tags[args[3]] = self.tags[args[2]]
         if args[:2] in [('systemctl','start'),('systemctl','stop')]:
-            n = args[2].removesuffix('.service')
-            self.props[n].update(ActiveState='active' if args[1] == 'start' else 'inactive', InvocationID='e'*32)
+            n = args[-1].removesuffix('.service')
+            if args[1] == 'start':
+                self.assertNotIn(n,self.guards)
+                self.props[n].update(ActiveState='active', MainPID='123', InvocationID=self.executions[n]['inv'])
+            else:
+                self.assertIn(n,self.guards)
+                self.assertTrue(all(peer in self.guards or os.path.lexists(d.mask(peer)) for peer in d.NAMES))
+                self.assertEqual('--job-mode=ignore-dependencies' in args, n == d.I)
+                self.journal[n] = self.props[n]['InvocationID']
+                self.props[n].update(ActiveState='inactive', MainPID='0', ControlPID='0')
+                self.props[n].update(self.outcomes.get(n,{}))
         if args[0] == 'journalctl':
-            return json.dumps({'INVOCATION_ID': 'e'*32})
+            n = next(x[5:-8] for x in args if x.startswith('UNIT='))
+            return json.dumps({'INVOCATION_ID': self.journal[n]})
 
     def resume(self):
         d.resume(self.h,self.rev,self.ids,self.digests)
+
+    def direct_hold(self):
+        h = self.root / 'd-cutover-direct'
+        def snapshot(path):
+            path.mkdir()
+            d.record(h/'profile.json',b'profile')
+            return self.state
+        for n in d.NAMES:
+            d.mask(n).unlink()
+            self.executions[n] = dict(self.state['old'][n])
+            self.props[n].update(ActiveState='active', InvocationID=self.executions[n]['inv'], MainPID='123')
+        self.reload()
+        self.patch('snapshot',snapshot)
+        self.patch('collector',lambda *args:b'profile')
+        self.patch('issuer',lambda *args:None)
+        return h
+
+    def test_original_jobs_finish_before_any_seal(self):
+        h = self.direct_hold()
+        self.outcomes[d.I] = {'ActiveState':'failed','Result':'exit-code','ExecMainStatus':'143'}
+        self.outcomes[d.C] = {'InvocationID':'','ExecMainCode':'0'}
+        d.quiesce(h)
+        self.assertEqual((h/'quiesced').read_bytes(),d.QUIESCED)
+        self.assertEqual([x[-1] for x in self.calls if x[:2] == ('systemctl','stop')],
+                         [d.I+'.service',d.C+'.service'])
+        for n in d.NAMES:
+            evidence = json.loads((h/(n+'.stopped.json')).read_bytes())
+            self.assertEqual(evidence['invocation'],self.state['old'][n]['inv'])
+            self.assertTrue(evidence['manager_stop'])
+            self.assertEqual(evidence['ExecMainStatus'],'143' if n == d.I else '0')
+            self.assertEqual(evidence['container_exit'],'143' if n == d.I else '0')
+        self.assertLess(self.calls.index(('systemctl','stop',d.C+'.service')),
+                        next(i for i,c in enumerate(self.calls) if c[4:5] == ('seal',)))
+
+    def test_issuer_stop_does_not_authorize_replaced_collector(self):
+        h = self.direct_hold()
+        def swap(*args, **kwargs):
+            result = self.command(*args,**kwargs)
+            if args[:2] == ('systemctl','stop') and args[-1] == d.I+'.service':
+                self.executions[d.C]['inv'] = 'd'*32
+            return result
+        self.patch('run',swap)
+        with self.assertRaisesRegex(ValueError,'세대 변경'):
+            d.quiesce(h)
+        self.assertEqual(self.guards,set(d.NAMES))
+        self.assertNotIn(('systemctl','stop',d.C+'.service'),self.calls)
+        self.assertFalse((h/'quiesced').exists())
+
+    def test_collector_143_cannot_be_hidden_by_seal_reload(self):
+        h = self.direct_hold()
+        self.outcomes[d.C] = {'ActiveState':'failed','Result':'exit-code','ExecMainStatus':'143'}
+        with self.assertRaisesRegex(ValueError,'정상 종료 미확인'):
+            d.quiesce(h)
+        result = json.loads((h/(d.C+'.stopped.json')).read_bytes())
+        self.assertTrue(result['manager_stop'])
+        self.assertEqual((result['Result'],result['ExecMainStatus']), ('exit-code','143'))
+        self.assertEqual(self.guards,set(d.NAMES))
+        self.assertFalse((h/(d.C+'.stopped')).exists())
+        self.assertFalse((h/'quiesced').exists())
+
+    def test_collector_nonzero_exit_survives_manager_collection(self):
+        h = self.direct_hold()
+        self.exits[d.C] = '143'
+        self.outcomes[d.C] = {'InvocationID':'','ExecMainCode':'0','ExecMainStatus':'0','Result':'success'}
+        with self.assertRaisesRegex(ValueError,'정상 종료 미확인'):
+            d.quiesce(h)
+        self.assertFalse((h/'quiesced').exists())
+        self.assertEqual(json.loads((h/(d.C+'.stopped.json')).read_bytes())['container_exit'],'143')
+        self.assertIn(d.C,self.guards)
+
+    def test_partial_arm_stops_neither_unit(self):
+        h = self.direct_hold()
+        self.guards.add(d.I)
+        with self.assertRaisesRegex(ValueError,'이전 가드'):
+            d.quiesce(h)
+        self.assertFalse(any(c[:2] == ('systemctl','stop') for c in self.calls))
+        self.assertEqual(self.guards,set(d.NAMES))
+        self.assertFalse((h/'quiesced').exists())
+
+    def test_accepted_candidate_is_not_reheld(self):
+        self.patch('gate',lambda *args:None)
+        self.patch('healthy',lambda *args:None)
+        self.patch('issuer',lambda *args:None)
+        self.patch('acceptance',lambda h,s,ids,n:self.executions[n])
+        self.resume()
+        self.assertEqual(json.loads((self.h/'accepted.json').read_bytes())['generations'],self.executions)
+        self.assertTrue(all(not os.path.lexists(d.mask(n)) for n in d.NAMES))
+        self.assertFalse(any(c[:2] == ('systemctl','stop') or c[4:5] == ('arm',) for c in self.calls))
+
+    def test_static_receipt_cannot_open_candidates(self):
+        (self.h/'quiesced').write_bytes(b'kapu-d-v1\n')
+        with self.assertRaisesRegex(ValueError,'quiesce 영수증'):
+            self.resume()
+        self.assertFalse(self.calls)
+
+    def test_new_marker_requires_both_genuine_stop_receipts(self):
+        path = self.h/(d.I+'.stopped.json')
+        result = json.loads(path.read_bytes())
+        result['cid'] = self.state['old'][d.C]['cid']
+        path.write_text(json.dumps(result))
+        with self.assertRaisesRegex(ValueError,'정지 영수증 불일치'):
+            self.resume()
+        self.assertFalse(self.calls)
+
+    def test_unapplied_unlink_restores_only_same_mask_without_stop(self):
+        self.patch('gate',lambda *args:None)
+        def interrupt(*args, **kwargs):
+            if args == ('systemctl','daemon-reload') and not os.path.lexists(d.mask(d.I)):
+                raise InterruptedError()
+            return self.command(*args,**kwargs)
+        self.patch('run',interrupt)
+        with self.assertRaises(InterruptedError):
+            self.resume()
+        self.assertFalse(any(x[:2] in (('systemctl','stop'),('systemctl','start')) or x[4:5] == ('arm',)
+                             for x in self.calls))
+        for n in d.NAMES:
+            self.assertEqual(d.number(d.mask(n)), d.number(d.mask_anchor(self.h,n)))
+        self.assertFalse((self.h/(d.C+'.before-rehold.json')).exists())
+
+    def test_candidate_stop_cannot_reuse_direct_issuer_143(self):
+        self.patch('gate',lambda *args:None)
+        self.patch('acceptance',lambda *args: self.fail_candidate())
+        self.outcomes[d.I] = {'ActiveState':'failed','InvocationID':self.state['old'][d.I]['inv'],
+                              'Result':'exit-code','ExecMainStatus':'143'}
+        with self.assertRaisesRegex(ValueError,'복원 미확인'):
+            self.resume()
+        self.assertEqual(self.guards,{d.I})
+        self.assertTrue(d.mask(d.C).is_symlink())
+        self.assertFalse((self.h/(d.I+'.candidate-stop')).exists())
+        result = json.loads((self.h/(d.I+'.candidate-stop.json')).read_bytes())
+        self.assertEqual((result['invocation'],result['InvocationID']), ('e'*32,'b'*32))
+
+    def fail_candidate(self):
+        raise ValueError('후보 거부')
+
+    def test_second_open_failure_preserves_both_candidate_stop_results(self):
+        self.patch('gate',lambda *args:None)
+        self.patch('healthy',lambda *args:None)
+        self.patch('issuer',lambda *args:None)
+        self.patch('acceptance',lambda h,s,ids,n: self.executions[n] if n == d.I else self.fail_candidate())
+        self.outcomes[d.C] = {'ActiveState':'failed','Result':'exit-code','ExecMainStatus':'143'}
+        with self.assertRaisesRegex(ValueError,'복원 미확인'):
+            self.resume()
+        self.assertEqual([c[-1] for c in self.calls if c[:2] == ('systemctl','stop')],
+                         [d.I+'.service',d.C+'.service'])
+        self.assertEqual((self.h/(d.I+'.candidate-stop')).read_bytes(),b'e'*32)
+        self.assertEqual(self.guards,{d.C})
+        self.assertTrue(d.mask(d.I).is_symlink())
+        result = json.loads((self.h/(d.C+'.candidate-stop.json')).read_bytes())
+        self.assertEqual((result['invocation'],result['Result'],result['ExecMainStatus']), ('e'*32,'exit-code','143'))
+        self.assertFalse((self.h/'accepted.json').exists())
 
     def test_wrong_second_digest_rejects_before_mutation(self):
         self.digests[d.I] = 'f'*64
@@ -157,6 +370,7 @@ class Cutover(unittest.TestCase):
             self.resume()
         self.assertFalse((self.h/'accepted.json').exists())
         self.assertEqual([c for c in self.calls if c[:2] == ('systemctl','start')], [('systemctl','start', d.I+'.service')])
+        self.assertEqual([x[5] for x in self.calls if x[4:5] == ('arm',)], [d.I+'.service'])
         for n in d.NAMES:
             self.assertEqual(d.number(d.mask(n)), json.loads((self.h/(n+'.mask')).read_bytes()))
             self.assertEqual(self.tags[d.prod(n)]['id'], self.ids[n])
@@ -192,7 +406,7 @@ class Cutover(unittest.TestCase):
     def test_completed_stop_without_matching_manager_event_is_not_a_receipt(self):
         for result in ('', json.dumps({'INVOCATION_ID': 'c'*32})):
             with patch.object(d, 'run', side_effect=['', result]), self.assertRaisesRegex(ValueError, 'stop 미확인'):
-                d.stop_invocation(d.I, 'b'*32)
+                d.stop_invocation(d.I, 'b'*32, '@1234.000056')
 
     def test_143_requires_exact_deliberate_issuer_stop(self):
         self.props[d.I].update(ActiveState='failed', InvocationID='b'*32, Result='exit-code', ExecMainCode='1',

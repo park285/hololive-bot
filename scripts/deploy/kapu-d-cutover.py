@@ -25,6 +25,8 @@ UNIT = Path('/etc/containers/systemd')
 SYSTEM = Path('/etc/systemd/system')
 GEN = Path('/run/systemd/generator')
 INPUT = Path(__file__).resolve().parents[2] / 'deploy/podman/kapu'
+GUARD = Path(__file__).resolve().with_name('lib') / 'systemd-stop-guard.py'
+QUIESCED = b'kapu-d-guarded-stop-v1\n'
 STORE = Path('/var/lib/hololive-collector-d-cutover')
 D = Path('/etc/hololive-bot/collector-d/worker-profile-release')
 SECRETS = Path('/etc/stack-secrets/hololive-bot/collector-d')
@@ -116,15 +118,47 @@ def raw(path):
     return path.read_bytes()
 
 
+def sync_dir(path):
+    fd = os.open(path, os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def record(path, value):
     with path.open('xb') as out:
         out.write(value)
         out.flush()
         os.fsync(out.fileno())
+    sync_dir(path.parent)
 
 
 def metadata(path, value):
     record(path, json.dumps(value, sort_keys=True).encode() + b'\n')
+
+
+@contextlib.contextmanager
+def defer_interrupts():
+    previous = signal.pthread_sigmask(signal.SIG_BLOCK, (signal.SIGINT,signal.SIGTERM,signal.SIGHUP))
+    try:
+        yield
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous)
+
+
+def owned_anchor(h, name):
+    anchor = mask_anchor(h,name)
+    st = anchor.lstat()
+    identity = [st.st_dev, st.st_ino]
+    need(stat.S_ISLNK(st.st_mode) and st.st_uid == os.geteuid() and os.readlink(anchor) == '/dev/null' and
+         identity == json.loads(raw(h / (name + '.mask'))), '소유 mask anchor 변경: ' + name)
+    return anchor, identity
+
+
+def guard(action, h, name):
+    anchor, (dev, ino) = owned_anchor(h,name)
+    run('python3','-I','-B',str(GUARD),action,name + '.service',str(anchor),f'{dev}:{ino}')
 
 
 def absent(kind, name):
@@ -145,10 +179,17 @@ def generation(name):
     need(prop(name, 'ActiveState') == 'active' and re.fullmatch(r'[0-9a-f]{32}', inv), 'active InvocationID 없음')
     parts = inspect('container', name, '{{.Id}} {{.Image}} {{.State.StartedAt.UnixNano}} {{.State.Pid}} '
                     '{{.State.Status}} {{.ConmonPidFile}}').split()
+    main = prop(name,'MainPID')
     need(len(parts) == 6 and all(re.fullmatch(HEX, s) for s in parts[:2]) and
          all(re.fullmatch('[1-9][0-9]*', s) for s in parts[2:4]) and parts[4] == 'running' and
-         Path(parts[5]).read_text().strip() == prop(name, 'MainPID'), 'systemd/Podman 실행 세대 불일치')
+         re.fullmatch('[1-9][0-9]*', main) and Path(parts[5]).read_text().strip() == main, 'systemd/Podman 실행 세대 불일치')
+    group = prop(name,'ControlGroup')
+    need(group.startswith('/') and group.endswith('/' + name + '.service'), '원래 unit cgroup 미확인')
+    for pid in (main, parts[3]):
+        groups = [line[3:] for line in (Path('/proc') / pid / 'cgroup').read_text().splitlines() if line.startswith('0::')]
+        need(len(groups) == 1 and (groups[0] == group or groups[0].startswith(group + '/')), 'unit 외부 PID')
     g = dict(zip(('cid', 'image', 'started', 'pid'), parts[:4]))
+    g.update(main=main, cgroup=group)
     g['inv'] = inv
     need(inspect('container', g['cid'], '{{.HostConfig.RestartPolicy.Name}}') in ('', 'no'), '독립 Podman restart 정책')
     return g
@@ -251,13 +292,14 @@ def container_settings(text, section):
     return settings
 
 
-def origin(name, masked):
+def origin(name, masked, guarded=False, allow_job=False):
     f = GEN / (name + '.service')
     text = raw(f).decode()
     need(re.findall('^SourcePath=(.*)$', text, re.M) == [str(UNIT / unit(name))] and
          prop(name, 'FragmentPath') == str(mask(name) if masked else f) and
          prop(name, 'NeedDaemonReload') == 'no', '생성된 unit 원천 불일치')
-    need(not prop(name, 'DropInPaths') and not prop(name, 'Job') and
+    drops = str(SYSTEM / (name + '.service.d/90-hololive-stop-guard.conf')) if guarded else ''
+    need(prop(name, 'DropInPaths') == drops and (allow_job or not prop(name, 'Job')) and
          (masked or prop(name, 'Type') == 'notify'), '불명 systemd drop-in/job/type')
     base = raw(UNIT / unit(name)).decode()
     for drop in sorted(policy(name).items()):
@@ -341,30 +383,85 @@ def healthy(name, g, wait=False):
          '비정상/교체된 컨테이너: ' + name)
 
 
-def stop_invocation(name, invocation):
-    seconds, micros = divmod(time.time_ns() // 1000, 1_000_000)
-    run('systemctl', 'stop', name + '.service', timeout=125)
+def stop_invocation(name, invocation, since):
+    # issuer의 역방향 Requires=가 collector까지 먼저 정지시키지 않게 단일 job으로 요청한다.
+    options = ('--job-mode=ignore-dependencies',) if name == I else ()
+    run('systemctl', 'stop', *options, name + '.service', timeout=125)
     evidence = run('journalctl', '--boot', '--quiet', '--no-pager', '-n', '1', '-o', 'json',
-                   '--output-fields=INVOCATION_ID', f'--since=@{seconds}.{micros:06}',
+                   '--output-fields=INVOCATION_ID', '--since=' + since,
                    '_PID=1', 'UNIT=' + name + '.service', 'INVOCATION_ID=' + invocation,
                    'JOB_TYPE=stop', 'MESSAGE_ID=de5b426a63be47a7b6ac3eaac82e2f6f')
     need(evidence and json.loads(evidence).get('INVOCATION_ID') == invocation, '이번 manager stop 미확인: ' + name)
 
 
+def terminal(name):
+    keys = ('ActiveState','InvocationID','Result','ExecMainCode','ExecMainStatus','MainPID','ControlPID','Job')
+    text = run('systemctl','show','--all','--property=' + ','.join(keys),name + '.service')
+    result = dict(line.split('=',1) for line in text.splitlines())
+    need(set(result) == set(keys), 'manager 종료 상태 필드 미확인: ' + name)
+    return result
+
+
+def issuer_exit(name, result, inv):
+    return (name == I and re.fullmatch('[0-9a-f]{32}', inv) and result['InvocationID'] == inv and
+            result['ActiveState'] == 'failed' and result['Result'] == 'exit-code' and
+            result['ExecMainCode'] == '1' and result['ExecMainStatus'] == '143')
+
+
+def successful_exit(name, inv, result, code):
+    return ((code == '0' and result['ActiveState'] == 'inactive' and result['Result'] == 'success' and
+             result['ExecMainCode'] in ('0','1') and result['ExecMainStatus'] == '0' and result['InvocationID'] in ('',inv)) or
+            (code == '143' and issuer_exit(name,result,inv)))
+
+
+def no_process(name, result, cid):
+    need(result['ActiveState'] in ('inactive','failed') and result['MainPID'] == result['ControlPID'] == '0' and not result['Job'],
+         '종료/PID 부재 미확인: ' + name)
+    absent('container', name)
+    absent('container', cid)
+
+
+def guarded_stop(h, name, g, candidate=False):
+    guard('check',h,name)
+    origin(name,False,True)
+    need(generation(name) == g, '정지 직전 세대 변경')
+    event = False
+    code = None
+    seconds, micros = divmod(time.time_ns() // 1000, 1_000_000)
+    since = f'@{seconds}.{micros:06}'
+    try:
+        stop_invocation(name, g['inv'], since)
+        event = True
+        code = run('python3','-I','-B',str(GUARD),'exit-status',name + '.service',g['cid'],since)
+    finally:
+        result = terminal(name)
+        marker = name + ('.candidate-stop' if candidate else '.stopped')
+        metadata(h / (marker + '.json'), {'invocation':g['inv'], 'cid':g['cid'], 'since':since,
+                                          'manager_stop':event, 'container_exit':code, **result})
+    no_process(name,result,g['cid'])
+    need(successful_exit(name,g['inv'],result,code), '원래 invocation의 정상 종료 미확인: ' + name)
+    record(h / marker, g['inv'].encode())
+
+
+def require_direct_stop(h, name, g):
+    marker = h / (name + '.stopped')
+    result = json.loads(raw(h / (name + '.stopped.json')))
+    need(result['manager_stop'] is True and re.fullmatch(r'@[0-9]+\.[0-9]{6}',result['since']) and
+         raw(marker).decode() == result['invocation'] == g['inv'] and result['cid'] == g['cid'] and
+         result['MainPID'] == result['ControlPID'] == '0' and not result['Job'] and
+         successful_exit(name,g['inv'],result,result['container_exit']), '원래 실행 세대의 정지 영수증 불일치: ' + name)
+
+
 def held_one(h, state, name, stopped=None):
     p = mask(name)
-    need(p.is_symlink() and os.readlink(p) == '/dev/null' and
-         number(p) == number(mask_anchor(h,name)) == json.loads(raw(h / (name + '.mask'))) and
+    _, identity = owned_anchor(h,name)
+    need(p.is_symlink() and os.readlink(p) == '/dev/null' and number(p) == identity and
          prop(name, 'LoadState') == 'masked', '소유 mask 불일치: ' + name)
-    need(prop(name, 'MainPID') == '0' and prop(name, 'ControlPID') == '0', '차단한 unit에 PID가 남아 있음')
-    active = prop(name, 'ActiveState')
-    if active != 'inactive':
+    result = terminal(name)
+    no_process(name,result,state['old'][name]['cid'])
+    if result['ActiveState'] != 'inactive':
         inv = raw(h / (name + '.stopped')).decode() if stopped is None else stopped
-        need(name == I and active == 'failed' and re.fullmatch('[0-9a-f]{32}', inv) and prop(name, 'InvocationID') == inv and
-             prop(name, 'Result') == 'exit-code' and prop(name, 'ExecMainCode') == '1' and prop(name, 'ExecMainStatus') == '143',
-             '동일 issuer stop/143 증거 없음')
-    absent('container', name)
-    absent('container', state['old'][name]['cid'])
+        need(issuer_exit(name,result,inv), '동일 issuer stop/143 증거 없음')
 
 
 def bindings():
@@ -422,6 +519,7 @@ def snapshot(h):
     state['direct'] = {'host':DB['POSTGRES_HOST'], 'port':5433, 'role':DB['POSTGRES_USER'],
                        'collector_user':'1000:1000', 'collector_group':1002, 'issuer_user':'65532:1000'}
     h.mkdir(mode=0o700)
+    sync_dir(h.parent)
     state['hold'] = number(h)
     for name,data in files.items():
         record(h / name, data)
@@ -435,37 +533,34 @@ def snapshot(h):
 
 def quiesce(h):
     need(not os.path.lexists(h), '새 hold 필요')
+    trusted(GUARD)
     s = snapshot(h)
     for n in NAMES:
         need(generation(n) == s['old'][n], '정지 전 세대 교체')
     for n in NAMES:
-        # 소유 inode를 처음부터 살려 두어 unlink/재생성 시 inode 번호 재사용을 차단한다.
         anchor = mask_anchor(h,n)
         os.symlink('/dev/null', anchor)
-        os.link(anchor,mask(n),follow_symlinks=False)
-        need(number(mask(n)) == number(anchor), '생성한 mask 교체')
+        sync_dir(SYSTEM)
         metadata(h / (n + '.mask'), number(anchor))
-    run('systemctl','daemon-reload')
+        guard('arm',h,n)
     for n in NAMES:
-        need(prop(n,'LoadState') == 'masked' and number(mask(n)) == number(mask_anchor(h,n)) ==
-             json.loads(raw(h / (n + '.mask'))), '정지 전 mask 불일치')
-        origin(n,True)
-    retained(h,s)
+        guard('check',h,n)
+        origin(n,False,True)
     # collector 종료가 issuer에 세대 반납을 요청하기 전에 issuer의 실행 세대를 직접 정지한다.
     for n in (I,C):
         g = s['old'][n]
+        retained(h,s)
         need(image(n,prod(n)) == s['images'][n] and generation(n) == g, '정지 전 실행 세대 변경')
         if n == C:
             need(collector(g,'5433',s['level']) == raw(h / 'profile.json'), '정지 전 profile 불일치')
         else:
             issuer(g)
-        need(generation(n) == g, '정지 직전 세대 변경')
-        stop_invocation(n, g['inv'])
-        record(h / (n + '.stopped'), g['inv'].encode())
-        held_one(h,s,n)
+        guarded_stop(h,n,g)
+    for n in (I,C):
+        guard('seal',h,n)
     for n in NAMES:
         held_one(h,s,n)
-    record(h / 'quiesced', b'kapu-d-v1\n')
+    record(h / 'quiesced', QUIESCED)
     print('quiesced:', h)
 
 
@@ -513,15 +608,94 @@ def acceptance(h, s, ids, n):
     return g
 
 
+def rehold(h, s, ids, opened, requested, started):
+    errors = (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError)
+    damaged = False
+    before, active, armed, stops = {}, {}, set(), {}
+    # 어느 가드의 reload라도 다른 실패 세대의 종료 상태를 지울 수 있다.
+    for n in opened:
+        try:
+            before[n] = terminal(n)
+            metadata(h/(n+'.before-rehold.json'), before[n])
+            if before[n]['ActiveState'] == 'active':
+                g = generation(n)
+                need(g['inv'] == before[n]['InvocationID'] and 'sha256:' + g['image'] == ids[n] and
+                     g['cid'] != s['old'][n]['cid'] and g['inv'] != s['old'][n]['inv'] and
+                     (n not in started or g == started[n]), '보호할 후보 세대 불일치')
+                active[n] = g
+        except errors:
+            before.pop(n,None)
+            damaged = True
+    protected = set()
+    for n in (I,C):
+        try:
+            if n not in opened:
+                held_one(h,s,n)
+            else:
+                p = mask(n)
+                anchor, _ = owned_anchor(h,n)
+                need(not os.path.lexists(p), '외부 mask/서비스 충돌')
+                if n not in requested and prop(n,'LoadState') == 'masked':
+                    # unlink만 반영됐고 manager는 아직 열리지 않았다. 실행된 후보에는 적용하지 않는다.
+                    result = terminal(n)
+                    need(n in before and before[n] == result and
+                         (result['ActiveState'] == 'inactive' or issuer_exit(n,result,s['old'][n]['inv'])) and
+                         prop(n,'FragmentPath') == str(p), '원 mask 유지 미확인')
+                    no_process(n,result,s['old'][n]['cid'])
+                    os.link(anchor,p,follow_symlinks=False)
+                    sync_dir(SYSTEM)
+                    held_one(h,s,n)
+                    origin(n,True)
+                else:
+                    origin(n,False,allow_job=True)
+                    guard('arm',h,n)
+                    armed.add(n)
+            protected.add(n)
+        except errors:
+            damaged = True
+    for n in (I,C):
+        if n not in armed:
+            continue
+        try:
+            need(len(protected) == len(NAMES), '다른 unit 차단 미확인')
+            if n in active:
+                guarded_stop(h,n,active[n],candidate=True)
+                stops[n] = active[n]['inv']
+            else:
+                # 실제 후보 stop 증거 없이 이미 failed인 unit(예전 issuer 143 포함)은 수용하지 않는다.
+                guard('check',h,n)
+                origin(n,False,True)
+                result = terminal(n)
+                need(n in before and before[n]['ActiveState'] == result['ActiveState'] == 'inactive' and
+                     n not in requested, '후보 종료 미확인')
+                no_process(n,result,s['old'][n]['cid'])
+                stops[n] = ''
+        except errors:
+            damaged = True
+    for n in (I,C):
+        try:
+            if n in armed:
+                need(n in stops, '미확인 종료: 보호 가드 유지')
+                guard('seal',h,n)
+            held_one(h,s,n,stops.get(n))
+            if n in active:
+                absent('container',active[n]['cid'])
+        except errors:
+            damaged = True
+    need(not damaged, '양쪽 소유 mask 복원 미확인: 증거와 잔여 가드 유지')
+
+
 def resume(h, revision, ids, digests):
     trusted(h,True)
-    need(stat.S_IMODE(h.stat().st_mode) == 0o700 and raw(h/'quiesced') == b'kapu-d-v1\n', '이번 quiesce 영수증 필요')
+    trusted(GUARD)
+    need(stat.S_IMODE(h.stat().st_mode) == 0o700 and raw(h/'quiesced') == QUIESCED, '이번 quiesce 영수증 필요')
     s = json.loads(raw(h/'previous.json'))
     need(re.fullmatch('[0-9a-f]{40}', revision) and len(set(ids.values())) == 2 and
          all(re.fullmatch('sha256:' + HEX,v) for v in ids.values()) and all(re.fullmatch(HEX,v) for v in digests.values()), '후보 인수 불일치')
     retained(h,s)
     candidates = {}
     for n in NAMES:
+        require_direct_stop(h,n,s['old'][n])
         held_one(h,s,n)
         candidates[n] = raw(INPUT / unit(n))
         need(sha(candidates[n]) == digests[n] and image(n,ids[n]) == {'id':ids[n],'rev':revision} and
@@ -544,8 +718,10 @@ def resume(h, revision, ids, digests):
         origin(n,True)
     gate(ids[C],s['level'])
     record(h/'sql-passed',b'kapu-d-v1\n')
-    anchors = {}
+    opened = []
+    requested = set()
     started = {}
+    published = False
     try:
         for n in (I,C):
             inputs()
@@ -556,10 +732,12 @@ def resume(h, revision, ids, digests):
                 healthy(I,started[I]); issuer(started[I])
             # 같은 filesystem의 전용 hardlink로 원래 mask inode를 유지한다. 외부 mask는 덮지 않는다.
             p = mask(n)
-            anchor = mask_anchor(h,n)
-            anchors[n] = anchor
-            need(number(p) == number(anchor) == json.loads(raw(h/(n+'.mask'))), '해제 직전 mask 교체')
-            p.unlink()
+            _, ident = owned_anchor(h,n)
+            need(number(p) == ident, '해제 직전 mask 교체')
+            with defer_interrupts():
+                p.unlink()
+                opened.append(n)
+                sync_dir(SYSTEM)
             run('systemctl','daemon-reload')
             origin(n,False)
             need(prop(n,'LoadState') == 'loaded' and prop(n,'ActiveState') in ('inactive','failed'), '단독 기동 전 상태 불일치')
@@ -568,54 +746,30 @@ def resume(h, revision, ids, digests):
             else:
                 healthy(I,started[I])
             inputs()
+            requested.add(n)
             run('systemctl','start',n+'.service',timeout=245)
             started[n] = acceptance(h,s,ids,n)
         inputs()
         healthy(I,started[I]); issuer(started[I]); healthy(C,started[C])
         need(prop(C,'NRestarts') == '0' and generation(I) == started[I], '최종 실행 세대 변경')
-        metadata(h/'accepted.json', {'generations':started, 'revision':revision, 'profile':s['profile'],
-                                     'host':DB['POSTGRES_HOST'], 'port':6433, 'role':DB['POSTGRES_USER'],
-                                     'first_success':True, 'handoff':'PROCESSED', 'collector_restarts':0})
+        pending = h/'.accepted-pending.json'
+        metadata(pending, {'generations':started, 'revision':revision, 'profile':s['profile'],
+                           'host':DB['POSTGRES_HOST'], 'port':6433, 'role':DB['POSTGRES_USER'],
+                           'first_success':True, 'handoff':'PROCESSED', 'collector_restarts':0})
+        # 확정 영수증의 일부만 보이거나 발행 직후 신호로 후보를 정지하는 일을 피한다.
+        with defer_interrupts():
+            os.link(pending,h/'accepted.json',follow_symlinks=False)
+            published = True
+            sync_dir(h)
+            pending.unlink()
     except BaseException:
-        damaged = False
-        for n in NAMES:
-            if n not in anchors:
-                continue
-            try:
-                a, p = anchors[n], mask(n)
-                need(a.is_symlink() and os.readlink(a) == '/dev/null' and number(a) == json.loads(raw(h/(n+'.mask'))), '소유 mask anchor 변경')
-                if not os.path.lexists(p):
-                    os.link(a,p,follow_symlinks=False)
-                need(number(p) == number(a), '외부 mask/서비스 충돌')
-            except (OSError,ValueError):
-                damaged = True
-        run('systemctl','daemon-reload')
-        for n in (I,C):
-            try:
-                stopped = None
-                active = prop(n, 'ActiveState')
-                if n in anchors:
-                    a = anchors[n]
-                    need(number(mask(n)) == number(a) == json.loads(raw(h/(n+'.mask'))) and
-                         prop(n,'LoadState') == 'masked', '외부 mask 충돌')
-                    # 원 direct invocation의 143을 후보 실패에 재사용하지 않는다.
-                    stopped = ''
-                    if active in ('active','activating','deactivating','reloading'):
-                        inv = prop(n,'InvocationID')
-                        if not re.fullmatch('[0-9a-f]{32}', inv):
-                            run('systemctl','stop',n+'.service',timeout=125)
-                            raise Refused('정지한 후보의 invocation 미확인')
-                        stop_invocation(n, inv)
-                        if active == 'active':
-                            stopped = inv
-                            record(h/(n+'.candidate-stop'),inv.encode())
-                held_one(h,s,n,stopped)
-            except (OSError, ValueError, subprocess.SubprocessError):
-                damaged = True
-        need(not damaged, '양쪽 소유 mask 복원 미확인')
-        print('후보 거부: 재기동 없이 소유 mask 유지', file=sys.stderr)
+        if not published:
+            with defer_interrupts():
+                rehold(h,s,ids,opened,requested,started)
+            print('후보 거부: 재기동 없이 소유 mask 유지', file=sys.stderr)
         raise
-    for n,a in anchors.items():
+    for n in opened:
+        a = mask_anchor(h,n)
         try:
             need(number(a) == json.loads(raw(h/(n+'.mask'))), '외부 mask anchor')
             a.unlink()
