@@ -208,7 +208,6 @@ func migrateDrainedCard(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exe
 		}
 	}()
 
-	// 관리자 관찰과 이 세션 사이 차단 공백이 있으면 원장 변경 전에 중단한다.
 	if guardErr := requireCardGuard(ctx, conn); guardErr != nil {
 		return Result{}, guardErr
 	}
@@ -221,7 +220,6 @@ func verifyCardManifest(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exe
 		return Result{}, fmt.Errorf("check indexes before card migration: %w", indexErr)
 	}
 
-	// 완전한 030/032만 들어온다. 앞선 30개 체크섬을 확인한 뒤에만 다음 파일을 실행한다.
 	result, err := applyManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
 	if err != nil {
 		return Result{}, fmt.Errorf("apply card manifest: %w", err)

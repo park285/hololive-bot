@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""원 Quadlet의 정지 명령을 보존하면서 같은 writer의 재기동을 먼저 차단한다."""
 import argparse
 import errno
 import hashlib
@@ -82,7 +81,6 @@ class Manager:
         commands = []
         for prop in ('ExecStopEx', 'ExecStopPostEx'):
             rows = self.property('Service', prop, 'a(sasasttttuii)')
-            # 뒤쪽 PID·시각·반환 코드는 정지 결과이며 명령 정의가 아니다.
             commands.append([row[:3] for row in rows])
         require(commands[0] and all(row[0] and row[1] for row in commands[0]), '원래 ExecStop 없음')
         raw = json.dumps([source, policy, commands], separators=(',', ':')).encode()
@@ -92,7 +90,6 @@ class Manager:
         conditions = self.property('Unit', 'Conditions', 'a(sbbsi)')
         require(any(row[:4] == ['ConditionPathExists', False, True, str(anchor)] for row in conditions),
                 'manager에 소유 anchor의 필수 부정 기동 조건이 없음')
-        # Restart= 재기동은 Unit 조건을 다시 검사하지 않는다. 강제 종료 코드도 재기동을 허용하면 안 된다.
         require(self.fields('Restart', 'RestartForceExitStatus') == ('no', ''), '자동 재기동 차단이 적용되지 않음')
 
     def terminal(self):
@@ -179,7 +176,6 @@ class Guard:
         try:
             original = self.manager.stop_definition()
         except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
-            # 해제가 일부만 적용된 경우에도 다음 부팅은 막는다. 미확인 guard로 stop이나 seal은 할 수 없다.
             self.publish_guard('unconfirmed')
             self.manager.condition(self.anchor)
             raise ValueError('기동 차단만 설치됨: 원래 정지 경로 미확인') from exc
@@ -212,7 +208,6 @@ class Guard:
         self.manager.terminal()
 
     def undo_unmask(self):
-        # caller가 이번에 해제한 직후이며 start 요청·컨테이너가 없을 때만 manager의 기존 mask를 복원한다.
         require(not any(os.path.lexists(p) for p in (self.mask, self.drop, self.side)) and
                 self.manager.fields('LoadState') == ('masked',), '미적용된 소유 unmask가 아님')
         self.publish_mask()
@@ -261,7 +256,7 @@ def podman_exit_status(unit, cid, since):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='원 Quadlet의 정지 명령을 보존하면서 같은 writer의 재기동을 먼저 차단한다.')
     actions = parser.add_subparsers(dest='action', required=True)
     for name in ('arm', 'check', 'seal', 'undo-unmask', 'start-budget'):
         guard = actions.add_parser(name)

@@ -233,7 +233,6 @@ for service in hololive-api hololive-alarm-worker hololive-youtube-collector-c; 
 done
 echo 'all app prestarts require matching live mounted capacity before writing runtime secrets'
 
-# 상속·다른 검색 루트·생성된 service의 원천을 무시하면 실제 앱은 11, pooler는 10이 된다.
 unsupported_origins=(
     units/container.d/60-pool.conf
     units/hololive-.container.d/60-pool.conf
@@ -293,7 +292,6 @@ for manager_case in manager-environment manager-reload-required; do
     [[ ! -e "$test_root/run/quadlet-env/hololive-api.env" ]]
     rm "$test_root/$manager_case"
 done
-# 지원하는 정확한 unit drop-in과 compose 우선순위는 그대로 유지한다.
 mkdir -p "$test_root/units/hololive-api.container.d"
 printf '[Service]\nEnvironment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' \
     > "$test_root/units/hololive-api.container.d/60-pool.conf"
@@ -308,7 +306,6 @@ for service in hololive-alarm-worker hololive-youtube-collector-c; do
 done
 echo 'prestart rejects unknown effective override origins before writing secrets; exact drop-ins retain compose precedence'
 
-# 파일명이 아니라 제한된 내용으로 MCS-only 원천을 판정한다.
 neutral_origins=(
     units/container.d/71-security.conf
     units/hololive-.container.d/72-security.conf
@@ -349,7 +346,6 @@ for body in \
     grep -q 'unsupported Quadlet/systemd override origin:' "$fixture/rejected.log"
     [[ ! -e "$test_root/run/quadlet-env/hololive-api.env" ]]
 done
-# 중립 파일이라도 동명 환경 파일을 가려 실제 precedence를 바꾸면 허용하지 않는다.
 write_neutral_origin "$origin"
 printf '[Container]\nEnvironment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=4\n' \
     > "$test_root/units/hololive-api.container.d/$(basename "$origin")"
@@ -381,12 +377,10 @@ mv "$test_root/pooled.env" "$test_root/compose.env"
 mv "$test_root/stopped-pgbouncer.ini" "$test_root/live-pgbouncer.ini"
 echo 'explicit direct recovery starts without a pooler but retains the static capacity budget'
 
-# Tailscale IPv6 admin bind는 허용 대상이므로 IPv4 주소만 찾다가 90초 뒤 실패하면 안 된다.
 sed -i 's/^HOLOLIVE_ADMIN_API_PORT_BIND_IP=.*/HOLOLIVE_ADMIN_API_PORT_BIND_IP=fd7a:115c:a1e0::8/' "$test_root/compose.env"
 timeout 20 bash -c "$(declare -f run_prestart invoke_prestart); test_root='$test_root' root='$root' run_prestart"
 echo 'prestart waits for an IPv6 tailnet admin bind on the IPv6 address family'
 
-# pooler 실패 주입은 뒤의 offline env 렌더링 입력과 생성 unit을 오염시키지 않는다.
 (
 cp -a "$test_root" "$fixture/pooler-prestart"
 test_root="$fixture/pooler-prestart"
@@ -442,7 +436,6 @@ for origin in "${neutral_origins[@]}"; do
     cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
     rm "$test_root/$origin"
 done
-# mount hash가 맞아도 pooler가 다른 config를 읽도록 명령을 바꾸면 기동 전에 거부한다.
 cp "$pooler_config" "$test_root/live-pgbouncer.ini"
 mkdir -p "$test_root/units/holo-pgbouncer.container.d"
 for directive in 'Exec=/tmp/other.ini' 'Entrypoint=/bin/sh' 'Exec=' 'Entrypoint='; do
@@ -526,7 +519,6 @@ fi
 cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
 echo 'pooler prestart preserves the last config on missing TLS, invalid bind or exhausted capacity'
 
-# 명시적 오프라인 source tree는 호스트의 설치/manager 원천과 섞지 않는다.
 offline_units="$fixture/offline-units"
 foreign_roots="$fixture/foreign-roots"
 mkdir -p "$offline_units" "$fixture/offline-bin" \
@@ -587,7 +579,6 @@ cmp -s "$fixture/offline.ini" "$fixture/offline-expected.ini"
 echo 'offline source rendering excludes host origins but rejects unsupported origins inside its own tree'
 )
 
-# preview도 실제 prestart 진입점을 호출하며 운영 명령은 호출 즉시 실패하게 격리한다.
 printf 'WORKER_SECRET=synthetic\n' > "$test_root/secrets/alarm-worker.env"
 printf 'COLLECTOR_SECRET=synthetic\n' > "$test_root/secrets/youtube-collector.env"
 cat >> "$test_root/compose.env" <<'ENV'

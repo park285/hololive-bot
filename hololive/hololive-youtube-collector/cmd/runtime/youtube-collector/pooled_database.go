@@ -48,7 +48,6 @@ func checkPooledDatabase(ctx context.Context) error {
 }
 
 func pooledCheckConfig() (*pgx.ConnConfig, error) {
-	// pgx의 서비스 파일·인증서·시작 옵션이 검증한 서비스 설정을 덮지 못하게 한다.
 	for _, item := range os.Environ() {
 		key, _, _ := strings.Cut(item, "=")
 		if strings.HasPrefix(key, "PG") && key != "PGAPPNAME" {
@@ -61,7 +60,6 @@ func pooledCheckConfig() (*pgx.ConnConfig, error) {
 		return nil, errors.New("invalid collector database settings")
 	}
 
-	// 파싱하는 문자열에는 허용 목록의 값만 넣고, 실제 비밀번호는 파싱 뒤 전달한다.
 	cfg, err := pgxdb.ParseConfig("host=" + db.Host + " port=" + strconv.Itoa(db.Port) + " dbname=" + db.Database +
 		" user=" + db.User + " password=unused passfile=/dev/null sslcert='' sslkey='' sslmode=verify-full sslrootcert=" + db.SSLRootCert +
 		" default_query_exec_mode=cache_statement")
@@ -95,7 +93,6 @@ func verifyPooledSession(ctx context.Context, conn *pgx.Conn, role string) error
 		return errors.New("read-only transaction failed")
 	}
 
-	// 실패하면 연결 종료가 미완료 트랜잭션을 취소한다. 성공도 COMMIT하지 않는다.
 	for _, statement := range [...]string{
 		"SET LOCAL default_transaction_read_only = on",
 		"SET LOCAL statement_timeout = '30s'",

@@ -85,7 +85,6 @@ def bind_argument(source, destination, options):
 
 
 def check_mounts(pid, destinations):
-    # 내부 submount를 빠뜨리면 실제 파일 대신 그 아래의 다른 inode를 검증하게 된다.
     table = {}
     for line in Path(f"/proc/{pid}/mountinfo").read_text().splitlines():
         _, _, _, _, path, flags, *_ = line.split()
@@ -139,7 +138,6 @@ def default_idmap(mount, linux):
 
 
 def user_maps(proc):
-    # 커널은 동일한 매핑도 auto와 명시적 map에서 다른 순서로 표시할 수 있다.
     return {kind: sorted(tuple(map(int, line.split())) for line in (proc / (kind + "_map")).read_text().splitlines())
             for kind in ("uid", "gid")}
 
@@ -159,7 +157,6 @@ def validate_container_pair(before, directory):
     if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) or "\n" in value or "\r" in value
            for key, value in environment.items()):
         raise ValueError("previous environment cannot be passed losslessly to the profile check")
-    # 앱 환경은 stdin으로만 전달한다. PATH·LD_* 등도 호스트의 root Podman 실행에는 적용하지 않는다.
     command = [CLI, "--runtime", before["OCIRuntime"], "create", "--rm", "--pull=never", "--no-healthcheck",
                "--image-volume=ignore", "--log-driver=none", "--timeout=30", "--network=none",
                "--read-only", "--read-only-tmpfs=false", "--cap-drop=all", "--security-opt=no-new-privileges",
@@ -175,7 +172,6 @@ def validate_container_pair(before, directory):
     old_pid = before["State"]["Pid"]
     old_proc = Path(f"/proc/{old_pid}")
     mappings = user_maps(old_proc)
-    # 별도 user namespace에 같은 숫자 매핑만 재현한다. 원 컨테이너를 기동하는 Podman 의존성을 만들지 않는다.
     if (old_proc / "ns/user").samefile("/proc/self/ns/user"):
         command.append("--userns=host")
     else:
@@ -213,7 +209,6 @@ def validate_container_pair(before, directory):
                            text=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=30)
             probe = cidfile.read_text().strip()
             run(CLI, "init", probe)
-            # init은 mount를 고정하지만 entrypoint를 실행하지 않는다. 호스트 경로가 교체된 경우 새 파일로 통과시키지 않는다.
             initialized = inspect("container", probe)
             if initialized["State"]["Status"] != "initialized" or initialized["Image"] != before["Image"]:
                 raise ValueError("profile check was not initialized with the previous image")
@@ -244,7 +239,6 @@ def validate_container_pair(before, directory):
                     raise ValueError("profile check bind policy differs from the writer")
             if running_generation(inspect("container", before["Id"])) != running_generation(before):
                 raise ValueError("previous process changed before the profile check")
-            # 설정 오류에는 입력값이 담길 수 있다. 로그에는 단계와 실제 종료 코드만 남긴다.
             result = subprocess.run([CLI, "start", "--attach", probe], stdout=subprocess.DEVNULL,
                                     stderr=subprocess.DEVNULL, timeout=35)
             if result.returncode:
@@ -345,7 +339,6 @@ def profile_security_level(unit):
     service = unit + ".service"
     fragment = Path(run("systemctl", "show", service, "--property=FragmentPath", "--value"))
     if fragment.is_symlink() and fragment.readlink() == Path("/dev/null"):
-        # 영속 mask는 기동을 차단하지만 생성된 Quadlet 정책을 대체하지 않는다.
         prefix = Path(os.environ.get("HOLOLIVE_QUADLET_TEST_ROOT") or "/")
         if fragment != prefix / "etc/systemd/system" / service:
             raise ValueError("unexpected profile preflight mask")
@@ -369,7 +362,6 @@ def check_resolved_pair(directory, pair, *, pooled=False):
                "--read-only-tmpfs=false", "--log-driver=none", "--no-healthcheck", "--image-volume=ignore",
                "--cap-drop", "all", "--security-opt", "no-new-privileges"]
     if pooled:
-        # 실제 writer의 DNS 별칭·포트는 점유하지 않고 검토한 단발 DB 검사만 실행한다.
         command.extend(("--entrypoint=./bin/youtube-collector", "--http-proxy=false", "--timeout=45"))
     unit = Path(QUADLET_UNITS[pair["service"]]).stem
     generated_env = "/run/hololive-bot/quadlet-env/" + unit + ".env"
@@ -413,7 +405,6 @@ def check_resolved_pair(directory, pair, *, pooled=False):
         if pair["service"] == "hololive-api" and "app_version" in pair:
             environment["APP_VERSION"] = pair["app_version"]
             command.extend(("--env", "APP_VERSION"))
-        # 호스트의 MCS drop-in은 기본 unit 스냅샷 밖에 있으므로 Quadlet이 합성한 정책을 따른다.
         level = profile_security_level(unit)
         if level:
             command.extend(("--security-opt", "label=level:" + expand_unit_value(level)))
@@ -572,7 +563,6 @@ def atomic_publish(files, before_replace=None):
             with os.fdopen(fd, "wb") as output:
                 output.write(contents)
             temporary.chmod(0o444)
-        # 모두 준비한 뒤 교체한다. 이름 변경 각각만 원자적이며 묶음 전체는 아니다.
         if before_replace is not None:
             before_replace()
         for temporary, path in staged:
@@ -626,7 +616,6 @@ def quadlet_slot(service, unit):
 
 def create_pair_directory(directory):
     directory.mkdir(mode=0o755, parents=True, exist_ok=False)
-    # 새 비밀 없는 release의 bind 루트는 배포자의 umask와 관계없이 서비스 UID가 탐색할 수 있어야 한다.
     directory.chmod(0o755)
 
 
@@ -648,7 +637,6 @@ def verify_writer(directory, service, container, *, captured):
     release = pair["captured_release"] if captured else str(directory)
     loaded = container_profile_hash(service, before)
     mounted = writer_profile(before, service, release)
-    # 무라벨 writer는 prepare 후에도 구 해시로 실행된다. mirror의 다음 후보 바이트와 비교하지 않는다.
     if loaded != pair["profile_hash"] or (release is not None and digest(mounted) != loaded):
         raise ValueError("running profile differs from its validated release pair")
     if running_generation(inspect("container", container)) != generation:
@@ -687,7 +675,6 @@ def capture(container, service, directory, root):
         if (prior / UNIT_RECORD).is_file():
             (directory / UNIT_RECORD).write_bytes((prior / UNIT_RECORD).read_bytes())
     else:
-        # 첫 도입은 기존 프로세스가 로드한 바이트를 증명할 수 있을 때만 허용한다.
         running_hash = container_profile_hash(service, before)
         (directory / "profile.json").write_bytes(profile_bytes(mounted))
         if running_hash != digest(directory / "profile.json"):
@@ -711,8 +698,6 @@ def capture(container, service, directory, root):
 
 
 def activate(directory, service, root, prepared_overlay=None, *, captured_container=None):
-    # 활성 overlay는 재생성·재부팅마다 이 디렉터리를 bind하므로, 수용 후 정리되는 백업이 아니라
-    # 배포 동기화와 보존 정리에서 빠지는 release 저장소에만 둔다.
     releases = (Path(root) / "artifacts/worker-profile/releases").resolve()
     if not directory.resolve().is_relative_to(releases):
         raise ValueError("active profile pair must live under artifacts/worker-profile/releases")
@@ -775,7 +760,6 @@ def main():
         quadlet_slot(service, unit_text)
         image = rest[0]
         create_pair_directory(directory)
-        # 이 candidate가 활성화되면 이 기본 unit으로 돈다. 다음 release의 capture가 롤백용으로 이어받는다.
         (directory / UNIT_RECORD).write_text(unit_text)
         source = Path(SOURCE) / PROFILES[service]
         (directory / "profile.json").write_bytes(profile_bytes(source))

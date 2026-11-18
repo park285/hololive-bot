@@ -241,14 +241,12 @@ for case in ('success', 'journal_failure', 'error_log', 'grep_failure', 'ordinar
         print(f'[PASS] native {case}: exit={result.returncode}, current={expected_current}, previous={expected_previous}, runtime={expected_runtime}')
 
 
-# 중앙(c)과 iris-seoul(b)은 rootful Podman Quadlet이다. 실제 원격 본문을 가짜 podman·systemctl·pair tool로 실행해
-# issuer 우선 교체, 이전 drop-in 복원, 후보 검사 실패의 무변경과 b의 source checkout 없는 재개를 검증한다.
 central_functions = '\n'.join(
     match.group() for match in re.finditer(r'^([a-z_]+)\(\) \{\n.*?^\}', central, re.M | re.S)
     if match.group(1) not in ('require_collector_lease_migration', 'restore_after_failed_cutover')
 )
 central_config = central[central.index('manifest="../'):central.index('[[ "$(stat')]
-central_main = central[central.index('{\nif [[ "$mode" == rollback ]]'):]
+central_main = central[central.index('{\nclaim_slot\n'):]
 central_source_gate = central[central.index('if [[ "$mode" == resume || "$mode" == rollback || "$mode" == check ]]'):central.index('compose_env=')]
 old_revision, new_revision = 'a' * 40, 'b' * 40
 old_id, new_id = 'sha256:' + 'a' * 64, 'sha256:' + 'b' * 64
@@ -760,7 +758,7 @@ for slot, tree in (('c', 'compose'), ('b', 'collector-b')):
     for prefix, staged_at, accepted in (('card-po', change, True), ('po', change, False), ('card-po', '20261002T000000Z', False)):
         args = [slot, 'resume', f'{remote}/po-staging-{staged_at}', f'{remote}/backups/{prefix}-{slot}-{change}',
                 new_revision, '6.0.1', '-']
-        result = run('set -- ' + shlex.join(args) + '\n' + central[:central.index('# 중앙 c는 source sync')], root, 'paths')
+        result = run('set -- ' + shlex.join(args) + '\n' + central[:central.index('install -d -m 0755 /run/lock')], root, 'paths')
         require((result.returncode == 0) == accepted, f'{slot}: W2 resume requires its card backup and staging', result)
 
 
@@ -855,7 +853,6 @@ for slot, case in runs:
         previous_definition = installed_definition.replace(f'POSTGRES_HOST={host}', f'POSTGRES_HOST={previous_host}').replace(f'POSTGRES_PORT={db_port}', f'POSTGRES_PORT={previous_port}') + '# previous revision\n'
         (state / f'units/hololive-youtube-collector-{slot}.container').write_text(installed_definition)
         (state / 'compose.env').write_text('APP_ENV=production\n')
-        # capacity 경계는 앱 용량뿐 아니라 pooler의 설치 원천도 확인한다.
         for name in ('hololive-api', 'hololive-alarm-worker', 'holo-pgbouncer'):
             shutil.copyfile(root / f'deploy/quadlet/hololive-bot/{name}.container', state / f'units/{name}.container')
         source_files = (root / 'scripts/deploy/po-central-files.txt').read_text().splitlines()
@@ -944,7 +941,6 @@ for slot, case in runs:
                 (candidate / 'profile.json').write_text('candidate profile\n')
                 if case != 'check_wrong_profile':
                     (state / 'loaded.profile').write_text('candidate profile\n')
-            # 이전 image가 돌던 기본 unit. sync가 이미 새 revision의 unit을 설치한 상황을 만든다.
             (previous_pair / 'unit.container').write_text(previous_definition)
             (backup / 'issuer.state').write_text('present')
             (backup / 'collector.revision').write_text(old_revision)
@@ -1103,7 +1099,6 @@ for slot, case in runs:
             if slot == 'c':
                 (current / '.source-revision').write_text(new_revision)
             else:
-                # b는 checkout·revision marker 없이 staged unit만 수동 설치한다.
                 shutil.copyfile(staging / 'deploy/podman/iris-seoul/hololive-youtube-collector-b.container', unit_path)
                 require(unit_path.read_text() == candidate_definition and not (current / '.source-revision').exists(),
                         'b: actual staged candidate installed without source marker', result)
@@ -1385,7 +1380,6 @@ for slot, case in runs:
             require(not any(call.startswith('pair activate ') and call.endswith('/previous') for call in calls), f'{label}: no previous pair activation', result)
             require(len(restarts) == 1, f'{label}: no restoration restart while manager outcome is unknown', result)
         elif case in ('missing_receipt', 'collector_stopped', 'inventory_failure', 'unadmitted_deploy', 'foreign_card_pair'):
-            # 이전 pair 기준점을 만들 수 없으면 백업·태그·적재 전에 원인을 남기고 멈춘다.
             require(not backup.exists() and not changed, f'{label}: no partial backup or runtime change', result)
         elif case == 'rollback_stale':
             require(not changed, f'{label}: copied release receipt is not the active owner', result)
@@ -1394,7 +1388,6 @@ for slot, case in runs:
             require(('completion verified' in result.stdout) == (expected_status == 0),
                     f'{label}: completion output requires the candidate loaded profile', result)
         elif case in ('candidate_check_failure', 'absent_candidate_check_failure', 'activation_failure', 'pooled_query_failure'):
-            # 후보 검사·drop-in 게시 실패는 :prod tag·drop-in·실행 중 pair를 바꾸지 않는다.
             require(not restarts, f'{label}: no unit restart', result)
             require(image_file(state, collector_prod).read_text() == 'old', f'{label}: collector tag baseline', result)
             require((image_file(state, issuer_prod).exists()) != issuer_absent, f'{label}: issuer tag baseline', result)

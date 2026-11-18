@@ -6,7 +6,6 @@ if [ "$#" -ne 2 ]; then
     exit 2
 fi
 
-# /etc/hosts를 우회하고 호스트의 search suffix에 영향받지 않도록 절대 DNS 이름을 조회한다.
 for host in "$@"; do
     if ! nslookup -type=a "${host%.}."; then
         printf 'PgBouncer DNS is not ready: %s\n' "$host" >&2

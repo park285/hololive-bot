@@ -323,7 +323,6 @@ class CaptureRaceTest(unittest.TestCase):
 
     def retain(self, *, labelled):
         prior = self.release.parents[1] / "old/previous"
-        # 라벨은 이전 세대의 receipt도 가리킬 수 있지만, prepare 포인터는 원 ID여야 한다.
         evidence = ({"container_id": self.other} if labelled else {
             "container_id": self.original, "container_name": self.name, "captured_release": None,
             "container_started_at": self.state["StartedAt"], "container_pid": self.state["Pid"]})
@@ -387,7 +386,6 @@ class CaptureRaceTest(unittest.TestCase):
         self.checker.assert_not_called()
 
     def test_diagnostics_from_temporary_name_owner_cannot_attest_original(self):
-        # 진단 때만 이름을 빌린 다른 컨테이너가 원본 파일과 일치하는 해시를 보고한다.
         self.hashes[self.original] = "0" * 64
         observed = []
 

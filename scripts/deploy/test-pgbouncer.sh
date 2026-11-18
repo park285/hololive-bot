@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# 내부 network와 각 fixture의 private netns에서만 운영 주소·인증 계약을 재현한다.
 set -euo pipefail
 if [[ -n "${CONTAINER_HOST:-}${CONTAINER_CONNECTION:-}" ]] || [[ "$(podman info --format '{{.Host.Security.Rootless}}')" != true ]]; then
   echo 'PgBouncer product test requires local rootless Podman' >&2
@@ -56,7 +55,6 @@ trap cleanup EXIT
 install -m 0644 "$root/deploy/postgres/pg_hba.conf" "$fixture/postgres-hba.conf"
 install -m 0644 "$root/deploy/pgbouncer/pg_hba.conf" "$fixture/pooler-hba.conf"
 install -m 0644 "$root/deploy/pgbouncer/stats-users.txt" "$fixture/stats-users.txt"
-# 키는 namespace 안의 서비스 UID만 읽는다. 저장소 bind에는 SELinux label을 변경하지 않는다.
 podman unshare chown 10001:10001 "$fixture/pooler-tls/server.key" "$fixture/pooler-tls/backend-client.key"
 printf 'ADMIN_API_POSTGRES_POOL_MAX_CONNS=3\n' >"$fixture/target.env"
 . "$root/scripts/deploy/lib/postgres-capacity.sh"
@@ -157,7 +155,6 @@ podman run -d --name "$pooler" --pull=never --platform="linux/$architecture" --s
 namespace_address "$pooler" 100.100.1.8
 pooler_netns=$(podman inspect -f '{{.NetworkSettings.SandboxKey}}' "$pooler")
 [[ -n "$pooler_netns" && -e "$pooler_netns" ]] || { echo 'isolated pooler netns is missing' >&2; exit 1; }
-# 외부 슬롯의 게시 포트 변환은 이 fixture의 고립된 네트워크 네임스페이스에만 둔다.
 podman unshare nsenter --net="$pooler_netns" -- nft \
   'add table ip fixture_pooler_port; add chain ip fixture_pooler_port prerouting { type nat hook prerouting priority dstnat; policy accept; }; add rule ip fixture_pooler_port prerouting ip daddr 100.100.1.8 tcp dport 6433 dnat to 100.100.1.8:6432'
 ready=false

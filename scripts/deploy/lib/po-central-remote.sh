@@ -28,7 +28,6 @@ unit_dir=/etc/containers/systemd/hololive-bot
 manifest="../po-current-$slot/rootfs-manifest.json"
 image_id_file="../po-current-$slot/image-id"
 change_id="${backup##*-}"
-# 활성 pair는 백업 정리 뒤에도 bind되므로 release 저장소에 둔다.
 profile_release="$current/artifacts/worker-profile/releases/${backup##*/}/$service"
 collector=localhost/hololive-youtube-collector:prod
 issuer=localhost/hololive-youtube-po-sandbox:prod
@@ -48,8 +47,6 @@ hold_owned=false
 declare -A release_attempted=() launched_inv=() launched_gen=() failed_start_job=() failed_start_since=()
 [[ "$(stat -c '%u:%g %a' "$staging")" == '0:0 700' ]] || { echo "$host_label staged artifacts are not root-private" >&2; exit 1; }
 cd "$current"
-# 재개 입력 검증은 staged helper를 실행하기 전에 끝낸다. b의 current는 source checkout이 아니라
-# release pair 저장소다. provenance는 SSH로 전달한 source checksum과 quiesce 영수증이 소유한다.
 if [[ "$mode" == resume || "$mode" == rollback || "$mode" == check ]]; then
   if [[ "$mode" == check ]]; then cmp -s -- "$backup/card-candidate" "$card_active" || exit 1; fi
   if [[ -f "$backup/transport.sha256" ]]; then
@@ -137,7 +134,6 @@ container_generation() {
 stop_manager_invocation() {
   local LC_ALL=C since="$3" record journal_status=0
   systemctl stop "$1" || return 1
-  # 비활성 unit의 stop도 성공할 수 있다. PID 1의 해당 invocation 정지 job이 실제로 시작됐는지 확인한다.
   record="$(journalctl --boot --quiet --no-pager -n 1 -o json --output-fields=INVOCATION_ID --since="$since" \
     _PID=1 "UNIT=$1" "INVOCATION_ID=$2" JOB_TYPE=stop MESSAGE_ID=de5b426a63be47a7b6ac3eaac82e2f6f)" || journal_status=$?
   if (( journal_status != 0 )) || [[ -z "$record" ]] ||
@@ -267,11 +263,9 @@ stop_guarded_unit() {
   if [[ -n "$generation" && -n "$invocation" ]]; then
     require_stop_generation "$unit" "$invocation" "$generation" "$phase" || return 1
     stop_guard check "$unit" || return 1
-    # journal과 Podman 종료 이벤트는 같은 epoch 마이크로초 하한을 사용한다.
     since="@$EPOCHREALTIME"
     if stop_manager_invocation "$unit" "$invocation" "$since"; then managed=true; fi
   fi
-  # seal의 reload로 실패 unit이 수거되기 전에 원래 invocation의 종료 결과를 보존한다.
   snapshot="$(unit_status "$unit")" || return 1
   if [[ -n "$since" ]]; then
     exit_status="$(python3 -I -B "$staging/scripts/deploy/lib/systemd-stop-guard.py" \
@@ -287,7 +281,6 @@ stop_guarded_unit() {
   container_absent "${unit%.service}" || return 1
   if [[ -n "$generation" ]]; then container_absent "${generation%% *}" || return 1; fi
   if [[ "$managed" == true ]]; then
-    # 수거된 정상 unit은 현재 invocation과 ExecMainCode가 비워질 수 있다. 종료 이벤트는 반드시 원 CID여야 한다.
     if [[ "$exit_status" == 0 && "${observed[ActiveState]}" == inactive && "${observed[Result]-}" == success &&
           -v 'observed[InvocationID]' && ( -z "${observed[InvocationID]}" || "${observed[InvocationID]}" == "$invocation" ) &&
           ( "${observed[ExecMainCode]-}" == 1 || "${observed[ExecMainCode]-}" == 0 ) && "${observed[ExecMainStatus]-}" == 0 ]]; then
@@ -300,7 +293,6 @@ stop_guarded_unit() {
   fi
   if [[ "$accepted" != true ]]; then
     record_stop_evidence "$unit" 'unconfirmed' "$snapshot" || return 1
-    # 2는 물리적 정지는 확인했으나 성공 영수증을 발행할 수 없는 경우다.
     return 2
   elif [[ "$unit" == "$issuer_unit" ]]; then
     printf '%s\n' "$invocation" > "$hold/issuer-stop.invocation" || return 1
@@ -347,7 +339,6 @@ hold_units() {
   for unit in "${opened[@]}"; do
     if stop_guard arm "$unit"; then armed+=("$unit"); else status=1; fi
   done
-  # 최초 정지는 두 차단 모두 필요하다. 복구에서는 동료의 실패로 이미 연 writer를 방치하지 않는다.
   if [[ "$phase" == initial ]]; then
     (( status == 0 )) || return 1
     for unit in "${armed[@]}"; do
@@ -357,7 +348,6 @@ hold_units() {
   for unit in "${armed[@]}"; do
     if [[ "$phase" == rehold && ! -v 'launched_gen[$unit]' ]]; then
       status=1
-      # 전송 실패 자체는 성공으로 바꾸지 않는다. 같은 job의 실제 완료 세대만 보호 정지할 수 있다.
       if [[ ! -v 'failed_start_job[$unit]' ]] || ! identity="$(started_slot_generation "$unit" \
         "${failed_start_since[$unit]}" "${failed_start_job[$unit]}" true)"; then continue; fi
       inv[$unit]="${identity%% *}"
@@ -408,7 +398,6 @@ request_slot_start() {
 started_slot_generation() {
   local unit="$1" since="$2" job="$3" wait_for_job="${4:-false}" current budget limit record invocation generation
   if [[ "$wait_for_job" == true ]]; then
-    # 기동을 다시 요청하지 않는다. 이미 기동 차단된 같은 notify job만 한 번의 기동 예산 안에서 기다린다.
     budget="$(stop_guard start-budget "$unit")" && [[ "$budget" =~ ^[1-9][0-9]*$ ]] || return 1
     limit=$((SECONDS + budget + 1))
     while :; do
@@ -432,7 +421,6 @@ start_slot_unit() {
   local unit="$1" defer_signal=true pending_signal=0 status=0 request since job identity
   if [[ "$hold_owned" != true ]]; then systemctl restart "$unit" || return $?; return 0; fi
   if (( pending_signal == 0 )); then
-    # 부모는 취소를 보류한다. 프로세스 그룹 신호도 요청을 보낸 자식과 최초 세대 조회를 중간에 끊지 않아야 한다.
     if request="$(trap '' INT TERM HUP; request_slot_start "$unit")"; then
       read -r since job status <<<"$request"
       if (( status != 0 )); then
@@ -463,7 +451,6 @@ clear_hold() {
     require_mask_inode "$unit" "$anchor" || return 1
     if [[ -v 'launched_inv[$unit]' ]]; then require_launched_unit "$unit" || return 1; fi
   done
-  # 활성 pair 검증이 끝난 뒤 hold를 한 번에 닫는다. 그 전까지는 두 anchor 모두 재차 차단에 사용할 수 있다.
   retired="$(mktemp -d -- "$remote_root/.po-$slot-released.XXXXXX")" || return
   trap '' INT TERM HUP
   mv -T -- "$hold" "$retired/hold" || return
@@ -550,8 +537,6 @@ prepare_candidate_pair() {
   python3 "$pair_tool" verify-source "$service" "$profile_release/candidate"
 }
 
-# Podman .Id·.Image는 접두어 없는 config digest다. 영수증과 drop-in의 identity는 sha256:<hex>다.
-# 두 조회를 비교할 때는 변수에 먼저 받는다. [[ "$(a)" == "$(b)" ]]는 둘 다 실패하면 빈 값끼리 같아 통과한다.
 image_id() {
   local id
   id="$(podman image inspect -f '{{.Id}}' "$1")" || return
@@ -609,18 +594,18 @@ verify_collector_runtime() {
   collector_readiness_json_field "$ready" instance_id "\"youtube-collector-$slot\""
 }
 started_since() {
-  local since_epoch="$1" container="$2"
-  [[ "$(podman inspect -f '{{.State.StartedAt.Unix}}' "$container")" -ge "$since_epoch" ]]
+  local since_epoch="$1" container_name="$2"
+  [[ "$(podman inspect -f '{{.State.StartedAt.Unix}}' "$container_name")" -ge "$since_epoch" ]]
 }
 require_post_cutover_logs() {
-  local since="$1" container="$2" output status
-  output="$(podman logs --since "$since" "$container" 2>&1)" || {
+  local since="$1" container_name="$2" output status
+  output="$(podman logs --since "$since" "$container_name" 2>&1)" || {
     status="$?"
-    echo "failed to read post-cutover logs for $container" >&2
+    echo "failed to read post-cutover logs for $container_name" >&2
     return "$status"
   }
   if grep -Eq 'ERR|panic|permission denied|x509|no such file|OOM' <<<"$output"; then
-    echo "post-cutover error in $container logs" >&2
+    echo "post-cutover error in $container_name logs" >&2
     return 1
   else
     status="$?"
@@ -714,12 +699,10 @@ restore() {
   if [[ "$mode" == rollback && "$hold_owned" != true ]] && ! cmp -s -- "$backup/card-candidate" "$card_active"; then
     echo 'rollback does not own the active card release' >&2; return 1
   fi
-  # 카드 창의 첫 backup은 복구 자료일 뿐, 이전 publisher의 기동 권한은 없다.
   [[ ! -e "$backup/transport.sha256" && -f "$backup/card-origin" ]] &&
     { cmp -s -- "$backup/card-origin" "$card_active" || cmp -s -- "$backup/card-candidate" "$card_active"; } || {
     echo 'rollback is not owned by an admitted card pair' >&2; return 1;
   }
-  # systemctl client 종료는 manager job 정산이 아니다. 진행 중·조회 실패에는 이전 pair를 게시하지 않는다.
   if ! cutover_units_settled; then
     printf 'outcome_unknown\n' > "$backup/cutover-outcome" || echo 'failed to record cutover outcome; retain the backup' >&2
     echo "$host_label cutover outcome_unknown; settle issuer/collector manager jobs before an approved rollback; retain $backup" >&2
@@ -756,7 +739,6 @@ restore() {
     postgres_capacity_assert_service "$staging" "$compose_env" "$unit_dir" "$collector_container" "$previous_unit" || return
   fi
   if [[ "$hold_owned" == true ]]; then require_held_units || return; fi
-  # 복원 drop-in 게시가 실패하면 실행 중인 issuer·collector를 건드리지 않는다.
   python3 "$pair_tool" activate "$service" "$profile_release/previous" "$current" || return
   restore_collector_base_unit || return
   podman tag "$collector_rollback" "$collector"
@@ -818,7 +800,6 @@ require_collector_lease_migration() {
   expected="$(sha256sum "$staging/hololive/hololive-api/scripts/migrations/$migration")"
   expected="${expected%% *}"
   [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || return 1
-  # 최초 전환 전 실행 상태에만 구 direct primary를 인정한다. 후보 기동 후에는 풀러 경로만 검사한다.
   endpoint="$(collector_database_endpoint "$collector_container")" || return 1
   if [[ "$endpoint" != 'holo-pgbouncer|6432' && "$endpoint" != 'holo-postgres|5432' ]]; then
     echo 'collector migration proof requires the local primary route' >&2
@@ -891,7 +872,6 @@ if [[ "$slot" == c && "$mode" != quiesce ]]; then
 fi
 if [[ "$mode" != resume ]]; then
 require_unmasked_units
-# 이전 pair는 실행 중인 collector에서만 증명한다. 정지 후에는 보존한 hold로만 재개한다.
 systemctl is-active --quiet "$collector_unit" || {
   echo "$host_label collector must be running for a paired cutover; $collector_unit is not active" >&2
   exit 1
@@ -907,8 +887,6 @@ if [[ "$mode" == quiesce && "$issuer_state" != present ]]; then
   echo 'quiesce requires the running previous issuer pair' >&2
   exit 1
 fi
-# issuer 기준 영수증(po-current-<slot>)은 current 밖의 호스트 상태다. issuer 이미지가 있는데 영수증이 없으면 이전 pair를
-# 복원할 근거가 없으므로, 백업·rollback 태그를 만들기 전에 원인을 남기고 거절한다(호스트 교체 때 누락된 사례).
 if [[ "$issuer_state" == present ]] && [[ ! -r "$current/$manifest" || ! -r "$current/$image_id_file" ]]; then
   echo "$host_label issuer receipt missing: restore the reviewed $current/$manifest and $current/$image_id_file before cutover" >&2
   exit 1
@@ -990,7 +968,6 @@ fi
   image.tar.sha256 collector-image.tar.sha256 source-files.sha256) > "$backup/candidate-inputs.sha256"
 : > "$backup/snapshot-complete"
 fi
-# 이전 pair snapshot을 확보한 뒤에만 복원을 무장합니다.
 restore_after_failed_cutover() {
   local status="${1:-1}" restore_status
   if [[ "$BASHPID" != "${cutover_restore_owner_pid:?cutover restore owner not armed}" ]]; then

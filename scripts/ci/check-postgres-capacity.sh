@@ -19,8 +19,6 @@ trap 'rm -rf "${tmp}"' EXIT
 : >"${tmp}/quadlet-defaults.env"
 postgres_capacity_write_pgbouncer_config "${policy_file}" "${tmp}/quadlet-defaults.env" "${tmp}/pgbouncer.ini"
 
-# 배포 원본인 Quadlet unit의 Exec 인자와 Environment 기본값이 policy pin·기본값과 같은지 본다.
-# [Container] Environment=KEY=${VAR}와 [Service] Environment=VAR=기본값을 ${VAR:-기본값}으로 합친다.
 "${CI_PYTHON_BIN}" - "${unit_dir}" "${policy_file}" "${root}/deploy/postgres/role-limits.sql" <<'PY'
 import re
 import shlex

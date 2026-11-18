@@ -16,12 +16,16 @@ native_capture_collector_state() {
   persistent="$(systemctl show "$unit" -p UnitFileState --value)" || return 1
   case "$collector_prechange_state" in
     active|activating|reloading) collector_prechange_running=true ;;
-    inactive|failed) collector_prechange_running=false ;;
+    inactive|failed)
+      # shellcheck disable=SC2034
+      collector_prechange_running=false ;;
     *) return 1 ;;
   esac
   case "$persistent" in
     enabled) collector_prechange_enabled=true ;;
-    disabled) collector_prechange_enabled=false ;;
+    disabled)
+      # shellcheck disable=SC2034
+      collector_prechange_enabled=false ;;
     *) return 1 ;;
   esac
 }
@@ -36,7 +40,6 @@ native_recovery_require_clear() {
 }
 
 native_cutover_claim() {
-  # 원자적 mkdir가 동시 배포와 미확정 이전 변경을 함께 거절합니다.
   local nonce
   native_claim_nonce=""
   IFS= read -r nonce < /proc/sys/kernel/random/uuid || return 1

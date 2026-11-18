@@ -8,7 +8,7 @@ native_payload_digest() (
 )
 
 native_window_identity() {
-  sudo -n python3 -I -B - "$current_link" "$releases_root" "$native_recovery_dir" "$native_release_window" "$@" <<'PY'
+  sudo -n python3 -I -B - "${current_link?}" "${releases_root?}" "${native_recovery_dir?}" "$native_release_window" "$@" <<'PY'
 from pathlib import Path
 import os, re, stat, sys
 
@@ -62,25 +62,25 @@ PY
 }
 
 native_apply_preflight() {
-  [[ "$(hostname -s)" == osaka1 && "$service" == youtube-collector-a ]] || return 1
+  [[ "$(hostname -s)" == osaka1 && "${service?}" == youtube-collector-a ]] || return 1
   native_recovery_require_clear && sudo -n test ! -L "$native_recovery_dir" || return 1
   native_window_identity apply "${1:-}" ''
 }
 
 native_window_pins() {
-  [[ "$window_name" == "$native_release_window" ]] || return 1
+  [[ "${window_name?}" == "$native_release_window" ]] || return 1
   [[ "$(hostname -s)" == osaka1 && "$service" == youtube-collector-a && "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ &&
-     "$window_digest" =~ ^[0-9a-f]{64}$ && "$window_old" != "$release_id" ]] || return 1
+     "${window_digest?}" =~ ^[0-9a-f]{64}$ && "${window_old?}" != "${release_id?}" ]] || return 1
   native_release_id_validate "$window_old" && native_release_id_validate "$release_id" || return 1
   case "$window_name" in W1) original_port=5433 ;; W2) original_port=6433 ;; *) return 1 ;; esac
   old_target="$releases_root/$window_old"
   window="$old_target/native-window"
   [[ -L "$current_link" && "$(realpath -e "$current_link")" == "${1:-$old_target}" ]] || return 1
-  window_units=("$po_socket" "$po_service" "$unit")
+  window_units=("${po_socket?}" "${po_service?}" "${unit?}")
 }
 
 native_window_previous() {
-  if [[ -L "$previous_link" ]]; then
+  if [[ -L "${previous_link?}" ]]; then
     local previous
     previous="$(realpath -e "$previous_link")" || return 1
     [[ "${previous%/*}" == "$releases_root" && "$previous" != "$old_target" && -d "$previous" ]] || return 1
@@ -93,13 +93,13 @@ native_window_previous() {
 
 native_snapshot_before_cutover() {
   local contract="$old_target/rollback-contract"
-  native_profile_pair_validate "$old_target" "$host_env"
+  native_profile_pair_validate "$old_target" "${host_env?}"
   sudo -n install -d -m 0755 -o root -g root "$contract"
   po_snapshot_previous "$old_target"
   printf '%s\n' "${old_previous_target:-absent}" | sudo -n tee "$contract/previous-before-cutover" >/dev/null
   sudo -n chmod 0644 "$contract/previous-before-cutover"
   sudo -n install -m 0640 -o root -g root "$host_env" "$contract/youtube-collector-host.env"
-  sudo -n install -m 0644 -o root -g root "$unit_file" "$contract/hololive-youtube-collector@.service"
+  sudo -n install -m 0644 -o root -g root "${unit_file?}" "$contract/hololive-youtube-collector@.service"
   sudo -n sh -ec '
     cd "$1"
     for f in bin/youtube-collector bin/youtube-collector-wrapper bin/healthcheck; do test -x "$f"; done
@@ -194,14 +194,12 @@ native_window_barrier_body() {
     printf 'ConditionPathExists=!%s/blocked\nConditionPathExists=%s\n' "$window" "$permit"
     if [[ "$1" == "$po_service" && "$2" == observing ]]; then
       printf '[Service]\nRestart=no\nRestartForceExitStatus=\nSuccessExitStatus=\nRootDirectoryStartOnly=yes\n'
-      # socket activation과 정상 퇴역 때 발행한 job이 다르면 다음 기동을 열지 않는다.
       printf 'ExecStartPre=+/usr/bin/bash %s/issuer-rotation.sh consume %s %s %s/blocked\n' "$window" "${permit%/next}" "$1" "$window"
       printf 'ExecStopPost=+/usr/bin/bash %s/issuer-rotation.sh grant %s %s %s/blocked\n' "$window" "${permit%/next}" "$1" "$window"
     elif [[ "$1" != "$po_socket" ]]; then
       printf '[Service]\nRestart=no\nRestartForceExitStatus=\n'
     fi
   elif [[ "$1" != "$po_socket" ]]; then
-    # 자동 재시작은 활성화 중 ConditionPathExists를 다시 검사하지 않는다.
     printf '[Service]\n'
     if [[ "$1" == "$po_service" ]]; then printf 'RootDirectoryStartOnly=yes\n'; fi
     printf 'ExecCondition=+/usr/bin/test ! -e %s/native-window\n' "$current_link"
@@ -294,7 +292,7 @@ native_window_inputs() {
   [[ "$(native_window_previous)" == "$(sudo -n cat "$contract/previous-before-cutover")" ]]
   sudo -n cmp -s "$host_env" "$contract/youtube-collector-host.env"
   [[ "$(native_root_endpoint "$host_env")" == "100.100.1.8|$original_port" ]]
-  for n in "$unit_file" "$po_unit_file" "$po_socket_file"; do sudo -n cmp -s "$n" "$contract/${n##*/}"; done
+  for n in "$unit_file" "${po_unit_file?}" "${po_socket_file?}"; do sudo -n cmp -s "$n" "$contract/${n##*/}"; done
   sudo -n sha256sum --strict --check --status "$window/inputs.sha256"
 }
 
@@ -354,7 +352,6 @@ native_window_stop_original() {
   native_window_barriers arm
   native_window_barriers check
   for n in "${window_units[@]}"; do [[ "$(native_window_prop "$n" InvocationID)" == "${generation[$n]}" ]]; done
-  # socket의 Requires 관계가 issuer를 함께 정지시킨다. 둘의 원 invocation을 같은 job 구간에서 증명한다.
   since="@$EPOCHREALTIME"
   sudo -n systemctl stop "$po_socket" "$po_service"
   for n in "${window_units[@]}"; do
@@ -363,7 +360,6 @@ native_window_stop_original() {
       since="@$EPOCHREALTIME"
       sudo -n systemctl stop "$n"
     fi
-    # socket은 시작 메시지 없이 바로 완료할 수 있다. 원 invocation의 단일 완료 job만 인정한다.
     before="$(native_window_stop_receipt "$n" "${generation[$n]}" "$since")"
     if [[ "$n" == "$unit" ]]; then
       sudo -n journalctl --boot --quiet --no-pager --grep='\byoutube_collector_stopped\b' -o json \
@@ -385,7 +381,7 @@ native_window_quiesce() {
   native_release_dir_resolve "$releases_root" "$release_id" "$current_link" >/dev/null
   old_previous_target="$(native_window_previous)"
   [[ "$(native_root_endpoint "$host_env")" == "100.100.1.8|$original_port" &&
-     "$(native_payload_digest "$payload")" == "$window_digest" ]]
+     "$(native_payload_digest "${payload?}")" == "$window_digest" ]]
   old_revision="$(cat "$old_target/po-sandbox/revision")"
   [[ "$old_revision" =~ ^[0-9a-f]{40}$ && "$old_revision" != "$EXPECTED_REVISION" ]]
   sudo -n test ! -e "$old_target/rollback-contract"
@@ -413,7 +409,7 @@ native_window_quiesce() {
 native_window_resume_claim() {
   local n owner="$BASHPID"
   native_window_pins
-  [[ "$window_nonce" =~ ^[0-9a-f-]{36}$ && "$(sudo -n cat "$native_recovery_dir/claim")" == "$window_nonce" &&
+  [[ "${window_nonce?}" =~ ^[0-9a-f-]{36}$ && "$(sudo -n cat "$native_recovery_dir/claim")" == "$window_nonce" &&
      "$(sudo -n cat "$native_recovery_dir/release")" == "$releases_root/$release_id" &&
      "$(sudo -n cat "$native_recovery_dir/step")" == window-stop && "$(sudo -n cat "$native_recovery_dir/terminal")" == 0 ]]
   sudo -n test ! -e "$native_recovery_dir/outcome"
@@ -512,7 +508,6 @@ native_window_open_rotation() {
   permit="$(native_window_permit rotation)" && lease="${permit##*/}.service"
   sudo -n test ! -e "$permit"
   sudo -n test ! -L "$permit"
-  # 관찰 SSH가 끊겨도 PID 1이 같은 부팅에서만 허가를 유지하고 상한에 회수한다.
   sudo -n systemd-run --quiet --collect --unit="$lease" --property=Type=exec --property=RuntimeMaxSec=900s \
     --property=RuntimeDirectoryPreserve=no --property=RuntimeDirectoryMode=0700 --property="RuntimeDirectory=${permit##*/}" /usr/bin/sleep infinity
   native_window_live_generation "$lease" | sudo -n tee "$window/issuer-lease" >/dev/null
@@ -582,7 +577,6 @@ native_window_start() {
   sudo -n mkdir -m 0700 -- "$window/$n.requesting"
   since="@$EPOCHREALTIME"
   if [[ "$n" == "$po_service" ]]; then printf '%s\n' "$since" | sudo -n tee "$window/$n.since" >/dev/null; fi
-  # 이 unit만 통과시키는 /run 디렉터리는 manager가 시작 client의 수명 동안만 유지한다. 부팅으로 승계되지 않는다.
   client_unit="hololive-native-start-${native_claim_nonce}-$n.service"
   sudo -n systemd-run --quiet --wait --collect --unit="$client_unit" --property=RuntimeMaxSec=120s --property=KillMode=control-group \
     --property=StandardOutput=journal --property=StandardError=journal \
@@ -623,7 +617,6 @@ native_window_await_observation() {
   native_window_candidates "${window_units[@]}"
   native_window_candidate_seal | sudo -n tee "$window/observed.tmp" >/dev/null
   sudo -n sync -f "$window"
-  # 별도 SSH가 영수증을 인수한 뒤 원 SSH의 ERR 복원이 경쟁해서는 안 된다.
   trap - ERR HUP INT TERM
   sudo -n ln -T "$window/observed.tmp" "$window/await-observation"
   sudo -n sync -f "$window"
@@ -665,7 +658,6 @@ native_window_issuer_ready() {
       ready) return 0 ;;
       not_ready) return 1 ;;
     esac
-    # 같은 기동의 SDK 초기화 예산만 관찰한다. 오래된 비정상 세대나 다른 세대는 기다리지 않는다.
     start="$(native_window_prop "$po_service" ExecMainStartTimestampMonotonic)" || return 1
     [[ "$start" =~ ^[1-9][0-9]*$ ]] || return 1
     python3 -I -B -c 'import sys,time; assert 0 <= time.monotonic_ns()//1000-int(sys.argv[1]) < 90_000_000' "$start" || return 1
@@ -728,7 +720,6 @@ native_window_rehold() {
       native_window_candidate_runtime "$n" || { native_window_uncertain; return 1; }
       opened+=("$n")
     else
-      # 실행 요청이 있었으나 그 세대가 사라졌다면 이미 정지된 것으로 단정하지 않는다.
       sudo -n test ! -e "$window/$n.requesting" && sudo -n test ! -e "$window/$n.started" &&
         sudo -n test ! -e "$window/$n.job" && native_window_terminal "$n" || { native_window_uncertain; return 1; }
     fi
@@ -776,7 +767,7 @@ native_window_commit_policy() {
 
 native_apply_before_stop() {
   local n
-  [[ "$(native_window_identity apply "$window_old" '')" == "$apply_origin_pin" && "$old_target" == "$releases_root/$window_old" &&
+  [[ "$(native_window_identity apply "$window_old" '')" == "${apply_origin_pin?}" && "$old_target" == "$releases_root/$window_old" &&
      "$(sudo -n cat "$native_recovery_dir/claim")" == "$native_claim_nonce" &&
      "$(sudo -n cat "$native_recovery_dir/owner-pid")" == "$BASHPID" && "$(sudo -n cat "$native_recovery_dir/release")" == "$release_dir" ]]
   sudo -n test ! -e "$native_recovery_dir/outcome"
@@ -791,7 +782,7 @@ native_apply_observation_record() { printf '%s\n' "$native_release_window" "$rel
 native_apply_record_start() {
   local n="$1" boot entry job
   boot="$(native_window_boot)"
-  entry="$(native_window_start_receipt "$n" "$boot" "$apply_start_since")"
+  entry="$(native_window_start_receipt "$n" "$boot" "${apply_start_since?}")"
   read -r _ job _ <<< "$entry"
   printf '%s\n' "$job" | sudo -n tee "$window/$n.job" >/dev/null
   printf '%s\n' "$entry" | sudo -n tee "$window/$n.started" >/dev/null
@@ -886,7 +877,7 @@ PY
 
 native_window_close_observation() {
   local owner="$BASHPID"
-  case "$window_action" in accepted|observation-failed) ;; *) return 2 ;; esac
+  case "${window_action?}" in accepted|observation-failed) ;; *) return 2 ;; esac
   release_dir="$releases_root/$release_id"
   native_window_pins "$release_dir"
   [[ "$window_nonce" =~ ^[0-9a-f-]{36}$ && "$(sudo -n cat "$native_recovery_dir/claim")" == "$window_nonce" &&
@@ -909,10 +900,8 @@ native_window_close_observation() {
     set -e
     if (( status != 0 )); then native_window_uncertain; fi
   else
-    # permanent 정책을 reload해도 guard의 accepting이 남은 동안에는 부팅·재기동할 수 없다.
     sudo -n mkdir -m 0700 "$native_recovery_dir/accepting"
     sudo -n sync -f "$native_recovery_dir"
-    # 작업 함수 안의 errexit을 보존한 채 감독자가 종료 영수증을 받는다.
     set +e
     native_cutover_run accept native_window_commit_policy
     status=$?
@@ -923,7 +912,6 @@ native_window_close_observation() {
       fi
       return "$status"
     fi
-    # 원자적 rename 한 번이 시작 권한과 guard를 함께 넘긴다. 중단된 수용은 accepting을 남긴다.
     native_window_accept_guard accept
   fi
 }

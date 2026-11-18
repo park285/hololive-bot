@@ -74,16 +74,12 @@ def security_label_only(path):
         return False
     lines = [line.strip() for line in path.read_text().splitlines()
              if line.strip() and not line.lstrip().startswith(("#", ";"))]
-    # 숫자 MCS level만 --security-opt label=level:로 전달된다. env/명령을 만들 수 없다.
-    # 섹션 추가, 재대입, 인용·치환·continuation은 이 중립 클래스에 포함하지 않는다.
     return len(lines) == 2 and lines[0] == "[Container]" and re.fullmatch(
         r"SecurityLabelLevel=s[0-9]+:c[0-9]+(?:,c[0-9]+)*", lines[1],
     ) is not None
 
 
 def check_origins(installed):
-    # base와 같은 디렉터리의 정확한 unit drop-in 외에는 검증된 MCS 전용 내용만 허용한다.
-    # Quadlet은 검색 루트를 재귀 탐색하므로 형제 디렉터리와 다른 루트도 검사한다.
     prefix = pathlib.Path("/")
     test_root = os.environ.get("HOLOLIVE_QUADLET_TEST_ROOT") if os.geteuid() != 0 else None
     if test_root:
@@ -91,8 +87,6 @@ def check_origins(installed):
     roots = {prefix / path for path in (
         "run/containers/systemd", "etc/containers/systemd", "usr/share/containers/systemd",
     )}
-    # 운영 caller는 installed 인자를 고정 설치 경로로 전달한다(rollback 후보 경로와 구별).
-    # 그 밖의 명시적 source tree 렌더링에는 호스트의 무관한 설치 원천을 합치지 않는다.
     installed_tree = bool(test_root) or any(installed.is_relative_to(root) for root in roots)
     if not installed_tree:
         roots.clear()
@@ -110,7 +104,6 @@ def check_origins(installed):
     ]
     system_roots = {prefix / path for path in system_dirs} if installed_tree else set()
     if installed_tree:
-        # 호출 셸과 PID 1의 검색 경로는 다를 수 있다. 값이나 비밀 env는 출력하지 않는다.
         manager_env = subprocess.run(
             ["systemctl", "show-environment"], check=True, capture_output=True, text=True,
         ).stdout
@@ -154,7 +147,6 @@ def check_origins(installed):
                 children[:] = []
                 continue
             visited.add(current)
-            # rootful Quadlet은 지정된 users 트리와 drop-in 내부 하위 디렉터리를 탐색하지 않는다.
             children[:] = [child for child in children if current / child not in user_roots]
             if current.name.endswith(".d"):
                 children[:] = []
@@ -172,7 +164,6 @@ def check_origins(installed):
                         reject_origin(path)
                     if current != allowed_dropin:
                         local_dropin = allowed_dropin / filename
-                        # 중립 파일도 동명 환경 drop-in을 가릴 수 있으므로 원천 충돌은 거부한다.
                         if not security_label_only(path) or (
                             os.path.lexists(local_dropin) and not security_label_only(local_dropin)
                         ):
@@ -192,14 +183,11 @@ def check_origins(installed):
         path = root / service_name
         if not os.path.lexists(path):
             continue
-        # coordinator의 영속 mask는 유지한다. 별도 service 본문은 Quadlet을 대체하므로 거부한다.
         if path.is_symlink() and os.readlink(path) == "/dev/null":
             continue
         if root != prefix / "run/systemd/generator" or path.is_symlink():
             reject_origin(path)
         source = re.findall(r"^SourcePath=(.*)$", path.read_text(), re.MULTILINE)
-        # root 전용 생성 결과는 원천 경로로 식별한다. 재생성 본문의 순서·표현 동일성을
-        # 요구하지 않고, 별도 service/drop-in 원천과 미반영 manager 상태를 위에서 차단한다.
         if source != [str(installed)]:
             reject_origin(path)
 
@@ -230,8 +218,6 @@ try:
                 section == "Container" and directive in ("PodmanArgs", "GlobalArgs", "EnvironmentHost")
             ) or directive == "ServiceName":
                 raise ValueError(f"unsupported Quadlet execution override: {path}")
-            # pooler image의 고정 ENTRYPOINT/CMD만 허용한다. 다른 config를 읽게 하면
-            # /etc/pgbouncer/pgbouncer.ini의 live mount hash가 맞아도 용량 증명이 아니다.
             if installed.name == "holo-pgbouncer.container" and section == "Container" and directive in ("Exec", "Entrypoint"):
                 raise ValueError(f"unsupported Quadlet pooler command override: {path}")
             if section in environment and directive == "Environment":
@@ -263,7 +249,6 @@ try:
     for key in sources:
         print("SERVICE_" + key + "=" + service.get(key, ""))
 except (OSError, ValueError, subprocess.CalledProcessError) as error:
-    # 예외의 원문에는 env 값이 포함될 수 있으므로 원천 경계 오류만 노출한다.
     detail = str(error) if isinstance(error, ValueError) and str(error).startswith("unsupported Quadlet") else "unreviewed environment source or syntax"
     sys.exit("[postgres-endpoint] cannot interpret Quadlet environment: " + detail)
 PY

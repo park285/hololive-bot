@@ -222,7 +222,6 @@ func upsertLoginRole(ctx context.Context, conn roleConnection, user, password st
 		return fmt.Errorf("bootstrap: check login role: %w", err)
 	}
 
-	// 기존 verifier를 유지할 때도 PostgreSQL·pgx의 비밀번호 정규화 검증을 생략하지 않는다.
 	verifier, err := pgxdb.SCRAMVerifier(password)
 	if err != nil {
 		return fmt.Errorf("bootstrap: prepare login password: %w", err)

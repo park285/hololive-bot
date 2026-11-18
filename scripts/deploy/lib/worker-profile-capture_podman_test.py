@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""kapu의 rootful Podman에서 명시한 로컬 Alpine 계열 이미지로 실행한다. 운영 입력은 사용하지 않는다."""
 import hashlib
 import importlib.util
 import json
@@ -140,7 +139,6 @@ printf '{"contractVersion":1,"profile":{"hash":"%s"}}\\n' "$LOADED_HASH"
             other = podman("run", "-d", "--pull=never", "--network=none", "--read-only", "--no-healthcheck",
                            "--entrypoint=/bin/sleep", image, "60")
             try:
-                # 진단은 원 ID에서 끝까지 성공하지만 그 사이 이름은 다른 실행 중인 컨테이너에 넘어간다.
                 swap = '''exec 3>"$1"
 podman rename "$2" "$3-original"
 podman rename "$4" "$3"
@@ -161,7 +159,6 @@ printf 'done\\n' >&3'''
         assert (data / "input").read_text() == "mapped"
         print(f"{namespace}: MCS, group-only input, mapped owner, profile, read-only and no-network: pass", flush=True)
 
-        # 같은 경로·바이트·라벨이어도 교체된 단일 파일 bind는 실행 중 writer가 보는 inode가 아니다.
         token.rename(root / "original")
         subprocess.run(["cp", "--preserve=all", root / "original", token], check=True)
         bad = release / "replaced-bind"
@@ -200,7 +197,6 @@ printf 'done\\n' >&3'''
         fifo.chmod(0o600)
         subprocess.run(["chcon", "--reference", data, fifo], check=True)
         replacement = root / "replacement.cid"
-        # open은 실제 검사 바이너리가 FIFO에 도달해야 끝난다. sleep이나 서비스 기동 재시도에 기대지 않는다.
         replace = '''exec 3>"$1"
 podman stop --time=0 "$2" >/dev/null
 podman rename "$2" "$3-old"
@@ -242,7 +238,6 @@ def main():
         sys.exit("host-native fixture image required")
     with tempfile.TemporaryDirectory(prefix="holo-capture-", dir="/var/tmp") as path:
         temp = Path(path)
-        # 컨테이너 런타임은 원본 이미지를 변경하지 않는다. pair가 요구하는 revision label만 시험 이미지에 둔다.
         (temp / "Containerfile").write_text("FROM " + image["Id"] + "\nLABEL org.opencontainers.image.revision=" + "a" * 40 + "\n")
         fixture = podman("build", "--pull=never", "--network=none", "--quiet", "--layers=false", "-t", "localhost/" + temp.name, str(temp))
         try:

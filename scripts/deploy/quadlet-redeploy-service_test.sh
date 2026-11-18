@@ -44,7 +44,6 @@ cat >"${fakebin}/mktemp" <<'EOF'
 command -p mktemp "$@"
 EOF
 
-# image 파일은 tag와 sha256 identity 두 이름으로 같은 속성(id·platform·title·revision)을 담는다.
 cat >"${fakebin}/podman" <<'EOF'
 #!/usr/bin/env bash
 state="${FAKE_STATE:?}"
@@ -171,7 +170,6 @@ job=12
 printf '{"INVOCATION_ID":"%s","MESSAGE_ID":"%s","JOB_ID":"%s","JOB_RESULT":"done"}\n' "$actual" "${13#MESSAGE_ID=}" "$job"
 EOF
 
-# restart는 설치된 worker-profile drop-in이 고정한 pair로 container를 다시 만든다. 명시적 restart는 NRestarts를 0으로 둔다.
 cat >"${fakebin}/systemctl" <<'EOF'
 #!/usr/bin/env bash
 state="${FAKE_STATE:?}"
@@ -417,7 +415,6 @@ case "$1" in
 esac
 EOF
 
-# pair와 정지 가드의 고정 CLI만 대체하고 나머지 파이썬 실행은 그대로 둔다.
 cat >"${fakebin}/python3" <<'EOF'
 #!/usr/bin/env bash
 state="${FAKE_STATE:?}"
@@ -767,7 +764,6 @@ for endpoint_case in changed override restored missing invalid unresolved; do
 done
 pass "rollback compares effective endpoints, preserves recovery pairs and honors coordinated configuration restoration"
 
-# 5-2. 다른 helper가 실행 중이면 아무것도 바꾸지 않고 멈춘다(migrator drop-in·daemon-reload·migration 경합 방지).
 root="${tmp}/concurrent"
 make_case "${root}" hololive-api true
 mkdir -p "${root}/run/lock"
@@ -799,7 +795,6 @@ fi
   fail "restore failure: release pairs were not retained"
 pass "a failed restoration fails visibly and retains the release pairs"
 
-# 7·8. preflight 거부(배포 트리와 다른 migrator revision, 연결 예산 초과): pair·unit·release 저장소를 건드리지 않는다.
 root="${tmp}/single-before-card"
 make_case "$root" hololive-api true
 if run_tool "$root" single_before_card "$API_HEX" "$HELPER" hololive-api localhost/hololive-api:candidate; then
@@ -848,7 +843,6 @@ for capacity_case in compose unit_default container_override missing query_faile
 done
 pass "live capacity drift and failed inspection stop before deployment effects"
 
-# 정확한 unit drop-in 외의 유효 원천은 parser가 알던 예산으로 통과시키지 않는다.
 for origin in \
   etc/containers/systemd/hololive-bot/container.d/60-pool.conf \
   etc/containers/systemd/hololive-bot/hololive-.container.d/60-pool.conf \
@@ -968,7 +962,6 @@ done
 pass "pooler base/drop-in command changes stop before migration or stop despite a matching live config hash"
 
 if [[ -x "${QUADLET_BIN}" ]]; then
-  # 실제 생성기의 결과가 5임을 확인하여 텍스트 유사성 검사가 아니라 구체적 우회를 재현한다.
   units="${tmp}/inherited-capacity-units"
   mkdir -p "${units}/hololive-.container.d"
   cp "${ROOT_DIR}/deploy/quadlet/hololive-bot/"* "${units}/"
@@ -1027,7 +1020,6 @@ for capacity_case in unit_default compose_override dropin_override missing query
 done
 pass "rollback validates retained unit caps with compose and installed drop-in precedence"
 
-# 9. rollback --check는 이전 pair 검증만 하고 아무것도 바꾸지 않는다.
 root="${tmp}/success"
 : >"${root}/state/calls"
 run_tool "${root}" rollback_check "${API_HEX}" "${ROLLBACK}" "${success_release}" --check ||
@@ -1062,7 +1054,6 @@ done
   fail "기존 release에 전환 증거를 소급 생성함"
 pass "기존 release는 보존한 overlay로만 명시적 복원이 가능하다"
 
-# 두 서비스의 실제 상태를 분리하고 API의 Wants가 정지한 worker를 기동하는 효과도 모델링한다.
 FAKE_COORDINATED=true
 make_coordinated_case() {
   local root="$1" service
@@ -1311,7 +1302,6 @@ for reason in foreign_mask wrong_owner replaced_owner mixed_release swapped_gene
     mixed_release)
       worker_copy="${worker_release}-other"
       cp -a "$worker_release" "$worker_copy"
-      # 유효한 inode와 같은 이미지·invocation이라도 다른 release 경로는 영수증에 없다.
       mask="$root/etc/systemd/system/hololive-alarm-worker.service"
       ln -PT -- "$mask" "$root/etc/systemd/system/.${worker_copy##*/}.mask"
       worker_release="$worker_copy" ;;

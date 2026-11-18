@@ -39,7 +39,6 @@ po_require_running_without_failure() {
   local since="$1" journal result=0
   systemctl is-active --quiet "$po_socket" || return
   po_issuer_active || return
-  # 정상 generation 퇴역도 service를 재기동하므로 issuer는 NRestarts 대신 종료 결과를 본다.
   [[ "$(systemctl show "$po_service" -p Result --value)" == success ]] || return 1
   [[ "$(systemctl show "$po_service" -p ExecMainStatus --value)" == 0 ]] || return 1
   journal="$(journalctl -u "$po_service" --since "$since" --no-pager)" || return

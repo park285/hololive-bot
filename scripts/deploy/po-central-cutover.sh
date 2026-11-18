@@ -65,7 +65,6 @@ PY
   (cd "$local_stage" && sha256sum collector-image.tar > collector-image.tar.sha256)
   python3 "$root/scripts/build/po-sandbox-manifest.py" image-ids "$local_stage/collector-image.tar" \
     "sha256:$(podman image inspect -f '{{.Id}}' "$collector_image")" > "$local_stage/collector-image-id"
-  # 이미지와 같은 검토 source의 bounded 입력만 전송하고, 재개 때도 이 바이트를 대조한다.
   (cd "$root"
     while IFS= read -r file; do sha256sum "$file"; done < scripts/deploy/po-central-files.txt
   ) > "$local_stage/source-files.sha256"

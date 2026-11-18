@@ -29,7 +29,6 @@ is_allowed_exception() {
     scripts/ci/nilaway-models/models.patch)
       return 0
       ;;
-    # 공통 pooler 이미지 빌드가 적용하는 upstream 소스 패치다.
     deploy/images/pgbouncer/unreported-startup-parameters.patch)
       return 0
       ;;

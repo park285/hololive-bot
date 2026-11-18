@@ -27,6 +27,7 @@ generated_env="${cfg008_dir}/youtube-collector-host.env"
 if [[ -z "${write_host_env_fn}" ]]; then
   record_fail "ap-host-native write_host_env function is missing"
 elif (
+  # shellcheck disable=SC2178
   export service="youtube-collector-a"
   export port="30005"
   export release_id="profile-pair-fixture"
@@ -136,7 +137,6 @@ env XDG_RUNTIME_DIR="${native_test_runtime}" DBUS_SESSION_BUS_ADDRESS="unix:path
   bash "${ROOT_DIR}/scripts/deploy/ap-host-native-cutover_test.sh"
 
 native_units_fns="$(awk '/^stop_native_units_and_require_inactive\(\) \{/,/^}$/; /^native_restore_recorded_runtime\(\) \{/,/^}$/; /^restore_native_after_failed_cutover\(\) \{/,/^}$/; /^native_cutover_failed\(\) \{/,/^}$/; /^arm_native_cutover_restore\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
-# cutover 최상위 정지 단계: 복원 ERR trap 설치부터 새 release의 첫 설치 변경 직전까지다.
 cutover_stop_step='arm_native_cutover_restore; native_cutover_run stop stop_native_units_and_require_inactive'
 stop_fixture="$(mktemp -d)"
 trap 'rm -rf "${stop_fixture}"' EXIT
@@ -158,7 +158,6 @@ run_native_units() (
   printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n' > "${release_dir}/youtube-collector-host.env"
   cp "${release_dir}/youtube-collector-host.env" "${old_target}/rollback-contract/youtube-collector-host.env"
   cp "${release_dir}/youtube-collector-host.env" "${host_env}"
-  # 기존 unit 순서 fixture는 실제 명령 완료를 동기 실행합니다. 신호/receipt는 별도 실제 child 회귀가 소유합니다.
   native_cutover_run() {
     shift
     # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 완료 상태입니다.
@@ -283,7 +282,6 @@ for brake_unit in "${running_units[@]}"; do
     pass "ap-host-native cutover rejects reboot-enabled ${brake_unit}"
   fi
 done
-# 실패한 cutover는 ERR trap으로 복원하고 원래 실패 상태(여기서는 false의 1)로 끝난다.
 failed_cutover='set -Eeuo pipefail; arm_native_cutover_restore; false'
 restore_warning='could not be restored'
 restore_state="$(stop_case restore "${running_units[@]}")"
@@ -347,7 +345,8 @@ fi
 
 if (
   export NATIVE_TEST_ROOT="$ROOT_DIR" NATIVE_TEST_BASE="$tmp/no-active-release"
-  mkdir -p -m 0700 "$NATIVE_TEST_BASE/releases"
+  mkdir -p "$NATIVE_TEST_BASE/releases"
+  chmod 0700 "$NATIVE_TEST_BASE/releases"
   hostname() { echo kapu; }
   git() { case "$3" in status) return 0 ;; rev-parse) printf '%040d\n' 1 ;; *) return 90 ;; esac; }
   ssh() {
@@ -360,6 +359,7 @@ if (
         . "$NATIVE_TEST_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh"
         . "$NATIVE_TEST_ROOT/scripts/deploy/lib/ap-host-native-window.sh"
         current_link="$NATIVE_TEST_BASE/current" releases_root="$NATIVE_TEST_BASE/releases"
+        # shellcheck disable=SC2178
         native_recovery_dir="$NATIVE_TEST_BASE/recovery" service=youtube-collector-a
         touch "$NATIVE_TEST_BASE/checked"
         native_apply_preflight ;;
@@ -601,7 +601,6 @@ fi
 
 restore_payload="${tmp}/success/call-2.stdin"
 
-# 수동 rollback이 원격에 보낸 payload에서 검증 뒤 첫 복원 변경 전까지의 정지 단계를 같은 가짜 systemctl로 실행한다.
 rollback_stop_step="$(awk '/^native_rollback_endpoint_validate "[$]previous_target" "[$]host_env"$/ { on = 1; next } on && /^sudo -n install / { exit } on' "${restore_payload}")"
 rollback_state="$(stop_case rollback "${running_units[@]}")"
 run_native_case "${rollback_state}" "set -euo pipefail; ${rollback_stop_step}"

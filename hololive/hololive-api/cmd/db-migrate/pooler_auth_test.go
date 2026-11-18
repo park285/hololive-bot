@@ -116,7 +116,6 @@ func checkPoolerAuthPermissions(t *testing.T, pool *pgxpool.Pool) {
 		roles := append([]loginRole{{user: "pooler_unrelated_client"}}, loginRoles...)
 		for _, role := range roles {
 			assertPoolerPermissionDenied(t, tx, role.user, "SELECT username, password FROM hololive_pooler_auth.lookup('hololive_runtime')")
-			// 스키마 거부만으로 함수 EXECUTE 유출이 가려지지 않도록 따로 검증한다.
 			execPoolerSQL(t, tx, "SAVEPOINT schema_access")
 			execPoolerSQL(t, tx, "GRANT USAGE ON SCHEMA hololive_pooler_auth TO "+pgx.Identifier{role.user}.Sanitize())
 			assertPoolerPermissionDenied(t, tx, role.user, "SELECT username, password FROM hololive_pooler_auth.lookup('hololive_runtime')")

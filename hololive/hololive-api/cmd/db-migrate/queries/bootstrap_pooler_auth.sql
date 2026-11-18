@@ -68,7 +68,6 @@ BEGIN
         RAISE EXCEPTION 'unexpected pooler authentication role membership or ownership' USING ERRCODE = '42501';
     END IF;
 
-    -- 기존 역할의 무관한 권한은 회수하지 않고 운영자의 명시적 복구를 요구한다.
     IF EXISTS (
         SELECT 1 FROM pg_catalog.pg_shdepend
         WHERE refclassid = 'pg_catalog.pg_authid'::pg_catalog.regclass AND refobjid = auth_oid
@@ -103,7 +102,6 @@ BEGIN
              AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
              AND (pg_catalog.has_table_privilege(auth_oid, c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
                   OR pg_catalog.has_any_column_privilege(auth_oid, c.oid, 'SELECT,INSERT,UPDATE,REFERENCES'))
-             -- 닫힌 public 스키마에서 확장이 설치한 두 뷰의 기본 PUBLIC SELECT만 허용한다.
              AND NOT EXISTS (
                  SELECT 1 FROM pg_catalog.pg_depend AS d
                  JOIN pg_catalog.pg_extension AS e ON e.oid = d.refobjid
@@ -146,7 +144,6 @@ BEGIN
               AND (r.rolvaliduntil IS NULL OR r.rolvaliduntil > pg_catalog.statement_timestamp())
               AND NOT (r.rolsuper OR r.rolreplication OR r.rolbypassrls OR r.rolcreatedb OR r.rolcreaterole)
               AND r.rolpassword LIKE 'SCRAM-SHA-256$%'
-              -- 공유 소켓의 관리자·migrator만 이 이름을 사용할 수 있다. 이미 인증한 frontend는 별도로 전수 확인한다.
               AND NOT EXISTS (
                   SELECT FROM pg_catalog.pg_stat_activity a
                   WHERE a.datname = pg_catalog.current_database() AND a.client_addr IS NULL

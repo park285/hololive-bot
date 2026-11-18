@@ -23,7 +23,6 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=holo-postgres \
   -addext subjectAltName=DNS:holo-postgres \
   -keyout "$fixture/server.key" -out "$fixture/server.crt" >/dev/null 2>&1
 chmod 0644 "$fixture/server.crt"
-# 서버 진입점이 합성 테스트 파일을 전용 데이터 tmpfs로 복사한다.
 chmod 0600 "$fixture/server.key"
 install -m 0644 "$root/deploy/postgres/pg_hba.conf" "$fixture/pg_hba.conf"
 podman network create --internal --subnet 172.31.249.0/24 "$network" >/dev/null
@@ -83,12 +82,11 @@ client() {
     "host=holo-postgres dbname=$database user=$role sslmode=$mode sslrootcert=/ca.pem" \
     -X -v ON_ERROR_STOP=1 -Atc 'SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()'
 }
-for role in postgres_exporter; do
-  [[ "$(client "$role" verify-full)" == t ]]
-  if client "$role" disable >"$fixture/rejected" 2>&1; then
-    echo "plaintext TCP unexpectedly accepted: $role" >&2; exit 1
-  fi
-done
+role=postgres_exporter
+[[ "$(client "$role" verify-full)" == t ]]
+if client "$role" disable >"$fixture/rejected" 2>&1; then
+  echo "plaintext TCP unexpectedly accepted: $role" >&2; exit 1
+fi
 for role in hololive_runtime hololive_alarm_worker hololive_collector_a hololive_collector_b hololive_collector_c hololive_collector_d hololive_pgbouncer_auth postgres_admin hololive_migrator hololive_scraper iris_db_nightly hololive_replicator; do
   for mode in verify-full disable; do
     if client "$role" "$mode" >"$fixture/rejected" 2>&1; then

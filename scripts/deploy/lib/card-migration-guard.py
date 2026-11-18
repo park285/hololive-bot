@@ -24,7 +24,6 @@ def confirm(session, sql):
 
 
 def verify_frontends():
-    # 단순 SHOW CLIENTS와 달리 아직 역할/DB가 정해지지 않은 로그인도 검사한다.
     census = subprocess.run(('podman', 'exec', 'holo-pgbouncer', 'psql', '-Xqw', '--csv', '-v', 'ON_ERROR_STOP=1',
                              '-h', '/tmp', '-p', '6432', '-U', 'pgbouncer', '-d', 'pgbouncer', '-c', 'SHOW SOCKETS'),
                             check=True, capture_output=True, text=True, timeout=15)
@@ -46,7 +45,6 @@ def verify_frontends():
 
 
 def verify_auth_closed():
-    # verifier 자체는 조회 결과에 싣지 않는다. 이전 인증 함수가 남아 있으면 진행하지 않는다.
     sql = f"""BEGIN READ ONLY;
 SELECT ({SETTINGS}) AND NOT EXISTS (
  SELECT FROM unnest(ARRAY['hololive_runtime','hololive_alarm_worker','hololive_collector_a',

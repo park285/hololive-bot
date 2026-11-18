@@ -12,6 +12,8 @@ import (
 	"golang.org/x/text/secure/precis"
 )
 
+const pgxMaxServerSCRAMIterations = 10_000_000
+
 func pgxSCRAMPassword(password string) string {
 	prepared, err := precis.OpaqueString.String(password)
 	if err != nil {
@@ -21,7 +23,6 @@ func pgxSCRAMPassword(password string) string {
 	return prepared
 }
 
-// pgxdb.SCRAMVerifier가 PostgreSQL·pgx 정규화 일치를 검증한 비밀번호만 받는다.
 func matchesValidatedSCRAMPassword(password, verifier string) (bool, error) {
 	encoded, scram := strings.CutPrefix(verifier, "SCRAM-SHA-256$")
 	if !scram {
@@ -39,8 +40,7 @@ func matchesValidatedSCRAMPassword(password, verifier string) (bool, error) {
 	}
 
 	iterations, err := strconv.Atoi(iterationText)
-	// pgx의 서버 제공 iteration 상한과 같아야 bootstrap에서 계산량이 무제한이 되지 않는다.
-	if err != nil || iterations <= 0 || iterations > 10_000_000 {
+	if err != nil || iterations <= 0 || iterations > pgxMaxServerSCRAMIterations {
 		return false, errors.New("stored SCRAM iteration count is invalid")
 	}
 

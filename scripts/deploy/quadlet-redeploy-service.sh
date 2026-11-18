@@ -1,18 +1,4 @@
 #!/usr/bin/env bash
-# 중앙(hololive-seoul) hololive-api·hololive-alarm-worker의 image 교체 helper다. 아래 순서를 Quadlet drop-in으로
-# 지킨다. collector c는 po-central-cutover.sh가 소유한다.
-#  1. preflight: root, 배포 트리 revision(sync-opt-current.sh의 .source-revision)과 image revision label 일치,
-#     image 존재·platform, primary fence 부재, unit 실행 중, PostgreSQL 연결 예산·실행 중 풀러 설정
-#  2. 실행 중 이전 pair 보존(capture). drop-in이 없는 첫 도입은 prepare로 실행 중 image를 먼저 고정해 이후 자동
-#     재시작이 tag 이동을 따라가지 않게 한다. 이어서 rollback drop-in과 이전 image의 --check-worker-profile
-#  3. candidate pair·--check-worker-profile·verify-source
-#  4. 활성화 전에 hololive-db-migrate의 image를 drop-in(50-migrator-image.conf)으로 고정하고 migration 실행
-#  5. candidate drop-in 활성화, daemon-reload, restart(Notify=healthy가 health gate), verify-live·NRestarts
-# 활성화를 시작한 뒤 실패하면 자동으로 되돌리지 않고 failed_after_activation으로 보고한다. 이전 pair
-# 복원은 스키마·admission 호환성 승인 뒤 quadlet-rollback-service.sh --check·--apply로 한다. 어느 단계도 재시도하지 않는다.
-# 카드 창은 이미 pooled인 두 writer와 같은 PostgreSQL·풀러 실행 세대만 인수한다.
-# --resume은 migration과 역할별 pooled SQL 검증 뒤 두 후보를 설치하고 worker를 확인한 뒤에만 API를 연다.
-# 재개 시 start job·invocation·conmon PID·CID가 일치해야 원본이다. 클라이언트 실패는 보호 정지만 허용한다.
 set -Eeuo pipefail
 
 die() { echo "[quadlet-redeploy] $*" >&2; exit 1; }
@@ -82,7 +68,6 @@ pair_tool="$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py"
 guard_tool="$ROOT_DIR/scripts/deploy/lib/systemd-stop-guard.py"
 releases="$deploy_root/artifacts/worker-profile/releases"
 owner_marker="$releases/.central-writer-hold"
-# source sync·rollback·collector c와 unit 및 drop-in을 공유하므로 같은 중앙 잠금을 유지한다.
 lock_dir="$prefix/run/lock"
 install -d -m 0755 "$lock_dir"
 exec 9>"$lock_dir/hololive-quadlet-redeploy.lock"
@@ -140,14 +125,14 @@ on_exit() {
   fi
   if [[ "$activation_started" == true ]]; then
     if [[ "$mode" == deploy ]]; then
-      echo "[OUTCOME] failed_after_activation service=$service stage=$stage release=$release: the candidate pair stays installed; roll back only after schema/admission compatibility is approved: scripts/deploy/quadlet-rollback-service.sh $release --check, then --apply" >&2
+      echo "[OUTCOME] failed_after_activation service=${service[0]} stage=$stage release=$release: the candidate pair stays installed; roll back only after schema/admission compatibility is approved: scripts/deploy/quadlet-rollback-service.sh $release --check, then --apply" >&2
     else
       echo "[OUTCOME] failed_after_activation services=${services[*]} stage=$stage releases=${release_paths[*]:-none}: retain all pairs and inspect unit state before an approved rollback" >&2
     fi
   elif [[ "$quiescence_started" == true ]]; then
     echo "[OUTCOME] quiescence_failed services=${services[*]} stage=$stage releases=${release_paths[*]:-none}: the hold may be partial; inspect both units and do not unmask automatically" >&2
   else
-    echo "[OUTCOME] not_activated service=$service stage=$stage release=${release:-none}: the candidate pair was not installed" >&2
+    echo "[OUTCOME] not_activated service=${service[0]} stage=$stage release=${release:-none}: the candidate pair was not installed" >&2
   fi
   exit "$status"
 }
@@ -240,14 +225,12 @@ managed_container() {
   local name="$1" metadata running cid conmon
   metadata="$(podman inspect -f '{{.State.Running}} {{.Id}} {{.State.ConmonPid}}' "$name")" || return 1
   read -r running cid conmon <<<"$metadata"
-  # 이름만 교체된 컨테이너는 동일 invocation의 실행 세대가 아니다.
   [[ "$running" == true && "$cid" =~ ^[0-9a-f]{64}$ && "$conmon" =~ ^[1-9][0-9]{0,9}$ &&
     "$(systemctl show "$name.service" -p MainPID --value)" == "$conmon" ]] || return 1
   printf '%s %s\n' "$cid" "$conmon"
 }
 first_generation() {
   local name="$1" invocation container confirm restarts
-  # CID를 읽는 사이 manager의 실행 세대나 재시작 횟수가 바뀌어도 받지 않는다.
   restarts="$(systemctl show "$name.service" -p NRestarts --value)" && [[ "$restarts" == 0 ]] &&
     invocation="$(active_invocation "$name")" && container="$(managed_container "$name")" &&
     [[ "$(active_invocation "$name")" == "$invocation" ]] &&
@@ -270,7 +253,6 @@ request_start() {
 started_generation() {
   local name="$1" since="$2" job="$3" wait_for_job="${4:-false}" current limit='' budget record invocation generation
   if [[ "$wait_for_job" == true ]]; then
-    # 차단된 관리자의 실제 TimeoutStartUSec 안에서 같은 notify job만 기다린다.
     while :; do
       current="$(systemctl show "$name.service" -p Job --value)" || return 1
       [[ -n "$current" ]] || break
@@ -300,7 +282,6 @@ stop_generation() {
   since="@$EPOCHREALTIME"
   if [[ -z "$evidence" ]] || ! { printf '%s %s %s\n' "$since" "$id" "$cid" >"$evidence/request" &&
       sync_paths "$evidence/request" "$evidence"; }; then
-    # 기록 장치의 실패가 이미 확인된 열린 writer의 정지까지 막아서는 안 된다.
     [[ "$reholding" == true ]] || return 1
     observed=false
   fi
@@ -335,14 +316,12 @@ PY
   for field in LoadState=loaded ActiveState=inactive Result=success ExecMainStatus=0 MainPID=0 ControlPID=0; do
     grep -qxF "$field" "$evidence/terminal" || return 1
   done
-  # 관리자가 정상 unit을 수거하면 ExecMainCode도 0으로 초기화된다. 실제 종료 0은 위의 개별 CID 사건으로 증명한다.
   grep -qxF 'ExecMainCode=1' "$evidence/terminal" || grep -qxF 'ExecMainCode=0' "$evidence/terminal" || return 1
   grep -qxF "InvocationID=$id" "$evidence/terminal" || grep -qxF 'InvocationID=' "$evidence/terminal" || return 1
 }
 restore_opened_hold() {
   local name dir path generation failed=false
   local -A armed=() evidence=() clean=() needs_guard=()
-  # unmask 직전 신호도 처리한다. 아직 열지 않은 동료의 mask를 벗기거나 외부 mask를 인수하지 않는다.
   for name in "${opened[@]}"; do
     if owned_mask "$name"; then
       [[ ! -v "unmasked[$name]" ]] && assert_stopped "$name" || failed=true
@@ -368,7 +347,6 @@ restore_opened_hold() {
   for name in "${opened[@]}"; do
     [[ -v "armed[$name]" ]] || continue
     if [[ -v "failed_start_jobs[$name]" ]]; then
-      # 클라이언트 실패는 수용하거나 영수증을 갱신하지 않는다. 증명된 원본만 보호 정지한다.
       failed=true
       generation="$(started_generation "$name" "${failed_start_times[$name]}" "${failed_start_jobs[$name]}" true)" || continue
       opened_invocations[$name]="${generation%% *}"
@@ -641,7 +619,6 @@ if [[ "$mode" == quiesce ]]; then
   quiescence_started=true
   ln -T -- "${release_paths[hololive-api]}/captured.invocation" "$owner_marker"
   sync_paths "$releases"
-  # 두 원본 정지 결과를 보존할 때까지 정식 mask를 설치하지 않는다.
   for service in "${services[@]}"; do
     anchor="$(mask_anchor "$service")"
     ln -sT -- /dev/null "$anchor"
@@ -768,8 +745,6 @@ for service in "${services[@]}"; do
   fi
   restarts_before="$(systemctl show "$unit" -p NRestarts --value)"
   printf '%s\n' "$restarts_before" >"$release/nrestarts-before"
-  # 재개는 직접 연 정지 unit에만 start를 한 번 요청한다. 단일 서비스 배포의 restart와 구분한다.
-  # worker를 먼저 기동하고 API를 뒤에 둬 Wants 관계에서도 같은 후보 쌍만 실행한다.
   if [[ "$mode" == resume ]]; then
     current_job="$(systemctl show "$unit" -p Job --value)"
     current_state="$(systemctl show "$unit" -p ActiveState --value)"

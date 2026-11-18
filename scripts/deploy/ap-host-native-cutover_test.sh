@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
-python3 - "$ROOT_DIR" "$test_dir" <<'PY'
+python3 - "$ROOT_DIR" "$test_dir" <<'CUTOVER_TEST_PY'
 from pathlib import Path
 import os
 import signal
@@ -746,4 +746,4 @@ for name, mutation, fault, accepted in (
     assert (case/'current/accepted-window').is_file() == accepted and (case/'recovery').exists() != accepted
 
 print('[PASS] native cutover owner/child/group/restore signals, first install, bounded unknown, supervisor errors, apply guards and grep errors')
-PY
+CUTOVER_TEST_PY

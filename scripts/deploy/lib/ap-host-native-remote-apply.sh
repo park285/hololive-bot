@@ -25,6 +25,7 @@ po_apply_lib="$payload/bin/ap-host-native-po.sh"
 worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
 swapfile="/swapfile"
 window_action="${9:?native command required}"
+# shellcheck disable=SC2034
 window_name="${10:-}" window_old="${11:-}" window_digest="${12:-}" window_nonce="${13:-}"
 same_window=false
 if [[ "$window_action" == same-window || "$window_action" == apply-accepted ]]; then
@@ -138,7 +139,6 @@ SYSCTL
 sudo -n sysctl -w vm.swappiness=10 >/dev/null
 
 if [[ "$window_action" == deploy ]]; then native_cutover_claim "$releases_root/$release_id"; fi
-# 준비 중 실패도 guard와 산출물을 남깁니다. 다음 apply 전에 소유 worker와 runtime을 확인합니다.
 old_target=""
 if [[ -L "$current_link" ]]; then
   old_target="$(readlink -f "$current_link" || true)"
@@ -224,10 +224,6 @@ if [[ "$same_window" == true ]]; then
   old_issuer="$(native_window_live_generation "$po_service")"
   printf 'InvocationID=%s\n' "$old_issuer" | sudo -n tee "$window/$po_service.before" >/dev/null
 fi
-# PO issuer를 collector보다 먼저 멈춘다. collector는 종료하면서 소유 generation을 DELETE로 반납하는데, broker가 살아
-# 있으면 retire 뒤 exit 0하고 Restart=always(RestartSec=1s)로 다시 떠서 곧바로 이 스크립트에 다시 멈춰진다.
-# broker가 먼저 멈추면 그 DELETE는 broker_unavailable로 끝나고 collector는 재전송 없이 무시한다(proof-controller.mjs retireOwned).
-# socket을 먼저 멈춰 service가 Requires=로 같은 transaction에서 멈추게 하고, 그 사이 socket activation이 service를 다시 띄우지 못하게 한다.
 stop_native_units_and_require_inactive() {
   local target load active persistent status failed=0
   local -a stopped=()
@@ -275,7 +271,7 @@ native_restore_recorded_runtime() {
     rollback_contract_dir="$old_target/rollback-contract"
     native_rollback_validate "$old_target"
     native_rollback_endpoint_validate "$old_target" "$release_dir/youtube-collector-host.env" || {
-      echo "automatic rollback blocked; collector and issuer stopped; retain $old_target and $release_dir; recovery guard retained: $native_recovery_dir" >&2
+      echo "automatic rollback blocked; collector and issuer stopped; retain $old_target and $release_dir; recovery guard retained: ${native_recovery_dir?}" >&2
       return 1
     }
     native_rollback_endpoint_validate "$old_target" "$host_env" || return
@@ -334,7 +330,6 @@ restore_native_after_failed_cutover() {
       sudo -n touch "$window/blocked"
       native_cutover_unknown
     elif [[ "${native_outcome_unknown:-false}" != true && "${native_completion_verified:-false}" == true ]]; then
-      # 복원이 issuer를 열고 나서 실패했을 수 있다. 미확정 worker와는 경쟁하지 않는다.
       stop_native_units_and_require_inactive || echo 'native failure brake not verified' >&2
     fi
   elif [[ "${window_action:-deploy}" == resume ]]; then
@@ -374,7 +369,10 @@ native_cutover_run host-env sudo -n install -m 0640 -o root -g root "$release_di
 native_cutover_run collector-unit sudo -n install -m 0644 -o root -g root "$release_dir/hololive-youtube-collector@.service" "$unit_file"
 native_cutover_run current-link sudo -n ln -sfn "$release_dir" "$current_link"
 
-if [[ "$same_window" == true ]]; then apply_start_since="@$EPOCHREALTIME"; fi
+if [[ "$same_window" == true ]]; then
+  # shellcheck disable=SC2034
+  apply_start_since="@$EPOCHREALTIME"
+fi
 native_pool_check_pending=true
 native_cutover_run pooled-database sudo -n systemd-run --quiet --wait --pipe --collect \
   --property=User=hololive --property=Group=opc --property=NoNewPrivileges=yes --property=RuntimeMaxSec=40s \

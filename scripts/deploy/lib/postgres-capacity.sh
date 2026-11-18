@@ -80,7 +80,6 @@ postgres_capacity_parse_policy_target() {
         if [[ "${line}" == @superuser-reserved\|* ]]; then
             ((superuser_reserved_rows += 1))
             superuser_reserved="${line#*|}"
-            # 앞자리 0은 bash 산술에서 8진수로 해석되므로 허용하지 않는다.
             [[ "${superuser_reserved}" =~ ^(0|[1-9][0-9]{0,8})$ ]] || {
                 echo "[pg-capacity] policy has an invalid @superuser-reserved" >&2
                 return 1
@@ -182,6 +181,7 @@ postgres_capacity_parse_policy_target() {
         return 1
     fi
     for role in "${!role_used[@]}"; do
+        # shellcheck disable=SC2034
         parsed_role_capacities["${role}"]="${role_used[${role}]}"
     done
     echo "[pg-capacity] source=target-env:${target_env_file} max=${server_limit} superuser_reserved=${superuser_reserved} allocated=${used} reserve=${reserve}; runtime, pooler auth, migrator, exporter and nightly allocations included"
@@ -290,7 +290,6 @@ postgres_capacity_write_quadlet_config() (
     local repo="$1" compose="$2" units="$3" output="$4" temporary
     . "$(dirname "${BASH_SOURCE[0]}")/compose-env.sh"
     . "$(dirname "${BASH_SOURCE[0]}")/postgres-endpoint.sh"
-    # pooler 자체의 별도 Quadlet/systemd 원천도 config 게시 전에 차단한다.
     postgres_quadlet_environment "$units/holo-pgbouncer.container" "$compose" \
         "$units/holo-pgbouncer.container" >/dev/null || return
     temporary="$(mktemp)" || return
@@ -308,7 +307,6 @@ postgres_capacity_assert_live() (
     postgres_capacity_write_quadlet_config "$repo" "$compose" "$units" "$temporary/pgbouncer.ini" \
         "${4:-}" "${5:-}" || return
     expected="$(sha256sum "$temporary/pgbouncer.ini")" || return
-    # 원자 교체된 호스트 경로가 아니라 실행 중 container가 붙잡은 bind inode를 검사한다.
     observed="$(podman exec holo-pgbouncer sha256sum /etc/pgbouncer/pgbouncer.ini)" || {
         echo '[pg-capacity] live pooler configuration inspection failed; activation refused' >&2
         return 1
@@ -327,8 +325,6 @@ postgres_pooler_assert_writer_sql() {
         hololive-alarm-worker) role=hololive_alarm_worker ;;
         *) echo '[pg-pooler] unknown central writer' >&2; return 1 ;;
     esac
-    # 최초 auth_query는 migration이 만든다. 두 writer는 그 뒤 실제 SCRAM·TLS SQL을 확인할 때까지 정지 상태다.
-    # 비밀번호는 이미 입력을 가진 PG 컨테이너 안에서만 libpq에 전달한다.
     result="$(podman exec -i holo-postgres timeout -k 2 38 sh -ec '
         unset PGSERVICE PGSERVICEFILE PGHOSTADDR PGOPTIONS
         export PGHOST=holo-pgbouncer PGPORT=6432 PGDATABASE=hololive PGUSER="$1"

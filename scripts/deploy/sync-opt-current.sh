@@ -54,7 +54,6 @@ backup_current() {
   local backup
   local -a exclusions=(--exclude=/data --exclude=/logs --exclude=/backups --exclude=/artifacts/worker-profile)
   [[ -d "$OPT_CURRENT" ]] || return 0
-  # 기존 복구점은 덮거나 정리하지 않는다. 보존 정리는 별도 승인된 운영 절차가 소유한다.
   backup="$(mktemp -d "${OPT_CURRENT}.bak-${HEAD_SHA}-XXXXXX")"
   [[ "$preserve_runtime" != true ]] || exclusions+=(--exclude=/runtime-config)
   rsync -a "${exclusions[@]}" "$OPT_CURRENT/" "$backup/"
@@ -103,7 +102,6 @@ assert_same_tree() {
   shift 2
   [[ -d "$source" && ! -L "$source" && -d "$dest" && ! -L "$dest" ]] ||
     die "application-only tree drift: $dest"
-  # archive 시각이 아니라 파일 종류·실행 비트·내용 및 추가/삭제를 비교한다.
   changes="$(rsync -rlDEcni --delete "$@" "$source/" "$dest/")"
   [[ -z "$changes" ]] || die "application-only tree drift: $dest ($changes)"
 }
@@ -161,7 +159,6 @@ if [[ "$application_only" == true ]]; then
   . "$STAGING/scripts/deploy/lib/source-revision.sh"
   deploy_assert_full_revision "$(<"$OPT_CURRENT/.source-revision")"
 
-  # 설치된 심볼릭 링크를 임시 drop-in 트리로 복사하면 삭제/생성이 원본까지 따라갈 수 있다.
   links="$(find "$QUADLET_DIR" -type l -print -quit)"
   [[ -z "$links" ]] || die "application-only symlink in Quadlet installation: $links"
   for path in "${protected[@]}"; do
@@ -175,7 +172,6 @@ if [[ "$application_only" == true ]]; then
   sync_flags+=(--checksum)
 fi
 
-# 설치 대상 값은 /opt 반영 전에 확인한다. 실패하면 현재 트리와 unit을 그대로 둔다.
 # shellcheck source=scripts/deploy/lib/compose-env.sh
 . "$STAGING/scripts/deploy/lib/compose-env.sh"
 compose_env_validate_file_format "$COMPOSE_ENV"
@@ -226,8 +222,6 @@ for feature in "${OPTIONAL_FEATURES[@]}"; do
 done
 if [[ "$application_only" == true ]]; then
   assert_same_tree "$quadlet_check_dir" "$QUADLET_DIR" "--exclude=/$migrator"
-  # 기존 image 고정 drop-in을 포함한 실제 생성 결과로 실행 인자와 자격 렌더링 경로를 확인한다.
-  # 호스트 systemd에 반영하는 일은 이후 후보 image를 고정하는 배포기가 소유한다.
   [[ "$(awk -F= '/^\[/{s=$0} s=="[Container]" && $1=="Exec"{print substr($0,6)}' "$QUADLET_DIR/$migrator")" == --pool-only=auth ]] ||
     die "application-only requires the accepted pool-only migrator"
   generated="$QUADLET_CHECK/generated"
@@ -249,9 +243,6 @@ if [[ "$application_only" == true ]]; then
   backup_current
 fi
 
-# current 반영: tracked 트리만 교체하고 런타임 bind-mount 데이터는 보존한다. staging 에는
-# data/logs/backups 가 없으므로 --delete 가 OPT_CURRENT 의 기존 런타임 데이터를 지우지 않도록
-# 명시적으로 제외한다.
 mkdir -p "$OPT_CURRENT"
 rsync -a --delete "${sync_flags[@]}" \
   --exclude=/data --exclude=/logs --exclude=/backups --exclude=/runtime-config --exclude=/artifacts/worker-profile \

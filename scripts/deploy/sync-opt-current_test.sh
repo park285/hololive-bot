@@ -245,8 +245,6 @@ for backup in "${host}/opt/"current.bak-*; do
 done
 pass "artifact-only sync preserves runtime bytes and metadata without copying runtime configuration"
 
-# W1의 프로세스와 단일 파일 bind는 W2 소스 게시 중 다시 열지 않는다. 같은 bytes라도
-# mtime이 다른 archive를 보내서 일반 rsync가 inode를 교체하는 경우까지 구별한다.
 migrator_path=deploy/quadlet/hololive-bot/hololive-db-migrate.container
 w1_repo="${tmp}/repo-pool"
 cp -a "${base_repo}" "${w1_repo}"
@@ -318,7 +316,6 @@ commit_repo "$drift_repo" changed-infrastructure
 assert_rejected_without_change "$w1_host" "$drift_repo" "candidate infrastructure" "application-only tree drift" --application-only
 pass "application-only rejects candidate, installed, drop-in and privileged bind drift before backup or publication"
 
-# 6. 같은 revision을 다시 반영해도 기존 backup을 덮거나 보존 개수만으로 지우지 않는다.
 host="${tmp}/host-retained-backups"
 make_host "${host}" 0
 for number in 1 2 3 4; do

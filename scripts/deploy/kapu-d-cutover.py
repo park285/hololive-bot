@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""kapu d 전용. 기존 설치·실행 증거가 없는 첫 설치와 자동 복구는 지원하지 않는다."""
 import argparse
 import contextlib
 import fcntl
@@ -59,7 +58,6 @@ def need(ok, reason):
 
 
 def run(*args, timeout=35, status=False):
-    # 명령 stderr와 진단 응답에는 비밀이 섞일 수 있다. 정해진 필드 외의 값을 영수증에 쓰지 않는다.
     proc = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                           timeout=timeout, env=COMMAND_ENV)
     if status:
@@ -226,7 +224,6 @@ def profile():
         sums[match[2]] = match[1]
     expected = {'profile.json', 'pair.json'} if os.path.lexists(D/'pair.json') else {'profile.json'}
     need(set(sums) == expected and all(sha(raw(D / key)) == digest for key, digest in sums.items()), 'release checksum 불일치')
-    # pair.json의 checksum은 보관 무결성일 뿐이다. d 실행 이미지/프로필 identity의 출처가 아니다.
     return released
 
 
@@ -235,7 +232,6 @@ def policy(name):
     trusted(base)
     dropdir = UNIT / (unit(name) + '.d')
     drops = {}
-    # Quadlet은 다른 검색 루트·상위 prefix·공통 .d도 병합한다. 보지 못한 override는 거부한다.
     names = {'container.d', unit(name) + '.d', *(name[:i+1] + '.container.d' for i,c in enumerate(name) if c == '-')}
     def error(exc):
         raise exc
@@ -340,7 +336,6 @@ def collector(g, port, level):
          'collector user/MCS 불일치')
     net = json.loads(inspect('container', cid, '{{json .NetworkSettings.Networks}}'))
     need(set(net) == {'hololive-collector'} and net['hololive-collector']['IPAddress'] == '10.89.15.14', 'collector network 불일치')
-    # 전체 컨테이너 env/개별 인증값을 inspector 밖으로 꺼내지 않는다.
     expected = {**DB, **PROFILE_ENV, 'POSTGRES_PORT': port}
     checks = []
     for key, value in expected.items():
@@ -391,7 +386,6 @@ def journal_since():
 
 
 def stop_invocation(name, invocation, since):
-    # issuer의 역방향 Requires=가 collector까지 먼저 정지시키지 않게 단일 job으로 요청한다.
     options = ('--job-mode=ignore-dependencies',) if name == I else ()
     run('systemctl', 'stop', *options, name + '.service', timeout=125)
     evidence = run('journalctl', '--boot', '--quiet', '--no-pager', '-n', '1', '-o', 'json',
@@ -471,7 +465,6 @@ def held_one(h, state, name, stopped=None):
 
 
 def bindings():
-    # envfile은 stat만 수행한다. credential이나 CA·개인키 바이트는 보존하지 않는다.
     result = {}
     for path in (ENVFILE, CA, SRC/'youtube-collector-d.json', D/'profile.json'):
         st = path.lstat()
@@ -528,7 +521,6 @@ def snapshot(h, source_port, target):
         need('sha256:' + g['image'] == ident['id'], '실행 이미지와 실제 :prod tag 불일치')
         healthy(n, g)
         if n == C:
-            # 고정 MCS가 없는 설치는 probe의 자격/레이블을 추측하지 않는다.
             mcs = drops.get('50-mcs-level.conf', b'').decode()
             match = re.search('^SecurityLabelLevel=(' + LEVEL + ')$', mcs, re.M)
             need(match, '고정된 collector MCS 없음')
@@ -562,7 +554,6 @@ def snapshot(h, source_port, target):
 def stop_receipt(source_port, state):
     marker = QUIESCED[source_port]
     if source_port == '6433':
-        # 정지 완료 영수증을 다른 hold·실행 세대·후보의 스냅샷과 짝지을 수 없다.
         marker += sha(json.dumps(state,sort_keys=True).encode()).encode() + b'\n'
     return marker
 
@@ -583,7 +574,6 @@ def quiesce(h, source_port, target=None):
     for n in NAMES:
         guard('check',h,n)
         origin(n,source_port,False,True)
-    # collector 종료가 issuer에 세대 반납을 요청하기 전에 issuer의 실행 세대를 직접 정지한다.
     for n in (I,C):
         g = s['old'][n]
         retained(h,s,source_port)
@@ -622,11 +612,9 @@ def gate(image_id, level):
     runtime = container_settings(raw(INPUT / unit(C)).decode(), '[Container]')
     envfile = '--env-file=' + str(ENVFILE)
     ca = '--volume=' + str(CA) + ':' + CERT + ':ro'
-    # 이 CLI는 profile뿐 아니라 실제 runtime env와 CA를 검사한다. 비밀값은 Podman만 읽고 외부 접속은 막는다.
     run(*common, '--name=' + C + '-profile-check', '--network=none', envfile, ca,
         '--volume=' + str(D/'profile.json') + ':' + PROFILE_ENV['STACK_WORKER_PROFILE_FILE'] + ':ro',
         *('--env=' + item for item in runtime['Environment']), image_id, '--check-worker-profile', timeout=65)
-    # SQL 한 번: envfile의 값은 Podman만 소비한다. H3 개인키·소켓·data/log·profile은 필요 없다.
     args = [*common,'--name=' + C + '-database-check','--network=hololive-collector','--ip=10.89.15.14',envfile,ca]
     args.extend('--env=' + k + '=' + v for k,v in {**DB,'POSTGRES_PORT':'6433'}.items())
     run(*args, image_id, '--check-pooled-database', timeout=65)
@@ -635,7 +623,6 @@ def gate(image_id, level):
 def start_once(n, requested):
     unit_name = n + '.service'
     since = journal_since()
-    # 클라이언트가 timeout/예외로 끝나도 manager의 원래 anchor job 번호를 잃지 않는다.
     with os.fdopen(os.memfd_create('cutover-start'), 'w+b') as log:
         requested[n] = (since, None)
         try:
@@ -657,7 +644,6 @@ def candidate(n, request, old, image_id, *, guarded_hold=None):
     result = terminal(n)
     inv = None
     if guarded_hold is not None and result['Job'] == job:
-        # arm은 이미 진행 중인 notify 기동을 취소하지 않는다. 다른 job/invocation을 따라가지 않는다.
         budget = guard('start-budget',guarded_hold,n)
         need(re.fullmatch('[1-9][0-9]*',budget), 'manager 기동 제한 미확인: ' + n)
         limit = time.monotonic() + int(budget)
@@ -671,7 +657,6 @@ def candidate(n, request, old, image_id, *, guarded_hold=None):
             time.sleep(0.25)
             result = terminal(n)
     need(result['ActiveState'] == 'active' and not result['Job'], '원래 후보 기동 완료 미확인: ' + n)
-    # 첫 세대 조회보다 앞서 재기동된 경우에도 같은 이미지의 교체 세대를 인수하지 않는다.
     if inv is None:
         evidence = run('journalctl','--boot','--quiet','--no-pager','-o','json','--output-fields=INVOCATION_ID',
                        '--since=' + since,'_PID=1','UNIT=' + n + '.service','JOB_ID=' + job,'JOB_TYPE=start',
@@ -703,7 +688,6 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
     errors = (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError)
     damaged = False
     before, armed, stops = {}, set(), {}
-    # 어느 가드의 reload라도 다른 실패 세대의 종료 상태를 지울 수 있다.
     for n in opened:
         try:
             before[n] = terminal(n)
@@ -729,7 +713,6 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
         if n not in requested:
             try:
                 if prop(n,'LoadState') == 'masked':
-                    # unlink만 반영된 원 mask는 실행된 후보를 정지한 증거가 아니다.
                     result = terminal(n)
                     need(n in before and before[n] == result and
                          (result['ActiveState'] == 'inactive' or issuer_exit(n,result,s['old'][n]['inv'])) and
@@ -745,7 +728,6 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
         if os.path.lexists(p):
             continue
         try:
-            # 미확인 세대를 인수하지 않되 정식 mask가 없는 경로에는 재부팅 기동 차단을 먼저 남긴다.
             guard('arm',h,n)
             origin(n,'6433',False,True,allow_job=True)
             if not uncertain:
@@ -762,7 +744,6 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
                 guarded_stop(h,n,started[n],'6433',candidate=True)
                 stops[n] = started[n]['inv']
             else:
-                # 실제 후보 stop 증거 없이 이미 failed인 unit(예전 issuer 143 포함)은 수용하지 않는다.
                 guard('check',h,n)
                 origin(n,'6433',False,True)
                 result = terminal(n)
@@ -834,7 +815,6 @@ def resume(h, target, source_port):
                 held_one(h,s,C)
             else:
                 healthy(I,started[I]); issuer(started[I])
-            # 같은 filesystem의 전용 hardlink로 원래 mask inode를 유지한다. 외부 mask는 덮지 않는다.
             p = mask(n)
             _, ident = owned_anchor(h,n)
             need(number(p) == ident, '해제 직전 mask 교체')
@@ -902,7 +882,7 @@ def prepare_store(path, *, create):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='kapu d 전용. 기존 설치·실행 증거가 없는 첫 설치와 자동 복구는 지원하지 않는다.')
     sub = parser.add_subparsers(dest='action', required=True)
     for cmd in ('quiesce','resume'):
         p = sub.add_parser(cmd, allow_abbrev=False)
@@ -944,6 +924,5 @@ if __name__ == '__main__':
     try:
         main()
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, KeyboardInterrupt) as exc:
-        # 진단 JSON/argv·env·키는 출력하지 않는다.
         print('전환 중단: ' + (str(exc) if isinstance(exc, Refused) else type(exc).__name__) + '; 증거 보존, 재시도/자동 복구 금지', file=sys.stderr)
         sys.exit(1)
