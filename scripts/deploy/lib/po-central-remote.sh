@@ -5,16 +5,23 @@
 # Image=의 localhost :prod tag를 쓴다. unit 정의 설치는 c는 sync-opt-current.sh, b는 deploy/podman/iris-seoul 절차가
 # 소유하므로 이 스크립트는 unit 파일을 설치하지 않는다(롤백의 기본 unit 복원만 예외).
 set -Eeuo pipefail
-[[ $# -eq 6 ]] || exit 2
+[[ $# -eq 7 ]] || exit 2
 slot="$1" mode="$2" staging="$3" backup="$4" revision="$5" version="$6"
+seal="$7"
+if [[ "$mode" == quiesce-verified ]]; then
+  [[ "$seal" =~ ^[0-9a-f]{64}$ ]] || exit 2
+  mode=quiesce
+else
+  [[ "$seal" == - ]] || exit 2
+fi
 case "$slot" in
   c) remote_root=/opt/hololive-bot/compose service=youtube-collector port=30025 host_label=central ;;
   b) remote_root=/opt/hololive-bot/collector-b service=youtube-collector-b port=30015 host_label=iris-seoul ;;
   *) exit 2 ;;
 esac
 [[ "$mode" == deploy || "$mode" == quiesce || "$mode" == resume || "$mode" == rollback || "$mode" == check ]] || exit 2
-[[ "$staging" =~ ^$remote_root/po-staging-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
-[[ "$backup" =~ ^$remote_root/backups/po-$slot-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
+[[ "$staging" == "$remote_root/po-staging-${backup##*-}" ]] || exit 2
+[[ "$backup" =~ ^$remote_root/backups/card-po-$slot-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
 [[ "$revision" =~ ^[0-9a-f]{40}$ && "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 2
 # 중앙 c는 source sync·API/worker pair 게시와 daemon-reload를 공유한다. b는 별도 호스트 배포다.
 install -d -m 0755 /run/lock
@@ -26,9 +33,9 @@ current="$remote_root/current"
 unit_dir=/etc/containers/systemd/hololive-bot
 manifest="../po-current-$slot/rootfs-manifest.json"
 image_id_file="../po-current-$slot/image-id"
-change_id="${backup##*/po-"$slot"-}"
+change_id="${backup##*-}"
 # 활성 pair는 백업 정리 뒤에도 bind되므로 release 저장소에 둔다.
-profile_release="$current/artifacts/worker-profile/releases/po-$slot-$change_id/$service"
+profile_release="$current/artifacts/worker-profile/releases/${backup##*/}/$service"
 collector=localhost/hololive-youtube-collector:prod
 issuer=localhost/hololive-youtube-po-sandbox:prod
 # kapu archive는 :candidate 이름으로 적재된다. Quadlet은 재시작할 때마다 Image= tag를 다시 읽으므로
@@ -43,6 +50,7 @@ collector_unit="$collector_container.service"
 issuer_unit="$issuer_container.service"
 hold="$remote_root/po-$slot.hold"
 lock="$remote_root/po-$slot.lock"
+card_active="$remote_root/po-$slot.card-active"
 system_unit_dir=/etc/systemd/system
 hold_owned=false
 declare -A release_attempted=() launched_inv=() launched_gen=() failed_start_job=() failed_start_since=()
@@ -50,8 +58,25 @@ declare -A release_attempted=() launched_inv=() launched_gen=() failed_start_job
 cd "$current"
 # 재개 입력 검증은 staged helper를 실행하기 전에 끝낸다. b의 current는 source checkout이 아니라
 # release pair 저장소다. provenance는 SSH로 전달한 source checksum과 quiesce 영수증이 소유한다.
-if [[ "$mode" == resume ]]; then
+if [[ "$mode" == resume || "$mode" == rollback || "$mode" == check ]]; then
+  if [[ "$mode" == check ]]; then cmp -s -- "$backup/card-candidate" "$card_active" || exit 1; fi
+  if [[ -f "$backup/transport.sha256" ]]; then
+    [[ "$mode" != rollback ]] || { echo 'card transition cannot restore the pre-card publisher' >&2; exit 1; }
+    seal="$(<"$backup/transport.sha256")"
+    [[ "$seal" =~ ^[0-9a-f]{64}$ ]] || exit 1
+  elif [[ "$mode" == resume ]]; then
+    cmp -s -- "$backup/card-origin" "$card_active" || exit 1
+  fi
   (cd "$staging" && sha256sum --check --strict "$backup/candidate-inputs.sha256")
+fi
+if [[ "$seal" != - ]]; then
+  (cd "$staging" && printf '%s  transport-files.sha256\n' "$seal" | sha256sum --check --strict --status - &&
+    sha256sum --check --strict transport-files.sha256)
+elif [[ "$mode" == deploy || "$mode" == quiesce ]]; then
+  [[ -f "$card_active" ]] || { echo 'first card cutover requires quiesce-verified and a new hold' >&2; exit 1; }
+fi
+if [[ "$mode" == quiesce || "$mode" == deploy ]]; then
+  (cd "$staging" && sha256sum --check --strict image.tar.sha256 collector-image.tar.sha256)
 fi
 (cd "$staging" && sha256sum --check --strict source-files.sha256)
 . "$staging/scripts/deploy/lib/po-sandbox-image.sh"
@@ -96,6 +121,9 @@ require_owned_hold() {
   [[ "$hold_owned" == true && "$(<"$hold/backup")" == "$backup" ]] || return 1
   [[ -r "$backup/snapshot-complete" && "$(<"$backup/candidate.revision")" == "$revision" &&
      "$(<"$backup/candidate.version")" == "$version" ]] || return 1
+  local inode
+  inode="$(stat -c '%d:%i' "$backup/card-candidate")" || return 1
+  [[ "$(<"$hold/card-candidate")" == "$inode" ]] || return 1
 }
 
 active_invocation() {
@@ -204,13 +232,15 @@ create_hold() {
   local unit anchor
   mkdir -m 0700 -- "$hold" || return
   printf '%s\n' "$backup" > "$hold/backup" || return
+  stat -c '%d:%i' "$backup/card-candidate" > "$hold/card-candidate" || return
   hold_owned=true
   for unit in "$issuer_unit" "$collector_unit"; do
     anchor="$(mask_anchor "$unit")" || return
     ln -sT -- /dev/null "$anchor" || return
     stat -c '%d:%i' "$anchor" > "$hold/$unit" || return
   done
-  sync -- "$hold/backup" "$hold/$issuer_unit" "$hold/$collector_unit" "$system_unit_dir" "$hold" "$remote_root"
+  sync -- "$backup/card-candidate" "$backup" "$hold/card-candidate" "$hold/backup" \
+    "$hold/$issuer_unit" "$hold/$collector_unit" "$system_unit_dir" "$hold" "$remote_root"
 }
 
 unit_status() {
@@ -454,7 +484,7 @@ clear_hold() {
     require_mask_inode "$unit" "$anchor" || return 1
     rm -- "$anchor" || return 1
   done
-  rm -- "$hold/$issuer_unit" "$hold/$collector_unit" "$hold/backup"
+  rm -- "$hold/$issuer_unit" "$hold/$collector_unit" "$hold/backup" "$hold/card-candidate"
   rm -f -- "$hold/issuer-stop.invocation" "$hold/$issuer_unit.stop-cid" "$hold/$collector_unit.stop-cid" "$hold/quiesced"
   rmdir -- "$hold" "$retired"
 }
@@ -515,6 +545,7 @@ prepare_candidate_pair() {
     [[ "$(<"$backup/issuer.state")" == present ]]
     po_verify_image "$issuer_rollback" "$backup/po-prechange-manifest.json" "$previous_revision" arm64 "$backup/po-prechange.image-id"
     python3 "$pair_tool" verify "$service" "$profile_release/previous" "$collector_rollback"
+    require_card_candidate || return 1
   fi
   if [[ ! -e "$profile_release/candidate" ]]; then
     python3 "$pair_tool" candidate "$service" "$profile_release/candidate" "$candidate_image" \
@@ -654,10 +685,52 @@ cutover_units_settled() {
     [[ "$job_seen" == true && "$state_seen" == true ]] || return 1
   done
 }
+card_pair() {
+  local inode
+  inode="$(stat -c '%d:%i' "$backup")" || return 1
+  printf '%s %s %s %s %s\n' "$backup" "$inode" "$1" "$2" "$3"
+}
+
+require_card_origin() {
+  local release inode recorded_revision recorded_collector recorded_issuer extra
+  read -r release inode recorded_revision recorded_collector recorded_issuer extra < "$1" || return 1
+  [[ "${release%/*}" == "${backup%/*}" && "${release##*/}" =~ ^card-po-$slot-[0-9]{8}T[0-9]{6}Z$ &&
+     "$inode" =~ ^[0-9]+:[0-9]+$ && -z "$extra" && "$recorded_revision" == "$2" && "$recorded_collector" == "$3" &&
+     "$recorded_issuer" =~ ^sha256:[0-9a-f]{64}$ && ( "$4" == absent || "$recorded_issuer" == "$4" ) ]]
+}
+
+require_card_candidate() {
+  cmp -s -- "$backup/card-candidate" <(card_pair "$revision" "$(<"$staging/collector-image-id")" "$(<"$staging/image-id")") || return 1
+  if [[ "$seal" != - ]]; then
+    [[ "$(<"$backup/collector.revision")" != "$revision" &&
+       "$(<"$backup/collector-prechange.image-id")" != "$(<"$staging/collector-image-id")" &&
+       "$(<"$backup/po-prechange.image-id")" != "$(<"$staging/image-id")" ]] || return 1
+  fi
+  if [[ "$mode" == resume ]]; then
+    local expected='holo-pgbouncer|6432'
+    [[ "$slot" != b ]] || expected='100.100.1.8|6433'
+    postgres_endpoint_require_same "$(<"$backup/collector.endpoint")" "$expected" || return 1
+  fi
+}
+
+publish_card_pair() {
+  local tmp
+  tmp="$(mktemp -- "$remote_root/.po-$slot.card-active.XXXXXX")" || return 1
+  cp -- "$1" "$tmp" && sync -- "$tmp" && mv -fT -- "$tmp" "$card_active" && sync -- "$remote_root"
+}
+
 restore() {
   local old_revision old_po_revision state issuer_now
   if [[ "$hold_owned" != true ]]; then trap - ERR INT TERM HUP; fi
   [[ -r "$backup/snapshot-complete" ]] || { echo "$host_label rollback snapshot incomplete" >&2; return 1; }
+  if [[ "$mode" == rollback && "$hold_owned" != true ]] && ! cmp -s -- "$backup/card-candidate" "$card_active"; then
+    echo 'rollback does not own the active card release' >&2; return 1
+  fi
+  # 카드 창의 첫 backup은 복구 자료일 뿐, 이전 publisher의 기동 권한은 없다.
+  [[ ! -e "$backup/transport.sha256" && -f "$backup/card-origin" ]] &&
+    { cmp -s -- "$backup/card-origin" "$card_active" || cmp -s -- "$backup/card-candidate" "$card_active"; } || {
+    echo 'rollback is not owned by an admitted card pair' >&2; return 1;
+  }
   # systemctl client 종료는 manager job 정산이 아니다. 진행 중·조회 실패에는 이전 pair를 게시하지 않는다.
   if ! cutover_units_settled; then
     printf 'outcome_unknown\n' > "$backup/cutover-outcome" || echo 'failed to record cutover outcome; retain the backup' >&2
@@ -670,8 +743,10 @@ restore() {
   if [[ "$state" == present ]]; then
     old_po_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_revision"])' "$backup/po-prechange-manifest.json")"
     po_verify_image "$issuer_rollback" "$backup/po-prechange-manifest.json" "$old_po_revision" arm64 "$backup/po-prechange.image-id"
+    require_card_origin "$backup/card-origin" "$old_revision" "$(<"$backup/collector-prechange.image-id")" "$(<"$backup/po-prechange.image-id")" || return 1
   else
     [[ "$state" == absent ]] || return 1
+    require_card_origin "$backup/card-origin" "$old_revision" "$(<"$backup/collector-prechange.image-id")" absent || return 1
   fi
   python3 "$pair_tool" verify "$service" "$profile_release/previous" "$collector_rollback"
   python3 "$pair_tool" check "$service" "$profile_release/previous"
@@ -724,6 +799,7 @@ restore() {
   verify_collector_runtime "$old_revision" "$(<"$backup/collector-prechange.image-id")" || return
   python3 "$pair_tool" verify-live "$service" "$profile_release/previous" "$collector_container" || return
   postgres_endpoint_require_same "$(collector_database_endpoint "$collector_container")" "$(<"$backup/collector.endpoint")" || return
+  publish_card_pair "$backup/card-origin" || return
   if [[ "$hold_owned" == true ]]; then
     if [[ "$state" == absent ]]; then release_unit "$issuer_unit"; fi
     clear_hold
@@ -798,6 +874,7 @@ require_collector_lease_migration() {
 # stdin을 읽는 자식 명령이 남은 본문을 소비해 교체 없이 exit 0으로 끝나지 않는다.
 {
 claim_slot
+if [[ "$mode" == rollback || "$mode" == check ]]; then require_card_candidate; fi
 if [[ "$mode" == rollback ]]; then
   if [[ "$hold_owned" == true ]]; then
     require_confirmed_hold
@@ -860,6 +937,13 @@ if [[ "$issuer_state" == present ]] && [[ ! -r "$current/$manifest" || ! -r "$cu
   exit 1
 fi
 [[ ! -e "$backup" ]] || { echo "$host_label backup path already exists" >&2; exit 1; }
+if [[ "$seal" == - ]]; then
+  previous_issuer=absent
+  if [[ "$issuer_state" == present ]]; then previous_issuer="$(container_image_id "$issuer_container")"; fi
+  require_card_origin "$card_active" "$(image_label "$collector" revision)" "$(container_image_id "$collector_container")" "$previous_issuer" || {
+    echo 'running pair does not own the active card release' >&2; exit 1;
+  }
+fi
 install -d -m 0700 -o root -g root "$backup"
 old_image_id="$(image_id "$collector")"
 running_image_id="$(container_image_id "$collector_container")"
@@ -885,6 +969,16 @@ fi
 captured_collector="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["container_id"])' "$profile_release/previous/pair.json")"
 [[ "$captured_collector" =~ ^[0-9a-f]{64}$ ]]
 collector_database_endpoint "$captured_collector" > "$backup/collector.endpoint"
+if [[ "$mode" == quiesce ]]; then
+  expected='holo-pgbouncer|6432'
+  [[ "$slot" != b ]] || expected='100.100.1.8|6433'
+  postgres_endpoint_require_same "$(<"$backup/collector.endpoint")" "$expected"
+fi
+if [[ "$seal" != - ]]; then
+  printf '%s\n' "$seal" > "$backup/transport.sha256"
+else
+  cp -- "$card_active" "$backup/card-origin"
+fi
 python3 "$pair_tool" rollback "$service" "$profile_release/previous"
 python3 "$pair_tool" check "$service" "$profile_release/previous"
 printf '%s\n' "$old_revision" > "$backup/collector.revision"
@@ -910,6 +1004,13 @@ else
 fi
 printf '%s\n' "$revision" > "$backup/candidate.revision"
 printf '%s\n' "$version" > "$backup/candidate.version"
+card_pair "$revision" "$(<"$staging/collector-image-id")" "$(<"$staging/image-id")" > "$backup/card-candidate"
+require_card_candidate
+if [[ "$seal" == - ]]; then
+  require_card_origin "$backup/card-origin" "$old_revision" "$old_image_id" "${issuer_image_id:-absent}"
+fi
+(cd "$staging" && sha256sum image-id collector-image-id rootfs-manifest.json collector-manifest.json \
+  image.tar.sha256 collector-image.tar.sha256 source-files.sha256) > "$backup/candidate-inputs.sha256"
 : > "$backup/snapshot-complete"
 fi
 # 이전 pair snapshot을 확보한 뒤에만 복원을 무장합니다.
@@ -940,15 +1041,11 @@ if [[ "$mode" != resume ]]; then
   trap 'restore_after_failed_cutover 130' INT
   trap 'restore_after_failed_cutover 143' TERM
   trap 'restore_after_failed_cutover 129' HUP
-(cd "$staging" && sha256sum --check --strict image.tar.sha256 collector-image.tar.sha256)
 podman load --input "$staging/image.tar"
 podman load --input "$staging/collector-image.tar"
   verify_candidate_images
 fi
 if [[ "$mode" == quiesce ]]; then
-  (cd "$staging" && sha256sum image-id collector-image-id rootfs-manifest.json collector-manifest.json \
-    image.tar.sha256 collector-image.tar.sha256 source-files.sha256) \
-    > "$backup/candidate-inputs.sha256"
   require_unmasked_units
   verify_issuer_runtime "$old_po_revision" "$issuer_image_id" || {
     echo 'captured issuer is no longer healthy on its reviewed image and socket; no hold created' >&2; exit 1;
@@ -970,8 +1067,6 @@ fi
 if [[ "$mode" == resume ]]; then
   require_confirmed_hold
   arm_maintenance_failure
-  (cd "$staging" && sha256sum --check --strict "$backup/candidate-inputs.sha256")
-  (cd "$staging" && sha256sum --check --strict source-files.sha256)
   (cd "$staging" && sha256sum --check --strict image.tar.sha256 collector-image.tar.sha256)
   verify_candidate_images
 fi
@@ -1008,6 +1103,7 @@ for container in "$issuer_container" "$collector_container"; do
   started_since "$since_epoch" "$container"
   require_post_cutover_logs "$started_at" "$container"
 done
+publish_card_pair "$backup/card-candidate"
 if [[ "$mode" == resume ]]; then clear_hold; fi
 trap - ERR INT TERM HUP
 printf '%s issuer-first cutover verified revision=%s backup=%s started_at=%s\n' "$host_label" "$revision" "$backup" "$started_at"

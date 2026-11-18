@@ -387,8 +387,8 @@ if unshare --user --map-root-user --mount bash -c '
   mount --bind "$1/run-lock" /run/lock
   exec bash "$2/scripts/deploy/lib/po-central-remote.sh" c deploy \
     /opt/hololive-bot/compose/po-staging-20261118T000000Z \
-    /opt/hololive-bot/compose/backups/po-c-20261118T000000Z \
-    0123456789abcdef0123456789abcdef01234567 1.0.0
+    /opt/hololive-bot/compose/backups/card-po-c-20261118T000000Z \
+    0123456789abcdef0123456789abcdef01234567 1.0.0 -
 ' _ "$host" "$ROOT_DIR" >"${host}/collector-out" 2>&1; then
   fail "collector c ran while another central writer held the lock"
 fi

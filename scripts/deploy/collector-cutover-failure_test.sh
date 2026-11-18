@@ -273,7 +273,7 @@ fi
 # staged helper는 원격 본문과 같은 checksum gate 뒤에서만 읽는다.
 compose_env="$fixture_root/compose.env"
 remote_root="$fixture_root"
-current="$fixture_root/current" staging="$fixture_root/staging" backup="$fixture_root/po-$slot-20261003T000000Z"
+current="$fixture_root/current" staging="$fixture_root/staging" backup="$fixture_root/card-po-$slot-20261003T000000Z"
 unit_dir="$fixture_root/units"
 revision=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb version=6.0.1
 pair_tool="$staging/scripts/deploy/lib/worker-profile-pair.py"
@@ -287,6 +287,11 @@ case "$fixture_case" in
   maintenance_check*) mode=check ;;
   maintenance_rollback*) mode=rollback ;;
 esac
+transport=-
+if [[ "$mode" == quiesce && -f "$fixture_root/trusted-seal" ]]; then
+  mode=quiesce-verified transport="$(<"$fixture_root/trusted-seal")"
+fi
+set -- "$slot" "$mode" "$staging" "$backup" "$revision" "$version" "$transport"
 ref_file() { printf '%s/images/%s\n' "$fixture_root" "${1//[\/:]/_}"; }
 hex_of() { if [[ "$1" == old ]]; then printf '%064d\n' 0 | tr 0 a; else printf '%064d\n' 0 | tr 0 b; fi; }
 revision_of() { if [[ "$1" == old ]]; then printf '%040d\n' 0 | tr 0 a; else printf '%040d\n' 0 | tr 0 b; fi; }
@@ -424,7 +429,7 @@ sync() {
   command sync "$@"
 }
 ln() {
-  printf 'mask link %s\n' "${*: -1}" >>"$fixture_root/calls"
+  if [[ "${*: -1}" == "$system_unit_dir/"* ]]; then printf 'mask link %s\n' "${*: -1}" >>"$fixture_root/calls"; fi
   if [[ "$1" == -PT && "$4" == "$system_unit_dir/$collector_unit" ]]; then
     [[ "$fixture_case" != maintenance_quiesce_mask_failure && "$fixture_case" != *error_log_seal_failure ]] || return 8
   fi
@@ -500,13 +505,13 @@ podman() {
       case "$format" in
         *Config.Env*)
           if [[ "$slot" == c ]]; then
-            if [[ "$fixture_case" == maintenance_* && "$value" == old || "$fixture_case" == transition_* && "$value" == old || "$fixture_case" == transition_wrong_endpoint ]]; then
+            if [[ -f "$fixture_root/direct-origin" && "$value" == old || "$fixture_case" == transition_* && "$value" == old || "$fixture_case" == transition_wrong_endpoint ]]; then
               printf 'POSTGRES_HOST=holo-postgres\nPOSTGRES_PORT=5432\nPOSTGRES_DB=hololive\n'
             else
               printf 'POSTGRES_HOST=holo-pgbouncer\nPOSTGRES_PORT=6432\nPOSTGRES_DB=hololive\n'
             fi
           else
-            if [[ "$fixture_case" == maintenance_* && "$value" == old || "$fixture_case" == transition_* && "$value" == old || "$fixture_case" == transition_wrong_endpoint ]]; then
+            if [[ -f "$fixture_root/direct-origin" && "$value" == old || "$fixture_case" == transition_* && "$value" == old || "$fixture_case" == transition_wrong_endpoint ]]; then
               printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=5433\nPOSTGRES_DB=hololive\n'
             else
               printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\nPOSTGRES_DB=hololive\n'
@@ -751,6 +756,14 @@ systemctl() {
 }
 if [[ "$fixture_case" == *grep_failure ]]; then grep() { if [[ "$*" == *'ERR|panic'* ]]; then return 2; else command grep "$@"; fi; }; fi
 '''
+central_setup += central[central.index('[[ $#'):central.index('case "$slot" in')]
+for slot, tree in (('c', 'compose'), ('b', 'collector-b')):
+    remote = f'/opt/hololive-bot/{tree}'
+    for prefix, staged_at, accepted in (('card-po', change, True), ('po', change, False), ('card-po', '20261002T000000Z', False)):
+        args = [slot, 'resume', f'{remote}/po-staging-{staged_at}', f'{remote}/backups/{prefix}-{slot}-{change}',
+                new_revision, '6.0.1', '-']
+        result = run('set -- ' + shlex.join(args) + '\n' + central[:central.index('# 중앙 c는 source sync')], root, 'paths')
+        require((result.returncode == 0) == accepted, f'{slot}: W2 resume requires its card backup and staging', result)
 
 
 def manifest(revision, identity):
@@ -783,6 +796,7 @@ central_cases = {
     'transition_wrong_endpoint': (1, False), 'rollback_cross': (1, False),
     'capacity_drift': (1, False), 'capacity_missing': (1, False), 'capacity_query_failed': (1, False),
     'rollback_capacity_drift': (1, False),
+    'unadmitted_deploy': (1, False), 'foreign_card_pair': (1, False), 'rollback_stale': (1, False),
 }
 slots = {
     'c': ('youtube-collector', 30025, 'central'),
@@ -790,7 +804,7 @@ slots = {
 }
 runs = [('c', case) for case in central_cases] + [('b', case) for case in (
     'success', 'rollback', 'check_success', 'check_wrong_profile', 'pooled_query_failure', 'transition_success',
-    'check_wrong_instance', 'check_waiting_handoff',
+    'check_wrong_instance', 'check_waiting_handoff', 'unadmitted_deploy', 'foreign_card_pair', 'rollback_stale',
     'transition_error_log', 'transition_wrong_endpoint', 'rollback_cross', 'rollback_masked_endpoint', 'rollback_missing_endpoint')]
 recovery_cases = (
     'receipt_signal', 'receipt_signal_changed', 'unmask_reload', 'unmask_reload_old_cid',
@@ -815,6 +829,7 @@ maintenance_cases = (
     'installed_unit_changed', 'helper_changed', 'migration_changed', 'source_manifest_changed',
     'candidate_image_overlay_changed', 'candidate_endpoint_overlay_changed',
     'rollback_cross', 'rollback_coordinated', 'capacity_drift', 'capacity_missing', 'capacity_query_failed',
+    'direct_origin', 'previous_candidate', 'origin_receipt_changed', 'copied_hold_receipt', 'lost_seal', 'seal_changed',
     'rollback_replaced', *recovery_cases,
 )
 runs += [(slot, 'maintenance_' + case) for slot in slots for case in maintenance_cases
@@ -827,12 +842,12 @@ for slot, case in runs:
     label = f'{slot} {case}'
     with tempfile.TemporaryDirectory(prefix='central-cutover-test-') as raw:
         state = Path(raw)
-        current, staging, backup = state / 'current', state / 'staging', state / f'po-{slot}-{change}'
+        current, staging, backup = state / 'current', state / 'staging', state / f'card-po-{slot}-{change}'
         for directory in (current, staging, state / 'images', state / 'units', state / f'po-current-{slot}'):
             directory.mkdir()
         host, db_port = ('holo-pgbouncer', 6432) if slot == 'c' else ('100.100.1.8', 6433)
-        if case.startswith('maintenance_'):
-            host, db_port = ('holo-postgres', 5432) if slot == 'c' else ('100.100.1.8', 5433)
+        if case == 'maintenance_direct_origin':
+            (state / 'direct-origin').touch()
         installed_definition = f'[Container]\nEnvironment=POSTGRES_HOST={host}\nEnvironment=POSTGRES_PORT={db_port}\n'
         if slot == 'c':
             installed_definition += 'Environment=POSTGRES_POOL_MAX_CONNS=${YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS}\n[Service]\nEnvironment=YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=7\nEnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env\n'
@@ -885,6 +900,21 @@ for slot, case in runs:
             (staging / (prefix + 'image.tar.sha256')).write_text(f'{digest}  {tar.name}\n')
             (staging / (prefix + 'image-id')).write_text(new_id)
             (staging / ('rootfs-manifest.json' if issuer else 'collector-manifest.json')).write_text(manifest(new_revision, new_id))
+        active = state / f'po-{slot}.card-active'
+        prior_backup = backup.with_name(f'card-po-{slot}-20261002T000000Z')
+        prior_backup.mkdir()
+        info = prior_backup.stat()
+        origin_pair = f'{prior_backup} {info.st_dev}:{info.st_ino} {old_revision} {old_id} {old_id}\n'
+        if case.startswith('maintenance_') and not case.startswith('maintenance_rollback_'):
+            if case == 'maintenance_previous_candidate':
+                (staging / 'collector-image-id').write_text(old_id)
+            names = ('source-files.sha256', 'rootfs-manifest.json', 'collector-manifest.json', 'image-id',
+                     'collector-image-id', 'image.tar.sha256', 'collector-image.tar.sha256')
+            transport = staging / 'transport-files.sha256'
+            transport.write_text(''.join(f'{hashlib.sha256((staging / n).read_bytes()).hexdigest()}  {n}\n' for n in names))
+            (state / 'trusted-seal').write_text(hashlib.sha256(transport.read_bytes()).hexdigest())
+        elif not (is_check or is_rollback or case == 'unadmitted_deploy'):
+            active.write_text(origin_pair.replace(old_id, new_id) if case == 'foreign_card_pair' else origin_pair)
         live_po = state / f'po-current-{slot}'
         if case != 'missing_receipt' and not issuer_absent:
             (live_po / 'rootfs-manifest.json').write_text(manifest(new_revision if initial == 'new' else old_revision, new_id if initial == 'new' else old_id))
@@ -893,6 +923,15 @@ for slot, case in runs:
             image_file(state, collector_rollback).write_text('old')
             image_file(state, issuer_rollback).write_text('old')
             backup.mkdir()
+            info = backup.stat()
+            candidate_pair = f'{backup} {info.st_dev}:{info.st_ino} {new_revision} {new_id} {new_id}\n'
+            names = ('image-id', 'collector-image-id', 'rootfs-manifest.json', 'collector-manifest.json',
+                     'image.tar.sha256', 'collector-image.tar.sha256', 'source-files.sha256')
+            (backup / 'candidate-inputs.sha256').write_text(''.join(
+                f'{hashlib.sha256((staging / n).read_bytes()).hexdigest()}  {n}\n' for n in names))
+            (backup / 'card-origin').write_text(origin_pair)
+            (backup / 'card-candidate').write_text(candidate_pair)
+            active.write_text(candidate_pair.replace(str(backup), str(prior_backup)) if case == 'rollback_stale' else candidate_pair)
             (backup / 'snapshot-complete').touch()
             previous_pair = current / 'artifacts/worker-profile/releases' / backup.name / service / 'previous'
             previous_pair.mkdir(parents=True)
@@ -967,13 +1006,17 @@ for slot, case in runs:
                 continue
             if scenario == 'foreign_guard':
                 guards[1].write_text('operator guard\n')
-            (state / 'live-pgbouncer.ini').rename(state / 'stopped-pgbouncer.ini')
             fail_quiesce = scenario.startswith('load_') or scenario in (
                 'mask_failure', 'stop_failure', 'stop_other_invocation', 'stop_missing_job', 'stop_stale_job',
                 'stop_peer_restarted', 'mask_race', 'guard_failure', 'guard_check_failure', 'foreign_guard', 'arm_collector_profile',
                 'stop_control_pid', 'collector_143', 'collected_143', 'died_duplicate', 'died_other_cid', 'died_stale',
                 'stop_terminal_invocation', 'stop_leftover_id')
             result = invoke('quiesce', scenario if fail_quiesce else '')
+            if scenario in ('direct_origin', 'previous_candidate'):
+                require(result.returncode != 0 and not hold.exists() and
+                        not any(c.startswith(('podman load ', 'systemctl stop ', held_start)) for c in calls_now()),
+                        f'{slot}: wrong original route or retained candidate cannot open the card window', result)
+                continue
             if scenario.startswith('load_'):
                 require(result.returncode != 0 and not hold.exists() and
                         not any(c.startswith(('mask link ', 'systemctl stop ', 'systemctl restart ')) for c in calls_now()),
@@ -1025,11 +1068,13 @@ for slot, case in runs:
                 require(rejected.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
                         f'{slot} {scenario}: incomplete hold cannot resume', rejected)
                 continue
-            require(result.returncode == 0, f'{slot} {scenario}: live direct pair quiesced', result)
-            require(not any(c.startswith('podman exec holo-pgbouncer ') for c in calls_now()),
-                    f'{slot}: first quiesce does not require a pooler', result)
-            (state / 'stopped-pgbouncer.ini').rename(state / 'live-pgbouncer.ini')
+            require(result.returncode == 0, f'{slot} {scenario}: pooled original pair quiesced', result)
             assert_held(result)
+            if scenario == 'success':
+                before = len(calls_now())
+                refused = invoke('rollback')
+                require(refused.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
+                        f'{slot}: card transition never issues rollback authority, even on the same pool', refused)
             require((hold / 'quiesced').read_text() == 'guarded-stop-v1\n' and not any(g.exists() for g in guards),
                     f'{slot}: both guards sealed before versioned receipt', result)
             require((release / 'previous/unit.container').read_text() == installed_definition and not (release / 'candidate').exists(),
@@ -1088,8 +1133,17 @@ for slot, case in runs:
                 (state / 'live-pgbouncer.ini').unlink()
             elif scenario == 'capacity_query_failed':
                 (state / 'pooler-query-failed').touch()
-            if scenario == 'wrong_endpoint':
-                unit_path.write_text(installed_definition)
+            if scenario == 'wrong_endpoint' or scenario.startswith('rollback_'):
+                unit_path.write_text(installed_definition.replace('6432', '5432').replace('6433', '5433'))
+            elif scenario == 'origin_receipt_changed':
+                (backup / 'collector.endpoint').write_text('holo-postgres|5432\n' if slot == 'c' else '100.100.1.8|5433\n')
+            elif scenario == 'copied_hold_receipt':
+                (hold / 'card-candidate').unlink()
+                shutil.copyfile(backup / 'card-candidate', hold / 'card-candidate')
+            elif scenario == 'lost_seal':
+                (backup / 'transport.sha256').unlink()
+            elif scenario == 'seal_changed':
+                (staging / 'transport-files.sha256').write_text('other transport\n')
             if scenario == 'source_changed':
                 if slot == 'c':
                     (current / '.source-revision').write_text('c' * 40)
@@ -1140,7 +1194,6 @@ for slot, case in runs:
                 if scenario == 'rollback_cross':
                     continue
                 unit_path.write_text(installed_definition)
-                (state / 'live-pgbouncer.ini').unlink()
                 failed_restore = scenario in ('rollback_image', 'rollback_profile', 'rollback_unhealthy', 'rollback_issuer_failure', 'rollback_replaced')
                 before = len(calls_now())
                 result = invoke('rollback', scenario if failed_restore else '')
@@ -1189,6 +1242,10 @@ for slot, case in runs:
                             f'{slot}: candidate pair running', result)
                     checked = invoke('check')
                     require(checked.returncode == 0, f'{slot}: completion check after resume', checked)
+                    before = len(calls_now())
+                    refused = invoke('rollback')
+                    require(refused.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
+                            f'{slot}: accepted card transition cannot resurrect the previous publisher', refused)
                 else:
                     require(hold.exists() and not any(c.startswith('pair activate ') and c.endswith('/previous') for c in subsequent),
                             f'{slot} {scenario}: no automatic direct restoration', result)
@@ -1330,9 +1387,11 @@ for slot, case in runs:
             require((backup / 'cutover-outcome').read_text().strip() == 'outcome_unknown', f'{label}: outcome receipt retained', result)
             require(not any(call.startswith('pair activate ') and call.endswith('/previous') for call in calls), f'{label}: no previous pair activation', result)
             require(len(restarts) == 1, f'{label}: no restoration restart while manager outcome is unknown', result)
-        elif case in ('missing_receipt', 'collector_stopped', 'inventory_failure'):
+        elif case in ('missing_receipt', 'collector_stopped', 'inventory_failure', 'unadmitted_deploy', 'foreign_card_pair'):
             # 이전 pair 기준점을 만들 수 없으면 백업·태그·적재 전에 원인을 남기고 멈춘다.
             require(not backup.exists() and not changed, f'{label}: no partial backup or runtime change', result)
+        elif case == 'rollback_stale':
+            require(not changed, f'{label}: copied release receipt is not the active owner', result)
         elif is_check:
             require(not changed, f'{label}: check has no mutations', result)
             require(('completion verified' in result.stdout) == (expected_status == 0),
