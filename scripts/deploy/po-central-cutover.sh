@@ -5,7 +5,7 @@ set -Eeuo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "$root/scripts/deploy/lib/source-revision.sh"
 [[ "$(hostname -s)" == kapu ]] || { echo 'image build/export is restricted to kapu' >&2; exit 1; }
-usage() { echo "Usage: $0 <c|b> deploy | <c|b> rollback|check <remote-root>/backups/po-<slot>-TIMESTAMP" >&2; exit 2; }
+usage() { echo "Usage: $0 <c|b> deploy|quiesce | <c|b> resume|rollback|check <remote-root>/backups/po-<slot>-TIMESTAMP" >&2; exit 2; }
 [[ $# -ge 2 && $# -le 3 ]] || usage
 slot="$1"
 shift
@@ -18,12 +18,14 @@ esac
 slot_upper="${slot^^}"
 ssh_var="PO_${slot_upper}_SSH_TARGET" deploy_var="APPROVE_PO_${slot_upper}_DEPLOY" rollback_var="APPROVE_PO_${slot_upper}_ROLLBACK"
 mode="$1"
-[[ "$mode" == deploy || "$mode" == rollback || "$mode" == check ]] || usage
+[[ "$mode" == deploy || "$mode" == quiesce || "$mode" == resume || "$mode" == rollback || "$mode" == check ]] || usage
 ssh_target="${!ssh_var:-}"
 [[ -n "$ssh_target" ]] || { echo "set $ssh_var to the approved collector $slot SSH host" >&2; exit 2; }
 [[ "$ssh_target" =~ ^[A-Za-z0-9@._-]+$ ]] || exit 2
-if [[ "$mode" == deploy ]]; then
+if [[ "$mode" == deploy || "$mode" == quiesce ]]; then
   [[ $# -eq 1 && "${!deploy_var:-}" == true ]] || { echo "$deploy_var=true required" >&2; exit 2; }
+elif [[ "$mode" == resume ]]; then
+  [[ $# -eq 2 && "${!deploy_var:-}" == true ]] || { echo "$deploy_var=true required" >&2; exit 2; }
 elif [[ "$mode" == rollback ]]; then
   [[ $# -eq 2 && "${!rollback_var:-}" == true ]] || { echo "$rollback_var=true required" >&2; exit 2; }
 else
@@ -31,7 +33,7 @@ else
 fi
 version="$(cat "$root/hololive/hololive-api/VERSION")"
 [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
-if [[ "$mode" == deploy ]]; then
+if [[ "$mode" == deploy || "$mode" == quiesce ]]; then
   revision="$(deploy_source_revision "$root")"
   change_id="$(date -u +%Y%m%dT%H%M%SZ)"
   backup="$remote_root/backups/po-$slot-$change_id"
@@ -61,6 +63,10 @@ PY
   (cd "$local_stage" && sha256sum collector-image.tar > collector-image.tar.sha256)
   python3 "$root/scripts/build/po-sandbox-manifest.py" image-ids "$local_stage/collector-image.tar" \
     "sha256:$(podman image inspect -f '{{.Id}}' "$collector_image")" > "$local_stage/collector-image-id"
+  # 이미지와 같은 검토 source의 bounded 입력만 전송하고, 재개 때도 이 바이트를 대조한다.
+  (cd "$root"
+    while IFS= read -r file; do sha256sum "$file"; done < scripts/deploy/po-central-files.txt
+  ) > "$local_stage/source-files.sha256"
   ssh "$ssh_target" "sudo -n install -d -o root -g root -m 0700 '$staging'"
   rsync -a --rsync-path='sudo -n rsync' \
     --files-from="$root/scripts/deploy/po-central-files.txt" "$root/" "$ssh_target:$staging/"
@@ -68,6 +74,7 @@ PY
     "$local_stage/issuer/image.tar" "$local_stage/issuer/image.tar.sha256" \
     "$local_stage/issuer/image-id" "$local_stage/issuer/rootfs-manifest.json" "$local_stage/collector-image.tar" \
     "$local_stage/collector-image.tar.sha256" "$local_stage/collector-image-id" "$local_stage/collector-manifest.json" \
+    "$local_stage/source-files.sha256" \
     "$ssh_target:$staging/"
   ssh "$ssh_target" "sudo -n chown -R root:root '$staging' && sudo -n chmod -R go-w '$staging'"
 else
@@ -78,6 +85,9 @@ else
   revision="$(ssh "$ssh_target" "sudo -n cat '$backup/candidate.revision'")"
   version="$(ssh "$ssh_target" "sudo -n cat '$backup/candidate.version'")"
   [[ "$revision" =~ ^[0-9a-f]{40}$ && "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
+  if [[ "$mode" == resume ]]; then
+    [[ "$(deploy_source_revision "$root")" == "$revision" ]] || { echo 'resume source differs from retained candidate' >&2; exit 1; }
+  fi
 fi
 ssh "$ssh_target" sudo -n bash -s -- "$slot" "$mode" "$staging" "$backup" "$revision" "$version" \
   < "$root/scripts/deploy/lib/po-central-remote.sh"

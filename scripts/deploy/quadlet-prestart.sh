@@ -12,6 +12,8 @@ self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${self_dir}/lib/admin-bind.sh"
 # shellcheck source=scripts/deploy/lib/public-bind-mounts.sh
 . "${self_dir}/lib/public-bind-mounts.sh"
+# shellcheck source=scripts/deploy/lib/postgres-capacity.sh
+. "${self_dir}/lib/postgres-capacity.sh"
 
 die() { echo "[quadlet-prestart] $*" >&2; exit 1; }
 
@@ -23,6 +25,7 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     run_dir=/run/hololive-bot
     secrets_dir=/etc/stack-secrets/hololive-bot
     installed_firewall=/etc/nftables.d/admin-dashboard-ingress.nft
+    quadlet_dir=/etc/containers/systemd/hololive-bot
 else
     test_root="${HOLOLIVE_QUADLET_TEST_ROOT:?non-root execution is only for tests and requires HOLOLIVE_QUADLET_TEST_ROOT}"
     deploy_root="${test_root}/deploy"
@@ -31,6 +34,40 @@ else
     run_dir="${test_root}/run"
     secrets_dir="${test_root}/secrets"
     installed_firewall="${test_root}/installed.nft"
+    quadlet_dir="${test_root}/units"
+fi
+
+render_env=false
+app_version_override=
+target="${1:-}"
+if [[ "$target" == --render-env ]]; then
+    [[ "$#" -eq 3 || "$#" -eq 5 ]] \
+        || die "usage: --render-env <unit-name> <private-output-directory> [--app-version <version>]"
+    render_env=true
+    target="$2"
+    case "$target" in
+        hololive-api|hololive-alarm-worker|hololive-youtube-collector-c) ;;
+        *) die "unsupported render-env unit" ;;
+    esac
+    if [[ "$#" -eq 5 ]]; then
+        [[ "$4" == --app-version && "$target" == hololive-api ]] \
+            || die "--app-version is only supported for hololive-api"
+        # retained pair의 dropin_contents와 같은 허용 문자 계약을 쓴다.
+        [[ "$5" =~ ^[0-9A-Za-z.+-]+$ ]] || die "retained APP_VERSION is not safe for a Quadlet drop-in"
+        app_version_override="$5"
+    fi
+    [[ -d "$3" && ! -L "$3" && -O "$3" ]] \
+        || die "render-env output must be a caller-owned private directory"
+    [[ "$(stat -c '%a' -- "$3")" == 700 ]] \
+        || die "render-env output directory mode must be 0700"
+    env_dir="$(cd -- "$3" && pwd -P)"
+    case "$env_dir/" in
+        /run/hololive-bot/*|"$run_dir/"*) die "render-env output must not use the runtime directory" ;;
+    esac
+    # 새 전용 디렉터리만 받으며 숨김 파일·끊어진 symlink도 기존 출력으로 본다.
+    if ! (shopt -s nullglob dotglob; entries=("$env_dir/"*); [[ "${#entries[@]}" -eq 0 ]]); then
+        die "render-env output directory must be empty"
+    fi
 fi
 
 render_env=false
@@ -190,6 +227,14 @@ api_release_version() {
 }
 
 case "$target" in
+    hololive-api|hololive-alarm-worker|hololive-youtube-collector-c)
+        validate_env_file_syntax "$compose_env"
+        if [[ "$render_env" != true ]]; then
+            postgres_capacity_assert_service "$deploy_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
+        fi
+        ;;
+esac
+case "$target" in
     collector-enabled)
         # ExecCondition: 1이면 건너뛰고(unit 실패 아님), 잘못된 값은 255로 실패시킨다.
         case "${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}" in
@@ -203,6 +248,7 @@ case "$target" in
         require_values POSTGRES_PORT_BIND_IP
         require_secret_file "${secrets_dir}/postgres-tls/server.crt"
         require_secret_file "${secrets_dir}/postgres-tls/server.key"
+        require_secret_file "${secrets_dir}/certs/postgres-ca.pem"
         wait_for_tailnet_address POSTGRES_PORT_BIND_IP
         admin_postgres_bind_assert "$deploy_root" "$POSTGRES_PORT_BIND_IP"
         admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
@@ -217,6 +263,20 @@ case "$target" in
             'HOLOLIVE_COLLECTOR_C_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
             'HOLOLIVE_COLLECTOR_D_PASSWORD=HOLOLIVE_COLLECTOR_D_PASSWORD!' \
             'HOLOLIVE_REPLICATOR_PASSWORD=HOLOLIVE_REPLICATOR_PASSWORD'
+        ;;
+    holo-pgbouncer)
+        validate_env_file_syntax "$compose_env"
+        require_values POSTGRES_PORT_BIND_IP
+        require_secret_file "${secrets_dir}/certs/postgres-ca.pem"
+        for tls_file in server.crt server.key backend-client.crt backend-client.key; do
+            require_secret_file "${secrets_dir}/pgbouncer/${tls_file}"
+        done
+        wait_for_tailnet_address POSTGRES_PORT_BIND_IP
+        admin_postgres_bind_assert "$deploy_root" "$POSTGRES_PORT_BIND_IP"
+        admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
+        install -d -m 0755 -- "${run_dir}/pgbouncer"
+        postgres_capacity_write_quadlet_config "$deploy_root" "$compose_env" "$quadlet_dir" \
+            "${run_dir}/pgbouncer/pgbouncer.ini"
         ;;
     valkey-cache)
         validate_env_file_syntax "$compose_env"

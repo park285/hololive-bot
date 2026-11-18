@@ -58,7 +58,7 @@ func bootstrapLoginRoles(ctx context.Context) error {
 	scraperGroup := runtimepolicy.PostgresScraperRoleUser
 	database := envDefault("PGDATABASE", "hololive")
 
-	if err := ensureLoginRoles(ctx, adminConnString("postgres", adminUser, adminPassword), scraperGroup, credentials, database); err != nil {
+	if err := ensureLoginRoles(ctx, adminConnString(database, adminUser, adminPassword), scraperGroup, credentials, database); err != nil {
 		return fmt.Errorf("ensure login roles: %w", err)
 	}
 
@@ -72,18 +72,21 @@ func bootstrapLoginRoles(ctx context.Context) error {
 func loginCredentialsFromEnv(adminPassword string) ([]loginCredential, error) {
 	credentials := make([]loginCredential, 0, len(loginRoles))
 
+	adminPassword = pgxSCRAMPassword(adminPassword)
+
 	for _, role := range loginRoles {
 		password := os.Getenv(role.env)
 		if strings.TrimSpace(password) == "" {
 			return nil, fmt.Errorf("%s is required for login role bootstrap", role.env)
 		}
 
-		if password == adminPassword {
-			return nil, fmt.Errorf("POSTGRES_ADMIN_PASSWORD and %s must be distinct", role.env)
-		}
-
 		if _, err := pgxdb.SCRAMVerifier(password); err != nil {
 			return nil, fmt.Errorf("%s is not a compatible PostgreSQL password: %w", role.env, err)
+		}
+
+		password = pgxSCRAMPassword(password)
+		if password == adminPassword {
+			return nil, fmt.Errorf("POSTGRES_ADMIN_PASSWORD and %s must be distinct", role.env)
 		}
 
 		for _, previous := range credentials {
@@ -119,6 +122,10 @@ func ensureLoginRoles(
 	}
 
 	defer func() { err = closeConn(ctx, conn, "admin", err) }()
+
+	if _, err := conn.Exec(ctx, mustSQL("bootstrap_pooler_auth.sql")); err != nil {
+		return fmt.Errorf("bootstrap: configure pooler authentication: %w", err)
+	}
 
 	if err := upsertScraperGroupRole(ctx, conn, scraperGroup); err != nil {
 		return fmt.Errorf("upsert scraper group role: %w", err)
@@ -220,9 +227,27 @@ func upsertLoginRole(ctx context.Context, conn roleConnection, user, password st
 		return fmt.Errorf("bootstrap: check login role: %w", err)
 	}
 
+	// 기존 verifier를 유지할 때도 PostgreSQL·pgx의 비밀번호 정규화 검증을 생략하지 않는다.
 	verifier, err := pgxdb.SCRAMVerifier(password)
 	if err != nil {
 		return fmt.Errorf("bootstrap: prepare login password: %w", err)
+	}
+
+	if exists {
+		var current string
+
+		if err := conn.QueryRow(ctx, mustSQL("read_role_password.sql"), user).Scan(&current); err != nil {
+			return fmt.Errorf("bootstrap: read login password: %w", err)
+		}
+
+		matches, err := matchesValidatedSCRAMPassword(password, current)
+		if err != nil {
+			return fmt.Errorf("bootstrap: compare login password: %w", err)
+		}
+
+		if matches {
+			verifier = current
+		}
 	}
 
 	roleIdent := pgx.Identifier{user}.Sanitize()

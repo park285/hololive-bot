@@ -17,7 +17,11 @@ while IFS='|' read -r owner _service _key _source _instances maximum _role; do
   if [[ "$owner" == youtube-collector-a ]]; then AP_POSTGRES_POOL_MAX_CONNS="$maximum"; fi
 done < "$REPO_ROOT/scripts/ci/postgres-capacity-policy.tsv"
 [[ "$AP_POSTGRES_POOL_MAX_CONNS" =~ ^[1-9][0-9]*$ ]] || { echo 'collector capacity policy missing' >&2; exit 1; }
-AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-5433}"
+AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-6433}"
+if [[ "$AP_POSTGRES_PORT" != 6433 ]]; then
+  echo "AP_POSTGRES_PORT must be the collector pooler port (6433)" >&2
+  exit 2
+fi
 
 case "$MODE" in
   --dry-run|--apply|--prepare-profile) ;;
@@ -45,10 +49,6 @@ if [[ ! "$AP_REQUIRED_UDP_BUFFER_BYTES" =~ ^[0-9]+$ ]]; then
 fi
 if [[ ! "$AP_SWAPFILE_SIZE_MIB" =~ ^[1-9][0-9]*$ ]]; then
   echo "AP_SWAPFILE_SIZE_MIB must be a positive integer" >&2
-  exit 2
-fi
-if [[ ! "$AP_POSTGRES_PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#${AP_POSTGRES_PORT} < 1 || 10#${AP_POSTGRES_PORT} > 65535 )); then
-  echo "AP_POSTGRES_PORT must be a valid TCP port" >&2
   exit 2
 fi
 
@@ -141,6 +141,8 @@ cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh" "$artifact_dir
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh" "$artifact_dir/bin/ap-host-native-po.sh"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh" "$artifact_dir/bin/ap-host-native-cutover.sh"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-rollback-check.sh" "$artifact_dir/bin/ap-host-native-rollback-check.sh"
+cp "$REPO_ROOT/scripts/deploy/lib/compose-env.sh" "$artifact_dir/bin/compose-env.sh"
+cp "$REPO_ROOT/scripts/deploy/lib/postgres-endpoint.sh" "$artifact_dir/bin/postgres-endpoint.sh"
 cp "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py" "$artifact_dir/bin/worker-profile-pair.py"
 
 native_revision="$(deploy_source_revision "$REPO_ROOT")"
@@ -197,6 +199,8 @@ REMOTE
 )"
 
 {
+  cat "$REPO_ROOT/scripts/deploy/lib/compose-env.sh"
+  cat "$REPO_ROOT/scripts/deploy/lib/postgres-endpoint.sh"
   cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
   cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
   cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh"
@@ -204,7 +208,18 @@ REMOTE
   cat "$NODE_VERSION_LIB"
   cat "$READINESS_LIB"
   cat "$REMOTE_APPLY_LIB"
-} | ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" "$native_revision"
+} | ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" "$native_revision" || {
+  status=$?
+  if (( status == 255 )); then
+    echo 'native cutover outcome unknown after transport loss; do not retry or release a guard' >&2
+  fi
+  exit "$status"
+}
 
-CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$AP_NAME"
-CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"
+for observer in "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh"; do
+  CHANGE_STARTED_AT="$change_started_at" "$observer" "$AP_NAME" || {
+    status=$?
+    echo 'native post-cutover observation failed; current state unconfirmed; no automatic change' >&2
+    exit "$status"
+  }
+done

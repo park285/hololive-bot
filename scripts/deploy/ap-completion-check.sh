@@ -63,8 +63,8 @@ require_node_version node
 
 if [[ "$po_expected_presence" == present ]]; then
   po_validate_release "$current_link"
-  systemctl is-active --quiet hololive-youtube-po.socket
-  systemctl is-active --quiet hololive-youtube-po.service
+  systemctl is-active --quiet "$po_socket"
+  systemctl is-active --quiet "$po_service"
   po_wait_ready "$current_link"
   python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert (m["source_revision"],m["version"],m["go"]["goarch"]) == (open(sys.argv[2]).read().strip(),open(sys.argv[3]).read().strip(),"amd64")' \
     "$current_link/manifest.json" "$current_link/po-sandbox/revision" "$current_link/po-sandbox/version"
@@ -121,20 +121,14 @@ if ! journal_output="$(journalctl -u "$unit" --since "$journal_since" --no-pager
   echo "failed to read completion logs for $unit" >&2
   exit 1
 fi
-if grep -E 'ERR|panic|permission denied|x509|no such file' <<<"$journal_output"; then
+grep_status=0
+grep -E 'ERR|panic|permission denied|x509|no such file' <<<"$journal_output" >/dev/null || grep_status=$?
+if (( grep_status != 1 )); then
+  echo 'collector startup journal check failed' >&2
   exit 1
 fi
-# issuer는 generation이 퇴역할 때마다 exit 0으로 재기동하므로 NRestarts가 아니라 종료 결과로 판정한다.
 if [[ "$po_expected_presence" == present ]]; then
-  [[ "$(systemctl show hololive-youtube-po.service -p Result --value)" == success ]]
-  [[ "$(systemctl show hololive-youtube-po.service -p ExecMainStatus --value)" == 0 ]]
-  if ! po_journal="$(journalctl -u hololive-youtube-po.service --since "$journal_since" --no-pager)"; then
-    echo "failed to read completion logs for hololive-youtube-po.service" >&2
-    exit 1
-  fi
-  if grep -F 'Failed with result' <<<"$po_journal"; then
-    exit 1
-  fi
+  po_require_running_without_failure "$journal_since"
 fi
 
 echo 'collector AP completion check passed'

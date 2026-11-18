@@ -17,6 +17,8 @@ pass() { echo "[PASS] $*"; }
 . "${RELEASE_PATH_LIB}"
 # shellcheck source=scripts/deploy/lib/ap-host-native-rollback-check.sh
 . "${ROLLBACK_CHECK_LIB}"
+. "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/postgres-endpoint.sh"
 
 
 write_host_env_fn="$(awk '/^write_host_env\(\) \{/,/^}$/' "${DEPLOY}")"
@@ -28,9 +30,9 @@ elif (
   export service="youtube-collector-a"
   export port="30005"
   export release_id="profile-pair-fixture"
-  export AP_POSTGRES_HOST="100.100.1.8"
-  export AP_POSTGRES_PORT="5433"
-  export AP_POSTGRES_POOL_MAX_CONNS=7
+  export REPO_ROOT="${ROOT_DIR}"
+  unset AP_POSTGRES_PORT
+  eval "$(awk '/^AP_POSTGRES_HOST=""/,/^AP_POSTGRES_PORT=/' "${DEPLOY}")"
   export AP_SSH_HOST="100.100.1.6"
   eval "${write_host_env_fn}"
   write_host_env "${generated_env}"
@@ -40,8 +42,8 @@ elif (
   elif grep -Eq '^SETTINGS_DIR=' "${generated_env}"; then
     record_fail "generated host env contents still include SETTINGS_DIR"
   elif ! grep -Fxq 'POSTGRES_HOST=100.100.1.8' "${generated_env}" ||
-       ! grep -Fxq 'POSTGRES_PORT=5433' "${generated_env}"; then
-    record_fail "generated host env must use the current Seoul primary endpoint"
+       ! grep -Fxq 'POSTGRES_PORT=6433' "${generated_env}"; then
+    record_fail "generated host env must use the central pooler endpoint"
   else
     pass "generated host env contents have 0 CACHE lines"
     pass "generated host env contents have 0 SETTINGS_DIR lines"
@@ -49,6 +51,17 @@ elif (
   fi
 else
   record_fail "ap-host-native write_host_env did not produce generated env contents"
+fi
+if direct_error="$(
+  hostname() { echo kapu; }
+  export -f hostname
+  AP_POSTGRES_PORT=5433 "$DEPLOY" osaka --dry-run 2>&1
+)"; then
+  record_fail "ap-host-native deploy accepted the direct database port"
+elif [[ "$direct_error" == 'AP_POSTGRES_PORT must be the collector pooler port (6433)' ]]; then
+  pass "ap-host-native deploy rejects the direct database port before any build or transport"
+else
+  record_fail "ap-host-native deploy did not reject the direct database port at entry"
 fi
 rm -rf "${cfg008_dir}"
 
@@ -123,7 +136,7 @@ env XDG_RUNTIME_DIR="${native_test_runtime}" DBUS_SESSION_BUS_ADDRESS="unix:path
   -p "WorkingDirectory=${ROOT_DIR}" \
   bash "${ROOT_DIR}/scripts/deploy/ap-host-native-cutover_test.sh"
 
-native_units_fns="$(awk '/^stop_collector_unit_and_require_inactive\(\) \{/,/^}$/; /^stop_native_units_and_require_inactive\(\) \{/,/^}$/; /^native_restore_recorded_runtime\(\) \{/,/^}$/; /^restore_native_after_failed_cutover\(\) \{/,/^}$/; /^native_cutover_failed\(\) \{/,/^}$/; /^arm_native_cutover_restore\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
+native_units_fns="$(awk '/^stop_native_units_and_require_inactive\(\) \{/,/^}$/; /^native_restore_recorded_runtime\(\) \{/,/^}$/; /^restore_native_after_failed_cutover\(\) \{/,/^}$/; /^native_cutover_failed\(\) \{/,/^}$/; /^arm_native_cutover_restore\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
 # cutover 최상위 정지 단계: 복원 ERR trap 설치부터 새 release의 첫 설치 변경 직전까지다.
 cutover_stop_step='arm_native_cutover_restore; native_cutover_run stop stop_native_units_and_require_inactive'
 stop_fixture="$(mktemp -d)"
@@ -144,6 +157,11 @@ run_native_units() (
   # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 경로입니다.
   releases_root="${state}/releases" previous_link="${state}/previous"
   mkdir -p "${old_target}"
+  release_dir="${state}/new-release"
+  mkdir -p "${old_target}/rollback-contract" "${release_dir}"
+  printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n' > "${release_dir}/youtube-collector-host.env"
+  cp "${release_dir}/youtube-collector-host.env" "${old_target}/rollback-contract/youtube-collector-host.env"
+  cp "${release_dir}/youtube-collector-host.env" "${host_env}"
   # 기존 unit 순서 fixture는 실제 명령 완료를 동기 실행합니다. 신호/receipt는 별도 실제 child 회귀가 소유합니다.
   native_cutover_run() {
     shift
@@ -157,7 +175,7 @@ run_native_units() (
   native_rollback_validate() { [[ -d "$1" ]]; }
   sudo() {
     [[ "${1:-}" != "-n" ]] || shift
-    if [[ "$1" == systemctl ]]; then
+    if [[ "$1" == systemctl || "$1" == bash ]]; then
       "$@"
     else
       printf 'sudo %s\n' "$*" >>"${state}/calls"
@@ -169,10 +187,22 @@ run_native_units() (
     case "$1" in
       cat | daemon-reload | enable) return 0 ;;
       is-active) [[ -e "${state}/active/${*: -1}" ]] ;;
+      show)
+        case "$4" in
+          LoadState)
+            if [[ -e "${state}/installed/$2" ]]; then echo loaded; else echo not-found; fi ;;
+          ActiveState)
+            if [[ -e "${state}/active/$2" ]]; then echo active; else echo inactive; fi ;;
+          UnitFileState)
+            if [[ -e "${state}/enabled/$2" ]]; then echo enabled; else echo disabled; fi ;;
+          *) return 1 ;;
+        esac
+        ;;
       stop | disable)
         [[ "$1" == stop ]] || shift
         shift
         for target in "$@"; do
+          if [[ ! -e "${state}/stuck-enable-${target}" ]]; then rm -f "${state}/enabled/${target}"; fi
           [[ "${target}" == "${unit}" && -e "${state}/collector_sticks" ]] && continue
           rm -f "${state}/active/${target}"
           [[ "${target}" != "${po_socket}" ]] || rm -f "${state}/active/${po_service}"
@@ -200,16 +230,16 @@ run_native_case() {
 stop_case() {
   local state="${stop_fixture}/$1" unit_name
   shift
-  mkdir -p "${state}/active"
+  mkdir -p "${state}/active" "${state}/enabled" "${state}/installed"
   for unit_name in "$@"; do
-    touch "${state}/active/${unit_name}"
+    touch "${state}/active/${unit_name}" "${state}/enabled/${unit_name}" "${state}/installed/${unit_name}"
   done
   printf '%s\n' "${state}"
 }
 running_units=(hololive-youtube-po.socket hololive-youtube-po.service hololive-youtube-collector@youtube-collector-a.service)
 stops_po_before_collector() {
   local po_stop_line collector_stop_line
-  po_stop_line="$(grep -nFx 'stop hololive-youtube-po.socket' "$1/calls" | head -1 | cut -d: -f1)"
+  po_stop_line="$(grep -nEx '(stop|disable --now) hololive-youtube-po\.socket' "$1/calls" | head -1 | cut -d: -f1)"
   collector_stop_line="$(grep -nFx 'disable --now hololive-youtube-collector@youtube-collector-a.service' "$1/calls" | head -1 | cut -d: -f1)"
   [[ -n "${po_stop_line}" && -n "${collector_stop_line}" ]] && (( po_stop_line < collector_stop_line ))
 }
@@ -217,6 +247,7 @@ stops_po_before_collector() {
 running_state="$(stop_case running "${running_units[@]}")"
 if run_native_stop "${running_state}" >/dev/null &&
    [[ -z "$(ls -A "${running_state}/active")" ]] &&
+   [[ -z "$(ls -A "${running_state}/enabled")" ]] &&
    stops_po_before_collector "${running_state}"; then
   pass "ap-host-native cutover stops the PO issuer before the collector can retire its generation"
 else
@@ -250,6 +281,15 @@ else
   pass "ap-host-native cutover fails closed while the collector stays active"
 fi
 
+for brake_unit in "${running_units[@]}"; do
+  stale_enable_state="$(stop_case "enabled-${brake_unit}" "${running_units[@]}")"
+  touch "${stale_enable_state}/stuck-enable-${brake_unit}"
+  if run_native_stop "${stale_enable_state}" >/dev/null 2>&1; then
+    record_fail "ap-host-native cutover accepted reboot-enabled ${brake_unit}"
+  else
+    pass "ap-host-native cutover rejects reboot-enabled ${brake_unit}"
+  fi
+done
 # 실패한 cutover는 ERR trap으로 복원하고 원래 실패 상태(여기서는 false의 1)로 끝난다.
 failed_cutover='set -Eeuo pipefail; arm_native_cutover_restore; false'
 restore_warning='could not be restored'
@@ -392,6 +432,7 @@ chmod +x "${rollback_fixture}/bin/youtube-collector" \
   "${rollback_fixture}/bin/youtube-collector-wrapper" \
   "${rollback_fixture}/bin/healthcheck"
 printf 'APP_ENV=production\nSTACK_WORKER_PROFILE_FILE=%s/worker-profile.json\n' "$rollback_fixture" > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
+printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n' >> "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
 printf '{}\n' > "$rollback_fixture/worker-profile.json"
 (cd "$rollback_fixture" && sha256sum bin/youtube-collector worker-profile.json > SHA256SUMS)
 printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
@@ -410,6 +451,16 @@ printf 'absent\n' > "${rollback_fixture}/rollback-contract/po-unit-presence"
     rollback-contract/po-unit-presence \
     > rollback-contract/SHA256SUMS
 )
+native_current_env="${tmp}/native-current.env"
+for native_port in 5433 6433 invalid ''; do
+  printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=%s\n' "${native_port}" > "${native_current_env}"
+  if [[ "${native_port}" == 6433 ]]; then
+    PATH="${tmp}/rollback-bin:${PATH}" native_rollback_endpoint_validate "${rollback_fixture}" "${native_current_env}" ||
+      record_fail "native same-endpoint rollback was rejected"
+  elif PATH="${tmp}/rollback-bin:${PATH}" native_rollback_endpoint_validate "${rollback_fixture}" "${native_current_env}" >"${tmp}/endpoint.err" 2>&1; then
+    record_fail "native unsafe endpoint rollback accepted"
+  fi
+done
 
 if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}"; then
   pass "native rollback validation accepts a complete integrity fixture"
@@ -493,7 +544,7 @@ fi
 restore_payload="${tmp}/success/call-2.stdin"
 
 # 수동 rollback이 원격에 보낸 payload에서 검증 뒤 첫 복원 변경 전까지의 정지 단계를 같은 가짜 systemctl로 실행한다.
-rollback_stop_step="$(awk '/^native_rollback_validate "[$]previous_target"$/ { on = 1; next } on && /^sudo -n install / { exit } on' "${restore_payload}")"
+rollback_stop_step="$(awk '/^native_rollback_endpoint_validate "[$]previous_target" "[$]host_env"$/ { on = 1; next } on && /^sudo -n install / { exit } on' "${restore_payload}")"
 rollback_state="$(stop_case rollback "${running_units[@]}")"
 run_native_case "${rollback_state}" "set -euo pipefail; ${rollback_stop_step}"
 if [[ -n "${rollback_stop_step}" ]] && (( native_rc == 0 )) &&

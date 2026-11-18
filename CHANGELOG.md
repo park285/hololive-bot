@@ -8,6 +8,12 @@
 
 ## 미출시
 
+- **PostgreSQL transaction pooling:** 중앙/API/worker/c와 AP a·b·d를 역할별 상한을 유지한 PgBouncer 경로로 전환하는 소스를 추가했습니다. DB의 현재 SCRAM verifier를 cert-only `auth_query`로 읽어 앱 비밀번호를 pooler 파일에 복제하지 않고, 같은 비밀번호 bootstrap은 verifier를 유지합니다. PgBouncer 1.26.1의 startup timeout 오염은 upstream `22d0aa1`을 backport한 공통 `1.26.1-guc1` 이미지로 수정했습니다. pgx prepared backend 교체·동명 동시 사용·재연결, timeout/cancel, control 예약, 실제 암호 회전과 장애 복구를 격리 환경에서 검증했습니다. direct↔pooler rollback은 HBA·endpoint의 조정 복구 전 재기동을 거부합니다. ChatBotGo는 같은 native 이미지에 별도 인스턴스·인증 DB·연결 예산을 사용합니다. 운영 인증서·DB/HBA·방화벽·서비스 전환은 별도 승인 사항입니다. Fallback delta: none.
+- PgBouncer 기동 health에 frontend/backend DNS 공개 확인을 추가했습니다. 정상 상태의 peer health와 별도 SQL 수용 검사는 유지하며, DNS 준비 전 성공 판정을 차단합니다.
+- **Pooler 전환·복구 안전성:** collector c·b에 이전 실행 pair를 보존하는 `quiesce/resume`과 영속 hold를 추가합니다. 재개 전 보관 drop-in과 실제 설치 후보를 검증하며 실패 시 direct writer를 자동 시작하지 않습니다. 중앙 앱의 effective pool 크기와 실행 pooler의 mount된 설정이 다르면 배포·재기동·복구를 거부하여 앱만 증설했을 때 예약 control이 backend 대기에 막히는 경로를 차단합니다. Fallback delta: none.
+- **SCRAM 역할 격리:** 원문이 달라도 pgx의 SCRAM 암호 준비 후 같아지는 역할 간·관리자 암호 중복을 DB 연결 전에 거부합니다. PostgreSQL/pgx 호환성 검사와 같은 비밀번호의 verifier 보존은 유지합니다. Fallback delta: none.
+- **최초 풀링 전환:** 새 배포 정의를 설치하기 전에 실행 중인 이전 writer와 실제 접속지를 보존합니다. 중앙 두 역할과 각 수집기는 실제 풀러 경유 SQL을 증명하기 전에는 업무를 시작하지 않습니다. 운영과 동일한 `pg_stat_statements` 기본 권한을 이용한 격리 시험을 추가했으며, 인증 역할에는 앱 데이터 권한을 부여하지 않습니다.
+
 ## v18.8.3 - 2026-11-18
 
 - **수집기 배포 payload:** paired cutover에 env 렌더러와 두 필수 라이브러리를 함께 전송합니다. 기존 profile fixture도 실제 전송 목록으로 만든 payload에서 렌더링하도록 바꿔 저장소 전체에서만 성공하고 원격에서 파일이 빠지는 회귀를 막습니다. 실행 코드·공개 dependency·runtime artifact 버전은 변경하지 않습니다.

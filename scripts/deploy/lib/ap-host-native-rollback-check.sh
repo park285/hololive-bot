@@ -21,6 +21,15 @@ native_profile_pair_validate() {
     "$release/bin/youtube-collector-wrapper" "$release/bin/youtube-collector" --check-worker-profile
 }
 
+native_rollback_endpoint_validate() {
+  local previous_target="$1" current_env="$2" previous_endpoint current_endpoint
+  previous_endpoint="$(sudo -n bash -c "$(declare -f compose_env_validate_file_format compose_env_read_value_from_file postgres_endpoint_validate postgres_endpoint_env); postgres_endpoint_env \"\$1\"" _ \
+    "$previous_target/rollback-contract/youtube-collector-host.env")" || return
+  current_endpoint="$(sudo -n bash -c "$(declare -f compose_env_validate_file_format compose_env_read_value_from_file postgres_endpoint_validate postgres_endpoint_env); postgres_endpoint_env \"\$1\"" _ \
+    "$current_env")" || return
+  postgres_endpoint_require_same "$current_endpoint" "$previous_endpoint"
+}
+
 native_rollback_validate() {
   local previous_target="$1"
   local contract_dir="$previous_target/rollback-contract"

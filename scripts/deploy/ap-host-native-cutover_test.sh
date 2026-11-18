@@ -16,7 +16,10 @@ helper = root / 'scripts/deploy/lib/ap-host-native-cutover.sh'
 if not helper.is_file():
     raise SystemExit('native cutover signal helper is missing')
 source = (root / 'scripts/deploy/lib/ap-host-native-remote-apply.sh').read_text()
-function_start = source.index('stop_collector_unit_and_require_inactive()')
+endpoint_libs = ''.join(f'. "{root / "scripts/deploy/lib" / name}"\n' for name in (
+    'compose-env.sh', 'postgres-endpoint.sh', 'ap-host-native-rollback-check.sh',
+))
+function_start = source.index('stop_native_units_and_require_inactive()')
 functions = source[function_start:source.index('\narm_native_cutover_restore\n', function_start)]
 log_check = source[source.index('native_post_cutover_log_check()'):source.index('\nnative_post_cutover_log_check\n')]
 
@@ -34,6 +37,10 @@ def run_case(name, action, target=None, signo=signal.SIGTERM, initial=True, mode
     case = work / name
     case.mkdir()
     (case / 'old/rollback-contract').mkdir(parents=True)
+    (case / 'new').mkdir()
+    endpoint_env = 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n'
+    (case / 'new/youtube-collector-host.env').write_text(endpoint_env)
+    (case / 'old/rollback-contract/youtube-collector-host.env').write_text(endpoint_env)
     (case / 'bin').mkdir()
     command = case / 'bin/systemctl'
     command.write_text('''#!/usr/bin/env bash
@@ -45,6 +52,14 @@ printf '%s\\n' "$*" >> "$CASE/calls"
 case "$1" in
   is-active) exit 3 ;;
   cat) exit 0 ;;
+  show)
+    case "$4" in
+      LoadState) echo loaded ;;
+      ActiveState) echo inactive ;;
+      UnitFileState) echo disabled ;;
+      *) exit 1 ;;
+    esac
+    ;;
   restart)
     printf '%s\\n' "$BASHPID" > "$CASE/command.pid"
     touch "$CASE/entered"
@@ -71,25 +86,25 @@ esac
 set -Eeuo pipefail
 sudo() {
   [[ "$1" != -n ]] || shift
-  if [[ "$MODE" == write_failure && "$1" == sh && "$3" == *worker-pid* && ! -e "$CASE/write.failed" ]]; then
+  if [[ "$MODE" == write_failure && "$1" == sh && "$2" == -c && "$3" == *worker-pid* && ! -e "$CASE/write.failed" ]]; then
     touch "$CASE/write.failed"; return 9
   fi
   if [[ "$MODE" == read_failure && "$1" == cat && "$2" == */terminal ]]; then return 8; fi
   if [[ "$MODE" == restore_prelaunch && "$1" == sh && "${5:-}" == restore ]]; then kill -TERM "$cutover_restore_owner_pid"; fi
-  if [[ "$MODE" == release_failure && "$1" == rm && "$2" == -r ]]; then return 9; fi
+  if [[ "$MODE" == release_failure && "$1" == sh && "$3" == *'rmdir --'* ]]; then return 9; fi
   case "$1" in
     install|ln) printf 'sudo %s\\n' "$*" >> "$CASE/calls" ;;
     *) "$@" ;;
   esac
 }
-''' + f'. "{helper}"\n' + '''
+''' + f'. "{helper}"\n' + endpoint_libs + '''
 native_recovery_dir="$CASE/recovery"
 release_dir="$CASE/new"
 old_target="$CASE/old"
 [[ "$INITIAL" != false ]] || old_target=""
 host_env="$CASE/host.env" unit_file="$CASE/unit"
 current_link="$CASE/current" previous_link="$CASE/previous" releases_root="$CASE"
-printf 'new\\n' > "$host_env"
+cp "$release_dir/youtube-collector-host.env" "$host_env"
 printf 'new\\n' > "$unit_file"
 ln -s "$release_dir" "$current_link"
 unit=hololive-youtube-collector@youtube-collector-a.service
@@ -138,27 +153,35 @@ for target, signo, status in [('child',signal.SIGTERM,143), ('child',signal.SIGI
 
 case, actual = run_case('known-failure', 'native_cutover_run failed bash -c "exit 7"')
 assert actual == 7 and (case/'restored').exists() and not (case/'recovery').exists()
-# 변경 전 상태 기록 본문을 가짜 systemctl로 실행합니다. 재시작 대기는 실행 중, 실패·정지는 멈춘 상태로 기록합니다.
-record_block = source[source.index('collector_prechange_enabled=false\n'):source.index('\nstop_collector_unit_and_require_inactive()')]
-for profile_name in ('desired-profile.json', 'worker-profile.json'):
-    (work / profile_name).write_text('{}\n')
-for active_state, enabled, want_running in [('active', True, 'true'), ('activating', True, 'true'), ('reloading', False, 'true'),
-                                             ('failed', True, 'false'), ('inactive', False, 'false'), ('', False, 'false')]:
-    probe = f'''set -Eeuo pipefail
-unit=hololive-youtube-collector@youtube-collector-a.service
-worker_profile="{work / 'desired-profile.json'}" release_dir="{work}"
-sudo() {{ [[ "$1" != -n ]] || shift; "$@"; }}
+for load, state, persistent, previous, status, expected in (
+    ('loaded', 'active', 'enabled', 'old', 0, 'true true active'),
+    ('loaded', 'failed', 'disabled', 'old', 0, 'false false failed'),
+    ('loaded', 'activating', 'enabled', 'old', 0, 'true true activating'),
+    ('loaded', 'reloading', 'disabled', 'old', 0, 'true false reloading'),
+    ('loaded', 'inactive', 'enabled', 'old', 0, 'false true inactive'),
+    ('not-found', '', '', '', 4, 'false false not-found'),
+    ('not-found', '', '', 'old', 4, None), ('loaded', 'active', 'enabled', '', 0, None),
+    ('loaded', 'deactivating', 'enabled', 'old', 0, None), ('loaded', '', 'enabled', 'old', 0, None),
+    ('loaded', 'inactive', 'masked', 'old', 0, None), ('loaded', 'inactive', '', 'old', 0, None),
+    ('loaded', 'active', 'enabled', 'old', 1, None),
+):
+    probe = f'''set -eu
+. "{helper}"
 systemctl() {{
-  case "$1" in
-    show) printf '%s\\n' "{active_state}" ;;
-    is-enabled) {'return 0' if enabled else 'return 1'} ;;
+  case "$4" in
+    LoadState) echo '{load}'; return {status} ;;
+    ActiveState) echo '{state}' ;;
+    UnitFileState) echo '{persistent}' ;;
     *) return 9 ;;
   esac
 }}
-''' + record_block + '\nprintf "%s %s %s\\n" "$collector_prechange_running" "$collector_prechange_enabled" "$collector_prechange_state"\n'
+native_capture_collector_state test.service '{previous}'
+printf '%s %s %s\\n' "$collector_prechange_running" "$collector_prechange_enabled" "$collector_prechange_state"
+'''
     result = subprocess.run(['bash', '-c', probe], capture_output=True, text=True)
-    assert result.returncode == 0, (active_state, result.stderr)
-    assert result.stdout.split('\n')[0].split(' ') == [want_running, str(enabled).lower(), active_state], (active_state, result.stdout)
+    assert (result.returncode == 0) == (expected is not None), (load, state, persistent, result)
+    if expected is not None:
+        assert result.stdout.strip() == expected, result
 
 # 점검 창에서 멈춰 있던 collector는 이전 release로 되돌리되 시작하지 않고, 변경 전 활성화 상태만 복원합니다.
 for enabled in [True, False]:
@@ -202,6 +225,37 @@ for occupied in (False, True):
     result = subprocess.run(['bash', '-c', prefix + f'native_recovery_require_clear && touch "{guard_case}/changed"'], capture_output=True)
     assert (result.returncode != 0) == occupied
     assert (guard_case / 'changed').exists() != occupied
+for kind, mutate in (
+    ('foreign', 'printf other > "$native_recovery_dir/claim"'),
+    ('unknown', 'touch "$native_recovery_dir/outcome"'),
+    ('unexpected', 'touch "$native_recovery_dir/foreign"'),
+    ('child', ':'),
+):
+    case = work / ('guard-' + kind)
+    case.mkdir()
+    guard = case / 'recovery'
+    prefix = f'set -eu; sudo() {{ shift; "$@"; }}; . "{helper}"; native_recovery_dir="{guard}"; '
+    action = '(native_cutover_release_guard)' if kind == 'child' else 'native_cutover_release_guard'
+    result = subprocess.run(['bash', '-c', prefix + f'native_cutover_claim first; {mutate}; {action}'], capture_output=True)
+    assert result.returncode != 0 and (guard/'claim').exists() and (guard/'release').read_text().strip() == 'first'
+
+gate = source[source.index('native_pool_check_pending=true\n'):source.index('\nsudo -n systemd-analyze verify "$unit_file"\n', source.index('native_pool_check_pending=true\n'))]
+case, actual = run_case('failed-database-proof', '''
+sudo() {
+  shift
+  if [[ "$1" == systemd-run && "${!#}" == --check-pooled-database ]]; then
+    echo probe >> "$CASE/calls"
+    return 7
+  fi
+  "$@"
+}
+po_install_release() { touch "$CASE/issuer-started"; }
+EXPECTED_REVISION=fixture
+''' + gate)
+assert actual == 7 and (case/'recovery').exists() and not (case/'issuer-started').exists()
+calls = (case/'calls').read_text().splitlines()
+assert calls.count('probe') == 1 and not any(line.startswith(('enable ', 'restart ', 'start ', 'po_restore_previous')) for line in calls)
+assert all('disable --now ' + unit in calls for unit in ('hololive-youtube-po.socket', 'hololive-youtube-po.service', 'hololive-youtube-collector@youtube-collector-a.service'))
 case, actual = run_case('restore-group', 'false', 'restore-group')
 assert actual == 143 and (case/'recovery').exists() and 'outcome_unknown' in (case/'err').read_text()
 assert (case/'calls').read_text().count('enable --now ') == 1
