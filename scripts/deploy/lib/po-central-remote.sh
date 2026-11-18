@@ -16,6 +16,12 @@ esac
 [[ "$staging" =~ ^$remote_root/po-staging-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
 [[ "$backup" =~ ^$remote_root/backups/po-$slot-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
 [[ "$revision" =~ ^[0-9a-f]{40}$ && "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 2
+# 중앙 c는 source sync·API/worker pair 게시와 daemon-reload를 공유한다. b는 별도 호스트 배포다.
+install -d -m 0755 /run/lock
+lock_name=hololive-quadlet-redeploy
+[[ "$slot" != b ]] || lock_name=hololive-collector-b-cutover
+exec 9>"/run/lock/$lock_name.lock"
+flock -n 9 || { echo 'another Quadlet writer is running' >&2; exit 1; }
 current="$remote_root/current"
 unit_dir=/etc/containers/systemd/hololive-bot
 manifest="../po-current-$slot/rootfs-manifest.json"
@@ -125,13 +131,44 @@ restore_collector_base_unit() {
   ! cmp -s -- "$recorded" "$installed" || return 0
   cp -p -- "$installed" "$profile_release/rollback-replaced-$collector_container.container" || return
   tmp="$(mktemp "$unit_dir/.$collector_container.container.XXXXXX")" || return
-  install -m 0644 -- "$recorded" "$tmp" && mv -f -- "$tmp" "$installed" || { rm -f -- "$tmp"; return 1; }
+  if ! install -m 0644 -- "$recorded" "$tmp" || ! mv -f -- "$tmp" "$installed"; then
+    rm -f -- "$tmp"
+    return 1
+  fi
   echo "[ROLLBACK] restored the collector base unit the previous image ran with; reinstall the intended revision's unit before the next deployment" >&2
+}
+cutover_units_settled() {
+  local unit observed key value job_seen state_seen
+  for unit in "$issuer_unit" "$collector_unit"; do
+    observed="$(systemctl show --property=Job --property=ActiveState "$unit")" || return 1
+    job_seen=false state_seen=false
+    while IFS='=' read -r key value; do
+      case "$key" in
+        Job)
+          [[ "$job_seen" == false && -z "$value" ]] || return 1
+          job_seen=true
+          ;;
+        ActiveState)
+          [[ "$state_seen" == false ]] || return 1
+          state_seen=true
+          case "$value" in active|inactive|failed) ;; *) return 1 ;; esac
+          ;;
+        *) return 1 ;;
+      esac
+    done <<<"$observed"
+    [[ "$job_seen" == true && "$state_seen" == true ]] || return 1
+  done
 }
 restore() {
   local old_revision old_po_revision state issuer_now
   trap - ERR INT TERM HUP
   [[ -r "$backup/snapshot-complete" ]] || { echo "$host_label rollback snapshot incomplete" >&2; return 1; }
+  # systemctl client 종료는 manager job 정산이 아니다. 진행 중·조회 실패에는 이전 pair를 게시하지 않는다.
+  if ! cutover_units_settled; then
+    printf 'outcome_unknown\n' > "$backup/cutover-outcome" || echo 'failed to record cutover outcome; retain the backup' >&2
+    echo "$host_label cutover outcome_unknown; settle issuer/collector manager jobs before an approved rollback; retain $backup" >&2
+    return 1
+  fi
   state="$(cat "$backup/issuer.state")"
   old_revision="$(cat "$backup/collector.revision")"
   verify_collector "$collector_rollback" "$backup/collector-prechange-manifest.json" "$old_revision" "$backup/collector-prechange.image-id"
@@ -235,6 +272,10 @@ if [[ "$mode" == check ]]; then
   echo "$host_label collector/issuer completion verified revision=$revision backup=$backup"
   exit 0
 fi
+cutover_units_settled || {
+  echo "$host_label issuer/collector manager jobs are unsettled or unavailable; no paired cutover started" >&2
+  exit 1
+}
 # Quadlet은 정지한 unit의 container를 지운다(--rm). 이전 pair의 profile은 실행 중인 collector에서만 증명할 수 있어
 # collector를 멈춘 채 교체하는 점검 모드는 지원하지 않는다.
 systemctl is-active --quiet "$collector_unit" || {

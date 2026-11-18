@@ -43,17 +43,13 @@ type handoffReconcilerConfig struct {
 	MaxRetries   int
 }
 
-// HandoffReconciler는 Iris admission을 마친 youtube 고정 요청의 handoff 확인 loop다. 정산은 claim 토큰·requestId·요청
-// 세대·본문 해시·고정 멤버와 멤버 행 버전이 그대로일 때만 요청 하나의 트랜잭션으로 적용한다.
-type HandoffReconciler = handoffloop.Reconciler[store.HandoffClaim]
-
 // NewHandoffReconciler는 youtube_delivery dispatcher와 같은 설정으로 전이 저장소를 만든다. 지평은 HandoffHorizon이다.
 func NewHandoffReconciler(
 	db deliverysql.DeliveryDB,
 	client handoffcheck.ReplyStatusClient,
 	logger *slog.Logger,
 	config *Config,
-) (*HandoffReconciler, error) {
+) (*handoffloop.Reconciler[store.HandoffClaim], error) {
 	if db == nil || reflectutil.IsNil(db) {
 		return nil, errors.New("new youtube handoff reconciler: db is required")
 	}
@@ -91,7 +87,7 @@ func newHandoffReconciler(
 	client handoffcheck.ReplyStatusClient,
 	config handoffReconcilerConfig,
 	logger *slog.Logger,
-) (*HandoffReconciler, error) {
+) (*handoffloop.Reconciler[store.HandoffClaim], error) {
 	if handoffs == nil {
 		return nil, errors.New("new youtube handoff reconciler: store is required")
 	}

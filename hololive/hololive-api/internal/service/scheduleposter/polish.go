@@ -38,7 +38,6 @@ func (k SlotKey) matches(slot *Slot) bool {
 	return slot.AddedPostID == 0 && slot.Ordinal == k.Ordinal
 }
 
-// Korean은 칸의 한국어 다섯 칸이다.
 type Korean struct {
 	TitleKo string
 	WithKo  []string

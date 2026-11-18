@@ -8,6 +8,16 @@
 
 ## 미출시
 
+## v19.0.0 - 2026-11-18
+
+- **공개 의존성:** SDK `v5.2.1`, shared-go root `v2.25.0`·postgres `v1.0.2`·transport `v1.0.1`의 게시 tag·module provenance를 확인해 고정했습니다. 변경 없는 core는 `v1.0.0`을 유지합니다.
+
+- **Holodex profile 퇴역 (migration 031):** `holodex/channel_profile` 신규 발행과 API 병합을 거절하고 미처리 관측·replay를 `unsupported_contract` DEAD_LETTER로 종결합니다. 과거 원본·payload·FK registry·처리 완료 기록·현재 profile projection은 보존합니다. YouTube.js profile과 Holodex photo는 유지합니다. 작업창에는 collector와 API YouTube writer를 정지하고 진행 중 트랜잭션 종료를 확인한 뒤 031과 새 runtime을 순서대로 적용합니다. 이미 커밋된 projection을 되돌리지 않습니다.
+- **Iris handoff 판정:** SDK의 상태 조회 identity 불일치를 알림 원장의 격리와 답장 원장의 수동 검토로 연결합니다. 요청 ID의 공백도 다른 identity로 처리하며 일시적 오류·권한 오류의 기존 재조회 정책은 유지합니다.
+- **종료와 취소:** 동시 listener 실패는 최초 종료 오류 하나를 lifecycle에 전달하고 개별 오류는 기록합니다. Worker profile 검사·queue sampler는 scheduler group에서 취소 후 join합니다. X Spaces fetch가 입력 Request의 취소 signal을 상속하고 명시한 signal의 우선순위를 보존합니다.
+- **소유권과 중복:** Schedule-poster key reader를 기존 Gemini 정본 reader로 이행하고 빈 경로의 자동 검토 비활성화는 유지합니다. Handoff와 시험용 type alias를 정본 직접 참조로 바꾸며 중복 설명 주석을 정리했습니다.
+- **배포 도구:** 중앙 source sync·rollback·collector·API/worker pair를 같은 writer 잠금으로 직렬화하고 env 검증을 공통 reader로 통합했습니다. Manager job의 종료를 확인하지 못하면 조기 복원하지 않으며 candidate·backup을 보존합니다. Fallback delta: 없음.
+
 ## v18.8.3 - 2026-11-18
 
 - **수집기 배포 payload:** paired cutover에 env 렌더러와 두 필수 라이브러리를 함께 전송합니다. 기존 profile fixture도 실제 전송 목록으로 만든 payload에서 렌더링하도록 바꿔 저장소 전체에서만 성공하고 원격에서 파일이 빠지는 회귀를 막습니다. 실행 코드·공개 dependency·runtime artifact 버전은 변경하지 않습니다.

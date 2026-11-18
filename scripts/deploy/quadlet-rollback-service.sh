@@ -29,6 +29,10 @@ if [[ -z "$prefix" && "$ROOT_DIR" != "$deploy_root" ]]; then
   die "run the deployed copy: $deploy_root/scripts/deploy/quadlet-rollback-service.sh"
 fi
 pair_tool="$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py"
+lock_dir="$prefix/run/lock"
+install -d -m 0755 "$lock_dir"
+exec 9>"$lock_dir/hololive-quadlet-redeploy.lock"
+flock -n 9 || die "another central Quadlet writer is running"
 
 release="$(realpath -e -- "$1")" || die "release directory not found: $1"
 [[ "$release" == "$deploy_root/artifacts/worker-profile/releases/"* ]] ||

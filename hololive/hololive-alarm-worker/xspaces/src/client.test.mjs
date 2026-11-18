@@ -120,6 +120,30 @@ test('redirect와 과도한 응답을 거부한다', async () => {
   await assert.rejects(boundedFetch(async () => new Response('x'.repeat(2 * 1024 * 1024 + 1)))('https://x.com/i/jf/'), { code: 'response_too_large' });
 });
 
+test('Request 취소를 전달하고 init의 명시적 signal을 우선한다', async () => {
+  const controller = new AbortController();
+  const reason = new Error('canceled');
+  const request = new Request('https://x.com/i/jf/', { signal: controller.signal });
+  const override = new AbortController();
+  let signal;
+  const fetch = boundedFetch(async (_url, init) => {
+    signal = init.signal;
+    return new Response('ok');
+  });
+  await fetch(request);
+  controller.abort(reason);
+  assert.equal(signal.aborted, true);
+  assert.equal(signal.reason, reason);
+
+  await fetch(request, { signal: override.signal });
+  assert.equal(signal.aborted, false);
+  override.abort(reason);
+  assert.equal(signal.reason, reason);
+
+  await fetch(request, { signal: null });
+  assert.equal(signal.aborted, false);
+});
+
 test('실패 보고는 코드·단계·내장 오류 종류만 남기고 예외 원문을 버린다', () => {
   const secret = cookies.auth_token;
   assert.deepEqual(failureReport(new CollectionError('redirect'), 'app_shell'), { error: 'redirect', stage: 'app_shell', cooldown_seconds: 0, http_status: 0, api_codes: [] });

@@ -20,6 +20,10 @@ esac
 
 [[ "$(id -u)" -eq 0 ]] || die "must run as root (sudo)"
 
+install -d -m 0755 /run/lock
+exec 9>/run/lock/hololive-quadlet-redeploy.lock
+flock -n 9 || die "another central Quadlet writer is running"
+
 # 알림 dispatcher는 중앙 하나뿐이다. build-control host kapu에 중앙 unit을 설치하면 부팅 때
 # 두 번째 alarm-worker가 뜨므로 승인된 rollback 표시 없이는 거부한다.
 if [[ "$(hostname -s)" == kapu && "${HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED:-}" != 1 ]]; then
@@ -177,6 +181,7 @@ fi
 # archive HEAD 스냅샷)에서만 가져온다. 작업 트리에 심어진 untracked unit/drop-in이 root systemd에
 # 주입(LPE)되지 않게 하고 assert_clean 이후 TOCTOU도 함께 막는다.
 install -d -m0755 -o root -g root "$LIBEXEC_DIR" "$LIBEXEC_DIR/lib"
+install -m0644 -o root -g root "$STAGING/scripts/deploy/lib/compose-env.sh" "$LIBEXEC_DIR/lib/compose-env.sh"
 install -m0755 -o root -g root "$STAGING/scripts/deploy/quadlet-prestart.sh" "$LIBEXEC_DIR/quadlet-prestart"
 install -m0644 -o root -g root "$STAGING/scripts/deploy/lib/admin-bind.sh" "$LIBEXEC_DIR/lib/admin-bind.sh"
 install -m0644 -o root -g root "$STAGING/scripts/deploy/lib/public-bind-mounts.sh" "$LIBEXEC_DIR/lib/public-bind-mounts.sh"
@@ -219,6 +224,7 @@ verifier="$OPT_CURRENT/scripts/deploy/verify-exec-tree-ownership.sh"
 exec_tree=(
   "$verifier"
   "$LIBEXEC_DIR/quadlet-prestart"
+  "$LIBEXEC_DIR/lib/compose-env.sh"
   "$LIBEXEC_DIR/lib/admin-bind.sh"
   "$LIBEXEC_DIR/lib/public-bind-mounts.sh"
   "$OPT_CURRENT/deploy/nginx/admin-dashboard-ingress.conf.template"

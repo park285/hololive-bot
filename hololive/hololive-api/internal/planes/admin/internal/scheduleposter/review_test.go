@@ -15,7 +15,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -609,41 +608,4 @@ func TestPeriodRequestAsksOnlyForPrintedDates(t *testing.T) {
 
 	_, err = parsePeriod(`{"first_month":11,"week":"this"}`)
 	require.ErrorIs(t, err, errUnjudgeable)
-}
-
-func TestLoadAPIKey(t *testing.T) {
-	t.Parallel()
-
-	key, err := LoadAPIKey("")
-	require.NoError(t, err)
-	require.Empty(t, key, "경로가 없으면 자동 검토를 끈다")
-
-	dir := t.TempDir()
-	write := func(name, content string) string {
-		path := filepath.Join(dir, name)
-		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-
-		return path
-	}
-
-	const secret = "test-key-0123456789abcdef"
-
-	key, err = LoadAPIKey(write("key", secret+"\n"))
-	require.NoError(t, err)
-	require.Equal(t, secret, key)
-
-	const authorizationKey = "AQ.test-key_0123456789abcdef0123456789abcdef01234567"
-
-	key, err = LoadAPIKey(write("authorization-key", authorizationKey+"\n"))
-	require.NoError(t, err, "AI Studio가 새로 발급하는 AQ. 접두사 키도 받는다")
-	require.Equal(t, authorizationKey, key)
-
-	for _, content := range []string{"GEMINI_API_KEY=" + secret, "short", secret + " " + secret} {
-		_, err = LoadAPIKey(write("bad", content))
-		require.Error(t, err)
-		require.NotContains(t, err.Error(), secret, "오류에 키를 싣지 않는다")
-	}
-
-	_, err = LoadAPIKey("relative/key")
-	require.Error(t, err)
 }

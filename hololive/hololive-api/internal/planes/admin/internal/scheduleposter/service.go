@@ -90,7 +90,7 @@ type Service struct {
 	collectNow chan struct{}
 }
 
-// New의 apiKey가 비어 있으면 후보 자동 검토를 끈다(LoadAPIKey).
+// New의 apiKey가 비어 있으면 후보 자동 검토를 끈다.
 func New(ctx context.Context, config *Config, apiKey string, store *posterstore.Store, members memberSource, logger *slog.Logger) (*Service, error) {
 	if config == nil || store == nil || members == nil || logger == nil {
 		return nil, errors.New("schedule poster service requires config, store, members and logger")

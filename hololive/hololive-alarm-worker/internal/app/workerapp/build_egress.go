@@ -189,7 +189,7 @@ func buildAlarmDispatchHandoffReconciler(
 	infra *sharedmodules.InfraModule,
 	statusClient handoffcheck.ReplyStatusClient,
 	logger *slog.Logger,
-) (*alarmdispatch.HandoffReconciler, error) {
+) (workerruntime.Scheduler, error) {
 	repository, err := dispatchoutbox.NewPgxRepository(infra.Postgres, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new alarm dispatch handoff repository: %w", err)

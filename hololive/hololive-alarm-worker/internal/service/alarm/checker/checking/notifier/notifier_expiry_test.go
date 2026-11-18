@@ -12,6 +12,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type expiryClaimCache struct {
@@ -44,7 +45,7 @@ func TestUpcomingExpiresDuringDedupClaim(t *testing.T) {
 		result, err := n.Send(t.Context(), []*domain.AlarmNotification{item.payload.notification}, testTargetPolicy(5))
 		require.NoError(t, err)
 		require.Zero(t, outbox.insertBatchCalls)
-		require.Equal(t, SendResult{Skipped: 1}, result)
+		require.Equal(t, delivery.SendResult{Skipped: 1}, result)
 		require.NotEmpty(t, claimCache.released)
 	})
 }
@@ -63,10 +64,10 @@ func TestPublishPreparedBatchSkipsExpiredAndKeepsActiveReceipt(t *testing.T) {
 	require.NoError(t, cacheClient.Set(ctx, "expired-claim", "1", time.Minute))
 	require.NoError(t, cacheClient.Set(ctx, "active-claim", "1", time.Minute))
 
-	result := SendResult{}
+	result := delivery.SendResult{}
 	errs := n.publishPreparedBatch(ctx, []claimedSend{expired, active}, &result, nil)
 	require.Empty(t, errs)
-	require.Equal(t, SendResult{Sent: 1, Skipped: 1}, result)
+	require.Equal(t, delivery.SendResult{Sent: 1, Skipped: 1}, result)
 	require.Len(t, outbox.lastBatchInput.Envelopes, 1)
 	require.Equal(t, "active-room", outbox.lastBatchInput.Envelopes[0].Notification.RoomID)
 

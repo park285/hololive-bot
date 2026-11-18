@@ -68,9 +68,10 @@ export function boundedFetch(fetchImpl) {
     if (!api && (headers.has('cookie') || headers.has('authorization'))) {
       throw new CollectionError('forbidden_credentials');
     }
+    const signal = init.signal === undefined && input instanceof Request ? input.signal : init.signal;
     const response = await fetchImpl(url, {
       ...init, method: 'GET', headers, redirect: 'error',
-      signal: AbortSignal.any([AbortSignal.timeout(10000), ...(init.signal ? [init.signal] : [])]),
+      signal: AbortSignal.any([AbortSignal.timeout(10000), ...(signal ? [signal] : [])]),
     });
     if (response.status >= 300 && response.status < 400) throw new CollectionError('redirect');
     const reader = response.body?.getReader();

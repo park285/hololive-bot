@@ -49,7 +49,7 @@ type AlarmWorkerRuntime struct {
 	XSpacesRunner       Scheduler
 	ServerAddr          string
 	HTTPServers         *sharedserver.RuntimeHTTPServers
-	WorkerObservability interface{ Start(context.Context) }
+	WorkerObservability Scheduler
 
 	schedulerMu     sync.Mutex
 	schedulerCancel context.CancelFunc

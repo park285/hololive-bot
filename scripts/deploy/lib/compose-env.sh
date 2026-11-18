@@ -3,6 +3,11 @@
 compose_env_validate_file_format() {
     local env_file="$1"
 
+    [[ -f "$env_file" && ! -L "$env_file" && -s "$env_file" ]] || {
+        echo "[ERROR] Compose env must be a non-empty regular file: ${env_file}" >&2
+        return 1
+    }
+
     awk '
         /^[[:space:]]*(#|$)/ { next }
 
@@ -30,20 +35,25 @@ compose_env_validate_file_format() {
             }
 
             key = substr(line, 1, index(line, "=") - 1)
+            value = substr(line, index(line, "=") + 1)
+            if (value ~ /^[[:space:]]|[[:space:]]$/) {
+                print "[ERROR] Env value must not contain surrounding whitespace: " FILENAME ":" NR > "/dev/stderr"
+                exit 1
+            }
             raw_key = key
             sub(/^[[:space:]]+/, "", key)
             sub(/[[:space:]]+$/, "", key)
 
             if (key != raw_key) {
-                print "[ERROR] Env key must not contain surrounding whitespace: " FILENAME ":" NR ":" raw_key > "/dev/stderr"
+                print "[ERROR] Env key must not contain surrounding whitespace: " FILENAME ":" NR > "/dev/stderr"
                 exit 1
             }
             if (key !~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
-                print "[ERROR] Invalid env key: " FILENAME ":" NR ":" key > "/dev/stderr"
+                print "[ERROR] Invalid env key: " FILENAME ":" NR > "/dev/stderr"
                 exit 1
             }
             if (seen[key]++) {
-                print "[ERROR] Duplicate env key: " FILENAME ":" NR ":" key > "/dev/stderr"
+                print "[ERROR] Duplicate env key: " FILENAME ":" NR > "/dev/stderr"
                 exit 1
             }
         }
