@@ -22,6 +22,9 @@ import (
 
 const commandTimeout = 15 * time.Minute
 
+// 운영 이미지에 링크한다. 오프라인 초기화 경로는 배포 바이너리로 실행할 수 없다.
+var deploymentOnly string
+
 // 시작 Ping 기한이 shared-go v2.18.0부터 필수라 이전 라이브러리 숨은 값(5초)을 명시한다.
 func migrationPoolOptions() pgxdb.Options {
 	return pgxdb.Options{Ping: pgxdb.PingConfig{PingTimeout: 5 * time.Second}}
@@ -37,6 +40,10 @@ func main() {
 }
 
 func run() error {
+	if deploymentOnly != "" && (len(os.Args) != 2 || os.Args[1] != "--schema-only") {
+		return errors.New("card release requires --schema-only")
+	}
+
 	allowBlockingIndexDropDefault, err := envBool("MIGRATION_ALLOW_BLOCKING_INDEX_DROP")
 	if err != nil {
 		return fmt.Errorf("env bool: %w", err)

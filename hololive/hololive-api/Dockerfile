@@ -62,7 +62,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -ldflags="-w -buildid= -X main.Version=${VERSION}" \
       -o /dist/bin/hololive-api ./cmd/hololive-api && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid= -X main.deploymentOnly=1" \
       -o /dist/bin/db-migrate ./cmd/db-migrate && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
