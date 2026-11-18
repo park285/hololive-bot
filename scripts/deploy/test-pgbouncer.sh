@@ -50,7 +50,10 @@ trap cleanup EXIT
   cd "$root/hololive/hololive-api"
   CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$fixture/db-migrate" ./cmd/db-migrate
 )
-"$fixture/probe" prepare "$fixture"
+(umask 022; "$fixture/probe" prepare "$fixture")
+install -m 0644 "$root/deploy/postgres/pg_hba.conf" "$fixture/postgres-hba.conf"
+install -m 0644 "$root/deploy/pgbouncer/pg_hba.conf" "$fixture/pooler-hba.conf"
+install -m 0644 "$root/deploy/pgbouncer/stats-users.txt" "$fixture/stats-users.txt"
 # 키는 namespace 안의 서비스 UID만 읽는다. 저장소 bind에는 SELinux label을 변경하지 않는다.
 podman unshare chown 10001:10001 "$fixture/pooler-tls/server.key" "$fixture/pooler-tls/backend-client.key"
 printf 'ADMIN_API_POSTGRES_POOL_MAX_CONNS=3\n' >"$fixture/target.env"
@@ -66,7 +69,8 @@ podman run -d --name "$server" --pull=never --platform="linux/$architecture" --s
   --tmpfs /var/lib/postgresql:rw,size=512m \
   --mount "type=volume,src=$socket,dst=/var/run/postgresql" \
   --mount "type=bind,src=$fixture,dst=/fixture,readonly" \
-  --mount "type=bind,src=$root/deploy/postgres/pg_hba.conf,dst=/policy/pg_hba.conf,readonly" \
+  --mount "type=bind,src=$fixture/ca.crt,dst=/run/hololive-bot/certs/postgres-ca.pem,readonly" \
+  --mount "type=bind,src=$fixture/postgres-hba.conf,dst=/policy/pg_hba.conf,readonly" \
   -e POSTGRES_USER=postgres_admin -e POSTGRES_DB=hololive -e POSTGRES_PASSWORD_FILE=/fixture/admin-password \
   -e PGDATA=/var/lib/postgresql/pgdata --entrypoint /bin/sh "$pg_image" -ec '
     cp /fixture/pg-tls/server.crt /var/lib/postgresql/server.crt
@@ -87,14 +91,6 @@ done
 podman exec "$server" psql -X -v ON_ERROR_STOP=1 -q -U postgres_admin -d hololive -f /fixture/setup.sql >"$fixture/setup.log" 2>&1 || {
   echo 'isolated role fixture setup failed' >&2; exit 1;
 }
-podman run --rm --pull=never --platform="linux/$architecture" --security-opt label=disable --network none \
-  --mount "type=volume,src=$socket,dst=/var/run/postgresql" \
-  --mount "type=bind,src=$fixture,dst=/fixture,readonly" \
-  --env-file "$fixture/bootstrap.env" --entrypoint /fixture/db-migrate "$pg_image" >"$fixture/bootstrap.log" 2>&1 || {
-    echo 'isolated application bootstrap/migrations failed' >&2; exit 1;
-  }
-podman exec "$server" psql -X -v ON_ERROR_STOP=1 -q -U postgres_admin -d hololive -f /fixture/records.sql
-podman exec -i "$server" psql -X -v ON_ERROR_STOP=1 -q -U postgres_admin -d hololive <"$root/deploy/postgres/role-limits.sql"
 client() {
   local network="$1" address="$2" mode="$3" argument="$4" name="${id}-client"
   local client_network="$network:ip=$address"
@@ -137,8 +133,8 @@ podman run -d --name "$pooler" --pull=never --platform="linux/$architecture" --s
   --read-only --read-only-tmpfs=false --tmpfs /tmp:rw,size=16m,mode=1777,noexec,nosuid,nodev \
   --cap-drop=all --security-opt no-new-privileges --memory=128m --pids-limit=64 --ulimit nofile=1024:1024 \
   --mount "type=bind,src=$fixture/pgbouncer.ini,dst=/etc/pgbouncer/pgbouncer.ini,readonly" \
-  --mount "type=bind,src=$root/deploy/pgbouncer/pg_hba.conf,dst=/etc/pgbouncer/pg_hba.conf,readonly" \
-  --mount "type=bind,src=$root/deploy/pgbouncer/stats-users.txt,dst=/etc/pgbouncer/stats-users.txt,readonly" \
+  --mount "type=bind,src=$fixture/pooler-hba.conf,dst=/etc/pgbouncer/pg_hba.conf,readonly" \
+  --mount "type=bind,src=$fixture/stats-users.txt,dst=/etc/pgbouncer/stats-users.txt,readonly" \
   --mount "type=bind,src=$fixture/pooler-tls,dst=/run/hololive-bot/pgbouncer,readonly" \
   --mount "type=bind,src=$fixture/ca.crt,dst=/run/hololive-bot/certs/postgres-ca.pem,readonly" \
   "$pool_image" >/dev/null
@@ -150,8 +146,31 @@ for _ in $(seq 1 30); do
 done
 [[ "$ready" == true ]] || { cat "$fixture/health-error" >&2; echo 'PgBouncer startup health failed' >&2; exit 1; }
 cat "$fixture/version"
+podman run --rm --pull=never --platform="linux/$architecture" --security-opt label=disable --network none \
+  --mount "type=volume,src=$socket,dst=/var/run/postgresql" \
+  --mount "type=bind,src=$fixture,dst=/fixture,readonly" \
+  --env-file "$fixture/bootstrap.env" --entrypoint /fixture/db-migrate "$pg_image" >"$fixture/bootstrap.log" 2>&1 || {
+    echo 'isolated application bootstrap/migrations failed' >&2; exit 1;
+  }
+podman exec "$server" psql -X -v ON_ERROR_STOP=1 -q -U postgres_admin -d hololive -f /fixture/records.sql
+podman exec -i "$server" psql -X -v ON_ERROR_STOP=1 -q -U postgres_admin -d hololive <"$root/deploy/postgres/role-limits.sql"
 client "$central" 172.23.255.254 auth-client central
 client "$central" 172.23.10.9 wrong-auth-source central
+(
+  podman() {
+    [[ "$1 $2 $3" == 'exec -i holo-postgres' ]] || return 2
+    shift 3
+    command podman exec -i --env-file <(grep -E '^HOLOLIVE_(DB|ALARM_WORKER)_PASSWORD=' "$fixture/bootstrap.env") \
+      "${invalid[@]}" "$server" "$@"
+  }
+  invalid=()
+  postgres_pooler_assert_writer_sql hololive-api
+  postgres_pooler_assert_writer_sql hololive-alarm-worker
+  invalid=(--env HOLOLIVE_ALARM_WORKER_PASSWORD=invalid-fixture-input)
+  if postgres_pooler_assert_writer_sql hololive-alarm-worker >"$fixture/rejected-writer.log" 2>&1; then
+    echo 'central writer activation accepted an invalid SCRAM credential' >&2; exit 1
+  fi
+)
 (
   podman() {
     [[ "$1" == exec && "$2" == holo-pgbouncer ]] || return 2

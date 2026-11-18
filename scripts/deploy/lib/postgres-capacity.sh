@@ -319,6 +319,46 @@ postgres_capacity_assert_live() (
     }
 )
 
+postgres_pooler_assert_writer_sql() {
+    local role result
+    case "$1" in
+        hololive-api) role=hololive_runtime ;;
+        hololive-alarm-worker) role=hololive_alarm_worker ;;
+        *) echo '[pg-pooler] unknown central writer' >&2; return 1 ;;
+    esac
+    # 최초 auth_query는 migration이 만든다. 두 writer는 그 뒤 실제 SCRAM·TLS SQL을 확인할 때까지 정지 상태다.
+    # 비밀번호는 이미 입력을 가진 PG 컨테이너 안에서만 libpq에 전달한다.
+    result="$(podman exec -i holo-postgres timeout -k 2 38 sh -ec '
+        unset PGSERVICE PGSERVICEFILE PGHOSTADDR PGOPTIONS
+        export PGHOST=holo-pgbouncer PGPORT=6432 PGDATABASE=hololive PGUSER="$1"
+        export PGSSLMODE=verify-full PGSSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
+        export PGGSSENCMODE=disable PGREQUIREAUTH=scram-sha-256 PGCONNECT_TIMEOUT=5
+        export PGAPPNAME=hololive-pooler-cutover-check
+        case "$PGUSER" in
+            hololive_runtime) PGPASSWORD="${HOLOLIVE_DB_PASSWORD:?}" ;;
+            hololive_alarm_worker) PGPASSWORD="${HOLOLIVE_ALARM_WORKER_PASSWORD:?}" ;;
+        esac
+        export PGPASSWORD
+        exec psql -XqwAt -v ON_ERROR_STOP=1 -v role="$PGUSER"
+    ' sh "$role" <<'SQL'
+BEGIN READ ONLY;
+SET LOCAL default_transaction_read_only = on;
+SET LOCAL statement_timeout = '30s';
+SET LOCAL lock_timeout = '3s';
+SELECT current_database() = 'hololive' AND current_user = :'role' AND session_user = :'role'
+   AND current_setting('default_transaction_read_only') = 'on' AND current_setting('transaction_read_only') = 'on'
+   AND current_setting('statement_timeout') = '30s' AND current_setting('lock_timeout') = '3s'
+   AND inet_client_addr() = inet '172.23.255.254'
+   AND EXISTS (SELECT 1 FROM pg_catalog.pg_stat_ssl WHERE pid = pg_backend_pid() AND ssl AND version IN ('TLSv1.2','TLSv1.3'));
+ROLLBACK;
+SQL
+    )" && [[ "$result" == t ]] || {
+        echo "[pg-pooler] pooled SQL verification failed for $role; activation refused" >&2
+        return 1
+    }
+    printf '[pg-pooler] pooled read-only SQL verified for %s\n' "$role"
+}
+
 postgres_capacity_assert_service() (
     local repo="$1" compose="$2" units="$3" service="$4" unit="$5" endpoint temporary
     . "$(dirname "${BASH_SOURCE[0]}")/compose-env.sh"
