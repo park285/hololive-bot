@@ -202,56 +202,71 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
   ' sh "$old_target"
 fi
 
-# 실패 복원은 변경 전 collector 실행 상태까지 되돌린다. 점검 창에서 멈춘 collector를 이전 release로 다시 띄우면
-# 새 schema 위에서 구 writer가 돈다. 재시작 대기(activating)는 실행 중으로 보고, 실패(failed)는 멈춘 상태로 본다.
-collector_prechange_enabled=false
-collector_prechange_running=false
-collector_prechange_state="$(systemctl show "$unit" -p ActiveState --value 2>/dev/null || true)"
-if systemctl is-enabled --quiet "$unit" 2>/dev/null; then
-  collector_prechange_enabled=true
-fi
-case "$collector_prechange_state" in
-  active | activating | reloading) collector_prechange_running=true ;;
-esac
+native_capture_collector_state "$unit" "$old_target" || {
+  echo 'collector state or persistent enablement is unconfirmed; writer unchanged' >&2
+  exit 1
+}
 
 sudo -n cmp -s "$worker_profile" "$release_dir/worker-profile.json" || {
   echo 'candidate source changed during profile validation; writer unchanged' >&2
   exit 1
 }
-
-stop_collector_unit_and_require_inactive() {
-  command -v systemctl >/dev/null 2>&1 || return 0
-  systemctl cat "$unit" >/dev/null 2>&1 || return 0
-  echo "[CUTOVER] Stopping collector unit: ${unit}"
-  sudo -n systemctl disable --now "$unit" >/dev/null
-  if systemctl is-active --quiet "$unit" 2>/dev/null; then
-    echo "collector unit still active: $unit" >&2
-    return 1
-  fi
-}
+candidate_endpoint="$(sudo -n bash -c "$(declare -f compose_env_validate_file_format compose_env_read_value_from_file postgres_endpoint_validate postgres_endpoint_env); postgres_endpoint_env \"\$1\"" _ \
+  "$release_dir/youtube-collector-host.env")"
+if [[ "$candidate_endpoint" != '100.100.1.8|6433' ]]; then
+  echo 'candidate must use the native collector pooler endpoint; writer unchanged' >&2
+  exit 1
+fi
 
 # PO issuer를 collector보다 먼저 멈춘다. collector는 종료하면서 소유 generation을 DELETE로 반납하는데, broker가 살아
 # 있으면 retire 뒤 exit 0하고 Restart=always(RestartSec=1s)로 다시 떠서 곧바로 이 스크립트에 다시 멈춰진다.
 # broker가 먼저 멈추면 그 DELETE는 broker_unavailable로 끝나고 collector는 재전송 없이 무시한다(proof-controller.mjs retireOwned).
 # socket을 먼저 멈춰 service가 Requires=로 같은 transaction에서 멈추게 하고, 그 사이 socket activation이 service를 다시 띄우지 못하게 한다.
 stop_native_units_and_require_inactive() {
-  if sudo -n systemctl is-active --quiet "$po_socket"; then
-    sudo -n systemctl stop "$po_socket"
+  local target load active persistent status failed=0
+  local -a stopped=()
+  for target in "$po_socket" "$po_service" "$unit"; do
+    status=0
+    load="$(systemctl show "$target" -p LoadState --value)" || status=$?
+    if [[ "$load" == not-found ]] && (( status == 0 || status == 4 )); then
+      continue
+    fi
+    if (( status != 0 )) || [[ "$load" != loaded && "$load" != masked ]]; then
+      failed=1
+    fi
+    if [[ "$load" == masked ]]; then
+      sudo -n systemctl stop "$target" || failed=1
+    else
+      sudo -n systemctl disable --now "$target" >/dev/null || failed=1
+    fi
+    stopped+=("$target")
+  done
+  for target in "${stopped[@]}"; do
+    active="$(systemctl show "$target" -p ActiveState --value)" || failed=1
+    persistent="$(systemctl show "$target" -p UnitFileState --value)" || failed=1
+    if [[ "$active" != inactive && "$active" != failed ]] ||
+       [[ "$persistent" != disabled && "$persistent" != masked ]]; then
+      failed=1
+    fi
+  done
+  if (( failed != 0 )); then
+    echo 'could not confirm native collector and issuer persistently stopped; recovery guard retained' >&2
+    return 1
   fi
-  if sudo -n systemctl is-active --quiet "$po_service"; then
-    sudo -n systemctl stop "$po_service"
-  fi
-  stop_collector_unit_and_require_inactive
 }
 
 # 실패하면 이전 release로 복원하고, 첫 설치라면 불완전한 unit을 제거한다.
 # set -E로 ERR trap이 subshell에도 상속되므로 부모 shell에서만 복원해 중복 실행을 막는다.
 native_restore_recorded_runtime() {
   stop_native_units_and_require_inactive
+  if [[ "${native_pool_check_pending:-false}" == true ]]; then
+    echo 'pooled database proof incomplete; collector and issuer remain disabled; recovery guard retained' >&2
+    return 1
+  fi
   if [[ -n "$old_target" && -d "$old_target" ]]; then
     rollback_contract_dir="$old_target/rollback-contract"
     native_rollback_validate "$old_target"
-    native_rollback_endpoint_validate "$old_target" "$payload/youtube-collector-host.env" || {
+    native_rollback_endpoint_validate "$old_target" "$release_dir/youtube-collector-host.env" || {
       echo "automatic rollback blocked; collector and issuer stopped; retain $old_target and $release_dir; recovery guard retained: $native_recovery_dir" >&2
       return 1
     }
@@ -301,6 +316,10 @@ restore_native_after_failed_cutover() {
   fi
   if [[ "${native_outcome_unknown:-false}" == true || "${native_worker_status:-$restore_status}" -ne 0 || "${native_completion_verified:-false}" != true ]]; then
     echo "host-native collector cutover failed and the recorded runtime could not be restored" >&2
+    if [[ "${native_outcome_unknown:-false}" != true && "${native_completion_verified:-false}" == true ]]; then
+      # 복원이 issuer를 열고 나서 실패했을 수 있다. 미확정 worker와는 경쟁하지 않는다.
+      stop_native_units_and_require_inactive || echo 'native failure brake not verified' >&2
+    fi
   else
     native_cutover_release_guard || echo 'recorded runtime restored but native recovery guard could not be released' >&2
   fi
@@ -332,9 +351,23 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
 fi
 native_cutover_run stop stop_native_units_and_require_inactive
 
-native_cutover_run host-env sudo -n install -m 0640 -o root -g root "$payload/youtube-collector-host.env" "$host_env"
-native_cutover_run collector-unit sudo -n install -m 0644 -o root -g root "$payload/hololive-youtube-collector@.service" "$unit_file"
+native_cutover_run host-env sudo -n install -m 0640 -o root -g root "$release_dir/youtube-collector-host.env" "$host_env"
+native_cutover_run collector-unit sudo -n install -m 0644 -o root -g root "$release_dir/hololive-youtube-collector@.service" "$unit_file"
 native_cutover_run current-link sudo -n ln -sfn "$release_dir" "$current_link"
+
+native_pool_check_pending=true
+native_cutover_run pooled-database sudo -n systemd-run --quiet --wait --pipe --collect \
+  --property=User=hololive --property=Group=opc --property=NoNewPrivileges=yes --property=RuntimeMaxSec=40s \
+  --property="WorkingDirectory=$release_dir" --property=ProtectHome=yes --property=ProtectSystem=strict \
+  --property=PrivateTmp=yes --property=RestrictAddressFamilies=AF_INET \
+  --property=IPAddressDeny=any --property=IPAddressAllow=100.100.1.8/32 \
+  --property=TemporaryFileSystem=/etc/stack-secrets:ro \
+  --property=BindReadOnlyPaths=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem \
+  --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env \
+  --property="EnvironmentFile=$host_env" \
+  /usr/bin/env "STACK_WORKER_PROFILE_FILE=$release_dir/worker-profile.json" \
+  "$release_dir/bin/youtube-collector-wrapper" "$release_dir/bin/youtube-collector" --check-pooled-database
+native_pool_check_pending=false
 
 native_cutover_run issuer po_install_release "$release_dir" "$EXPECTED_REVISION"
 sudo -n systemd-analyze verify "$unit_file"
@@ -348,6 +381,7 @@ for _ in $(seq 1 30); do
   [[ "$active_state" == active ]] && break
   sleep 2
 done
+[[ "$active_state" == active ]]
 active_enter="$(systemctl show "$unit" -p ActiveEnterTimestamp --value)"
 active_epoch="$(date -u -d "$active_enter" +%s)"
 [[ "$active_epoch" -ge "$since_epoch" ]]
@@ -355,16 +389,6 @@ active_epoch="$(date -u -d "$active_enter" +%s)"
 systemctl show "$unit" -p ActiveState -p SubState -p ExecMainPID -p MemoryCurrent -p NRestarts -p ActiveEnterTimestamp
 printf 'net.core.rmem_max=%s\n' "$(sysctl -n net.core.rmem_max)"
 printf 'net.core.wmem_max=%s\n' "$(sysctl -n net.core.wmem_max)"
-
-for _ in $(seq 1 30); do
-  if sudo -n -u hololive env \
-     HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
-     HEALTHCHECK_SERVER_NAME=127.0.0.1 \
-     "$current_link/bin/healthcheck" "https://127.0.0.1:${port}/health"; then
-    break
-  fi
-  sleep 2
-done
 
 collector_readiness_fetch() {
   systemctl is-active --quiet "$unit" || return 1
@@ -376,7 +400,16 @@ collector_readiness_fetch() {
 ready="$(collector_readiness_poll 90 2 collector_readiness_fetch)"
 printf '%s\n' "$ready"
 collector_readiness_validate "$ready"
+sudo -n -u hololive env \
+  HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
+  HEALTHCHECK_SERVER_NAME=127.0.0.1 \
+  "$release_dir/bin/healthcheck" "https://127.0.0.1:${port}/health"
+[[ "$(readlink -f "$current_link")" == "$release_dir" ]]
 sudo -n python3 "$release_dir/bin/worker-profile-pair.py" verify-native "$service" "$release_dir" "$unit"
+[[ "$(systemctl show "$unit" -p NRestarts --value)" == 0 ]]
+[[ "$(systemctl show "$unit" -p SubState --value)" == running ]]
+po_since="${change_started_at/T/ }"
+po_require_running_without_failure "${po_since%Z} UTC"
 
 native_post_cutover_log_check() {
 local journal_since journal_output grep_status=0
@@ -386,10 +419,11 @@ if ! journal_output="$(journalctl -u "$unit" --since "$journal_since" --no-pager
   echo "failed to read post-cutover logs for $unit" >&2
   false
 fi
-grep -E 'PostgreSQL|Valkey|active_active|ERR|panic|permission denied|x509|no such file' <<<"$journal_output" || grep_status=$?
+grep -E 'PostgreSQL|Valkey|active_active|ERR|panic|permission denied|x509|no such file' <<<"$journal_output" >/dev/null || grep_status=$?
 (( grep_status <= 1 )) || return "$grep_status"
 grep_status=0
-if grep -E 'ERR|panic|permission denied|x509|no such file' <<<"$journal_output"; then
+if grep -E 'ERR|panic|permission denied|x509|no such file' <<<"$journal_output" >/dev/null; then
+  echo 'collector journal contains a startup error' >&2
   return 1
 else
   grep_status=$?

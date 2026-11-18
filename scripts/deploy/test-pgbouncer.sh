@@ -49,6 +49,8 @@ trap cleanup EXIT
   CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$fixture/probe" "$root/scripts/deploy/fixtures/pgbouncer/main.go"
   cd "$root/hololive/hololive-api"
   CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$fixture/db-migrate" ./cmd/db-migrate
+  cd "$root/hololive/hololive-youtube-collector"
+  CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$fixture/collector" ./cmd/runtime/youtube-collector
 )
 (umask 022; "$fixture/probe" prepare "$fixture")
 install -m 0644 "$root/deploy/postgres/pg_hba.conf" "$fixture/postgres-hba.conf"
@@ -111,6 +113,19 @@ namespace_address() {
     --network "container:$1" --read-only --cap-drop=all --cap-add=NET_ADMIN --security-opt no-new-privileges \
     --entrypoint ip "$pg_image" address add "$2/24" dev eth0
 }
+collector_sql() {
+  local network="$1" slot="$2" host=100.100.1.8 port=6433 ca=/run/hololive-bot/certs/postgres-ca.pem
+  if [[ "$slot" == c ]]; then host=holo-pgbouncer; port=6432; fi
+  if [[ "$slot" == a ]]; then ca=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem; fi
+  awk -F= -v k="HOLOLIVE_COLLECTOR_${slot^^}_PASSWORD" '$1==k {print "POSTGRES_PASSWORD=" $2}' "$fixture/bootstrap.env" |
+    podman run --rm --pull=never --platform="linux/$architecture" --security-opt label=disable \
+      --read-only --cap-drop=all --security-opt no-new-privileges --network "$network" --unsetenv-all --http-proxy=false \
+      --mount "type=bind,src=$fixture/collector,dst=/check,readonly" --mount "type=bind,src=$fixture/ca.crt,dst=$ca,readonly" \
+      --env-file /dev/stdin -e "YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-$slot" \
+      -e "POSTGRES_USER=hololive_collector_$slot" -e "POSTGRES_HOST=$host" -e "POSTGRES_PORT=$port" -e POSTGRES_DB=hololive \
+      -e POSTGRES_SOCKET_PATH= -e POSTGRES_SSLMODE=verify-full -e "POSTGRES_SSLROOTCERT=$ca" -e POSTGRES_QUERY_EXEC_MODE=cache_statement \
+      --entrypoint /check "$pg_image" --check-pooled-database
+}
 remote_client() {
   local address="$1" slot="$2" name="${id}-ap-client"
   containers+=("$name")
@@ -120,6 +135,7 @@ remote_client() {
     --init --stop-signal SIGTERM --entrypoint sleep "$pg_image" 120 >/dev/null
   namespace_address "$name" "$address"
   podman exec "$name" /fixture/probe identity "$slot"
+  collector_sql "container:$name" "$slot"
   podman rm --force "$name" >/dev/null
 }
 podman run --rm --pull=never --platform="linux/$architecture" --security-opt label=disable --network none \
@@ -139,6 +155,11 @@ podman run -d --name "$pooler" --pull=never --platform="linux/$architecture" --s
   --mount "type=bind,src=$fixture/ca.crt,dst=/run/hololive-bot/certs/postgres-ca.pem,readonly" \
   "$pool_image" >/dev/null
 namespace_address "$pooler" 100.100.1.8
+pooler_netns=$(podman inspect -f '{{.NetworkSettings.SandboxKey}}' "$pooler")
+[[ -n "$pooler_netns" && -e "$pooler_netns" ]] || { echo 'isolated pooler netns is missing' >&2; exit 1; }
+# 외부 슬롯의 게시 포트 변환은 이 fixture의 고립된 네트워크 네임스페이스에만 둔다.
+podman unshare nsenter --net="$pooler_netns" -- nft \
+  'add table ip fixture_pooler_port; add chain ip fixture_pooler_port prerouting { type nat hook prerouting priority dstnat; policy accept; }; add rule ip fixture_pooler_port prerouting ip daddr 100.100.1.8 tcp dport 6433 dnat to 100.100.1.8:6432'
 ready=false
 for _ in $(seq 1 30); do
   if podman exec "$pooler" /usr/local/bin/pgbouncer-startup-health holo-pgbouncer holo-postgres >"$fixture/version" 2>"$fixture/health-error"; then ready=true; break; fi
@@ -192,6 +213,7 @@ client "$central" 172.23.10.9 wrong-auth-source central
 )
 printf 'PASS live capacity guard rejects atomic host replacement until pooler recreation\n'
 client "$central" 172.23.10.10 identity central
+collector_sql "$central:ip=172.23.10.18" c
 remote_client 100.100.1.6 a
 remote_client 100.100.1.5 b
 remote_client 100.100.1.3 d

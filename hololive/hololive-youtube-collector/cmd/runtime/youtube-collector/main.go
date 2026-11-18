@@ -26,6 +26,16 @@ import (
 var Version = "dev"
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--check-pooled-database" {
+		if err := checkPooledDatabase(context.Background()); err != nil {
+			fmt.Fprintln(os.Stderr, "collector pooled database check failed:", err)
+			os.Exit(1)
+		}
+
+		fmt.Println("collector pooled database verified")
+		return
+	}
+
 	if handled, exitCode := entrypoint.RunWorkerProfileCheck(os.Args[1:], os.Stderr, "youtube collector", func() error {
 		if _, err := loadRuntime(); err != nil {
 			return fmt.Errorf("load youtube collector worker profile: %w", err)
