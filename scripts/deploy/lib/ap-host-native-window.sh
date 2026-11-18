@@ -121,9 +121,7 @@ native_window_terminal() {
   local target="$1" job control state
   job="$(native_window_prop "$target" Job)" && control="$(native_window_prop "$target" ControlPID)" || return 1
   state="$(native_window_prop "$target" ActiveState)" || return 1
-  [[ -z "$job" && "$control" == 0 &&
-     ( ( "$state" == inactive && "$(native_window_prop "$target" Result)" == success ) ||
-       ( "${2:-}" == brake && "$state" == failed ) ) ]] || return 1
+  [[ -z "$job" && "$control" == 0 && "$state" == inactive && "$(native_window_prop "$target" Result)" == success ]] || return 1
   [[ "$target" == "$po_socket" || "$(native_window_prop "$target" MainPID)" == 0 ]]
 }
 
@@ -154,45 +152,96 @@ native_window_verify_quiesced() {
   native_window_boot | sudo -n cmp -s - "$window/boot"
 }
 
+native_window_rotation_hook() {
+  cat <<'HOOK'
+set -eu
+umask 077
+action=$1 lease=$2 unit=$3 blocked=$4
+job_id() { /usr/bin/timeout -k 1 3 /usr/bin/systemctl --system show "$unit" --property=Job --value; }
+case "$action" in
+  grant)
+    [[ "${SERVICE_RESULT:-}:${EXIT_CODE:-}:${EXIT_STATUS:-}" == success:exited:0 && -d "$lease" && ! -e "$blocked" ]] || exit 0
+    existing=$(job_id)
+    [[ -z "$existing" ]] || exit 0
+    # stop-post가 끝나기 전에는 이 job의 start-pre를 실행할 수 없다.
+    path=$(/usr/bin/timeout -k 1 3 /usr/bin/busctl --system call org.freedesktop.systemd1 \
+      /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager StartUnit ss "$unit" fail)
+    [[ "$path" =~ ^o\ \"/org/freedesktop/systemd1/job/([1-9][0-9]*)\"$ ]]
+    job=${BASH_REMATCH[1]}
+    [[ "$INVOCATION_ID" =~ ^[0-9a-f]{32}$ ]]
+    set -C
+    printf '%s %s\n' "$job" "$INVOCATION_ID" >"$lease/next"
+    ;;
+  consume)
+    [[ ! -e "$blocked" && "$INVOCATION_ID" =~ ^[0-9a-f]{32}$ ]]
+    read -r want previous <"$lease/next"
+    [[ "$want" =~ ^[1-9][0-9]*$ && "$previous" =~ ^[0-9a-f]{32}$ && "$previous" != "$INVOCATION_ID" && "$want" == "$(job_id)" ]]
+    /usr/bin/ln -T -- "$lease/next" "$lease/$INVOCATION_ID"
+    /usr/bin/rm -- "$lease/next"
+    ;;
+  *) exit 2 ;;
+esac
+HOOK
+}
+
 native_window_barrier_body() {
   printf '[Unit]\nConditionPathExists=!%s/native-window\n' "$current_link"
   printf 'ConditionPathExists=!%s/accepting\n' "$native_recovery_dir"
-  if [[ "$2" == held ]]; then
-    printf 'ConditionPathExists=!%s/blocked\n' "$window"
-    printf 'ConditionPathExists=%s\n' "$(native_window_permit "$1")"
-    if [[ "$1" != "$po_socket" ]]; then printf '[Service]\nRestart=no\nRestartForceExitStatus=\n'; fi
+  if [[ "$2" != permanent ]]; then
+    local permit
+    permit="$(native_window_permit "$1")"
+    if [[ "$1" == "$po_service" && "$2" == observing ]]; then permit="$(native_window_permit rotation)/next"; fi
+    printf 'ConditionPathExists=!%s/blocked\nConditionPathExists=%s\n' "$window" "$permit"
+    if [[ "$1" == "$po_service" && "$2" == observing ]]; then
+      printf '[Service]\nRestart=no\nRestartForceExitStatus=\nSuccessExitStatus=\nRootDirectoryStartOnly=yes\n'
+      # socket activation과 정상 퇴역 때 발행한 job이 다르면 다음 기동을 열지 않는다.
+      printf 'ExecStartPre=+/usr/bin/bash %s/issuer-rotation.sh consume %s %s %s/blocked\n' "$window" "${permit%/next}" "$1" "$window"
+      printf 'ExecStopPost=+/usr/bin/bash %s/issuer-rotation.sh grant %s %s %s/blocked\n' "$window" "${permit%/next}" "$1" "$window"
+    elif [[ "$1" != "$po_socket" ]]; then
+      printf '[Service]\nRestart=no\nRestartForceExitStatus=\n'
+    fi
+  elif [[ "$1" != "$po_socket" ]]; then
+    # 자동 재시작은 활성화 중 ConditionPathExists를 다시 검사하지 않는다.
+    printf '[Service]\n'
+    if [[ "$1" == "$po_service" ]]; then printf 'RootDirectoryStartOnly=yes\n'; fi
+    printf 'ExecCondition=+/usr/bin/test ! -e %s/native-window\n' "$current_link"
+    printf 'ExecCondition=+/usr/bin/test ! -e %s/accepting\n' "$native_recovery_dir"
   fi
 }
 
 native_window_barriers() {
   local action="$1" n file directory link object policy force paths drop
-  case "$action" in arm|check|finish|permanent|rearm) ;; *) return 2 ;; esac
+  case "$action" in arm|check|rotate|observing|finish|permanent|rearm) ;; *) return 2 ;; esac
+  shift
+  if (( $# == 0 )); then set -- "${window_units[@]}"; fi
   local -a drops
   local -a conditions=("$current_link/native-window" "$native_recovery_dir/accepting")
   if [[ "$action" == arm ]]; then
-    sudo -n mkdir -- "$window/held" "$window/permanent"
+    sudo -n mkdir -- "$window/held" "$window/observing" "$window/permanent"
     sudo -n ln -sT held "$window/policy"
-  elif [[ "$action" == finish || "$action" == rearm ]]; then
+    native_window_rotation_hook | sudo -n sh -ec 'umask 077; set -C; cat >"$1"' sh "$window/issuer-rotation.sh"
+  elif [[ "$action" == finish || "$action" == rearm || "$action" == rotate ]]; then
     local next=permanent
-    if [[ "$action" == rearm ]]; then next=held; fi
+    case "$action" in rearm) next=held ;; rotate) next=observing ;; esac
     sudo -n ln -sT "$next" "$window/policy.$next"
     sudo -n mv -T "$window/policy.$next" "$window/policy"
     sudo -n systemctl daemon-reload
     return
   fi
   if [[ "$action" != permanent ]]; then conditions+=("$window/blocked"); fi
-  for n in "${window_units[@]}"; do
+  for n in "$@"; do
     directory="${unit_file%/*}/$n.d"
     file="$window/policy/$n.conf"
     link="$directory/90-native-window-$native_claim_nonce.conf"
     if [[ "$action" == arm ]]; then
       sudo -n install -d -m 0755 -o root -g root "$directory"
       native_window_barrier_body "$n" held | sudo -n tee "$window/held/$n.conf" >/dev/null
+      native_window_barrier_body "$n" observing | sudo -n tee "$window/observing/$n.conf" >/dev/null
       native_window_barrier_body "$n" permanent | sudo -n tee "$window/permanent/$n.conf" >/dev/null
       sudo -n ln -sT "$file" "$link"
-    elif [[ "$action" == check || "$action" == permanent ]]; then
-      policy=held
-      if [[ "$action" == permanent ]]; then policy=permanent; fi
+    elif [[ "$action" == check || "$action" == observing || "$action" == permanent ]]; then
+      policy="$action"
+      if [[ "$action" == check ]]; then policy=held; fi
       [[ "$(sudo -n readlink "$window/policy")" == "$policy" ]]
       native_window_barrier_body "$n" "$policy" | sudo -n cmp -s - "$file"
       [[ "$(sudo -n readlink "$link")" == "$file" ]]
@@ -207,12 +256,32 @@ native_window_barriers() {
       object="$(busctl --system call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager GetUnit s "$n")"
       [[ "$object" =~ ^o\ \"(/org/freedesktop/systemd1/unit/[a-zA-Z0-9_]+)\"$ ]]
       local object_path="${BASH_REMATCH[1]}" permit=''
-      if [[ "$action" == check ]]; then permit="$(native_window_permit "$n")"; fi
+      if [[ "$action" != permanent ]]; then
+        if [[ "$action" == observing && "$n" == "$po_service" ]]; then permit="$(native_window_permit rotation)/next"
+        else permit="$(native_window_permit "$n")"; fi
+      fi
       busctl --system --json=short get-property org.freedesktop.systemd1 "$object_path" org.freedesktop.systemd1.Unit Conditions |
         python3 -I -c 'import json,sys; a=json.load(sys.stdin); rows=[r[:4] for r in a["data"]]; assert a["type"]=="a(sbbsi)" and all(["ConditionPathExists",False,True,p] in rows for p in sys.argv[2:]) and (not sys.argv[1] or ["ConditionPathExists",False,False,sys.argv[1]] in rows)' "$permit" "${conditions[@]}"
       if [[ "$n" != "$po_socket" ]]; then
         policy="$(native_window_prop "$n" Restart)"; force="$(native_window_prop "$n" RestartForceExitStatus)"
-        if [[ "$action" == permanent ]]; then [[ "$policy" == always ]]; else [[ "$policy" == no && -z "$force" ]]; fi
+        if [[ "$action" == permanent ]]; then
+          [[ "$policy" == always && -z "$force" ]]
+          if [[ "$n" == "$po_service" ]]; then [[ "$(native_window_prop "$n" RootDirectoryStartOnly)" == yes ]]; fi
+          busctl --system --json=short get-property org.freedesktop.systemd1 "$object_path" org.freedesktop.systemd1.Service ExecConditionEx |
+            python3 -I -c 'import json,sys; row=json.load(sys.stdin); a,b,n=sys.argv[1:]; expected=[["/usr/bin/test",["/usr/bin/test","!","-e",p],["privileged"]] for p in (a,b)]; assert row["type"]=="a(sasasttttuii)" and [r[:3] for r in row["data"]]==expected*int(n)' "$current_link/native-window" "$native_recovery_dir/accepting" "${#drops[@]}"
+        elif [[ "$action" == observing && "$n" == "$po_service" ]]; then
+          [[ "$policy" == no && -z "$force" && -z "$(native_window_prop "$n" SuccessExitStatus)" &&
+             "$(native_window_prop "$n" RootDirectoryStartOnly)" == yes ]]
+          sudo -n sh -ec 'test -f "$1"; test ! -L "$1"; test "$(stat -c "%u:%g:%a" "$1")" = "$(id -u):$(id -g):600"' sh "$window/issuer-rotation.sh"
+          native_window_rotation_hook | sudo -n cmp -s - "$window/issuer-rotation.sh"
+          busctl --system --json=short get-property org.freedesktop.systemd1 "$object_path" org.freedesktop.systemd1.Service ExecStartPreEx ExecStopPostEx |
+            python3 -I -c 'import json,sys; w,p,n=sys.argv[1:]; rows=[json.loads(s) for s in sys.stdin]; assert len(rows)==2
+for row,action in zip(rows,("consume","grant")):
+    argv=["/usr/bin/bash",w+"/issuer-rotation.sh",action,p,n,w+"/blocked"]
+    assert row["type"]=="a(sasasttttuii)" and len(row["data"])==1 and row["data"][0][:3]==[argv[0],argv,["privileged"]]' "$window" "${permit%/next}" "$n"
+        else
+          [[ "$policy" == no && -z "$force" ]]
+        fi
       fi
     fi
   done
@@ -260,6 +329,14 @@ native_window_verify_original() {
   done
 }
 
+native_window_stop_receipt() {
+  local n="$1" id="$2" since="$3" record
+  record="$(sudo -n journalctl --boot --quiet --no-pager -o json --output-fields=INVOCATION_ID,JOB_ID,JOB_RESULT --since="$since" \
+    _PID=1 "UNIT=$n" "INVOCATION_ID=$id" JOB_TYPE=stop JOB_RESULT=done MESSAGE_ID=9d1aaa27d60140bd96365438aad20286)" || return 1
+  python3 -I -B -c 'import json,sys; r=json.load(sys.stdin); j=r["JOB_ID"]; assert r["INVOCATION_ID"]==sys.argv[1] and r["JOB_RESULT"]=="done" and j.isdecimal() and int(j)>0' "$id" <<< "$record" &&
+    printf '%s\n' "$record"
+}
+
 native_window_stop_original() {
   local LC_ALL=C n since id persistent state job before
   local -A generation=()
@@ -287,9 +364,7 @@ native_window_stop_original() {
       sudo -n systemctl stop "$n"
     fi
     # socket은 시작 메시지 없이 바로 완료할 수 있다. 원 invocation의 단일 완료 job만 인정한다.
-    before="$(sudo -n journalctl --boot --quiet --no-pager -o json --output-fields=INVOCATION_ID,JOB_ID,JOB_RESULT --since="$since" \
-      _PID=1 "UNIT=$n" "INVOCATION_ID=${generation[$n]}" JOB_TYPE=stop JOB_RESULT=done MESSAGE_ID=9d1aaa27d60140bd96365438aad20286)"
-    python3 -I -B -c 'import json,sys; r=json.load(sys.stdin); j=r["JOB_ID"]; assert r["INVOCATION_ID"]==sys.argv[1] and r["JOB_RESULT"]=="done" and j.isdecimal() and int(j)>0' "${generation[$n]}" <<< "$before"
+    before="$(native_window_stop_receipt "$n" "${generation[$n]}" "$since")"
     if [[ "$n" == "$unit" ]]; then
       sudo -n journalctl --boot --quiet --no-pager --grep='\byoutube_collector_stopped\b' -o json \
         --output-fields=_SYSTEMD_INVOCATION_ID --since="$since" "_SYSTEMD_UNIT=$n" "_SYSTEMD_INVOCATION_ID=${generation[$n]}" |
@@ -374,18 +449,117 @@ native_window_live_generation() {
     "$id" =~ ^[0-9a-f]{32}$ && "$id" != 00000000000000000000000000000000 ]] && printf '%s\n' "$id"
 }
 
+native_window_issuer_chain() (
+  set -o pipefail
+  local boot="$1" job="$2" first="$3" since="$4" current="$5" restarts="$6" mode="$7" lease
+  [[ "$since" =~ ^@[0-9]+([.][0-9]+)?$ && "$restarts" == 0 ]] || return 1
+  lease="$(native_window_permit rotation)"
+  sudo -n journalctl --boot="$boot" --since="$since" --lines=4096 --quiet --no-pager -o json \
+    --output-fields=_BOOT_ID,_PID,UNIT,INVOCATION_ID,MESSAGE_ID,JOB_ID,JOB_TYPE,JOB_RESULT,EXIT_CODE,EXIT_STATUS \
+    _PID=1 "UNIT=$po_service" | sudo -n python3 -I -B -c '
+from pathlib import Path
+import json, os, re, stat, sys
+boot, unit, first_job, first, current, mode, lease = sys.argv[1:]
+start, clean = "39f53479d3a045ac8e11786248231fbf", "7ad2d189f7e94e70a38c781354912448"
+jobs, ids = set(), set()
+state, last = "initial", None
+for line in sys.stdin:
+    r = json.loads(line)
+    assert r["_BOOT_ID"] == boot and r["_PID"] == "1" and r["UNIT"] == unit
+    mid, inv, job = r.get("MESSAGE_ID"), r.get("INVOCATION_ID"), r.get("JOB_ID")
+    if mid == start:
+        assert r["JOB_TYPE"] == "start" and r["JOB_RESULT"] == "done"
+        if mode == "retired" and state == "clean" and inv == last:
+            continue
+        assert state in ("initial","clean") and re.fullmatch("[1-9][0-9]*", job) and job not in jobs
+        assert re.fullmatch("[0-9a-f]{32}", inv) and int(inv,16) and inv not in ids
+        if state == "initial":
+            assert (job,inv) == (first_job,first)
+        else:
+            receipt = Path(lease) / inv
+            s = receipt.lstat()
+            assert (s.st_uid,s.st_gid) == (os.geteuid(),os.getegid()) and stat.S_ISREG(s.st_mode) and stat.S_IMODE(s.st_mode) == 0o600
+            assert receipt.read_text() == f"{job} {last}\n"
+        jobs.add(job); ids.add(inv)
+        state, last = "live", inv
+    elif mid == clean:
+        assert state == "live" and inv == last
+        state = "clean"
+    elif mid == "98e322203f7a4ed290d09fe03c09fe15":
+        assert r["EXIT_CODE"] == "exited" and r["EXIT_STATUS"] == "0"
+    else:
+        assert mid not in ("5eb03494b6584870a536b337290809b3","be02cf6855d2428ba40df7e9d022f03d","d9b373ed55a64feb8242e02dbe79a49c","de5b426a63be47a7b6ac3eaac82e2f6f") and not r.get("JOB_RESULT")
+assert last == current
+assert (mode == "live" and state == "live") or (mode == "retired" and state == "clean")
+' "$boot" "$po_service" "$job" "$first" "$current" "$mode" "$lease"
+)
+
+native_window_lease_deadline() {
+  local permit lease started
+  permit="$(native_window_permit rotation)" && lease="${permit##*/}.service"
+  sudo -n test -d "$permit" && native_window_live_generation "$lease" | sudo -n cmp -s - "$window/issuer-lease" || return 1
+  started="$(native_window_prop "$lease" ActiveEnterTimestampMonotonic)" || return 1
+  [[ "$started" =~ ^[1-9][0-9]*$ ]] || return 1
+  python3 -I -B -c 'import sys,time; expires=int(sys.argv[1])+900_000_000; assert time.monotonic_ns()//1000 < expires; print(expires)' "$started"
+}
+
+native_window_lease_live() { native_window_lease_deadline >/dev/null; }
+
+native_window_open_rotation() {
+  local permit lease
+  native_window_candidates "$po_socket" "$po_service"
+  native_window_candidate_runtime "$po_service"
+  permit="$(native_window_permit rotation)" && lease="${permit##*/}.service"
+  sudo -n test ! -e "$permit"
+  sudo -n test ! -L "$permit"
+  # 관찰 SSH가 끊겨도 PID 1이 같은 부팅에서만 허가를 유지하고 상한에 회수한다.
+  sudo -n systemd-run --quiet --collect --unit="$lease" --property=Type=exec --property=RuntimeMaxSec=900s \
+    --property=RuntimeDirectoryPreserve=no --property=RuntimeDirectoryMode=0700 --property="RuntimeDirectory=${permit##*/}" /usr/bin/sleep infinity
+  native_window_live_generation "$lease" | sudo -n tee "$window/issuer-lease" >/dev/null
+  native_window_lease_live
+  native_window_barriers rotate "$@"
+  native_window_barriers observing "$@"
+  native_window_candidates "$po_socket" "$po_service"
+}
+
 native_window_owned() {
-  local n="$1" boot job id receipt
+  local n="$1" mode="${2:-live}" boot job id receipt current since count
   boot="$(native_window_boot)" && receipt="$(sudo -n cat "$window/$n.started")" || return 1
   [[ "$receipt" =~ ^([0-9a-f]{32})[[:blank:]]([1-9][0-9]*)[[:blank:]]([0-9a-f]{32})$ ]] || return 1
   job="${BASH_REMATCH[2]}" id="${BASH_REMATCH[3]}"
-  [[ "${BASH_REMATCH[1]}" == "$boot" && "$(native_window_live_generation "$n")" == "$id" ]] || return 1
-  printf '%s\n' "$job" | sudo -n cmp -s - "$window/$n.job"
+  [[ "${BASH_REMATCH[1]}" == "$boot" ]] && printf '%s\n' "$job" | sudo -n cmp -s - "$window/$n.job" || return 1
+  if [[ "$mode" == retired ]]; then
+    [[ "$n" == "$po_service" ]] && native_window_terminal "$n" &&
+      [[ "$(native_window_prop "$n" ExecMainCode)" == 1 && "$(native_window_prop "$n" ExecMainStatus)" == 0 ]] || return 1
+    current="$(native_window_prop "$n" InvocationID)" || return 1
+  else
+    current="$(native_window_live_generation "$n")" || return 1
+  fi
+  if [[ "$n" != "$po_service" ]]; then [[ "$current" == "$id" ]]; return; fi
+  if [[ "$current" != "$id" ]]; then sudo -n test -f "$window/issuer-lease" || return 1; fi
+  count="$(native_window_prop "$n" NRestarts)" || return 1
+  since="$(sudo -n cat "$window/$n.since")" || return 1
+  native_window_issuer_chain "$boot" "$job" "$id" "$since" "$current" "$count" "$mode" || return 1
+  if [[ "$mode" == retired ]]; then
+    native_window_terminal "$n" && [[ "$(native_window_prop "$n" InvocationID)" == "$current" ]]
+    return
+  fi
+  native_window_candidate_runtime "$n" && [[ "$(native_window_live_generation "$n")" == "$current" ]]
+}
+
+native_window_probe_units() {
+  local n
+  for n in "$@"; do
+    if [[ "$n" == "$po_service" ]]; then
+      native_window_issuer_state live >/dev/null || return 1
+    else
+      native_window_owned "$n" || return 1
+    fi
+  done
 }
 
 native_window_candidates() {
-  local n
-  for n in "$@"; do native_window_owned "$n" || { native_window_uncertain; return 1; }; done
+  native_window_probe_units "$@" || { native_window_uncertain; return 1; }
 }
 
 native_window_start_receipt() {
@@ -407,6 +581,7 @@ native_window_start() {
   sudo -n test ! -L "$permit"
   sudo -n mkdir -m 0700 -- "$window/$n.requesting"
   since="@$EPOCHREALTIME"
+  if [[ "$n" == "$po_service" ]]; then printf '%s\n' "$since" | sudo -n tee "$window/$n.since" >/dev/null; fi
   # 이 unit만 통과시키는 /run 디렉터리는 manager가 시작 client의 수명 동안만 유지한다. 부팅으로 승계되지 않는다.
   client_unit="hololive-native-start-${native_claim_nonce}-$n.service"
   sudo -n systemd-run --quiet --wait --collect --unit="$client_unit" --property=RuntimeMaxSec=120s --property=KillMode=control-group \
@@ -438,12 +613,13 @@ native_window_start() {
 
 native_window_candidate_seal() {
   local n
-  local -a files=("$window/quiesced")
+  local -a files=("$window/quiesced" "$window/issuer-lease" "$window/$po_service.since")
   for n in "${window_units[@]}"; do files+=("$window/$n.job" "$window/$n.started"); done
   sudo -n sha256sum -- "${files[@]}"
 }
 
 native_window_await_observation() {
+  native_window_lease_live || { native_window_uncertain; return 1; }
   native_window_candidates "${window_units[@]}"
   native_window_candidate_seal | sudo -n tee "$window/observed.tmp" >/dev/null
   sudo -n sync -f "$window"
@@ -461,6 +637,8 @@ native_window_candidate_runtime() {
   fi
   pid="$(native_window_prop "$n" MainPID)" && [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
   if [[ "$n" == "$po_service" ]]; then
+    [[ "$(native_window_prop "$n" RootDirectory)" == "$release_dir/po-sandbox/rootfs" &&
+       "$(native_window_prop "$n" SubState)" == running && "$(native_window_prop "$n" ControlPID)" == 0 ]] || return 1
     sudo -n test "/proc/$pid/root" -ef "$release_dir/po-sandbox/rootfs" || return 1
     exe="$release_dir/po-sandbox/rootfs/app/bin/po-broker"
   else
@@ -469,17 +647,80 @@ native_window_candidate_runtime() {
   sudo -n test "/proc/$pid/exe" -ef "$exe"
 }
 
+native_window_issuer_ready() {
+  local current after ready start state deadline=$((SECONDS+90))
+  while (( SECONDS < deadline )); do
+    native_window_lease_live && native_window_probe_units "${window_units[@]}" || return 1
+    current="$(native_window_live_generation "$po_service")" || return 1
+    state=cold
+    if po_health_ready "$release_dir"; then
+      state=not_ready
+      if ready="$(collector_readiness_fetch)" && collector_readiness_validate "$ready" &&
+          collector_readiness_json_field "$ready" instance_id "\"$service\""; then state=ready; fi
+    fi
+    native_window_probe_units "${window_units[@]}" || return 1
+    after="$(native_window_live_generation "$po_service")" || return 1
+    if [[ "$after" != "$current" ]]; then continue; fi
+    case "$state" in
+      ready) return 0 ;;
+      not_ready) return 1 ;;
+    esac
+    # 같은 기동의 SDK 초기화 예산만 관찰한다. 오래된 비정상 세대나 다른 세대는 기다리지 않는다.
+    start="$(native_window_prop "$po_service" ExecMainStartTimestampMonotonic)" || return 1
+    [[ "$start" =~ ^[1-9][0-9]*$ ]] || return 1
+    python3 -I -B -c 'import sys,time; assert 0 <= time.monotonic_ns()//1000-int(sys.argv[1]) < 90_000_000' "$start" || return 1
+    sleep 2
+  done
+  return 1
+}
+
+native_window_issuer_state() {
+  local mode="$1" state attempt id
+  for attempt in {1..6}; do
+    state="$(native_window_prop "$po_service" ActiveState)" || return 1
+    case "$state" in
+      active)
+        id="$(native_window_prop "$po_service" InvocationID)" || return 1
+        if native_window_owned "$po_service"; then echo live; return; fi
+        [[ "$(native_window_prop "$po_service" ActiveState)" != active || "$(native_window_prop "$po_service" InvocationID)" != "$id" ]] || return 1
+        ;;
+      inactive)
+        if [[ -z "$(native_window_prop "$po_service" Job)" ]]; then
+          [[ "$mode" == brake ]] && native_window_owned "$po_service" retired && echo retired
+          return
+        fi
+        ;;
+      activating|deactivating)
+        case "$(native_window_prop "$po_service" SubState)" in start-pre|start|stop-post) ;; *) return 1 ;; esac
+        ;;
+      *) return 1 ;;
+    esac
+    (( attempt == 6 )) || sleep 1
+  done
+  return 1
+}
+
 native_window_rehold() {
-  local n state policy collector_open=false
+  local n state policy issuer_requested=false collector_open=false issuer_state id since
   local -a opened=()
   sudo -n touch "$window/blocked"
+  if sudo -n test -f "$window/issuer-lease"; then native_window_lease_live || { native_window_uncertain; return 1; }; fi
   policy="$(sudo -n readlink "$window/policy")"
-  if [[ "$policy" == permanent ]]; then native_window_barriers rearm; fi
-  native_window_barriers check
+  case "$policy" in
+    held) native_window_barriers check ;;
+    observing) native_window_barriers observing ;;
+    permanent) sudo -n test -d "$native_recovery_dir/accepting"; native_window_barriers permanent ;;
+    *) native_window_uncertain; return 1 ;;
+  esac
   native_window_verify_quiesced || { native_window_uncertain; return 1; }
   sudo -n test ! -e "$native_recovery_dir/outcome"
   for n in "${window_units[@]}"; do
     sudo -n test ! -e "$(native_window_permit "$n")" || { native_window_uncertain; return 1; }
+    if [[ "$n" == "$po_service" ]] && sudo -n test -d "$window/$n.requesting"; then
+      [[ "$(realpath -e "$current_link")" == "$release_dir" ]] || { native_window_uncertain; return 1; }
+      issuer_requested=true
+      continue
+    fi
     state="$(native_window_prop "$n" ActiveState)" || { native_window_uncertain; return 1; }
     if [[ "$state" == active ]]; then
       [[ "$(realpath -e "$current_link")" == "$release_dir" ]] || { native_window_uncertain; return 1; }
@@ -488,32 +729,49 @@ native_window_rehold() {
       opened+=("$n")
     else
       # 실행 요청이 있었으나 그 세대가 사라졌다면 이미 정지된 것으로 단정하지 않는다.
-      sudo -n test ! -e "$window/$n.requesting" && native_window_terminal "$n" || { native_window_uncertain; return 1; }
+      sudo -n test ! -e "$window/$n.requesting" && sudo -n test ! -e "$window/$n.started" &&
+        sudo -n test ! -e "$window/$n.job" && native_window_terminal "$n" || { native_window_uncertain; return 1; }
     fi
   done
-  if (( ${#opened[@]} )); then
+  if [[ "$policy" != held ]]; then
+    if [[ "$issuer_requested" == true ]]; then native_window_issuer_state brake >/dev/null || { native_window_uncertain; return 1; }; fi
+    native_window_barriers rearm
+    native_window_barriers check
+  fi
+  if [[ "$issuer_requested" == true || ${#opened[@]} -gt 0 ]]; then
     native_window_candidates "${opened[@]}"
-    if [[ "${opened[-1]}" == "$unit" ]]; then collector_open=true; unset 'opened[-1]'; fi
+    if [[ ${#opened[@]} -gt 0 && "${opened[-1]}" == "$unit" ]]; then collector_open=true; unset 'opened[-1]'; fi
+    if [[ "$issuer_requested" == true ]]; then
+      issuer_state="$(native_window_issuer_state brake)" || { native_window_uncertain; return 1; }
+      if [[ "$issuer_state" == live ]]; then opened+=("$po_service"); fi
+    fi
     if (( ${#opened[@]} )); then sudo -n systemctl --job-mode=fail stop "${opened[@]}" || { native_window_uncertain; return 1; }; fi
     if [[ "$collector_open" == true ]]; then
+      id="$(sudo -n cat "$window/$unit.started")" || { native_window_uncertain; return 1; }
       native_window_candidates "$unit"
+      since="@$EPOCHREALTIME"
       sudo -n systemctl --job-mode=fail stop "$unit" || { native_window_uncertain; return 1; }
+      native_window_stop_receipt "$unit" "${id##* }" "$since" >/dev/null || { native_window_uncertain; return 1; }
     fi
   fi
-  for n in "${window_units[@]}"; do native_window_terminal "$n" brake || { native_window_uncertain; return 1; }; done
+  for n in "${window_units[@]}"; do native_window_terminal "$n" || { native_window_uncertain; return 1; }; done
   echo "후보 정지 확인, 구 publisher 복원 금지: $window" >&2
 }
 
 native_window_commit_policy() {
+  native_window_lease_live || { native_window_uncertain; return 1; }
   local n pid
-  native_window_candidates "${window_units[@]}"
+  native_window_probe_units "${window_units[@]}"
   pid="$(native_window_prop "$unit" MainPID)"; [[ "$pid" =~ ^[1-9][0-9]*$ ]]
-  for n in "${window_units[@]}"; do native_window_candidate_runtime "$n" || { native_window_uncertain; return 1; }; done
+  for n in "${window_units[@]}"; do native_window_candidate_runtime "$n"; done
   native_window_process_endpoint "$pid" 6433
-  native_window_barriers check
-  native_window_barriers finish
-  native_window_barriers permanent
-  native_window_candidates "${window_units[@]}"
+  native_window_lease_live || { native_window_uncertain; return 1; }
+  native_window_barriers observing "$@"
+  native_window_issuer_ready || { native_window_uncertain; return 1; }
+  native_window_lease_live || { native_window_uncertain; return 1; }
+  native_window_barriers finish "$@"
+  native_window_barriers permanent "$@"
+  native_window_probe_units "${window_units[@]}"
 }
 
 native_apply_before_stop() {
@@ -530,17 +788,42 @@ native_apply_before_stop() {
 
 native_apply_observation_record() { printf '%s\n' "$native_release_window" "$release_id" "$EXPECTED_REVISION" "$1"; }
 
-native_apply_await_observation() {
-  local n boot entry job
+native_apply_record_start() {
+  local n="$1" boot entry job
   boot="$(native_window_boot)"
-  for n in "${window_units[@]}"; do
-    # 마지막 실행 세대로 journal을 좁히면 관찰 전의 추가 기동을 숨기므로 전체 구간의 단일 완료만 받는다.
-    entry="$(native_window_start_receipt "$n" "$boot" "$apply_start_since")"
-    read -r _ job _ <<< "$entry"
-    printf '%s\n' "$job" | sudo -n tee "$window/$n.job" >/dev/null
-    printf '%s\n' "$entry" | sudo -n tee "$window/$n.started" >/dev/null
-    native_window_candidate_runtime "$n"
-  done
+  entry="$(native_window_start_receipt "$n" "$boot" "$apply_start_since")"
+  read -r _ job _ <<< "$entry"
+  printf '%s\n' "$job" | sudo -n tee "$window/$n.job" >/dev/null
+  printf '%s\n' "$entry" | sudo -n tee "$window/$n.started" >/dev/null
+  native_window_candidates "$n"
+}
+
+native_apply_unarm_issuer() {
+  local n link="${unit_file%/*}/$po_service.d/90-native-window-$native_claim_nonce.conf"
+  [[ "$(realpath -e "$current_link")" == "$release_dir" ]] || return 1
+  sudo -n test ! -e "$window/$po_socket.requesting" || return 1
+  for n in "${window_units[@]}"; do native_window_terminal "$n" || return 1; done
+  if sudo -n test -L "$link"; then
+    [[ "$(sudo -n readlink "$link")" == "$window/policy/$po_service.conf" ]] || return 1
+    sudo -n rm -- "$link"
+  else
+    sudo -n test ! -e "$link"
+  fi
+}
+
+native_apply_start_issuer() {
+  native_window_barriers arm "$po_service"
+  native_window_barriers check "$po_service"
+  sudo -n mkdir -m 0700 -- "$window/$po_socket.requesting"
+  sudo -n systemctl enable --now "$po_socket"
+  native_apply_record_start "$po_socket"
+  native_window_start "$po_service"
+  native_window_open_rotation "$po_service"
+}
+
+native_apply_await_observation() {
+  native_apply_record_start "$unit"
+  native_window_lease_live || { native_window_uncertain; return 1; }
   native_window_candidates "${window_units[@]}"
   native_apply_observation_record "$native_claim_nonce" | sudo -n tee "$window/await-observation" >/dev/null
   sudo -n sync -f "$window"
@@ -548,7 +831,7 @@ native_apply_await_observation() {
 }
 
 native_apply_close_observation() {
-  local owner="$BASHPID" n
+  local owner="$BASHPID"
   [[ "$(hostname -s)" == osaka1 && "$service" == youtube-collector-a && "$window_nonce" =~ ^[0-9a-f-]{36}$ &&
      "$(realpath -e "$current_link")" == "$release_dir" && "$(sudo -n cat "$native_recovery_dir/claim")" == "$window_nonce" &&
      "$(sudo -n cat "$native_recovery_dir/release")" == "$release_dir" && "$(sudo -n cat "$native_recovery_dir/step")" == collector-restart &&
@@ -558,20 +841,24 @@ native_apply_close_observation() {
   sudo -n mkdir -m 0700 "$window/closing"
   native_claim_nonce="$window_nonce"
   printf '%s\n' "$owner" | sudo -n tee "$native_recovery_dir/owner-pid" >/dev/null
-  for n in "${window_units[@]}"; do native_window_candidate_runtime "$n"; done
-  native_window_process_endpoint "$(native_window_prop "$unit" MainPID)" 6433
-  native_window_candidates "${window_units[@]}"
-  native_window_accept_guard collector-restart
+  sudo -n mkdir -m 0700 "$native_recovery_dir/accepting"
+  sudo -n sync -f "$native_recovery_dir"
+  native_cutover_run accept native_window_commit_policy "$po_service"
+  native_window_accept_guard accept
 }
 
 native_window_accept_guard() {
-  local step="$1" dest="$window/accepted-guard"
+  local step="$1" dest="$window/accepted-guard" expires permit status=0
   native_window_identity stage "$release_id" "$EXPECTED_REVISION"
-  sudo -n python3 -I -B - "$native_recovery_dir" "$dest" "$native_claim_nonce" "$owner" "$release_dir" "$step" "$current_link" <<'PY'
+  native_window_lease_live || { native_window_uncertain; return 1; }
+  native_window_issuer_ready || { native_window_uncertain; return 1; }
+  expires="$(native_window_lease_deadline)" || { native_window_uncertain; return 1; }
+  permit="$(native_window_permit rotation)"
+  sudo -n python3 -I -B - "$native_recovery_dir" "$dest" "$native_claim_nonce" "$owner" "$release_dir" "$step" "$current_link" "$permit" "$expires" <<'PY' || status=$?
 from pathlib import Path
-import os, sys
+import os, sys, time
 g, dest = map(Path, sys.argv[1:3])
-nonce, owner, release, step, current = sys.argv[3:]
+nonce, owner, release, step, current, permit, expires = sys.argv[3:]
 assert Path(current).resolve(strict=True) == Path(release)
 assert not os.path.lexists(dest) and not g.is_symlink()
 files = {'owner-pid','worker-pid','claim','release','step','terminal','accepted-window'}
@@ -581,14 +868,20 @@ if step == 'accept':
 assert {p.name for p in g.iterdir()} == files and all(not p.is_symlink() for p in g.iterdir())
 for name, value in zip(('claim','owner-pid','release','step','terminal'), (nonce,owner,release,step,'0')):
     assert (g/name).read_text() == value+'\n'
+os.link(g/'accepted-window', Path(release)/'accepted-window')
+fd=os.open(release,os.O_RDONLY|os.O_DIRECTORY)
+try: os.fsync(fd)
+finally: os.close(fd)
+if not Path(permit).is_dir() or time.monotonic_ns()//1000 >= int(expires):
+    sys.exit(75)
 os.rename(g,dest)
 for path in (dest.parent, g.parent):
     fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY)
     try: os.fsync(fd)
     finally: os.close(fd)
-os.link(dest/'accepted-window', Path(release)/'accepted-window')
 PY
-  sudo -n sync -f "$release_dir"
+  if (( status == 75 )); then native_window_uncertain; fi
+  return "$status"
 }
 
 native_window_close_observation() {
@@ -607,7 +900,7 @@ native_window_close_observation() {
   printf '%s\n' "$owner" | sudo -n tee "$native_recovery_dir/owner-pid" >/dev/null
   native_window_verify_quiesced || { native_window_uncertain; return 1; }
   native_window_candidate_seal | sudo -n cmp -s - "$window/await-observation" || { native_window_uncertain; return 1; }
-  native_window_candidates "${window_units[@]}"
+  native_window_lease_live || { native_window_uncertain; return 1; }
   local status
   if [[ "$window_action" == observation-failed ]]; then
     set +e
@@ -630,7 +923,6 @@ native_window_close_observation() {
       fi
       return "$status"
     fi
-    native_window_candidates "${window_units[@]}"
     # 원자적 rename 한 번이 시작 권한과 guard를 함께 넘긴다. 중단된 수용은 accepting을 남긴다.
     native_window_accept_guard accept
   fi

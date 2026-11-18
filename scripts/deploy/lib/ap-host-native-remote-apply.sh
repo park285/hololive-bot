@@ -34,6 +34,13 @@ if [[ "$window_action" == same-window || "$window_action" == apply-accepted ]]; 
   release_dir="$releases_root/$release_id" window="$releases_root/$release_id/native-observation"
   window_units=("$po_socket" "$po_service" "$unit")
 fi
+collector_readiness_fetch() {
+  systemctl is-active --quiet "$unit" || return 1
+  sudo -n -u hololive env \
+    HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
+    HEALTHCHECK_SERVER_NAME=127.0.0.1 \
+    "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
+}
 case "$window_action" in
   quiesce) [[ $# == 13 && -z "$window_nonce" ]]; native_window_quiesce; exit ;;
   resume) [[ $# == 13 && -n "$window_nonce" ]]; native_window_resume_claim ;;
@@ -222,6 +229,9 @@ fi
 if [[ "$same_window" == true ]]; then
   native_apply_before_stop
   sudo -n mkdir -m 0700 "$window"
+  native_window_boot | sudo -n tee "$window/boot" >/dev/null
+  old_issuer="$(native_window_live_generation "$po_service")"
+  printf 'InvocationID=%s\n' "$old_issuer" | sudo -n tee "$window/$po_service.before" >/dev/null
 fi
 # PO issuer를 collector보다 먼저 멈춘다. collector는 종료하면서 소유 generation을 DELETE로 반납하는데, broker가 살아
 # 있으면 retire 뒤 exit 0하고 Restart=always(RestartSec=1s)로 다시 떠서 곧바로 이 스크립트에 다시 멈춰진다.
@@ -310,6 +320,13 @@ restore_native_after_failed_cutover() {
   native_restoring=true
   if [[ "${native_phase_active:-false}" == true && "${native_phase_started:-false}" == true ]]; then
     native_cutover_unknown
+  fi
+  if [[ "${same_window:-false}" == true ]] && sudo -n test -d "$window/held"; then
+    if [[ "${native_outcome_unknown:-false}" == true ]] || ! native_apply_unarm_issuer; then
+      sudo -n touch "$window/blocked"
+      native_cutover_unknown
+      exit "$status"
+    fi
   fi
   if [[ "${native_outcome_unknown:-false}" == true ]]; then
     if [[ "${window_action:-deploy}" == resume ]]; then sudo -n touch "$window/blocked"; fi
@@ -412,13 +429,6 @@ systemctl show "$unit" -p ActiveState -p SubState -p ExecMainPID -p MemoryCurren
 printf 'net.core.rmem_max=%s\n' "$(sysctl -n net.core.rmem_max)"
 printf 'net.core.wmem_max=%s\n' "$(sysctl -n net.core.wmem_max)"
 
-collector_readiness_fetch() {
-  systemctl is-active --quiet "$unit" || return 1
-  sudo -n -u hololive env \
-    HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
-    HEALTHCHECK_SERVER_NAME=127.0.0.1 \
-    "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
-}
 ready="$(collector_readiness_poll 90 2 collector_readiness_fetch)"
 printf '%s\n' "$ready"
 collector_readiness_validate "$ready"

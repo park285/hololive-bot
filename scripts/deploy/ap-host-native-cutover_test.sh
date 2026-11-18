@@ -338,7 +338,8 @@ release_window, old_port = 'W2', 6433
 def window_case(name, args, scenario):
     case = work / name
     case.mkdir(mode=0o700)
-    script = f'. "{helper}"\n. "{release_lib}"\n. "{window_lib}"\n' + endpoint_libs + r'''
+    readiness = root / 'scripts/deploy/lib/ap-collector-readiness.sh'
+    script = f'. "{helper}"\n. "{release_lib}"\n. "{window_lib}"\n. "{readiness}"\n' + endpoint_libs + r'''
 set -Eeuo pipefail
 umask 077
 cd "$CASE"
@@ -356,6 +357,46 @@ printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=%s\n' "$original" > "$host_env"
 window_digest="$(native_payload_digest "$payload")"
 gen=$(printf '%032d' 1)
 hostname() { echo osaka1; }
+native_window_permit() { printf '%s/run/hololive-native-%s-%s\n' "$CASE" "$native_claim_nonce" "$1"; }
+po_health_ready() {
+  [[ ! -f broker-not-ready && ! -f "down-$po_service" ]] || return 1
+  if [[ -f broker-warming ]]; then rm -- broker-warming; return 1; fi
+  if [[ -f expire-during-health ]]; then rmdir "$(native_window_permit rotation)"; fi
+}
+collector_readiness_fetch() { printf '{"instance_id":"youtube-collector-a","status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED","handoff_processed":true,"pending_queue":0}\n'; }
+rotation_fixture_event() {
+  local mid=$1 id=$2
+  shift 2
+  printf '{"_BOOT_ID":"%s","_PID":"1","UNIT":"%s","INVOCATION_ID":"%s","MESSAGE_ID":"%s"%s}\n' \
+    "$(native_window_boot)" "$po_service" "$id" "$mid" "${1:-}" >> issuer.journal
+}
+rotation_fixture_start() {
+  local job=$1 id=$2
+  rotation_fixture_event 39f53479d3a045ac8e11786248231fbf "$id" \
+    ',"JOB_TYPE":"start","JOB_RESULT":"done","JOB_ID":"'"$job"'"'
+}
+retire_issuer() {
+  local old counter next grant status=${2:-0}
+  old=$(cat "live-$po_service")
+  rotation_fixture_event 98e322203f7a4ed290d09fe03c09fe15 "$old" ',"EXIT_CODE":"exited","EXIT_STATUS":"'"$status"'"'
+  rotation_fixture_event 7ad2d189f7e94e70a38c781354912448 "$old"
+  if [[ $1 == stop ]]; then
+    touch "down-$po_service"
+    return
+  fi
+  counter=0
+  if [[ -f rotations ]]; then counter=$(<rotations); fi
+  counter=$((counter+1))
+  printf '%s\n' "$counter" > rotations
+  printf -v next '%032d' "$((200+counter))"
+  if [[ $1 != foreign ]]; then
+    grant=$((200+counter))
+    if [[ $1 == canceled ]]; then grant=199; fi
+    printf '%s %s\n' "$grant" "$old" >"$(native_window_permit rotation)/$next"
+  fi
+  printf '%s\n' "$next" > "live-$po_service"
+  rotation_fixture_start "$((200+counter))" "$next"
+}
 sudo() {
   [[ "$1" == -n ]]; shift
   case "$1" in
@@ -372,6 +413,13 @@ sudo() {
 }
 systemd-run() {
   local target="${!#}" id
+  if [[ "$*" == *"--property=RuntimeMaxSec=900s "* ]]; then
+    local permit
+    permit=$(native_window_permit rotation)
+    mkdir -p "$permit"
+    printf '%032d\n' 104 >"live-${permit##*/}.service"
+    return
+  fi
   [[ "$*" == *"--property=RuntimeDirectory=hololive-native-$native_claim_nonce-$target "* && "$*" == *"systemctl --job-mode=fail --show-transaction start $target" ]]
   case "$target" in "$po_socket") id=101 ;; "$po_service") id=102 ;; "$unit") id=103 ;; *) return 8 ;; esac
   rm "down-$target"
@@ -380,12 +428,16 @@ systemd-run() {
   for arg in "$@"; do case "$arg" in --unit=*) name="${arg#*=}" ;; esac; done
   : >"request-${name:?}"
   if [[ "$fault" != missing_anchor ]]; then printf 'Enqueued anchor job %s %s/start.\n' "$id" "$target" >>"request-$name"; fi
+  if [[ "$target" == "$po_service" ]]; then rotation_fixture_start "$id" "$(cat "live-$target")"; fi
 }
 systemctl() {
   if [[ "$1" == --job-mode=fail ]]; then shift; fi
   case "$1" in
     show) printf 'InvocationID=%s\n' "$gen" ;;
     daemon-reload) touch reload ;;
+    enable)
+      [[ "$2" == --now && "$3" == "$po_socket" ]]
+      rm "down-$po_socket"; printf '%032d\n' 101 >"live-$po_socket" ;;
     stop) shift; printf '%s\n' "$*" >> calls; for n in "$@"; do touch "down-$n"; rm -f "live-$n"; done ;;
     *) return 92 ;;
   esac
@@ -394,11 +446,23 @@ native_window_prop() {
   case "$2" in
     InvocationID) if [[ -e "live-$1" ]]; then cat "live-$1"; elif [[ "$fault" == replaced && -e reload ]]; then printf '%032d\n' 2; else echo "$gen"; fi ;;
     Job) if [[ -e job-pending && "$1" == "$unit" ]]; then echo 42; fi ;;
-    RestartForceExitStatus) echo ;;
+    RestartForceExitStatus|SuccessExitStatus) echo ;;
+    NRestarts) echo 0 ;;
+    ActiveEnterTimestampMonotonic) python3 -I -B -c 'import time; print(time.monotonic_ns()//1000)' ;;
+    ExecMainStartTimestampMonotonic) python3 -I -B -c 'import sys,time; print(time.monotonic_ns()//1000-100000000*int(sys.argv[1]))' "$([[ -f broker-not-ready ]] && echo 1 || echo 0)" ;;
+    ExecMainCode) echo 1 ;;
+    ExecMainStatus) echo 0 ;;
     ActiveState) if [[ -e "down-$1" ]]; then echo inactive; else echo active; fi ;;
-    Restart) if [[ "$fault" == restart || $(readlink "$window/policy") == permanent ]]; then echo always; else echo no; fi ;;
-    DropInPaths) printf '%s/%s.d/90-native-window-%s.conf\n' "${unit_file%/*}" "$1" "$native_claim_nonce" ;;
-    MainPID) if [[ -f "live-$1" ]]; then echo "$BASHPID"; else echo 0; fi ;;
+    SubState) if [[ "$1" == "$po_socket" ]]; then echo listening; else echo running; fi ;;
+    RootDirectory) printf '%s/po-sandbox/rootfs\n' "$release_dir" ;;
+    RootDirectoryStartOnly) if [[ $(readlink "$window/policy") != held ]]; then echo yes; else echo no; fi ;;
+    Restart)
+      if [[ "$fault" == restart || $(readlink "$window/policy") == permanent ]]; then echo always
+      else echo no; fi ;;
+    DropInPaths)
+      if [[ -d "$PWD/w1-adoption" ]]; then printf '%s ' "$PWD/system/$1.d/90-native-window-prior.conf"; fi
+      printf '%s/%s.d/90-native-window-%s.conf\n' "${unit_file%/*}" "$1" "$native_claim_nonce" ;;
+    MainPID) if [[ -f "live-$1" && ! -f "down-$1" ]]; then echo "$BASHPID"; else echo 0; fi ;;
     ControlPID) echo 0 ;;
     UnitFileState) echo enabled ;;
     Result) echo success ;;
@@ -407,14 +471,36 @@ native_window_prop() {
 }
 busctl() {
   if [[ "$2" == call ]]; then echo 'o "/org/freedesktop/systemd1/unit/fixture"'; return; fi
-  local condition=blocked
+  if [[ "${!#}" == ExecConditionEx ]]; then
+    python3 -I -B - "$current_link/native-window" "$native_recovery_dir/accepting" "$([[ -d "$PWD/w1-adoption" ]] && echo 2 || echo 1)" <<'PY_CONDITION'
+import json,sys
+print(json.dumps({"type":"a(sasasttttuii)", "data":[["/usr/bin/test",["/usr/bin/test","!","-e",p],["privileged"],0,0,0,0,0,0,0] for p in sys.argv[1:3]]*int(sys.argv[3])}))
+PY_CONDITION
+    return
+  fi
+  if [[ "${!#}" == ExecStopPostEx ]]; then
+    local lease
+    lease=$(native_window_permit rotation)
+    python3 -I -B - "$window" "$lease" "$n" <<'PY_HOOKS'
+import json,sys
+window,lease,unit=sys.argv[1:]
+for action in ("consume","grant"):
+    argv=["/usr/bin/bash",window+"/issuer-rotation.sh",action,lease,unit,window+"/blocked"]
+    print(json.dumps({"type":"a(sasasttttuii)", "data":[[argv[0],argv,["privileged"],0,0,0,0,0,0,0]]}))
+PY_HOOKS
+    return
+  fi
+  local condition=blocked permit
+  permit=$(native_window_permit "$n")
+  if [[ "$n" == "$po_service" && $(readlink "$window/policy") == observing ]]; then permit=$(native_window_permit rotation)/next; fi
   if [[ "$fault" == missing ]]; then condition=wrong; fi
   printf '{"type":"a(sbbsi)","data":[["ConditionPathExists",false,true,"%s",0],["ConditionPathExists",false,true,"%s",0],["ConditionPathExists",false,true,"%s",0],["ConditionPathExists",false,false,"%s",0]]}\n' \
-    "$current_link/native-window" "$native_recovery_dir/accepting" "$window/$condition" "$(native_window_permit "$n")"
+    "$current_link/native-window" "$native_recovery_dir/accepting" "$window/$condition" "$permit"
 }
 journalctl() {
   if [[ "$fault" == nojournal ]]; then return 1; fi
   if [[ "${!#}" == _SYSTEMD_UNIT=hololive-native-start-* ]]; then local name="${!#}"; cat "request-${name#*=}"; return; fi
+  if [[ "$*" == *--lines=4096* ]]; then cat issuer.journal; return; fi
   if [[ "$*" == *' JOB_TYPE=start '* ]]; then
     local n job id
     for n in "${window_units[@]}"; do [[ " $* " != *" UNIT=$n "* ]] || break; done
@@ -432,7 +518,13 @@ journalctl() {
     [[ "$fault" != no_drain ]] || return 0
     printf '{"_SYSTEMD_INVOCATION_ID":"%s"}\n' "$gen"
   elif [[ "$*" == *JOB_RESULT=done* && "$*" == *MESSAGE_ID=9d1aaa27d60140bd96365438aad20286* && "$fault" != started_only ]]; then
-    printf '{"INVOCATION_ID":"%s","JOB_ID":"42","JOB_RESULT":"done"}\n' "$gen"
+    local selected
+    for selected in "$@"; do
+      if [[ "$selected" == INVOCATION_ID=* ]]; then
+        printf '{"INVOCATION_ID":"%s","JOB_ID":"42","JOB_RESULT":"done"}\n' "${selected#*=}"
+        return
+      fi
+    done
   fi
 }
 native_window_verify_original() { test -L "$current_link"; }
@@ -508,12 +600,46 @@ mkdir "$release_dir/po-sandbox"; echo "$EXPECTED_REVISION" > "$release_dir/po-sa
 po_socket_file="$PWD/system/$po_socket"; touch "$po_socket_file"; cp "$po_socket_file" "$release_dir/$po_socket"
 rm "$window/blocked"
 for target in "$po_socket" "$po_service"; do native_cutover_run issuer native_window_start "$target"; done
+native_window_open_rotation
 native_cutover_run collector-start native_window_start "$unit"
 native_window_await_observation
 '''
+adopted_policy = '''
+mkdir -p w1-adoption/permanent w1-adoption/original-guard
+printf 'outcome_unknown\\n' >w1-adoption/original-guard/outcome
+ln -s permanent w1-adoption/policy
+for n in "$po_socket" "$po_service" "$unit"; do
+  mkdir -p "$PWD/system/$n.d"
+  {
+    printf '[Unit]\\nConditionPathExists=!%s/native-window\\nConditionPathExists=!%s/accepting\\n' "$current_link" "$native_recovery_dir"
+    if [[ "$n" != "$po_socket" ]]; then
+      printf '[Service]\\n'
+      if [[ "$n" == "$po_service" ]]; then printf 'RootDirectoryStartOnly=yes\\n'; fi
+      printf 'ExecCondition=+/usr/bin/test ! -e %s/native-window\\nExecCondition=+/usr/bin/test ! -e %s/accepting\\n' "$current_link" "$native_recovery_dir"
+    fi
+  } >"w1-adoption/permanent/$n.conf"
+  ln -sT "$PWD/w1-adoption/policy/$n.conf" "$PWD/system/$n.d/90-native-window-prior.conf"
+done
+'''
+case, result = window_case('adopted-w1-to-w2', [release_window, str(old_port), 'normal'], adopted_policy + candidate_stage +
+                           'window_action=accepted\nnative_window_close_observation\n')
+assert result.returncode == 0, result.stderr
+assert (case/'current/accepted-window').read_text().splitlines()[0] == 'W2'
+assert (case/'w1-adoption/original-guard/outcome').read_text() == 'outcome_unknown\n'
+assert (case/'releases/old/accepted-window').samefile(case/'releases/old/seed-guard/accepted-window')
+
 for name, action, mutation, expected in (
     ('accepted', 'accepted', '', 'accepted'),
     ('failed', 'observation-failed', '', 'stopped'),
+    ('issuer-rotated', 'accepted', 'retire_issuer rotate; retire_issuer rotate', 'accepted'),
+    ('issuer-failed-then-replaced', 'accepted', 'retire_issuer rotate 23', 'unknown'),
+    ('issuer-unowned-replacement', 'accepted', 'retire_issuer foreign', 'unknown'),
+    ('issuer-canceled-job-replaced', 'accepted', 'retire_issuer canceled', 'unknown'),
+    ('issuer-retired-before-brake', 'observation-failed', 'retire_issuer stop', 'stopped'),
+    ('expired-issuer-lease', 'accepted', 'rmdir "$(native_window_permit rotation)"', 'unknown'),
+    ('expired-during-final-health', 'accepted', 'touch expire-during-health', 'unknown'),
+    ('socket-open-issuer-not-ready', 'accepted', 'touch broker-not-ready', 'unknown'),
+    ('owned-cold-issuer-warms', 'accepted', 'retire_issuer rotate; touch broker-warming', 'accepted'),
     ('issuer-changed', 'accepted', 'printf "%032d\\n" 9 > "live-$po_service"', 'unknown'),
     ('socket-changed', 'observation-failed', 'printf "%032d\\n" 9 > "live-$po_socket"', 'unknown'),
     ('collector-changed', 'observation-failed', 'printf "%032d\\n" 9 > "live-$unit"', 'unknown'),
@@ -526,13 +652,16 @@ for name, action, mutation, expected in (
                                '\nwindow_action=' + action + '\nnative_window_close_observation\n')
     hold = case/'releases/old/native-window'
     assert (result.returncode == 0) == (expected in ('accepted','stopped')), (name, result.stderr)
-    assert (hold/'accepted-guard').is_dir() == (expected == 'accepted')
-    assert (case/'current/accepted-window').is_file() == (expected == 'accepted')
-    assert (case/'recovery').is_dir() != (expected == 'accepted')
-    assert (case/'recovery/outcome').exists() == (expected == 'unknown')
-    assert (hold/'blocked').exists() == (expected in ('unknown','stopped'))
+    assert (hold/'accepted-guard').is_dir() == (expected == 'accepted'), (name, result.stderr)
+    assert (case/'current/accepted-window').is_file() == (expected == 'accepted'), (name, result.stderr)
+    assert (case/'recovery').is_dir() != (expected == 'accepted'), (name, result.stderr)
+    assert (case/'recovery/outcome').exists() == (expected == 'unknown'), (name, result.stderr)
+    assert (hold/'blocked').exists() == (expected in ('unknown','stopped')), (name, result.stderr)
     stops = (case/'calls').read_text().splitlines()[2:]
-    assert stops == (['issuer.socket issuer.service','collector.service'] if expected == 'stopped' else []), (name, stops)
+    expected_stops = ['issuer.socket issuer.service','collector.service'] if expected == 'stopped' else []
+    if name == 'issuer-retired-before-brake':
+        expected_stops[0] = 'issuer.socket'
+    assert stops == expected_stops, (name, stops)
 
 for fault in ('wrong_start_job','foreign_start','missing_anchor'):
     case, result = window_case(fault, [release_window, str(old_port), fault], candidate_stage)
@@ -591,13 +720,20 @@ native_apply_before_stop
 mkdir -p "$release_dir/po-sandbox"; printf '%s\n' "$EXPECTED_REVISION" > "$release_dir/po-sandbox/revision"
 cp "$po_socket_file" "$release_dir/$po_socket"; ln -sfn "$release_dir" "$current_link"
 window="$release_dir/native-observation"; mkdir -m 0700 "$window"; apply_start_since=@1
-for n in "${window_units[@]}"; do printf '%032d\n' 10 > "live-$n"; done
+for n in "${window_units[@]}"; do touch "down-$n"; rm "live-$n"; done
+printf 'InvocationID=%s\n' "$gen" >"$window/$po_service.before"
+native_window_boot >"$window/boot"
+native_apply_start_issuer
+rm "down-$unit"; printf '%032d\n' 103 >"live-$unit"
 native_cutover_run collector-restart true
 native_apply_await_observation
 window_nonce="$native_claim_nonce"
 '''
 for name, mutation, fault, accepted in (
     ('normal', '', 'normal', True),
+    ('issuer-rotation', 'retire_issuer rotate', 'normal', True),
+    ('issuer-failed', 'retire_issuer rotate 23', 'normal', False),
+    ('permit-expired', 'rmdir "$(native_window_permit rotation)"', 'normal', False),
     ('unobserved', 'rm "$window/await-observation"', 'normal', False),
     ('foreign-nonce', 'window_nonce=$(printf "%036d" 7)', 'normal', False),
     ('new-release-old-nonce', 'release_id=other; release_dir="$releases_root/other"; cp -a "$releases_root/new" "$release_dir"; ln -sfn "$release_dir" "$current_link"; window="$release_dir/native-observation"', 'normal', False),

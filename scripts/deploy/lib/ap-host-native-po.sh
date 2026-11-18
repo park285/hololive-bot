@@ -5,12 +5,16 @@ po_socket=hololive-youtube-po.socket
 po_unit_file=/etc/systemd/system/hololive-youtube-po.service
 po_socket_file=/etc/systemd/system/hololive-youtube-po.socket
 
+po_health_ready() {
+  sudo -n -u hololive "$1/po-sandbox/rootfs/app/bin/po-broker" --healthcheck --socket /run/hololive-youtube-po/worker.sock
+}
+
 po_wait_ready() {
   local release="$1" _
   # health는 SDK import가 끝난 worker를 보장한다. 이 조회는 발급하지 않으며
   # native의 90초 준비 한도를 포함하도록 45회/2초 간격으로만 관찰한다.
   for _ in {1..45}; do
-    if sudo -n -u hololive "$release/po-sandbox/rootfs/app/bin/po-broker" --healthcheck --socket /run/hololive-youtube-po/worker.sock; then
+    if systemctl is-active --quiet "$po_service" && po_health_ready "$release"; then
       return 0
     fi
     sleep 2
@@ -19,10 +23,25 @@ po_wait_ready() {
   return 1
 }
 
+po_issuer_active() {
+  local attempt state
+  for attempt in {1..6}; do
+    if systemctl is-active --quiet "$po_service"; then return 0; fi
+    state="$(systemctl show "$po_service" -p SubState --value)" || return 1
+    case "$state" in
+      auto-restart|auto-restart-queued|stop-post|start-pre|start) ;;
+      dead) [[ -n "$(systemctl show "$po_service" -p Job --value)" ]] || return 1 ;;
+      *) return 1 ;;
+    esac
+    (( attempt == 6 )) || sleep 1
+  done
+  return 1
+}
+
 po_require_running_without_failure() {
   local since="$1" journal result=0
   systemctl is-active --quiet "$po_socket" || return
-  systemctl is-active --quiet "$po_service" || return
+  po_issuer_active || return
   # 정상 generation 퇴역도 service를 재기동하므로 issuer는 NRestarts 대신 종료 결과를 본다.
   [[ "$(systemctl show "$po_service" -p Result --value)" == success ]] || return 1
   [[ "$(systemctl show "$po_service" -p ExecMainStatus --value)" == 0 ]] || return 1
@@ -40,7 +59,7 @@ po_validate_release() {
   (cd "$release/po-sandbox" && sudo -n sha256sum --check --strict rootfs.tar.sha256)
   sudo -n python3 "$release/bin/po-sandbox-manifest.py" verify \
     "$release/po-sandbox/rootfs" "$release/po-sandbox/rootfs-manifest.json" "$revision" "$arch"
-  sudo -n "$release/po-sandbox/rootfs/app/bin/po-broker" --version | \
+  sudo -n -u hololive "$release/po-sandbox/rootfs/app/bin/po-broker" --version | \
     python3 -c 'import json,sys; obj=json.load(sys.stdin); assert (obj["revision"],obj["version"],obj["goos"],obj["goarch"]) == (sys.argv[1],sys.argv[2],"linux","amd64")' "$revision" "$version"
 }
 
@@ -129,11 +148,13 @@ po_install_release() {
     sudo -n systemctl enable "$po_socket"
     native_window_start "$po_socket"
     native_window_start "$po_service"
-    native_window_candidates "$po_socket" "$po_service"
+    native_window_open_rotation
+  elif [[ "${same_window:-false}" == true ]]; then
+    native_apply_start_issuer
   else
     sudo -n systemctl enable --now "$po_socket"
     sudo -n systemctl restart "$po_service"
   fi
   po_wait_ready "$release"
-  if [[ "${window_action:-deploy}" == resume ]]; then native_window_candidates "$po_socket" "$po_service"; fi
+  if [[ "${window_action:-deploy}" == resume || "${same_window:-false}" == true ]]; then native_window_candidates "$po_socket" "$po_service"; fi
 }
