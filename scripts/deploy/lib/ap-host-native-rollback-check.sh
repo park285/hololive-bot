@@ -20,6 +20,21 @@ native_profile_pair_validate() {
     "$release/bin/youtube-collector-wrapper" "$release/bin/youtube-collector" --check-worker-profile
 }
 
+native_root_endpoint() {
+  sudo -n bash -c "$(declare -f compose_env_validate_file_format compose_env_read_value_from_file postgres_endpoint_validate postgres_endpoint_env); postgres_endpoint_env \"\$1\"" _ "$1"
+}
+
+native_rollback_endpoint_validate() {
+  local previous_target="$1" current_env="$2" previous_endpoint current_endpoint
+  sudo -n test ! -e "$previous_target/native-window" || {
+    echo '정지 창이 퇴역시킨 native release는 endpoint가 같아도 복원할 수 없습니다.' >&2
+    return 1
+  }
+  previous_endpoint="$(native_root_endpoint "$previous_target/rollback-contract/youtube-collector-host.env")" || return
+  current_endpoint="$(native_root_endpoint "$current_env")" || return
+  postgres_endpoint_require_same "$current_endpoint" "$previous_endpoint"
+}
+
 native_rollback_validate() {
   local previous_target="$1"
   local contract_dir="$previous_target/rollback-contract"

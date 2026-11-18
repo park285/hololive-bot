@@ -121,6 +121,7 @@ Exec=postgres \
   -c ssl=on \
   -c ssl_cert_file=/run/hololive-bot/postgres-tls/server.crt \
   -c ssl_key_file=/run/hololive-bot/postgres-tls/server.key \
+  -c ssl_ca_file=/run/hololive-bot/certs/postgres-ca.pem \
   -c hba_file=/run/hololive-bot/postgres/pg_hba.conf
 
 [Service]

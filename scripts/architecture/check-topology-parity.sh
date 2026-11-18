@@ -83,6 +83,7 @@ LC_ALL=C cut -f1 "$manifest" | LC_ALL=C sort -u >"$tmpdir/registered"
     deploy/quadlet/*/*.container
     deploy/podman/*/*.container
     deploy/postgres/pg_hba.conf
+    deploy/pgbouncer/pg_hba.conf
     deploy/nginx/*.conf
     deploy/nginx/*.template
     scripts/systemd/*.nft
@@ -188,9 +189,9 @@ tcp dport { 30191, 30192 } reject with tcp reset
 iifname "lo" udp dport 30006 accept
 iifname "tailscale0" ip saddr $seoul udp dport 30006 accept
 udp dport 30006 reject
-iifname "lo" tcp dport 5433 accept
-iifname "tailscale0" ip saddr @postgres_sources tcp dport 5433 accept
-tcp dport 5433 reject with tcp reset
+iifname "lo" tcp dport { 5433, 6433 } accept
+iifname "tailscale0" ip saddr @postgres_sources tcp dport { 5433, 6433 } accept
+tcp dport { 5433, 6433 } reject with tcp reset
 iifname "lo" tcp dport { 5432, 5458 } accept
 iifname "tailscale0" ip saddr @bot_postgres_sources tcp dport { 5432, 5458 } accept
 tcp dport { 5432, 5458 } reject with tcp reset
@@ -201,12 +202,15 @@ ct status dnat ct original proto-dst 30006 udp dport 30006 iifname "tailscale0" 
 ct status dnat ct original proto-dst 30006 udp dport 30006 reject
 ct status dnat ct original proto-dst 5433 tcp dport 5432 iifname "tailscale0" ip saddr @postgres_sources accept
 ct status dnat ct original proto-dst 5433 tcp dport 5432 reject with tcp reset
+ct status dnat ct original proto-dst 6433 tcp dport 6432 iifname "tailscale0" ip saddr @postgres_sources accept
+ct status dnat ct original proto-dst 6433 tcp dport 6432 reject with tcp reset
 ct status dnat ct original proto-dst { 5432, 5458 } tcp dport 5432 iifname "tailscale0" ip saddr @bot_postgres_sources accept
 ct status dnat ct original proto-dst { 5432, 5458 } tcp dport 5432 reject with tcp reset
 }
 chain forward_preserve_postgres_source {
 type filter hook forward priority 10; policy accept;
 ct status dnat ct original proto-dst 5433 tcp dport 5432 iifname "tailscale0" ip saddr @postgres_sources meta mark set meta mark and 0xff00ffff
+ct status dnat ct original proto-dst 6433 tcp dport 6432 iifname "tailscale0" ip saddr @postgres_sources meta mark set meta mark and 0xff00ffff
 }
 }
 EOF

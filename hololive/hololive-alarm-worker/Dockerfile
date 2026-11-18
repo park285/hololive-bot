@@ -77,6 +77,7 @@ FROM runtime-base
 ARG VERSION=dev
 ARG REVISION=unknown
 LABEL org.opencontainers.image.title="hololive-alarm-worker" \
+      io.hololive-bot.outbox-schema="text-file-v1" \
       org.opencontainers.image.source="https://github.com/park285/hololive-bot" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}"

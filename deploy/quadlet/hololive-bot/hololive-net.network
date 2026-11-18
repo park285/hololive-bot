@@ -5,3 +5,5 @@ NetworkName=hololive-bot_hololive-net
 Subnet=172.23.0.0/16
 Gateway=172.23.0.1
 InterfaceName=pm-holo
+# bridge 간 직접 접근은 호스트의 podman_bridge_isolation 정책이 통제한다.
+Options=isolate=false

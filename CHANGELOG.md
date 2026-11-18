@@ -8,6 +8,18 @@
 
 ## 미출시
 
+- 카드 창은 이미 풀링된 여섯 역할에서만 진행합니다. 030 상태의 단일 writer 배포를 거부하고 업무 migrator만으로 031/032를 적용합니다. PostgreSQL과 PgBouncer를 교체하거나 풀러 인증과 앱 자격을 다시 생성하지 않습니다.
+- **수집기 전환 검사:** Osaka는 관찰 중 PID 1이 승인한 정확한 job으로만 정상 issuer 퇴역을 인계하며, 새 issuer의 준비 한도와 기존 lease를 함께 적용합니다. 영속 시작 조건은 systemd 자동 재시작에서도 검사합니다.
+- **kapu d의 프로필 검사:** 동일 후보의 runtime 환경과 공개 PostgreSQL CA를 네트워크 없는 검사에 전달합니다. 잘못된 프로필·DB 설정을 기동 전에 거부하며, 별도의 실제 pooled SQL을 통과하기 전에는 두 unit의 mask를 풀지 않습니다.
+- **Quadlet writer 정지:** 중앙 API·worker와 collector b/c/d는 재기동을 먼저 차단하고 원래 `ExecStop`과 해당 CID의 종료를 확인한 뒤 영속 mask를 적용합니다. Collector 143은 정상 정지가 아닙니다. 재개 도중 기동 클라이언트가 사라져도 새로 요청하지 않고 원래 manager job과 컨테이너에 결합된 세대만 보호 정지합니다. 부분 해제나 교체된 세대에는 성공 영수증을 발행하지 않습니다. Fallback delta: none.
+- **PostgreSQL transaction pooling:** 중앙/API/worker/c와 AP a·b·d를 역할별 상한을 유지한 PgBouncer 경로로 전환하는 소스를 추가했습니다. DB의 현재 SCRAM verifier를 cert-only `auth_query`로 읽어 앱 비밀번호를 pooler 파일에 복제하지 않고, 같은 비밀번호 bootstrap은 verifier를 유지합니다. PgBouncer 1.26.1의 startup timeout 오염은 upstream `22d0aa1`을 backport한 공통 `1.26.1-guc1` 이미지로 수정했습니다. pgx prepared backend 교체·동명 동시 사용·재연결, timeout/cancel, control 예약, 실제 암호 회전과 장애 복구를 격리 환경에서 검증했습니다. direct↔pooler rollback은 HBA·endpoint의 조정 복구 전 재기동을 거부합니다. ChatBotGo는 같은 native 이미지에 별도 인스턴스·인증 DB·연결 예산을 사용합니다. 운영 인증서·DB/HBA·방화벽·서비스 전환은 별도 승인 사항입니다. Fallback delta: none.
+- PgBouncer 기동 health에 frontend/backend DNS 공개 확인을 추가했습니다. 정상 상태의 peer health와 별도 SQL 수용 검사는 유지하며, DNS 준비 전 성공 판정을 차단합니다.
+- **Pooler 전환·복구 안전성:** collector c·b에 이전 실행 pair를 보존하는 `quiesce/resume`과 영속 hold를 추가합니다. 재개 전 보관 drop-in과 실제 설치 후보를 검증하며 실패 시 direct writer를 자동 시작하지 않습니다. 중앙 앱의 effective pool 크기와 실행 pooler의 mount된 설정이 다르면 배포·재기동·복구를 거부하여 앱만 증설했을 때 예약 control이 backend 대기에 막히는 경로를 차단합니다. Fallback delta: none.
+- **SCRAM 역할 격리:** 원문이 달라도 pgx의 SCRAM 암호 준비 후 같아지는 역할 간·관리자 암호 중복을 DB 연결 전에 거부합니다. PostgreSQL/pgx 호환성 검사와 같은 비밀번호의 verifier 보존은 유지합니다. Fallback delta: none.
+- **최초 풀링 전환:** 새 배포 정의를 설치하기 전에 실행 중인 이전 writer와 실제 접속지를 보존합니다. 중앙 두 역할과 각 수집기는 실제 풀러 경유 SQL을 증명하기 전에는 업무를 시작하지 않습니다. 운영과 동일한 `pg_stat_statements` 기본 권한을 이용한 격리 시험을 추가했으며, 인증 역할에는 앱 데이터 권한을 부여하지 않습니다.
+- kapu d의 전환 영수증을 수집기 쓰기 경로와 분리했습니다. 정지할 때만 root 전용 디렉터리를 만들고, 재개 시 영수증이 없거나 권한이 다르면 기존 데이터의 소유권을 바꾸지 않고 중단합니다.
+- c·b의 정지 증명은 Bash의 epoch 마이크로초를 systemd journal에 그대로 전달합니다. 소수 초의 선행 0이 사라져 정상 정지를 놓치던 경우를 고쳤으며, 확인 실패 시 해당 unit·invocation·조회 하한과 journal 종료 코드를 남깁니다.
+- 풀러 설치 전의 direct 복구는 기존 writer의 실제 연결 예산을 검사하되 아직 없는 풀러 unit을 요구하지 않습니다. pooled 경로는 설치된 풀러의 원천과 실행 설정을 계속 검증합니다.
 - 결정 기록을 폐기하고 완료한 작업의 계획·검증 자료를 정리했습니다. 과거 결정과 근거는 Git 이력에서 확인할 수 있습니다.
 - **lint 경계:** hololive-api와 저장 template 실행기의 `os/exec`·`plugin` import 금지를 `rg` 스크립트(`check-repository-ownership.sh`) 대신 스택 golangci 템플릿의 `depguard` 규칙이 검사합니다. 시험 파일 제외와 대상 경로는 그대로이며, 문자열 리터럴을 import로 오인하던 일은 없어집니다. 같은 템플릿의 `encoding/json` v1·대체 codec·외부 UUID import 금지, v1 동작 복원 JSON option·legacy sort·untyped atomic·정적 target `errors.As` 금지(`forbidigo`), `TODO`·`FIXME`·`HACK`·`XXX` 주석 금지(`godox`)도 적용됩니다. 실행 코드는 바뀌지 않습니다.
 - **주석 금지:** 기계 지시문을 뺀 Go·SQL·JavaScript·shell·Python 주석과 doc 주석을 지웠습니다. shell heredoc으로 실행하는 Python 본문도 같은 검사를 받습니다. Go 파일별 MIT 머리글도 지웠으며 라이선스 고지는 루트 `LICENSE`가 유지합니다. youtubejs JSDoc은 tsc checkJs가 읽는 타입 전용 형식만 남깁니다. checksum 원장에 묶인 적용된 migration 31개는 `scripts/ci/sql-immutable-migrations.txt`에 두고 바이트를 유지합니다. pre-push gate가 `bash scripts/ci/verify-tools.sh scan`으로 강제합니다.

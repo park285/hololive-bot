@@ -112,6 +112,20 @@ class PairToolTest(unittest.TestCase):
         self.assertIn("APP_VERSION=13.2.0", argv)
 
 
+    def test_explicit_rollback_overlay_verifies_without_replacing_prepared_dropin(self):
+        directory = self.root / "artifacts/worker-profile/releases/api/previous"
+        write_pair(directory, "hololive-api", {"app_version": "13.2.0"})
+        overlay = directory.parent / "rollback.conf"
+        original = (directory / "50-worker-profile.conf").read_bytes()
+        result = self.tool("rollback", "hololive-api", str(directory), str(overlay))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.tool("verify-dropin", "hololive-api", str(directory), str(overlay))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        overlay.chmod(0o644)
+        overlay.write_bytes(overlay.read_bytes() + b"Environment=APP_VERSION=other\n")
+        self.assertNotEqual(self.tool("verify-dropin", "hololive-api", str(directory), str(overlay)).returncode, 0)
+        self.assertEqual((directory / "50-worker-profile.conf").read_bytes(), original)
+
     def test_check_refuses_a_pair_whose_profile_changed(self):
         directory = self.root / "artifacts/worker-profile/releases/po-c-20261104T000000Z" / SERVICE / "previous"
         write_pair(directory)
@@ -203,6 +217,35 @@ class PairToolTest(unittest.TestCase):
         pointer = self.root / "artifacts/worker-profile/active/hololive-api.pair"
         self.assertEqual(pointer.read_text(), f"{unrelated}\n")
 
+    def test_collector_dropin_changes_are_refused_before_publication(self):
+        previous = self.root / "artifacts/worker-profile/releases/collector-old/previous"
+        candidate = self.root / "artifacts/worker-profile/releases/collector-new/candidate"
+        for directory in (previous, candidate):
+            write_pair(directory)
+            result = self.tool("rollback", SERVICE, str(directory))
+            self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.activate(previous)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        before = self.installed_dropin().read_bytes()
+        pointer = self.active_pair().read_bytes()
+        dropin = candidate / "50-worker-profile.conf"
+        canonical = dropin.read_bytes()
+        result = self.tool("verify-dropin", SERVICE, str(candidate))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for addition in (b"Image=unreviewed\n", b"Environment=POSTGRES_PORT=5432\n"):
+            with self.subTest(addition=addition):
+                dropin.chmod(0o644)
+                dropin.write_bytes(canonical + addition)
+                for result in (self.tool("verify-dropin", SERVICE, str(candidate)), self.activate(candidate)):
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(self.installed_dropin().read_bytes(), before)
+                    self.assertEqual(self.active_pair().read_bytes(), pointer)
+                    self.assertEqual(dropin.read_bytes(), canonical + addition)
+        dropin.write_bytes(canonical)
+        result = self.activate(candidate)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.installed_dropin().read_bytes(), canonical)
+
     @unittest.skipUnless(QUADLET.exists(), "podman quadlet generator is not installed")
     def test_partial_publication_resumes_to_the_candidate_unit(self):
         previous, candidate, units = self.retained_case()
@@ -220,6 +263,242 @@ class PairToolTest(unittest.TestCase):
                        if line.startswith("ExecStart=") and " --name hololive-api " in line)
         self.assertIn(f"{candidate}:/run/hololive-bot/worker-profile-release:ro", command.split())
         self.assertEqual(command.split()[-1], IMAGE)
+
+
+class CaptureRaceTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        spec = importlib.util.spec_from_file_location("capture_worker_profile_pair", TOOL)
+        self.tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.tool)
+        self.tool.SOURCE = str(self.root / "mirror")
+        self.tool.TARGET = str(self.root / "mounted-desired")
+        self.tool.RELEASE_TARGET = str(self.root / "mounted-release")
+        self.tool.QUADLET_DIR = self.root / "units"
+        self.release = self.root / "artifacts/worker-profile/releases/new/previous"
+        self.pointer = self.root / "artifacts/worker-profile/active" / (SERVICE + ".pair")
+        unit = self.tool.QUADLET_UNITS[SERVICE]
+        self.overlay = self.tool.QUADLET_DIR / (unit + ".d") / self.tool.DROPIN
+        self.tool.QUADLET_DIR.mkdir()
+        shutil.copyfile(UNITS / unit, self.tool.QUADLET_DIR / unit)
+        self.name = Path(unit).stem
+        profile = Path(self.tool.SOURCE) / self.tool.PROFILES[SERVICE]
+        profile.parent.mkdir()
+        profile.write_bytes(b'{"workers":{}}\n')
+        Path(self.tool.TARGET).symlink_to(profile.parent)
+        self.original, self.other = "c" * 64, "d" * 64
+        self.named = self.original
+        self.hashes = dict.fromkeys((self.original, self.other), hashlib.sha256(profile.read_bytes()).hexdigest())
+        self.state = {"Running": True, "Pid": os.getpid(), "StartedAt": "2026-11-18T00:00:00Z"}
+        self.config = {"Labels": {}, "Env": ["HOLOLIVE_METRICS_ADDR=:8080",
+                       f"STACK_WORKER_PROFILE_FILE={self.tool.TARGET}/{profile.name}"]}
+        self.tags = set()
+        self.mounts = [{"destination": self.tool.TARGET, "type": "bind", "source": self.tool.SOURCE}]
+        self.flags = {self.tool.TARGET: {"ro"}}
+        self.enterContext(mock.patch.object(self.tool, "oci_spec", side_effect=lambda data: {
+            "process": {"env": data["Config"]["Env"]}, "mounts": self.mounts}))
+        self.enterContext(mock.patch.object(self.tool, "check_mounts",
+                                           side_effect=lambda pid, dests: {d: self.flags[d] for d in dests}))
+        self.enterContext(mock.patch.object(self.tool, "run", side_effect=self.runtime))
+        self.checker = self.enterContext(mock.patch.object(self.tool, "validate_container_pair"))
+
+    def runtime(self, cli, action, *args):
+        if action == "container":
+            identity = self.named if args[-1] == self.name else args[-1]
+            self.assertIn(identity, self.hashes)
+            return json.dumps([{"Id": identity, "Name": self.name, "Image": IMAGE_HEX,
+                                "State": self.state, "Config": self.config}])
+        if action == "image":
+            return json.dumps([{"Id": IMAGE_HEX, "Architecture": "arm64", "Os": "linux",
+                                "Config": {"Labels": {"org.opencontainers.image.revision": "b" * 40}}}])
+        if action == "exec":
+            identity = self.named if args[0] == self.name else args[0]
+            return json.dumps({"contractVersion": 1, "profile": {"hash": self.hashes[identity]}})
+        if action == "tag":
+            self.tags.add(args[-1])
+            return ""
+        self.fail(f"예상 밖의 실행: {cli} {action}")
+
+    def retain(self, *, labelled):
+        prior = self.release.parents[1] / "old/previous"
+        # 라벨은 이전 세대의 receipt도 가리킬 수 있지만, prepare 포인터는 원 ID여야 한다.
+        evidence = ({"container_id": self.other} if labelled else {
+            "container_id": self.original, "container_name": self.name, "captured_release": None,
+            "container_started_at": self.state["StartedAt"], "container_pid": self.state["Pid"]})
+        write_pair(prior, extra=evidence)
+        pair = json.loads((prior / "pair.json").read_text())
+        self.tool.dropin(prior, SERVICE, pair)
+        self.tool.activate(prior, SERVICE, self.root)
+        if labelled:
+            self.config["Labels"][self.tool.LABEL] = str(prior)
+            self.config["Env"][1:] = [
+                "STACK_WORKER_PROFILE_FILE=" + self.tool.RELEASE_TARGET + "/profile.json",
+                "STACK_WORKER_PROFILE_SOURCE_FILE=" + self.tool.TARGET + "/" + self.tool.PROFILES[SERVICE]]
+            Path(self.tool.RELEASE_TARGET).symlink_to(prior)
+            self.mounts.append({"destination": self.tool.RELEASE_TARGET, "type": "bind", "source": str(prior)})
+            self.flags[self.tool.RELEASE_TARGET] = {"ro"}
+        return prior
+
+    def assert_prepare_rejected(self):
+        def installed():
+            return [path.read_bytes() if path.exists() else None for path in (self.pointer, self.overlay)]
+
+        before = installed()
+        argv = [str(TOOL), "prepare", SERVICE, str(self.release), self.name, str(self.root)]
+        with mock.patch.object(sys, "argv", argv), self.assertRaises(ValueError):
+            self.tool.main()
+        self.assertEqual(installed(), before)
+        self.assertFalse(self.tags)
+        for name in ("pair.json", "SHA256SUMS", self.tool.DROPIN):
+            self.assertFalse((self.release / name).exists(), name)
+
+    def reject_change_during_check(self, change):
+        self.checker.side_effect = lambda *args, **kwargs: change()
+        self.assert_prepare_rejected()
+        self.checker.assert_called_once()
+
+    def test_named_replacement_cannot_publish_while_original_still_exists(self):
+        self.reject_change_during_check(lambda: setattr(self, "named", self.other))
+
+    def test_stopped_source_cannot_publish(self):
+        self.reject_change_during_check(lambda: self.state.update(Running=False, Pid=0))
+
+    def test_prepared_source_restart_cannot_replace_active_pair(self):
+        self.retain(labelled=False)
+        self.reject_change_during_check(lambda: self.state.update(StartedAt="2026-11-18T00:00:01Z"))
+
+    def test_labelled_source_replacement_cannot_replace_active_pair(self):
+        self.retain(labelled=True)
+        self.reject_change_during_check(lambda: setattr(self, "named", self.other))
+
+    def test_replaced_retained_bytes_cannot_attest_the_loaded_profile(self):
+        self.retain(labelled=True)
+        profile = Path(self.config["Labels"][self.tool.LABEL]) / "profile.json"
+
+        def during_diagnostics(cli, action, *args):
+            if action == "exec":
+                profile.write_bytes(b'{"workers":{"changed":{}}}\n')
+            return self.runtime(cli, action, *args)
+
+        self.tool.run.side_effect = during_diagnostics
+        self.assert_prepare_rejected()
+        self.checker.assert_not_called()
+
+    def test_diagnostics_from_temporary_name_owner_cannot_attest_original(self):
+        # 진단 때만 이름을 빌린 다른 컨테이너가 원본 파일과 일치하는 해시를 보고한다.
+        self.hashes[self.original] = "0" * 64
+        observed = []
+
+        def borrowed_name(cli, action, *args):
+            if action == "exec":
+                with mock.patch.object(self, "named", self.other):
+                    result = self.runtime(cli, action, *args)
+                    observed.append(json.loads(result)["profile"]["hash"])
+                    return result
+            return self.runtime(cli, action, *args)
+
+        self.tool.run.side_effect = borrowed_name
+        self.assert_prepare_rejected()
+        self.assertEqual(observed, [self.hashes[self.original]])
+        self.checker.assert_not_called()
+
+    def test_prepared_writer_must_still_own_its_generation_before_capture(self):
+        self.retain(labelled=False)
+        self.state.update(StartedAt="2026-11-18T00:01:00Z")
+        self.assert_prepare_rejected()
+        self.checker.assert_not_called()
+
+    def test_labelled_release_without_generation_can_be_live_but_cannot_authorize_hold(self):
+        prior = self.retain(labelled=True)
+        mirror = Path(self.tool.SOURCE) / self.tool.PROFILES[SERVICE]
+        mirror.write_text('{"desired":"new"}')
+        self.tool.verify_writer(prior, SERVICE, self.name, captured=False)
+        with self.assertRaisesRegex(ValueError, "captured writer generation"):
+            self.tool.verify_writer(prior, SERVICE, self.name, captured=True)
+        self.tool.capture(self.name, SERVICE, self.release, self.root)
+        self.tool.verify_writer(self.release, SERVICE, self.name, captured=True)
+        with self.assertRaisesRegex(ValueError, "expected profile release"):
+            self.tool.verify_writer(self.release, SERVICE, self.name, captured=False)
+        self.named = self.other
+        with self.assertRaisesRegex(ValueError, "captured writer generation"):
+            self.tool.verify_writer(self.release, SERVICE, self.name, captured=True)
+
+    def test_unlabelled_prepared_writer_attests_retained_bytes_not_next_desired(self):
+        self.retain(labelled=False)
+        (Path(self.tool.SOURCE) / self.tool.PROFILES[SERVICE]).write_text('{"desired":"new"}')
+        self.tool.capture(self.name, SERVICE, self.release, self.root)
+        self.tool.verify_writer(self.release, SERVICE, self.name, captured=True)
+        self.hashes[self.original] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "validated release pair"):
+            self.tool.verify_writer(self.release, SERVICE, self.name, captured=True)
+
+    def test_prepare_rechecks_generation_at_publication(self):
+        publish = self.tool.atomic_publish
+
+        def replace_before_publication(files, before_replace=None):
+            if before_replace is not None:
+                self.named = self.other
+            publish(files, before_replace)
+
+        argv = [str(TOOL), "prepare", SERVICE, str(self.release), self.name, str(self.root)]
+        with mock.patch.object(self.tool, "atomic_publish", side_effect=replace_before_publication), \
+                mock.patch.object(sys, "argv", argv), self.assertRaisesRegex(ValueError, "captured writer generation"):
+            self.tool.main()
+        self.assertTrue((self.release / "pair.json").exists())
+        self.assertFalse(self.pointer.exists())
+        self.assertFalse(self.overlay.exists())
+
+    def test_verify_live_rechecks_name_after_diagnostics_on_original_id(self):
+        prior = self.retain(labelled=True)
+
+        def change_during_diagnostics(cli, action, *args):
+            if action == "exec":
+                self.assertEqual(args[0], self.original)
+                self.named = self.other
+            return self.runtime(cli, action, *args)
+
+        self.tool.run.side_effect = change_during_diagnostics
+        with self.assertRaisesRegex(ValueError, "generation changed"):
+            self.tool.verify_writer(prior, SERVICE, self.name, captured=False)
+
+    def test_capture_and_verify_refuse_wrong_desired_environment_mount_and_inode(self):
+        prior = self.retain(labelled=True)
+        wrong = self.root / "unrelated"
+        shutil.copytree(self.tool.SOURCE, wrong)
+        for defect in ("source-file", "source-path", "writable", "source-inode", "missing-release"):
+            with self.subTest(defect=defect):
+                env, mounts, flags = self.config["Env"][:], [m.copy() for m in self.mounts], self.flags.copy()
+                if defect == "source-file":
+                    self.config["Env"][-1] = "STACK_WORKER_PROFILE_SOURCE_FILE=/unused"
+                elif defect == "source-path":
+                    self.mounts[0]["source"] = str(wrong)
+                elif defect == "writable":
+                    self.flags[self.tool.TARGET] = {"rw"}
+                elif defect == "source-inode":
+                    Path(self.tool.TARGET).unlink()
+                    Path(self.tool.TARGET).symlink_to(wrong)
+                else:
+                    self.mounts.pop()
+                with self.assertRaises(ValueError):
+                    self.tool.capture(self.name, SERVICE, self.release, self.root)
+                with self.assertRaises(ValueError):
+                    self.tool.verify_writer(prior, SERVICE, self.name, captured=False)
+                self.config["Env"], self.mounts, self.flags = env, mounts, flags
+                if defect == "source-inode":
+                    Path(self.tool.TARGET).unlink()
+                    Path(self.tool.TARGET).symlink_to(self.tool.SOURCE)
+
+    def test_probe_refuses_to_reinterpret_oci_mount_maps(self):
+        maps = {"uidMappings": [{"containerID": 0, "hostID": 100000, "size": 65536}],
+                "gidMappings": [{"containerID": 0, "hostID": 200000, "size": 65536}]}
+        self.assertTrue(self.tool.default_idmap(maps, maps))
+        self.assertFalse(self.tool.default_idmap({"options": ["ro"]}, maps))
+        for mount in ({"options": ["idmap"]}, {**maps, "options": ["idmap=uids=0-1-1"]},
+                      {**maps, "uidMappings": maps["gidMappings"]}):
+            with self.subTest(mount=mount), self.assertRaises(ValueError):
+                self.tool.default_idmap(mount, maps)
 
 
 @unittest.skipIf(os.geteuid() == 0, "renderer fixtures require the non-root test path contract")
@@ -285,8 +564,8 @@ class ResolvedPairTest(unittest.TestCase):
         values = self.module.unit_values(original)
         defaults = dict(value.split("=", 1) for key, value in values["Service"] if key == "Environment")
         self.host = {**defaults, **self.host}
-        self.directory = self.root / "pair"
-        self.directory.mkdir()
+        self.directory = self.root / service / "candidate"
+        self.directory.mkdir(parents=True)
         (self.directory / "profile.json").write_text('{"workers":{}}\n')
         lines = []
         for line in original.read_text().splitlines():
@@ -328,6 +607,19 @@ class ResolvedPairTest(unittest.TestCase):
                 raise subprocess.CalledProcessError(1, args)
             return subprocess.CompletedProcess(args, 0, json.dumps([self.volumes[args[3]]]))
         if args[:2] == ["podman", "run"]:
+            self.assertEqual(kwargs["stdout"], subprocess.DEVNULL)
+            self.assertEqual(kwargs["stderr"], subprocess.DEVNULL)
+            for option in ("--read-only", "--read-only-tmpfs=false", "--log-driver=none", "--no-healthcheck",
+                           "--image-volume=ignore"):
+                self.assertIn(option, args)
+            network = args[args.index("--network") + 1]
+            if args[-1] == "--check-pooled-database":
+                self.assertEqual(network, {"youtube-collector": "hololive-bot_hololive-net",
+                                           "youtube-collector-b": "hololive-collector-b"}[self.pair["service"]])
+                self.assertIn("--entrypoint=./bin/youtube-collector", args)
+            else:
+                self.assertEqual(args[-1], "--check-worker-profile")
+                self.assertEqual(network, "none")
             env = {}
             files = [args[index + 1] for index, arg in enumerate(args) if arg == "--env-file"]
             for name in files:
@@ -354,18 +646,62 @@ class ResolvedPairTest(unittest.TestCase):
         self.assertEqual(args[2], "--render-env")
         self.assertEqual(Path(args[4]).stat().st_mode & 0o777, 0o700)
         self.assertEqual(list(Path(args[4]).iterdir()), [])
-        result = self.real_run(args, capture_output=True, text=True, **kwargs)
-        for key in ("HOLOLIVE_DB_PASSWORD", "HOLOLIVE_ALARM_WORKER_PASSWORD",
-                    "HOLOLIVE_COLLECTOR_C_PASSWORD", "HOLODEX_API_KEY"):
-            if self.host.get(key):
-                self.assertNotIn(self.host[key], result.stdout + result.stderr)
-        return result
+        self.assertEqual(kwargs["stdout"], subprocess.DEVNULL)
+        self.assertEqual(kwargs["stderr"], subprocess.DEVNULL)
+        return self.real_run(args, **kwargs)
 
-    def check(self):
+    def check(self, *, pooled=False):
         (self.root / "compose.env").write_text("SYNTHETIC_FIXTURE=1\n")
         with mock.patch.dict(os.environ, self.host, clear=True), \
                 mock.patch.object(self.module.subprocess, "run", side_effect=self.lifecycle):
-            self.module.check_resolved_pair(self.directory, self.pair)
+            self.module.check_resolved_pair(self.directory, self.pair, pooled=pooled)
+
+    def test_pooled_probe_uses_only_its_candidate_network_and_slot_environment(self):
+        for service, volume, slot in (("youtube-collector", "hololive-bot_youtube-po-c-socket", "c"),
+                                      ("youtube-collector-b", "hololive-youtube-po-b-socket", "b")):
+            with self.subTest(service=service):
+                fixture = ResolvedPairTest()
+                fixture.setUp()
+                try:
+                    fixture.case(service)
+                    (fixture.units / fixture.module.QUADLET_UNITS[service]).write_bytes(fixture.record.read_bytes())
+                    fixture.existing_volume(volume)
+                    fixture.check(pooled=True)
+                    self.assertEqual(len(fixture.consumed), 1)
+                    args, env, _ = fixture.consumed[0]
+                    self.assertEqual(args[-2:], [IMAGE, "--check-pooled-database"])
+                    self.assertEqual((env["POSTGRES_HOST"], env["POSTGRES_PORT"]),
+                                     ("holo-pgbouncer", "6432") if slot == "c" else ("100.100.1.8", "6433"))
+                    self.assertEqual(env["POSTGRES_USER"], "hololive_collector_" + slot)
+                    self.assertEqual(env["POSTGRES_SSLMODE"], "verify-full")
+                    fixture.check_status = 19
+                    with self.assertRaises(subprocess.CalledProcessError) as failure:
+                        fixture.check(pooled=True)
+                    self.assertEqual(failure.exception.returncode, 19)
+                    self.assertEqual(len(fixture.consumed), 2)
+                    fixture.assert_private_inputs()
+                finally:
+                    fixture.doCleanups()
+
+    def test_pooled_probe_refuses_previous_or_unreviewed_network_before_podman(self):
+        self.case("youtube-collector-b")
+        with self.assertRaisesRegex(ValueError, "installed candidate unit"):
+            self.check(pooled=True)
+        (self.units / self.module.QUADLET_UNITS["youtube-collector-b"]).write_bytes(self.record.read_bytes())
+        self.pair["container_id"] = "c" * 64
+        with self.assertRaisesRegex(ValueError, "collector candidate"):
+            self.check(pooled=True)
+        del self.pair["container_id"]
+        (self.units / "hololive-collector-b.network").write_text("[Network]\nNetworkName=host\n")
+        with self.assertRaisesRegex(ValueError, "installed collector probe network"):
+            self.check(pooled=True)
+        self.assertEqual(self.calls, [])
+
+    def test_api_pair_cannot_enable_network_for_profile_checks(self):
+        self.case("hololive-api")
+        with self.assertRaisesRegex(ValueError, "collector candidate"):
+            self.check(pooled=True)
+        self.assertEqual(self.calls, [])
 
     def assert_private_inputs(self):
         for args in self.calls:
@@ -401,7 +737,7 @@ class ResolvedPairTest(unittest.TestCase):
                     self.assertIn(f"{name}:/run/hololive-youtube-po:{flags}", shlex.split(runtime))
                     fixture.check()
                     args, env, _ = fixture.consumed[-1]
-                    self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:{flags}", args)
+                    self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:{flags.replace('ro', 'ro,bind')}", args)
                     level = next(value for value in shlex.split(runtime) if value.startswith("label=level:"))
                     self.assertIn(level, args)
                     self.assertEqual(env["YOUTUBE_COLLECTOR_INSTANCE_ID"], unit.removeprefix("hololive-"))
@@ -416,13 +752,33 @@ class ResolvedPairTest(unittest.TestCase):
                 finally:
                     fixture.doCleanups()
 
+    def test_masked_unit_uses_only_its_generated_security_policy(self):
+        self.case("hololive-alarm-worker")
+        name = self.fragment.name
+        self.fragment = self.root / "etc/systemd/system" / name
+        self.fragment.parent.mkdir(parents=True)
+        self.fragment.symlink_to("/dev/null")
+        generated = self.root / "run/systemd/generator" / name
+        generated.parent.mkdir(parents=True)
+        source = self.units / self.module.QUADLET_UNITS[self.pair["service"]]
+        policy = "[X-Container]\nSecurityLabelLevel=s0:c900,c901\n"
+        generated.write_text(f"[Unit]\nSourcePath={source}\n{policy}")
+        self.check()
+        self.assertIn("label=level:s0:c900,c901", self.consumed[-1][0])
+        self.consumed.clear()
+        generated.write_text(f"[Unit]\nSourcePath={self.units}/foreign.container\n{policy}")
+        with self.assertRaisesRegex(ValueError, "unit source changed"):
+            self.check()
+        self.assertFalse(self.consumed)
+        self.assertEqual(self.fragment.readlink(), Path("/dev/null"))
+
     def test_ordinary_named_volume_uses_existing_storage_readonly(self):
         self.case("youtube-collector-b")
         self.record.write_text(self.record.read_text().replace("hololive-youtube-po-b.volume:", "ordinary-volume:"))
         mountpoint = self.existing_volume("ordinary-volume")
         self.check()
         args, env, _ = self.consumed[-1]
-        self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:ro", args)
+        self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:ro,bind", args)
         self.assertEqual(env["POSTGRES_USER"], "hololive_collector_b")
         self.assertEqual((mountpoint / "socket-fixture").read_bytes(), b"unchanged")
 
@@ -439,7 +795,7 @@ class ResolvedPairTest(unittest.TestCase):
         self.assertIn(f"{name}:/run/hololive-youtube-po:ro", shlex.split(runtime))
         mountpoint = self.existing_volume(name)
         self.check()
-        self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:ro", self.consumed[-1][0])
+        self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:ro,bind", self.consumed[-1][0])
 
     def test_missing_volume_declaration_cannot_fall_back_to_a_named_volume(self):
         self.case("youtube-collector-b")
@@ -526,7 +882,7 @@ class ResolvedPairTest(unittest.TestCase):
         live.write_bytes(stale)
         with self.assertRaises(subprocess.CalledProcessError) as failure:
             self.check()
-        self.assertIn("HOLOLIVE_DB_PASSWORD", failure.exception.stderr)
+        self.assertIsNone(failure.exception.stderr)
         self.assertEqual(self.consumed, [])
         self.assertEqual(live.read_bytes(), stale)
 

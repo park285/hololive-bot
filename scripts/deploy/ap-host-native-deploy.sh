@@ -16,12 +16,22 @@ while IFS='|' read -r owner _service _key _source _instances maximum _role; do
   if [[ "$owner" == youtube-collector-a ]]; then AP_POSTGRES_POOL_MAX_CONNS="$maximum"; fi
 done < "$REPO_ROOT/scripts/ci/postgres-capacity-policy.tsv"
 [[ "$AP_POSTGRES_POOL_MAX_CONNS" =~ ^[1-9][0-9]*$ ]] || { echo 'collector capacity policy missing' >&2; exit 1; }
-AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-5433}"
+AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-6433}"
+if [[ "$AP_POSTGRES_PORT" != 6433 ]]; then
+  echo "AP_POSTGRES_PORT must be the collector pooler port (6433)" >&2
+  exit 2
+fi
 
+. "$REPO_ROOT/scripts/deploy/lib/ap-host-native-window.sh"
 case "$MODE" in
-  --dry-run|--apply|--prepare-profile) ;;
+  --dry-run|--apply|--prepare-profile) [[ $# -le 2 ]] || exit 2 ;;
+  --quiesce|--resume)
+    [[ ${1:-} == osaka && ${3:-} == "$native_release_window" && -n ${RELEASE_ID:-} &&
+       -n ${HOLO_BOT_VERSION:-} && -n ${4:-} && ${HOLO_NATIVE_PAYLOAD_SHA256:-} =~ ^[0-9a-f]{64}$ ]] || exit 2
+    if [[ "$MODE" == --quiesce ]]; then [[ $# == 4 ]]; else [[ $# == 5 && "$5" =~ ^[0-9a-f-]{36}$ ]]; fi
+    ;;
   *)
-    echo "Usage: $0 <ap-host> [--dry-run|--apply|--prepare-profile]" >&2
+    echo "Usage: $0 <ap-host> [--dry-run|--apply|--prepare-profile] | osaka --quiesce|--resume W1|W2 <old-release> [nonce]" >&2
     exit 2
     ;;
 esac
@@ -29,6 +39,7 @@ esac
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 . "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
 . "$REPO_ROOT/scripts/deploy/lib/source-revision.sh"
+
 NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
 REMOTE_APPLY_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-remote-apply.sh"
 COLLECTOR_WRAPPER_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-collector-wrapper.sh"
@@ -44,10 +55,6 @@ if [[ ! "$AP_REQUIRED_UDP_BUFFER_BYTES" =~ ^[0-9]+$ ]]; then
 fi
 if [[ ! "$AP_SWAPFILE_SIZE_MIB" =~ ^[1-9][0-9]*$ ]]; then
   echo "AP_SWAPFILE_SIZE_MIB must be a positive integer" >&2
-  exit 2
-fi
-if [[ ! "$AP_POSTGRES_PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#${AP_POSTGRES_PORT} < 1 || 10#${AP_POSTGRES_PORT} > 65535 )); then
-  echo "AP_POSTGRES_PORT must be a valid TCP port" >&2
   exit 2
 fi
 
@@ -68,7 +75,15 @@ if [[ "$MODE" == --prepare-profile ]]; then
 fi
 
 release_id="${RELEASE_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)-$AP_NAME}"
+artifact_dir="${ARTIFACT_DIR:-$REPO_ROOT/artifacts/ap-host-native/$release_id}"
 native_release_id_validate "$release_id"
+if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then
+  native_release_id_validate "$4"
+  [[ "$4" != "$release_id" ]]
+  artifact_dir="$(realpath -e "$artifact_dir")"
+  digest="$(native_payload_digest "$artifact_dir")"
+  [[ "$digest" == "$HOLO_NATIVE_PAYLOAD_SHA256" ]] || { echo "검증 당시 native payload digest와 다릅니다." >&2; exit 1; }
+fi
 
 if [[ "$AP_GOAMD64" != v1 ]]; then
   if ! ap_remote_bash "$AP_GOAMD64" <<'REMOTE'
@@ -82,7 +97,6 @@ fi
 
 service="${AP_SERVICES[0]}"
 port="${AP_PORTS[0]}"
-artifact_dir="${ARTIFACT_DIR:-$REPO_ROOT/artifacts/ap-host-native/$release_id}"
 payload_name=".hololive-host-native-${AP_NAME}-${release_id}"
 version="${HOLO_BOT_VERSION:-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)}"
 
@@ -132,76 +146,151 @@ write_wrapper() {
   chmod 0755 "$dest"
 }
 
-mkdir -p "$artifact_dir/bin"
-artifact_dir="$(cd "$artifact_dir" && pwd)"
-cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh" "$artifact_dir/bin/ap-host-native-release-path.sh"
-cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh" "$artifact_dir/bin/ap-host-native-po.sh"
-cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh" "$artifact_dir/bin/ap-host-native-cutover.sh"
-cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-rollback-check.sh" "$artifact_dir/bin/ap-host-native-rollback-check.sh"
-cp "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py" "$artifact_dir/bin/worker-profile-pair.py"
-
 native_revision="$(deploy_source_revision "$REPO_ROOT")"
-sh "$REPO_ROOT/scripts/build/build-youtube-collector-go.sh" \
-  --output-dir "$artifact_dir" \
-  --version "$version" \
-  --revision "$native_revision" \
-  --goos linux \
-  --goarch amd64 \
-  --goamd64 "$AP_GOAMD64"
-sh "$REPO_ROOT/scripts/build/check-youtube-collector-go-artifact.sh" "$artifact_dir" \
-  --version "$version" \
-  --revision "$native_revision" \
-  --goos linux \
-  --goarch amd64 \
-  --goamd64 "$AP_GOAMD64"
-issuer_artifact="$artifact_dir/po-sandbox-build"
-"$REPO_ROOT/scripts/build/build-po-sandbox-artifact.sh" amd64 "$native_revision" "$version" "$issuer_artifact" rootfs
-mkdir -p "$artifact_dir/po-sandbox"
-cp "$issuer_artifact/rootfs.tar" "$issuer_artifact/rootfs.tar.sha256" \
-  "$issuer_artifact/rootfs-manifest.json" "$issuer_artifact/revision" \
-  "$issuer_artifact/architecture" "$issuer_artifact/version" "$artifact_dir/po-sandbox/"
-cp "$REPO_ROOT/scripts/build/po-sandbox-manifest.py" "$artifact_dir/bin/po-sandbox-manifest.py"
-rm -rf "$issuer_artifact"
-write_wrapper "$artifact_dir/bin/youtube-collector-wrapper"
-rm -rf "$artifact_dir/youtubejs"
-mkdir -p "$artifact_dir/youtubejs"
-cp "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/package.json" \
-  "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/package-lock.json" \
-  "$artifact_dir/youtubejs/"
-cp -R "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/src" "$artifact_dir/youtubejs/src"
-rm -f "$artifact_dir/youtubejs/src/"*.test.mjs
-(
-  cd "$artifact_dir/youtubejs"
-  npm_config_engine_strict=true npm exec --yes --package=corepack@0.36.0 -- corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
-)
-write_host_env "$artifact_dir/youtube-collector-host.env"
-cp "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"
-sed "s/@RELEASE_ID@/$release_id/g" "$PO_UNIT_TEMPLATE" > "$artifact_dir/hololive-youtube-po.service"
-cp "$PO_SOCKET_TEMPLATE" "$artifact_dir/hololive-youtube-po.socket"
+build_native_payload() {
+  mkdir -p "$artifact_dir/bin"
+  artifact_dir="$(cd "$artifact_dir" && pwd)"
+  for helper in ap-host-native-{release-path,po,cutover,rollback-check,window}.sh \
+    compose-env.sh postgres-endpoint.sh worker-profile-pair.py; do
+    cp "$REPO_ROOT/scripts/deploy/lib/$helper" "$artifact_dir/bin/"
+  done
+  sh "$REPO_ROOT/scripts/build/build-youtube-collector-go.sh" \
+    --output-dir "$artifact_dir" --version "$version" --revision "$native_revision" \
+    --goos linux --goarch amd64 --goamd64 "$AP_GOAMD64"
+  verify_native_collector
+  local issuer_artifact="$artifact_dir/po-sandbox-build"
+  "$REPO_ROOT/scripts/build/build-po-sandbox-artifact.sh" amd64 "$native_revision" "$version" "$issuer_artifact" rootfs
+  mkdir -p "$artifact_dir/po-sandbox"
+  cp "$issuer_artifact/rootfs.tar" "$issuer_artifact/rootfs.tar.sha256" \
+    "$issuer_artifact/rootfs-manifest.json" "$issuer_artifact/revision" \
+    "$issuer_artifact/architecture" "$issuer_artifact/version" "$artifact_dir/po-sandbox/"
+  cp "$REPO_ROOT/scripts/build/po-sandbox-manifest.py" "$artifact_dir/bin/po-sandbox-manifest.py"
+  rm -rf "$issuer_artifact"
+  write_wrapper "$artifact_dir/bin/youtube-collector-wrapper"
+  rm -rf "$artifact_dir/youtubejs"
+  mkdir -p "$artifact_dir/youtubejs"
+  cp "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/package.json" \
+    "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/package-lock.json" "$artifact_dir/youtubejs/"
+  cp -R "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/src" "$artifact_dir/youtubejs/src"
+  rm -f "$artifact_dir/youtubejs/src/"*.test.mjs
+  (
+    cd "$artifact_dir/youtubejs"
+    npm_config_engine_strict=true npm exec --yes --package=corepack@0.36.0 -- corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
+  )
+  write_host_env "$artifact_dir/youtube-collector-host.env"
+  cp "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"
+  sed "s/@RELEASE_ID@/$release_id/g" "$PO_UNIT_TEMPLATE" > "$artifact_dir/hololive-youtube-po.service"
+  cp "$PO_SOCKET_TEMPLATE" "$artifact_dir/hololive-youtube-po.socket"
+}
+
+verify_native_collector() {
+  sh "$REPO_ROOT/scripts/build/check-youtube-collector-go-artifact.sh" "$artifact_dir" \
+    --version "$version" --revision "$native_revision" --goos linux --goarch amd64 --goamd64 "$AP_GOAMD64"
+}
+
+apply_remote() {
+  {
+    if [[ "$AP_NAME" == osaka ]]; then
+      local base=/opt/hololive-bot/youtube-collector oldroot
+      local -a custody=("$base")
+      if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then
+        oldroot="$base/releases/${window_args[1]}"
+        custody+=("$oldroot" "$oldroot/bin/"{po-sandbox-manifest,worker-profile-pair}.py \
+          "$base/cutover-recovery" "$oldroot/native-window" "$base/releases/$release_id" \
+          /etc/systemd/system/hololive-youtube-{collector@youtube-collector-a.service,po.service,po.socket}.d)
+      fi
+      printf 'set -euo pipefail\nsudo -n bash -s --'
+      printf ' %q' "${custody[@]}"
+      printf " <<'NATIVE_CUSTODY'\n"
+      cat "$REPO_ROOT/scripts/deploy/verify-exec-tree-ownership.sh" || return
+      printf '\nNATIVE_CUSTODY\n'
+    fi
+    cat "$REPO_ROOT/scripts/deploy/lib/"{compose-env,postgres-endpoint,ap-host-native-release-path,ap-host-native-po,ap-host-native-cutover,ap-host-native-window,ap-host-native-rollback-check}.sh \
+      "$NODE_VERSION_LIB" "$READINESS_LIB" "$REMOTE_APPLY_LIB"
+  } |
+    ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "${change_started_at:-}" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" "$native_revision" "$1" "${window_args[@]}"
+}
+
+window_args=()
+if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
+  origin="$(apply_remote apply-origin)"
+  native_release_id_validate "${origin%% *}"
+  [[ "${origin#* }" =~ ^[0-9a-f]{40}\ [0-9]+:[0-9]+:[0-9]+$ ]]
+  window_args=("$origin")
+fi
+if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then
+  verify_native_collector
+  cmp -s "$COLLECTOR_WRAPPER_LIB" "$artifact_dir/bin/youtube-collector-wrapper"
+  cmp -s "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"
+  cmp -s "$PO_SOCKET_TEMPLATE" "$artifact_dir/hololive-youtube-po.socket"
+  sed "s/@RELEASE_ID@/$release_id/g" "$PO_UNIT_TEMPLATE" | cmp -s - "$artifact_dir/hololive-youtube-po.service"
+  write_host_env /dev/stdout | cmp -s - "$artifact_dir/youtube-collector-host.env"
+  [[ "$(<"$artifact_dir/po-sandbox/revision")" == "$native_revision" &&
+     "$(<"$artifact_dir/po-sandbox/version")" == "$version" && "$(<"$artifact_dir/po-sandbox/architecture")" == amd64 ]]
+  (cd "$artifact_dir/po-sandbox" && sha256sum --strict --check rootfs.tar.sha256)
+  window_args=("$3" "$4" "$HOLO_NATIVE_PAYLOAD_SHA256" "${5:-}")
+else
+  build_native_payload
+  if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
+    digest="$(native_payload_digest "$artifact_dir")"
+    window_args+=("$digest")
+  fi
+fi
 
 RSYNC_RSH="$(ap_rsync_rsh)"
 
 if [[ "$MODE" == "--dry-run" ]]; then
   rsync -ani --delete "$artifact_dir/" -e "$RSYNC_RSH" "$(ap_rsync_target "./$payload_name/")"
+  digest="$(native_payload_digest "$artifact_dir")"
+  printf 'HOLO_NATIVE_PAYLOAD_SHA256=%s\n' "$digest"
   echo "[DRY-RUN] Built $artifact_dir; no remote files or services changed."
   exit 0
 fi
 
-rsync -ai --delete "$artifact_dir/" -e "$RSYNC_RSH" "$(ap_rsync_target "./$payload_name/")"
+if [[ "$MODE" != --resume ]]; then
+  ap_remote_bash "$payload_name" <<'REMOTE'
+set -eu
+mkdir -m 0700 -- "$HOME/$1"
+REMOTE
+
+  rsync -ai --delete "$artifact_dir/" -e "$RSYNC_RSH" "$(ap_rsync_target "./$payload_name/")"
+fi
 change_started_at="$(ap_remote_bash <<'REMOTE'
 date -u +%Y-%m-%dT%H:%M:%SZ
 REMOTE
 )"
 
-{
-  cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
-  cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
-  cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh"
-  cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-rollback-check.sh"
-  cat "$NODE_VERSION_LIB"
-  cat "$READINESS_LIB"
-  cat "$REMOTE_APPLY_LIB"
-} | ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" "$native_revision"
+action=deploy
+if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then action="${MODE#--}"; fi
+apply_cutover() {
+  if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
+    local nonce
+    nonce="$(apply_remote same-window)" || return
+    [[ "$nonce" =~ ^[0-9a-f-]{36}$ ]] || return 1
+    window_args=("$nonce")
+  else
+    apply_remote "$action"
+  fi
+}
+apply_cutover || {
+  status=$?
+  if (( status == 255 )); then
+    echo 'native cutover outcome unknown after transport loss; do not retry or release a guard' >&2
+  fi
+  exit "$status"
+}
+if [[ "$MODE" == --quiesce ]]; then exit 0; fi
 
-CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$AP_NAME"
-CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"
+for observer in "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh"; do
+  CHANGE_STARTED_AT="$change_started_at" "$observer" "$AP_NAME" || {
+    status=$?
+    if [[ "$MODE" == --resume && "$status" != 255 ]]; then
+      apply_remote observation-failed
+    else
+      echo 'native post-cutover observation failed; current state unconfirmed; no automatic change' >&2
+    fi
+    exit "$status"
+  }
+done
+if [[ "$MODE" == --resume ]]; then apply_remote accepted; fi
+if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then apply_remote apply-accepted; fi

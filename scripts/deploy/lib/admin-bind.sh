@@ -37,13 +37,28 @@ admin_network_assert_firewall() {
         return 1
     fi
     if ! jq -e '
+        def dnat($published; $internal):
+            [{"match":{"op":"in","left":{"ct":{"key":"status"}},"right":"dnat"}},
+             {"match":{"op":"==","left":{"ct":{"key":"proto-dst","dir":"original"}},"right":$published}},
+             {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":$internal}}];
+        def sources:
+            [{"match":{"op":"==","left":{"meta":{"key":"iifname"}},"right":"tailscale0"}},
+             {"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"@postgres_sources"}}];
+        def preserve:
+            [{"mangle":{"key":{"meta":{"key":"mark"}},"value":{"&":[{"meta":{"key":"mark"}},4278255615]}}}];
         [.nftables[] | .set // empty | select(.name == "postgres_sources")] as $sources |
         ($sources | length == 1) and
         ($sources[0].elem | sort == ["100.100.1.3", "100.100.1.5", "100.100.1.6", "100.100.1.8"]) and
         ([.nftables[] | .set // empty | select(.name == "bot_postgres_sources")] as $bot |
             ($bot | length == 1) and ($bot[0].elem == ["100.100.1.3"])) and
         any(.nftables[]; .chain.hook == "forward" and .chain.name == "forward" and .chain.prio == -20) and
-        ([.nftables[] | .rule // empty | select(.chain == "forward")] | length == 6)
+        ([.nftables[] | .rule // empty | select(.chain == "forward")] as $forward |
+            ($forward | length == 8) and
+            ($forward[4].expr == dnat(6433; 6432) + sources + [{"accept":null}]) and
+            ($forward[5].expr == dnat(6433; 6432) + [{"reject":{"type":"tcp reset"}}])) and
+        any(.nftables[]; .chain.hook == "forward" and .chain.name == "forward_preserve_postgres_source" and .chain.prio == 10) and
+        ([.nftables[] | .rule // empty | select(.chain == "forward_preserve_postgres_source") | .expr] ==
+            [dnat(5433; 5432) + sources + preserve, dnat(6433; 6432) + sources + preserve])
     ' <<<"${rules}" >/dev/null; then
         echo '[ERROR] Active firewall is missing the approved DB source set or DNAT forward boundary' >&2
         return 1

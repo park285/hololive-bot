@@ -6,6 +6,8 @@ self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${self_dir}/lib/admin-bind.sh"
 # shellcheck source=scripts/deploy/lib/public-bind-mounts.sh
 . "${self_dir}/lib/public-bind-mounts.sh"
+# shellcheck source=scripts/deploy/lib/postgres-capacity.sh
+. "${self_dir}/lib/postgres-capacity.sh"
 
 # shellcheck source=scripts/deploy/lib/compose-env.sh
 . "${self_dir}/lib/compose-env.sh"
@@ -19,6 +21,7 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     run_dir=/run/hololive-bot
     secrets_dir=/etc/stack-secrets/hololive-bot
     installed_firewall=/etc/nftables.d/admin-dashboard-ingress.nft
+    quadlet_dir=/etc/containers/systemd/hololive-bot
 else
     test_root="${HOLOLIVE_QUADLET_TEST_ROOT:?non-root execution is only for tests and requires HOLOLIVE_QUADLET_TEST_ROOT}"
     deploy_root="${test_root}/deploy"
@@ -27,6 +30,7 @@ else
     run_dir="${test_root}/run"
     secrets_dir="${test_root}/secrets"
     installed_firewall="${test_root}/installed.nft"
+    quadlet_dir="${test_root}/units"
 fi
 
 render_env=false
@@ -153,6 +157,14 @@ api_release_version() {
 }
 
 case "$target" in
+    hololive-api|hololive-alarm-worker|hololive-youtube-collector-c)
+        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
+        if [[ "$render_env" != true ]]; then
+            postgres_capacity_assert_service "$deploy_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
+        fi
+        ;;
+esac
+case "$target" in
     collector-enabled)
         case "${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}" in
             ""|0) exit 0 ;;
@@ -165,6 +177,7 @@ case "$target" in
         require_values POSTGRES_PORT_BIND_IP
         require_secret_file "${secrets_dir}/postgres-tls/server.crt"
         require_secret_file "${secrets_dir}/postgres-tls/server.key"
+        require_secret_file "${secrets_dir}/certs/postgres-ca.pem"
         wait_for_tailnet_address POSTGRES_PORT_BIND_IP
         admin_postgres_bind_assert "$deploy_root" "$POSTGRES_PORT_BIND_IP"
         admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
@@ -180,6 +193,20 @@ case "$target" in
             'HOLOLIVE_COLLECTOR_D_PASSWORD=HOLOLIVE_COLLECTOR_D_PASSWORD!' \
             'HOLOLIVE_REPLICATOR_PASSWORD=HOLOLIVE_REPLICATOR_PASSWORD'
         ;;
+    holo-pgbouncer)
+        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
+        require_values POSTGRES_PORT_BIND_IP
+        require_secret_file "${secrets_dir}/certs/postgres-ca.pem"
+        for tls_file in server.crt server.key backend-client.crt backend-client.key; do
+            require_secret_file "${secrets_dir}/pgbouncer/${tls_file}"
+        done
+        wait_for_tailnet_address POSTGRES_PORT_BIND_IP
+        admin_postgres_bind_assert "$deploy_root" "$POSTGRES_PORT_BIND_IP"
+        admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
+        install -d -m 0755 -- "${run_dir}/pgbouncer"
+        postgres_capacity_write_quadlet_config "$deploy_root" "$compose_env" "$quadlet_dir" \
+            "${run_dir}/pgbouncer/pgbouncer.ini"
+        ;;
     valkey-cache)
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values VALKEY_BIND_IP
@@ -187,18 +214,13 @@ case "$target" in
         ;;
     hololive-db-migrate)
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
-        write_secret_env hololive-db-migrate \
-            'PGPASSWORD=HOLOLIVE_MIGRATOR_PASSWORD' \
-            'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_A_PASSWORD=HOLOLIVE_COLLECTOR_A_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_B_PASSWORD=HOLOLIVE_COLLECTOR_B_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_C_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_D_PASSWORD=HOLOLIVE_COLLECTOR_D_PASSWORD!' \
-            'HOLOLIVE_ALARM_WORKER_PASSWORD=HOLOLIVE_ALARM_WORKER_PASSWORD!' \
-            'HOLOLIVE_DB_PASSWORD=HOLOLIVE_DB_PASSWORD!'
+        case "${2:-}" in
+            pool-auth) write_secret_env hololive-db-migrate 'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' ;;
+            schema) write_secret_env hololive-db-migrate 'PGPASSWORD=HOLOLIVE_MIGRATOR_PASSWORD!' ;;
+            *) die "hololive-db-migrate requires pool-auth or schema" ;;
+        esac
         ;;
     hololive-alarm-worker)
-        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS
         validate_container_env_file "${secrets_dir}/alarm-worker.env"
         if [[ "$render_env" == false ]]; then
@@ -209,7 +231,6 @@ case "$target" in
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     hololive-api)
-        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS \
             HOLOLIVE_API_PORT_BIND_IP HOLOLIVE_ADMIN_API_PORT_BIND_IP HOLOLIVE_H3_SERVER_NAME
         validate_container_env_file "${secrets_dir}/bot.env"
@@ -232,7 +253,6 @@ case "$target" in
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     hololive-youtube-collector-c)
-        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values LIVE_LOGS_PATH
         validate_container_env_file "${secrets_dir}/youtube-collector.env"
         if [[ "$render_env" == false ]]; then

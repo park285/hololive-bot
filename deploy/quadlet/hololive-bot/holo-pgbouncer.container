@@ -1,0 +1,58 @@
+[Unit]
+Description=Hololive transaction pooler
+Wants=holo-postgres.service
+After=holo-postgres.service tailscaled.service admin-dashboard-ingress-firewall.service
+Requires=admin-dashboard-ingress-firewall.service
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent
+ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced
+StartLimitIntervalSec=0
+
+[Container]
+ContainerName=holo-pgbouncer
+Image=${PGBOUNCER_IMAGE}
+Pull=never
+User=10001
+Group=10001
+UserNS=auto:size=65536
+Network=hololive-net.network
+IP=172.23.255.254
+PublishPort=${POSTGRES_PORT_BIND_IP}:6433:6432
+Volume=/run/hololive-bot/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+Volume=/opt/hololive-bot/compose/current/deploy/pgbouncer/pg_hba.conf:/etc/pgbouncer/pg_hba.conf:ro
+Volume=/opt/hololive-bot/compose/current/deploy/pgbouncer/stats-users.txt:/etc/pgbouncer/stats-users.txt:ro
+Volume=/etc/stack-secrets/hololive-bot/pgbouncer:/run/hololive-bot/pgbouncer:ro,idmap
+Volume=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+Tmpfs=/tmp:size=16m,mode=1777,noexec,nosuid,nodev
+ReadOnly=true
+ReadOnlyTmpfs=false
+NoNewPrivileges=true
+DropCapability=all
+Memory=128m
+PidsLimit=64
+Ulimit=nofile=1024:1024
+LogDriver=journald
+# 로컬 peer 통계 콘솔만 검사한다. 실제 DB 쿼리 준비 상태는 앱 readiness가 판정한다.
+HealthCmd=["psql","-X","-w","-h","/tmp","-p","6432","-U","pgbouncer","-d","pgbouncer","-v","ON_ERROR_STOP=1","-Atc","SHOW VERSION"]
+HealthInterval=30s
+HealthTimeout=5s
+HealthRetries=3
+HealthStartPeriod=10s
+HealthStartupCmd=["/usr/local/bin/pgbouncer-startup-health","holo-pgbouncer","holo-postgres"]
+HealthStartupInterval=2s
+HealthStartupTimeout=5s
+HealthOnFailure=stop
+Notify=healthy
+StopTimeout=30
+
+[Service]
+Environment=PGBOUNCER_IMAGE=localhost/iris-stack-pgbouncer:1.26.1-guc1
+EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
+ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart holo-pgbouncer
+Restart=always
+RestartSec=5s
+TimeoutStartSec=120
+TimeoutStopSec=45
+LogRateLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

@@ -62,7 +62,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -ldflags="-w -buildid= -X main.Version=${VERSION}" \
       -o /dist/bin/hololive-api ./cmd/hololive-api && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid= -X main.deploymentOnly=1" \
       -o /dist/bin/db-migrate ./cmd/db-migrate && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
@@ -76,6 +76,7 @@ FROM runtime-base
 ARG VERSION=dev
 ARG REVISION=unknown
 LABEL org.opencontainers.image.title="hololive-api" \
+      io.hololive-bot.outbox-schema="text-file-v1" \
       org.opencontainers.image.source="https://github.com/park285/hololive-bot" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}"
