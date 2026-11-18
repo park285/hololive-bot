@@ -101,8 +101,25 @@ BEGIN
            JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
            WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg_toast%'
              AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
-             AND (pg_catalog.has_table_privilege(auth_oid, c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+             AND (pg_catalog.has_table_privilege(auth_oid, c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
                   OR pg_catalog.has_any_column_privilege(auth_oid, c.oid, 'SELECT,INSERT,UPDATE,REFERENCES'))
+             -- 닫힌 public 스키마에서 확장이 설치한 두 뷰의 기본 PUBLIC SELECT만 허용한다.
+             AND NOT EXISTS (
+                 SELECT 1 FROM pg_catalog.pg_depend AS d
+                 JOIN pg_catalog.pg_extension AS e ON e.oid = d.refobjid
+                 WHERE d.classid = 'pg_catalog.pg_class'::pg_catalog.regclass AND d.objid = c.oid AND d.objsubid = 0
+                   AND d.refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND d.refobjsubid = 0 AND d.deptype = 'e'
+                   AND e.extname = 'pg_stat_statements' AND e.extversion = '1.12' AND e.extnamespace = n.oid
+                   AND n.nspname = 'public' AND NOT pg_catalog.has_schema_privilege(auth_oid, n.oid, 'USAGE')
+                   AND c.relkind = 'v' AND c.relname IN ('pg_stat_statements', 'pg_stat_statements_info')
+                   AND (SELECT pg_catalog.bool_and(a.grantor = c.relowner AND a.privilege_type = 'SELECT' AND NOT a.is_grantable)
+                        FROM pg_catalog.aclexplode(c.relacl) AS a WHERE a.grantee = 0)
+                   AND NOT EXISTS (
+                       SELECT 1 FROM pg_catalog.pg_attribute AS col
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(col.attacl) AS a
+                       WHERE col.attrelid = c.oid AND a.grantee = 0
+                   )
+             )
        ) THEN
         RAISE EXCEPTION 'unexpected pooler authentication effective privileges' USING ERRCODE = '42501';
     END IF;

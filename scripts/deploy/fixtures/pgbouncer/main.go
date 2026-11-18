@@ -129,6 +129,7 @@ func prepare(dir string) error {
 	}
 	var sql strings.Builder
 	sql.WriteString("REVOKE ALL ON DATABASE hololive FROM PUBLIC; REVOKE ALL ON SCHEMA public FROM PUBLIC;\nCREATE ROLE hololive_scraper NOLOGIN;\n")
+	sql.WriteString("CREATE EXTENSION pg_stat_statements WITH SCHEMA public;\n")
 	for _, role := range roles {
 		if role == "postgres_admin" {
 			continue

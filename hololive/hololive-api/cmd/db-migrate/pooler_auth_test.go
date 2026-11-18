@@ -16,6 +16,10 @@ import (
 
 func TestPoolerAuthBootstrap(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
+	if _, err := pool.Exec(t.Context(), "CREATE EXTENSION pg_stat_statements WITH SCHEMA public"); err != nil {
+		t.Fatal(err)
+	}
+
 	checkPoolerAuthCredentials(t, pool)
 	checkPoolerAuthPermissions(t, pool)
 	checkPoolerLookupRejections(t, pool)
@@ -77,9 +81,21 @@ func checkPoolerAuthPermissions(t *testing.T, pool *pgxpool.Pool) {
 			t.Fatalf("certificate-only role attributes: restricted=%v, error=%v", restricted, err)
 		}
 
+		var publicSelectOnly bool
+
+		err = tx.QueryRow(t.Context(), `SELECT
+			pg_catalog.has_table_privilege('public', 'public.pg_stat_statements', 'SELECT')
+			AND pg_catalog.has_table_privilege('public', 'public.pg_stat_statements_info', 'SELECT')
+			AND NOT pg_catalog.has_schema_privilege('hololive_pgbouncer_auth', 'public', 'USAGE')`).Scan(&publicSelectOnly)
+		if err != nil || !publicSelectOnly {
+			t.Fatalf("extension PUBLIC SELECT behind restricted schema: got=%v, error=%v", publicSelectOnly, err)
+		}
+
 		for _, statement := range []string{
 			"SELECT rolpassword FROM pg_catalog.pg_authid",
 			"SELECT id FROM public.pooler_private_data",
+			"SELECT 1 FROM public.pg_stat_statements LIMIT 0",
+			"SELECT 1 FROM public.pg_stat_statements_info LIMIT 0",
 			"CREATE TABLE public.pooler_forbidden (id bigint)",
 			"CREATE TABLE hololive_pooler_auth.pooler_forbidden (id bigint)",
 			"CREATE SCHEMA pooler_forbidden",
@@ -177,10 +193,16 @@ func checkPoolerBootstrapRejections(t *testing.T, pool *pgxpool.Pool) {
 		{"member", "GRANT hololive_pgbouncer_auth TO hololive_runtime"},
 		{"owned object", "CREATE SCHEMA pooler_unexpected AUTHORIZATION hololive_pgbouncer_auth"},
 		{"catalog grant", "GRANT SELECT ON pg_catalog.pg_authid TO hololive_pgbouncer_auth"},
+		{"public catalog grant", "GRANT SELECT ON pg_catalog.pg_authid TO PUBLIC"},
 		{"database create", "GRANT CREATE ON DATABASE %DATABASE% TO hololive_pgbouncer_auth"},
 		{"public temp", "GRANT TEMPORARY ON DATABASE %DATABASE% TO PUBLIC"},
 		{"connect grant option", "GRANT CONNECT ON DATABASE %DATABASE% TO hololive_pgbouncer_auth WITH GRANT OPTION"},
 		{"public app data", "CREATE TABLE public.pooler_data (id bigint); GRANT SELECT ON public.pooler_data TO PUBLIC"},
+		{"nonextension statistics view", "ALTER EXTENSION pg_stat_statements DROP VIEW public.pg_stat_statements"},
+		{"reachable statistics views", "GRANT USAGE ON SCHEMA public TO PUBLIC"},
+		{"auth statistics grant", "GRANT SELECT ON public.pg_stat_statements TO hololive_pgbouncer_auth"},
+		{"public statistics update", "GRANT UPDATE ON public.pg_stat_statements TO PUBLIC"},
+		{"public statistics column grant", "GRANT SELECT (userid) ON public.pg_stat_statements TO PUBLIC"},
 	} {
 		t.Run("reject unexpected "+test.name, func(t *testing.T) {
 			tx := poolerAuthTransaction(t, pool)
