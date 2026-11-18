@@ -158,14 +158,69 @@ func applyCardWindow(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *
 		return Result{}, errors.New("card window requires the reviewed 031/032 manifest")
 	}
 
-	var admitted bool
+	var admitted, pending bool
 
-	if checkErr := conn.QueryRow(ctx, mustSQL("card_window_state.sql"), entries).Scan(&admitted); checkErr != nil {
+	if checkErr := conn.QueryRow(ctx, mustSQL("card_window_state.sql"), entries).Scan(&admitted, &pending); checkErr != nil {
 		return Result{}, fmt.Errorf("inspect card window: %w", checkErr)
 	}
 
 	if !admitted {
 		return Result{}, errors.New("card window refused: pool authentication, writer drain, schema or ledger not confirmed")
+	}
+
+	if !pending {
+		return verifyCardManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
+	}
+
+	return migrateDrainedCard(ctx, conn, fsys, exec, ledger, entries, cfg)
+}
+
+func requireCardGuard(ctx context.Context, conn *pgxpool.Conn) error {
+	var guarded bool
+
+	if err := conn.QueryRow(ctx, mustSQL("card_window_guard.sql")).Scan(&guarded); err != nil {
+		return fmt.Errorf("read pool admission guard: %w", err)
+	}
+
+	if !guarded {
+		return errors.New("card migration requires the live administrator who drained pool frontends")
+	}
+
+	return nil
+}
+
+func migrateDrainedCard(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (result Result, err error) {
+	if guardErr := requireCardGuard(ctx, conn); guardErr != nil {
+		return Result{}, guardErr
+	}
+
+	previous := conn.Conn().PgConn().ParameterStatus("application_name")
+	if _, markErr := conn.Exec(ctx, "SET application_name = 'hololive-pool-migrating'"); markErr != nil {
+		return Result{}, fmt.Errorf("hold pool admission during migration: %w", markErr)
+	}
+
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), advisoryUnlockTimeout)
+		defer cancel()
+
+		if _, restoreErr := conn.Exec(cleanup, "SELECT pg_catalog.set_config('application_name',$1,false)", previous); restoreErr != nil {
+			closeErr := conn.Conn().Close(cleanup)
+
+			err = errors.Join(err, fmt.Errorf("release migration admission: %w", restoreErr), closeErr)
+		}
+	}()
+
+	// 관리자 관찰과 이 세션 사이 차단 공백이 있으면 원장 변경 전에 중단한다.
+	if guardErr := requireCardGuard(ctx, conn); guardErr != nil {
+		return Result{}, guardErr
+	}
+
+	return verifyCardManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
+}
+
+func verifyCardManifest(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (Result, error) {
+	if indexErr := assertNoInvalidIndexes(ctx, conn); indexErr != nil {
+		return Result{}, fmt.Errorf("check indexes before card migration: %w", indexErr)
 	}
 
 	// 완전한 030/032만 들어온다. 앞선 30개 체크섬을 확인한 뒤에만 다음 파일을 실행한다.

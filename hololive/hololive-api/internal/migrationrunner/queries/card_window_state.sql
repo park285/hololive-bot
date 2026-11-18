@@ -24,4 +24,4 @@ SELECT COALESCE(current_database() = 'hololive' AND current_user = 'hololive_mig
             ('hololive_runtime','hololive_alarm_worker','hololive_collector_a','hololive_collector_b','hololive_collector_c','hololive_collector_d'))
          AND NOT EXISTS (SELECT FROM pg_catalog.pg_prepared_xacts WHERE database = current_database()))
         OR (files = $1::text[] AND triggers = 2 AND enabled = 2 AND card AND reject_fn AND terminal_fn)
-    ), false) FROM physical, ledger;
+    ), false), COALESCE(files = ($1::text[])[1:30], false) FROM physical, ledger;

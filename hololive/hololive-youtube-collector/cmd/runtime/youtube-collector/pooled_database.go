@@ -110,6 +110,10 @@ func verifyPooledSession(ctx context.Context, conn *pgx.Conn, role string) error
 		AND current_setting('default_transaction_read_only') = 'on' AND current_setting('transaction_read_only') = 'on'
 		AND current_setting('statement_timeout') = '30s' AND current_setting('lock_timeout') = '3s'
 		AND inet_client_addr() = inet '172.23.255.254'
+		AND to_regclass('public.member_schedule_card_templates') IS NOT NULL
+		AND (SELECT count(*)=2 FROM pg_catalog.pg_trigger WHERE NOT tgisinternal AND tgenabled IN ('O','A') AND (
+			(tgrelid='public.source_observations'::regclass AND tgname='reject_retired_holodex_channel_profile' AND tgfoid=to_regprocedure('public.reject_retired_holodex_channel_profile()')) OR
+			(tgrelid='public.source_observation_queue'::regclass AND tgname='terminalize_retired_holodex_channel_profile' AND tgfoid=to_regprocedure('public.terminalize_retired_holodex_channel_profile()'))))
 		AND EXISTS (SELECT 1 FROM pg_catalog.pg_stat_ssl WHERE pid = pg_backend_pid() AND ssl AND version IN ('TLSv1.2','TLSv1.3'))`
 
 	var verified bool

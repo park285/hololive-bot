@@ -146,6 +146,13 @@ BEGIN
               AND (r.rolvaliduntil IS NULL OR r.rolvaliduntil > pg_catalog.statement_timestamp())
               AND NOT (r.rolsuper OR r.rolreplication OR r.rolbypassrls OR r.rolcreatedb OR r.rolcreaterole)
               AND r.rolpassword LIKE 'SCRAM-SHA-256$%'
+              -- 공유 소켓의 관리자·migrator만 이 이름을 사용할 수 있다. 이미 인증한 frontend는 별도로 전수 확인한다.
+              AND NOT EXISTS (
+                  SELECT FROM pg_catalog.pg_stat_activity a
+                  WHERE a.datname = pg_catalog.current_database() AND a.client_addr IS NULL
+                    AND ((a.usename = 'postgres_admin' AND a.application_name IN ('hololive-pool-draining', 'hololive-pool-drained'))
+                      OR (a.usename = 'hololive_migrator' AND a.application_name = 'hololive-pool-migrating'))
+              )
         $lookup$
     $definition$;
 

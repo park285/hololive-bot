@@ -53,7 +53,11 @@ func run() error {
 
 	flag.Parse()
 
-	if *schemaOnly && (*baselineThrough != "" || *allowBlockingIndexDrop || flag.NArg() != 0) {
+	if flag.NArg() != 0 {
+		return errors.New("unexpected positional argument")
+	}
+
+	if *schemaOnly && (*baselineThrough != "" || *allowBlockingIndexDrop) {
 		return errors.New("schema-only does not accept baseline or blocking maintenance overrides")
 	}
 
