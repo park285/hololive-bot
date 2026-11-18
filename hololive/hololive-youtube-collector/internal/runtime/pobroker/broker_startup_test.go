@@ -5,16 +5,18 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -25,7 +27,7 @@ func TestServeDoesNotReportHealthyBeforeWorkerLoads(t *testing.T) {
 	gate := filepath.Join(dir, "load")
 	require.NoError(t, syscall.Mkfifo(gate, 0o600))
 
-	script := "#!/bin/sh\nfor gate do :; done\nIFS= read -r release < \"$gate\"\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nsleep 30\n"
+	script := "#!/bin/sh\nfor gate do :; done\nIFS= read -r release < \"$gate\"\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nIFS= read -r stop\n"
 	broker := New("revision", fakeNode(t, "loading-node", script), gate)
 
 	var config net.ListenConfig
@@ -89,7 +91,7 @@ func TestServeDoesNotReportHealthyBeforeWorkerLoads(t *testing.T) {
 }
 
 func TestInvalidStartupFrameClosesListenerAndReapsWorker(t *testing.T) {
-	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\",\"extra\":true}'\nsleep 30\n"
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\",\"extra\":true}'\nIFS= read -r stop\n"
 	broker := New("revision", fakeNode(t, "invalid-startup-node", script), "unused")
 
 	var config net.ListenConfig
@@ -119,7 +121,7 @@ func TestInvalidStartupFrameClosesListenerAndReapsWorker(t *testing.T) {
 }
 
 func TestServeStartupDeadlineClosesListenerAndReapsWorker(t *testing.T) {
-	broker := New("revision", fakeNode(t, "silent-startup-node", "#!/bin/sh\nsleep 60\n"), "unused")
+	broker := New("revision", fakeNode(t, "silent-startup-node", "#!/bin/sh\nIFS= read -r stop\n"), "unused")
 
 	var config net.ListenConfig
 
@@ -260,70 +262,72 @@ func TestFlushedResponsesHaveContentLength(t *testing.T) {
 }
 
 func TestServeKeepsIdleConnectionPastClientStallWindow(t *testing.T) {
-	broker, socket, listener := newKeepAliveBroker(t)
-	idleDeadline := make(chan time.Duration, 1)
-	serveBroker(t, broker, &idleDeadlineListener{Listener: listener, deadline: idleDeadline})
-
+	broker, socket, _ := serveKeepAliveBroker(t)
 	conn := dialBroker(t, socket)
-
 	require.Equal(t, http.StatusOK, roundTrip(t, conn, http.MethodGet, "/health", ""))
 
-	select {
-	case remaining := <-idleDeadline:
-		require.Greater(t, remaining, 2500*time.Millisecond)
-	case <-time.After(5 * time.Second):
-		t.Fatal("server did not start waiting for the next request")
-	}
+	synctest.Test(t, func(t *testing.T) {
+		server := httptest.NewTestServer(t, broker.server.Handler)
 
-	require.Equal(t, http.StatusOK, roundTrip(t, conn, http.MethodGet, "/health", ""))
-}
+		server.Config.IdleTimeout = broker.server.IdleTimeout
+		server.Config.ReadHeaderTimeout = broker.server.ReadHeaderTimeout
+		server.Config.ReadTimeout = broker.server.ReadTimeout
 
-type idleDeadlineListener struct {
-	net.Listener
+		var closed atomic.Bool
 
-	deadline chan<- time.Duration
-}
+		server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+			if state == http.StateClosed {
+				closed.Store(true)
+			}
+		}
 
-func (l *idleDeadlineListener) Accept() (net.Conn, error) {
-	conn, err := l.Listener.Accept()
-	if err != nil {
-		return nil, fmt.Errorf("accept keep-alive connection: %w", err)
-	}
+		client := server.Client()
 
-	return &idleDeadlineConn{Conn: conn, deadline: l.deadline}, nil
-}
+		var first net.Conn
 
-type idleDeadlineConn struct {
-	net.Conn
+		for _, wantReused := range []bool{false, true} {
+			if wantReused {
+				synctest.Sleep(2500 * time.Millisecond)
+			}
 
-	deadline  chan<- time.Duration
-	responded bool
-}
+			var connections []httptrace.GotConnInfo
 
-func (c *idleDeadlineConn) Write(p []byte) (int, error) {
-	n, err := c.Conn.Write(p)
+			ctx := httptrace.WithClientTrace(t.Context(), &httptrace.ClientTrace{
+				GotConn: func(info httptrace.GotConnInfo) { connections = append(connections, info) },
+			})
+			request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/health", http.NoBody)
+			require.NoError(t, err)
 
-	c.responded = true
+			response, err := client.Do(request)
+			require.NoError(t, err)
 
-	if err != nil {
-		return n, fmt.Errorf("write response: %w", err)
-	}
+			_, err = io.Copy(io.Discard, response.Body)
+			require.NoError(t, response.Body.Close())
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			require.Len(t, connections, 1, "health request must succeed without a connection retry")
+			require.Equal(t, wantReused, connections[0].Reused, "second health request must reuse the idle connection")
 
-	return n, nil
-}
+			if wantReused {
+				require.Same(t, first, connections[0].Conn, "health requests must use the same connection")
+			} else {
+				first = connections[0].Conn
+			}
+		}
 
-func (c *idleDeadlineConn) SetReadDeadline(t time.Time) error {
-	if c.responded && c.deadline != nil && t.After(time.Now()) {
-		c.deadline <- time.Until(t)
+		synctest.Wait()
+		synctest.Sleep(30*time.Second - time.Nanosecond)
 
-		c.deadline = nil
-	}
+		if closed.Load() {
+			t.Fatal("broker closed the connection before 30 seconds idle")
+		}
 
-	if err := c.Conn.SetReadDeadline(t); err != nil {
-		return fmt.Errorf("set read deadline: %w", err)
-	}
+		synctest.Sleep(time.Nanosecond)
 
-	return nil
+		if !closed.Load() {
+			t.Fatal("broker kept the connection open after 30 seconds idle")
+		}
+	})
 }
 
 func serveKeepAliveBroker(t *testing.T) (broker *Broker, socket string, done <-chan error) {

@@ -373,21 +373,15 @@ func publishAndClaimCommunityPost(ctx context.Context, t *testing.T, pool *pgxpo
 	return batch
 }
 
-func requireLiveLease(ctx context.Context, t *testing.T, pool *pgxpool.Pool, observationID int64, label string) {
+func holdLeaseForExplicitExpiry(ctx context.Context, t *testing.T, pool *pgxpool.Pool, observationID int64, lease time.Duration) {
 	t.Helper()
 
-	var leaseExpiresAt time.Time
-
-	if err := pool.QueryRow(ctx, `
-		SELECT lease_expires_at
-		FROM source_observation_queue
-		WHERE observation_id = $1
-	`, observationID).Scan(&leaseExpiresAt); err != nil {
-		t.Fatalf("load initial lease: %v", err)
-	}
-
-	if !leaseExpiresAt.After(time.Now().UTC()) {
-		t.Fatalf("%s did not begin with a valid lease: %s", label, leaseExpiresAt)
+	tag, err := pool.Exec(ctx, `
+		UPDATE source_observation_queue SET lease_expires_at = TIMESTAMPTZ '9999-12-31 00:00:00+00'
+		WHERE observation_id = $1 AND lease_expires_at = updated_at + $2::bigint * INTERVAL '1 millisecond'
+	`, observationID, lease.Milliseconds())
+	if err != nil || tag.RowsAffected() != 1 {
+		t.Fatalf("hold claim %d with initial lease %s: rows=%d, error=%v", observationID, lease, tag.RowsAffected(), err)
 	}
 }
 
@@ -448,7 +442,7 @@ func TestFinalizeLeaseExpiryAtTerminalUpdateRollsBackAllSideEffects(t *testing.T
 	batch := publishAndClaimCommunityPost(ctx, t, pool, claimOptions())
 	observation := batch.Claims[0]
 
-	requireLiveLease(ctx, t, pool, observation.ObservationID, "claim")
+	holdLeaseForExplicitExpiry(ctx, t, pool, observation.ObservationID, claimOptions().LeaseDuration)
 
 	_, err := NewRepository(pool).Finalize(ctx, Claim{
 		ConsumerName:  batch.ConsumerName,
@@ -471,7 +465,7 @@ func TestFinalizeUnsupportedContractExpiryAtDeadLetterRollsBackState(t *testing.
 	batch := publishAndClaimCommunityPost(ctx, t, pool, claimOptions())
 	observation := batch.Claims[0]
 
-	requireLiveLease(ctx, t, pool, observation.ObservationID, "DLQ regression")
+	holdLeaseForExplicitExpiry(ctx, t, pool, observation.ObservationID, claimOptions().LeaseDuration)
 
 	var finalizeConn *pgx.Conn
 

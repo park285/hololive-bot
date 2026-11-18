@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
@@ -41,38 +43,52 @@ func TestShutdownJoinsRetentionWorker(t *testing.T) {
 }
 
 func TestRetentionTickKeepsSourceWhenProjectionFails(t *testing.T) {
-	ticked := make(chan struct{})
-	recordTick := sync.OnceFunc(func() { close(ticked) })
+	synctest.Test(t, func(t *testing.T) {
+		runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
-	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
+		runtime.Config.Retention.Interval = time.Millisecond
+		runtime.Config.Retention.ProjectionRetiredAge = 24 * time.Hour
+		runtime.projectionRetainer = fakeProjectionRetainer{
+			retain: func(context.Context, time.Time, time.Duration, int) (targetprojection.RetentionResult, error) {
+				return targetprojection.RetentionResult{}, errors.New("projection retain failed")
+			},
+		}
 
-	runtime.Config.Retention.ProjectionRetiredAge = 24 * time.Hour
-	runtime.projectionRetainer = fakeProjectionRetainer{
-		retain: func(context.Context, time.Time, time.Duration, int) (targetprojection.RetentionResult, error) {
-			return targetprojection.RetentionResult{}, errors.New("projection retain failed")
-		},
-	}
-	runtime.retainer = fakeRetainer{
-		tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
-			recordTick()
+		var sourceTicks atomic.Int32
 
-			return sourceobservation.RetentionResult{Table: "source_observation_queue", Deleted: 1}, nil
-		},
-	}
+		runtime.retainer = fakeRetainer{
+			tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
+				sourceTicks.Add(1)
 
-	errCh := make(chan error, 1)
-	runtime.Start(t.Context(), errCh)
-	awaitSignal(t, ticked, "retention worker did not run")
+				return sourceobservation.RetentionResult{Table: "source_observation_queue", Deleted: 1}, nil
+			},
+		}
 
-	select {
-	case err := <-errCh:
-		t.Fatalf("retention must not kill the process: %v", err)
-	default:
-	}
+		errCh := make(chan error, 1)
+		runtime.Start(t.Context(), errCh)
+		synctest.Wait()
 
-	if err := runtime.Shutdown(t.Context()); err != nil {
-		t.Fatalf("shutdown: %v", err)
-	}
+		select {
+		case err := <-errCh:
+			t.Errorf("retention must not kill the process: %v", err)
+		default:
+		}
+
+		if ticks := sourceTicks.Load(); ticks != 1 || !runtime.retentionFailed.Load() || runtime.Ready() {
+			t.Errorf("after projection failure: source ticks=%d, retention failed=%t, ready=%t", ticks, runtime.retentionFailed.Load(), runtime.Ready())
+		}
+
+		synctest.Sleep(runtime.Config.Retention.Interval)
+		synctest.Wait()
+
+		if ticks := sourceTicks.Load(); ticks != 2 {
+			t.Errorf("source ticks = %d, want 2 after the next retention interval", ticks)
+		}
+
+		if err := runtime.Shutdown(t.Context()); err != nil {
+			t.Fatalf("shutdown: %v", err)
+		}
+	})
 }
 
 func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {

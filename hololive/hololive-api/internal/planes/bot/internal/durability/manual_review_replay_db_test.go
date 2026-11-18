@@ -424,7 +424,7 @@ func countConcurrentOutboxClaims(ctx context.Context, t *testing.T, repo *ReplyO
 }
 
 func TestManualReviewReplayGrantAllowsRetryableReclaimWithoutDuplicateAudit(t *testing.T) {
-	pool := newDurabilityPool(t)
+	pool := newReplyDelayPool(t)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
 
@@ -456,7 +456,7 @@ func TestManualReviewReplayGrantAllowsRetryableReclaimWithoutDuplicateAudit(t *t
 	})
 	require.NoError(t, err)
 	require.True(t, applied)
-	advanceReplyRetry(ctx, t, pool, first.ID)
+	require.NoError(t, makeReplyRetryDue(ctx, pool, first.ID, time.Millisecond))
 
 	second, err := repo.Claim(ctx, "manual-replay-retryable-b", time.Minute)
 	require.NoError(t, err)

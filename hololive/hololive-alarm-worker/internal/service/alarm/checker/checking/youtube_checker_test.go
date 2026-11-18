@@ -2,17 +2,23 @@ package checking
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"maps"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
@@ -21,6 +27,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	cachepkg "github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
@@ -264,11 +272,52 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 
 	defer server.Close()
 
-	cache := newCheckerTestCacheClient(t)
+	if tc.ctxTimeout > 0 {
+		synctest.Test(t, func(t *testing.T) {
+			tc.check(t, newPipeCheckerCache(t), server.URL, channelID, roomID, streamID, startScheduled)
+		})
+
+		return
+	}
+
+	tc.check(t, newCheckerTestCacheClient(t), server.URL, channelID, roomID, streamID, startScheduled)
+}
+
+func newPipeCheckerCache(t *testing.T) cachepkg.Client {
+	t.Helper()
+
+	mini := miniredis.NewMiniRedis()
+	t.Cleanup(mini.Close)
+
+	client, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress: []string{"localhost:6379"},
+		DialCtxFn: func(context.Context, string, *net.Dialer, *tls.Config) (net.Conn, error) {
+			return mini.Dial()
+		},
+		DisableCache: true, ForceSingleClient: true,
+	})
+	require.NoError(t, err)
+	t.Cleanup(client.Close)
+
+	return &mocks.Client{
+		GetClientFunc: func() valkey.Client { return client },
+		BFunc:         client.B,
+		SAddFunc: func(ctx context.Context, key string, members []string) (int64, error) {
+			return client.Do(ctx, client.B().Sadd().Key(key).Member(members...).Build()).AsInt64()
+		},
+		SMembersFunc: func(ctx context.Context, key string) ([]string, error) {
+			return client.Do(ctx, client.B().Smembers().Key(key).Build()).AsStrSlice()
+		},
+	}
+}
+
+func (tc *youtubeCheckerCheckTestCase) check(t *testing.T, cache cachepkg.Client, serverURL, channelID, roomID, streamID string, startScheduled time.Time) {
+	t.Helper()
+
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), serverURL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, 0, nil, nil, logger)
@@ -295,6 +344,22 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 		runCtx, cancel = context.WithTimeout(setupCtx, tc.ctxTimeout)
 
 		defer cancel()
+
+		started := make(chan struct{})
+		expiry := runCtx.Done()
+
+		runCtx = httptrace.WithClientTrace(runCtx, &httptrace.ClientTrace{GotFirstResponseByte: func() {
+			close(started)
+			<-expiry
+		}})
+
+		t.Cleanup(func() {
+			select {
+			case <-started:
+			default:
+				t.Error("provider request did not receive the caller's deadline trace")
+			}
+		})
 	}
 
 	notifications, checkErr := checker.Check(runCtx, testTargetPolicy(5, 3, 1))
@@ -316,6 +381,15 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 func newYouTubeCheckerScenarioServer(t *testing.T, scenario, channelID, streamID string, startScheduled time.Time) *httptest.Server {
 	t.Helper()
 
+	var watchdog <-chan struct{}
+
+	if scenario == "timeout" {
+		guard, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		t.Cleanup(cancel)
+
+		watchdog = guard.Done()
+	}
+
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != testUsersLivePath {
 			http.NotFound(w, r)
@@ -330,7 +404,17 @@ func newYouTubeCheckerScenarioServer(t *testing.T, scenario, channelID, streamID
 		}
 
 		if scenario == "timeout" {
-			<-r.Context().Done()
+			w.WriteHeader(http.StatusOK)
+
+			if err := http.NewResponseController(w).Flush(); err != nil {
+				t.Error(err)
+			}
+
+			select {
+			case <-r.Context().Done():
+			case <-watchdog:
+				panic(http.ErrAbortHandler)
+			}
 
 			return
 		}

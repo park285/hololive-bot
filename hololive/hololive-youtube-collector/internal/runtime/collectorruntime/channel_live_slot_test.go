@@ -3,6 +3,7 @@ package collectorruntime
 import (
 	"context"
 	"log/slog"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -81,6 +82,17 @@ func newChannelLiveSlotFixture(t *testing.T) (*pgxpool.Pool, *collectionExecutor
 		{testSubjectKey, contract.KindChannelLiveCheck},
 	})
 
+	setup, err := os.ReadFile("../testdata/slot_clock.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = pool.Exec(t.Context(), string(setup)); err != nil {
+		t.Fatal(err)
+	}
+
+	pool.Reset()
+
 	config := runtimeLeaseConfig()
 
 	repository, err := joblease.NewRepository(pool, &config)
@@ -144,12 +156,7 @@ func channelLiveSlotSpec(jobKind string) joblease.JobSpec {
 func makeLeaseDue(t *testing.T, pool *pgxpool.Pool, jobKey string) {
 	t.Helper()
 
-	if _, err := pool.Exec(t.Context(), `
-		UPDATE youtube_collection_job_leases
-		SET next_due_at = CASE WHEN slot_state = 'IDLE' THEN clock_timestamp() ELSE next_due_at END,
-		    retry_not_before = CASE WHEN slot_state = 'DEFERRED' THEN clock_timestamp() ELSE retry_not_before END
-		WHERE job_key = $1 AND slot_state IN ('IDLE', 'DEFERRED')
-	`, jobKey); err != nil {
+	if _, err := pool.Exec(t.Context(), `SELECT advance_slot_clock($1)`, jobKey); err != nil {
 		t.Fatalf("make lease %s due: %v", jobKey, err)
 	}
 }

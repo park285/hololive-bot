@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -454,6 +455,36 @@ func advanceReplyRetry(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id
 
 	_, err := pool.Exec(ctx, `UPDATE bot_reply_outbox SET available_at = available_at - interval '1 millisecond' WHERE id = $1`, id)
 	require.NoError(t, err)
+}
+
+func newReplyDelayPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+
+	pool := newDurabilityPool(t)
+	_, err := pool.Exec(t.Context(), `
+		CREATE FUNCTION public.clock_timestamp() RETURNS timestamptz LANGUAGE sql STABLE
+			AS 'SELECT pg_catalog.statement_timestamp()';
+		DO $$ BEGIN
+			EXECUTE format('ALTER DATABASE %I SET search_path TO public, pg_catalog', current_database());
+		END $$`)
+	require.NoError(t, err)
+	pool.Reset()
+
+	return pool
+}
+
+func makeReplyRetryDue(ctx context.Context, pool *pgxpool.Pool, id int64, delay time.Duration) error {
+	tag, err := pool.Exec(ctx, `UPDATE bot_reply_outbox SET available_at = statement_timestamp()
+		WHERE id = $1 AND available_at - updated_at = $2::bigint * interval '1 millisecond'`, id, delay.Milliseconds())
+	if err != nil {
+		return fmt.Errorf("advance reply outbox retry: %w", err)
+	}
+
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("outbox row %d did not store retry delay %s", id, delay)
+	}
+
+	return nil
 }
 
 func newTestReplyOutboxRepository(pool *pgxpool.Pool) *ReplyOutboxRepository {

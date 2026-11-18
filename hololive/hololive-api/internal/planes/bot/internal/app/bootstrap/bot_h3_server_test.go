@@ -80,6 +80,10 @@ func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 		synctest.Sleep(10 * time.Millisecond)
 		synctest.Wait()
 
+		if err = os.Remove(certFile); err != nil {
+			t.Fatal(err)
+		}
+
 		cert, err := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
 		if err != nil {
 			t.Fatalf("GetCertificate() error = %v", err)

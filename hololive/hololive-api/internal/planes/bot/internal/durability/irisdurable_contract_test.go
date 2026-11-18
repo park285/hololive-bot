@@ -41,7 +41,7 @@ func TestIrisDurableContract(t *testing.T) {
 		ReplyOutbox: func(t *testing.T) contracttest.ReplyOutboxFixture {
 			t.Helper()
 
-			pool := newDurabilityPool(t)
+			pool := newReplyDelayPool(t)
 
 			return &contractReplyOutbox{pool: pool, repo: newTestReplyOutboxRepository(pool)}
 		},
@@ -225,17 +225,7 @@ func (o *contractReplyOutbox) Settle(ctx context.Context, attempt irisdurable.Re
 	}
 
 	if outcome.Status.Resendable() {
-		return o.advanceRetry(ctx, id, outcome.RetryAfter)
-	}
-
-	return nil
-}
-
-func (o *contractReplyOutbox) advanceRetry(ctx context.Context, id int64, retryAfter time.Duration) error {
-	_, err := o.pool.Exec(ctx, `UPDATE bot_reply_outbox SET available_at = available_at - ($2::bigint * interval '1 millisecond') WHERE id = $1`,
-		id, max(retryAfter.Milliseconds(), 1))
-	if err != nil {
-		return fmt.Errorf("advance reply outbox retry: %w", err)
+		return makeReplyRetryDue(ctx, o.pool, id, max(outcome.RetryAfter.Truncate(time.Millisecond), time.Millisecond))
 	}
 
 	return nil

@@ -332,12 +332,13 @@ func provenanceIDs(t *testing.T, pool *pgxpool.Pool) []int {
 func waitForLockWaiter(t *testing.T, pool *pgxpool.Pool, blocker uint32) {
 	t.Helper()
 
-	deadline := time.Now().Add(10 * time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
 
-	for time.Now().Before(deadline) {
+	for {
 		var waiting bool
 
-		if err := pool.QueryRow(t.Context(), `
+		if err := pool.QueryRow(ctx, `
 			SELECT EXISTS (
 				SELECT 1 FROM pg_catalog.pg_stat_activity
 				WHERE $1::int = ANY(pg_blocking_pids(pid))
@@ -349,6 +350,4 @@ func waitForLockWaiter(t *testing.T, pool *pgxpool.Pool, blocker uint32) {
 			return
 		}
 	}
-
-	t.Fatal("resolver did not wait on the provenance row locked by retention")
 }

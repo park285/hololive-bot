@@ -27,6 +27,12 @@ const (
 )
 
 func TestProviderGateReleasesBeforeDatabaseBlockedPublish(t *testing.T) {
+	withCollectorClock(t, checkProviderGateDuringPublish)
+}
+
+func checkProviderGateDuringPublish(t *testing.T, observer *lockObserver, pool *pgxpool.Pool) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	var (
@@ -34,7 +40,7 @@ func TestProviderGateReleasesBeforeDatabaseBlockedPublish(t *testing.T) {
 		collected atomic.Int32
 	)
 
-	executor, pool := newGateFixture(t, countingMetadataRunner(&collected), 1, &fatal, testSubjectKey, gateSecondSubject)
+	executor := newGateExecutor(t, pool, countingMetadataRunner(&collected), 1, &fatal, testSubjectKey, gateSecondSubject)
 
 	executor.collector.PublishTimeout = 15 * time.Second
 
@@ -45,7 +51,7 @@ func TestProviderGateReleasesBeforeDatabaseBlockedPublish(t *testing.T) {
 	held := lockLeaseRow(t, pool, first.JobKey)
 	firstDone := startCollectAndPublish(ctx, executor, first, firstLease)
 
-	held.waitForBlockedWriter(t)
+	held.waitForBlockedWriter(t, observer)
 
 	if depth := len(gate); depth != 0 {
 		t.Fatalf("gate depth while publish is blocked = %d, want 0", depth)
@@ -54,7 +60,7 @@ func TestProviderGateReleasesBeforeDatabaseBlockedPublish(t *testing.T) {
 	second := gateMetadataSpec(gateSecondSubject)
 	secondDone := startCollectAndPublish(ctx, executor, second, mustAcquireGateLease(t, executor, second))
 
-	if err := awaitRun(t, secondDone, "second same-provider job while the first publish is blocked"); err != nil {
+	if err := awaitRun(t, observer.expired, secondDone, "second same-provider job while the first publish is blocked"); err != nil {
 		t.Fatalf("second same-provider job = %v, want published while first publish is blocked", err)
 	}
 
@@ -62,7 +68,7 @@ func TestProviderGateReleasesBeforeDatabaseBlockedPublish(t *testing.T) {
 	assertSubjectObservations(t, pool, testSubjectKey, 0)
 	held.release(t)
 
-	if err := awaitRun(t, firstDone, "first publish after the lease row is released"); err != nil {
+	if err := awaitRun(t, observer.expired, firstDone, "first publish after the lease row is released"); err != nil {
 		t.Fatalf("first publish after unlock = %v", err)
 	}
 
@@ -75,9 +81,8 @@ func TestProviderGateReleasesBeforeDatabaseBlockedPublish(t *testing.T) {
 }
 
 type heldLeaseRow struct {
-	pool *pgxpool.Pool
-	tx   pgx.Tx
-	pid  int32
+	tx  pgx.Tx
+	pid int32
 }
 
 func lockLeaseRow(t *testing.T, pool *pgxpool.Pool, jobKey string) *heldLeaseRow {
@@ -99,6 +104,10 @@ func lockLeaseRow(t *testing.T, pool *pgxpool.Pool, jobKey string) *heldLeaseRow
 		}
 	})
 
+	if _, err = tx.Exec(ctx, `SET LOCAL idle_in_transaction_session_timeout = '30s'`); err != nil {
+		t.Fatalf("set held lease lock watchdog: %v", err)
+	}
+
 	var pid int32
 
 	err = tx.QueryRow(ctx, `
@@ -108,21 +117,18 @@ func lockLeaseRow(t *testing.T, pool *pgxpool.Pool, jobKey string) *heldLeaseRow
 		t.Fatal(err)
 	}
 
-	return &heldLeaseRow{pool: pool, tx: tx, pid: pid}
+	return &heldLeaseRow{tx: tx, pid: pid}
 }
 
-func (h *heldLeaseRow) waitForBlockedWriter(t *testing.T) int32 {
+func (h *heldLeaseRow) waitForBlockedWriter(t *testing.T, observer *lockObserver) int32 {
 	t.Helper()
-
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
 
 	for {
 		var pid int32
 
-		err := h.pool.QueryRow(ctx, `
+		err := observer.scan(&pid, `
 			SELECT pid FROM pg_stat_activity WHERE $1::int = ANY(pg_blocking_pids(pid))
-		`, h.pid).Scan(&pid)
+		`, h.pid)
 		if errors.Is(err, pgx.ErrNoRows) {
 			continue
 		}
@@ -166,16 +172,21 @@ func mustAcquireGateLease(t *testing.T, executor *collectionExecutor, spec *jobl
 	return lease
 }
 
-func awaitRun(t *testing.T, done <-chan error, name string) error {
+func awaitRun(t *testing.T, expired <-chan struct{}, done <-chan error, name string) error {
 	t.Helper()
 
 	select {
 	case err := <-done:
 		return err
-	case <-time.After(5 * time.Second):
-		t.Fatalf("%s did not finish", name)
+	case <-expired:
+		select {
+		case err := <-done:
+			return err
+		default:
+			t.Fatalf("%s did not finish", name)
 
-		return nil
+			return nil
+		}
 	}
 }
 
@@ -363,6 +374,13 @@ func newGateFixture(
 	t.Helper()
 
 	pool := dbtest.NewPool(t)
+
+	return newGateExecutor(t, pool, runner, capacity, fatal, subjects...), pool
+}
+
+func newGateExecutor(t *testing.T, pool *pgxpool.Pool, runner collection.JobRunner, capacity int, fatal *[]error, subjects ...string) *collectionExecutor {
+	t.Helper()
+
 	seeds := make([]leaseSeed, 0, 2*len(subjects))
 
 	for _, subject := range subjects {
@@ -394,7 +412,7 @@ func newGateFixture(
 	executor.gates = map[contract.Provider]chan struct{}{contract.ProviderYouTubeJS: make(chan struct{}, capacity)}
 	executor.readiness = &readinessTracker{}
 
-	return executor, pool
+	return executor
 }
 
 func gateMetadataSpec(subject string) *joblease.JobSpec {

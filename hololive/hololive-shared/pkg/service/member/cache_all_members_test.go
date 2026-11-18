@@ -403,51 +403,60 @@ func TestCacheAllMembers_ReturnsClonedSlice(t *testing.T) {
 func TestCacheInvalidateAllRacesWithSnapshotReload(t *testing.T) {
 	t.Parallel()
 
-	started := make(chan struct{})
-	firstLoad := sync.OnceFunc(func() { close(started) })
-	c := &Cache{
-		logger:      slog.New(slog.DiscardHandler),
-		snapshotTTL: time.Nanosecond,
-		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
-			firstLoad()
+	synctest.Test(t, func(t *testing.T) {
+		const invalidations = 200
 
-			return testMembers(), nil
-		},
-	}
+		started := make(chan struct{})
+		resume := make(chan struct{})
 
-	var wg sync.WaitGroup
+		var loads atomic.Int32
 
-	stop := make(chan struct{})
+		c := &Cache{
+			logger: slog.New(slog.DiscardHandler),
+			loadAllMembers: func(context.Context) ([]*domain.Member, error) {
+				if loads.Add(1) <= invalidations {
+					started <- struct{}{}
 
-	wg.Go(func() {
-		for {
+					<-resume
+
+					return []*domain.Member{{Name: testMemberNameOld}}, nil
+				}
+
+				return []*domain.Member{{Name: testMemberNameNew}}, nil
+			},
+		}
+
+		done := make(chan struct{})
+
+		var (
+			members []*domain.Member
+			loadErr error
+		)
+
+		go func() {
+			defer close(done)
+
+			members, loadErr = c.LoadAllMembers(t.Context())
+		}()
+
+		for round := range invalidations {
 			select {
-			case <-stop:
-				return
-			default:
+			case <-started:
+			case <-done:
+				t.Fatalf("reload finished during invalidation %d: members=%v, err=%v", round, members, loadErr)
 			}
 
-			if _, err := c.LoadAllMembers(t.Context()); err != nil {
-				t.Errorf("AllMembers() error = %v", err)
-
-				return
-			}
-		}
-	})
-
-	wg.Go(func() {
-		defer close(stop)
-
-		<-started
-
-		for range 200 {
 			if err := c.InvalidateAll(t.Context()); err != nil {
-				t.Errorf("InvalidateAll() error = %v", err)
-
-				return
+				t.Fatal(err)
 			}
+
+			resume <- struct{}{}
+		}
+
+		<-done
+
+		if loadErr != nil || loads.Load() != invalidations+1 || len(members) != 1 || members[0].Name != testMemberNameNew {
+			t.Fatalf("reload after %d invalidations: loads=%d members=%v err=%v", invalidations, loads.Load(), members, loadErr)
 		}
 	})
-
-	wg.Wait()
 }
