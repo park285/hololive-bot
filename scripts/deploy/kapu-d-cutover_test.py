@@ -13,6 +13,42 @@ d = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(d)
 
 
+@unittest.skipUnless(os.geteuid() == 0, '실제 root 소유권과 서비스 UID를 분리하는 시험')
+class ReceiptStore(unittest.TestCase):
+    def test_first_quiesce_separates_receipts_from_service_owned_data(self):
+        with tempfile.TemporaryDirectory(dir='/run') as tmp:
+            root = Path(tmp)
+            data = root / 'hololive-collectors'
+            data.mkdir(mode=0o750)
+            os.chown(data, 65534, 65534)
+            before = data.stat()
+            store = root / d.STORE.relative_to('/var/lib')
+            with self.assertRaises(FileNotFoundError):
+                d.prepare_store(store, create=False)
+            self.assertFalse(store.exists())
+            d.prepare_store(store, create=True)
+            receipt = store / 'retained'
+            receipt.write_bytes(b'original')
+            d.prepare_store(store, create=False)
+            self.assertEqual(receipt.read_bytes(), b'original')
+            self.assertEqual((store.stat().st_uid, store.stat().st_mode & 0o777), (0, 0o700))
+            self.assertEqual((before.st_uid, before.st_gid, before.st_mode, before.st_ctime_ns),
+                             (data.stat().st_uid, data.stat().st_gid, data.stat().st_mode, data.stat().st_ctime_ns))
+
+    def test_quiesce_does_not_adopt_foreign_or_linked_store(self):
+        with tempfile.TemporaryDirectory(dir='/run') as tmp:
+            foreign = Path(tmp) / 'foreign'
+            foreign.mkdir(mode=0o700)
+            os.chown(foreign, 65534, 65534)
+            link = Path(tmp) / 'link'
+            link.symlink_to(foreign, target_is_directory=True)
+            for path in (foreign, link):
+                with self.subTest(path=path.name), self.assertRaises(d.Refused):
+                    d.prepare_store(path, create=True)
+            self.assertEqual(foreign.stat().st_uid, 65534)
+            self.assertTrue(link.is_symlink())
+
+
 class Cutover(unittest.TestCase):
     def test_sql_runs_once_with_only_public_ca_and_runtime_isolation(self):
         image = 'sha256:' + 'a' * 64

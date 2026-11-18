@@ -13,6 +13,7 @@
 - **Pooler 전환·복구 안전성:** collector c·b에 이전 실행 pair를 보존하는 `quiesce/resume`과 영속 hold를 추가합니다. 재개 전 보관 drop-in과 실제 설치 후보를 검증하며 실패 시 direct writer를 자동 시작하지 않습니다. 중앙 앱의 effective pool 크기와 실행 pooler의 mount된 설정이 다르면 배포·재기동·복구를 거부하여 앱만 증설했을 때 예약 control이 backend 대기에 막히는 경로를 차단합니다. Fallback delta: none.
 - **SCRAM 역할 격리:** 원문이 달라도 pgx의 SCRAM 암호 준비 후 같아지는 역할 간·관리자 암호 중복을 DB 연결 전에 거부합니다. PostgreSQL/pgx 호환성 검사와 같은 비밀번호의 verifier 보존은 유지합니다. Fallback delta: none.
 - **최초 풀링 전환:** 새 배포 정의를 설치하기 전에 실행 중인 이전 writer와 실제 접속지를 보존합니다. 중앙 두 역할과 각 수집기는 실제 풀러 경유 SQL을 증명하기 전에는 업무를 시작하지 않습니다. 운영과 동일한 `pg_stat_statements` 기본 권한을 이용한 격리 시험을 추가했으며, 인증 역할에는 앱 데이터 권한을 부여하지 않습니다.
+- kapu d의 전환 영수증을 수집기 쓰기 경로와 분리했습니다. 정지할 때만 root 전용 디렉터리를 만들고, 재개 시 영수증이 없거나 권한이 다르면 기존 데이터의 소유권을 바꾸지 않고 중단합니다.
 
 ## v18.8.3 - 2026-11-18
 

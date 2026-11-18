@@ -9,8 +9,8 @@ osaka 호스트를 다시 설치하는 동안에도 a를 kapu에 임시로 띄�
 `scripts/deploy/kapu-d-cutover.py`는 **kapu rootful d의 기존 실행 pair**만 전환한다. 운영자가 서명된 변경 범위와 창을 확인하고, 검토한 release의 helper와 `deploy/podman/kapu/`를 함께 사용한다. 첫 설치, 호스트 복구, 타 슬롯, 이미지 구축·전송, PgBouncer/HBA/DB 변경은 별도 작업이다. 자동 시작/재시작을 먼저 하지 않는다.
 
 ```bash
-# 매 작업마다 새 이름. 이 경로는 생성하지 않는다.
-hold=/var/lib/hololive-collectors/d-cutover-CHANGE-ID
+# quiesce가 root 전용 보관 디렉터리와 새 hold를 만든다. hold를 미리 만들지 않는다.
+hold=/var/lib/hololive-collector-d-cutover/d-cutover-CHANGE-ID
 sudo -n python3 -I scripts/deploy/kapu-d-cutover.py quiesce "$hold"
 # 양쪽 정지·소유 mask 증거가 확인된 뒤, 중앙 경로가 준비되면 같은 hold에서 딱 한 번:
 sudo -n python3 -I scripts/deploy/kapu-d-cutover.py resume "$hold" \
@@ -20,6 +20,7 @@ sudo -n python3 -I scripts/deploy/kapu-d-cutover.py resume "$hold" \
 
 revision은 40자리, image ID 두 개는 검증되어 rootful 저장소에 이미 있는 `sha256:<64 hex>`이고 마지막 두 값은 **해당 revision에서 승인한 두 `.container` 파일 원본의 SHA-256**(접두사 없음)이다. 실행 호스트 파일에서 기대 해시를 역산하지 않는다. helper 자체와 전달 파일의 provenance도 실행 전에 별도로 검증한다.
 root만 수정할 수 있는 배포 트리에서 실행한다. 후보 적재 때 실제 `:prod` 두 개를 먼저 이동하면 이전 실행 증거를 잃으므로 helper는 거부한다. hold에는 비밀 env/key가 아닌 파일 식별 metadata·profile·unit·보존 태그 식별자만 남긴다.
+영수증은 `/var/lib/hololive-collector-d-cutover`(`root`, `0700`)에 보관한다. 이 경로의 소유권·권한이 맞지 않으면 인수하거나 고치지 않고 중단한다. `resume`은 없는 경로를 만들지 않는다. 수집기 데이터·로그가 있는 `/var/lib/hololive-collectors`의 권한은 바꾸지 않는다.
 
 - `quiesce`: 지금 d의 실제 `:prod`·실행 세대·direct endpoint·사용자·읽기 전용 profile bind·인증된 loaded hash를 대조한다. 원본 unit·허용된 drop-in·비밀 없는 profile과 실이미지별 새 보존 태그를 남긴다. 예전 incident 영수증이나 release에 남은 `pair.json`의 타 슬롯 image metadata는 d 증거가 아니다.
 - `resume`: 동일 부팅의 두 소유 mask와 기존 컨테이너 부재를 확인한다. direct→pooled port 외에 검토되지 않은 설치 차이, profile/source drift, 숨은 override는 거부한다. 후보 unit과 **두 `docker.io/library/…:prod`**를 검증하고, issuer·collector가 계속 막혀 있는 상태에서 candidate의 profile 검사와 d 소스의 실제 `--check-pooled-database`를 수행한다. envfile은 Podman에만 주며 SQL probe에는 공개 DB CA만 읽기 전용으로 붙인다.

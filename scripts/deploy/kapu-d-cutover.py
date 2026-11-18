@@ -25,7 +25,7 @@ UNIT = Path('/etc/containers/systemd')
 SYSTEM = Path('/etc/systemd/system')
 GEN = Path('/run/systemd/generator')
 INPUT = Path(__file__).resolve().parents[2] / 'deploy/podman/kapu'
-STORE = Path('/var/lib/hololive-collectors')
+STORE = Path('/var/lib/hololive-collector-d-cutover')
 D = Path('/etc/hololive-bot/collector-d/worker-profile-release')
 SECRETS = Path('/etc/stack-secrets/hololive-bot/collector-d')
 SRC = SECRETS / 'worker-profiles'
@@ -624,6 +624,14 @@ def resume(h, revision, ids, digests):
     print('accepted:', h)
 
 
+def prepare_store(path, *, create):
+    if create:
+        trusted(path.parent, True)
+        path.mkdir(mode=0o700, exist_ok=True)
+    trusted(path, True)
+    need(stat.S_IMODE(path.stat().st_mode) == 0o700, '전환 영수증 디렉터리는 root 전용 0700이어야 함')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='action', required=True)
@@ -636,9 +644,9 @@ def main():
     a = parser.parse_args()
     need(os.geteuid() == 0 and socket.gethostname().split('.')[0] == 'kapu' and os.uname().machine == 'x86_64', 'kapu rootful amd64 전용')
     need(a.hold.parent == STORE and re.fullmatch('d-cutover-[a-zA-Z0-9][a-zA-Z0-9-]{0,63}',a.hold.name), 'hold 경로 불일치')
-    trusted(STORE,True)
     trusted(Path(__file__).resolve())
     os.umask(0o077)
+    prepare_store(STORE, create=a.action == 'quiesce')
     def interrupted(signum, frame):
         raise InterruptedError('실행 중단')
     for sig in (signal.SIGTERM,signal.SIGHUP):
