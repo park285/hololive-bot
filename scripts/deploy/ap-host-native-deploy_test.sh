@@ -132,7 +132,7 @@ native_test_runtime="/run/user/$(id -u)"
 test -S "${native_test_runtime}/bus"
 env XDG_RUNTIME_DIR="${native_test_runtime}" DBUS_SESSION_BUS_ADDRESS="unix:path=${native_test_runtime}/bus" \
   systemd-run --user --quiet --wait --pipe --collect \
-  -p Type=exec -p RuntimeMaxSec=45s -p KillMode=control-group \
+  -p Type=exec -p RuntimeMaxSec=120s -p KillMode=control-group \
   -p "WorkingDirectory=${ROOT_DIR}" \
   bash "${ROOT_DIR}/scripts/deploy/ap-host-native-cutover_test.sh"
 

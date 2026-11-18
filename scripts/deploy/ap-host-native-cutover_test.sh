@@ -67,13 +67,17 @@ case "$1" in
       trap '' HUP INT TERM
       while :; do sleep 1; done
     fi
-    sleep .3
+    if [[ "$SIGNAL_PHASE" == restart ]]; then
+      while [[ ! -e "$CASE/signal-delivered" ]]; do sleep .01; done
+    else sleep .3; fi
     touch "$CASE/completed"
     ;;
   enable)
     if [[ "$*" == 'enable --now '* ]]; then
       touch "$CASE/restoring"
-      sleep .3
+      if [[ "$SIGNAL_PHASE" == restore ]]; then
+        while [[ ! -e "$CASE/signal-delivered" ]]; do sleep .01; done
+      else sleep .3; fi
       [[ "$MODE" != restore_failure ]] || exit 9
       touch "$CASE/restored"
     fi
@@ -116,10 +120,19 @@ po_restore_previous() { printf 'po_restore_previous %s\\n' "$*" >> "$CASE/calls"
 ''' + functions + '\nnative_cutover_claim "$release_dir"\narm_native_cutover_restore\n' + action + '\n')
     env = dict(os.environ, CASE=str(case), INITIAL=str(initial).lower(), MODE=mode, PATH=f'{case / "bin"}:{os.environ["PATH"]}',
                PRECHANGE_RUNNING=str(prechange_running).lower(), PRECHANGE_ENABLED=str(prechange_enabled).lower())
+    env['SIGNAL_PHASE'] = ('restore' if target.startswith('restore') else 'restart') if target else ''
     with (case / 'out').open('w') as out, (case / 'err').open('w') as err:
         proc = subprocess.Popen(['bash', str(script)], env=env, stdout=out, stderr=err, start_new_session=True)
         if target:
             await_file(case / ('restoring' if target.startswith('restore') else 'entered'), proc)
+            if target.endswith('group') or target == 'worker':
+                pidfile = case / 'recovery/worker-pid'
+                await_file(pidfile, proc)
+                until = time.monotonic() + 5
+                while not pidfile.read_text().strip().isdecimal():
+                    if time.monotonic() >= until:
+                        raise AssertionError('원 worker PID를 발행하지 못함')
+                    time.sleep(.01)
             if target.endswith('group'):
                 # 변경 워커는 소유자가 만든 별도 작업 프로세스 그룹에서 실행된다.
                 worker = int((case / 'recovery/worker-pid').read_text())
@@ -132,7 +145,8 @@ po_restore_previous() { printf 'po_restore_previous %s\\n' "$*" >> "$CASE/calls"
                 os.kill(int((case / 'recovery/worker-pid').read_text()), signo)
             else:
                 os.kill(proc.pid, signo)
-        status = proc.wait(timeout=10)
+            (case / 'signal-delivered').touch()
+        status = proc.wait(timeout=12)
     return case, status
 
 for signo, status in [(signal.SIGHUP,129), (signal.SIGINT,130), (signal.SIGTERM,143)]:
