@@ -27,6 +27,7 @@ var (
 
 // ScheduleCardData는 일정 카드 글꼴 파일 원본이다. 슬라이스는 embed 원본을 공유하므로 고치지 않는다.
 type ScheduleCardData struct {
+	PretendardRegular   []byte
 	PretendardBold      []byte
 	PretendardExtraBold []byte
 	YeonSung            []byte
@@ -40,6 +41,7 @@ type ScheduleCardData struct {
 // ScheduleCard는 일정 카드가 쓰는 글꼴 원본을 돌려준다.
 func ScheduleCard() ScheduleCardData {
 	return ScheduleCardData{
+		PretendardRegular:   pretendardRegularData,
 		PretendardBold:      pretendardBoldData,
 		PretendardExtraBold: pretendardExtraBoldData,
 		YeonSung:            yeonSungData,

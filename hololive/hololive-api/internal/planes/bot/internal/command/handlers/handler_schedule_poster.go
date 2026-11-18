@@ -11,6 +11,9 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/schedulecard"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // 포스터의 주 범위는 일본 방송 기준이라 오늘 날짜를 JST로 정한다.
@@ -44,7 +47,7 @@ func (c *SchedulePosterCommand) Execute(ctx context.Context, cmdCtx *botcommand.
 		return c.replyError(ctx, room, messaging.ErrSchedulePosterNeedMemberName)
 	}
 
-	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), room, memberName, "스케쥴")
+	member, err := handlercore.FindActiveMemberProfile(ctx, c.Deps(), room, memberName, "스케쥴")
 	if memberLookupHandled(err) {
 		return nil
 	}
@@ -53,16 +56,16 @@ func (c *SchedulePosterCommand) Execute(ctx context.Context, cmdCtx *botcommand.
 		return fmt.Errorf("find member: %w", err)
 	}
 
-	if channel == nil {
+	if member == nil {
 		return nil
 	}
 
 	now := c.now().In(schedulePosterZone)
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
-	schedule, found, err := c.Deps().SchedulePosters.PublishedRows(ctx, channel.ID, day)
+	schedule, found, err := c.Deps().SchedulePosters.PublishedRows(ctx, member.ChannelID, day)
 	if err != nil {
-		c.Deps().Logger.Error("Failed to load schedule poster", slog.String("channel_id", channel.ID), slog.Any("error", err))
+		c.Deps().Logger.Error("Failed to load schedule poster", slog.String("channel_id", member.ChannelID), slog.Any("error", err))
 
 		return c.replyError(ctx, room, messaging.ErrSchedulePosterQueryFailed)
 	}
@@ -76,17 +79,39 @@ func (c *SchedulePosterCommand) Execute(ctx context.Context, cmdCtx *botcommand.
 		return c.reply(ctx, room, text)
 	}
 
-	member, err := c.Deps().Matcher.GetMemberByChannelID(ctx, channel.ID)
+	return c.replySchedule(ctx, room, member, schedule)
+}
+
+func (c *SchedulePosterCommand) replySchedule(ctx context.Context, room string, member *domain.Member, schedule scheduleposter.PublishedSchedule) error {
+	template, err := c.Deps().SchedulePosters.MemberCardTemplate(ctx, member.ID)
 	if err != nil {
-		return fmt.Errorf("load schedule card member: %w", err)
+		return fmt.Errorf("load member schedule card template: %w", err)
 	}
 
-	card, err := c.Deps().ScheduleCards.RenderScheduleCard(ctx, member, schedule)
+	pages, err := c.Deps().ScheduleCards.RenderScheduleCards(ctx, member, schedule, template)
+	if errors.Is(err, schedulecard.ErrRenderBudget) {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
+		c.Deps().Logger.InfoContext(ctx, "sending complete schedule as text file", slog.Int64("poster_id", schedule.PosterID), slog.Int("member_id", member.ID))
+
+		if fileErr := c.Deps().SendTextFile(ctx, room, "schedule.txt", scheduleText(member.DisplayName(), &schedule)); fileErr != nil {
+			return fmt.Errorf("send complete schedule file: %w", fileErr)
+		}
+
+		return nil
+	}
+
 	if err != nil {
 		return fmt.Errorf("render schedule card: %w", err)
 	}
 
-	if err := c.Deps().SendImage(transport.WithImageContentType(ctx, scheduleCardContentType), room, card); err != nil {
+	if len(pages) == 1 {
+		ctx = transport.WithImageContentType(ctx, scheduleCardContentType)
+	}
+
+	if err := c.Deps().SendImages(ctx, room, pages); err != nil {
 		return fmt.Errorf("send schedule card: %w", err)
 	}
 
@@ -98,7 +123,7 @@ func (c *SchedulePosterCommand) CheckDependencies() error {
 		return fmt.Errorf("ensure base dependencies: %w", err)
 	}
 
-	if c.Deps().Matcher == nil || c.Deps().SchedulePosters == nil || c.Deps().ScheduleCards == nil || c.Deps().Formatter == nil || c.Deps().SendImage == nil {
+	if c.Deps().Matcher == nil || c.Deps().SchedulePosters == nil || c.Deps().ScheduleCards == nil || c.Deps().Formatter == nil || c.Deps().SendImages == nil || c.Deps().SendTextFile == nil {
 		return errors.New("schedule poster command services not configured")
 	}
 

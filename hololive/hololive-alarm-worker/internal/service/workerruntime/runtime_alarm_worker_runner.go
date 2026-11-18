@@ -47,10 +47,6 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 
 	r.beginAlarmScheduler()
 
-	if r.WorkerObservability != nil {
-		r.WorkerObservability.Start(ctx)
-	}
-
 	startAlarmScheduler(ctx, errCh, alarmSchedulerHooks{
 		Logger:    r.Logger,
 		Start:     r.startBackgroundSchedulers,
@@ -71,6 +67,7 @@ func (r *AlarmWorkerRuntime) startBackgroundSchedulers(ctx context.Context) erro
 	}
 
 	runners := []NamedScheduler{
+		{Name: "observability", Scheduler: r.WorkerObservability},
 		{Name: "scheduler", Scheduler: r.Scheduler},
 		{Name: "notification-egress", Scheduler: r.NotificationEgress},
 		{Name: "celebration", Scheduler: r.CelebrationRunner},

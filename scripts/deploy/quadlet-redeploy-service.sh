@@ -102,11 +102,11 @@ fi
 pair_tool="$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py"
 guard_tool="$ROOT_DIR/scripts/deploy/lib/systemd-stop-guard.py"
 releases="$deploy_root/artifacts/worker-profile/releases"
-# api·alarm-worker helper가 함께 돌면 migrator drop-in 쓰기, daemon-reload, migration이 서로 끼어든다. 하나씩만 실행한다.
+# source sync·rollback·collector c와 unit 및 drop-in을 공유하므로 같은 중앙 잠금을 유지한다.
 lock_dir="$prefix/run/lock"
 install -d -m 0755 "$lock_dir"
 exec 9>"$lock_dir/hololive-quadlet-redeploy.lock"
-flock -n 9 || die "another quadlet-redeploy-service.sh is running; wait for its [OUTCOME] line"
+flock -n 9 || die "another central Quadlet writer is running"
 # shellcheck source=scripts/deploy/lib/postgres-capacity.sh
 . "$ROOT_DIR/scripts/deploy/lib/postgres-capacity.sh"
 . "$ROOT_DIR/scripts/deploy/lib/compose-env.sh"
@@ -354,9 +354,10 @@ load_coordinated_release() {
   cmp -s "$release/service" <(printf '%s\n' "$service") || die "retained release service mismatch"
   cmp -s "$release/candidate.revision" <(printf '%s\n' "$revision") || die "deployment tree changed after quiescence"
   candidate_refs[$service]="$(<"$release/candidate.image")"
-  [[ "${candidate_refs[$service]}" =~ ^sha256:[0-9a-f]{64}$ ]] &&
-    cmp -s "$release/candidate.image" <(printf '%s\n' "${candidate_refs[$service]}") ||
+  if [[ ! "${candidate_refs[$service]}" =~ ^sha256:[0-9a-f]{64}$ ]] ||
+    ! cmp -s "$release/candidate.image" <(printf '%s\n' "${candidate_refs[$service]}"); then
     die "retained candidate identity is invalid"
+  fi
   release_paths[$service]="$release"
 }
 

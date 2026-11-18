@@ -8,12 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 // FirstCheckDelay는 admission부터 첫 확인까지의 간격이다. Iris 같은 ID 재시도 창(약 2초)보다 길게 두어 첫 확인에서
@@ -108,6 +108,10 @@ func Decide(in Input) Decision {
 			return Decision{Action: ActionQuarantine, Code: contractsalarm.HandoffCodeStatusMissing, Detail: "iris reply status not found"}
 		}
 
+		if delivery.ReplyStatusIdentityMismatch(in.QueryErr) {
+			return Decision{Action: ActionQuarantine, Code: contractsalarm.HandoffCodeOutcomeUnknown, Detail: "iris reply status request id does not match"}
+		}
+
 		return pending(in, QueryErrorDetail(in.QueryErr))
 	}
 
@@ -115,7 +119,7 @@ func Decide(in Input) Decision {
 		return Decision{Action: ActionQuarantine, Code: contractsalarm.HandoffCodeOutcomeUnknown, Detail: "iris reply status response is empty"}
 	}
 
-	if strings.TrimSpace(in.Snapshot.RequestID) != in.RequestID {
+	if in.Snapshot.RequestID != in.RequestID {
 		return Decision{Action: ActionQuarantine, Code: contractsalarm.HandoffCodeOutcomeUnknown, Detail: "iris reply status request id does not match"}
 	}
 

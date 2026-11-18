@@ -17,6 +17,7 @@ import (
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	adminsettings "github.com/kapu/hololive-api/internal/planes/admin/internal/service/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
+	"github.com/kapu/hololive-api/internal/service/geminidecision"
 	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -170,9 +171,9 @@ func buildSchedulePosterService(
 		return nil, fmt.Errorf("load schedule poster config: %w", err)
 	}
 
-	apiKey, err := posterservice.LoadAPIKey(appConfig.SchedulePosterGeminiKeyFile)
+	apiKey, err := loadSchedulePosterAPIKey(appConfig.SchedulePosterGeminiKeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("load schedule poster gemini api key: %w", err)
+		return nil, err
 	}
 
 	service, err := posterservice.New(ctx, config, apiKey, store, members, logger)
@@ -244,4 +245,17 @@ func newAdminAPIRuntime(
 		HTTPServers: servers,
 		cleanup:     cleanup,
 	}, nil
+}
+
+func loadSchedulePosterAPIKey(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+
+	key, err := geminidecision.LoadAPIKey(path)
+	if err != nil {
+		return "", fmt.Errorf("load schedule poster gemini api key: %w", err)
+	}
+
+	return key, nil
 }

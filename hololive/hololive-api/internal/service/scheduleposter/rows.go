@@ -108,7 +108,6 @@ type PublishedSchedule struct {
 	Changes []Change
 }
 
-// Slots는 행 묶음에 변경을 적용한 현재 일정이다.
 func (s *PublishedSchedule) Slots() []Slot {
 	return ApplyChanges(s.Rows, s.Changes)
 }

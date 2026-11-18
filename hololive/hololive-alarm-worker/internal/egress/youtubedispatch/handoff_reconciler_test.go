@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffloop"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -134,7 +135,7 @@ func (f youtubeHandoffFixture) makeDue(t *testing.T, age time.Duration) {
 	require.NoError(t, err)
 }
 
-func (f youtubeHandoffFixture) reconciler(t *testing.T, client handoffcheck.ReplyStatusClient, maxRetries int) *HandoffReconciler {
+func (f youtubeHandoffFixture) reconciler(t *testing.T, client handoffcheck.ReplyStatusClient, maxRetries int) *handoffloop.Reconciler[store.HandoffClaim] {
 	t.Helper()
 
 	reconciler, err := newHandoffReconciler(

@@ -698,7 +698,7 @@ done
 
 # compose 및 서비스별 env 문법 검증도 정상 경로의 소유 검증기를 그대로 거친다.
 cp "$test_root/compose.env" "$fixture/valid-compose.env"
-for invalid_line in 'INVALID' 'BAD KEY=value' 'LIVE_LOGS_PATH=duplicate' 'SPACE= value'; do
+for invalid_line in 'INVALID' 'BAD KEY=value' 'LIVE_LOGS_PATH=duplicate' 'SPACE= value' 'SPACE=value ' $'COMMAND=$(id)' $'COMMAND=`id`' $'CONTROL=a\x01b'; do
     cp "$fixture/valid-compose.env" "$test_root/compose.env"
     printf '%s\n' "$invalid_line" >> "$test_root/compose.env"
     directory="$(mktemp -d "$fixture/invalid-compose.XXXXXX")"

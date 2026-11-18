@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 )
 
 const (
@@ -381,7 +383,7 @@ func TestSubtitle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := subtitle(&tt.item, everyRune); got != tt.want {
+			if got := subtitle(&tt.item, everyRune, maxPlaceRunes, maxNoteRunes); got != tt.want {
 				t.Errorf("subtitle() = %q, want %q", got, tt.want)
 			}
 		})
@@ -440,7 +442,7 @@ func TestToSlotStatusDisplay(t *testing.T) {
 	f := testFonts(t)
 	drawable := f.drawable()
 
-	off, err := toSlot(&Item{Status: StatusOff}, drawable)
+	off, err := toSlot(&Item{Status: StatusOff}, drawable, cardtemplate.Classic)
 	if err != nil || off.main != "휴방" {
 		t.Errorf("empty off title = %q, %v; want 휴방", off.main, err)
 	}
@@ -451,13 +453,13 @@ func TestToSlotStatusDisplay(t *testing.T) {
 		"🎤 노래 방송 🎶":          "노래 방송",
 		"\u1112\u1161\u11ab": "한",
 	} {
-		got, gotErr := toSlot(&Item{Status: StatusPlanned, Start: at20, Title: in}, drawable)
+		got, gotErr := toSlot(&Item{Status: StatusPlanned, Start: at20, Title: in}, drawable, cardtemplate.Classic)
 		if gotErr != nil || got.main != want {
 			t.Errorf("title %q = %q, %v; want %q", in, got.main, gotErr, want)
 		}
 	}
 
-	canceled, err := toSlot(&Item{Status: StatusCancelled, Start: at20, Title: "노래"}, drawable)
+	canceled, err := toSlot(&Item{Status: StatusCancelled, Start: at20, Title: "노래"}, drawable, cardtemplate.Classic)
 	if err != nil {
 		t.Fatalf("toSlot() error = %v", err)
 	}
@@ -581,8 +583,11 @@ func testFonts(t *testing.T) *fontSet {
 		t.Fatalf("loadFontSet() error = %v", err)
 	}
 
-	renderMu.Lock()
-	t.Cleanup(renderMu.Unlock)
+	if err := renderMu.Acquire(t.Context(), 1); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { renderMu.Release(1) })
 
 	return fs
 }

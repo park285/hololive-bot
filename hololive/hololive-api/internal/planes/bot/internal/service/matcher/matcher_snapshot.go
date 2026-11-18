@@ -205,19 +205,15 @@ func (mm *Matcher) storeSnapshotEntry(
 		return
 	}
 
-	current, exists := entriesByChannel[entry.candidate.channelID]
-	if !exists {
+	if _, exists := entriesByChannel[entry.candidate.channelID]; !exists {
 		entriesByChannel[entry.candidate.channelID] = entry
-		snapshot.entries = append(snapshot.entries, entry)
-		current = entry
 	}
 
-	if entry.nameNorm != "" {
-		current.nameNorm = chooseSnapshotString(current.nameNorm, entry.nameNorm)
-		appendSnapshotEntry(snapshot.exactNames, entry.nameNorm, current)
-	}
+	// 채널 대표와 달리 이름·별칭 색인은 그 이름을 소유한 멤버를 가리킨다.
+	snapshot.entries = append(snapshot.entries, entry)
+	appendSnapshotEntry(snapshot.exactNames, entry.nameNorm, entry)
 
 	for _, aliasNorm := range entry.aliasNorms {
-		appendSnapshotEntry(snapshot.exactAliases, aliasNorm, current)
+		appendSnapshotEntry(snapshot.exactAliases, aliasNorm, entry)
 	}
 }

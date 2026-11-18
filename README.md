@@ -8,6 +8,12 @@
 
 ---
 
+## 주간 일정 포스터
+
+`!스케쥴 미코`처럼 멤버 이름으로 이번 주 포스터를 조회합니다. 카드 디자인은 채팅에서 고르지 않습니다. 관리자는 Iris Console의 **홀로라이브 → 멤버 관리**에서 멤버별로 **기존** 또는 **궤도**를 저장합니다. 다음 조회부터 적용되며 다른 멤버에게 영향을 주지 않습니다. 최초 설정은 소피아만 궤도이고 나머지는 기존입니다.
+
+궤도 카드는 하루 방송을 시간순으로 묶고, 1~8장의 PNG를 한 앨범으로 보냅니다. 이미지 예산(8장·개별 20 MiB·합계 30 MiB·공유 작업 12초)을 넘거나 명령의 남은 시간 중 ¾ 안에 이미지를 준비하지 못한 경우, 또는 참가자·태그를 생략해야 하는 편성은 전체 일정을 `schedule.txt` 하나로 보냅니다. `!스케줄`과 `!일정`은 별도의 일정 조회 명령입니다.
+
 ## 시스템 아키텍처 (Architecture Overview)
 
 본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-collector`)로 구성됩니다. 중앙 호스트의 `hololive-api`, `alarm-worker`, collector `c`는 rootful Podman Quadlet([deploy/quadlet](deploy/quadlet/README.md))으로, Seoul collector `b`는 iris-seoul rootful Podman Quadlet([deploy/podman/iris-seoul](deploy/podman/iris-seoul/README.md))으로 실행합니다. Osaka collector `a`와 Osaka2 collector `d`는 host-native systemd로 실행합니다. `hololive-api`는 bot/admin plane과 YouTube consume plane을 단일 프로세스에서 호스팅합니다.
@@ -39,7 +45,7 @@ bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 �
 `401`과 검증된 `AUTH_EPOCH_MISMATCH`가 함께 온 경우만 원래 deadline·본문·`ClientRequestID`를 유지해
 논리 호출당 최대 한 번 epoch를 갱신하고 재서명합니다. 일반 401·5xx·전송 오류는 이 인증 복구 경로로
 재시도하지 않으며 기존 owner 재시도·handoff·결과 불명·webhook v3·inbox 계약은 그대로입니다.
-새 Iris와 소비자를 같은 배포 창에서 교체하고 롤백도 인증 호환 조합으로 수행해야 합니다.
+새 Iris와 소비자를 같은 배포 창에서 교체하고 롤백도 인증 호환 조합으로 수행해야 합니다. 일정표 파일 응답(`text_file`)을 기록하기 전에 모든 봇 outbox 발송기를 해당 형식을 읽는 버전으로 전환하세요. 구버전으로 되돌릴 때는 새 명령 수신을 멈추고 미발송 파일 응답을 먼저 정산하세요.
 정식 SDK tag 게시 뒤 공식 Go 도구로 checksum을 생성하기 전에는 운영 빌드·배포하지 않습니다.
 
 ---

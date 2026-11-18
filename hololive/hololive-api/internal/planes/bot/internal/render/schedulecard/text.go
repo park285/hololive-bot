@@ -25,6 +25,7 @@ const (
 	faceImpact
 	faceSign
 	faceFat
+	faceRegular
 	faceCount
 )
 
@@ -58,13 +59,14 @@ type fontSet struct {
 var loadFontSet = sync.OnceValues(func() (*fontSet, error) {
 	data := fonts.ScheduleCard()
 	files := [faceCount][]byte{
-		faceBold:   data.PretendardBold,
-		faceXBold:  data.PretendardExtraBold,
-		faceHand:   data.YeonSung,
-		faceRound:  data.Jua,
-		faceImpact: data.BlackHanSans,
-		faceSign:   data.DoHyeon,
-		faceFat:    data.BagelFatOne,
+		faceRegular: data.PretendardRegular,
+		faceBold:    data.PretendardBold,
+		faceXBold:   data.PretendardExtraBold,
+		faceHand:    data.YeonSung,
+		faceRound:   data.Jua,
+		faceImpact:  data.BlackHanSans,
+		faceSign:    data.DoHyeon,
+		faceFat:     data.BagelFatOne,
 	}
 	f := &fontSet{cache: map[glyphKey]*glyph{}}
 

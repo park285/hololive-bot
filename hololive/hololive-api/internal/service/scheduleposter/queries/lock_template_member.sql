@@ -1,0 +1,1 @@
+SELECT id FROM members WHERE id = $1 FOR UPDATE

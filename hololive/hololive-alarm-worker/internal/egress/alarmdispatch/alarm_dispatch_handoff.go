@@ -30,12 +30,8 @@ type HandoffReconcilerConfig struct {
 	PollInterval time.Duration
 }
 
-// HandoffReconciler는 Iris admission을 마친 sent send unit의 handoff 확인 loop다. 정산은 claim 토큰과 요청 ID가
-// 그대로일 때만 단위 하나의 단일 문장으로 적용한다.
-type HandoffReconciler = handoffloop.Reconciler[dispatchoutbox.HandoffClaim]
-
 // NewHandoffReconciler는 지평과 poll 주기가 1ms 이상이어야 만든다.
-func NewHandoffReconciler(consumer HandoffConsumer, client handoffcheck.ReplyStatusClient, config HandoffReconcilerConfig, logger *slog.Logger) (*HandoffReconciler, error) {
+func NewHandoffReconciler(consumer HandoffConsumer, client handoffcheck.ReplyStatusClient, config HandoffReconcilerConfig, logger *slog.Logger) (*handoffloop.Reconciler[dispatchoutbox.HandoffClaim], error) {
 	if consumer == nil {
 		return nil, errors.New("new alarm dispatch handoff reconciler: consumer is required")
 	}

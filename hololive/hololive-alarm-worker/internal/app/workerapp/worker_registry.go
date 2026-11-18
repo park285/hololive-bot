@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -86,16 +87,26 @@ func (s *alarmWorkerRegistryState) wrap(workerID string, scheduler workerruntime
 	return trackedWorkerScheduler{Scheduler: scheduler, tracker: s.trackers[workerID], workers: worker.Executor.ConfiguredWorkers}
 }
 
-func (s *alarmWorkerRegistryState) Start(ctx context.Context) {
+func (s *alarmWorkerRegistryState) Start(ctx context.Context) error {
 	if s == nil {
-		return
+		return nil
 	}
 
-	go panicguard.Run(nil, panicscope.BackgroundTask, "alarm-worker-profile-checker", func() { s.checker.Run(ctx) })
+	var group sync.WaitGroup
+
+	group.Go(func() {
+		panicguard.Run(nil, panicscope.BackgroundTask, "alarm-worker-profile-checker", func() { s.checker.Run(ctx) })
+	})
 
 	for workerID, sampler := range s.samplers {
-		go panicguard.Run(nil, panicscope.BackgroundTask, "alarm-worker-queue-sampler-"+workerID, func() { sampler.Run(ctx) })
+		group.Go(func() {
+			panicguard.Run(nil, panicscope.BackgroundTask, "alarm-worker-queue-sampler-"+workerID, func() { sampler.Run(ctx) })
+		})
 	}
+
+	group.Wait()
+
+	return nil
 }
 
 type trackedWorkerScheduler struct {

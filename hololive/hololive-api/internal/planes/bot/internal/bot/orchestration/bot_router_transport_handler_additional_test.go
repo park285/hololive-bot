@@ -85,6 +85,8 @@ func withMessagePath(b *Bot, registry *command.Registry) *Bot {
 }
 
 type testIrisClient struct {
+	iris.FileSender
+
 	sendMessageErr        error
 	sendImageErr          error
 	sendMultipleImagesErr error

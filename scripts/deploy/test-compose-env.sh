@@ -76,3 +76,29 @@ bad_dup="$tmpdir/bad-dup.env"
 printf 'DB_PASSWORD=a\nDB_PASSWORD=b\n' >"$bad_dup"
 expect_fail compose_env_validate_file_format "$bad_dup"
 pass "duplicate key fails"
+
+for value in ' leading' 'trailing ' $'embedded\x01control' $'`id`'; do
+    printf 'KEY=%s\n' "$value" >"$tmpdir/rejected.env"
+    expect_fail compose_env_validate_file_format "$tmpdir/rejected.env"
+done
+pass "value whitespace, controls and backticks fail"
+
+: >"$tmpdir/empty.env"
+ln -s "$env_file" "$tmpdir/link.env"
+mkfifo "$tmpdir/pipe.env"
+for file in "$tmpdir/empty.env" "$tmpdir/link.env" "$tmpdir/pipe.env" "$tmpdir" "$tmpdir/missing.env"; do
+    expect_fail compose_env_validate_file_format "$file"
+done
+pass "empty and non-regular files fail"
+printf 'KEY=value\r\nEMPTY=\r\nQUOTED="two words"\r\n' >"$tmpdir/crlf.env"
+compose_env_validate_file_format "$tmpdir/crlf.env"
+pass "CRLF, empty values and quoted spaces pass"
+
+for line in 'synthetic-sensitive-key-token=value' ' synthetic-sensitive-key-token=value'; do
+    printf '%s\n' "$line" >"$tmpdir/sensitive.env"
+    expect_fail compose_env_validate_file_format "$tmpdir/sensitive.env"
+    if grep -q 'synthetic-sensitive-key-token=value' "$tmpdir/err"; then
+        fail "invalid key diagnostics exposed input"
+    fi
+done
+pass "invalid key diagnostics omit input"

@@ -15,6 +15,9 @@ self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/deploy/lib/postgres-capacity.sh
 . "${self_dir}/lib/postgres-capacity.sh"
 
+# shellcheck source=scripts/deploy/lib/compose-env.sh
+. "${self_dir}/lib/compose-env.sh"
+
 die() { echo "[quadlet-prestart] $*" >&2; exit 1; }
 
 # 운영(root)에서는 경로를 고정한다. 테스트만 비root로 임시 root 아래 경로를 쓴다.
@@ -69,28 +72,6 @@ if [[ "$target" == --render-env ]]; then
         die "render-env output directory must be empty"
     fi
 fi
-
-# systemd EnvironmentFile로 읽히는 compose.env의 형식(KEY=VALUE, 유효한 key, 중복 없음, 앞뒤 공백 없음)을 확인한다.
-# 메시지에는 key 이름만 남긴다.
-validate_env_file_syntax() {
-    local file="$1"
-    [[ -f "$file" && ! -L "$file" && -s "$file" ]] || die "compose env must be a non-empty regular file: ${file}"
-    awk '
-        /^[[:space:]]*(#|$)/ { next }
-        {
-            line = $0
-            sub(/\r$/, "", line)
-            eq = index(line, "=")
-            if (eq == 0) { print "[quadlet-prestart] compose env line must be KEY=VALUE: line " NR > "/dev/stderr"; bad = 1; next }
-            key = substr(line, 1, eq - 1)
-            value = substr(line, eq + 1)
-            if (key !~ /^[A-Za-z_][A-Za-z0-9_]*$/) { print "[quadlet-prestart] invalid env key at line " NR > "/dev/stderr"; bad = 1; next }
-            if (seen[key]++) { print "[quadlet-prestart] duplicate env key: " key > "/dev/stderr"; bad = 1; next }
-            if (value ~ /^[[:space:]]|[[:space:]]$/) { print "[quadlet-prestart] env value has surrounding whitespace: " key > "/dev/stderr"; bad = 1; next }
-        }
-        END { exit bad }
-    ' "$file" || die "compose env file is invalid: ${file}"
-}
 
 # bot.env 같은 서비스별 비밀 파일은 [Container] EnvironmentFile=(podman --env-file)로 읽힌다. podman은 '='가 없는 줄을
 # 호스트 env에서 끌어오므로 KEY=VALUE 줄만 받고 중복 key를 거부한다. 메시지에는 key 이름만 남긴다.
@@ -195,7 +176,7 @@ api_release_version() {
 
 case "$target" in
     hololive-api|hololive-alarm-worker|hololive-youtube-collector-c)
-        validate_env_file_syntax "$compose_env"
+        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         if [[ "$render_env" != true ]]; then
             postgres_capacity_assert_service "$deploy_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
         fi
@@ -211,7 +192,7 @@ case "$target" in
         esac
         ;;
     holo-postgres)
-        validate_env_file_syntax "$compose_env"
+        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values POSTGRES_PORT_BIND_IP
         require_secret_file "${secrets_dir}/postgres-tls/server.crt"
         require_secret_file "${secrets_dir}/postgres-tls/server.key"
@@ -232,7 +213,7 @@ case "$target" in
             'HOLOLIVE_REPLICATOR_PASSWORD=HOLOLIVE_REPLICATOR_PASSWORD'
         ;;
     holo-pgbouncer)
-        validate_env_file_syntax "$compose_env"
+        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values POSTGRES_PORT_BIND_IP
         require_secret_file "${secrets_dir}/certs/postgres-ca.pem"
         for tls_file in server.crt server.key backend-client.crt backend-client.key; do
@@ -246,12 +227,12 @@ case "$target" in
             "${run_dir}/pgbouncer/pgbouncer.ini"
         ;;
     valkey-cache)
-        validate_env_file_syntax "$compose_env"
+        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values VALKEY_BIND_IP
         wait_for_tailnet_address VALKEY_BIND_IP
         ;;
     hololive-db-migrate)
-        validate_env_file_syntax "$compose_env"
+        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         write_secret_env hololive-db-migrate \
             'PGPASSWORD=HOLOLIVE_MIGRATOR_PASSWORD' \
             'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' \
@@ -263,7 +244,6 @@ case "$target" in
             'HOLOLIVE_DB_PASSWORD=HOLOLIVE_DB_PASSWORD!'
         ;;
     hololive-alarm-worker)
-        validate_env_file_syntax "$compose_env"
         require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS
         validate_container_env_file "${secrets_dir}/alarm-worker.env"
         if [[ "$render_env" == false ]]; then
@@ -274,7 +254,6 @@ case "$target" in
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     hololive-api)
-        validate_env_file_syntax "$compose_env"
         require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS \
             HOLOLIVE_API_PORT_BIND_IP HOLOLIVE_ADMIN_API_PORT_BIND_IP HOLOLIVE_H3_SERVER_NAME
         validate_container_env_file "${secrets_dir}/bot.env"
@@ -297,7 +276,6 @@ case "$target" in
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     hololive-youtube-collector-c)
-        validate_env_file_syntax "$compose_env"
         require_values LIVE_LOGS_PATH
         validate_container_env_file "${secrets_dir}/youtube-collector.env"
         if [[ "$render_env" == false ]]; then
@@ -308,7 +286,7 @@ case "$target" in
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     admin-dashboard-ingress)
-        validate_env_file_syntax "$compose_env"
+        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values HOLOLIVE_BOT_PORT_BIND_IP
         admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
         wait_for_tailnet_address HOLOLIVE_BOT_PORT_BIND_IP

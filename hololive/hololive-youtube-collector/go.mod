@@ -8,9 +8,9 @@ require (
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/shared-go/core v1.0.0
-	github.com/park285/shared-go/postgres v1.0.1
-	github.com/park285/shared-go/transport v1.0.0
-	github.com/park285/shared-go/v2 v2.24.0
+	github.com/park285/shared-go/postgres v1.0.2
+	github.com/park285/shared-go/transport v1.0.1
+	github.com/park285/shared-go/v2 v2.25.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/stretchr/testify v1.12.1
@@ -76,7 +76,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pandatix/go-abnf v0.5.5 // indirect
-	github.com/park285/iris-client-go/v5 v5.2.0 // indirect
+	github.com/park285/iris-client-go/v5 v5.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0 // indirect
 	github.com/prometheus/common v0.74.0 // indirect

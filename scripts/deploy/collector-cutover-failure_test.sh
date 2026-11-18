@@ -7,6 +7,8 @@ python3 - "$root" <<'PY'
 import hashlib
 import fcntl
 import json
+import socket
+import threading
 import re
 import shlex
 import shutil
@@ -549,6 +551,17 @@ systemctl() {
         rm -f "$fixture_root/collector.exit"
       fi ;;
     show)
+      if [[ "$2" == --property=Job && "$3" == --property=ActiveState ]]; then
+        [[ "$fixture_case" != manager_probe_failure || "$cutover_started" != true ]] || return 8
+        if [[ -f "$fixture_root/manager-job" ]] && [[ "$(cat "$fixture_root/manager-job")" == "${*: -1}" ]]; then
+          printf 'Job=17\nActiveState=activating\n'
+        elif [[ "$(cat "$fixture_root/$kind.running")" == true ]]; then
+          printf 'Job=\nActiveState=active\n'
+        else
+          printf 'Job=\nActiveState=failed\n'
+        fi
+        return 0
+      fi
       case "$3" in
         LoadState)
           if [[ -L "$system_unit_dir/${*: -1}" ]]; then printf 'masked\n'; else printf 'loaded\n'; fi ;;
@@ -570,6 +583,7 @@ systemctl() {
       [[ "$fixture_case" != *unmask_failure || "$kind" != collector ]] || return 8
       rm "$system_unit_dir/$2" ;;
     is-active) [[ "$(cat "$fixture_root/$kind.running")" == true ]] ;;
+
     restart)
       admitted "$2" || return 8
       rm -f "$fixture_root/$kind.exit"
@@ -582,6 +596,11 @@ systemctl() {
           [[ "$(<"$current/$image_id_file")" == "sha256:$(hex_of new)" ]] || return 9
         fi
         [[ "$(cat "$fixture_root/dropin")" == candidate || "$mode" == rollback ]] || return 9
+      fi
+      if [[ "$fixture_case" == client_lost_pending && "$kind" == issuer && ! -f "$fixture_root/manager-job" ]]; then
+        local client_status=0
+        command python3 "$fixture_root/manager-client.py" "$fixture_root/manager.sock" "$issuer_unit" || client_status=$?
+        return "$client_status"
       fi
       # 재시작은 unit의 Image=를 다시 읽는다: collector는 drop-in이 고정한 pair, issuer는 :prod tag다.
       if [[ "$kind" == collector ]]; then
@@ -598,7 +617,7 @@ systemctl() {
         value="$(cat "$(ref_file "$issuer")")"
       fi
       printf '%s' "$value" > "$fixture_root/$kind.runtime"
-      if [[ "$fixture_case" == *substitution_failure || "$fixture_case" == restore_failure ]] && [[ "$kind" == issuer && "$value" == new ]]; then
+      if [[ "$fixture_case" == *substitution_failure || "$fixture_case" == restore_failure || "$fixture_case" == manager_probe_failure ]] && [[ "$kind" == issuer && "$value" == new ]]; then
         printf false > "$fixture_root/$kind.running"
         printf '143\n' > "$fixture_root/issuer.exit"
         return 1
@@ -671,6 +690,7 @@ central_cases = {
     'success': (0, False), 'absent_success': (0, False),
     'substitution_failure': (1, True), 'deploy_logs_collector': (5, True), 'deploy_error_log': (1, True),
     'deploy_grep_failure': (2, True), 'signal_TERM': (143, True), 'signal_HUP': (129, True),
+    'client_lost_pending': (137, False), 'manager_probe_failure': (1, False),
     'restore_failure': (1, False), 'activation_failure': (7, False),
     'candidate_check_failure': (7, False), 'absent_candidate_check_failure': (7, False),
     'missing_receipt': (1, False), 'collector_stopped': (1, False), 'inventory_failure': (1, False),
@@ -1110,7 +1130,38 @@ for slot, case in runs:
                                 f'{slot} {scenario}: validation fails before unmask or activation', result)
             print(f'[PASS] {slot} maintenance {scenario}')
             continue
-        result = run(body, state, case)
+        manager_stop = threading.Event()
+        manager = None
+        if case == 'client_lost_pending':
+            server = socket.socket(socket.AF_UNIX)
+            server.bind(str(state / 'manager.sock'))
+            server.listen(1)
+            server.settimeout(10)
+            def manage():
+                try:
+                    with server.accept()[0] as client:
+                        unit = client.recv(256).decode()
+                        (state / 'manager-job').write_text(unit)
+                        client.sendall(b'queued')
+                    manager_stop.wait(10)
+                finally:
+                    server.close()
+            manager = threading.Thread(target=manage)
+            manager.start()
+            (state / 'manager-client.py').write_text(
+                "import os,signal,socket,sys\n"
+                "with socket.socket(socket.AF_UNIX) as client:\n"
+                " client.connect(sys.argv[1]); client.sendall(sys.argv[2].encode()); assert client.recv(32)==b'queued'\n"
+                "os.kill(os.getpid(),signal.SIGKILL)\n")
+        try:
+            result = run(body, state, case)
+            if manager is not None:
+                require(manager.is_alive() and (state / 'manager-job').is_file(), 'client exit does not settle manager job', result)
+        finally:
+            manager_stop.set()
+            if manager is not None:
+                manager.join(2)
+
         require(result.returncode == expected_status, f'{label}: original status', result)
         calls = (state / 'calls').read_text().splitlines() if (state / 'calls').exists() else []
         changed = [call for call in calls if call.startswith(mutations)]
@@ -1136,7 +1187,14 @@ for slot, case in runs:
                         f'{label}: rollback recovery and installed unit retained', result)
             else:
                 require(not backup.exists(), f'{label}: capacity rejected before snapshot', result)
-        if case in ('missing_receipt', 'collector_stopped', 'inventory_failure'):
+        expected_warning = endpoint_blocked or case in ('restore_failure', 'activation_failure', 'client_lost_pending', 'manager_probe_failure')
+        require(('automatic restoration failed' in result.stderr) == expected_warning, f'{label}: restoration warning', result)
+        if case in ('client_lost_pending', 'manager_probe_failure'):
+            require('outcome_unknown' in result.stderr, f'{label}: pending/unknown outcome is explicit', result)
+            require((backup / 'cutover-outcome').read_text().strip() == 'outcome_unknown', f'{label}: outcome receipt retained', result)
+            require(not any(call.startswith('pair activate ') and call.endswith('/previous') for call in calls), f'{label}: no previous pair activation', result)
+            require(len(restarts) == 1, f'{label}: no restoration restart while manager outcome is unknown', result)
+        elif case in ('missing_receipt', 'collector_stopped', 'inventory_failure'):
             # 이전 pair 기준점을 만들 수 없으면 백업·태그·적재 전에 원인을 남기고 멈춘다.
             require(not backup.exists() and not changed, f'{label}: no partial backup or runtime change', result)
         elif is_check:
@@ -1172,7 +1230,7 @@ for slot, case in runs:
         expected_runtime = 'absent' if endpoint_blocked else 'new' if is_check or is_rollback and not restored or case in (
             'success', 'absent_success', 'transition_success') else 'old'
         require((state / 'collector.runtime').read_text() == expected_runtime, f'{label}: collector runtime', result)
-        expected_issuer = 'new' if case == 'restore_failure' else 'absent' if case == 'absent_candidate_check_failure' else expected_runtime
+        expected_issuer = 'new' if case in ('restore_failure', 'manager_probe_failure') else 'absent' if case == 'absent_candidate_check_failure' else expected_runtime
         require((state / 'issuer.runtime').read_text() == expected_issuer, f'{label}: issuer runtime', result)
         print(f'[PASS] {label}: exit={result.returncode}, collector={(state / "collector.runtime").read_text()}, issuer={(state / "issuer.runtime").read_text()}')
 PY
