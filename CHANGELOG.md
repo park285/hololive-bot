@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- 카드 창은 이미 풀링된 여섯 역할에서만 진행합니다. 030 상태의 단일 writer 배포를 거부하고 업무 migrator만으로 031/032를 적용합니다. PostgreSQL과 PgBouncer를 교체하거나 풀러 인증과 앱 자격을 다시 생성하지 않습니다.
 - **Quadlet writer 정지:** 중앙 API·worker와 collector b/c/d는 재기동을 먼저 차단하고 원래 `ExecStop`과 해당 CID의 종료를 확인한 뒤 영속 mask를 적용합니다. Collector 143은 정상 정지가 아닙니다. 재개 도중 기동 클라이언트가 사라져도 새로 요청하지 않고 원래 manager job과 컨테이너에 결합된 세대만 보호 정지합니다. 부분 해제나 교체된 세대에는 성공 영수증을 발행하지 않습니다. Fallback delta: none.
 - **PostgreSQL transaction pooling:** 중앙/API/worker/c와 AP a·b·d를 역할별 상한을 유지한 PgBouncer 경로로 전환하는 소스를 추가했습니다. DB의 현재 SCRAM verifier를 cert-only `auth_query`로 읽어 앱 비밀번호를 pooler 파일에 복제하지 않고, 같은 비밀번호 bootstrap은 verifier를 유지합니다. PgBouncer 1.26.1의 startup timeout 오염은 upstream `22d0aa1`을 backport한 공통 `1.26.1-guc1` 이미지로 수정했습니다. pgx prepared backend 교체·동명 동시 사용·재연결, timeout/cancel, control 예약, 실제 암호 회전과 장애 복구를 격리 환경에서 검증했습니다. direct↔pooler rollback은 HBA·endpoint의 조정 복구 전 재기동을 거부합니다. ChatBotGo는 같은 native 이미지에 별도 인스턴스·인증 DB·연결 예산을 사용합니다. 운영 인증서·DB/HBA·방화벽·서비스 전환은 별도 승인 사항입니다. Fallback delta: none.
 - PgBouncer 기동 health에 frontend/backend DNS 공개 확인을 추가했습니다. 정상 상태의 peer health와 별도 SQL 수용 검사는 유지하며, DNS 준비 전 성공 판정을 차단합니다.
