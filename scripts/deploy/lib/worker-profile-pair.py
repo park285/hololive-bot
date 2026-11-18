@@ -56,7 +56,7 @@ def loaded_hash(diagnostics):
     return value
 
 
-def container_profile_hash(service, container, data):
+def container_profile_hash(service, data):
     environment = dict(item.split("=", 1) for item in data["Config"]["Env"])
     port = environment["HOLOLIVE_METRICS_ADDR"].rsplit(":", 1)[1]
     if not port.isdigit():
@@ -67,7 +67,7 @@ def container_profile_hash(service, container, data):
         "youtube-collector": "METRICS_API_KEY",
         "youtube-collector-b": "METRICS_API_KEY",
     }[service]
-    return loaded_hash(run(CLI, "exec", container, "/app/bin/healthcheck",
+    return loaded_hash(run(CLI, "exec", data["Id"], "/app/bin/healthcheck",
                            "--body-api-key-env", credential,
                            "http://127.0.0.1:" + port + "/diagnostics/workers"))
 
@@ -105,6 +105,44 @@ def check_mounts(pid, destinations):
     if table.keys() != destinations:
         raise ValueError("missing profile check mount")
     return table
+
+
+def writer_profile(before, service, release):
+    if (before["Config"].get("Labels") or {}).get(LABEL) != release:
+        raise ValueError("writer does not use the expected profile release")
+    spec = oci_spec(before)
+    env = spec["process"]["env"]
+    slot = TARGET + "/" + PROFILES[service]
+    expected_env = {"STACK_WORKER_PROFILE_FILE": slot}
+    if release is not None:
+        expected_env.update(STACK_WORKER_PROFILE_FILE=RELEASE_TARGET + "/profile.json",
+                            STACK_WORKER_PROFILE_SOURCE_FILE=slot)
+    for key, expected in expected_env.items():
+        if [item for item in env if item.startswith(key + "=")] != [key + "=" + expected]:
+            raise ValueError("writer does not use its expected profile environment")
+    pid = before["State"]["Pid"]
+    root = Path(f"/proc/{pid}/root")
+    sources = {TARGET: SOURCE}
+    if release is not None:
+        sources[RELEASE_TARGET] = release
+    flags = check_mounts(pid, sources.keys())
+    for dest, source in sources.items():
+        mounts = [m for m in spec["mounts"] if m["destination"] == dest]
+        if (len(mounts) != 1 or mounts[0]["type"] != "bind" or mounts[0]["source"] != source or
+                "ro" not in flags[dest] or not (root / dest.lstrip("/")).samefile(source)):
+            raise ValueError("writer profile differs from its expected read-only bind")
+    return root / (RELEASE_TARGET + "/profile.json" if release else slot).lstrip("/")
+
+
+def default_idmap(mount, linux):
+    keys = ("uidMappings", "gidMappings")
+    mapped = any(mount.get(key) for key in keys)
+    if any(option.partition("=")[0] in ("idmap", "ridmap") and (option != "idmap" or not mapped)
+           for option in mount.get("options", [])):
+        raise ValueError("unsupported named mount ID mapping")
+    if mapped and any(mount.get(key) != linux.get(key) for key in keys):
+        raise ValueError("unsupported custom mount ID mapping")
+    return mapped
 
 
 def user_maps(proc):
@@ -158,23 +196,17 @@ def validate_container_pair(before, directory):
         raise ValueError("unsupported previous profile mount")
     source_flags = check_mounts(old_pid, destinations)
     mounts = {mount["destination"]: mount for mount in spec["mounts"]}
-    previous_release = (before["Config"].get("Labels") or {}).get(LABEL)
-    if previous_release:
-        mounted = old_proc / ("root" + RELEASE_TARGET)
-        if (RELEASE_TARGET not in destinations or "ro" not in source_flags[RELEASE_TARGET] or
-                mounts[RELEASE_TARGET]["source"] != previous_release or
-                not mounted.samefile(previous_release) or
-                digest(mounted / "profile.json") != digest(directory / "profile.json") or
-                "STACK_WORKER_PROFILE_FILE=" + RELEASE_TARGET + "/profile.json" not in process["env"]):
-            raise ValueError("previous release differs from the writer's active profile mount")
+    if RELEASE_TARGET in destinations and default_idmap(mounts[RELEASE_TARGET], linux):
+        raise ValueError("unsupported mapped profile release")
+    probe_destinations = destinations | {RELEASE_TARGET}
+    mapped = set()
     for dest in sorted(destinations - {RELEASE_TARGET}):
         mount = mounts[dest]
         if mount["type"] != "bind":
             raise ValueError("previous volume has no resolved bind source")
         flags = sorted(source_flags[dest] & {"nosuid", "nodev", "noexec"})
-        if mount.get("uidMappings") or mount.get("gidMappings"):
-            if any(mount.get(key) != linux.get(key) for key in ("uidMappings", "gidMappings")):
-                raise ValueError("unsupported custom mount ID mapping")
+        if default_idmap(mount, linux):
+            mapped.add(dest)
             flags.append("idmap")
         command.extend(("--volume", bind_argument(mount["source"], dest, flags)))
     command.extend(("--volume", bind_argument(str(directory), RELEASE_TARGET, [])))
@@ -185,14 +217,19 @@ def validate_container_pair(before, directory):
         command.extend(("--cidfile", str(cidfile), "--entrypoint", entrypoint[0], before["Image"], "--check-worker-profile"))
         try:
             subprocess.run(command, input="".join(f"{k}={v}\n" for k, v in environment.items()),
-                           text=True, stdout=subprocess.DEVNULL, check=True, timeout=30)
+                           text=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=30)
             probe = cidfile.read_text().strip()
             run(CLI, "init", probe)
             # init은 mount를 고정하지만 entrypoint를 실행하지 않는다. 호스트 경로가 교체된 경우 새 파일로 통과시키지 않는다.
             initialized = inspect("container", probe)
             if initialized["State"]["Status"] != "initialized" or initialized["Image"] != before["Image"]:
                 raise ValueError("profile check was not initialized with the previous image")
-            actual = oci_spec(initialized)["process"]
+            initialized_spec = oci_spec(initialized)
+            actual = initialized_spec["process"]
+            actual_mapped = {m["destination"] for m in initialized_spec["mounts"]
+                             if m["destination"] in probe_destinations and default_idmap(m, initialized_spec["linux"])}
+            if actual_mapped != mapped:
+                raise ValueError("profile check mount ID mappings differ from the writer")
             if (actual["args"] != [entrypoint[0], "--check-worker-profile"] or actual["cwd"] != process["cwd"] or
                     dict(item.split("=", 1) for item in actual["env"]) != environment or
                     actual.get("selinuxLabel", "") != label or
@@ -204,7 +241,7 @@ def validate_container_pair(before, directory):
             proc = Path(f"/proc/{pid}")
             if user_maps(proc) != mappings:
                 raise ValueError("profile check user namespace mappings differ from the writer")
-            flags = check_mounts(pid, destinations | {RELEASE_TARGET})
+            flags = check_mounts(pid, probe_destinations)
             for dest, options in flags.items():
                 original = directory if dest == RELEASE_TARGET else old_proc / ("root" + dest)
                 if "ro" not in options or not (proc / ("root" + dest)).samefile(original):
@@ -226,9 +263,32 @@ def validate_container_pair(before, directory):
                 run(CLI, "rm", "--force", "--ignore", "--time=0", probe)
 
 
-def check_pair(directory, pair):
-    # 보존한 unit의 환경과 로컬 파일을 그대로 읽되 네트워크·쓰기·worker 시작은 허용하지 않는다.
+def collector_probe_network(directory, pair, values):
+    networks = {"youtube-collector": ("hololive-net.network", "hololive-bot_hololive-net"),
+                "youtube-collector-b": ("hololive-collector-b.network", "hololive-collector-b")}
+    service = pair["service"]
+    if (service not in networks or directory.name != "candidate" or directory.parent.name != service or
+            "container_id" in pair):
+        raise ValueError("pooled database check requires a collector candidate")
+    definition = QUADLET_UNITS[service]
+    if profile_bytes(directory / UNIT_RECORD) != profile_bytes(QUADLET_DIR / definition):
+        raise ValueError("pooled database check requires the installed candidate unit")
+    name = Path(definition).stem
+    network_unit, network = networks[service]
+    for key, expected in (("ContainerName", name), ("Entrypoint", "./bin/youtube-collector"),
+                          ("Network", network_unit + ":alias=" + name.removeprefix("hololive-"))):
+        if [v for k, v in values if k == key] != [expected]:
+            raise ValueError("unexpected collector probe unit or network")
+    declared = unit_values(QUADLET_DIR / network_unit, ("Network",))["Network"]
+    if [v for k, v in declared if k == "NetworkName"] != [network]:
+        raise ValueError("unexpected installed collector probe network")
+    return network
+
+
+def check_pair(directory, pair, *, pooled=False):
     values = unit_values(directory / UNIT_RECORD)
+    if pooled:
+        collector_probe_network(directory, pair, values["Container"])
     command = ["systemd-run", "--quiet", "--wait", "--pipe", "--collect",
                "--property=RuntimeMaxSec=60s"]
     for key, value in values["Service"]:
@@ -236,9 +296,9 @@ def check_pair(directory, pair):
             command.append("--property=EnvironmentFile=" + value)
         elif key == "Environment":
             command.append("--setenv=" + value)
-    command.extend((sys.executable, str(Path(__file__).resolve()), "check-resolved",
+    command.extend((sys.executable, str(Path(__file__).resolve()), "check-pooled-resolved" if pooled else "check-resolved",
                     pair["service"], str(directory)))
-    subprocess.run(command, check=True, timeout=65)
+    subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=65)
 
 
 def unit_values(path, sections=("Container", "Service")):
@@ -313,11 +373,16 @@ def profile_security_level(unit):
     return dict(native).get("SecurityLabelLevel")
 
 
-def check_resolved_pair(directory, pair):
+def check_resolved_pair(directory, pair, *, pooled=False):
     values = unit_values(directory / UNIT_RECORD)["Container"]
     environment = dict(os.environ)
-    command = [CLI, "run", "--rm", "--pull=never", "--network", "none", "--read-only",
+    network = collector_probe_network(directory, pair, values) if pooled else "none"
+    command = [CLI, "run", "--rm", "--pull=never", "--network", network, "--read-only",
+               "--read-only-tmpfs=false", "--log-driver=none", "--no-healthcheck", "--image-volume=ignore",
                "--cap-drop", "all", "--security-opt", "no-new-privileges"]
+    if pooled:
+        # 실제 writer의 DNS 별칭·포트는 점유하지 않고 검토한 단발 DB 검사만 실행한다.
+        command.extend(("--entrypoint=./bin/youtube-collector", "--http-proxy=false", "--timeout=45"))
     unit = Path(QUADLET_UNITS[pair["service"]]).stem
     generated_env = "/run/hololive-bot/quadlet-env/" + unit + ".env"
     user, group = "", ""
@@ -332,7 +397,7 @@ def check_resolved_pair(directory, pair):
                                     "--render-env", unit, output]
                         if pair["service"] == "hololive-api" and "app_version" in pair:
                             renderer.extend(("--app-version", pair["app_version"]))
-                        subprocess.run(renderer, check=True, timeout=30)
+                        subprocess.run(renderer, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
                         rendered = str(Path(output) / (unit + ".env"))
                     value = rendered
                 command.extend(("--env-file", value))
@@ -344,7 +409,9 @@ def check_resolved_pair(directory, pair):
                 source, target, *options = value.split(":")
                 source = volume_source(source)
                 flags = [flag for option in options for flag in option.split(",") if flag not in ("rw", "ro")]
-                command.extend(("--volume", ":".join((source, target, ",".join(["ro", *flags])))))
+                if any(flag != "idmap" for flag in flags):
+                    raise ValueError("unsupported profile preflight bind option")
+                command.extend(("--volume", bind_argument(source, target, flags)))
             elif key == "User":
                 user = value
             elif key == "Group":
@@ -366,8 +433,8 @@ def check_resolved_pair(directory, pair):
                         "--mount", "type=bind,src=" + str(directory) + ",dst=" + RELEASE_TARGET + ",readonly",
                         "--env", "STACK_WORKER_PROFILE_FILE=" + RELEASE_TARGET + "/profile.json",
                         "--unsetenv", "STACK_WORKER_PROFILE_SOURCE_FILE",
-                        pair["image"], "--check-worker-profile"))
-        subprocess.run(command, env=environment, check=True, timeout=60)
+                        pair["image"], "--check-pooled-database" if pooled else "--check-worker-profile"))
+        subprocess.run(command, env=environment, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
 
 
 def prepare_native(service, release, host_env, unit):
@@ -508,7 +575,7 @@ def verify(directory, service, image=None):
     return pair
 
 
-def atomic_publish(files):
+def atomic_publish(files, before_replace=None):
     staged = []
     try:
         for path, contents in files:
@@ -519,6 +586,8 @@ def atomic_publish(files):
                 output.write(contents)
             temporary.chmod(0o444)
         # 모두 준비한 뒤 교체한다. 이름 변경 각각만 원자적이며 묶음 전체는 아니다.
+        if before_replace is not None:
+            before_replace()
         for temporary, path in staged:
             os.replace(temporary, path)
     finally:
@@ -580,10 +649,38 @@ def create_pair_directory(directory):
     directory.chmod(0o755)
 
 
+def require_captured(pair, container, before):
+    cid, image, started, pid = running_generation(before)
+    if (pair.get("container_name") != container or before["Name"] != container or
+            pair.get("container_id") != cid or pair["image"] != "sha256:" + image or
+            pair.get("container_started_at") != started or pair.get("container_pid") != pid or
+            "captured_release" not in pair):
+        raise ValueError("captured writer generation does not match the running container")
+
+
+def verify_writer(directory, service, container, *, captured):
+    before = inspect("container", container)
+    generation = running_generation(before)
+    pair = verify(directory, service, before["Image"])
+    if captured:
+        require_captured(pair, container, before)
+    release = pair["captured_release"] if captured else str(directory)
+    loaded = container_profile_hash(service, before)
+    mounted = writer_profile(before, service, release)
+    # 무라벨 writer는 prepare 후에도 구 해시로 실행된다. mirror의 다음 후보 바이트와 비교하지 않는다.
+    if loaded != pair["profile_hash"] or (release is not None and digest(mounted) != loaded):
+        raise ValueError("running profile differs from its validated release pair")
+    if running_generation(inspect("container", container)) != generation:
+        raise ValueError("writer generation changed during profile verification")
+
+
 def capture(container, service, directory, root):
     before = inspect("container", container)
     generation = running_generation(before)
+    if before["Name"] != container:
+        raise ValueError("profile capture requires the writer's container name")
     labelled = (before["Config"].get("Labels") or {}).get(LABEL)
+    mounted = writer_profile(before, service, labelled)
     previous = labelled
     prepared = Path(root) / "artifacts/worker-profile/active" / (service + ".pair")
     if not labelled and os.path.lexists(prepared):
@@ -598,28 +695,20 @@ def capture(container, service, directory, root):
         pair = verify(prior, service, before["Image"])
         if not labelled:
             installed = QUADLET_DIR / (QUADLET_UNITS[service] + ".d") / DROPIN
-            if pair.get("container_id") != before["Id"] or verify_dropin(prior, service, pair) != profile_bytes(installed):
+            require_captured(pair, container, before)
+            if pair["captured_release"] is not None or verify_dropin(prior, service, pair) != profile_bytes(installed):
                 raise ValueError("prepared profile does not belong to the running container")
-        loaded = container_profile_hash(service, before["Id"], before)
-        raw = profile_bytes(prior / "profile.json")
-        if loaded != pair["profile_hash"] or hashlib.sha256(raw).hexdigest() != loaded:
+        loaded = container_profile_hash(service, before)
+        raw = profile_bytes(mounted if labelled else prior / "profile.json")
+        if (labelled and labelled != str(prior)) or loaded != pair["profile_hash"] or hashlib.sha256(raw).hexdigest() != loaded:
             raise ValueError("retained profile bytes differ from the running process")
         (directory / "profile.json").write_bytes(raw)
         if (prior / UNIT_RECORD).is_file():
             (directory / UNIT_RECORD).write_bytes((prior / UNIT_RECORD).read_bytes())
     else:
         # 첫 도입은 기존 프로세스가 로드한 바이트를 증명할 수 있을 때만 허용한다.
-        env = dict(item.split("=", 1) for item in before["Config"]["Env"])
-        profile_path = env["STACK_WORKER_PROFILE_FILE"]
-        if profile_path != TARGET + "/" + PROFILES[service]:
-            raise ValueError("unexpected previous profile path")
-        running_hash = container_profile_hash(service, before["Id"], before)
-        # UserNS=auto container에서는 idmap 없는 bind의 root 소유 파일을 podman cp가 꺼내지 못한다
-        # (host ID 0 cannot be mapped). profile 디렉터리는 bind라 그 host 원본이 container가 읽는 파일과 같다.
-        sources = [mount.get("Source") for mount in before.get("Mounts") or [] if mount.get("Destination") == TARGET]
-        if sources != [SOURCE]:
-            raise ValueError("unexpected previous profile mount")
-        (directory / "profile.json").write_bytes(profile_bytes(Path(SOURCE) / PROFILES[service]))
+        running_hash = container_profile_hash(service, before)
+        (directory / "profile.json").write_bytes(profile_bytes(mounted))
         if running_hash != digest(directory / "profile.json"):
             raise ValueError("previous profile bytes differ from the running process; writer unchanged")
         pair = image_identity(before["Image"])
@@ -634,13 +723,15 @@ def capture(container, service, directory, root):
         raise ValueError("previous process changed during profile capture")
     pair["retained_image"] = "hololive-worker-profile:pair-" + hashlib.sha256(str(directory).encode()).hexdigest()[:24]
     run(CLI, "tag", before["Image"], pair["retained_image"])
-    pair["container_id"] = before["Id"]
+    pair.update(container_name=container, container_id=before["Id"], container_started_at=generation[2],
+                container_pid=generation[3], captured_release=labelled)
     if service == "hololive-api":
         pair["app_version"] = dict(item.split("=", 1) for item in before["Config"]["Env"])["APP_VERSION"]
+    require_captured(pair, container, inspect("container", container))
     save_pair(directory, service, pair)
 
 
-def activate(directory, service, root, prepared_overlay=None):
+def activate(directory, service, root, prepared_overlay=None, *, captured_container=None):
     # 활성 overlay는 재생성·재부팅마다 이 디렉터리를 bind하므로, 수용 후 정리되는 백업이 아니라
     # 배포 동기화와 보존 정리에서 빠지는 release 저장소에만 둔다.
     releases = (Path(root) / "artifacts/worker-profile/releases").resolve()
@@ -656,7 +747,8 @@ def activate(directory, service, root, prepared_overlay=None):
     unit_dropins.mkdir(mode=0o755, parents=True, exist_ok=True)
     files.append((unit_dropins / DROPIN, contents))
     files.append((active / (service + ".pair"), (str(directory) + "\n").encode("utf-8")))
-    atomic_publish(files)
+    atomic_publish(files, None if captured_container is None else
+                   lambda: verify_writer(directory, service, captured_container, captured=True))
 
 
 def verify_retained(directory, service, candidate, root):
@@ -720,7 +812,7 @@ def main():
         if action == "prepare":
             pair = verify(directory, service)
             dropin(directory, service, pair)
-            activate(directory, service, rest[1])
+            activate(directory, service, rest[1], captured_container=rest[0])
     elif action == "rollback":
         pair = verify(directory, service)
         output = Path(rest[0]) if rest else None
@@ -735,16 +827,13 @@ def main():
     elif action == "verify":
         verify(directory, service, rest[0] if rest else None)
     elif action == "verify-dropin":
-        verify_dropin(directory, service, verify(directory, service))
-    elif action == "check":
-        check_pair(directory, verify(directory, service))
-    elif action == "check-resolved":
-        check_resolved_pair(directory, verify(directory, service))
-    elif action == "verify-live":
-        before = inspect("container", rest[0])
-        pair = verify(directory, service, before["Image"])
-        if container_profile_hash(service, rest[0], before) != pair["profile_hash"]:
-            raise ValueError("running profile differs from its validated release pair")
+        verify_dropin(directory, service, verify(directory, service), Path(rest[0]) if rest else None)
+    elif action in ("check", "check-pooled"):
+        check_pair(directory, verify(directory, service), pooled=action == "check-pooled")
+    elif action in ("check-resolved", "check-pooled-resolved"):
+        check_resolved_pair(directory, verify(directory, service), pooled=action == "check-pooled-resolved")
+    elif action in ("verify-live", "verify-captured"):
+        verify_writer(directory, service, rest[0], captured=action == "verify-captured")
     elif action == "activate":
         activate(directory, service, rest[0], Path(rest[1]) if len(rest) > 1 else None)
     else:
