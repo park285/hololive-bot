@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # quadlet-redeploy-service.sh가 release 디렉터리에 보존한 이전 image·worker profile pair로 중앙
 # hololive-api·hololive-alarm-worker를 되돌린다. DB migration·schema·secret mirror는 되돌리지 않는다. 호환성 판정은 docs/current/runbooks/rollback.md를 따른다.
-#   --check(기본): pair checksum·image identity·이전 image profile과 유효 endpoint·실행 중 풀러 용량을 검증한다.
+#   --check(기본): 보존 pair의 image ID에서 카드 outbox 호환성을 확인하고 profile·유효 endpoint·풀러 용량을 검증한다.
 #   --apply: 이전 pair drop-in을 게시하고 daemon-reload 뒤 unit을 재시작해 실행 중 profile과 NRestarts를 확인한다.
 # 배포 helper는 자동으로 호출하지 않는다. --apply는 호환성과 실제 unit 상태를 검토한 별도 승인 뒤에만 실행한다.
 set -Eeuo pipefail
@@ -60,6 +60,11 @@ if [[ "$mode" == --apply ]]; then
 fi
 
 python3 "$pair_tool" verify "$service" "$previous"
+previous_image="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["image"])' "$previous/pair.json")"
+[[ "$previous_image" =~ ^sha256:[0-9a-f]{64}$ ]] || die "invalid retained image ID"
+compatible="$(podman image inspect --format '{{eq (index .Config.Labels "io.hololive-bot.outbox-schema") "text-file-v1"}}' "$previous_image")" ||
+  die "cannot inspect the retained image's outbox contract"
+[[ "$compatible" == true ]] || die "retained image does not declare the text-file-v1 outbox contract; recovery pair retained"
 python3 "$pair_tool" check "$service" "$previous"
 # 과거 release는 previous 안에 이미 검증 가능한 복원 overlay를 둔다. 새 관측값을 소급 생성하지 않는다.
 overlay="$previous/50-worker-profile.conf"

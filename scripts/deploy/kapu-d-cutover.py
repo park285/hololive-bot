@@ -26,7 +26,7 @@ SYSTEM = Path('/etc/systemd/system')
 GEN = Path('/run/systemd/generator')
 INPUT = Path(__file__).resolve().parents[2] / 'deploy/podman/kapu'
 GUARD = Path(__file__).resolve().with_name('lib') / 'systemd-stop-guard.py'
-QUIESCED = {'5433': b'kapu-d-guarded-stop-v2 direct\n', '6433': b'kapu-d-guarded-stop-v2 already-pooled\n'}
+QUIESCED = {'5433': b'kapu-d-guarded-stop-v2 direct\n', '6433': b'kapu-d-guarded-stop-v3 already-pooled\n'}
 STORE = Path('/var/lib/hololive-collector-d-cutover')
 D = Path('/etc/hololive-bot/collector-d/worker-profile-release')
 SECRETS = Path('/etc/stack-secrets/hololive-bot/collector-d')
@@ -498,7 +498,19 @@ def retained(h, state, source_port, *, candidate_installed=False):
         need(image(n, oldtag(n,h)) == state['images'][n], '보존 이미지 tag drift')
 
 
-def snapshot(h, source_port):
+def release_candidate(revision, ids, digests):
+    need(re.fullmatch('[0-9a-f]{40}', revision) and len(set(ids.values())) == 2 and
+         all(re.fullmatch('sha256:' + HEX, ids[n]) and re.fullmatch(HEX, digests[n]) for n in NAMES), '후보 인수 불일치')
+    return {'revision':revision, 'images':ids, 'units':digests}
+
+
+def verify_candidate_input(n, data, target):
+    ref = target['images'][n]
+    need(sha(data) == target['units'][n] and image(n,ref) == {'id':ref,'rev':target['revision']},
+         '후보 unit digest 또는 이미지 revision 불일치: ' + n)
+
+
+def snapshot(h, source_port, target):
     prereqs()
     state = {'boot': Path('/proc/sys/kernel/random/boot_id').read_text().strip(), 'old':{}, 'images':{}, 'drops':{}, 'base':{}}
     files = {}
@@ -525,6 +537,12 @@ def snapshot(h, source_port):
         else:
             issuer(g)
         absent('image', oldtag(n,h))
+    if target is not None:
+        for n in NAMES:
+            old = state['images'][n]
+            need(target['revision'] != old['rev'] and target['images'][n] != old['id'], '이전 실행 이미지 또는 revision 재사용: ' + n)
+            verify_candidate_input(n,files[unit(n)],target)
+        state['candidate'] = target
     state['bindings'] = bindings()
     state['previous_endpoint'] = previous_endpoint(source_port)
     h.mkdir(mode=0o700)
@@ -540,11 +558,19 @@ def snapshot(h, source_port):
     return state
 
 
-def quiesce(h, source_port):
-    receipt = QUIESCED[source_port]
+def stop_receipt(source_port, state):
+    marker = QUIESCED[source_port]
+    if source_port == '6433':
+        # 정지 완료 영수증을 다른 hold·실행 세대·후보의 스냅샷과 짝지을 수 없다.
+        marker += sha(json.dumps(state,sort_keys=True).encode()).encode() + b'\n'
+    return marker
+
+
+def quiesce(h, source_port, target=None):
+    need((source_port == '6433') == (target is not None), 'pooled quiesce에만 별도 후보 identity 필요')
     need(not os.path.lexists(h), '새 hold 필요')
     trusted(GUARD)
-    s = snapshot(h,source_port)
+    s = snapshot(h,source_port,target)
     for n in NAMES:
         need(generation(n) == s['old'][n], '정지 전 세대 교체')
     for n in NAMES:
@@ -570,7 +596,7 @@ def quiesce(h, source_port):
         guard('seal',h,n)
     for n in NAMES:
         held_one(h,s,n)
-    record(h / 'quiesced', receipt)
+    record(h / 'quiesced', stop_receipt(source_port,s))
     print('quiesced:', h)
 
 
@@ -756,22 +782,24 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
     need(not damaged and not receipt_failed, '양쪽 소유 mask 복원 미확인: 증거와 잔여 가드 유지')
 
 
-def resume(h, revision, ids, digests, source_port):
+def resume(h, target, source_port):
     trusted(h,True)
     trusted(GUARD)
-    need(stat.S_IMODE(h.stat().st_mode) == 0o700 and raw(h/'quiesced') == QUIESCED[source_port], '선택한 모드의 새 quiesce 영수증 필요')
     s = json.loads(raw(h/'previous.json'))
-    need(re.fullmatch('[0-9a-f]{40}', revision) and len(set(ids.values())) == 2 and
-         all(re.fullmatch('sha256:' + HEX,v) for v in ids.values()) and all(re.fullmatch(HEX,v) for v in digests.values()), '후보 인수 불일치')
+    need(stat.S_IMODE(h.stat().st_mode) == 0o700 and raw(h/'quiesced') == stop_receipt(source_port,s),
+         '선택한 모드의 새 quiesce 영수증 필요')
+    revision, ids, digests = target['revision'], target['images'], target['units']
+    if source_port == '6433':
+        need(s.get('candidate') == target, '이 hold에서 정지 전에 승인한 후보와 불일치')
     retained(h,s,source_port)
     candidates = {}
     for n in NAMES:
         require_previous_stop(h,n,s['old'][n])
         held_one(h,s,n)
         candidates[n] = raw(INPUT / unit(n))
-        need(sha(candidates[n]) == digests[n] and image(n,ids[n]) == {'id':ids[n],'rev':revision} and
-             image(n,prod(n)) == s['images'][n], '후보 digest/revision 또는 이전 :prod 불일치')
-    metadata(h/'resume-attempt.json', {'revision':revision,'images':ids,'units':digests,'profile':s['profile']})
+        verify_candidate_input(n,candidates[n],target)
+        need(image(n,prod(n)) == s['images'][n], '이전 :prod 불일치')
+    metadata(h/'resume-attempt.json', {**target,'profile':s['profile']})
     for n in NAMES:
         if candidates[n] != raw(UNIT/unit(n)):
             install_unit(n, candidates[n])
@@ -877,10 +905,18 @@ def main():
         p.add_argument('hold', type=Path)
         p.add_argument('--already-pooled', dest='source_port', action='store_const', const='6433', default='5433',
                        help='이미 6433인 d를 정지하고 같은 pooled endpoint에서 교체')
-        if cmd == 'resume':
-            for arg in ('revision','collector_id','issuer_id','collector_unit_sha256','issuer_unit_sha256'):
-                p.add_argument(arg)
+        for arg in ('revision','collector_id','issuer_id','collector_unit_sha256','issuer_unit_sha256'):
+            p.add_argument(arg, nargs='?' if cmd == 'quiesce' else None)
     a = parser.parse_args()
+    values = (a.revision, a.collector_id, a.issuer_id, a.collector_unit_sha256, a.issuer_unit_sha256)
+    target = None
+    if a.action == 'resume' or a.source_port == '6433':
+        if not all(values):
+            parser.error('후보 revision·양쪽 image ID·unit SHA-256을 모두 지정해야 합니다')
+        target = release_candidate(a.revision,{C:a.collector_id,I:a.issuer_id},
+                                   {C:a.collector_unit_sha256,I:a.issuer_unit_sha256})
+    elif any(v is not None for v in values):
+        parser.error('direct quiesce는 후보 인수를 받지 않습니다')
     need(os.geteuid() == 0 and socket.gethostname().split('.')[0] == 'kapu' and os.uname().machine == 'x86_64', 'kapu rootful amd64 전용')
     need(a.hold.parent == STORE and re.fullmatch('d-cutover-[a-zA-Z0-9][a-zA-Z0-9-]{0,63}',a.hold.name), 'hold 경로 불일치')
     trusted(Path(__file__).resolve())
@@ -899,9 +935,9 @@ def main():
         stack.callback(os.close,fd)
         fcntl.flock(fd,fcntl.LOCK_EX | fcntl.LOCK_NB)
         if a.action == 'quiesce':
-            quiesce(a.hold, a.source_port)
+            quiesce(a.hold, a.source_port, target)
         else:
-            resume(a.hold, a.revision, {C:a.collector_id,I:a.issuer_id}, {C:a.collector_unit_sha256,I:a.issuer_unit_sha256}, a.source_port)
+            resume(a.hold, target, a.source_port)
 
 
 if __name__ == '__main__':

@@ -20,17 +20,18 @@ sudo -n python3 -I scripts/deploy/kapu-d-cutover.py resume "$hold" \
   "$COLLECTOR_CONTAINER_FILE_SHA256" "$ISSUER_CONTAINER_FILE_SHA256"
 ```
 
-**카드 창(6433→6433):** 첫 창의 풀링 수용 후에만 사용한다. 첫 창의 hold를 재개하지 않고 카드 창 전용 새 hold에 현재 실행 세대부터 다시 기록한다. **두 명령 모두** `--already-pooled`가 필요하다.
+**카드 창(6433→6433):** 첫 창의 풀링 수용 후에만 사용한다. 첫 창의 hold 대신 새 hold를 만들고, **정지 전에** 카드 창의 승인된 산출물 목록에서 full revision, 두 이미지 ID와 두 unit SHA-256을 가져온다. 두 명령에 `--already-pooled`와 같은 후보 식별자를 전달한다.
 
 ```bash
 hold="/var/lib/hololive-collector-d-cutover/d-cutover-card-${CHANGE_ID:?}"
-sudo -n python3 -I scripts/deploy/kapu-d-cutover.py quiesce --already-pooled "$hold"
+candidate=("$FULL_REVISION" "$COLLECTOR_SHA256_IMAGE_ID" "$ISSUER_SHA256_IMAGE_ID"
+           "$COLLECTOR_CONTAINER_FILE_SHA256" "$ISSUER_CONTAINER_FILE_SHA256")
+sudo -n python3 -I scripts/deploy/kapu-d-cutover.py quiesce --already-pooled "$hold" "${candidate[@]}"
 # 모든 writer 정지·복구 시점 확인과 승인된 카드 마이그레이션이 끝난 뒤:
-sudo -n python3 -I scripts/deploy/kapu-d-cutover.py resume --already-pooled "$hold" \
-  "$FULL_REVISION" "$COLLECTOR_SHA256_IMAGE_ID" "$ISSUER_SHA256_IMAGE_ID" \
-  "$COLLECTOR_CONTAINER_FILE_SHA256" "$ISSUER_CONTAINER_FILE_SHA256"
+sudo -n python3 -I scripts/deploy/kapu-d-cutover.py resume --already-pooled "$hold" "${candidate[@]}"
 ```
 
+카드 창은 두 후보 이미지가 각각 정지할 실행 이미지와 다른 ID이며 다른 revision인지 확인한다. 이미지에 기록된 revision·역할·아키텍처와 unit 원본 digest를 검증한 뒤에만 이 후보와 현재 실행 세대·hold inode를 `previous.json`에 함께 보존한다. 카드 창의 두 unit은 풀링 수용 시와 같은 바이트여도 된다. `resume`은 다른 hold, 정지 전 후보가 없는 영수증, 후보 인수 중 하나라도 달라진 요청을 거부한다. 새 태그나 재빌드 이미지를 같은 revision이라는 이유로 대체할 수 없다.
 revision은 40자리, image ID 두 개는 검증되어 rootful 저장소에 이미 있는 `sha256:<64 hex>`이고 마지막 두 값은 **해당 revision에서 승인한 두 `.container` 파일 원본의 SHA-256**(접두사 없음)이다. 실행 호스트 파일에서 기대 해시를 역산하지 않는다. helper 자체와 전달 파일의 provenance도 실행 전에 별도로 검증한다.
 root만 수정할 수 있는 배포 트리에서 실행한다. 후보 적재 때 실제 `:prod` 두 개를 먼저 이동하면 이전 실행 증거를 잃으므로 helper는 거부한다. hold에는 비밀 env/key가 아닌 파일 식별 metadata·profile·unit·보존 태그 식별자만 남긴다.
 영수증은 `/var/lib/hololive-collector-d-cutover`(`root`, `0700`)에 보관한다. 이 경로의 소유권·권한이 맞지 않으면 인수하거나 고치지 않고 중단한다. `resume`은 없는 경로를 만들지 않는다. 수집기 데이터·로그가 있는 `/var/lib/hololive-collectors`의 권한은 바꾸지 않는다.

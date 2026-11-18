@@ -223,8 +223,11 @@ class Cutover(unittest.TestCase):
                 return json.dumps({'INVOCATION_ID':inv})
             return json.dumps({'INVOCATION_ID': self.journal[n]})
 
+    def target(self):
+        return d.release_candidate(self.rev, self.ids, self.digests)
+
     def resume(self, source_port='5433'):
-        d.resume(self.h,self.rev,self.ids,self.digests,source_port)
+        d.resume(self.h,self.target(),source_port)
 
     def running_pair(self, installed_port='5433', runtime_port=None):
         self.h = self.root / 'd-cutover-running'
@@ -333,10 +336,12 @@ class Cutover(unittest.TestCase):
     def exercise_release(self, source_port):
         candidates = dict(self.executions)
         h = self.running_pair(source_port)
-        d.quiesce(h,source_port)
+        target = self.target() if source_port == '6433' else None
+        d.quiesce(h,source_port,target)
         previous = json.loads((h/'previous.json').read_bytes())
         self.assertEqual(previous['previous_endpoint']['port'],int(source_port))
         self.assertEqual(previous['old'],self.executions)
+        self.assertEqual(previous.get('candidate'),target)
         collector_unit = self.units / d.unit(d.C)
         inode = d.number(collector_unit)
         self.executions = candidates
@@ -364,20 +369,80 @@ class Cutover(unittest.TestCase):
     def test_already_pooled_refuses_direct_running_collector(self):
         h = self.running_pair('6433',runtime_port='5433')
         with self.assertRaisesRegex(d.Refused,'실행 환경 불일치'):
-            d.quiesce(h,'6433')
+            d.quiesce(h,'6433',self.target())
         self.assertFalse(h.exists())
         self.assertFalse(self.calls)
 
     def test_pooled_resume_refuses_changed_previous_endpoint(self):
         h = self.running_pair('6433')
-        d.quiesce(h,'6433')
+        d.quiesce(h,'6433',self.target())
         state = json.loads((h/'previous.json').read_bytes())
         state['previous_endpoint']['port'] = 5433
         (h/'previous.json').write_text(json.dumps(state))
-        with self.assertRaisesRegex(d.Refused,'원래 endpoint 영수증 불일치'):
+        with self.assertRaisesRegex(d.Refused,'quiesce 영수증'):
             self.resume('6433')
         self.assertFalse((h/'resume-attempt.json').exists())
         self.assertTrue(all(d.mask(n).is_symlink() for n in d.NAMES))
+
+    def test_pooled_quiesce_requires_a_new_verified_pair_before_either_stop(self):
+        h = self.running_pair('6433')
+        target = self.target()
+        old_ids = {n:i['id'] for n,i in self.state['images'].items()}
+        old_revision = self.state['images'][d.C]['rev']
+        cases = (
+            (None,'별도 후보 identity'),
+            ({**target, 'revision':old_revision, 'images':old_ids},'재사용'),
+            ({**target, 'revision':old_revision},'재사용'),
+            ({**target, 'images':{**self.ids,d.I:old_ids[d.I]}},'재사용'),
+            ({**target, 'revision':'c'*40},'이미지 revision'),
+            ({**target, 'units':{**self.digests,d.I:'c'*64}},'unit digest'),
+        )
+        for invalid,reason in cases:
+            with self.subTest(reason=reason), self.assertRaisesRegex(d.Refused,reason):
+                d.quiesce(h,'6433',invalid)
+            self.assertFalse(h.exists())
+            self.assertFalse(self.calls)
+
+    def test_pooled_resume_only_opens_the_candidate_from_this_hold(self):
+        h = self.running_pair('6433')
+        target = self.target()
+        d.quiesce(h,'6433',target)
+        alternate = 'sha256:' + 'c'*64
+        self.tags[alternate] = {'id':alternate,'rev':self.rev}
+        old = self.state['images']
+        candidates = [
+            {**target, 'revision':old[d.C]['rev'], 'images':{n:i['id'] for n,i in old.items()}},
+            {**target, 'revision':'f'*40},
+            *({**target, 'images':{**self.ids,n:alternate}} for n in d.NAMES),
+            *({**target, 'units':{**self.digests,n:'f'*64}} for n in d.NAMES),
+        ]
+        self.calls.clear()
+        for replacement in candidates:
+            with self.subTest(candidate=replacement), self.assertRaisesRegex(d.Refused,'승인한 후보와 불일치'):
+                d.resume(h,replacement,'6433')
+            self.assertFalse(self.calls)
+            self.assertFalse((h/'resume-attempt.json').exists())
+            for n in d.NAMES:
+                self.assertEqual(self.tags[d.prod(n)],old[n])
+                self.assertEqual(d.number(d.mask(n)),d.number(d.mask_anchor(h,n)))
+
+        foreign = self.root / 'd-cutover-other'
+        foreign.mkdir(mode=0o700)
+        for f in ('previous.json','quiesced'):
+            (foreign/f).write_bytes((h/f).read_bytes())
+        with self.assertRaisesRegex(d.Refused,'다른 hold/boot'):
+            d.resume(foreign,target,'6433')
+        self.assertFalse(self.calls)
+        self.assertFalse((foreign/'resume-attempt.json').exists())
+
+        state = json.loads((h/'previous.json').read_bytes())
+        replacement = {**target, 'images':{**self.ids,d.C:alternate}}
+        state['candidate'] = replacement
+        (h/'previous.json').write_text(json.dumps(state))
+        with self.assertRaisesRegex(d.Refused,'quiesce 영수증'):
+            d.resume(h,replacement,'6433')
+        self.assertFalse(self.calls)
+        self.assertFalse((h/'resume-attempt.json').exists())
 
     def resume_inputs(self):
         self.patch('gate',lambda *args:None)
