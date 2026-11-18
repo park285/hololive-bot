@@ -70,39 +70,6 @@ if [[ "$target" == --render-env ]]; then
     fi
 fi
 
-render_env=false
-app_version_override=
-target="${1:-}"
-if [[ "$target" == --render-env ]]; then
-    [[ "$#" -eq 3 || "$#" -eq 5 ]] \
-        || die "usage: --render-env <unit-name> <private-output-directory> [--app-version <version>]"
-    render_env=true
-    target="$2"
-    case "$target" in
-        hololive-api|hololive-alarm-worker|hololive-youtube-collector-c) ;;
-        *) die "unsupported render-env unit" ;;
-    esac
-    if [[ "$#" -eq 5 ]]; then
-        [[ "$4" == --app-version && "$target" == hololive-api ]] \
-            || die "--app-version is only supported for hololive-api"
-        # retained pair의 dropin_contents와 같은 허용 문자 계약을 쓴다.
-        [[ "$5" =~ ^[0-9A-Za-z.+-]+$ ]] || die "retained APP_VERSION is not safe for a Quadlet drop-in"
-        app_version_override="$5"
-    fi
-    [[ -d "$3" && ! -L "$3" && -O "$3" ]] \
-        || die "render-env output must be a caller-owned private directory"
-    [[ "$(stat -c '%a' -- "$3")" == 700 ]] \
-        || die "render-env output directory mode must be 0700"
-    env_dir="$(cd -- "$3" && pwd -P)"
-    case "$env_dir/" in
-        /run/hololive-bot/*|"$run_dir/"*) die "render-env output must not use the runtime directory" ;;
-    esac
-    # 새 전용 디렉터리만 받으며 숨김 파일·끊어진 symlink도 기존 출력으로 본다.
-    if ! (shopt -s nullglob dotglob; entries=("$env_dir/"*); [[ "${#entries[@]}" -eq 0 ]]); then
-        die "render-env output directory must be empty"
-    fi
-fi
-
 # systemd EnvironmentFile로 읽히는 compose.env의 형식(KEY=VALUE, 유효한 key, 중복 없음, 앞뒤 공백 없음)을 확인한다.
 # 메시지에는 key 이름만 남긴다.
 validate_env_file_syntax() {
