@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 
 
 C = 'hololive-youtube-collector-d'
@@ -340,17 +341,28 @@ def healthy(name, g, wait=False):
          '비정상/교체된 컨테이너: ' + name)
 
 
+def stop_invocation(name, invocation):
+    seconds, micros = divmod(time.time_ns() // 1000, 1_000_000)
+    run('systemctl', 'stop', name + '.service', timeout=125)
+    evidence = run('journalctl', '--boot', '--quiet', '--no-pager', '-n', '1', '-o', 'json',
+                   '--output-fields=INVOCATION_ID', f'--since=@{seconds}.{micros:06}',
+                   '_PID=1', 'UNIT=' + name + '.service', 'INVOCATION_ID=' + invocation,
+                   'JOB_TYPE=stop', 'MESSAGE_ID=de5b426a63be47a7b6ac3eaac82e2f6f')
+    need(evidence and json.loads(evidence).get('INVOCATION_ID') == invocation, '이번 manager stop 미확인: ' + name)
+
+
 def held_one(h, state, name, stopped=None):
     p = mask(name)
     need(p.is_symlink() and os.readlink(p) == '/dev/null' and
          number(p) == number(mask_anchor(h,name)) == json.loads(raw(h / (name + '.mask'))) and
          prop(name, 'LoadState') == 'masked', '소유 mask 불일치: ' + name)
+    need(prop(name, 'MainPID') == '0' and prop(name, 'ControlPID') == '0', '차단한 unit에 PID가 남아 있음')
     active = prop(name, 'ActiveState')
     if active != 'inactive':
         inv = raw(h / (name + '.stopped')).decode() if stopped is None else stopped
         need(name == I and active == 'failed' and re.fullmatch('[0-9a-f]{32}', inv) and prop(name, 'InvocationID') == inv and
-             prop(name, 'Result') == 'exit-code' and prop(name, 'ExecMainCode') == '1' and prop(name, 'ExecMainStatus') == '143' and
-             prop(name, 'MainPID') == '0' and prop(name, 'ControlPID') == '0', '동일 issuer stop/143 증거 없음')
+             prop(name, 'Result') == 'exit-code' and prop(name, 'ExecMainCode') == '1' and prop(name, 'ExecMainStatus') == '143',
+             '동일 issuer stop/143 증거 없음')
     absent('container', name)
     absent('container', state['old'][name]['cid'])
 
@@ -439,7 +451,8 @@ def quiesce(h):
              json.loads(raw(h / (n + '.mask'))), '정지 전 mask 불일치')
         origin(n,True)
     retained(h,s)
-    for n in NAMES:
+    # collector 종료가 issuer에 세대 반납을 요청하기 전에 issuer의 실행 세대를 직접 정지한다.
+    for n in (I,C):
         g = s['old'][n]
         need(image(n,prod(n)) == s['images'][n] and generation(n) == g, '정지 전 실행 세대 변경')
         if n == C:
@@ -447,7 +460,7 @@ def quiesce(h):
         else:
             issuer(g)
         need(generation(n) == g, '정지 직전 세대 변경')
-        run('systemctl','stop',n + '.service',timeout=125)
+        stop_invocation(n, g['inv'])
         record(h / (n + '.stopped'), g['inv'].encode())
         held_one(h,s,n)
     for n in NAMES:
@@ -577,7 +590,7 @@ def resume(h, revision, ids, digests):
             except (OSError,ValueError):
                 damaged = True
         run('systemctl','daemon-reload')
-        for n in NAMES:
+        for n in (I,C):
             try:
                 stopped = None
                 active = prop(n, 'ActiveState')
@@ -589,8 +602,11 @@ def resume(h, revision, ids, digests):
                     stopped = ''
                     if active in ('active','activating','deactivating','reloading'):
                         inv = prop(n,'InvocationID')
-                        run('systemctl','stop',n+'.service',timeout=125)
-                        if active == 'active' and re.fullmatch('[0-9a-f]{32}',inv):
+                        if not re.fullmatch('[0-9a-f]{32}', inv):
+                            run('systemctl','stop',n+'.service',timeout=125)
+                            raise Refused('정지한 후보의 invocation 미확인')
+                        stop_invocation(n, inv)
+                        if active == 'active':
                             stopped = inv
                             record(h/(n+'.candidate-stop'),inv.encode())
                 held_one(h,s,n,stopped)

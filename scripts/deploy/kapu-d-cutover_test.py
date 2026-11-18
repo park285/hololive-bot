@@ -46,7 +46,7 @@ class Cutover(unittest.TestCase):
         self.ids = {d.C:'sha256:'+'1'*64, d.I:'sha256:'+'2'*64}
         self.state = {'level':'s0:c908,c909','profile':'3'*64,'images':{},'old':{}}
         self.digests = {}
-        self.props = {n:{'ActiveState':'inactive', 'NRestarts':'0'} for n in d.NAMES}
+        self.props = {n:{'ActiveState':'inactive', 'NRestarts':'0', 'MainPID':'0', 'ControlPID':'0'} for n in d.NAMES}
         self.tags = {}
         for k,v in [('UNIT',self.units),('INPUT',self.input),('SYSTEM',self.system)]:
             self.patch(k,v)
@@ -85,6 +85,8 @@ class Cutover(unittest.TestCase):
         if args[:2] in [('systemctl','start'),('systemctl','stop')]:
             n = args[2].removesuffix('.service')
             self.props[n].update(ActiveState='active' if args[1] == 'start' else 'inactive', InvocationID='e'*32)
+        if args[0] == 'journalctl':
+            return json.dumps({'INVOCATION_ID': 'e'*32})
 
     def resume(self):
         d.resume(self.h,self.rev,self.ids,self.digests)
@@ -150,6 +152,11 @@ class Cutover(unittest.TestCase):
             self.resume()
         self.assertNotEqual(d.number(d.mask(d.I)), json.loads((self.h/(d.I+'.mask')).read_bytes()))
         self.assertFalse(any(c[:2] == ('systemctl','stop') for c in self.calls))
+
+    def test_completed_stop_without_matching_manager_event_is_not_a_receipt(self):
+        for result in ('', json.dumps({'INVOCATION_ID': 'c'*32})):
+            with patch.object(d, 'run', side_effect=['', result]), self.assertRaisesRegex(ValueError, 'stop 미확인'):
+                d.stop_invocation(d.I, 'b'*32)
 
     def test_143_requires_exact_deliberate_issuer_stop(self):
         self.props[d.I].update(ActiveState='failed', InvocationID='b'*32, Result='exit-code', ExecMainCode='1',

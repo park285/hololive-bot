@@ -12,6 +12,7 @@
 - PgBouncer 기동 health에 frontend/backend DNS 공개 확인을 추가했습니다. 정상 상태의 peer health와 별도 SQL 수용 검사는 유지하며, DNS 준비 전 성공 판정을 차단합니다.
 - **Pooler 전환·복구 안전성:** collector c·b에 이전 실행 pair를 보존하는 `quiesce/resume`과 영속 hold를 추가합니다. 재개 전 보관 drop-in과 실제 설치 후보를 검증하며 실패 시 direct writer를 자동 시작하지 않습니다. 중앙 앱의 effective pool 크기와 실행 pooler의 mount된 설정이 다르면 배포·재기동·복구를 거부하여 앱만 증설했을 때 예약 control이 backend 대기에 막히는 경로를 차단합니다. Fallback delta: none.
 - **SCRAM 역할 격리:** 원문이 달라도 pgx의 SCRAM 암호 준비 후 같아지는 역할 간·관리자 암호 중복을 DB 연결 전에 거부합니다. PostgreSQL/pgx 호환성 검사와 같은 비밀번호의 verifier 보존은 유지합니다. Fallback delta: none.
+- **최초 풀링 전환:** 새 배포 정의를 설치하기 전에 실행 중인 이전 writer와 실제 접속지를 보존합니다. 중앙 두 역할과 각 수집기는 실제 풀러 경유 SQL을 증명하기 전에는 업무를 시작하지 않습니다. 운영과 동일한 `pg_stat_statements` 기본 권한을 이용한 격리 시험을 추가했으며, 인증 역할에는 앱 데이터 권한을 부여하지 않습니다.
 
 ## v18.8.3 - 2026-11-18
 
