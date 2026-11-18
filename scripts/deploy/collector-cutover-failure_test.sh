@@ -31,6 +31,7 @@ def run(body, state, case):
     result = subprocess.run(
         ['bash', '-s', '--', str(state), case, str(root)],
         input=body, capture_output=True, text=True, timeout=20,
+        start_new_session=case.endswith('_group_TERM'),
     )
     return result
 
@@ -304,7 +305,7 @@ fixture_exit_status() {
 guard_cli() {
   local op="$1" unit="$2" anchor="$3" inode="$4" mask="$system_unit_dir/$2" guard="$system_unit_dir/$2.guard"
   printf 'guard %s %s\n' "$op" "$unit" >> "$fixture_root/calls"
-  if [[ "$op" == exit-status ]]; then fixture_exit_status "$unit" "$3" "$4"; return; fi
+  if [[ "$op" == exit-status ]]; then fixture_exit_status "$unit" "$3" "$4" || return 8; return 0; fi
   [[ "$(readlink "$anchor")" == /dev/null && "$(command stat -c '%d:%i' "$anchor")" == "$inode" ]] || return 8
   if [[ "$op" == arm && "$fixture_case" == maintenance_quiesce_mask_race && "$unit" == "$collector_unit" ]]; then
     command ln -s /dev/null "$mask" || return 8
@@ -313,11 +314,15 @@ guard_cli() {
   case "$op" in
     arm)
       (set -C; printf '%s\n' "$anchor" > "$guard") || return 8
+      [[ "$(systemctl show -p LoadState --value "$unit")" == loaded ]] || return 8
       systemctl daemon-reload || return 8
       if [[ "$unit" == "$collector_unit" && "$fixture_case" == *arm_collector_profile ]]; then
         printf 'other profile\n' > "$fixture_root/loaded.profile"
       fi
       [[ "$unit" != "$collector_unit" || "$fixture_case" != *guard_failure ]] ;;
+    undo-unmask)
+      [[ "$(systemctl show -p LoadState --value "$unit")" == masked && ! -e "$guard" ]] || return 8
+      ln -PT -- "$anchor" "$mask" && systemctl daemon-reload || return 8 ;;
     check|seal)
       [[ -f "$guard" && "$(<"$guard")" == "$anchor" ]] || return 8
       [[ "$unit" != "$collector_unit" || "$fixture_case" != *guard_check_failure ]] || return 8
@@ -360,6 +365,9 @@ python3() {
         test -f "$4/profile.json" ;;
       verify) test -f "$4/profile.json" ;;
       verify-live)
+        if [[ "$fixture_case" == *rollback_replaced && "$4" == */previous ]]; then
+          printf 9 > "$fixture_root/collector.cid"; printf '%032x\n' 3 > "$fixture_root/collector.invocation"; return 7
+        fi
         [[ "$5" == "$collector_container" ]] && cmp -s "$4/profile.json" "$fixture_root/loaded.profile" ;;
       verify-captured)
         [[ "$5" == "$collector_container" ]] && cmp -s "$4/pair.json" "$fixture_root/collector.generation" &&
@@ -388,6 +396,17 @@ install() {
     case "$1" in -o|-g) shift 2 ;; *) args+=("$1"); shift ;; esac
   done
   command install "${args[@]}"
+}
+rm() {
+  command rm "$@" || return
+  if [[ "$fixture_case" == *receipt_signal* && "$*" == "-- $hold/quiesced" ]]; then
+    if [[ "$fixture_case" == *receipt_signal_changed ]]; then printf '137\n' > "$fixture_root/issuer.exit"; fi
+    kill -TERM "$maintenance_owner_pid"
+  fi
+}
+sync() {
+  if [[ "$fixture_case" == *error_log_evidence_failure && "$2" == "$backup/guarded-stop.log" ]]; then return 8; fi
+  command sync "$@"
 }
 ln() {
   printf 'mask link %s\n' "${*: -1}" >>"$fixture_root/calls"
@@ -431,6 +450,7 @@ podman() {
     'container exists')
       [[ ! -f "$fixture_root/inventory-unavailable" ]] || return 125
       if [[ "$fixture_case" == *stop_leftover_id && "$3" == "$(printf '%064d' 3)" ]]; then return 0; fi
+      if [[ "$3" == "$(printf '%064d' 4)" && -e "$fixture_root/issuer.old-cid" ]]; then return 0; fi
       kind=collector
       [[ "$3" != "$issuer_container" && "$3" != "$(printf '%064d' 4)" ]] || kind=issuer
       [[ "$(cat "$fixture_root/$kind.running")" == true || -e "$fixture_root/$kind.leftover" ]]
@@ -481,7 +501,9 @@ podman() {
           if [[ -e "$fixture_root/$kind.unhealthy" ]]; then printf 'unhealthy\n'; else printf 'healthy\n'; fi ;;
         *State.StartedAt.UnixNano*)
           local cid=3; [[ "$kind" != issuer ]] || cid=4
-          printf '%064d %s %s 42\n' "$cid" "$(hex_of "$value")" "$(<"$fixture_root/$kind.started")" ;;
+          if [[ -f "$fixture_root/$kind.cid" ]]; then cid="$(<"$fixture_root/$kind.cid")"; fi
+          printf '%064d %s %s 42\n' "$cid" "$(hex_of "$value")" "$(<"$fixture_root/$kind.started")"
+          if [[ "$fixture_case" == *capture_cid_changed && "$kind" == issuer ]]; then printf 9 > "$fixture_root/$kind.cid"; fi ;;
         *image.revision*) revision_of "$value" ;;
         '{{.Image}}') hex_of "$value" ;;
         *Mounts*) printf '%s/socket\n' "$fixture_root" ;;
@@ -508,6 +530,7 @@ podman() {
     'logs --since')
       case "$fixture_case:${*: -1}" in
         *logs_collector*:"$collector_container") return 5 ;;
+        *error_log_replaced:"$collector_container") printf 9 > "$fixture_root/collector.cid"; printf 'ERR replaced\n' ;;
         *error_log*:"$collector_container") printf 'ERR injected runtime error\n' ;;
         *) printf 'runtime ready\n' ;;
       esac
@@ -516,6 +539,14 @@ podman() {
   esac
 }
 journalctl() {
+  if [[ "${11-}" == JOB_TYPE=start ]]; then
+    local unit="${9#UNIT=}" id invocation
+    [[ "$8" == _PID=1 && "${12}" == JOB_RESULT=done && "${13}" == MESSAGE_ID=39f53479d3a045ac8e11786248231fbf ]] || return 2
+    read -r id invocation < "$fixture_root/$unit.start-job" || return 8
+    [[ "${10}" == "JOB_ID=$id" ]] || return 8
+    printf '{"INVOCATION_ID":"%s"}\n' "$invocation"
+    return 0
+  fi
   local unit="${11#UNIT=}" invocation="${12#INVOCATION_ID=}" since="${9#--since=}" id at
   [[ "${10}" == _PID=1 ]] || return 2
   printf '%s\n' "$since" > "$fixture_root/$unit.since"
@@ -563,8 +594,11 @@ systemctl() {
         return 0
       fi
       case "$3" in
+        Job) [[ ! -e "$fixture_root/$kind.probe-failed" ]] || return 8; printf '\n' ;;
+        NRestarts)
+          if [[ "$fixture_case" == *capture_restarted && "$kind" == issuer ]]; then printf '1\n'; else printf '0\n'; fi ;;
         LoadState)
-          if [[ -L "$system_unit_dir/${*: -1}" ]]; then printf 'masked\n'; else printf 'loaded\n'; fi ;;
+          if [[ -L "$system_unit_dir/${*: -1}" || -e "$fixture_root/$kind.masked-cache" ]]; then printf 'masked\n'; else printf 'loaded\n'; fi ;;
         ActiveState)
           if [[ "$(cat "$fixture_root/$kind.running")" == true ]]; then printf 'active\n'
           elif [[ -f "$fixture_root/$kind.exit" ]]; then printf 'failed\n'; else printf 'inactive\n'; fi ;;
@@ -581,10 +615,23 @@ systemctl() {
       esac ;;
     unmask)
       [[ "$fixture_case" != *unmask_failure || "$kind" != collector ]] || return 8
-      rm "$system_unit_dir/$2" ;;
+      if [[ "$fixture_case" == *peer_probe_failure && "$kind" == collector ]]; then
+        touch "$fixture_root/$kind.probe-failed"; return 8
+      fi
+      rm "$system_unit_dir/$2" || return 8
+      if [[ "$fixture_case" == *unmask_reload* && "$kind" == issuer ]]; then
+        touch "$fixture_root/$kind.masked-cache"
+        if [[ "$fixture_case" == *unmask_reload_old_cid ]]; then touch "$fixture_root/issuer.old-cid"; fi
+        return 8
+      fi ;;
     is-active) [[ "$(cat "$fixture_root/$kind.running")" == true ]] ;;
 
-    restart)
+    restart|--show-transaction)
+      if [[ "$1" == --show-transaction ]]; then
+        shift; [[ "$1" == start ]] || return 2
+        local job=17; [[ "$kind" == issuer ]] || job=18
+        printf 'Enqueued anchor job %s %s/start.\n' "$job" "$2" >&2
+      fi
       admitted "$2" || return 8
       rm -f "$fixture_root/$kind.exit"
       printf '%032x\n' 2 > "$fixture_root/$kind.invocation"
@@ -624,7 +671,17 @@ systemctl() {
       fi
       printf true > "$fixture_root/$kind.running"
       if [[ "$fixture_case" == *rollback_issuer_failure && "$kind" == issuer ]]; then touch "$fixture_root/issuer.socket-failed"; fi
-      if [[ "$fixture_case" == maintenance_resume_signal_TERM && "$kind" == issuer ]]; then kill -TERM "$maintenance_owner_pid"; fi
+      if [[ "$1" == start ]]; then
+        printf '%s %s\n' "$job" "$(<"$fixture_root/$kind.invocation")" > "$fixture_root/$2.start-job"
+        if [[ "$kind" == issuer ]]; then
+          case "$fixture_case" in
+            *capture_inv_changed) printf '%032x\n' 3 > "$fixture_root/$kind.invocation" ;;
+            *client_unknown) return 9 ;;
+            maintenance_resume_signal_group_TERM) kill -s TERM -- "-$maintenance_owner_pid" ;;
+            maintenance_resume_signal_*) kill -s "${fixture_case##*_}" "$maintenance_owner_pid" ;;
+          esac
+        fi
+      fi
       if [[ "$fixture_case" == signal_* && "$kind" == collector && "$value" == new ]]; then
         kill -s "${fixture_case#signal_}" "$cutover_restore_owner_pid"
       fi
@@ -632,7 +689,7 @@ systemctl() {
     stop)
       if [[ "$fixture_case" == maintenance_* || "$fixture_case" == transition_* ]]; then
         [[ ! -L "$system_unit_dir/$2" && -f "$system_unit_dir/$2.guard" ]] || return 8
-        if admitted "$issuer_unit" || admitted "$collector_unit"; then return 8; fi
+        if [[ "$mode" == quiesce ]] && { admitted "$issuer_unit" || admitted "$collector_unit"; }; then return 8; fi
       fi
       [[ "$fixture_case" != *stop_failure || "$kind" != collector ]] || return 8
       if [[ "$fixture_case" == *stop_peer_restarted && "$kind" == issuer ]]; then
@@ -684,7 +741,8 @@ def image_file(state, ref):
 collector_prod, issuer_prod = 'localhost/hololive-youtube-collector:prod', 'localhost/hololive-youtube-po-sandbox:prod'
 collector_rollback = f'localhost/hololive-youtube-collector:rollback-{change}'
 issuer_rollback = f'localhost/hololive-youtube-po-sandbox:rollback-{change}'
-mutations = ('podman tag ', 'podman load ', 'podman image rm ', 'systemctl restart ', 'systemctl stop ', 'mask link ', 'guard arm ', 'guard seal ', 'systemctl unmask ', 'systemctl daemon-reload', 'pair activate ')
+held_start = 'systemctl --show-transaction start '
+mutations = ('podman tag ', 'podman load ', 'podman image rm ', 'systemctl restart ', held_start, 'systemctl stop ', 'mask link ', 'guard arm ', 'guard seal ', 'guard undo-unmask ', 'systemctl unmask ', 'systemctl daemon-reload', 'pair activate ')
 central_cases = {
     # case: (exit status, restored to previous pair)
     'success': (0, False), 'absent_success': (0, False),
@@ -711,6 +769,12 @@ runs = [('c', case) for case in central_cases] + [('b', case) for case in (
     'success', 'rollback', 'check_success', 'check_wrong_profile', 'pooled_query_failure', 'transition_success',
     'check_wrong_instance', 'check_waiting_handoff',
     'transition_error_log', 'transition_wrong_endpoint', 'rollback_cross', 'rollback_masked_endpoint', 'rollback_missing_endpoint')]
+recovery_cases = (
+    'receipt_signal', 'receipt_signal_changed', 'unmask_reload', 'unmask_reload_old_cid',
+    'client_unknown', 'capture_inv_changed', 'capture_cid_changed', 'capture_restarted',
+    'error_log_replaced', 'peer_probe_failure', 'error_log_guard_failure', 'error_log_evidence_failure',
+    'signal_INT', 'signal_HUP', 'signal_group_TERM',
+)
 maintenance_cases = (
     'success', 'reboot', 'mask_failure', 'stop_failure', 'activation_failure',
     'collector_143', 'guard_failure', 'guard_check_failure', 'foreign_guard', 'stop_control_pid', 'legacy_receipt',
@@ -728,6 +792,7 @@ maintenance_cases = (
     'installed_unit_changed', 'helper_changed', 'migration_changed', 'source_manifest_changed',
     'candidate_image_overlay_changed', 'candidate_endpoint_overlay_changed',
     'rollback_cross', 'rollback_coordinated', 'capacity_drift', 'capacity_missing', 'capacity_query_failed',
+    'rollback_replaced', *recovery_cases,
 )
 runs += [(slot, 'maintenance_' + case) for slot in slots for case in maintenance_cases
          if (slot == 'c' or not case.startswith('capacity_')) and (slot == 'b' or case != 'installed_unit_changed')]
@@ -1053,16 +1118,24 @@ for slot, case in runs:
                     continue
                 unit_path.write_text(installed_definition)
                 (state / 'live-pgbouncer.ini').unlink()
-                failed_restore = scenario in ('rollback_image', 'rollback_profile', 'rollback_unhealthy', 'rollback_issuer_failure')
+                failed_restore = scenario in ('rollback_image', 'rollback_profile', 'rollback_unhealthy', 'rollback_issuer_failure', 'rollback_replaced')
                 before = len(calls_now())
                 result = invoke('rollback', scenario if failed_restore else '')
                 if failed_restore:
                     require(result.returncode != 0 and 'previous collector/issuer restored' not in result.stdout,
                             f'{slot}: ready does not hide the failed restored runtime check', result)
+                    if scenario == 'rollback_replaced':
+                        stopped = [c for c in calls_now()[before:] if c.startswith('systemctl stop ')]
+                        require(stopped == [f'systemctl stop {issuer_unit}'] and guards[1].is_file() and
+                                (state / 'collector.running').read_text() == 'true' and
+                                not (hold / 'quiesced').exists() and '[OUTCOME] unconfirmed:' in result.stderr,
+                                f'{slot}: held rollback never stops replacement or certifies it as the original', result)
+                        assert_new_manager_blocks()
+                        continue
                     assert_held(result)
                     reopened = [issuer_unit] if scenario == 'rollback_issuer_failure' else [issuer_unit, collector_unit]
                     require([c for c in calls_now()[before:] if c.startswith('guard arm ')] == [f'guard arm {u}' for u in reopened] and
-                            (hold / 'quiesced').read_text() == 'guarded-stop-v1\n',
+                            (hold / 'quiesced').is_file() and (hold / 'quiesced').read_text() == 'guarded-stop-v1\n',
                             f'{slot}: failed manual rollback re-holds only opened units', result)
                     continue
                 require(result.returncode == 0 and not hold.exists() and all(not m.is_symlink() for m in masks),
@@ -1074,7 +1147,7 @@ for slot, case in runs:
                         f'{slot}: coordinated rollback retains the exact previous unit', result)
             else:
                 failure = scenario if scenario in ('activation_failure', 'candidate_check_failure', 'pooled_query_failure',
-                                                   'substitution_failure', 'error_log', 'unmask_failure', 'signal_TERM', 'error_log_seal_failure') else ''
+                                                   'substitution_failure', 'error_log', 'unmask_failure', 'signal_TERM', 'error_log_seal_failure', *recovery_cases) else ''
                 result = invoke('resume', failure)
                 success = scenario in ('success', 'reboot')
                 require((result.returncode == 0) == success, f'{slot} {scenario}: resume outcome', result)
@@ -1086,8 +1159,8 @@ for slot, case in runs:
                             f'{slot}: successful resume releases ownership', result)
                     require((release / 'candidate/unit.container').read_text() == candidate_definition,
                             f'{slot}: candidate uses actual installed unit', result)
-                    require([c for c in subsequent if c.startswith('systemctl restart ')] ==
-                            [f'systemctl restart {u}' for u in (issuer_unit, collector_unit)],
+                    require([c for c in subsequent if c.startswith((held_start, 'systemctl restart '))] ==
+                            [held_start + u for u in (issuer_unit, collector_unit)],
                             f'{slot}: issuer-first resume', result)
                     require(all((state / f'{k}.runtime').read_text() == 'new' for k in ('issuer', 'collector')),
                             f'{slot}: candidate pair running', result)
@@ -1099,10 +1172,47 @@ for slot, case in runs:
                     require((release / 'previous/unit.container').read_text() == installed_definition and
                             not (state / 'unreviewed-helper-ran').exists(),
                             f'{slot}: recovery unit retained and unverified helper never executed', result)
+                    if scenario in recovery_cases or scenario == 'signal_TERM':
+                        stops = [c for c in subsequent if c.startswith('systemctl stop ')]
+                        starts = [c for c in subsequent if c.startswith((held_start, 'systemctl restart '))]
+                        receipt = hold / 'quiesced'
+                        if scenario.startswith(('receipt_signal', 'unmask_reload')):
+                            intact = scenario in ('receipt_signal', 'unmask_reload')
+                            require(not stops and not starts and
+                                    [c for c in subsequent if c.startswith('guard undo-unmask ')] ==
+                                    ([f'guard undo-unmask {issuer_unit}'] if scenario == 'unmask_reload' else []) and
+                                    receipt.exists() == intact, f'{label}: only verified pre-start masks can be restored', result)
+                            if scenario.startswith('receipt_signal'):
+                                require(result.returncode == 143 and not any(c.startswith('systemctl unmask ') for c in subsequent),
+                                        f'{label}: cancellation during receipt invalidation stays before unmask', result)
+                            if intact:
+                                assert_held(result)
+                                require(receipt.read_text() == 'guarded-stop-v1\n', f'{label}: prior managed hold retained', result)
+                        elif scenario.startswith('signal_'):
+                            require(result.returncode == {'TERM': 143, 'INT': 130, 'HUP': 129}[scenario.rsplit('_', 1)[1]] and
+                                    starts == [held_start + issuer_unit] and stops == [f'systemctl stop {issuer_unit}'] and
+                                    receipt.read_text() == 'guarded-stop-v1\n', f'{label}: cancel stops only the one launched job', result)
+                            assert_held(result)
+                        else:
+                            both_started = scenario.startswith('error_log_')
+                            issuer_stopped = both_started or scenario in ('peer_probe_failure', 'client_unknown')
+                            expected_stops = ([issuer_unit] if issuer_stopped else []) + (
+                                [collector_unit] if scenario == 'error_log_evidence_failure' else [])
+                            require(starts == [held_start + u for u in ([issuer_unit, collector_unit] if both_started else [issuer_unit])] and
+                                    stops == [f'systemctl stop {u}' for u in expected_stops] and
+                                    (state / 'issuer.running').read_text() == ('false' if issuer_stopped else 'true') and
+                                    (state / 'collector.running').read_text() == ('true' if both_started and collector_unit not in expected_stops else 'false') and
+                                    not receipt.exists() and '[OUTCOME] unconfirmed:' in result.stderr,
+                                    f'{label}: only independently proven first generations stopped; no receipt', result)
+                        assert_new_manager_blocks()
+                        continue
                     if scenario == 'substitution_failure':
-                        require('[OUTCOME] unconfirmed:' in result.stderr and not (hold / 'quiesced').exists(),
-                                f'{slot}: failed start with exit 143 is not a managed stop', result)
-                    if scenario in ('substitution_failure', 'unmask_failure', 'signal_TERM', 'error_log', 'error_log_seal_failure'):
+                        require('[OUTCOME] unconfirmed:' in result.stderr and not (hold / 'quiesced').exists() and
+                                not masks[0].is_symlink() and guards[0].is_file() and masks[1].is_symlink() and
+                                all((state / f'{kind}.running').read_text() == 'false' for kind in ('issuer', 'collector')) and
+                                not any(c.startswith('systemctl stop ') for c in subsequent),
+                                f'{slot}: failed start with exit 143 is guarded, never adopted as a managed stop', result)
+                    if scenario in ('substitution_failure', 'unmask_failure', 'error_log', 'error_log_seal_failure'):
                         reopened = [issuer_unit, collector_unit] if scenario.startswith('error_log') else [issuer_unit]
                         require([c for c in subsequent if c.startswith('guard arm ')] == [f'guard arm {u}' for u in reopened],
                                 f'{slot}: only reopened units acquire fresh admission guards', result)
@@ -1116,7 +1226,7 @@ for slot, case in runs:
                     if scenario == 'pooled_query_failure':
                         require(not any(c.startswith(mutations) for c in subsequent),
                                 f'{slot}: failed pooled SQL before activation retains the hold', result)
-                    if scenario not in ('foreign_hold', 'incomplete_hold', 'error_log_seal_failure'):
+                    if scenario not in ('foreign_hold', 'incomplete_hold', 'error_log_seal_failure', 'substitution_failure'):
                         assert_held(result)
                     if scenario in ('candidate_image_overlay_changed', 'candidate_endpoint_overlay_changed'):
                         require(not any(c.startswith(mutations) for c in subsequent) and
@@ -1125,7 +1235,7 @@ for slot, case in runs:
                     if scenario.startswith('capacity_'):
                         require(not any(c.startswith(mutations) for c in subsequent) and (release / 'previous/profile.json').exists(),
                                 f'{slot}: capacity refusal preserves hold and recovery before effects', result)
-                    if scenario not in ('substitution_failure', 'error_log', 'unmask_failure', 'signal_TERM', 'error_log_seal_failure'):
+                    if scenario not in ('substitution_failure', 'error_log', 'unmask_failure', 'error_log_seal_failure'):
                         require(not any(c.startswith(('systemctl restart ', 'systemctl unmask ')) for c in subsequent),
                                 f'{slot} {scenario}: validation fails before unmask or activation', result)
             print(f'[PASS] {slot} maintenance {scenario}')

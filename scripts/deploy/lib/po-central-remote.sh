@@ -45,7 +45,7 @@ hold="$remote_root/po-$slot.hold"
 lock="$remote_root/po-$slot.lock"
 system_unit_dir=/etc/systemd/system
 hold_owned=false
-declare -A release_attempted=()
+declare -A release_attempted=() launched_inv=() launched_gen=() failed_start_job=() failed_start_since=()
 [[ "$(stat -c '%u:%g %a' "$staging")" == '0:0 700' ]] || { echo "$host_label staged artifacts are not root-private" >&2; exit 1; }
 cd "$current"
 # 재개 입력 검증은 staged helper를 실행하기 전에 끝낸다. b의 current는 source checkout이 아니라
@@ -152,11 +152,13 @@ container_absent() {
   [[ "$exists" == 1 ]] || { echo "container absence unconfirmed for $1 (status=$exists)" >&2; return 1; }
 }
 
-require_held_unit() {
-  local unit="$1" state invocation
-  require_mask_inode "$unit" "$(mask_anchor "$unit")" || return 1
-  require_mask_inode "$unit" "$system_unit_dir/$unit" || return 1
-  [[ "$(systemctl show -p LoadState --value "$unit")" == masked &&
+require_stopped_unit() {
+  local unit="$1" state invocation job cid
+  [[ -f "$hold/$unit.stop-cid" && ! -L "$hold/$unit.stop-cid" ]] || return 1
+  cid="$(<"$hold/$unit.stop-cid")"
+  [[ "$cid" =~ ^[0-9a-f]{64}$ ]] || return 1
+  job="$(systemctl show -p Job --value "$unit")" || return 1
+  [[ -z "$job" && "$(systemctl show -p LoadState --value "$unit")" == masked &&
      "$(systemctl show -p MainPID --value "$unit")" == 0 &&
      "$(systemctl show -p ControlPID --value "$unit")" == 0 ]] || return 1
   state="$(systemctl show -p ActiveState --value "$unit")" || return
@@ -169,7 +171,13 @@ require_held_unit() {
        "$(systemctl show -p ExecMainCode --value "$unit")" == 1 &&
        "$(systemctl show -p ExecMainStatus --value "$unit")" == 143 ]] || return 1
   fi
-  container_absent "${unit%.service}"
+  container_absent "$cid" && container_absent "${unit%.service}"
+}
+
+require_held_unit() {
+  local unit="$1"
+  require_mask_inode "$unit" "$(mask_anchor "$unit")" &&
+    require_mask_inode "$unit" "$system_unit_dir/$unit" && require_stopped_unit "$unit"
 }
 
 require_held_units() {
@@ -184,8 +192,11 @@ require_confirmed_hold() {
 }
 
 record_confirmed_hold() {
-  require_held_units && printf 'guarded-stop-v1\n' > "$hold/quiesced" &&
-    sync -- "$hold/issuer-stop.invocation" "$hold/quiesced" "$hold"
+  require_held_units &&
+    sync -- "$hold/issuer-stop.invocation" "$hold/$issuer_unit.stop-cid" "$hold/$collector_unit.stop-cid" &&
+    printf 'guarded-stop-v1\n' > "$hold/quiesced" && sync -- "$hold/quiesced" "$hold" || {
+      rm -f -- "$hold/quiesced"; return 1;
+    }
 }
 
 create_hold() {
@@ -219,6 +230,8 @@ require_stop_generation() {
     else
       python3 "$pair_tool" verify-captured "$service" "$profile_release/previous" "$collector_container" || return 1
     fi
+  elif [[ "$phase" == rehold ]]; then
+    [[ "$(systemctl show -p NRestarts --value "$unit")" == 0 ]] || return 1
   fi
   [[ -n "$generation" && -n "$invocation" && "$(container_generation "${unit%.service}")" == "$generation" &&
      "$(active_invocation "$unit")" == "$invocation" ]]
@@ -269,39 +282,64 @@ stop_guarded_unit() {
   elif [[ "$unit" == "$issuer_unit" ]]; then
     printf '%s\n' "$invocation" > "$hold/issuer-stop.invocation" || return 1
   fi
+  printf '%s\n' "${generation%% *}" > "$hold/$unit.stop-cid"
 }
 
 hold_units() {
-  local phase="$1" unit status=0 snapshot outcome all_observed=true
-  local -a opened=() sealable=()
+  local phase="$1" unit status=0 snapshot outcome all_observed=true identity
+  local -a opened=() armed=() sealable=()
   local -A inv=() gen=()
   require_owned_hold || return 1
+  if [[ "$phase" == rehold ]]; then
+    rm -f -- "$hold/quiesced" && sync -- "$hold" || status=1
+  fi
   for unit in "$issuer_unit" "$collector_unit"; do
-    if [[ "$phase" == rehold ]] &&
-       [[ ! -v 'release_attempted[$unit]' || ( "${release_attempted[$unit]-}" == opening &&
-          ( -e "$system_unit_dir/$unit" || -L "$system_unit_dir/$unit" ) ) ]]; then
-      require_held_unit "$unit" || status=1
-      continue
+    if [[ "$phase" == rehold ]]; then
+      if [[ ! -v 'release_attempted[$unit]' || -L "$system_unit_dir/$unit" || -e "$system_unit_dir/$unit" ]]; then
+        require_held_unit "$unit" || status=1
+        [[ "${release_attempted[$unit]-}" != opened ]] || status=1
+        continue
+      fi
+      if [[ "${release_attempted[$unit]}" == opening ]] &&
+         require_mask_inode "$unit" "$(mask_anchor "$unit")" && require_stopped_unit "$unit"; then
+        if stop_guard undo-unmask "$unit" && require_held_unit "$unit"; then continue; fi
+        status=1
+      fi
     fi
     opened+=("$unit")
     if [[ "$phase" == initial ]]; then
       if [[ "$unit" == "$issuer_unit" ]]; then inv[$unit]="$issuer_invocation"; gen[$unit]="$captured_issuer"
       else inv[$unit]="$collector_invocation"; gen[$unit]="$captured_generation"; fi
     else
-      # 재차 차단할 때는 기동 실패 증거가 첫 reload에서 사라질 수 있다.
       snapshot="$(unit_status "$unit")" || { snapshot=unknown; status=1; }
       record_stop_evidence "$unit" pre-arm "$snapshot" || status=1
-      inv[$unit]="$(active_invocation "$unit")" || inv[$unit]=''
-      gen[$unit]="$(container_generation "${unit%.service}")" || gen[$unit]=''
+      if [[ "$phase" == rehold ]]; then
+        inv[$unit]="${launched_inv[$unit]-}" gen[$unit]="${launched_gen[$unit]-}"
+      else
+        inv[$unit]="$(active_invocation "$unit")" || inv[$unit]=''
+        gen[$unit]="$(container_generation "${unit%.service}")" || gen[$unit]=''
+      fi
     fi
   done
-  for unit in "${opened[@]}"; do stop_guard arm "$unit" || status=1; done
-  (( status == 0 )) || return 1
   for unit in "${opened[@]}"; do
-    stop_guard check "$unit" || return 1
-    if [[ "$phase" == initial ]]; then require_stop_generation "$unit" "${inv[$unit]}" "${gen[$unit]}" "$phase" || return 1; fi
+    if stop_guard arm "$unit"; then armed+=("$unit"); else status=1; fi
   done
-  for unit in "${opened[@]}"; do
+  # 최초 정지는 두 차단 모두 필요하다. 복구에서는 동료의 실패로 이미 연 writer를 방치하지 않는다.
+  if [[ "$phase" == initial ]]; then
+    (( status == 0 )) || return 1
+    for unit in "${armed[@]}"; do
+      stop_guard check "$unit" && require_stop_generation "$unit" "${inv[$unit]}" "${gen[$unit]}" "$phase" || return 1
+    done
+  fi
+  for unit in "${armed[@]}"; do
+    if [[ "$phase" == rehold && ! -v 'launched_gen[$unit]' ]]; then
+      status=1
+      # 전송 실패 자체는 성공으로 바꾸지 않는다. 같은 job의 실제 완료 세대만 보호 정지할 수 있다.
+      if [[ ! -v 'failed_start_job[$unit]' ]] || ! identity="$(started_slot_generation "$unit" \
+        "${failed_start_since[$unit]}" "${failed_start_job[$unit]}" true)"; then continue; fi
+      inv[$unit]="${identity%% *}"
+      gen[$unit]="${identity#* }"
+    fi
     outcome=0
     stop_guarded_unit "$unit" "${inv[$unit]}" "${gen[$unit]}" "$phase" || outcome=$?
     case "$outcome" in
@@ -311,7 +349,6 @@ hold_units() {
          snapshot="$(unit_status "$unit")" && record_stop_evidence "$unit" unconfirmed "$snapshot" || all_observed=false ;;
     esac
   done
-  # 두 원본의 종료 판정이 끝나야 첫 mask를 적재한다.
   [[ "$all_observed" == true ]] || return 1
   for unit in "${sealable[@]}"; do stop_guard seal "$unit" || status=1; done
   (( status == 0 )) && record_confirmed_hold
@@ -321,13 +358,77 @@ release_unit() {
   local unit="$1"
   require_owned_hold || return 1
   require_held_unit "$unit" || return 1
-  if [[ "${#release_attempted[@]}" == 0 ]]; then
+  if (( ${#release_attempted[@]} == 0 )); then
+    release_attempted[$unit]=invalidating
     rm -- "$hold/quiesced" && sync -- "$hold" || return 1
   fi
   release_attempted[$unit]=opening
   systemctl unmask "$unit" || return
   release_attempted[$unit]=opened
-  if [[ "$unit" == "$issuer_unit" ]]; then rm -f -- "$hold/issuer-stop.invocation"; fi
+}
+
+request_slot_start() {
+  local LC_ALL=C unit="$1" since transaction line job='' client=0
+  since="@$EPOCHREALTIME"
+  transaction="$(LC_ALL=C SYSTEMD_LOG_COLOR=0 SYSTEMD_LOG_LEVEL=info SYSTEMD_LOG_TARGET=console \
+    systemctl --show-transaction start "$unit" 2>&1)" || client=$?
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^Enqueued\ anchor\ job\ ([1-9][0-9]*)\ (.*)/start\.$ && "${BASH_REMATCH[2]}" == "$unit" ]]; then
+      [[ -z "$job" ]] || return 1
+      job="${BASH_REMATCH[1]}"
+    fi
+  done <<< "$transaction"
+  [[ -n "$job" ]] || { echo "[start] $unit: original manager job not identified (client=$client)" >&2; return 1; }
+  printf '%s %s %s\n' "$since" "$job" "$client"
+}
+
+started_slot_generation() {
+  local unit="$1" since="$2" job="$3" wait_for_job="${4:-false}" current limit record invocation generation
+  if [[ "$wait_for_job" == true ]]; then
+    # 기동을 다시 요청하지 않는다. 이미 기동 차단된 같은 notify job만 한 번의 기동 예산 안에서 기다린다.
+    limit=$((SECONDS + 245))
+    while :; do
+      current="$(systemctl show -p Job --value "$unit")" || return 1
+      [[ -n "$current" ]] || break
+      [[ "$current" == "$job" ]] && (( SECONDS < limit )) || return 1
+      sleep 0.25 || return 1
+    done
+  fi
+  record="$(journalctl --boot --quiet --no-pager -o json --output-fields=INVOCATION_ID --since="$since" \
+    _PID=1 "UNIT=$unit" "JOB_ID=$job" JOB_TYPE=start JOB_RESULT=done MESSAGE_ID=39f53479d3a045ac8e11786248231fbf)" || return 1
+  invocation="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["INVOCATION_ID"])' <<< "$record")" || return 1
+  [[ "$invocation" =~ ^[0-9a-f]{32}$ && "$(active_invocation "$unit")" == "$invocation" &&
+     "$(systemctl show -p NRestarts --value "$unit")" == 0 ]] || return 1
+  generation="$(container_generation "${unit%.service}")" || return 1
+  require_stop_generation "$unit" "$invocation" "$generation" rehold || return 1
+  printf '%s %s\n' "$invocation" "$generation"
+}
+
+start_slot_unit() {
+  local unit="$1" defer_signal=true pending_signal=0 status=0 request since job identity
+  if [[ "$hold_owned" != true ]]; then systemctl restart "$unit" || return $?; return 0; fi
+  if (( pending_signal == 0 )); then
+    # 부모는 취소를 보류한다. 프로세스 그룹 신호도 요청을 보낸 자식과 최초 세대 조회를 중간에 끊지 않아야 한다.
+    if request="$(trap '' INT TERM HUP; request_slot_start "$unit")"; then
+      read -r since job status <<<"$request"
+      if (( status != 0 )); then
+        failed_start_job[$unit]="$job" failed_start_since[$unit]="$since"
+      elif identity="$(trap '' INT TERM HUP; started_slot_generation "$unit" "$since" "$job")"; then
+        launched_inv[$unit]="${identity%% *}" launched_gen[$unit]="${identity#* }"
+      else
+        status=1
+      fi
+    else
+      status=$?
+    fi
+  fi
+  defer_signal=false
+  if (( pending_signal != 0 )); then maintenance_failed "$pending_signal"; fi
+  return "$status"
+}
+
+require_launched_unit() {
+  require_stop_generation "$1" "${launched_inv[$1]-}" "${launched_gen[$1]-}" rehold
 }
 
 clear_hold() {
@@ -336,6 +437,7 @@ clear_hold() {
   for unit in "$issuer_unit" "$collector_unit"; do
     anchor="$(mask_anchor "$unit")"
     require_mask_inode "$unit" "$anchor" || return 1
+    if [[ -v 'launched_inv[$unit]' ]]; then require_launched_unit "$unit" || return 1; fi
   done
   # 활성 pair 검증이 끝난 뒤 hold를 한 번에 닫는다. 그 전까지는 두 anchor 모두 재차 차단에 사용할 수 있다.
   retired="$(mktemp -d -- "$remote_root/.po-$slot-released.XXXXXX")" || return
@@ -351,7 +453,7 @@ clear_hold() {
     rm -- "$anchor" || return 1
   done
   rm -- "$hold/$issuer_unit" "$hold/$collector_unit" "$hold/backup"
-  rm -f -- "$hold/issuer-stop.invocation" "$hold/quiesced"
+  rm -f -- "$hold/issuer-stop.invocation" "$hold/$issuer_unit.stop-cid" "$hold/$collector_unit.stop-cid" "$hold/quiesced"
   rmdir -- "$hold" "$retired"
 }
 
@@ -370,12 +472,20 @@ maintenance_failed() {
   exit "$status"
 }
 
+maintenance_signal() {
+  if [[ "${defer_signal:-false}" == true ]]; then
+    if (( pending_signal == 0 )); then pending_signal="$1"; fi
+  else
+    maintenance_failed "$1"
+  fi
+}
+
 arm_maintenance_failure() {
   maintenance_owner_pid="$BASHPID"
   trap 'maintenance_failed $?' ERR
-  trap 'maintenance_failed 130' INT
-  trap 'maintenance_failed 143' TERM
-  trap 'maintenance_failed 129' HUP
+  trap 'maintenance_signal 130' INT
+  trap 'maintenance_signal 143' TERM
+  trap 'maintenance_signal 129' HUP
 }
 
 verify_candidate_images() {
@@ -596,7 +706,7 @@ restore() {
     if [[ "$hold_owned" == true ]]; then
       release_unit "$issuer_unit"
     fi
-    systemctl restart "$issuer_unit"
+    start_slot_unit "$issuer_unit"
     verify_issuer_runtime "$old_po_revision" "$(<"$backup/po-prechange.image-id")"
   else
     if [[ "$hold_owned" != true ]]; then systemctl stop "$issuer_unit"; fi
@@ -604,8 +714,11 @@ restore() {
     issuer_now="$(issuer_presence)" || return 1
     if [[ "$issuer_now" == present ]]; then podman image rm "$issuer" >/dev/null; fi
   fi
-  if [[ "$hold_owned" == true ]]; then release_unit "$collector_unit"; fi
-  systemctl restart "$collector_unit" || return
+  if [[ "$hold_owned" == true ]]; then
+    if [[ "$state" == present ]]; then require_launched_unit "$issuer_unit"; fi
+    release_unit "$collector_unit"
+  fi
+  start_slot_unit "$collector_unit" || return
   verify_collector_runtime "$old_revision" "$(<"$backup/collector-prechange.image-id")" || return
   python3 "$pair_tool" verify-live "$service" "$profile_release/previous" "$collector_container" || return
   postgres_endpoint_require_same "$(collector_database_endpoint "$collector_container")" "$(<"$backup/collector.endpoint")" || return
@@ -879,12 +992,12 @@ if [[ "$mode" == resume ]]; then
   cmp -- "$profile_release/candidate/unit.container" "$unit_dir/$collector_container.container"
   release_unit "$issuer_unit"
 fi
-systemctl restart "$issuer_unit"
+start_slot_unit "$issuer_unit"
 verify_issuer_runtime "$revision" "$(<"$staging/image-id")"
 install -D -m 0644 "$staging/rootfs-manifest.json" "$current/$manifest"
 install -D -m 0644 "$staging/image-id" "$current/$image_id_file"
-if [[ "$mode" == resume ]]; then release_unit "$collector_unit"; fi
-systemctl restart "$collector_unit"
+if [[ "$mode" == resume ]]; then require_launched_unit "$issuer_unit"; release_unit "$collector_unit"; fi
+start_slot_unit "$collector_unit"
 verify_collector_runtime "$revision" "$(<"$staging/collector-image-id")"
 require_collector_pooler_endpoint
 python3 "$pair_tool" verify-live "$service" "$profile_release/candidate" "$collector_container"
