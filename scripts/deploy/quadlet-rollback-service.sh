@@ -50,7 +50,13 @@ unit="$service.service"
 previous="$release/previous"
 installed_unit="$prefix/etc/containers/systemd/hololive-bot/$service.container"
 if [[ "$mode" == --apply ]]; then
-  [[ ! -L "$prefix/etc/systemd/system/$unit" ]] || die "refusing to change a held writer"
+  marker="$deploy_root/artifacts/worker-profile/releases/.central-writer-hold"
+  [[ ! -e "$marker" && ! -L "$marker" ]] || die "ongoing coordinated writer hold"
+  for peer in hololive-alarm-worker hololive-api; do
+    mask="$prefix/etc/systemd/system/$peer.service"
+    drop="$mask.d/90-hololive-stop-guard.conf"
+    [[ ! -L "$mask" && ! -e "$drop" && ! -L "$drop" ]] || die "refusing to change a held writer"
+  done
 fi
 
 python3 "$pair_tool" verify "$service" "$previous"

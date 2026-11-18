@@ -37,6 +37,17 @@ cat >"${fakebin}/hostname" <<'EOF'
 echo hololive-seoul
 EOF
 
+cat >"${fakebin}/mkdir" <<'EOF'
+#!/usr/bin/env bash
+command -p mkdir "$@" || exit
+if [[ "$FAKE_CASE" == term_before_first_unmask && "${*: -1}" == */opening ]]; then kill -TERM "$PPID"; fi
+EOF
+cat >"${fakebin}/mktemp" <<'EOF'
+#!/usr/bin/env bash
+[[ "$FAKE_CASE" != rehold_evidence_unwritable || "${*: -1}" != */rehold.XXXXXX ]] || exit 1
+command -p mktemp "$@"
+EOF
+
 # image 파일은 tag와 sha256 identity 두 이름으로 같은 속성(id·platform·title·revision)을 담는다.
 cat >"${fakebin}/podman" <<'EOF'
 #!/usr/bin/env bash
@@ -52,15 +63,36 @@ fi
 printf 'podman %s\n' "$*" >>"${state}/calls"
 image_file() { printf '%s/images/%s' "${state}" "$(printf '%s' "$1" | tr '/:' '__')"; }
 case "$1 ${2:-}" in
-  'info --format') printf 'arm64\n' ;;
+  'info --format')
+    case "$3" in
+      '{{.Host.Arch}}') printf 'arm64\n' ;;
+      *) exit 2 ;;
+    esac ;;
   'inspect -f')
     [[ "${*: -1}" =~ ^([0-9a-f]{64}|hololive-api|hololive-alarm-worker)$ ]] || exit 2
-    if [[ "$3" == '{{.Id}}' ]]; then cat "$state/$4/cid"; exit; fi
+    if [[ "$3" == '{{.Id}}' || "$3" == '{{.State.Running}} {{.Id}} {{.State.ConmonPid}}' ]]; then
+      if [[ -f "$state/signal-at-capture" ]]; then
+        rm "$state/signal-at-capture"
+        kill -TERM -- "-${FAKE_SIGNAL_OWNER:?}"
+      fi
+      cid="$(<"$state/$4/cid")" || exit 1
+      if [[ "$3" == '{{.Id}}' ]]; then printf '%s\n' "$cid"; else
+        printf '%s %s %s\n' "$(<"$state/$4/active")" "$cid" "$(<"$state/$4/conmonpid")"
+      fi
+      exit
+    fi
     cat "${state}/running-endpoint"
     ;;
   'container exists')
     [[ "${FAKE_COORDINATED:-false}" == true ]] || exit 2
     [[ "${FAKE_CASE}" != inventory_failure ]] || exit 125
+    if [[ "$3" =~ ^[0-9a-f]{64}$ ]]; then
+      [[ ! -f "$state/residual-cid" || "$(<"$state/residual-cid")" != "$3" ]] || exit 0
+      for peer in hololive-alarm-worker hololive-api; do
+        [[ "$(<"$state/$peer/active")" != true || "$(<"$state/$peer/cid")" != "$3" ]] || exit 0
+      done
+      exit 1
+    fi
     [[ "$(<"$state/$3/active")" == true || "${FAKE_CASE}" == residual_container ]]
     ;;
   'container inspect')
@@ -92,6 +124,19 @@ EOF
 cat >"${fakebin}/journalctl" <<'EOF'
 #!/usr/bin/env bash
 set -eu
+if [[ "$6" == --output-fields=INVOCATION_ID ]]; then
+  [[ "$1 $2 $3 $4 $5" == '--boot --quiet --no-pager -o json' && "$7" =~ ^--since=@[0-9]+\.[0-9]{6}$ &&
+    "$8" == _PID=1 && "$9" == UNIT=*.service && "${10}" =~ ^JOB_ID=[1-9][0-9]*$ &&
+    "${11} ${12} ${13}" == 'JOB_TYPE=start JOB_RESULT=done MESSAGE_ID=39f53479d3a045ac8e11786248231fbf' ]] || exit 2
+  unit="${9#UNIT=}"
+  printf 'journal start %s %s\n' "$unit" "${10#JOB_ID=}" >>"$FAKE_STATE/calls"
+  current="$FAKE_STATE/${unit%.service}"
+  [[ -f "$current/start-done" ]] || exit 0
+  read -r at job invocation <"$current/start-done"
+  [[ ! "$at" < "${7#--since=@}" && "$job" == "${10#JOB_ID=}" ]] || exit 0
+  printf '{"INVOCATION_ID":"%s"}\n' "$invocation"
+  exit 0
+fi
 [[ "$1 $2 $3 $4 $5 $6" == '--boot --quiet --no-pager -o json --output-fields=INVOCATION_ID,MESSAGE_ID,JOB_ID,JOB_RESULT' &&
   "$7" =~ ^--since=@[0-9]+\.[0-9]{6}$ && "$8" == _PID=1 && "$9" == UNIT=*.service &&
   "${10}" == INVOCATION_ID=* && "${11}" == JOB_TYPE=stop && "${12}" == MESSAGE_ID=de5b426a63be47a7b6ac3eaac82e2f6f &&
@@ -124,6 +169,17 @@ case "$*" in
     if [[ -e "${state}/manager-reload-required" ]]; then echo yes; else echo no; fi
     exit 0 ;;
 esac
+launch_job=''
+if [[ "$1" == --show-transaction ]]; then
+  [[ "$#" == 3 && "$2" == start && "${FAKE_COORDINATED:-false}" == true &&
+    "$LC_ALL $SYSTEMD_LOG_COLOR $SYSTEMD_LOG_LEVEL $SYSTEMD_LOG_TARGET" == 'C 0 info console' ]] || exit 2
+  case "$3" in
+    hololive-alarm-worker.service) launch_job=71 ;;
+    hololive-api.service) launch_job=72 ;;
+    *) exit 2 ;;
+  esac
+  shift
+fi
 printf 'systemctl %s\n' "$*" >>"${state}/calls"
 state_dir() {
   if [[ "${FAKE_COORDINATED:-false}" == true ]]; then
@@ -133,7 +189,7 @@ state_dir() {
   fi
 }
 restart_unit() {
-  local unit="$1" current dropin pair worker
+  local unit="$1" current dropin pair worker next
   current="$(state_dir "${unit}")"
   if [[ "${FAKE_COORDINATED:-false}" == true ]]; then
     [[ "$(<"${current}/loadstate")" != masked ]] || return 1
@@ -158,11 +214,51 @@ restart_unit() {
     return 1
   fi
   if [[ "${FAKE_COORDINATED:-false}" == true ]]; then
-    printf '%032d\n' 4 >"$current/invocation"
-    printf '%064d\n' 4 >"$current/cid"
+    next=$((10#$(<"$current/cid") + 10))
+    printf '%032d\n' "$next" >"$current/invocation"
+    printf '%064d\n' "$next" >"$current/cid"
+    printf '%d\n' "$((1000 + next))" >"$current/mainpid"
+    cp "$current/mainpid" "$current/conmonpid" || return 1
+    if [[ -n "${2:-}" ]]; then
+      printf '%s %s %s\n' "$EPOCHREALTIME" "$2" "$(<"$current/invocation")" >"$current/start-done"
+    fi
   fi
   printf 'true\n' >"${current}/active"
   [[ "${FAKE_CASE}" != auto_restart || "${pair}" != candidate ]] || printf '1\n' >"${current}/nrestarts"
+  if [[ "$unit" == hololive-alarm-worker.service ]]; then
+    case "$FAKE_CASE" in
+      term_after_first_restart)
+        : >"$state/signal-at-capture"
+        kill -TERM -- "-${FAKE_SIGNAL_OWNER:?}" ;;
+      replaced_at_launch)
+        printf '%032d\n' 5 >"$current/invocation"
+        printf '%064d\n' 5 >"$current/cid"
+        printf '1005\n' >"$current/mainpid"
+        cp "$current/mainpid" "$current/conmonpid" || return 1
+        printf '1\n' >"$current/nrestarts" ;;
+      client_failed_done|client_failed_no_anchor) return 1 ;;
+      client_failed_foreign_cid)
+        # 관리자 job·invocation은 원본 그대로인데 현재 Podman 이름만 다른 살아 있는 conmon을 가리킨다.
+        printf '%064d\n' 5 >"$current/cid"
+        printf '1005\n' >"$current/conmonpid"
+        return 1 ;;
+      client_failed_pending)
+        printf 'false\n' >"$current/active"
+        mv "$current/start-done" "$current/pending-event"
+        return 1 ;;
+      wrong_start_record)
+        printf '%s 99 %s\n' "$EPOCHREALTIME" "$(<"$current/invocation")" >"$current/start-done" ;;
+      restart_client_interrupted)
+        printf '%032d\n' 5 >"$current/invocation"
+        printf '%064d\n' 5 >"$current/cid"
+        printf '1005\n' >"$current/mainpid"
+        cp "$current/mainpid" "$current/conmonpid" || exit 2
+        exec "$FAKE_REAL_PYTHON3" -c 'import os, signal
+assert int(os.environ["FAKE_SIGNAL_OWNER"]) == os.getpgrp() == os.getsid(0)
+signal.signal(signal.SIGTERM, signal.SIG_DFL)
+os.killpg(os.getpgrp(), signal.SIGTERM)' ;;
+    esac
+  fi
 }
 case "$1" in
   daemon-reload)
@@ -198,8 +294,21 @@ case "$1" in
       UnitFileState) cat "${current}/mask_scope" ;;
       ActiveState) if [[ "$(<"${current}/active")" == true ]]; then echo active; else echo inactive; fi ;;
       InvocationID) cat "${current}/invocation" ;;
-      MainPID) if [[ "$(<"${current}/active")" == true || "${FAKE_CASE}" == residual_pid ]]; then echo 42; else echo 0; fi ;;
+      MainPID)
+        if [[ "$(<"${current}/active")" == true && -f "$current/mainpid" ]]; then cat "$current/mainpid";
+        elif [[ "$(<"${current}/active")" == true || "$FAKE_CASE" == residual_pid ]]; then echo 42; else echo 0; fi ;;
       ControlPID) echo 0 ;;
+      Job)
+        if [[ -f "$current/pending-event" ]]; then
+          [[ -f "$current/guard" ]] || exit 2
+          if [[ -f "$current/poll" ]]; then
+            mv "$current/pending-event" "$current/start-done"
+            printf 'true\n' >"$current/active"
+          else
+            : >"$current/poll"
+            printf '71\n'
+          fi
+        fi ;;
       Result) if [[ -f "$current/failed" ]]; then echo exit-code; else echo success; fi ;;
       *) exit 2 ;;
     esac
@@ -238,12 +347,27 @@ case "$1" in
     for unit in "$@"; do
       current="$(state_dir "${unit}")"
       rm -- "$HOLOLIVE_QUADLET_TEST_ROOT/etc/systemd/system/$unit" || exit 1
+      if [[ "$unit" == hololive-api.service ]]; then
+        case "$FAKE_CASE" in
+          unmask_reload_failed) exit 1 ;;
+          unmask_with_residual_cid) cp "$current/cid" "$state/residual-cid"; exit 1 ;;
+        esac
+      fi
       printf 'loaded\n' >"${current}/loadstate"
       printf 'generated\n' >"${current}/mask_scope"
       if [[ "$FAKE_CASE" == term_after_unmask ]]; then kill -TERM "$PPID"; fi
     done
     ;;
   start)
+    if [[ -n "$launch_job" ]]; then
+      current="$(state_dir "$2")"
+      [[ "$(<"$current/active")" == false && "$(<"$current/loadstate")" == loaded ]] || exit 2
+      if [[ "$FAKE_CASE" != client_failed_no_anchor ]]; then
+        printf 'Enqueued anchor job %s %s/start.\n' "$launch_job" "$2" >&2
+      fi
+      restart_unit "$2" "$launch_job"
+      exit $?
+    fi
     [[ "$2" == hololive-db-migrate.service ]] || exit 2
     if [[ "${FAKE_COORDINATED:-false}" == true ]]; then
       for unit in hololive-api hololive-alarm-worker; do
@@ -294,16 +418,25 @@ if [[ "${1:-} ${2:-}" == '-I -B' && ( "${3:-}" == "${FAKE_PAIR_TOOL%/*}/systemd-
   current="$state/${unit%.service}" mask="${anchor%/*}/$unit"
   printf 'guard %s %s\n' "$action" "$unit" >>"$state/calls"
   [[ "$anchor" == "$HOLOLIVE_QUADLET_TEST_ROOT/etc/systemd/system/."*.mask && "$(readlink "$anchor")" == /dev/null &&
-    "$(stat -c '%d:%i' "$anchor")" == "$identity" && ! -L "$mask" && ! -e "$mask" && "$(<"$current/loadstate")" == loaded ]] || exit 1
+    "$(stat -c '%d:%i' "$anchor")" == "$identity" && ! -L "$mask" && ! -e "$mask" ]] || exit 1
   case "$action" in
+    undo-unmask)
+      [[ "$(<"$current/loadstate")" == masked && "$(<"$current/active")" == false &&
+        ! -e "$current/guard" ]] || exit 1
+      ln -PT -- "$anchor" "$mask" && systemctl daemon-reload || exit 1
+      ;;
     arm)
+      [[ "$FAKE_CASE" != partial_guard || "$unit" != hololive-api.service ]] || exit 1
       (set -C; printf '%s\n' "$identity" >"$current/guard") || exit 1
+      [[ "$(<"$current/loadstate")" == loaded ]] || exit 1
       systemctl daemon-reload || exit 1
       if [[ "$FAKE_CASE" == invocation_changed ]]; then printf '%032d\n' 2 >"$current/invocation"; fi
       if [[ "$FAKE_CASE" == lost_guard && "$unit" == hololive-api.service ]]; then rm "$state/hololive-alarm-worker/guard"; fi
       ;;
-    check|seal)
+    check|seal|start-budget)
+      [[ "$(<"$current/loadstate")" == loaded ]] || exit 1
       [[ -f "$current/guard" && "$(<"$current/guard")" == "$identity" ]] || exit 1
+      if [[ "$action" == start-budget ]]; then printf '180\n'; fi
       if [[ "$action" == seal ]]; then
         [[ "$(<"$current/active")" == false && "$FAKE_CASE" != residual_pid ]] || exit 1
         ln -PT -- "$anchor" "$mask" && systemctl daemon-reload && rm "$current/guard" || exit 1
@@ -389,6 +522,7 @@ case "${action}" in
   verify-live)
     [[ "${FAKE_CASE}" != "verify_failure_${service}" ]] || exit 1
     [[ "${FAKE_CASE}" != failed_rehold || "$service" != hololive-alarm-worker ]] || exit 1
+    [[ "$FAKE_CASE" != rehold_evidence_unwritable || "$service" != hololive-alarm-worker ]] || exit 1
     expected="${dir##*/}"
     if [[ "${FAKE_COORDINATED:-false}" == true && "${expected}" == previous ]]; then expected=baseline; fi
     [[ "$4" == "${service}" && "$(cat "${current}/active")" == true &&
@@ -435,6 +569,11 @@ make_case() {
 
 run_tool() {
   local root="$1" case_name="$2" candidate_hex="$3"
+  local -a shell=(bash)
+  case "$case_name" in
+    restart_client_interrupted|term_after_first_restart)
+      shell=(setsid --wait bash -c 'export FAKE_SIGNAL_OWNER=$$; exec bash "$@"' bash) ;;
+  esac
   shift 3
   env PATH="${fakebin}:${PATH}" HOLOLIVE_QUADLET_TEST_ROOT="${root}" FAKE_STATE="${root}/state" FAKE_CASE="${case_name}" \
     FAKE_PAIR_TOOL="${ROOT_DIR}/scripts/deploy/lib/worker-profile-pair.py" \
@@ -446,7 +585,7 @@ run_tool() {
     FAKE_CANDIDATE_ID="sha256:${candidate_hex}" \
     FAKE_COORDINATED="${FAKE_COORDINATED:-false}" FAKE_SERVER_EPOCH="${FAKE_SERVER_EPOCH:-old}" \
     FAKE_API_ID="sha256:${API_HEX}" FAKE_WORKER_ID="sha256:${WORKER_HEX}" \
-    bash "$@" >"${root}/out" 2>&1
+    "${shell[@]}" "$@" >"${root}/out" 2>&1
 }
 
 installed_pair() {
@@ -907,6 +1046,7 @@ make_coordinated_case() {
     printf 'generated\n' >"${root}/state/${service}/mask_scope"
     if [[ "$service" == hololive-api ]]; then printf '%032d\n' 7; else printf '%032d\n' 1; fi >"${root}/state/${service}/invocation"
     if [[ "$service" == hololive-api ]]; then printf '%064d\n' 7; else printf '%064d\n' 1; fi >"${root}/state/${service}/cid"
+    printf '42\n' >"${root}/state/${service}/conmonpid"
     printf '3\n' >"${root}/state/${service}/nrestarts"
     printf 'baseline\n' >"${root}/state/${service}/runtime"
     printf 'pair=baseline\n' >"${root}/etc/containers/systemd/hololive-bot/${service}.container.d/50-worker-profile.conf"
@@ -998,8 +1138,12 @@ assert_candidate_pair_running "${root}"
 assert_order "$root" resume \
   'systemctl start hololive-db-migrate.service' 'writer-sql hololive_alarm_worker' 'writer-sql hololive_runtime' \
   'pair activate hololive-alarm-worker candidate' 'pair activate hololive-api candidate' \
-  'systemctl unmask hololive-alarm-worker.service' 'pair verify-live hololive-alarm-worker candidate' \
-  'systemctl unmask hololive-api.service' 'pair verify-live hololive-api candidate'
+  'systemctl unmask hololive-alarm-worker.service' 'systemctl start hololive-alarm-worker.service' \
+  'journal start hololive-alarm-worker.service 71' 'pair verify-live hololive-alarm-worker candidate' \
+  'systemctl unmask hololive-api.service' 'systemctl start hololive-api.service' \
+  'journal start hololive-api.service 72' 'pair verify-live hololive-api candidate'
+run_tool "$root" success "$API_HEX" "$HELPER" hololive-api localhost/hololive-api:candidate ||
+  { cat "$root/out" >&2; fail "완료된 과거 opening이 정상 단일 배포를 차단함"; }
 pass "coordinated resume never starts an old dependency before both candidate pairs are installed"
 
 root="${tmp}/coordinated-reboot"
@@ -1068,6 +1212,22 @@ fi
   fail "incomplete hold triggered migration or changed the other peer"
 pass "an incomplete coordinated hold is rejected without migration or automatic peer recovery"
 
+root="$tmp/partial-guard"
+make_coordinated_case "$root"
+if run_tool "$root" partial_guard "$API_HEX" "$HELPER" --quiesce \
+    localhost/hololive-api:candidate localhost/hololive-alarm-worker:candidate; then
+  fail "한 writer만 차단한 정지를 수용함"
+fi
+[[ -f "$root/state/hololive-alarm-worker/guard" && ! -f "$root/state/hololive-api/guard" &&
+  "$(<"$root/state/hololive-api/active")" == true ]] || fail "동료만 차단한 상태가 아님"
+api_release="$(coordinated_release "$root" hololive-api)"
+: >"$root/state/calls"
+if run_tool "$root" success "$API_HEX" "$HELPER" hololive-api localhost/hololive-api:candidate ||
+   run_tool "$root" success "$API_HEX" "$ROLLBACK" "$api_release" --apply; then
+  fail "활성 API 단일 작업이 worker의 미완료 정지를 우회함"
+fi
+assert_no_call "$root" partial_guard '^(pair |writer-sql |podman |systemctl )'
+
 for reason in generation_changed invocation_changed other_stopped_invocation residual_pid residual_container inventory_failure \
     failed_stop stop_command_failed abnormal_success_result lost_guard missing_job other_done_job journal_failure \
     gc_exit_143 missing_exit peer_changed; do
@@ -1101,13 +1261,21 @@ for reason in generation_changed invocation_changed other_stopped_invocation res
   assert_no_call "$root" "$reason" '^(writer-sql |podman exec |pair activate |systemctl (start|stop|restart|unmask))'
 done
 
-for reason in foreign_mask mixed_release swapped_generation legacy_receipt direct tls; do
+for reason in foreign_mask wrong_owner replaced_owner mixed_release swapped_generation legacy_receipt direct tls; do
   root="${tmp}/reject-resume-${reason}"
   make_coordinated_case "$root"
   quiesce_case "$root"
   api_release="$(coordinated_release "$root" hololive-api)"
   worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
   case "$reason" in
+    wrong_owner)
+      marker="${api_release%/*}/.central-writer-hold"
+      rm "$marker"
+      ln -s "${worker_release##*/}" "$marker" ;;
+    replaced_owner)
+      marker="${api_release%/*}/.central-writer-hold"
+      rm "$marker"
+      cp -- "$api_release/captured.invocation" "$marker" ;;
     foreign_mask)
       mask="$root/etc/systemd/system/hololive-api.service"
       rm "$mask"
@@ -1162,7 +1330,7 @@ for writer in hololive-api hololive-alarm-worker; do
     fail "$writer: 후보 수용 실패가 성공으로 끝남"
   fi
   if [[ "$writer" == hololive-alarm-worker ]]; then
-    assert_no_call "$root" "$writer" '^systemctl (unmask|restart|stop) hololive-api.service$'
+    assert_no_call "$root" "$writer" '^systemctl (unmask|start|restart|stop) hololive-api.service$'
     assert_no_call "$root" "$writer" '^guard (arm|check|seal) hololive-api.service$'
   fi
   assert_held_pair "$root"
@@ -1182,7 +1350,7 @@ for reason in lost_hold_during_migration term_after_unmask worker_cid_changed; d
   if run_tool "$root" "$reason" "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release"; then
     fail "$reason: 불완전한 상태에서 재개함"
   fi
-  assert_no_call "$root" "$reason" '^systemctl (restart|unmask) hololive-api.service$'
+  assert_no_call "$root" "$reason" '^systemctl (start|restart|unmask) hololive-api.service$'
   if [[ "$reason" == lost_hold_during_migration ]]; then
     assert_no_call "$root" "$reason" '^(writer-sql |pair activate |systemctl unmask )'
   elif [[ "$reason" == worker_cid_changed ]]; then
@@ -1192,8 +1360,75 @@ for reason in lost_hold_during_migration term_after_unmask worker_cid_changed; d
   else
     [[ -d "$api_release/opening" && -f "$root/state/hololive-alarm-worker/guard" ]] ||
       fail "unmask 직후 신호로 실패했는데 영속 기동 차단이 없음"
-    assert_no_call "$root" "$reason" '^systemctl (stop|restart) '
+    assert_no_call "$root" "$reason" '^systemctl (stop|start|restart) hololive-(alarm-worker|api)\.service$'
   fi
+done
+
+for reason in term_before_first_unmask term_after_first_restart replaced_at_launch restart_client_interrupted \
+    client_failed_done client_failed_pending client_failed_no_anchor client_failed_foreign_cid wrong_start_record \
+    rehold_evidence_unwritable unmask_reload_failed unmask_with_residual_cid; do
+  root="$tmp/$reason"
+  make_coordinated_case "$root"
+  quiesce_case "$root"
+  api_release="$(coordinated_release "$root" hololive-api)"
+  worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
+  cp "$api_release/quiesced" "$root/original-receipt"
+  : >"$root/state/calls"
+  status=0
+  run_tool "$root" "$reason" "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release" || status=$?
+  [[ "$status" != 0 ]] || fail "$reason: 실패한 재개를 수용함"
+  assert_no_call "$root" "$reason" '^systemctl (start|restart|stop) hololive-api.service$'
+  assert_no_call "$root" "$reason" '^systemctl restart '
+  [[ "$(grep -cxF 'systemctl start hololive-db-migrate.service' "$root/state/calls")" == 1 ]] || fail "$reason: migration 횟수 불일치"
+  if [[ "$reason" != term_before_first_unmask ]]; then
+    [[ "$(grep -cxF 'systemctl start hololive-alarm-worker.service' "$root/state/calls")" == 1 ]] ||
+      fail "$reason: 원래 worker 기동 요청이 하나가 아님"
+  fi
+  case "$reason" in
+    term_before_first_unmask)
+      [[ "$status" == 143 && ! -e "$api_release/opening" ]] && cmp -s "$api_release/quiesced" "$root/original-receipt" ||
+        fail "첫 개방 전 취소에서 원래 영수증 유실"
+      assert_no_call "$root" "$reason" '^systemctl (stop|restart|unmask) '
+      assert_held_pair "$root" ;;
+    term_after_first_restart)
+      [[ "$status" == 143 && ! -e "$api_release/opening" ]] || fail "기동 완료 직후 취소를 놓침"
+      assert_order "$root" "$reason" 'systemctl start hololive-alarm-worker.service' \
+        'guard check hololive-alarm-worker.service' 'systemctl stop hololive-alarm-worker.service' 'guard seal hololive-alarm-worker.service'
+      assert_no_call "$root" "$reason" '^systemctl unmask hololive-api.service$'
+      assert_held_pair "$root"
+      run_tool "$root" success "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release" ||
+        { cat "$root/out" >&2; fail "확인된 첫 세대 재정지의 영수증으로 명시적 재개 실패"; }
+      [[ "$(grep -cxF 'systemctl start hololive-db-migrate.service' "$root/state/calls")" == 1 ]] ||
+        fail "재정지 뒤 migration 재실행" ;;
+    client_failed_done|client_failed_pending)
+      assert_order "$root" "$reason" 'systemctl start hololive-alarm-worker.service' 'guard arm hololive-alarm-worker.service' \
+        'journal start hololive-alarm-worker.service 71' 'guard check hololive-alarm-worker.service' \
+        'systemctl stop hololive-alarm-worker.service' 'guard seal hololive-alarm-worker.service'
+      assert_held_pair "$root"
+      [[ "$reason" != client_failed_pending || -f "$root/state/hololive-alarm-worker/poll" ]] ||
+        fail "차단 후 진행 중인 원래 job을 관찰하지 않음"
+      [[ -d "$api_release/opening" ]] && cmp -s "$api_release/quiesced" "$root/original-receipt" ||
+        fail "$reason: 실패한 요청이 완료를 게시함"
+      assert_no_call "$root" "$reason" '^(pair verify-live |systemctl unmask hololive-api.service)' ;;
+    replaced_at_launch|restart_client_interrupted|client_failed_no_anchor|client_failed_foreign_cid|wrong_start_record)
+      [[ "$reason" != restart_client_interrupted || "$status" == 143 ]] || fail "중단된 클라이언트의 신호를 놓침"
+      [[ -d "$api_release/opening" && -f "$root/state/hololive-alarm-worker/guard" &&
+        "$(<"$root/state/hololive-alarm-worker/active")" == true ]] || fail "$reason: 확인되지 않은 세대 인수"
+      assert_no_call "$root" "$reason" '^systemctl (stop |unmask hololive-api.service)' ;;
+    rehold_evidence_unwritable)
+      [[ -d "$api_release/opening" && -f "$root/state/hololive-alarm-worker/guard" &&
+        "$(<"$root/state/hololive-alarm-worker/active")" == false ]] || fail "증거 저장 실패로 확인된 writer 정지 누락"
+      assert_no_call "$root" "$reason" '^(guard seal |systemctl unmask hololive-api.service)' ;;
+    unmask_reload_failed)
+      assert_order "$root" "$reason" 'systemctl unmask hololive-api.service' 'guard undo-unmask hololive-api.service' \
+        'systemctl stop hololive-alarm-worker.service'
+      [[ ! -e "$api_release/opening" ]] || fail "소유 mask 복원 뒤 미완료 상태가 남음"
+      assert_held_pair "$root" ;;
+    unmask_with_residual_cid)
+      assert_no_call "$root" "$reason" '^guard undo-unmask hololive-api.service$'
+      [[ -d "$api_release/opening" && -f "$root/state/hololive-api/guard" &&
+        "$(<"$root/state/hololive-alarm-worker/active")" == false ]] || fail "잔존 원본 CID를 무시하거나 동료 정지 누락" ;;
+  esac
 done
 
 root="$tmp/rehold-abnormal"
@@ -1205,7 +1440,7 @@ worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
 if run_tool "$root" failed_rehold "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release"; then
   fail "재차 정지한 worker의 비정상 종료를 성공으로 보고함"
 fi
-assert_no_call "$root" rehold '^((guard (arm|check|seal)|systemctl (stop|restart|unmask)) hololive-api.service)$'
+assert_no_call "$root" rehold '^((guard (arm|check|seal)|systemctl (stop|start|restart|unmask)) hololive-api.service)$'
 grep -qxF 'ExecMainStatus=143' "$worker_release"/rehold.*/terminal || fail "재정지 당시 원본 증거 유실"
 [[ -d "$api_release/opening" && -f "$root/state/hololive-alarm-worker/guard" ]] || fail "불완전한 재정지를 허용함"
 : >"$root/state/calls"
