@@ -159,7 +159,7 @@ def owned_anchor(h, name):
 
 def guard(action, h, name):
     anchor, (dev, ino) = owned_anchor(h,name)
-    run('python3','-I','-B',str(GUARD),action,name + '.service',str(anchor),f'{dev}:{ino}')
+    return run('python3','-I','-B',str(GUARD),action,name + '.service',str(anchor),f'{dev}:{ino}')
 
 
 def absent(kind, name):
@@ -617,14 +617,16 @@ def start_once(n, requested):
         need(p.returncode == 0 and requested[n][1], '원래 start job 미확인: ' + n)
 
 
-def candidate(n, request, old, image_id, *, settle=False):
+def candidate(n, request, old, image_id, *, guarded_hold=None):
     since, job = request
     need(job, '요청한 start job 번호 미확인: ' + n)
     result = terminal(n)
     inv = None
-    if settle and result['Job'] == job:
+    if guarded_hold is not None and result['Job'] == job:
         # arm은 이미 진행 중인 notify 기동을 취소하지 않는다. 다른 job/invocation을 따라가지 않는다.
-        limit = time.monotonic() + 245
+        budget = guard('start-budget',guarded_hold,n)
+        need(re.fullmatch('[1-9][0-9]*',budget), 'manager 기동 제한 미확인: ' + n)
+        limit = time.monotonic() + int(budget)
         while result['Job'] == job:
             current = result['InvocationID']
             if inv is not None or (result['ActiveState'] == 'activating' and current):
@@ -678,16 +680,22 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
             metadata(h/(n+'.before-rehold.json'), before[n])
         except errors:
             receipt_failed = True
-    protected = set()
     for n in (I,C):
-        try:
-            if n not in opened:
+        if n not in opened:
+            try:
                 held_one(h,s,n)
-            else:
-                p = mask(n)
-                need(not os.path.lexists(p), '외부 mask/서비스 충돌')
-                if n not in requested and prop(n,'LoadState') == 'masked':
-                    # unlink만 반영됐고 manager는 아직 열리지 않았다. 실행된 후보에는 적용하지 않는다.
+            except errors:
+                damaged = True
+            continue
+        p = mask(n)
+        if os.path.lexists(p):
+            damaged = True
+            continue
+        uncertain = False
+        if n not in requested:
+            try:
+                if prop(n,'LoadState') == 'masked':
+                    # unlink만 반영된 원 mask는 실행된 후보를 정지한 증거가 아니다.
                     result = terminal(n)
                     need(n in before and before[n] == result and
                          (result['ActiveState'] == 'inactive' or issuer_exit(n,result,s['old'][n]['inv'])) and
@@ -697,21 +705,26 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
                     guard('undo-unmask',h,n)
                     held_one(h,s,n)
                     origin(n,True)
-                else:
-                    origin(n,False,allow_job=True)
-                    guard('arm',h,n)
-                    armed.add(n)
-            protected.add(n)
+                    continue
+            except errors:
+                damaged = uncertain = True
+        if os.path.lexists(p):
+            continue
+        try:
+            # 미확인 세대를 인수하지 않되 정식 mask가 없는 경로에는 재부팅 기동 차단을 먼저 남긴다.
+            guard('arm',h,n)
+            origin(n,False,True,allow_job=True)
+            if not uncertain:
+                armed.add(n)
         except errors:
             damaged = True
     for n in (I,C):
         if n not in armed:
             continue
         try:
-            need(len(protected) == len(NAMES), '다른 unit 차단 미확인')
             if n in requested:
                 if n not in started:
-                    started[n] = candidate(n,requested[n],s['old'][n],ids[n],settle=True)
+                    started[n] = candidate(n,requested[n],s['old'][n],ids[n],guarded_hold=h)
                 guarded_stop(h,n,started[n],candidate=True)
                 stops[n] = started[n]['inv']
             else:

@@ -169,16 +169,22 @@ class Cutover(unittest.TestCase):
             action, unit, path, identity = args[4:]
             n, anchor = unit.removesuffix('.service'), Path(path)
             self.assertEqual(identity, ':'.join(map(str,d.number(anchor))))
+            if action == 'start-budget':
+                self.assertIn(n,self.guards)
+                return '90'
             if action == 'undo-unmask':
                 self.assertFalse(os.path.lexists(d.mask(n)))
                 self.assertEqual(self.props[n]['LoadState'],'masked')
                 os.link(anchor,d.mask(n),follow_symlinks=False)
                 self.reload()
                 return
-            d.need(not os.path.lexists(d.mask(n)) and self.props[n]['LoadState'] == 'loaded', '가드 충돌')
+            d.need(not os.path.lexists(d.mask(n)), '가드 충돌')
             if action == 'arm':
                 d.need(n not in self.guards, '이전 가드')
                 self.guards.add(n)
+                was_loaded = self.props[n]['LoadState'] == 'loaded'
+                self.reload()
+                d.need(was_loaded, '기동 차단만 설치됨')
             else:
                 self.assertIn(n,self.guards)
             if action == 'seal':
@@ -198,7 +204,8 @@ class Cutover(unittest.TestCase):
         if args[:2] == ('systemctl','stop'):
             n = args[-1].removesuffix('.service')
             self.assertIn(n,self.guards)
-            self.assertTrue(all(peer in self.guards or os.path.lexists(d.mask(peer)) for peer in d.NAMES))
+            if not (self.h/'resume-attempt.json').exists():
+                self.assertTrue(all(peer in self.guards or os.path.lexists(d.mask(peer)) for peer in d.NAMES))
             self.assertEqual('--job-mode=ignore-dependencies' in args, n == d.I)
             self.journal[n] = self.props[n]['InvocationID']
             self.props[n].update(ActiveState='inactive', MainPID='0', ControlPID='0')
@@ -375,7 +382,7 @@ class Cutover(unittest.TestCase):
 
     def test_surviving_notify_observation_is_bounded(self):
         self.lost_client(d.subprocess.TimeoutExpired('systemctl',245))
-        with patch.object(d.time,'monotonic',side_effect=[100,346]), self.assertRaisesRegex(d.Refused,'복원 미확인'):
+        with patch.object(d.time,'monotonic',side_effect=[100,191]), self.assertRaisesRegex(d.Refused,'복원 미확인'):
             self.resume()
         self.starts_and_stops((d.I,))
         self.assertEqual(self.guards,{d.C})
@@ -490,6 +497,8 @@ class Cutover(unittest.TestCase):
             self.resume()
         self.assertFalse(os.path.lexists(d.mask(d.I)))
         self.assertTrue(d.mask_anchor(self.h,d.I).is_symlink())
+        self.reload()
+        self.assertIn(d.I,self.guards)
         self.assertFalse(any(x[:2] in (('systemctl','stop'),('systemctl','start')) or x[4:5] == ('undo-unmask',)
                              for x in self.calls))
 
@@ -498,6 +507,25 @@ class Cutover(unittest.TestCase):
 
     def test_partial_unlink_cannot_seal_over_occupied_name(self):
         self.partial_unlink_with_container(d.I)
+
+    def test_uncertain_second_unmask_protects_reboot_and_stops_accepted_issuer(self):
+        self.resume_inputs()
+        def interrupt(*args, **kwargs):
+            if args == ('systemctl','daemon-reload') and not os.path.lexists(d.mask(d.C)):
+                raise InterruptedError()
+            return self.command(*args,**kwargs)
+        def absent(kind,name):
+            if not os.path.lexists(d.mask(d.C)) and name == self.state['old'][d.C]['cid']:
+                raise d.Refused('이전 CID 부재 미확인')
+        self.patch('run',interrupt)
+        self.patch('absent',absent)
+        with self.assertRaisesRegex(d.Refused,'복원 미확인'):
+            self.resume()
+        self.reload()
+        self.assertIn(d.C,self.guards)
+        self.assertEqual([c[-1] for c in self.calls if c[:2] == ('systemctl','stop')], [d.I+'.service'])
+        self.assertEqual(self.props[d.I]['MainPID'],'0')
+        self.assertFalse((self.h/'accepted.json').exists())
 
     def test_candidate_stop_cannot_reuse_direct_issuer_143(self):
         self.patch('gate',lambda *args:None)

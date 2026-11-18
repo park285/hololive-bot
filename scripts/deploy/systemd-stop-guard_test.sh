@@ -106,6 +106,7 @@ for u in "$collector" "$po" "$foreign" "$reset" "$drift" "$auto"; do
   ln -s /dev/null "$(anchor "$u")"
 done
 printf 'RestartForceExitStatus=23\n' >>"$r/units/$auto"
+printf 'TimeoutStartSec=300.25\n' >>"$r/units/$collector"
 printf '[Unit]\nDefaultDependencies=no\nWants=%s %s\nAfter=%s %s\n' "$collector" "$po" "$collector" "$po" >"$r/units/consumer.target"
 printf '[Unit]\nDefaultDependencies=no\nWants=%s\nAfter=%s\n' "$auto" "$auto" >"$r/units/restarting.target"
 printf '[Unit]\nDefaultDependencies=no\n[Service]\nExecStart=/usr/bin/sleep 60\n' >"$r/units/$missing"
@@ -153,6 +154,7 @@ echo 'PASS: a real Restart=always restart before the guard; no restart after the
 guard arm "$po"
 guard arm "$collector"
 guard check "$po"
+[[ $(guard start-budget "$collector") == 301 ]]
 reject guard seal "$collector"
 collector_inv=$(prop "$collector" InvocationID)
 systemctl --user stop --job-mode=ignore-dependencies "$po"
@@ -177,3 +179,11 @@ guard undo-unmask "$po"
 [[ $(stat -c '%d:%i' "$system/$po") == "$(stat -c '%d:%i' "$(anchor "$po")")" ]]
 reject systemctl --user start "$po"
 echo 'PASS: persistent guard on fresh manager, final owned mask, foreign and ineffective guard rejected'
+rm -- "$system/$po"
+reject guard arm "$po"
+close_manager
+new_manager partial
+systemctl --user start "$po"
+[[ $(prop "$po" ConditionResult) == no && $(prop "$po" MainPID) == 0 && $(cat "$r/$po.events") == "$normal" ]]
+reject guard seal "$po"
+echo 'PASS: uncertain partial unmask blocks a fresh manager without creating a stop receipt'

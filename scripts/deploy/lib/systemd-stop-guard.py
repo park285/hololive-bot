@@ -193,6 +193,12 @@ class Guard:
         self.manager.condition(self.anchor)
         return before
 
+    def start_budget(self):
+        self.check()
+        timeout = self.manager.property('Service', 'TimeoutStartUSec', 't')
+        require(type(timeout) is int and 0 < timeout < (1 << 64) - 1, '유한한 manager 기동 제한 필요')
+        print((timeout + 999_999) // 1_000_000)
+
     def publish_mask(self):
         self.check_anchor()
         self.manager.terminal()
@@ -257,7 +263,7 @@ def podman_exit_status(unit, cid, since):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_subparsers(dest='action', required=True)
-    for name in ('arm', 'check', 'seal', 'undo-unmask'):
+    for name in ('arm', 'check', 'seal', 'undo-unmask', 'start-budget'):
         guard = actions.add_parser(name)
         guard.add_argument('unit', choices=sorted(UNITS))
         guard.add_argument('anchor')
