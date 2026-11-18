@@ -44,9 +44,26 @@ esac
 unit="$service.service"
 previous="$release/previous"
 installed_unit="$prefix/etc/containers/systemd/hololive-bot/$service.container"
+if [[ "$mode" == --apply ]]; then
+  install -d -m 0755 "$prefix/run/lock"
+  exec 9>"$prefix/run/lock/hololive-quadlet-redeploy.lock"
+  flock -n 9 || die "a central writer transition is in progress"
+  [[ ! -L "$prefix/etc/systemd/system/$unit" ]] || die "refusing to change a held writer"
+fi
 
 python3 "$pair_tool" verify "$service" "$previous"
 python3 "$pair_tool" check "$service" "$previous"
+# 과거 release는 previous 안에 이미 검증 가능한 복원 overlay를 둔다. 새 관측값을 소급 생성하지 않는다.
+overlay="$previous/50-worker-profile.conf"
+if [[ "${release##*/}" == "$service-v2-"* ]]; then
+  overlay="$release/rollback.conf"
+  [[ -f "$release/previous.endpoint" && ! -L "$release/previous.endpoint" ]] ||
+    die "captured rollback endpoint is missing"
+  hashes="$(cd "$release" && sha256sum previous/pair.json previous.endpoint rollback.conf)"
+  cmp -s "$release/rollback.sha256" <(printf '%s\n' "$hashes") ||
+    die "retained rollback overlay or observed endpoint changed"
+fi
+python3 "$pair_tool" verify-dropin "$service" "$previous" "$overlay"
 # pair는 그 image가 돌던 기본 unit(unit.container, SHA256SUMS로 검증)을 함께 보존한다. sync-opt-current.sh가 이미
 # 새 revision의 기본 unit을 설치했으면, 이전 image를 새 unit 정의(env·HealthCmd·mount)로 띄우지 않도록 함께 되돌린다.
 restore_unit=false
@@ -60,6 +77,10 @@ recorded_unit="$previous/unit.container"
 compose_env="$prefix/etc/stack-secrets/hololive-bot/compose.env"
 current_endpoint="$(postgres_endpoint_quadlet "$installed_unit" "$compose_env")" || die "cannot determine current effective PostgreSQL endpoint"
 previous_endpoint="$(postgres_endpoint_quadlet "$recorded_unit" "$compose_env" "$installed_unit")" || die "cannot determine rollback effective PostgreSQL endpoint"
+if [[ "$overlay" == "$release/rollback.conf" ]]; then
+  cmp -s "$release/previous.endpoint" <(printf '%s\n' "$previous_endpoint") ||
+    die "captured running endpoint differs from the rollback configuration; retain the recovery pair"
+fi
 postgres_endpoint_require_same "$current_endpoint" "$previous_endpoint" ||
   die "rollback not applied; current service state unchanged; recovery pair retained: $previous"
 postgres_capacity_assert_service "$ROOT_DIR" "$compose_env" "$(dirname "$installed_unit")" "$service" "$recorded_unit"
@@ -81,7 +102,7 @@ if [[ "$restore_unit" == true ]]; then
   mv -f -- "$unit_tmp" "$installed_unit"
   echo "[ROLLBACK] restored the base unit the previous image ran with; run sync-opt-current.sh for the intended revision before the next deployment"
 fi
-python3 "$pair_tool" activate "$service" "$previous" "$deploy_root"
+python3 "$pair_tool" activate "$service" "$previous" "$deploy_root" "$overlay"
 systemctl daemon-reload
 # Notify=healthy라 restart는 이전 image가 healthy가 된 뒤에만 성공한다.
 systemctl restart "$unit"

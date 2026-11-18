@@ -13,6 +13,7 @@ QUADLET_BIN=/usr/libexec/podman/quadlet
 REVISION=0123456789abcdef0123456789abcdef01234567
 API_HEX="$(printf 'a%.0s' {1..64})"
 WORKER_HEX="$(printf 'b%.0s' {1..64})"
+POOLER_HEX="$(printf 'c%.0s' {1..64})"
 . "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
 
 fail() {
@@ -40,10 +41,30 @@ EOF
 cat >"${fakebin}/podman" <<'EOF'
 #!/usr/bin/env bash
 state="${FAKE_STATE:?}"
+if [[ "$1 $2" == 'exec -i' ]]; then
+  [[ "$3" == holo-postgres ]] || exit 2
+  role="${*: -1}"
+  printf 'writer-sql %s\n' "$role" >>"$state/calls"
+  [[ "${FAKE_CASE}" != "sql_failure_$role" ]] || exit 1
+  printf 't\n'
+  exit 0
+fi
 printf 'podman %s\n' "$*" >>"${state}/calls"
 image_file() { printf '%s/images/%s' "${state}" "$(printf '%s' "$1" | tr '/:' '__')"; }
 case "$1 ${2:-}" in
   'info --format') printf 'arm64\n' ;;
+  'inspect -f')
+    [[ "${*: -1}" =~ ^([0-9a-f]{64}|hololive-api|hololive-alarm-worker)$ ]] || exit 2
+    cat "${state}/running-endpoint"
+    ;;
+  'container exists')
+    [[ "${FAKE_COORDINATED:-false}" == true ]] || exit 2
+    [[ "${FAKE_CASE}" != inventory_failure ]] || exit 125
+    [[ "$(<"$state/$3/active")" == true || "${FAKE_CASE}" == residual_container ]]
+    ;;
+  'container inspect')
+    [[ "$3" == --format && "$4" == '{{.State.Running}} {{.Image}}' && "$5" == holo-pgbouncer ]] || exit 2
+    cat "$state/pooler-identity" ;;
   'exec holo-pgbouncer')
     [[ "$*" == 'exec holo-pgbouncer sha256sum /etc/pgbouncer/pgbouncer.ini' ]] || exit 2
     [[ ! -e "${state}/pooler-query-failed" ]] || exit 125
@@ -119,7 +140,19 @@ restart_unit() {
   [[ "${FAKE_CASE}" != auto_restart || "${pair}" != candidate ]] || printf '1\n' >"${current}/nrestarts"
 }
 case "$1" in
-  daemon-reload) ;;
+  daemon-reload)
+    if [[ "${FAKE_COORDINATED:-false}" == true ]]; then
+      for service in hololive-api hololive-alarm-worker; do
+        if [[ -L "$HOLOLIVE_QUADLET_TEST_ROOT/etc/systemd/system/$service.service" ]]; then
+          printf 'masked\n' >"$state/$service/loadstate"
+          printf 'masked\n' >"$state/$service/mask_scope"
+          if [[ "${FAKE_CASE}" == invocation_changed ]]; then
+            printf '%032d\n' 2 >"$state/$service/invocation"
+          fi
+        fi
+      done
+    fi
+    ;;
   is-active) [[ "$(cat "$(state_dir "${*: -1}")/active")" == true ]] ;;
   show)
     current="$(state_dir "$2")"
@@ -128,20 +161,19 @@ case "$1" in
       LoadState) cat "${current}/loadstate" ;;
       UnitFileState) cat "${current}/mask_scope" ;;
       ActiveState) if [[ "$(<"${current}/active")" == true ]]; then echo active; else echo inactive; fi ;;
+      InvocationID) cat "${current}/invocation" ;;
+      MainPID) if [[ "$(<"${current}/active")" == true || "${FAKE_CASE}" == residual_pid ]]; then echo 42; else echo 0; fi ;;
+      ControlPID) echo 0 ;;
+      Result) if [[ "${FAKE_CASE}" == failed_stop ]]; then echo exit-code; else echo success; fi ;;
       *) exit 2 ;;
     esac
     ;;
-  mask)
-    scope=masked
-    shift
-    if [[ "$1" == --runtime ]]; then scope=masked-runtime; shift; fi
-    [[ "$1" == --now ]] || exit 2
+  stop)
     shift
     for unit in "$@"; do
-      current="$(state_dir "${unit}")"
-      printf 'masked\n' >"${current}/loadstate"
-      printf '%s\n' "${scope}" >"${current}/mask_scope"
-      printf 'false\n' >"${current}/active"
+      current="$(state_dir "$unit")"
+      printf 'false\n' >"$current/active"
+      if [[ "${FAKE_CASE}" == other_stopped_invocation ]]; then printf '%032d\n' 3 >"$current/invocation"; fi
     done
     ;;
   unmask)
@@ -149,6 +181,7 @@ case "$1" in
     if [[ "${1:-}" == --runtime ]]; then shift; fi
     for unit in "$@"; do
       current="$(state_dir "${unit}")"
+      rm -- "$HOLOLIVE_QUADLET_TEST_ROOT/etc/systemd/system/$unit" || exit 1
       printf 'loaded\n' >"${current}/loadstate"
       printf 'generated\n' >"${current}/mask_scope"
     done
@@ -188,7 +221,7 @@ EOF
 cat >"${fakebin}/python3" <<'EOF'
 #!/usr/bin/env bash
 state="${FAKE_STATE:?}"
-[[ "${1:-}" == "${FAKE_PAIR_TOOL}" ]] || exec "${FAKE_REAL_PYTHON3:?}" "$@"
+[[ "${1:-}" == "${FAKE_PAIR_TOOL}" || "${1:-}" == "${FAKE_STAGE_PAIR_TOOL:-unused}" ]] || exec "${FAKE_REAL_PYTHON3:?}" "$@"
 shift
 action="$1" service="$2" dir="$3"
 printf 'pair %s %s %s\n' "${action}" "${service}" "${dir##*/}" >>"${state}/calls"
@@ -200,9 +233,14 @@ case "${action}" in
     [[ "$4" == "${service}" && "$5" == "${FAKE_DEPLOY_ROOT}" ]] || exit 3
     [[ "$(cat "${current}/active")" == true ]] || exit 3
     mkdir "${dir}"
+    printf '{"container_id":"%064d"}\n' 1 >"${dir}/pair.json"
     printf 'profile\n' >"${dir}/profile.json"
     # 실제 도구는 이전 pair가 기록한 기본 unit(그 image가 돌던 정의)을 이어받는다.
-    [[ ! -f "${state}/previous-unit" ]] || cp "${state}/previous-unit" "${dir}/unit.container"
+    if [[ -f "${state}/previous-unit" ]]; then
+      cp "${state}/previous-unit" "${dir}/unit.container"
+    else
+      cp "${FAKE_QUADLET_DIR}/${service}.container" "${dir}/unit.container"
+    fi
     if [[ "${action}" == prepare ]]; then
       printf 'pair=previous\n' >"${dir}/50-worker-profile.conf"
       mkdir -p "${unit_dropin%/*}"
@@ -211,7 +249,8 @@ case "${action}" in
     ;;
   rollback)
     [[ -f "${dir}/profile.json" ]] || exit 3
-    printf 'pair=%s\n' "${dir##*/}" >"${dir}/50-worker-profile.conf"
+    [[ "$4" == "${dir%/*}/rollback.conf" ]] || exit 3
+    printf 'pair=previous\napp_version=captured\n' >"$4"
     ;;
   candidate)
     expected="${FAKE_CANDIDATE_ID}"
@@ -230,8 +269,16 @@ case "${action}" in
     [[ "${FAKE_CASE}" != candidate_check_failure || "${dir##*/}" != candidate ]]
     ;;
   verify|verify-source) [[ -f "${dir}/profile.json" ]] ;;
+  verify-dropin)
+    [[ -f "$4" && "$(<"$4")" == $'pair=previous\napp_version=captured' ]] ;;
+  verify-captured)
+    [[ "$4" == "${service}" && "$(<"${current}/runtime")" == baseline && "$(<"${current}/active")" == true &&
+      "${FAKE_CASE}" != generation_changed ]] ;;
   verify-retained)
     [[ -f "${dir}/profile.json" && -f "$4/profile.json" && "$5" == "${FAKE_DEPLOY_ROOT}" ]] || exit 3
+    if grep -qx 'pair=previous' "${unit_dropin}"; then
+      cmp -s "$dir/50-worker-profile.conf" "$unit_dropin" || exit 3
+    fi
     retained="$(sed -n 's/^pair=//p' "${unit_dropin}")"
     [[ "${retained}" == baseline || "${retained}" == previous || "${retained}" == candidate ]]
     ;;
@@ -239,9 +286,14 @@ case "${action}" in
     [[ "$4" == "${FAKE_DEPLOY_ROOT}" ]] || exit 3
     [[ "${FAKE_CASE}" != api_activation_failure || "${service}" != hololive-api ]] || exit 1
     mkdir -p "${unit_dropin%/*}"
+    if [[ "${dir##*/}" == previous ]]; then
+      [[ "$#" == 5 && "$(<"$5")" == $'pair=previous\napp_version=captured' ]] || exit 3
+      if [[ "$5" != "${dir}/50-worker-profile.conf" ]]; then cp "$5" "${dir}/50-worker-profile.conf"; fi
+    fi
     cp "${dir}/50-worker-profile.conf" "${unit_dropin}"
     ;;
   verify-live)
+    [[ "${FAKE_CASE}" != "verify_failure_${service}" ]] || exit 1
     expected="${dir##*/}"
     if [[ "${FAKE_COORDINATED:-false}" == true && "${expected}" == previous ]]; then expected=baseline; fi
     [[ "$4" == "${service}" && "$(cat "${current}/active")" == true &&
@@ -265,6 +317,7 @@ make_case() {
   local root="$1" service="$2" with_dropin="$3" api_revision="${4:-${REVISION}}" quadlet_dir
   quadlet_dir="${root}/etc/containers/systemd/hololive-bot"
   mkdir -p "${root}/opt/hololive-bot/compose/current" "${quadlet_dir}" "${root}/etc/stack-secrets/hololive-bot" \
+    "${root}/etc/systemd/system" \
     "${root}/state/images"
   printf '%s\n' "${REVISION}" >"${root}/opt/hololive-bot/compose/current/.source-revision"
   cp "${ROOT_DIR}/deploy/quadlet/hololive-bot/"*.container "${quadlet_dir}/"
@@ -278,6 +331,7 @@ make_case() {
   add_image "${root}" localhost/hololive-api:candidate "${API_HEX}" hololive-api "${api_revision}"
   add_image "${root}" localhost/hololive-alarm-worker:candidate "${WORKER_HEX}" hololive-alarm-worker "${REVISION}"
   printf 'true\n' >"${root}/state/active"
+  printf 'POSTGRES_HOST=holo-pgbouncer\nPOSTGRES_PORT=6432\n' >"$root/state/running-endpoint"
   printf '3\n' >"${root}/state/nrestarts"
   printf 'baseline\n' >"${root}/state/runtime"
   : >"${root}/state/calls"
@@ -288,6 +342,7 @@ run_tool() {
   shift 3
   env PATH="${fakebin}:${PATH}" HOLOLIVE_QUADLET_TEST_ROOT="${root}" FAKE_STATE="${root}/state" FAKE_CASE="${case_name}" \
     FAKE_PAIR_TOOL="${ROOT_DIR}/scripts/deploy/lib/worker-profile-pair.py" \
+    FAKE_STAGE_PAIR_TOOL="${root}/opt/hololive-bot/compose/staged/${REVISION}/scripts/deploy/lib/worker-profile-pair.py" \
     FAKE_REAL_PYTHON3="${REAL_PYTHON3}" \
     FAKE_QUADLET_DIR="${root}/etc/containers/systemd/hololive-bot" \
     FAKE_FENCE_DIR="${root}/var/lib/hololive-postgres-fence" \
@@ -332,7 +387,7 @@ assert_order "${root}" success \
   'pair capture hololive-api previous' 'pair rollback hololive-api previous' 'pair check hololive-api previous' \
   'pair candidate hololive-api candidate' 'pair check hololive-api candidate' 'pair verify-source hololive-api candidate' \
   'systemctl daemon-reload' 'systemctl start hololive-db-migrate.service' \
-  'pair activate hololive-api candidate' 'systemctl daemon-reload' 'systemctl restart hololive-api.service' \
+  'writer-sql hololive_runtime' 'pair activate hololive-api candidate' 'systemctl daemon-reload' 'systemctl restart hololive-api.service' \
   'pair verify-live hololive-api candidate'
 assert_no_call "${root}" success '^pair (prepare|activate hololive-api previous)'
 [[ "$(installed_pair "${root}" hololive-api)" == candidate && "$(cat "${root}/state/runtime")" == candidate ]] ||
@@ -435,9 +490,12 @@ for endpoint_case in changed override restored missing invalid unresolved; do
   sed -e 's/^Environment=HOLOLIVE_CENTRAL_POSTGRES_HOST=.*/Environment=HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres/' \
       -e 's/^Environment=HOLOLIVE_CENTRAL_POSTGRES_PORT=.*/Environment=HOLOLIVE_CENTRAL_POSTGRES_PORT=5432/' \
       "${unit_file}" > "${root}/state/previous-unit"
-  if run_tool "${root}" health_failure "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate; then
-    fail "endpoint fixture unexpectedly deployed"
-  fi
+  release="$root/opt/hololive-bot/compose/current/artifacts/worker-profile/releases/prior"
+  mkdir -p "$release/previous"
+  printf 'hololive-api\n' >"$release/service"
+  printf 'profile\n' >"$release/previous/profile.json"
+  printf 'pair=previous\napp_version=captured\n' >"$release/previous/50-worker-profile.conf"
+  cp "$root/state/previous-unit" "$release/previous/unit.container"
   case "${endpoint_case}" in
     override) printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-pgbouncer\nHOLOLIVE_CENTRAL_POSTGRES_PORT=6432\n' >> "${root}/etc/stack-secrets/hololive-bot/compose.env" ;;
     restored)
@@ -721,6 +779,21 @@ assert_order "${root}" "rollback check" 'pair verify hololive-api previous' 'pai
 assert_no_call "${root}" "rollback check" '^(pair activate |systemctl )'
 pass "rollback --check verifies the retained pair without changes"
 
+root="${tmp}/legacy-rollback"
+make_case "$root" hololive-api true
+release="$root/opt/hololive-bot/compose/current/artifacts/worker-profile/releases/prior"
+mkdir -p "$release/previous"
+printf 'hololive-api\n' >"$release/service"
+printf 'profile\n' >"$release/previous/profile.json"
+printf 'pair=previous\napp_version=captured\n' >"$release/previous/50-worker-profile.conf"
+for mode in --check --apply; do
+  run_tool "$root" success "$API_HEX" "$ROLLBACK" "$release" "$mode" ||
+    { cat "$root/out" >&2; fail "기존 복원 가능한 release 거부"; }
+done
+[[ ! -e "$release/rollback.conf" && ! -e "$release/previous.endpoint" ]] ||
+  fail "기존 release에 전환 증거를 소급 생성함"
+pass "기존 release는 보존한 overlay로만 명시적 복원이 가능하다"
+
 # 두 서비스의 실제 상태를 분리하고 API의 Wants가 정지한 worker를 기동하는 효과도 모델링한다.
 FAKE_COORDINATED=true
 make_coordinated_case() {
@@ -731,6 +804,7 @@ make_coordinated_case() {
     printf 'true\n' >"${root}/state/${service}/active"
     printf 'loaded\n' >"${root}/state/${service}/loadstate"
     printf 'generated\n' >"${root}/state/${service}/mask_scope"
+    printf '%032d\n' 1 >"${root}/state/${service}/invocation"
     printf '3\n' >"${root}/state/${service}/nrestarts"
     printf 'baseline\n' >"${root}/state/${service}/runtime"
     printf 'pair=baseline\n' >"${root}/etc/containers/systemd/hololive-bot/${service}.container.d/50-worker-profile.conf"
@@ -808,6 +882,11 @@ FAKE_SERVER_EPOCH=new
 run_tool "${root}" success "${API_HEX}" "${HELPER}" --resume "${api_release}" "${worker_release}" ||
   { cat "${root}/out" >&2; fail "coordinated resume failed"; }
 assert_candidate_pair_running "${root}"
+assert_order "$root" resume \
+  'systemctl start hololive-db-migrate.service' 'writer-sql hololive_alarm_worker' 'writer-sql hololive_runtime' \
+  'pair activate hololive-alarm-worker candidate' 'pair activate hololive-api candidate' \
+  'systemctl unmask hololive-alarm-worker.service' 'pair verify-live hololive-alarm-worker candidate' \
+  'systemctl unmask hololive-api.service' 'pair verify-live hololive-api candidate'
 pass "coordinated resume never starts an old dependency before both candidate pairs are installed"
 
 root="${tmp}/coordinated-reboot"
@@ -840,6 +919,8 @@ assert_held_pair "${root}"
 run_tool "${root}" success "${API_HEX}" "${HELPER}" --resume "${api_release}" "${worker_release}" ||
   { cat "${root}/out" >&2; fail "explicit resume of the held partial activation failed"; }
 assert_candidate_pair_running "${root}"
+[[ "$(grep -cxF 'systemctl start hololive-db-migrate.service' "$root/state/calls")" == 1 ]] ||
+  fail "부분 게시 재개가 migration을 반복함"
 pass "partial publication leaves both peers held and supports an explicit verified resume"
 
 root="${tmp}/coordinated-stale"
@@ -873,5 +954,167 @@ fi
   ! -e "${root}/state/migrated-with" ]] ||
   fail "incomplete hold triggered migration or changed the other peer"
 pass "an incomplete coordinated hold is rejected without migration or automatic peer recovery"
+
+for reason in generation_changed invocation_changed other_stopped_invocation residual_pid residual_container inventory_failure failed_stop; do
+  root="${tmp}/quiesce-${reason}"
+  make_coordinated_case "$root"
+  if run_tool "$root" "$reason" "$API_HEX" "$HELPER" --quiesce \
+      localhost/hololive-api:candidate localhost/hololive-alarm-worker:candidate; then
+    fail "$reason: 불완전한 정지를 성공으로 판정"
+  fi
+  [[ ! -e "$(coordinated_release "$root" hololive-api)/quiesced" ]] || fail "$reason: 정지 영수증을 발행함"
+  assert_no_call "$root" "$reason" '^(pair activate |systemctl (start|restart|unmask))'
+done
+
+for reason in foreign_mask mixed_release swapped_generation direct tls; do
+  root="${tmp}/reject-resume-${reason}"
+  make_coordinated_case "$root"
+  quiesce_case "$root"
+  api_release="$(coordinated_release "$root" hololive-api)"
+  worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
+  case "$reason" in
+    foreign_mask)
+      mask="$root/etc/systemd/system/hololive-api.service"
+      rm "$mask"
+      ln -s /dev/null "$mask" ;;
+    mixed_release)
+      worker_copy="${worker_release}-other"
+      cp -a "$worker_release" "$worker_copy"
+      # 유효한 inode와 같은 이미지·invocation이라도 다른 release 경로는 영수증에 없다.
+      mask="$root/etc/systemd/system/hololive-alarm-worker.service"
+      ln -PT -- "$mask" "$root/etc/systemd/system/.${worker_copy##*/}.mask"
+      worker_release="$worker_copy" ;;
+    swapped_generation) printf '{"container_id":"%064d"}\n' 2 >"$worker_release/previous/pair.json" ;;
+    direct) printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres\nHOLOLIVE_CENTRAL_POSTGRES_PORT=5432\n' \
+      >>"$root/etc/stack-secrets/hololive-bot/compose.env" ;;
+    tls) printf 'POSTGRES_SSLMODE=require\n' >>"$root/etc/stack-secrets/hololive-bot/compose.env" ;;
+  esac
+  : >"$root/state/calls"
+  if run_tool "$root" success "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release"; then
+    fail "$reason: 안전하지 않은 재개를 허용함"
+  fi
+  assert_held_pair "$root"
+  assert_no_call "$root" "$reason" '^(writer-sql |pair activate |systemctl (daemon-reload|unmask|start|restart))'
+done
+
+for reason in sql_failure_hololive_runtime sql_failure_hololive_alarm_worker migration_failure; do
+  root="${tmp}/held-${reason}"
+  make_coordinated_case "$root"
+  quiesce_case "$root"
+  api_release="$(coordinated_release "$root" hololive-api)"
+  worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
+  if run_tool "$root" "$reason" "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release"; then
+    fail "$reason: migration 또는 SQL 실패를 성공으로 처리함"
+  fi
+  assert_no_call "$root" "$reason" '^(pair activate |systemctl (unmask|restart))'
+  assert_held_pair "$root"
+  : >"$root/state/calls"
+  if run_tool "$root" "$reason" "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release"; then
+    fail "$reason: 실패한 검사를 건너뜀"
+  fi
+  assert_no_call "$root" "$reason" '^(pair activate |systemctl (start|restart|unmask))'
+done
+
+for writer in hololive-api hololive-alarm-worker; do
+  root="${tmp}/reject-start-${writer}"
+  make_coordinated_case "$root"
+  quiesce_case "$root"
+  api_release="$(coordinated_release "$root" hololive-api)"
+  worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
+  if run_tool "$root" "verify_failure_$writer" "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release"; then
+    fail "$writer: 후보 수용 실패가 성공으로 끝남"
+  fi
+  if [[ "$writer" == hololive-alarm-worker ]]; then
+    assert_no_call "$root" "$writer" '^systemctl (unmask|restart|stop) hololive-api.service$'
+  fi
+  assert_held_pair "$root"
+  ! grep -q '^\[OUTCOME\] deployed' "$root/out" || fail "$writer: 실패한 쌍의 배포 성공을 기록함"
+  run_tool "$root" success "$API_HEX" "${fakebin}/systemctl" simulate-reboot
+  assert_held_pair "$root"
+done
+
+root="${tmp}/before-sync"
+make_coordinated_case "$root"
+current="$root/opt/hololive-bot/compose/current"
+staged="$root/opt/hololive-bot/compose/staged/$REVISION"
+mkdir -p "$staged/scripts/deploy/lib" "$staged/scripts/ci"
+cp "$HELPER" "$staged/scripts/deploy/"
+cp "$ROOT_DIR/scripts/deploy/lib/"{compose-env.sh,postgres-endpoint.sh,postgres-capacity.sh} "$staged/scripts/deploy/lib/"
+cp "$ROOT_DIR/scripts/ci/postgres-capacity-policy.tsv" "$staged/scripts/ci/"
+printf '%s\n' "$REVISION" >"$staged/.source-revision"
+printf '%040d\n' 1 >"$current/.source-revision"
+units="$root/etc/containers/systemd/hololive-bot"
+rm "$units/hololive-api.container.d/50-worker-profile.conf"
+printf 'POSTGRES_HOST=holo-postgres\nPOSTGRES_PORT=5432\n' >"$root/state/running-endpoint"
+for service in hololive-api hololive-alarm-worker; do
+  sed -i -e 's/HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-pgbouncer/HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres/' \
+    -e 's/HOLOLIVE_CENTRAL_POSTGRES_PORT=6432/HOLOLIVE_CENTRAL_POSTGRES_PORT=5432/' "$units/$service.container"
+done
+mv "$root/state/"{live,uninstalled}-pgbouncer.ini
+add_image "$root" staged-pooler "$POOLER_HEX" iris-stack-pgbouncer "${REVISION}"
+for attribute in 'platform=linux/amd64' 'revision=bad' 'title=other'; do
+  image="$root/state/images/sha256_${POOLER_HEX}"
+  sed -i "s|^${attribute%%=*}=.*|${attribute}|" "$image"
+  if run_tool "$root" success "$API_HEX" "$staged/scripts/deploy/quadlet-redeploy-service.sh" --quiesce-before-sync \
+      localhost/hololive-api:candidate localhost/hololive-alarm-worker:candidate "sha256:$POOLER_HEX"; then
+    fail "staged pooler의 잘못된 ${attribute%%=*}를 허용함"
+  fi
+  assert_no_call "$root" pooler '^(pair |systemctl (stop|start|restart|unmask))'
+  add_image "$root" staged-pooler "$POOLER_HEX" iris-stack-pgbouncer "${REVISION}"
+done
+run_tool "$root" success "$API_HEX" "$staged/scripts/deploy/quadlet-redeploy-service.sh" --quiesce-before-sync \
+  localhost/hololive-api:candidate localhost/hololive-alarm-worker:candidate "sha256:$POOLER_HEX" ||
+  { cat "$root/out" >&2; fail "sync 전 실세대 정지 실패"; }
+api_release="$(coordinated_release "$root" hololive-api)"
+worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
+for release in "$api_release" "$worker_release"; do
+  [[ "$(<"$release/pooler.image")" == "sha256:$POOLER_HEX" && "$(<"$release/pooler.platform")" == linux/arm64 &&
+    "$(<"$release/pooler.revision")" == "$REVISION" ]] || fail "두 release에 고정한 pooler가 일치하지 않음"
+done
+cmp -s "$api_release/previous/50-worker-profile.conf" "$units/hololive-api.container.d/50-worker-profile.conf" ||
+  fail "최초 prepare한 API의 활성 overlay가 rollback 렌더링으로 바뀜"
+[[ "$(<"$api_release/previous.endpoint")" == 'holo-postgres|5432' && ! -e "$api_release/candidate" ]] ||
+  fail "sync 전에 새 unit에서만 만들 수 있는 후보 또는 잘못된 endpoint를 기록함"
+assert_no_call "$root" before-sync '^(writer-sql |podman exec holo-pgbouncer |pair candidate |systemctl (unmask|restart|start))'
+mkdir -p "$current/deploy/quadlet/hololive-bot"
+for service in hololive-api hololive-alarm-worker; do
+  cp "$ROOT_DIR/deploy/quadlet/hololive-bot/$service.container" "$current/deploy/quadlet/hololive-bot/"
+  cp "$current/deploy/quadlet/hololive-bot/$service.container" "$units/"
+done
+cp "$staged/.source-revision" "$current/.source-revision"
+mv "$root/state/"{uninstalled,live}-pgbouncer.ini
+run_tool "$root" success "$API_HEX" "${fakebin}/systemctl" simulate-reboot
+assert_held_pair "$root"
+printf 'true %s\n' "$WORKER_HEX" >"$root/state/pooler-identity"
+: >"$root/state/calls"
+if run_tool "$root" success "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release"; then
+  fail "실행 pooler가 staged ID와 다른데 재개함"
+fi
+assert_no_call "$root" pooler '^(writer-sql |pair candidate |pair activate |systemctl (unmask|start|restart))'
+assert_held_pair "$root"
+printf 'true %s\n' "$POOLER_HEX" >"$root/state/pooler-identity"
+run_tool "$root" success "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release" ||
+  { cat "$root/out" >&2; fail "검토한 revision sync 후 재개 실패"; }
+assert_candidate_pair_running "$root"
+printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-pgbouncer\nHOLOLIVE_CENTRAL_POSTGRES_PORT=6432\n' \
+  >>"$root/etc/stack-secrets/hololive-bot/compose.env"
+for mode in --check --apply; do
+  : >"$root/state/calls"
+  if run_tool "$root" success "$API_HEX" "$ROLLBACK" "$api_release" "$mode"; then
+    fail "새 compose가 이전 direct 실행 세대의 증거를 대체함"
+  fi
+  assert_no_call "$root" rollback '^(pair activate |systemctl (start|restart|daemon-reload))'
+done
+FAKE_COORDINATED=false
+root="$tmp/single-endpoint-change"
+make_case "$root" hololive-api false
+printf 'POSTGRES_HOST=holo-postgres\nPOSTGRES_PORT=5432\n' >"$root/state/running-endpoint"
+if run_tool "$root" success "$API_HEX" "$HELPER" hololive-api localhost/hololive-api:candidate; then
+  fail "단일 deploy로 coordinated endpoint 전환을 우회함"
+fi
+grep -q 'single-writer endpoint change refused' "$root/out" || { cat "$root/out" >&2; fail "단일 실행 endpoint gate에 도달하지 못함"; }
+assert_no_call "$root" single '^(pair |systemctl (start|restart|daemon-reload))'
+[[ ! -e "$root/opt/hololive-bot/compose/current/artifacts" ]] || fail "단일 전환 거부가 release를 변경함"
+pass "새 unit 설치 전 확보한 같은 영속 hold에서만 pooled 후보를 준비하고 직렬로 연다"
 
 echo "all quadlet redeploy checks passed"
