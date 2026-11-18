@@ -530,22 +530,25 @@ systemctl() {
   local kind=collector value
   printf 'systemctl %s\n' "$*" >>"$fixture_root/calls"
   [[ "${*: -1}" != "$issuer_unit" ]] || kind=issuer
+  if [[ "$1" == show && "$2" == --all ]]; then
+    local prop answer unit="${*: -1}"
+    shift 2
+    while [[ "$1" == -p ]]; do
+      prop="$2"; shift 2
+      answer="$(systemctl show -p "$prop" --value "$unit")" || return
+      printf '%s=%s\n' "$prop" "$answer"
+    done
+    return 0
+  fi
   case "$1" in
+    start)
+      admitted "$2" || return 8
+      printf true > "$fixture_root/$kind.running" ;;
     daemon-reload)
       if [[ "$fixture_case" == *collector_143 && -L "$system_unit_dir/$collector_unit" ]]; then
         rm -f "$fixture_root/collector.exit"
       fi ;;
     show)
-      if [[ "$2" == --all ]]; then
-        local prop answer unit="${*: -1}"
-        shift 2
-        while [[ "$1" == -p ]]; do
-          prop="$2"; shift 2
-          answer="$(systemctl show -p "$prop" --value "$unit")" || return
-          printf '%s=%s\n' "$prop" "$answer"
-        done
-        return 0
-      fi
       case "$3" in
         LoadState)
           if [[ -L "$system_unit_dir/${*: -1}" ]]; then printf 'masked\n'; else printf 'loaded\n'; fi ;;
@@ -567,9 +570,6 @@ systemctl() {
       [[ "$fixture_case" != *unmask_failure || "$kind" != collector ]] || return 8
       rm "$system_unit_dir/$2" ;;
     is-active) [[ "$(cat "$fixture_root/$kind.running")" == true ]] ;;
-    start)
-      admitted "$2" || return 8
-      printf true > "$fixture_root/$kind.running" ;;
     restart)
       admitted "$2" || return 8
       rm -f "$fixture_root/$kind.exit"
