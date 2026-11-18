@@ -94,6 +94,7 @@ class Cutover(unittest.TestCase):
         self.on_start = lambda n:None
         self.journal = {}
         self.tags = {}
+        self.unit_source, self.origin, self.retained = d.INPUT, d.origin, d.retained
         for k,v in [('UNIT',self.units),('INPUT',self.input),('SYSTEM',self.system)]:
             self.patch(k,v)
         for i,n in enumerate(d.NAMES):
@@ -113,7 +114,7 @@ class Cutover(unittest.TestCase):
             d.record(self.h / (n + '.stopped'), b'b'*32)
             d.metadata(self.h / (n + '.stopped.json'), {**self.props[n],'cid':self.state['old'][n]['cid'],
                        'invocation':'b'*32,'since':'@1234.000056','manager_stop':True,'container_exit':'0'})
-        d.record(self.h/'quiesced', d.QUIESCED)
+        d.record(self.h/'quiesced', d.QUIESCED['5433'])
         d.metadata(self.h/'previous.json',self.state)
         self.patch('trusted', lambda *args:None)
         self.patch('raw', Path.read_bytes)
@@ -201,6 +202,9 @@ class Cutover(unittest.TestCase):
             self.reload()
         if args[:2] == ('podman','tag'):
             self.tags[args[3]] = self.tags[args[2]]
+        if args[:2] == ('podman','exec') and '--body' in args:
+            return json.dumps({'status':'ready','instance_id':'youtube-collector-d','helper':'ok',
+                               'first_success':True,'handoff_status':'PROCESSED','handoff_processed':True})
         if args[:2] == ('systemctl','stop'):
             n = args[-1].removesuffix('.service')
             self.assertIn(n,self.guards)
@@ -219,31 +223,57 @@ class Cutover(unittest.TestCase):
                 return json.dumps({'INVOCATION_ID':inv})
             return json.dumps({'INVOCATION_ID': self.journal[n]})
 
-    def resume(self):
-        d.resume(self.h,self.rev,self.ids,self.digests)
+    def resume(self, source_port='5433'):
+        d.resume(self.h,self.rev,self.ids,self.digests,source_port)
 
-    def direct_hold(self):
-        h = self.root / 'd-cutover-direct'
-        def snapshot(path):
-            path.mkdir()
-            d.record(h/'profile.json',b'profile')
-            return self.state
+    def running_pair(self, installed_port='5433', runtime_port=None):
+        self.h = self.root / 'd-cutover-running'
+        self.patch('GEN',self.root / 'generator')
+        d.GEN.mkdir()
+        self.patch('INPUT',self.unit_source)
+        self.patch('origin',self.origin)
+        self.patch('retained',self.retained)
+        self.patch('prereqs',lambda:None)
+        self.patch('bindings',lambda:{})
+        self.patch('policy',lambda n: {'50-mcs-level.conf':b'[Container]\nSecurityLabelLevel=s0:c908,c909\n'} if n == d.C else {})
+        self.patch('profile',lambda:b'profile')
+        self.patch('healthy',lambda n,g,**kwargs:self.assertEqual(g,self.generation(n)))
+        def collector(g,port,level):
+            expected = (runtime_port or installed_port) if g['cid'] == self.state['old'][d.C]['cid'] else '6433'
+            d.need(port == expected,'collector 실행 환경 불일치')
+            return b'profile'
+        self.patch('collector',collector)
+        self.patch('issuer',lambda *args:None)
+        reload_masks = self.reload
+        def reload():
+            reload_masks()
+            for n in d.NAMES:
+                base = self.units / d.unit(n)
+                f = d.GEN / (n + '.service')
+                text = base.read_text() + '\n' + '\n'.join(v.decode() for v in d.policy(n).values())
+                f.write_text('SourcePath=' + str(base) + '\n' + text.replace('[Container]', '[X-Container]'))
+                self.props[n].update(FragmentPath=str(d.mask(n) if self.props[n]['LoadState'] == 'masked' else f),
+                                     NeedDaemonReload='no', Type='notify', DropInPaths=(
+                                         str(self.system / (n+'.service.d/90-hololive-stop-guard.conf')) if n in self.guards else ''))
+        self.reload = reload
         for n in d.NAMES:
+            candidate = (d.INPUT / d.unit(n)).read_bytes()
+            self.digests[n] = d.sha(candidate)
+            (self.units / d.unit(n)).write_bytes(candidate.replace(b'POSTGRES_PORT=6433', b'POSTGRES_PORT=' + installed_port.encode()))
+            old_image = self.state['images'][n]
+            self.tags[old_image['id']] = old_image
             d.mask(n).unlink()
             self.executions[n] = dict(self.state['old'][n])
             self.props[n].update(ActiveState='active', InvocationID=self.executions[n]['inv'], MainPID='123')
         self.reload()
-        self.patch('snapshot',snapshot)
-        self.patch('collector',lambda *args:b'profile')
-        self.patch('issuer',lambda *args:None)
-        return h
+        return self.h
 
     def test_original_jobs_finish_before_any_seal(self):
-        h = self.direct_hold()
+        h = self.running_pair()
         self.outcomes[d.I] = {'ActiveState':'failed','Result':'exit-code','ExecMainStatus':'143'}
         self.outcomes[d.C] = {'InvocationID':'','ExecMainCode':'0'}
-        d.quiesce(h)
-        self.assertEqual((h/'quiesced').read_bytes(),d.QUIESCED)
+        d.quiesce(h,'5433')
+        self.assertEqual((h/'quiesced').read_bytes(),d.QUIESCED['5433'])
         self.assertEqual([x[-1] for x in self.calls if x[:2] == ('systemctl','stop')],
                          [d.I+'.service',d.C+'.service'])
         for n in d.NAMES:
@@ -256,7 +286,7 @@ class Cutover(unittest.TestCase):
                         next(i for i,c in enumerate(self.calls) if c[4:5] == ('seal',)))
 
     def test_issuer_stop_does_not_authorize_replaced_collector(self):
-        h = self.direct_hold()
+        h = self.running_pair()
         def swap(*args, **kwargs):
             result = self.command(*args,**kwargs)
             if args[:2] == ('systemctl','stop') and args[-1] == d.I+'.service':
@@ -264,16 +294,16 @@ class Cutover(unittest.TestCase):
             return result
         self.patch('run',swap)
         with self.assertRaisesRegex(ValueError,'세대 변경'):
-            d.quiesce(h)
+            d.quiesce(h,'5433')
         self.assertEqual(self.guards,set(d.NAMES))
         self.assertNotIn(('systemctl','stop',d.C+'.service'),self.calls)
         self.assertFalse((h/'quiesced').exists())
 
     def test_collector_143_cannot_be_hidden_by_seal_reload(self):
-        h = self.direct_hold()
+        h = self.running_pair()
         self.outcomes[d.C] = {'ActiveState':'failed','Result':'exit-code','ExecMainStatus':'143'}
         with self.assertRaisesRegex(ValueError,'정상 종료 미확인'):
-            d.quiesce(h)
+            d.quiesce(h,'5433')
         result = json.loads((h/(d.C+'.stopped.json')).read_bytes())
         self.assertTrue(result['manager_stop'])
         self.assertEqual((result['Result'],result['ExecMainStatus']), ('exit-code','143'))
@@ -282,23 +312,72 @@ class Cutover(unittest.TestCase):
         self.assertFalse((h/'quiesced').exists())
 
     def test_collector_nonzero_exit_survives_manager_collection(self):
-        h = self.direct_hold()
+        h = self.running_pair()
         self.exits[d.C] = '143'
         self.outcomes[d.C] = {'InvocationID':'','ExecMainCode':'0','ExecMainStatus':'0','Result':'success'}
         with self.assertRaisesRegex(ValueError,'정상 종료 미확인'):
-            d.quiesce(h)
+            d.quiesce(h,'5433')
         self.assertFalse((h/'quiesced').exists())
         self.assertEqual(json.loads((h/(d.C+'.stopped.json')).read_bytes())['container_exit'],'143')
         self.assertIn(d.C,self.guards)
 
     def test_partial_arm_stops_neither_unit(self):
-        h = self.direct_hold()
+        h = self.running_pair()
         self.guards.add(d.I)
         with self.assertRaisesRegex(ValueError,'이전 가드'):
-            d.quiesce(h)
+            d.quiesce(h,'5433')
         self.assertFalse(any(c[:2] == ('systemctl','stop') for c in self.calls))
         self.assertEqual(self.guards,set(d.NAMES))
         self.assertFalse((h/'quiesced').exists())
+
+    def exercise_release(self, source_port):
+        candidates = dict(self.executions)
+        h = self.running_pair(source_port)
+        d.quiesce(h,source_port)
+        previous = json.loads((h/'previous.json').read_bytes())
+        self.assertEqual(previous['previous_endpoint']['port'],int(source_port))
+        self.assertEqual(previous['old'],self.executions)
+        collector_unit = self.units / d.unit(d.C)
+        inode = d.number(collector_unit)
+        self.executions = candidates
+        self.resume(source_port)
+        self.assertEqual(d.number(collector_unit) == inode,source_port == '6433')
+        self.assertEqual(collector_unit.read_bytes(),(d.INPUT / d.unit(d.C)).read_bytes())
+        accepted = json.loads((h/'accepted.json').read_bytes())
+        self.assertEqual((accepted['generations'],accepted['port']),(candidates,6433))
+        self.assertEqual([x[-1] for x in self.calls if x[:2] == ('systemctl','start')],
+                         [d.I+'.service',d.C+'.service'])
+
+    def test_direct_release_switches_installed_endpoint(self):
+        self.exercise_release('5433')
+
+    def test_already_pooled_release_keeps_installed_endpoint(self):
+        self.exercise_release('6433')
+
+    def test_pooled_installation_is_not_an_implicit_direct_cutover(self):
+        h = self.running_pair('6433')
+        with self.assertRaisesRegex(d.Refused,'계약 불일치'):
+            d.quiesce(h,'5433')
+        self.assertFalse(h.exists())
+        self.assertFalse(self.calls)
+
+    def test_already_pooled_refuses_direct_running_collector(self):
+        h = self.running_pair('6433',runtime_port='5433')
+        with self.assertRaisesRegex(d.Refused,'실행 환경 불일치'):
+            d.quiesce(h,'6433')
+        self.assertFalse(h.exists())
+        self.assertFalse(self.calls)
+
+    def test_pooled_resume_refuses_changed_previous_endpoint(self):
+        h = self.running_pair('6433')
+        d.quiesce(h,'6433')
+        state = json.loads((h/'previous.json').read_bytes())
+        state['previous_endpoint']['port'] = 5433
+        (h/'previous.json').write_text(json.dumps(state))
+        with self.assertRaisesRegex(d.Refused,'원래 endpoint 영수증 불일치'):
+            self.resume('6433')
+        self.assertFalse((h/'resume-attempt.json').exists())
+        self.assertTrue(all(d.mask(n).is_symlink() for n in d.NAMES))
 
     def resume_inputs(self):
         self.patch('gate',lambda *args:None)
@@ -455,10 +534,14 @@ class Cutover(unittest.TestCase):
         self.rejected_but_stopped()
 
     def test_static_receipt_cannot_open_candidates(self):
-        (self.h/'quiesced').write_bytes(b'kapu-d-v1\n')
-        with self.assertRaisesRegex(ValueError,'quiesce 영수증'):
-            self.resume()
-        self.assertFalse(self.calls)
+        for marker,requested in ((b'kapu-d-v1\n','5433'),(b'kapu-d-guarded-stop-v1\n','5433'),
+                                 (d.QUIESCED['6433'],'5433'),(d.QUIESCED['5433'],'6433')):
+            with self.subTest(marker=marker,requested=requested):
+                (self.h/'quiesced').write_bytes(marker)
+                with self.assertRaisesRegex(ValueError,'quiesce 영수증'):
+                    self.resume(requested)
+                self.assertFalse(self.calls)
+                self.assertFalse((self.h/'resume-attempt.json').exists())
 
     def test_new_marker_requires_both_genuine_stop_receipts(self):
         path = self.h/(d.I+'.stopped.json')
