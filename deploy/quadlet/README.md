@@ -111,7 +111,12 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 
 중앙 API·worker와 b/c/d의 Quadlet은 **기동 차단 → 원래 unit으로 정지 → 최종 mask** 순서입니다. 활성 unit에 `/dev/null` mask를 먼저 로드하면 원래 `ExecStop`과 `KillMode`가 사라집니다. 반대로 mask의 reload만 미루면 기존 `Wants=`가 writer를 다시 기동할 수 있습니다.
 
-같은 변경의 `systemd-stop-guard.py`는 두 unit 각각에 작업 소유 anchor를 가리키는 `90-hololive-stop-guard.conf`를 설치하고, systemd가 필수 `ConditionPathExists=!…`를 로드했는지 확인합니다. 이 조건은 명시적·의존성·재부팅 기동만 막고 실행 중인 프로세스를 정지하지 않습니다. 원 invocation의 manager stop과 같은 시간 범위의 원래 Podman CID 종료 이벤트를 확인한 뒤에만 해당 unit을 최종 mask합니다. 기동 차단 파일만 있거나 물리적으로 컨테이너가 없다는 사실은 정상 정지 영수증이 아닙니다. 부분 실패 시 guard·anchor·복구점·journal을 보존하고 임의 삭제, `reset-failed`, DB 변경, 다음 writer 기동을 하지 않습니다.
+같은 변경의 `systemd-stop-guard.py`가 각 unit에 설치하는 `90-hololive-stop-guard.conf`는 두 경로를 차단합니다.
+
+- 명시적 기동·의존성·재부팅: 작업 소유 anchor가 있으면 `ConditionPathExists=!…`가 성립하지 않습니다.
+- 프로세스 자체 종료: systemd의 자동 재시작은 위 조건을 다시 검사하지 않으므로 `Restart=no`, 빈 `RestartForceExitStatus=`가 실제 manager에 적용돼야 합니다.
+
+어느 설정도 이미 실행 중인 프로세스를 정지시키지는 않습니다. 원래 정지 명령과 정책이 그대로인 상태에서 manager가 원 invocation을 정지했는지, 같은 시간 범위에 원래 Podman CID의 종료 이벤트가 단 한 건인지 확인합니다. 기동 차단 파일이나 컨테이너 부재만으로 정상 종료를 인정하지 않습니다. 부분 실패 시 guard·anchor·복구점·journal을 보존하고 임의 삭제, `reset-failed`, DB 변경, 다음 writer 기동을 하지 않습니다.
 
 `b/c quiesce`는 자기 mask의 inode와 두 컨테이너의 부재를 함께 확인합니다. `po-broker`는 의도적으로 SIGTERM을 다시 보내므로 Podman이 143, systemd가 `failed`를 기록할 수 있습니다. 성공한 `stop` 직전에 실행 중이던 바로 그 issuer invocation이고 두 PID가 0인 경우에만 이 상태를 차단으로 인정합니다. 실패 이력을 지우거나 collector의 오류를 정상 종료로 취급하지 않습니다. 종료 영수증이 없는 기존 hold에 영수증을 소급 작성하지 않습니다. `[OUTCOME] unconfirmed`이면 DB 변경·추가 기동을 중단하고 mask·원래 journal·복구점을 보존합니다.
 정지 journal 조회가 실패하면 `[hold] stop journal unconfirmed`의 `unit`, `invocation`, `since`(epoch 마이크로초), `journal_status`를 보존합니다. 상태 0인데도 이 진단이 나오면 해당 범위에 일치한 이벤트가 없었다는 뜻입니다. 나중에 같은 이벤트를 찾더라도 원래 종료 결과나 영수증을 바꾸지 않습니다.
@@ -230,6 +235,7 @@ sudo "$helper" --resume '<api-release-dir>' '<alarm-release-dir>'
 - `--quiesce`는 실행 중 이전 pair와 후보를 모두 검증·보존한 뒤 두 unit을 함께 정지하고 영속 mask합니다.
   호스트 재부팅 뒤에도 명시적 재개 전에는 구형 writer를 기동하지 않습니다. `[OUTCOME] quiesced`는 writer
   정지만 증명하며 migration·후보 활성화·배포 완료를 뜻하지 않습니다.
+- 중앙 두 writer의 소유 표식 `artifacts/worker-profile/releases/.central-writer-hold`는 해당 API release의 `captured.invocation`과 같은 inode입니다. 부분 정지라도 이 표식이나 기동 차단 파일이 남아 있으면 단일 배포와 단일 `rollback --apply`는 거부합니다. 같은 내용을 복사하거나 표식을 지워 재개하지 않습니다.
 - `--resume`은 두 release가 같은 정지 작업에서 나왔고 그 작업이 만든 영속 mask가 유지되는지 확인합니다. 설치된 후보의 revision·image·프로필·기본 unit·실효 endpoint가 일치해야 합니다. 두 후보 drop-in을 게시하더라도 API는 worker가 수용될 때까지 차단합니다.
 - 완료는 exit 0과 두 서비스의 `[OUTCOME] deployed`, 실제 image/profile·health·`NRestarts=0`으로 확인합니다.
   실행 중 pair를 잃은 뒤 과거 파일 이름만으로 복구점을 만들지 않습니다.

@@ -92,6 +92,8 @@ class Manager:
         conditions = self.property('Unit', 'Conditions', 'a(sbbsi)')
         require(any(row[:4] == ['ConditionPathExists', False, True, str(anchor)] for row in conditions),
                 'manager에 소유 anchor의 필수 부정 기동 조건이 없음')
+        # Restart= 재기동은 Unit 조건을 다시 검사하지 않는다. 강제 종료 코드도 재기동을 허용하면 안 된다.
+        require(self.fields('Restart', 'RestartForceExitStatus') == ('no', ''), '자동 재기동 차단이 적용되지 않음')
 
     def terminal(self):
         state, main, control, job = self.fields('ActiveState', 'MainPID', 'ControlPID', 'Job')
@@ -142,7 +144,7 @@ class Guard:
     def payload(self, created, stop_digest):
         d = directory(self.dropdir, self.owner)
         return (f'# anchor={self.expected} directory={identity(d)} created={int(created)} stop={stop_digest}\n'
-                f'[Unit]\nConditionPathExists=!{self.anchor}\n').encode()
+                f'[Unit]\nConditionPathExists=!{self.anchor}\n[Service]\nRestart=no\nRestartForceExitStatus=\n').encode()
 
     def owned_dropin(self, stop_digest):
         self.check_anchor()
@@ -158,13 +160,11 @@ class Guard:
         require(data in (regular, created), '기동 차단 또는 원래 unit의 정지 정의 변경')
         return data == created
 
-    def arm(self):
-        require(not any(os.path.lexists(p) for p in (self.mask, self.drop, self.side)), '기존 mask/기동 차단 인수 거부')
-        before = self.manager.stop_definition()
+    def publish_guard(self, stop_digest):
         created = not os.path.lexists(self.dropdir)
         if created:
             self.dropdir.mkdir(mode=0o755)
-        data = self.payload(created, before)
+        data = self.payload(created, stop_digest)
         with os.fdopen(os.open(self.side, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600), 'wb') as f:
             f.write(data)
             f.flush()
@@ -173,6 +173,17 @@ class Guard:
         sync_dir(self.dropdir)
         sync_dir(self.system)
         self.manager.reload()
+
+    def arm(self):
+        require(not any(os.path.lexists(p) for p in (self.mask, self.drop, self.side)), '기존 mask/기동 차단 인수 거부')
+        try:
+            original = self.manager.stop_definition()
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+            # 해제가 일부만 적용된 경우에도 다음 부팅은 막는다. 미확인 guard로 stop이나 seal은 할 수 없다.
+            self.publish_guard('unconfirmed')
+            self.manager.condition(self.anchor)
+            raise ValueError('기동 차단만 설치됨: 원래 정지 경로 미확인') from exc
+        self.publish_guard(original)
         self.check()
 
     def check(self):
@@ -182,8 +193,8 @@ class Guard:
         self.manager.condition(self.anchor)
         return before
 
-    def seal(self):
-        before = self.check()
+    def publish_mask(self):
+        self.check_anchor()
         self.manager.terminal()
         os.link(self.anchor, self.mask, follow_symlinks=False)
         sync_dir(self.system)
@@ -193,6 +204,16 @@ class Guard:
         load, installed = self.manager.fields('LoadState', 'UnitFileState')
         require((load, installed) == ('masked', 'masked'), f'최종 mask 미확인: {load}/{installed}')
         self.manager.terminal()
+
+    def undo_unmask(self):
+        # caller가 이번에 해제한 직후이며 start 요청·컨테이너가 없을 때만 manager의 기존 mask를 복원한다.
+        require(not any(os.path.lexists(p) for p in (self.mask, self.drop, self.side)) and
+                self.manager.fields('LoadState') == ('masked',), '미적용된 소유 unmask가 아님')
+        self.publish_mask()
+
+    def seal(self):
+        before = self.check()
+        self.publish_mask()
         created = self.owned_dropin(before)
         self.drop.unlink()
         self.side.unlink()
@@ -236,7 +257,7 @@ def podman_exit_status(unit, cid, since):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_subparsers(dest='action', required=True)
-    for name in ('arm', 'check', 'seal'):
+    for name in ('arm', 'check', 'seal', 'undo-unmask'):
         guard = actions.add_parser(name)
         guard.add_argument('unit', choices=sorted(UNITS))
         guard.add_argument('anchor')
@@ -250,7 +271,7 @@ def main():
         print(podman_exit_status(args.unit, args.cid, args.since))
         return
     g = Guard(args.unit, args.anchor, args.device_inode)
-    getattr(g, args.action)()
+    getattr(g, args.action.replace('-', '_'))()
 
 
 if __name__ == '__main__':

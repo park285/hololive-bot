@@ -27,6 +27,8 @@ collector=hololive-youtube-collector-d.service
 foreign=hololive-api.service
 reset=hololive-alarm-worker.service
 drift=hololive-youtube-po-b.service
+auto=hololive-youtube-collector-b.service
+missing=hololive-youtube-po-c.service
 manager=''
 private_ctl() { DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/systemd/private" systemctl --user "$@"; }
 close_manager() {
@@ -83,6 +85,7 @@ def finish(*_):
     append('drained')
     sys.exit(0)
 signal.signal(signal.SIGTERM, finish)
+signal.signal(signal.SIGUSR1, lambda *_: os._exit(23))
 append('started')
 with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
     notify.sendto(b'READY=1', os.environ['NOTIFY_SOCKET'].replace('@', '\0', 1))
@@ -91,10 +94,10 @@ while True:
 PY
 cat >"$r/stop" <<'SH'
 printf 'original-ExecStop\n' >>"$1"
-kill -TERM "$2"
+if [[ -n ${2:-} ]]; then kill -TERM "$2"; fi
 SH
 printf '[Unit]\nDefaultDependencies=no\n' >"$r/units/empty.target"
-for u in "$collector" "$po" "$foreign" "$reset" "$drift"; do
+for u in "$collector" "$po" "$foreign" "$reset" "$drift" "$auto"; do
   {
     printf '[Unit]\nDefaultDependencies=no\n'
     if [[ $u == "$collector" ]]; then printf 'Requires=%s\nAfter=%s\n' "$po" "$po"; fi
@@ -102,9 +105,13 @@ for u in "$collector" "$po" "$foreign" "$reset" "$drift"; do
   } >"$r/units/$u"
   ln -s /dev/null "$(anchor "$u")"
 done
+printf 'RestartForceExitStatus=23\n' >>"$r/units/$auto"
 printf '[Unit]\nDefaultDependencies=no\nWants=%s %s\nAfter=%s %s\n' "$collector" "$po" "$collector" "$po" >"$r/units/consumer.target"
+printf '[Unit]\nDefaultDependencies=no\nWants=%s\nAfter=%s\n' "$auto" "$auto" >"$r/units/restarting.target"
+printf '[Unit]\nDefaultDependencies=no\n[Service]\nExecStart=/usr/bin/sleep 60\n' >"$r/units/$missing"
+ln -s /dev/null "$(anchor "$missing")"
 new_manager first
-systemctl --user start "$collector" "$foreign" "$reset" "$drift"
+systemctl --user start "$collector" "$foreign" "$reset" "$drift" "$missing" restarting.target
 mkdir "$system/$foreign.d" "$system/$reset.d"
 printf '# operator\n' >"$system/$foreign.d/90-hololive-stop-guard.conf"
 reject guard arm "$foreign"
@@ -120,6 +127,29 @@ systemctl --user daemon-reload
 reject guard check "$drift"
 [[ $(prop "$drift" ActiveState) == active && ! -L $system/$drift ]]
 systemctl --user stop "$drift"
+reject guard arm "$missing"
+[[ -f $system/$missing.d/90-hololive-stop-guard.conf && $(prop "$missing" ActiveState) == active ]]
+reject guard check "$missing"
+systemctl --user stop "$missing"
+systemctl --user start "$missing"
+[[ $(prop "$missing" ConditionResult) == no && $(prop "$missing" MainPID) == 0 ]]
+initial=$(prop "$auto" InvocationID)
+systemctl --user kill --kill-whom=main --signal=USR1 "$auto"
+for _ in {1..100}; do
+  if [[ $(prop "$auto" ActiveState) == active && $(grep -cx started "$r/$auto.events") == 2 ]]; then break; fi
+  sleep 0.03
+done
+[[ $(prop "$auto" InvocationID) != "$initial" && $(grep -cx started "$r/$auto.events") == 2 ]]
+guard arm "$auto"
+[[ $(prop "$auto" Restart) == no && -z $(prop "$auto" RestartForceExitStatus) ]]
+systemctl --user kill --kill-whom=main --signal=USR1 "$auto"
+for _ in {1..100}; do
+  [[ $(prop "$auto" ActiveState) == failed && $(prop "$auto" MainPID) == 0 ]] && break
+  sleep 0.03
+done
+[[ $(prop "$auto" ActiveState) == failed && $(prop "$auto" MainPID) == 0 &&
+   -z $(prop "$auto" Job) && $(grep -cx started "$r/$auto.events") == 2 ]]
+echo 'PASS: a real Restart=always restart before the guard; no restart after the same process exit under guard'
 guard arm "$po"
 guard arm "$collector"
 guard check "$po"
@@ -132,7 +162,7 @@ normal=$'started\noriginal-ExecStop\ndrained'
 for u in "$po" "$collector"; do [[ $(cat "$r/$u.events") == "$normal" ]]; done
 systemctl --user start "$po" consumer.target
 for u in "$po" "$collector"; do [[ $(prop "$u" ActiveState) == inactive && $(cat "$r/$u.events") == "$normal" ]]; done
-echo 'PASS: original stop/drain; explicit, dependency and automatic reactivation blocked'
+echo 'PASS: original stop/drain; explicit and dependency reactivation blocked'
 close_manager
 new_manager fresh
 systemctl --user start consumer.target
@@ -142,4 +172,8 @@ for u in "$po" "$collector"; do
   [[ $(prop "$u" LoadState) == masked && $(stat -c '%d:%i' "$system/$u") == "$(stat -c '%d:%i' "$(anchor "$u")")" && ! -e $system/$u.d ]]
   reject systemctl --user start "$u"
 done
+rm -- "$system/$po"
+guard undo-unmask "$po"
+[[ $(stat -c '%d:%i' "$system/$po") == "$(stat -c '%d:%i' "$(anchor "$po")")" ]]
+reject systemctl --user start "$po"
 echo 'PASS: persistent guard on fresh manager, final owned mask, foreign and ineffective guard rejected'
