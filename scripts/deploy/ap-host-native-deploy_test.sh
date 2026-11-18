@@ -353,6 +353,41 @@ else
   record_fail "invalid RELEASE_ID must report the safe component contract"
 fi
 
+. "$ROOT_DIR/scripts/deploy/lib/ap-host-native-window.sh"
+mkdir -p "$tmp/payload/bin" "$tmp/transfer-home"
+printf 'qualified\n' > "$tmp/payload/bin/worker-profile-pair.py"
+qualified_digest="$(native_payload_digest "$tmp/payload")"
+printf 'different\n' > "$tmp/payload/bin/worker-profile-pair.py"
+for mode in --quiesce --resume; do
+  args=(osaka "$mode" "$native_release_window" old)
+  if [[ "$mode" == --resume ]]; then args+=(12345678-1234-1234-1234-123456789012); fi
+  status=0
+  error="$(PATH="$tmp/bin:$PATH" RELEASE_ID=new HOLO_BOT_VERSION=123 ARTIFACT_DIR="$tmp/payload" \
+    SSH_KEY="$tmp/KR.key" I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true HOLO_NATIVE_PAYLOAD_SHA256="$qualified_digest" \
+    "$DEPLOY" "${args[@]}" 2>&1)" || status=$?
+  [[ "$status" == 1 && "$error" == '검증 당시 native payload digest와 다릅니다.' ]] || record_fail "$mode: 검증 후 교체된 helper 허용"
+  status=0
+  HOLO_NATIVE_PAYLOAD_SHA256='' RELEASE_ID=new HOLO_BOT_VERSION=123 "$DEPLOY" "${args[@]}" >/dev/null 2>&1 || status=$?
+  [[ "$status" == 2 ]] || record_fail "$mode: 독립 digest 누락 처리 오류"
+done
+
+python3 - "$DEPLOY" "$tmp" <<'PY'
+from pathlib import Path
+import subprocess, sys
+entry, temp = map(Path, sys.argv[1:])
+body = entry.read_text().split('RSYNC_RSH="$(ap_rsync_rsh)"',1)[1].split('change_started_at=',1)[0]
+fixture = '''set -euo pipefail
+HOME="$1/transfer-home" payload_name=claimed artifact_dir="$1/payload" MODE="$2" RSYNC_RSH=fixture
+ap_remote_bash() { bash -s -- "$@"; }
+ap_rsync_target() { printf '%s' "$1"; }
+rsync() { printf '%s' "$MODE" > "$HOME/$payload_name/last-transfer"; }
+'''
+receipt = temp/'transfer-home/claimed/last-transfer'
+for mode, expected in [('--quiesce', True), ('--apply', False), ('--resume', True)]:
+    result = subprocess.run(['bash','-c',fixture+body,'fixture',str(temp),mode],capture_output=True)
+    assert (result.returncode == 0) == expected and receipt.read_text() == '--quiesce', (mode, result.stderr)
+PY
+
 release_root="${tmp}/releases"
 mkdir -p "${release_root}/active" "${tmp}/outside"
 ln -s "${release_root}/active" "${tmp}/current"

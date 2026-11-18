@@ -271,9 +271,24 @@ native 배포는 root 소유 `/opt/hololive-bot/youtube-collector/cutover-recove
 
 guard가 남으면 새 배포와 수동 rollback `--apply` 모두 거절합니다. 준비 중 실패와 복원 실패도 guard를 보존하며 rollback `--dry-run`은 기존 payload 진단에 사용할 수 있습니다. 운영 변경 승인을 받은 뒤 기록의 worker와 자식 process group, 잔존 systemd job 및 collector/issuer 상태를 확인하고 변경 완료 여부를 확정하십시오. PID는 재사용될 수 있으므로 PID 숫자만으로 다른 프로세스를 종료하지 않습니다. 5초 뒤 worker group에 TERM을 전달해도 신호를 무시하는 클라이언트나 daemon 작업의 종료를 보장하지 않습니다. 복구가 확정된 뒤에만 guard를 해제하고 필요한 rollback/fix-forward를 적용합니다. 새 release와 `previous`의 rollback 자료는 이 확인이 끝날 때까지 보존합니다.
 
+### Osaka a: W1·W2 분리 정지 창
+
+아래는 **별도 운영 승인을 받은 뒤** kapu에서 실행할 절차입니다. 이 release의 `WINDOW=W2`만 허용합니다. 일반 `--apply`의 자동 복원을 쓰지 않습니다. `RELEASE_ID`(새 ID), `HOLO_BOT_VERSION`, `ARTIFACT_DIR`, `I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true`를 명시합니다. `OLD`는 osaka1의 실제 `current`가 가리키는 `releases/` 바로 아래 릴리스 이름입니다. 원 프로세스의 endpoint는 `100.100.1.8:6433`이며 이전 창의 OLD·nonce는 재사용할 수 없습니다.
+
+각 창에서 깨끗한 source의 `osaka --dry-run`은 빌드한 **전체** 디렉터리의 `HOLO_NATIVE_PAYLOAD_SHA256`을 출력합니다. qualification 완료 시 같은 `source scripts/deploy/lib/ap-host-native-window.sh; native_payload_digest "$ARTIFACT_DIR"`로 일치하는 값을 확인해 산출물 밖의 승인 기록에 revision·release ID와 함께 보존하십시오. `--quiesce`와 `--resume` 둘 다 그 **기록의 값**을 `export HOLO_NATIVE_PAYLOAD_SHA256=…`로 요구합니다. 실행 직전 디렉터리를 다시 해시해 입력을 대체하지 않습니다.
+
+1. `scripts/deploy/ap-host-native-deploy.sh osaka --quiesce "$WINDOW" "$OLD"` — 빌드하지 않고 검증 payload를 새 staging에 전송합니다. 기존 rollback 입력을 덮어쓰지 않습니다. 실행 binary·profile, 실제 프로세스 DB endpoint, issuer rootfs와 unit, 원 `current`/`previous`를 대조합니다. socket·issuer·collector의 고유 invocation을 기록하고, root 소유 guard/drop-in으로 부팅·의존·명시적 start를 차단합니다. 서비스의 `Restart=no`도 manager에서 확인한 다음 socket+issuer, collector 순으로 정지합니다. 각 원 invocation의 이번 stop job journal과 PID·job 없는 정상 비활성 상태, 원본 checksum까지 확인한 `quiesced`와 출력 nonce 없이는 다음 단계로 가지 않습니다. `disable`이나 `inactive` 출력만으로 대체할 수 없습니다.
+2. 세 writer가 정지한 뒤에만 해당 창의 다른 서비스·DB 절차로 진행합니다. W1은 030·pool 수용, W2는 **모든** 구 publisher 차단과 031 적용 등 각 창의 승인된 공통 관문이 선행합니다. native 영수증은 타 슬롯 정지나 DB 원장을 증명하지 않습니다.
+3. `scripts/deploy/ap-host-native-deploy.sh osaka --resume "$WINDOW" "$OLD" "$NONCE"` — 같은 kapu payload·source로 한 번만 실행합니다. 재빌드·재전송하지 않습니다. `quiesced`와 원본 checksum·guard 소유권, 세 unit에 적용된 차단을 확인합니다. root 소유 사본의 전체 payload digest, 새 binary/profile, 후보 endpoint `100.100.1.8:6433`, `--check-pooled-database`와 설치한 세 unit을 확인한 뒤 후보 issuer·collector만 엽니다. `/ready`·실행 profile·journal과 기존 외부 완료 관찰까지 성공해야 임시 재시작 차단과 cutover guard를 해제합니다.
+   - `quiesced`는 세 unit의 원 `.before`·`.stopped`, boot와 동결 입력을 묶습니다. 후보 시작 때마다 그 unit에만 임시 `/run` 허가가 열립니다. 시작 client의 수명이 끝나거나 재부팅하면 허가는 사라집니다. 각 unit의 요청한 manager start job, 그 완료 journal의 boot·invocation과 현재 실행 세대가 맞아야 root 영수증을 남깁니다. readiness 전후부터 별도 SSH 수용·보호 정지까지 하나라도 다른 세대, 미완료 요청, 재부팅이면 guard를 보존하고 교체 세대는 정지하지 않습니다. 정상 수용 시에만 `accepted-guard`로 원자적 인계가 이루어집니다.
+4. 실패하면 원 `release/native-window`, `rollback-contract`, 후보 release, staging, `cutover-recovery`를 보존합니다. 판정 가능한 실패는 후보만 보호 정지하며 재개 권리를 다시 발급하지 않습니다. 전송 단절·신호·불명확한 manager job은 `outcome_unknown` 취급하고 경쟁하는 stop/start나 자동 재시도를 하지 않습니다. 어떤 경우에도 이전 release의 marker와 이를 참조하는 systemd drop-in을 삭제하지 않습니다. 완료 뒤에도 `current/native-window`가 있는 퇴역 release의 기동과 수동 rollback을 거절합니다. **W2 후 구 publisher는 같은 6433이어도 복구 대상이 아닙니다.** 승인된 호환 후보로만 fix-forward합니다.
+
+### 일반 native 배포
+
 native 배포·수동 rollback·profile preparation은 기존 SSH와 `sudo -n` 경로를 사용합니다. env·인증서·profile 소비 경로와 immutable release의 current/previous 계약은 유지하며 별도 암호화 저장소 helper를 요구하지 않습니다.
 
 전송 staging은 SSH 사용자 홈의 `.hololive-host-native-<AP_NAME>-<release_id>`입니다. 배포는 기존 `/swapfile`을 유지하고, 없으면 `AP_SWAPFILE_SIZE_MIB` 크기(기본 2048MiB)의 파일을 준비하여 활성화하고 `/etc/fstab`에 등록합니다. 값은 양수여야 합니다. 이전 release·staging·원본 데이터 삭제는 별도 승인 대상입니다.
+일반 `--apply`와 `--quiesce`는 rsync 전에 staging을 독점 생성합니다. 동명 staging이 있으면 덮어쓰거나 이어서 전송하지 않습니다.
 
 ### Native AP 배포 산출물 보존
 
@@ -374,7 +389,7 @@ service and runbook contract
 
 - Quadlet b·c는 paired cutover 백업으로 `PO_<B|C>_SSH_TARGET=<승인된 SSH 대상> APPROVE_PO_<B|C>_ROLLBACK=true scripts/deploy/po-central-cutover.sh <b|c> rollback <backup>`을 실행합니다. 이전 pair의 drop-in(`50-worker-profile.conf`)·rollback tag·issuer 영수증을 함께 되돌리고 issuer부터 재시작합니다. 그 밖에 이전 `hololive-youtube-collector:rollback-<UTC timestamp>` tag가 있으면 [`rollback.md`](rollback.md#runtime-rollback)의 revision 확인·`prod` 재승격 절차를 사용한 뒤 collector만 무빌드로 다시 시작합니다. Quadlet unit과 host-native generator는 같은 revision tree를 써야 합니다.
 - kapu Quadlet d는 [kapu README](../../../deploy/podman/kapu/README.md)의 `SHA256SUMS` release profile과 `runtime-before-<날짜>` image tag로 되돌립니다. `po-central-cutover.sh`와 `ap-host-native-*`는 d를 다루지 않습니다.
-- host-native AP rollback 기준점은 `previous` collector release 하나입니다. 기준점이 없는 호스트는 되돌릴 이전 collector가 없으므로 `ap-host-native-rollback.sh`가 거절하고 fix-forward합니다. host-native AP 배포가 cutover 뒤 검증에 실패하면 unit을 멈추고 `previous` release와 그 issuer로 자동 복원합니다. 퇴역 producer 첫 cutover 상태를 기록·복원하던 경로와 repo 루트 compose 경로 폴백은 삭제했습니다(stack-audit 2026-09-26 T11).
+- 일반 host-native AP 배포의 복구 기준점은 `previous`와 그 issuer입니다. 기준점이 없거나 해당 release에 `native-window`가 있으면 수동·자동 rollback을 거절합니다. [W1·W2 분리 창](#osaka-a-w1w2-분리-정지-창)의 `--resume` 실패에는 일반 복원을 사용하지 않습니다.
 - Quadlet b·c는 collector를 정지한 채 교체하는 점검 모드를 지원하지 않습니다(정지한 unit의 container가 없어 이전 profile을 증명할 수 없음). schema 점검 창에서는 배포 전에 실행 중인 collector로 이전 pair를 확보합니다. host-native a 배포는 별도 값 없이 변경 전 collector unit의 실행·활성화 상태를 기록하고, 실패 복원은 실행 중이던 unit만 `previous` release로 다시 시작합니다. 점검 창에서 멈춰 둔 unit과 변경 전에 실패(`failed`)해 있던 unit은 `previous` release로 되돌리고 변경 전 활성화 상태만 복원하며 시작하지 않습니다(`ActiveState=…`를 포함한 `restored … without starting it` 안내). schema가 복원한 release와 맞는지 확인한 뒤 시작합니다. 수동 `ap-host-native-rollback.sh`는 이 기록을 쓰지 않고 collector를 시작하므로, 점검 창에서는 schema가 이전 release와 맞을 때만 실행합니다.
 
 ```bash

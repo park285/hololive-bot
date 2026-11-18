@@ -318,5 +318,198 @@ assert result.returncode == 143 and not (po_case/'restore-past-signal').exists()
 case, actual = run_case('stalled-owner', 'native_cutover_run restart sudo -n systemctl restart "$unit"; touch "$CASE/activated"', 'owner', mode='stalled')
 assert actual == 143 and (case/'recovery').exists() and not (case/'restored').exists() and not (case/'activated').exists()
 os.killpg(int((case/'recovery/worker-pid').read_text()), signal.SIGKILL)
+window_lib = root / 'scripts/deploy/lib/ap-host-native-window.sh'
+release_lib = root / 'scripts/deploy/lib/ap-host-native-release-path.sh'
+release_window, old_port = 'W2', 6433
+def window_case(name, args, scenario):
+    case = work / name
+    case.mkdir()
+    script = f'. "{helper}"\n. "{release_lib}"\n. "{window_lib}"\n' + endpoint_libs + r'''
+set -Eeuo pipefail
+cd "$CASE"
+releases_root="$PWD/releases" release_id=new window_old=old
+old_target="$releases_root/old" current_link="$PWD/current" previous_link="$PWD/previous"
+payload="$PWD/payload" host_env="$PWD/host.env" unit_file="$PWD/system/collector@.service"
+native_recovery_dir="$PWD/recovery"
+service=youtube-collector-a unit=collector.service po_service=issuer.service po_socket=issuer.socket
+window_name="$1" original="$2" fault="$3"
+EXPECTED_REVISION=$(printf 'a%.0s' {1..40})
+mkdir -p "$old_target/po-sandbox" "$payload" "$PWD/system"
+printf '%040d\n' 1 > "$old_target/po-sandbox/revision"
+ln -s "$old_target" "$current_link"
+printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=%s\n' "$original" > "$host_env"
+window_digest="$(native_payload_digest "$payload")"
+gen=$(printf '%032d' 1)
+hostname() { echo osaka1; }
+sudo() {
+  [[ "$1" == -n ]]; shift
+  case "$1" in
+    test) case "$2" in
+      /proc/*/exe) [[ "$3" == -ef && ( "$4" == "$release_dir/bin/youtube-collector" || "$4" == "$release_dir/po-sandbox/rootfs/app/bin/po-broker" ) ]] ;;
+      /proc/*/root) [[ "$3" == -ef && "$4" == "$release_dir/po-sandbox/rootfs" ]] ;;
+      *) "$@" ;;
+    esac ;;
+    install) mkdir -p -- "${!#}" ;;
+    sync) return 0 ;;
+    awk|python3|systemd-run|journalctl|systemctl|bash|sh|mkdir|tee|touch|sha256sum|ln|cmp|cat|grep|readlink|rm|mv) "$@" ;;
+    *) return 91 ;;
+  esac
+}
+systemd-run() {
+  local target="${!#}" id
+  [[ "$*" == *"--property=RuntimeDirectory=hololive-native-$native_claim_nonce-$target "* && "$*" == *"systemctl --job-mode=fail --show-transaction start $target" ]]
+  case "$target" in "$po_socket") id=101 ;; "$po_service") id=102 ;; "$unit") id=103 ;; *) return 8 ;; esac
+  rm "down-$target"
+  printf '%032d\n' "$id" > "live-$target"
+  local name arg
+  for arg in "$@"; do case "$arg" in --unit=*) name="${arg#*=}" ;; esac; done
+  : >"request-${name:?}"
+  if [[ "$fault" != missing_anchor ]]; then printf 'Enqueued anchor job %s %s/start.\n' "$id" "$target" >>"request-$name"; fi
+}
+systemctl() {
+  if [[ "$1" == --job-mode=fail ]]; then shift; fi
+  case "$1" in
+    show) printf 'InvocationID=%s\n' "$gen" ;;
+    daemon-reload) touch reload ;;
+    stop) shift; printf '%s\n' "$*" >> calls; for n in "$@"; do touch "down-$n"; rm -f "live-$n"; done ;;
+    *) return 92 ;;
+  esac
+}
+native_window_prop() {
+  case "$2" in
+    InvocationID) if [[ -e "live-$1" ]]; then cat "live-$1"; elif [[ "$fault" == replaced && -e reload ]]; then printf '%032d\n' 2; else echo "$gen"; fi ;;
+    Job) if [[ -e job-pending && "$1" == "$unit" ]]; then echo 42; fi ;;
+    RestartForceExitStatus) echo ;;
+    ActiveState) if [[ -e "down-$1" ]]; then echo inactive; else echo active; fi ;;
+    Restart) if [[ "$fault" == restart || $(readlink "$window/policy") == permanent ]]; then echo always; else echo no; fi ;;
+    DropInPaths) printf '%s/%s.d/90-native-window-%s.conf\n' "${unit_file%/*}" "$1" "$native_claim_nonce" ;;
+    MainPID) if [[ -f "live-$1" ]]; then echo "$BASHPID"; else echo 0; fi ;;
+    ControlPID) echo 0 ;;
+    UnitFileState) echo enabled ;;
+    Result) echo success ;;
+    *) return 93 ;;
+  esac
+}
+busctl() {
+  if [[ "$2" == call ]]; then echo 'o "/org/freedesktop/systemd1/unit/fixture"'; return; fi
+  local condition=blocked
+  if [[ "$fault" == missing ]]; then condition=wrong; fi
+  printf '{"type":"a(sbbsi)","data":[["ConditionPathExists",false,true,"%s",0],["ConditionPathExists",false,true,"%s",0],["ConditionPathExists",false,true,"%s",0],["ConditionPathExists",false,false,"%s",0]]}\n' \
+    "$current_link/native-window" "$native_recovery_dir/accepting" "$window/$condition" "$(native_window_permit "$n")"
+}
+journalctl() {
+  if [[ "$fault" == nojournal ]]; then return 1; fi
+  if [[ "${!#}" == _SYSTEMD_UNIT=hololive-native-start-* ]]; then local name="${!#}"; cat "request-${name#*=}"; return; fi
+  if [[ "$*" == *' JOB_TYPE=start '* ]]; then
+    local n job id
+    for n in "${window_units[@]}"; do [[ " $* " != *" UNIT=$n "* ]] || break; done
+    case "$n" in "$po_socket") job=101 ;; "$po_service") job=102 ;; "$unit") job=103 ;; esac
+    [[ " $* " == *" JOB_ID=$job "* && " $* " == *" --boot=$(native_window_boot) "* ]]
+    id="$(cat "live-$n")"
+    if [[ "$fault" == wrong_start_job ]]; then job=777; fi
+    if [[ "$fault" == foreign_start ]]; then id="$gen"; fi
+    printf '{"_BOOT_ID":"%s","INVOCATION_ID":"%s","JOB_ID":"%s"}\n' "$(native_window_boot)" "$id" "$job"
+    return
+  fi
+  if [[ "$*" == *--grep=* ]]; then
+    [[ "$fault" != no_drain ]] || return 0
+    printf '{"_SYSTEMD_INVOCATION_ID":"%s"}\n' "$gen"
+  elif [[ "$*" == *JOB_RESULT=done* && "$*" == *MESSAGE_ID=9d1aaa27d60140bd96365438aad20286* && "$fault" != started_only ]]; then
+    printf '{"INVOCATION_ID":"%s","JOB_ID":"42","JOB_RESULT":"done"}\n' "$gen"
+  fi
+}
+native_window_verify_original() { test -L "$current_link"; }
+native_snapshot_before_cutover() { mkdir "$old_target/rollback-contract"; cp "$host_env" "$old_target/rollback-contract/SHA256SUMS"; }
+native_window_inputs() { sudo -n sha256sum --strict --check --status "$window/inputs.sha256"; }
+native_window_process_endpoint() { [[ "$2" == 6433 ]]; }
+
+''' + scenario
+    result = subprocess.run(['bash', '-c', script, 'test', *args], env=dict(os.environ, CASE=str(case)),
+                            capture_output=True, text=True, timeout=15)
+    return case, result
+
+for name, win, port, fault, mutation, ok in (
+    ('window-valid', release_window, old_port, 'normal', '', True),
+    ('window-other', ('W2' if release_window == 'W1' else 'W1'), (6433 if old_port == 5433 else 5433), 'normal', '', False),
+    ('window-endpoint', release_window, (6433 if old_port == 5433 else 5433), 'normal', '', False),
+    ('window-guard', release_window, old_port, 'missing', '', False),
+    ('window-restart', release_window, old_port, 'restart', '', False),
+    ('window-generation', release_window, old_port, 'replaced', '', False),
+    ('window-journal', release_window, old_port, 'nojournal', '', False),
+    ('window-only-started', release_window, old_port, 'started_only', '', False),
+    ('window-no-drain', release_window, old_port, 'no_drain', '', False),
+    ('window-foreign', release_window, old_port, 'normal', 'window_nonce=$(printf "%036d" 1)', False),
+    ('window-incomplete', release_window, old_port, 'normal', 'rm "$window/quiesced"', False),
+    ('window-digest', release_window, old_port, 'normal', 'window_digest=$(printf "%064d" 1)', False),
+    ('window-stage-drift', release_window, old_port, 'normal', 'touch "$payload/extra"', False),
+    ('window-before', release_window, old_port, 'normal', 'echo other > "$window/$unit.before"', False),
+    ('window-stopped', release_window, old_port, 'normal', 'cp "$window/$unit.before" "$window/$po_socket.stopped"', False),
+    ('window-reuse', release_window, old_port, 'normal', 'native_window_resume_claim', False),
+):
+    case, result = window_case(name, [win, str(port), fault], 'native_window_quiesce\nwindow_nonce="$native_claim_nonce"\n'
+                               + mutation + '\nnative_window_resume_claim\n')
+    assert (result.returncode == 0) == ok, (name, result.stderr)
+    held = case / 'releases/old/native-window'
+    if ok:
+        assert (held/'blocked').exists() and (held/'resuming').is_dir() and (held/'quiesced').is_file()
+        assert (case/'calls').read_text().splitlines() == ['issuer.socket issuer.service', 'collector.service']
+    elif fault != 'normal':
+        assert not (held/'quiesced').exists() and not (held/'resuming').exists()
+        if fault == 'no_drain':
+            assert (case/'calls').read_text().splitlines() == ['issuer.socket issuer.service', 'collector.service']
+        elif fault in ('nojournal', 'started_only'):
+            assert (case/'calls').read_text().splitlines() == ['issuer.socket issuer.service']
+        else:
+            assert not (case/'calls').exists()
+
+case, result = window_case('window-brake', [release_window, str(old_port), 'normal'], '''
+native_window_quiesce
+window_nonce="$native_claim_nonce"
+native_window_resume_claim
+release_dir="$releases_root/new"; mkdir "$release_dir"; ln -sfn "$release_dir" "$current_link"
+rm "$window/blocked"
+native_window_rehold
+native_rollback_endpoint_validate "$old_target" "$host_env"
+''')
+assert result.returncode != 0 and '퇴역' in result.stderr and (case/'recovery/claim').is_file()
+assert (case/'releases/old/native-window/blocked').is_file() and (case/'current').resolve() == case/'releases/new'
+candidate_stage = '''
+native_window_quiesce
+window_nonce="$native_claim_nonce"
+native_window_resume_claim
+release_dir="$releases_root/new"; mkdir "$release_dir"; ln -sfn "$release_dir" "$current_link"
+po_socket_file="$PWD/system/$po_socket"; touch "$po_socket_file"; cp "$po_socket_file" "$release_dir/$po_socket"
+rm "$window/blocked"
+for target in "$po_socket" "$po_service"; do native_cutover_run issuer native_window_start "$target"; done
+native_cutover_run collector-start native_window_start "$unit"
+native_window_await_observation
+'''
+for name, action, mutation, expected in (
+    ('accepted', 'accepted', '', 'accepted'),
+    ('failed', 'observation-failed', '', 'stopped'),
+    ('issuer-changed', 'accepted', 'printf "%032d\\n" 9 > "live-$po_service"', 'unknown'),
+    ('socket-changed', 'observation-failed', 'printf "%032d\\n" 9 > "live-$po_socket"', 'unknown'),
+    ('collector-changed', 'observation-failed', 'printf "%032d\\n" 9 > "live-$unit"', 'unknown'),
+    ('reboot', 'accepted', 'native_window_boot() { printf "%032d\\n" 999; }', 'unknown'),
+    ('partial', 'observation-failed', 'rm "$window/$po_socket.job"', 'unknown'),
+    ('queued', 'observation-failed', 'touch job-pending', 'unknown'),
+    ('closing-owned', 'observation-failed', 'mkdir "$window/closing"', 'busy'),
+):
+    case, result = window_case('observe-' + name, [release_window, str(old_port), 'normal'], candidate_stage + mutation +
+                               '\nwindow_action=' + action + '\nnative_window_close_observation\n')
+    hold = case/'releases/old/native-window'
+    assert (result.returncode == 0) == (expected in ('accepted','stopped')), (name, result.stderr)
+    assert (hold/'accepted-guard').is_dir() == (expected == 'accepted')
+    assert (case/'recovery').is_dir() != (expected == 'accepted')
+    assert (case/'recovery/outcome').exists() == (expected == 'unknown')
+    assert (hold/'blocked').exists() == (expected in ('unknown','stopped'))
+    stops = (case/'calls').read_text().splitlines()[2:]
+    assert stops == (['issuer.socket issuer.service','collector.service'] if expected == 'stopped' else []), (name, stops)
+
+for fault in ('wrong_start_job','foreign_start','missing_anchor'):
+    case, result = window_case(fault, [release_window, str(old_port), fault], candidate_stage)
+    assert result.returncode != 0 and not (case/'releases/old/native-window/await-observation').exists(), (fault, result.stderr)
+    assert not (case/'releases/old/native-window/issuer.socket.started').exists()
+
 print('[PASS] native cutover owner/child/group/restore signals, first install, bounded unknown, supervisor errors, apply guards and grep errors')
 PY

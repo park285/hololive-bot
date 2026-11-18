@@ -124,7 +124,16 @@ po_install_release() {
   sudo -n install -m 0644 -o root -g root "$release/hololive-youtube-po.socket" "$po_socket_file"
   po_verify_units "$release" "$po_unit_file" "$po_socket_file"
   sudo -n systemctl daemon-reload
-  sudo -n systemctl enable --now "$po_socket"
-  sudo -n systemctl restart "$po_service"
+  if [[ "${window_action:-deploy}" == resume ]]; then
+    native_window_admit_candidate
+    sudo -n systemctl enable "$po_socket"
+    native_window_start "$po_socket"
+    native_window_start "$po_service"
+    native_window_candidates "$po_socket" "$po_service"
+  else
+    sudo -n systemctl enable --now "$po_socket"
+    sudo -n systemctl restart "$po_service"
+  fi
   po_wait_ready "$release"
+  if [[ "${window_action:-deploy}" == resume ]]; then native_window_candidates "$po_socket" "$po_service"; fi
 }

@@ -25,7 +25,15 @@ unit="hololive-youtube-collector@${service}.service"
 po_apply_lib="$payload/bin/ap-host-native-po.sh"
 worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
 swapfile="/swapfile"
-native_recovery_require_clear
+window_action="${9:?native command required}"
+window_name="${10:-}" window_old="${11:-}" window_digest="${12:-}" window_nonce="${13:-}"
+case "$window_action" in
+  quiesce) [[ $# == 13 && -z "$window_nonce" ]]; native_window_quiesce; exit ;;
+  resume) [[ $# == 13 && -n "$window_nonce" ]]; native_window_resume_claim ;;
+  accepted|observation-failed) [[ $# == 13 && -n "$window_nonce" ]]; native_window_close_observation; exit ;;
+  deploy) [[ $# == 9 ]]; native_recovery_require_clear ;;
+  *) exit 2 ;;
+esac
 
 normalize_runtime_payload_permissions() {
   local root="$1"
@@ -111,7 +119,7 @@ vm.swappiness = 10
 SYSCTL
 sudo -n sysctl -w vm.swappiness=10 >/dev/null
 
-native_cutover_claim "$releases_root/$release_id"
+if [[ "$window_action" == deploy ]]; then native_cutover_claim "$releases_root/$release_id"; fi
 # 준비 중 실패도 guard와 산출물을 남깁니다. 다음 apply 전에 소유 worker와 runtime을 확인합니다.
 old_target=""
 if [[ -L "$current_link" ]]; then
@@ -142,6 +150,10 @@ release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$curre
 sudo -n mkdir "$release_dir"
 sudo -n rsync -a --delete "$payload/" "$release_dir/"
 sudo -n chown -R -P root:root "$release_dir"
+if [[ "$window_action" == resume ]]; then
+  copied_digest="$(sudo -n bash -c "$(declare -f native_payload_digest); native_payload_digest \"\$1\"" _ "$release_dir")"
+  [[ "$copied_digest" == "$window_digest" ]]
+fi
 normalize_runtime_payload_permissions "$release_dir"
 [[ "$(cat "$release_dir/po-sandbox/revision")" == "${EXPECTED_REVISION:?expected native source SHA missing}" ]]
 po_install_root="$release_dir/po-sandbox/rootfs"
@@ -164,55 +176,22 @@ sudo -n systemd-run --quiet --wait --pipe --collect \
   "$release_dir/bin/youtube-collector-wrapper" "$release_dir/bin/youtube-collector" --check-worker-profile
 sudo -n sh -c 'cd "$1" && sha256sum bin/youtube-collector worker-profile.json > SHA256SUMS && chmod 0444 SHA256SUMS' sh "$release_dir"
 
-if [[ -n "$old_target" && -d "$old_target" ]]; then
-  native_profile_pair_validate "$old_target" "$host_env"
-  sudo -n test -r "$host_env"
-  sudo -n test -r "$unit_file"
-  sudo -n test -x "$old_target/bin/youtube-collector"
-  sudo -n test -x "$old_target/bin/youtube-collector-wrapper"
-  sudo -n test -x "$old_target/bin/healthcheck"
-  sudo -n test -f "$old_target/youtubejs/src/server.mjs"
-  rollback_contract_dir="$old_target/rollback-contract"
-  sudo -n install -d -m 0755 -o root -g root "$rollback_contract_dir"
-  po_snapshot_previous "$old_target"
-  printf '%s\n' "${old_previous_target:-absent}" | sudo -n tee "$rollback_contract_dir/previous-before-cutover" >/dev/null
-  sudo -n chmod 0644 "$rollback_contract_dir/previous-before-cutover"
-  sudo -n install -m 0640 -o root -g root "$host_env" "$rollback_contract_dir/youtube-collector-host.env"
-  sudo -n install -m 0644 -o root -g root "$unit_file" "$rollback_contract_dir/hololive-youtube-collector@.service"
-  sudo -n sh -c '
-    set -eu
-    cd "$1"
-    {
-      sha256sum \
-        bin/youtube-collector \
-        bin/youtube-collector-wrapper \
-        bin/healthcheck \
-        worker-profile.json \
-        SHA256SUMS \
-        rollback-contract/youtube-collector-host.env \
-        rollback-contract/hololive-youtube-collector@.service
-      find youtubejs/src -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
-      sha256sum rollback-contract/po-unit-presence
-      sha256sum rollback-contract/previous-before-cutover
-      if test -f rollback-contract/hololive-youtube-po.service; then
-        sha256sum rollback-contract/hololive-youtube-po.service rollback-contract/hololive-youtube-po.socket
-      fi
-    } > rollback-contract/SHA256SUMS
-    chmod 0644 rollback-contract/SHA256SUMS
-  ' sh "$old_target"
+if [[ "$window_action" == resume ]]; then
+  native_window_pins
+  native_window_inputs
+else
+  if [[ -n "$old_target" && -d "$old_target" ]]; then native_snapshot_before_cutover; fi
+  native_capture_collector_state "$unit" "$old_target" || {
+    echo 'collector state or persistent enablement is unconfirmed; writer unchanged' >&2
+    exit 1
+  }
 fi
-
-native_capture_collector_state "$unit" "$old_target" || {
-  echo 'collector state or persistent enablement is unconfirmed; writer unchanged' >&2
-  exit 1
-}
 
 sudo -n cmp -s "$worker_profile" "$release_dir/worker-profile.json" || {
   echo 'candidate source changed during profile validation; writer unchanged' >&2
   exit 1
 }
-candidate_endpoint="$(sudo -n bash -c "$(declare -f compose_env_validate_file_format compose_env_read_value_from_file postgres_endpoint_validate postgres_endpoint_env); postgres_endpoint_env \"\$1\"" _ \
-  "$release_dir/youtube-collector-host.env")"
+candidate_endpoint="$(native_root_endpoint "$release_dir/youtube-collector-host.env")"
 if [[ "$candidate_endpoint" != '100.100.1.8|6433' ]]; then
   echo 'candidate must use the native collector pooler endpoint; writer unchanged' >&2
   exit 1
@@ -258,6 +237,10 @@ stop_native_units_and_require_inactive() {
 # 실패하면 이전 release로 복원하고, 첫 설치라면 불완전한 unit을 제거한다.
 # set -E로 ERR trap이 subshell에도 상속되므로 부모 shell에서만 복원해 중복 실행을 막는다.
 native_restore_recorded_runtime() {
+  if [[ "${window_action:-deploy}" == resume ]]; then
+    native_window_rehold
+    return
+  fi
   stop_native_units_and_require_inactive
   if [[ "${native_pool_check_pending:-false}" == true ]]; then
     echo 'pooled database proof incomplete; collector and issuer remain disabled; recovery guard retained' >&2
@@ -303,6 +286,7 @@ restore_native_after_failed_cutover() {
     native_cutover_unknown
   fi
   if [[ "${native_outcome_unknown:-false}" == true ]]; then
+    if [[ "${window_action:-deploy}" == resume ]]; then sudo -n touch "$window/blocked"; fi
     exit "$status"
   fi
   # if/!/&&/|| 조건 안의 subshell은 set -e를 무시해 실패한 복원 단계를 지나친다. 조건 밖에서 실행해 첫 실패에서 멈추고 상태를 받는다.
@@ -316,10 +300,15 @@ restore_native_after_failed_cutover() {
   fi
   if [[ "${native_outcome_unknown:-false}" == true || "${native_worker_status:-$restore_status}" -ne 0 || "${native_completion_verified:-false}" != true ]]; then
     echo "host-native collector cutover failed and the recorded runtime could not be restored" >&2
-    if [[ "${native_outcome_unknown:-false}" != true && "${native_completion_verified:-false}" == true ]]; then
+    if [[ "${window_action:-deploy}" == resume ]]; then
+      sudo -n touch "$window/blocked"
+      native_cutover_unknown
+    elif [[ "${native_outcome_unknown:-false}" != true && "${native_completion_verified:-false}" == true ]]; then
       # 복원이 issuer를 열고 나서 실패했을 수 있다. 미확정 worker와는 경쟁하지 않는다.
       stop_native_units_and_require_inactive || echo 'native failure brake not verified' >&2
     fi
+  elif [[ "${window_action:-deploy}" == resume ]]; then
+    echo "후보 정지 후에도 hold와 복구 입력을 유지합니다: $window" >&2
   else
     native_cutover_release_guard || echo 'recorded runtime restored but native recovery guard could not be released' >&2
   fi
@@ -349,7 +338,7 @@ arm_native_cutover_restore
 if [[ -n "$old_target" && -d "$old_target" ]]; then
   native_cutover_run previous-link sudo -n ln -sfn "$old_target" "$previous_link"
 fi
-native_cutover_run stop stop_native_units_and_require_inactive
+if [[ "$window_action" == deploy ]]; then native_cutover_run stop stop_native_units_and_require_inactive; fi
 
 native_cutover_run host-env sudo -n install -m 0640 -o root -g root "$release_dir/youtube-collector-host.env" "$host_env"
 native_cutover_run collector-unit sudo -n install -m 0644 -o root -g root "$release_dir/hololive-youtube-collector@.service" "$unit_file"
@@ -373,7 +362,13 @@ native_cutover_run issuer po_install_release "$release_dir" "$EXPECTED_REVISION"
 sudo -n systemd-analyze verify "$unit_file"
 native_cutover_run daemon-reload sudo -n systemctl daemon-reload
 native_cutover_run collector-enable sudo -n systemctl enable "$unit"
-native_cutover_run collector-restart sudo -n systemctl restart "$unit"
+if [[ "$window_action" == resume ]]; then
+  native_window_candidates "$po_socket" "$po_service"
+  native_cutover_run collector-start native_window_start "$unit"
+  native_window_candidates "${window_units[@]}"
+else
+  native_cutover_run collector-restart sudo -n systemctl restart "$unit"
+fi
 
 since_epoch="$(date -u -d "$change_started_at" +%s)"
 for _ in $(seq 1 30); do
@@ -400,6 +395,7 @@ collector_readiness_fetch() {
 ready="$(collector_readiness_poll 90 2 collector_readiness_fetch)"
 printf '%s\n' "$ready"
 collector_readiness_validate "$ready"
+if [[ "$window_action" == resume ]]; then native_window_candidates "${window_units[@]}"; fi
 sudo -n -u hololive env \
   HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
@@ -431,5 +427,9 @@ fi
 (( grep_status == 1 )) || return "$grep_status"
 }
 native_post_cutover_log_check
-trap - ERR HUP INT TERM
-native_cutover_release_guard
+if [[ "${window_action:-deploy}" == resume ]]; then
+  native_window_await_observation
+else
+  trap - ERR HUP INT TERM
+  native_cutover_release_guard
+fi
