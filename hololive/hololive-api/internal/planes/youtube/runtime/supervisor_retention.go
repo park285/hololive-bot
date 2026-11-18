@@ -85,7 +85,6 @@ func (r *Runtime) retainSource(ctx context.Context) error {
 	var result sourceobservation.RetentionResult
 
 	err := r.withBudgetDB(ctx, dbOperationRetentionSource, func(ctx context.Context) error {
-		// 슬롯 대기는 db_slot_wait_seconds가 맡고, tick 시간은 획득 뒤 실행분만 잰다.
 		defer observeSeconds(youtubeRetentionTickSeconds, retentionPhaseSource, time.Now())
 
 		var tickErr error
@@ -131,7 +130,6 @@ func (r *Runtime) retainProjections(ctx context.Context) error {
 	return nil
 }
 
-// 멈춘 문장이 슬롯을 무기한 보유하지 않고 DeadlineExceeded로 드러나며, 호출 loop의 기존 오류 분류가 처리한다.
 func (r *Runtime) withBudgetDB(ctx context.Context, operation dbOperation, fn func(context.Context) error) error {
 	if r.Config.TransactionTimeout <= 0 {
 		return errors.New("youtube plane transaction timeout must be positive")
@@ -141,8 +139,6 @@ func (r *Runtime) withBudgetDB(ctx context.Context, operation dbOperation, fn fu
 
 	defer cancel()
 
-	// consume는 provider 호출 없이 claim 갱신과 한 canonical/finalize 트랜잭션만 수행한다.
-	// 기존 source 슬롯·예산은 유지하고, pool 전체의 일반 획득 제한에서만 정산을 분리한다.
 	if operation == dbOperationConsume || operation == dbOperationRetry || operation == dbOperationDeadLetter {
 		budgetCtx = pgxdb.WithControlAcquire(budgetCtx)
 	}
@@ -189,7 +185,6 @@ func addEvidenceRetentionAge(
 }
 
 func recordRetentionTick(result sourceobservation.RetentionResult, err error) {
-	// 앞 단계 실패로 조회하지 못한 테이블도 지난 tick의 적체 값을 남기지 않는다.
 	youtubeRetentionBacklogAgeSeconds.DeleteLabelValues("source_observations")
 
 	for _, part := range retentionParts(result) {
@@ -231,7 +226,6 @@ func recordRetentionPart(part sourceobservation.RetentionResult) {
 	if part.BacklogKnown {
 		youtubeRetentionBacklogAgeSeconds.WithLabelValues(table).Set(part.BacklogAge.Seconds())
 	} else {
-		// 제한 조회로 적체 유무를 확정하지 못한 경우 이전 값을 현재 값처럼 남기지 않는다.
 		youtubeRetentionBacklogAgeSeconds.DeleteLabelValues(table)
 	}
 }

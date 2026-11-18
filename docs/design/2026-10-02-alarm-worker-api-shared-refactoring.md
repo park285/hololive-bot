@@ -24,7 +24,7 @@
 | 외부 계약 보존 | 현재 계약 문서 | wire JSON, DB 상태 의미, env 이름, metric 이름, HTTP route는 별도 승인 없이 바꾸지 않습니다. |
 | 운영 경계 | [hololive AGENTS.md](../../AGENTS.md) | 운영 log·metric·DB 조회는 `hololive-bot-ops`와 `stack-platform-ops`가 소유합니다. 배포·DB 쓰기·Git 게시는 이 계획의 승인 범위가 아닙니다. |
 
-[2026-09-26 stack 감사](../../../docs/agent-workflows/evidence/2026-09-26-stack-audit/)는 Hololive 후보 131건을 분류했고, 그중 97건은 삭제한 뒤 운영 배포까지 마쳤습니다. 이 계획은 그 감사가 다루지 않은 항목만 새로 추가합니다. 조건부로 남긴 퇴역 env 가드와 종단 데이터 경로는 [retired-guards.tsv](../../../docs/agent-workflows/evidence/2026-09-26-stack-audit/retired-guards.tsv)의 조건과 `remove_after`를 그대로 따릅니다.
+2026-09-26 stack 감사는 Hololive 후보 131건을 분류했고, 그중 97건은 삭제한 뒤 운영 배포까지 마쳤습니다. 이 계획은 그 감사가 다루지 않은 항목만 새로 추가합니다. 조건부로 남긴 퇴역 env 가드와 종단 데이터 경로는 [retired-guards.tsv](../../../docs/contracts/retired-guards.tsv)의 조건과 `remove_after`를 그대로 따릅니다.
 
 ## 분석 기준과 범위
 
@@ -69,7 +69,7 @@
 
 실제 enqueue 생산자([membernews digest](../../hololive/hololive-api/internal/planes/llm/internal/service/membernews/scheduler/digest_helper.go), [majorevent 알림](../../hololive/hololive-api/internal/planes/llm/internal/service/majorevent/scheduler/notification_guard.go))는 방마다 1건씩 넣으므로 두 번째 형태가 운영 패턴에 가깝습니다. 아래 행의 값은 운영 profile(batch 50, worker 4)을 적용한 것입니다. 운영 Iris 전송 지연은 측정하지 않았으므로 어느 행이 운영에 해당하는지는 판단하지 않았습니다. 실제 PostgreSQL·Iris 시험이 아니며 영구 유실을 증명한 결과도 아닙니다. 확인한 위험은 불필요한 재claim과 지연입니다.
 
-현재 운영 볼륨에서는 잠재 결함입니다. [2026-09-26 운영 증거](../../../docs/agent-workflows/evidence/2026-09-26-stack-audit/t18-ops-evidence.md)에서 `notification_delivery_outbox`의 SENT 행은 3건이었습니다(SENT 보존 7일). 한 배치가 lease를 넘기려면 위 표처럼 한 번에 수십 건이 쌓여야 합니다. 그래도 고치는 이유는 방 수가 늘면 조용히 지연이 커지고, 수정 범위가 dispatcher 안에 한정되기 때문입니다.
+현재 운영 볼륨에서는 잠재 결함입니다. 2026-09-26 운영 증거에서 `notification_delivery_outbox`의 SENT 행은 3건이었습니다(SENT 보존 7일). 한 배치가 lease를 넘기려면 위 표처럼 한 번에 수십 건이 쌓여야 합니다. 그래도 고치는 이유는 방 수가 늘면 조용히 지연이 커지고, 수정 범위가 dispatcher 안에 한정되기 때문입니다.
 
 함께 확인한 사실은 다음과 같습니다.
 
@@ -181,7 +181,7 @@ runtime별 조립(`BuildInfraModule`, 멤버 캐시·Iris client 생성)은 각 
 | F5 | [Holodex upcoming → 공식 일정 API](../../hololive/hololive-shared/pkg/service/holodex/provider/service_streams_fallback.go#L22) | [공식 일정 계약](../current/contracts/schedule-hololive-tv-api.md)의 Fallback semantics에 trigger·한도·종단·metric이 있습니다. | owner, 검토 조건 | 문서를 보강합니다. 범용 실행기 `internal/service/fallback`은 호출부가 이 경로 하나뿐이므로 provider 안으로 합치되, metric 이름(`hololive_fallback_primary_total`, `hololive_fallback_execution_total`, `hololive_holodex_official_schedule_fallback_total`)은 유지합니다. |
 | F6 | [grouped 전송 fallback](../../hololive/hololive-alarm-worker/internal/egress/youtubedispatch/send_engine_send.go#L436) | lifecycle 계약의 Grouped fallback 절에 trigger·한도·종단이 있습니다. | telemetry(현재 log만), owner, 검토 조건 | 문서를 보강하고 bounded counter를 추가합니다. |
 | F7 | [checker의 Holodex 실패 시 persisted live session 계속](../../hololive/hololive-alarm-worker/internal/service/alarm/checker/checking/youtube_checker_input.go#L42) | 2026-07-07 코드 지도에 설명만 있습니다. | 예외 계약 전체 | trigger(Holodex 오류), 한도(persisted session 범위), 종단(Holodex 오류이면서 session 0건이면 실패), telemetry(`hololive_alarm_youtube_persisted_live_sessions_total`), owner(alarm-worker checker), 검토 조건을 작성합니다. |
-| F8 | [도움말](../../hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_help.go#L71)·[달력](../../hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_calendar.go#L103) 이미지 → 텍스트 | [2026-10-01 접기 계획](../current/plans/2026-10-01-function-based-see-more-fold.md)에서 기존 경로로만 언급합니다. 결과 불명이면 텍스트를 보내지 않습니다. | 예외 형식 전체, telemetry(현재 log만) | 계약과 counter를 추가합니다. 달력 `imageRenderer == nil`이면 조용히 텍스트로 가므로, renderer가 설정상 필수인지 확인해 필수라면 기동 실패로 바꿉니다. |
+| F8 | [도움말](../../hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_help.go#L71)·[달력](../../hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_calendar.go#L103) 이미지 → 텍스트 | 2026-10-01 접기 계획에서 기존 경로로만 언급합니다. 결과 불명이면 텍스트를 보내지 않습니다. | 예외 형식 전체, telemetry(현재 log만) | 계약과 counter를 추가합니다. 달력 `imageRenderer == nil`이면 조용히 텍스트로 가므로, renderer가 설정상 필수인지 확인해 필수라면 기동 실패로 바꿉니다. |
 | F9 | [majorevent 링크 검사 HEAD → GET](../../hololive/hololive-api/internal/planes/llm/internal/service/majorevent/scraper/link_checker.go#L303) | 이유 주석만 있습니다. | 예외 형식 전체 | 오류 문자열 일치(`timeout`, `connection reset`, `method not allowed`) 대신 타입·status 기준으로 분류하고, 남길 조건을 문서화합니다. |
 
 이름에 fallback이 없어 키워드 조사에서 빠졌다가 F1 분석 중 확인한 경로도 같은 분류에 넣습니다.
@@ -242,7 +242,7 @@ stack 규칙은 이런 가드를 금지하고 과거의 "영구 계약" 표기�
 
 이 경로들은 구형 행을 fail-closed로 종단 처리하므로 fallback이 아닙니다. 해당 데이터가 남아 있는 동안은 유지하고, 소유 ops skill로 read-only 조회한 근거가 생기면 제거합니다.
 
-이미 추적 중인 항목은 [retired-guards.tsv](../../../docs/agent-workflows/evidence/2026-09-26-stack-audit/retired-guards.tsv)의 조건을 따릅니다. `config/settings`의 퇴역 env 존재 기준 가드, worker profile drain 필드, [dispatchops의 send_unit_id NULL 조회](../../hololive/hololive-api/internal/planes/admin/internal/service/dispatchops/model.go#L268)(2026-09-28 종단 NULL 420건), [Twitch·Chzzk 전용 envelope 드레인 종단](../../hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go#L240)이 해당하며, 대부분 `remove_after 2026-12-31`입니다. `config_youtube_producer_retired.go` 가드는 추적표에 "2026-10-01 이후 재검토"로 적혀 있으므로 0단계에서 조건을 확인합니다.
+이미 추적 중인 항목은 [retired-guards.tsv](../../../docs/contracts/retired-guards.tsv)의 조건을 따릅니다. `config/settings`의 퇴역 env 존재 기준 가드, worker profile drain 필드, [dispatchops의 send_unit_id NULL 조회](../../hololive/hololive-api/internal/planes/admin/internal/service/dispatchops/model.go#L268)(2026-09-28 종단 NULL 420건), [Twitch·Chzzk 전용 envelope 드레인 종단](../../hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go#L240)이 해당하며, 대부분 `remove_after 2026-12-31`입니다. `config_youtube_producer_retired.go` 가드는 추적표에 "2026-10-01 이후 재검토"로 적혀 있으므로 0단계에서 조건을 확인합니다.
 
 이전 감사가 다루지 않은 항목은 다음과 같습니다.
 
@@ -348,7 +348,7 @@ role별 loader 이동은 공통 설정 타입의 소비 관계를 먼저 분리�
 
 ## 10. 결정 분석
 
-2026-10-02에 결정 항목을 코드, 결정 기록, [2026-09-26 운영 증거](../../../docs/agent-workflows/evidence/2026-09-26-stack-audit/t18-ops-evidence.md), 로컬 `observability-stack` 저장소로 다시 분석했습니다. 운영 시스템에는 새로 접속하지 않았습니다. F1·F2·F3·L11은 근거로 정했고, 사용자 결정이 남은 항목은 10.4 하나입니다.
+2026-10-02에 결정 항목을 코드, 결정 기록, 2026-09-26 운영 증거, 로컬 `observability-stack` 저장소로 다시 분석했습니다. 운영 시스템에는 새로 접속하지 않았습니다. F1·F2·F3·L11은 근거로 정했고, 사용자 결정이 남은 항목은 10.4 하나입니다.
 
 | 항목 | 결정 | 이전 판본과 달라진 점 |
 |---|---|---|
@@ -590,7 +590,7 @@ runtime binary별 `go list -deps`로 worker만 링크하는 shared 패키지 7�
 - 아래 기존 선별 race 테스트를 저장소 root에서 다시 실행했고 대상 6개 패키지가 모두 통과했습니다. 패키지 전체 테스트가 아니라 정규식으로 선택한 사례이며, `-race`가 모든 실행 경로의 경합 부재를 증명하지는 않습니다.
 - runtime binary 3개의 `go list -deps` 링크 그래프로 5절의 소비자 열을 확인했습니다.
 - 문서의 모든 상대 링크와 줄 번호를 대조해 어긋난 2개(`formatter.go`, `publisher.go`)를 고쳤습니다.
-- fallback·legacy·alias 키워드 조사 결과를 [2026-09-26 감사 표](../../../docs/agent-workflows/evidence/2026-09-26-stack-audit/row-results.tsv)와 현재 계약 문서에 대조했습니다.
+- fallback·legacy·alias 키워드 조사 결과를 2026-09-26 감사 표와 현재 계약 문서에 대조했습니다.
 - 10절의 결정 분석은 코드 경로 추적, 결정 기록(`DEC-20260626`, `DEC-20260825`, `DEC-20260926-hololive-message-strings-startup-validation`), 감사 B5·B6 기록, 2026-09-26 운영 증거, 로컬 `observability-stack`(`40e2303`)의 대시보드 생성기·alert·rule test 검색으로 수행했습니다. 운영 시스템에는 접속하지 않았습니다.
 
 ```bash
@@ -615,4 +615,4 @@ go test -race \
 - 2026-09-26 운영 증거는 6일 전 값입니다. F1 (c)의 조회 형태와 비용은 시제품으로 확인하지 않았고, Grafana UI에서 수동으로 만든 대시보드는 확인하지 않았습니다.
 - 이 문서의 우선순위는 코드상 영향과 재현 결과에 기반하며 운영 빈도에 기반한 순위가 아닙니다.
 
-이전 [2026-09-30 워커·수집기 리뷰](../history/architecture/2026-09-30-alarm-worker-collector-reliability-review.md)는 당시 snapshot입니다. 그 문서의 미수정 상태를 이번 기준 revision으로 그대로 가져오지 않으며, 이번 lease 대기 문제도 과거의 단일 attempt deadline 부재와 구분합니다.
+이전 2026-09-30 워커·수집기 리뷰는 당시 snapshot입니다. 그 문서의 미수정 상태를 이번 기준 revision으로 그대로 가져오지 않으며, 이번 lease 대기 문제도 과거의 단일 attempt deadline 부재와 구분합니다.

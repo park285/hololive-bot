@@ -25,8 +25,7 @@ const (
 var (
 	fixedZoneHours  = map[string]int{"UTC": 0, "GMT": 0, "WIB": 7, "WITA": 8, "WIT": 9, "SGT": 8, "PHT": 8, "HKT": 8}
 	zoneOffsetLabel = regexp.MustCompile(`^(?:UTC|GMT)([+-])(\d{1,2})(?::([0-5]\d))?$`)
-	// 포스터가 여름에 PST라고 적어도 멤버의 현지 시각을 뜻하므로 표준·일광 표기를 모두 그날의 지역 시각으로 읽는다.
-	regionZones = []struct {
+	regionZones     = []struct {
 		key, location string
 		labels        []string
 	}{
@@ -54,14 +53,12 @@ var (
 	})
 )
 
-// rowZone의 loc이 nil이면 날짜·시각을 그대로 둔다(JST·KST). 다수결은 key로 견주며, 같은 지역이나 같은 시차를 뜻하는 표기는 key가 같다.
 type rowZone struct {
 	key       string
 	loc       *time.Location
 	converted bool
 }
 
-// lookupZone은 표에 없는 시간대에 errUnsupportedZone을 돌려준다. 시간대 데이터를 읽지 못한 오류는 그와 구분된다.
 func lookupZone(tz string) (rowZone, error) {
 	label := strings.ToUpper(strings.TrimSpace(tz))
 
@@ -205,8 +202,6 @@ func toJSTRows(rows []posterstore.Row) (converted []posterstore.Row, posterShift
 	return converted, posterShift, nil
 }
 
-// untimedZone은 시각 없는 칸의 빈 시간대를 시각 있는 칸 다수의 시간대로 정한다. 추출 지시문이 시각 없는 칸의 시간대를 비우게 하고,
-// 시각 있는 칸의 빈 시간대는 포스터가 시간대를 적지 않은 JST이기 때문이다.
 func untimedZone(rows []posterstore.Row) (string, error) {
 	type seenZone struct{ key, label string }
 
@@ -342,7 +337,6 @@ func daysBetween(from, to time.Time) int {
 	return int(to.Sub(from).Hours() / 24)
 }
 
-// rowsDayShift는 동률이면 posterShift를 먼저 고른다. 시각 있는 칸이 모두 하루 밀린 주가 창 안에 함께 들어가도 창을 밀어야 경계일에 앞 주 포스터의 밀린 칸이 보인다.
 func rowsDayShift(rows []posterstore.Row, weekStart, weekEnd time.Time, posterShift int) int {
 	if !slices.ContainsFunc(rows, func(row posterstore.Row) bool { return row.SourceZone != "" }) {
 		return 0

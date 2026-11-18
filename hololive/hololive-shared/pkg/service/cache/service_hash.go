@@ -44,7 +44,7 @@ func (c *Service) HMSet(ctx context.Context, key string, fields map[string]any) 
 func (c *Service) HGet(ctx context.Context, key, field string) (string, error) {
 	resp := c.client.Do(ctx, c.client.B().Hget().Key(key).Field(field).Build())
 	if errors.Is(resp.Error(), valkey.Nil) {
-		return "", nil // 필드가 존재하지 않음 - 에러 아님
+		return "", nil
 	}
 
 	if resp.Error() != nil {
@@ -66,7 +66,6 @@ func (c *Service) BatchHGet(ctx context.Context, key string, fields []string) (m
 		return map[string]string{}, nil
 	}
 
-	// 필드 수만큼 HGET을 보내는 대신 HMGET 한 명령으로 받는다. 없는 필드는 nil 원소로 온다.
 	resp := c.client.Do(ctx, c.client.B().Hmget().Key(key).Field(fields...).Build())
 	if err := resp.Error(); err != nil {
 		c.logger.Error("Cache batch hget failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))

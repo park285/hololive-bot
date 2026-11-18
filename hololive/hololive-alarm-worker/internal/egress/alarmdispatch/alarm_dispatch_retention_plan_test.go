@@ -20,7 +20,6 @@ const (
 	retentionPlanLimit         = 100
 )
 
-// 같은 연결에서 maintenance가 같은 SQL을 반복 실행하므로 custom plan과 generic plan을 모두 확인한다.
 func TestAlarmDispatchRetentionDeleteReadsOnlyExpiredRowsPerStatus(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -37,7 +36,6 @@ func TestAlarmDispatchRetentionDeleteReadsOnlyExpiredRowsPerStatus(t *testing.T)
 				stats.collect(&plan)
 
 				assert.False(t, stats.seqScan, "%s %s plan must not sequentially scan deliveries", status, mode)
-				// picked는 limit만큼 읽고 바깥 DELETE는 고른 행을 PK로 한 번씩 다시 읽는다.
 				assert.LessOrEqual(t, stats.examinedRows, float64(2*retentionPlanLimit),
 					"%s %s plan read deliveries beyond the expired batch", status, mode)
 			})
@@ -59,7 +57,6 @@ func seedAlarmDispatchRetentionPlanHistory(t *testing.T, pool *pgxpool.Pool) {
 		RETURNING id`).Scan(&unitID))
 
 	for status := range alarmDispatchRetentionDeleteSQL {
-		// 종료 상태의 시각 열 이름은 "<status>_at"이다.
 		column := string(status) + "_at"
 		_, err := pool.Exec(ctx, fmt.Sprintf(`INSERT INTO alarm_dispatch_deliveries (
 				event_id, room_id, dedupe_key, dispatch_group_key, send_unit_id, status, %s, created_at, updated_at
@@ -94,7 +91,6 @@ func explainAlarmDispatchRetentionDelete(
 	tx, err := conn.Begin(ctx)
 	require.NoError(t, err)
 
-	// EXPLAIN ANALYZE는 행을 실제로 지우므로 다음 상태·모드가 같은 이력으로 계획되게 되돌린다.
 	defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 	_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = "+mode)
@@ -103,7 +99,6 @@ func explainAlarmDispatchRetentionDelete(
 	_, err = tx.Exec(ctx, "PREPARE retention_delete_plan AS "+query)
 	require.NoError(t, err)
 
-	// prepared statement는 rollback 뒤에도 연결에 남으므로 풀에 돌려주기 전에 지운다.
 	defer func() {
 		_, deallocateErr := conn.Exec(context.WithoutCancel(ctx), "DEALLOCATE retention_delete_plan")
 		require.NoError(t, deallocateErr)
@@ -129,11 +124,10 @@ func explainAlarmDispatchRetentionDelete(
 }
 
 type retentionPlanNode struct {
-	NodeType string  `json:"Node Type"`
-	Relation string  `json:"Relation Name"`
-	Rows     float64 `json:"Actual Rows"`
-	Loops    float64 `json:"Actual Loops"`
-	// 필터와 lossy bitmap 재검사가 버린 행도 heap에서 읽은 행이다.
+	NodeType         string              `json:"Node Type"`
+	Relation         string              `json:"Relation Name"`
+	Rows             float64             `json:"Actual Rows"`
+	Loops            float64             `json:"Actual Loops"`
 	RemovedByFilter  float64             `json:"Rows Removed by Filter"`
 	RemovedByRecheck float64             `json:"Rows Removed by Index Recheck"`
 	Plans            []retentionPlanNode `json:"Plans"`

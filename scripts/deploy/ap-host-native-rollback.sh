@@ -31,7 +31,6 @@ fi
 
 service="${AP_SERVICES[0]}"
 
-# rollback 기준점은 previous collector release다. previous가 없으면 거절한다.
 if [[ "$MODE" == "--dry-run" ]]; then
   {
     cat "$RELEASE_PATH_LIB"

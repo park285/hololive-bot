@@ -31,7 +31,6 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		return nil, map[string][]*domain.Stream{}, youtubeLiveCheckEvidence{}, map[string][]string{}, nil
 	}
 
-	// due 판정과 UpdateChannelState가 같은 iteration 시각을 써야 Tier1 채널이 tick마다 due가 된다.
 	dueChannels = c.selectDueYouTubeChannels(ctx, channelIDs, now)
 
 	if len(dueChannels) == 0 {
@@ -42,16 +41,13 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 
 	streamsByChannel, holodexErr := c.loadHolodexStreamsByChannel(ctx, dueChannels)
 	if streamsByChannel == nil {
-		// Holodex가 실패해도 persisted 세션을 이 맵에 병합해야 하므로, 여기서 비어 있는 맵을 마련해 둔다.
 		streamsByChannel = make(map[string][]*domain.Stream)
 	}
 
 	if holodexErr == nil {
-		// 과거 canonical 보강이 최신 provider 응답으로 위장해 후보를 취소하지 않도록 분리한다.
 		liveEvidence.currentProviderStreams = cloneCurrentProviderStreams(streamsByChannel)
 	}
 
-	// 외부 요청 대기 중 도착한 정상 관측을 미래 시각으로 오인하지 않도록 조회 직전에 경계를 잡는다.
 	persistedSessions, persistedErr := c.loadPersistedLiveSessions(ctx, dueChannels, time.Now().UTC())
 	if persistedErr != nil {
 		c.logPersistedLiveSourceError(persistedErr)
@@ -62,12 +58,10 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 	}
 
 	if holodexErr != nil {
-		// Holodex 실패는 여기서 한 번만 기록한다. 계속하지 못하는 경우는 반환 오류를 scheduler가 기록한다.
 		c.logger.Warn("YouTube Holodex live status source failed; continuing with persisted live sessions",
 			slog.Int("channel_count", len(dueChannels)),
 			slog.Any("error", holodexErr),
 		)
-		// Holodex 실패 뒤 persisted 세션만으로 이번 주기를 계속한 횟수다. 예외 계약(contracts/alarm.md)의 telemetry다.
 		observeYouTubePersistedLiveSessions("holodex_error_continued", "all", 1)
 	}
 

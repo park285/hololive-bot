@@ -21,7 +21,6 @@ import (
 
 const channelLiveSlotRounds = 3
 
-// 발행된 확인의 canonical 반영은 API consumer 테스트가 검증한다.
 func TestChannelLiveCheckSlotAdvancesWhileSnapshotRetries(t *testing.T) {
 	ctx := t.Context()
 	pool, executor, client := newChannelLiveSlotFixture(t)
@@ -34,9 +33,9 @@ func TestChannelLiveCheckSlotAdvancesWhileSnapshotRetries(t *testing.T) {
 	)
 
 	for round := 1; round <= channelLiveSlotRounds; round++ {
-		waitLeaseDue(t, pool, snapshotSpec.JobKey)
+		makeLeaseDue(t, pool, snapshotSpec.JobKey)
 		runAdmittedSpec(ctx, t, executor, &snapshotSpec)
-		waitLeaseDue(t, pool, checkSpec.JobKey)
+		makeLeaseDue(t, pool, checkSpec.JobKey)
 		runAdmittedSpec(ctx, t, executor, &checkSpec)
 
 		snapshot := loadChannelLiveSlot(t, pool, snapshotSpec.JobKey)
@@ -113,13 +112,11 @@ func newChannelLiveSlotFixture(t *testing.T) (*pgxpool.Pool, *collectionExecutor
 func assertIndependentLeaseStates(t *testing.T, round int, snapshot, check *channelLiveSlot, snapshotSlot, previousCheckSlot time.Time) {
 	t.Helper()
 
-	// 방송 탭은 같은 슬롯에서 재시도만 반복하고 완료되지 않는다.
 	if snapshot.state != "DEFERRED" || !snapshot.scheduledFor.Equal(snapshotSlot) || snapshot.fenceEpoch != int64(round) ||
 		snapshot.lastCompletedAt != nil || snapshot.failureCode != "collection_timeout" {
 		t.Fatalf("round %d snapshot lease = %+v, want DEFERRED retry of slot %s", round, snapshot, snapshotSlot)
 	}
 
-	// 채널 확인은 매 cadence 새 슬롯을 완료한다.
 	if check.state != "IDLE" || check.lastCompletedAt == nil || !check.scheduledFor.After(previousCheckSlot) ||
 		!check.scheduledFor.After(snapshotSlot) {
 		t.Fatalf("round %d check lease = %+v, want COMPLETE slot after %s", round, check, previousCheckSlot)
@@ -144,35 +141,16 @@ func channelLiveSlotSpec(jobKind string) joblease.JobSpec {
 	}
 }
 
-func waitLeaseDue(t *testing.T, pool *pgxpool.Pool, jobKey string) {
+func makeLeaseDue(t *testing.T, pool *pgxpool.Pool, jobKey string) {
 	t.Helper()
 
-	deadline := time.Now().Add(5 * time.Second)
-
-	for {
-		var due bool
-
-		if err := pool.QueryRow(t.Context(), `
-			SELECT NOT EXISTS (SELECT 1 FROM youtube_collection_job_leases WHERE job_key = $1)
-			    OR EXISTS (
-			        SELECT 1 FROM youtube_collection_job_leases
-			        WHERE job_key = $1
-			          AND ((slot_state = 'IDLE' AND next_due_at <= clock_timestamp())
-			            OR (slot_state = 'DEFERRED' AND retry_not_before <= clock_timestamp()))
-			    )
-		`, jobKey).Scan(&due); err != nil {
-			t.Fatal(err)
-		}
-
-		if due {
-			return
-		}
-
-		if time.Now().After(deadline) {
-			t.Fatalf("lease %s did not become due", jobKey)
-		}
-
-		time.Sleep(20 * time.Millisecond)
+	if _, err := pool.Exec(t.Context(), `
+		UPDATE youtube_collection_job_leases
+		SET next_due_at = CASE WHEN slot_state = 'IDLE' THEN clock_timestamp() ELSE next_due_at END,
+		    retry_not_before = CASE WHEN slot_state = 'DEFERRED' THEN clock_timestamp() ELSE retry_not_before END
+		WHERE job_key = $1 AND slot_state IN ('IDLE', 'DEFERRED')
+	`, jobKey); err != nil {
+		t.Fatalf("make lease %s due: %v", jobKey, err)
 	}
 }
 

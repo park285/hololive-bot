@@ -30,7 +30,6 @@ func TestProvideHolodexServiceHasNoLiveStatusScraperFallback(t *testing.T) {
 	var officialRequests atomic.Int32
 
 	officialServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 개발 host의 포트 탐지 도구가 새 loopback listener의 "/"를 요청할 수 있으므로 공식 일정 API 경로만 센다.
 		if r.URL.Path == officialScheduleAPIPath {
 			officialRequests.Add(1)
 		}

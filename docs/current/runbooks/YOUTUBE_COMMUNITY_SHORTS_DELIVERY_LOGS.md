@@ -10,7 +10,7 @@
 
 ## Telemetry 기록 계약
 
-`DEC-20260926-hololive-delivery-telemetry-single-path`에 따라 시도 telemetry는 alarm-worker `TransitionStore`가 lifecycle 전이 트랜잭션(`CompleteSent`, 실패 전이, stale SENDING 격리) 안에서 owner 시도 하나당 한 행만 기록합니다. commit 뒤 직접 enqueue, `direct_fallback` 로그, delivery 테이블을 역산하던 backfill(`delivery_mode = recovered`)은 삭제했습니다.
+시도 telemetry는 alarm-worker `TransitionStore`가 lifecycle 전이 트랜잭션(`CompleteSent`, 실패 전이, stale SENDING 격리) 안에서 owner 시도 하나당 한 행만 기록합니다. commit 뒤 직접 enqueue, `direct_fallback` 로그, delivery 테이블을 역산하던 backfill(`delivery_mode = recovered`)은 삭제했습니다.
 
 - 기록 대상은 owner의 provider 성공·실패와 prepared failure 전체(`message_missing`, `pre_send_claim` 포함)입니다. follower·fulfilled·전파 전이는 시도가 아니라 기록하지 않습니다.
 - 결과 불명 시도는 공백으로 두지 않고 stale SENDING 격리 트랜잭션이 `send_result = outcome_unknown`, `delivery_mode = stale_sweep`, `failure_reason = stale_sending_outcome_unknown`으로 기록합니다.

@@ -1,4 +1,3 @@
-// Package contentid는 모든 YouTube 발송 런타임이 공유하는 정본 논리 식별자를 소유한다.
 package contentid
 
 import (
@@ -14,16 +13,13 @@ import (
 )
 
 const (
-	// MaxLogicalIDLength는 youtube_notification_delivery_ledger.logical_id의 길이 상한이다.
 	MaxLogicalIDLength = 50
-	// MaxRoomIDLength는 youtube_notification_delivery_ledger.room_id의 길이 상한이다.
-	MaxRoomIDLength = 100
+	MaxRoomIDLength    = 100
 
 	shortPrefix     = "short:"
 	communityPrefix = "community:"
 )
 
-// ErrorReason은 정본 식별자 검증 실패의 분류다.
 type ErrorReason string
 
 const (
@@ -35,7 +31,6 @@ const (
 	ErrorReasonMismatch        ErrorReason = "mismatch"
 )
 
-// Error는 원본 값을 노출하지 않는 정본 식별자 오류다.
 type Error struct {
 	Kind   domain.OutboxKind
 	Field  string
@@ -66,7 +61,6 @@ func (e *Error) Unwrap() error {
 	return e.Cause
 }
 
-// LogicalKey는 스키마 상한을 적용한 정본 전송 식별자다.
 type LogicalKey struct {
 	Kind      domain.OutboxKind
 	LogicalID string
@@ -87,7 +81,6 @@ type notificationPayloadIdentity struct {
 	VideoID         string `json:"video_id"`
 }
 
-// ResolveDeliveryKey는 outbox 행에서 논리 키를 구하고 제공자 호출 전에 Community·Shorts 식별자를 검증한다.
 func ResolveDeliveryKey(kind domain.OutboxKind, contentID, payload, roomID string) (LogicalKey, error) {
 	logicalID, err := ResolveDeliveryLogicalID(kind, contentID, payload)
 	if err != nil {
@@ -102,9 +95,6 @@ func ResolveDeliveryKey(kind domain.OutboxKind, contentID, payload, roomID strin
 	return key, nil
 }
 
-// ResolveDeliveryLogicalID는 방과 독립적인 outbox의 정본 논리 ID를 반환한다.
-// Community·Shorts는 content_id와 일치하는 필수 canonical_post_id를, 나머지는 content_id를 사용한다.
-// 리소스 ID로 대체하지 않으며 식별자가 없거나 잘못되면 실패한다.
 func ResolveDeliveryLogicalID(kind domain.OutboxKind, contentID, payload string) (string, error) {
 	if kind != domain.OutboxKindNewShort && kind != domain.OutboxKindCommunityPost {
 		logicalID, err := ForOutboxKind(kind, contentID)
@@ -153,7 +143,6 @@ func parseNotificationPayloadIdentity(kind domain.OutboxKind, payload string) (n
 	return identity, nil
 }
 
-// ResolveLogicalKey는 ledger 기본 키를 정규화하고 검증한다.
 func ResolveLogicalKey(kind domain.OutboxKind, resourceID, roomID string) (LogicalKey, error) {
 	logicalID, err := ForOutboxKind(kind, resourceID)
 	if err != nil {
@@ -196,7 +185,6 @@ func ForCommunity(postID string) (string, error) {
 	return logicalID, nil
 }
 
-// ForOutboxKind는 지원하는 outbox 종류의 정본 논리 ID를 반환한다.
 func ForOutboxKind(kind domain.OutboxKind, resourceID string) (string, error) {
 	switch kind {
 	case domain.OutboxKindNewShort:

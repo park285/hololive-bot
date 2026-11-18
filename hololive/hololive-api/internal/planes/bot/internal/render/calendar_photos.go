@@ -40,7 +40,6 @@ type calendarPhotoFetchResult struct {
 	cachePolicy calendarCachePolicy
 }
 
-// 각 goroutine은 자기 index의 slot에만 쓰고, 쓰지 못한 slot의 zero value는 실패로 집계된다.
 type calendarPhotoFetchSlot struct {
 	image         image.Image
 	ok            bool
@@ -66,7 +65,6 @@ func fetchPhotos(parent context.Context, photoURLs []string, truncated bool) (ca
 	return out, nil
 }
 
-// 캐시 정책은 다음과 같다. 상한을 넘는 사진이 있거나 예산이 끝난 뒤 실패한 사진이 있으면 메모리·디스크 캐시를 모두 막고, 그 밖의 개별 실패는 디스크 캐시만 막는다. 부모 ctx 취소는 오류로 돌려준다.
 func fetchPhotosWithinBudget(parent, budgetCtx context.Context, photoURLs []string, truncated bool) (calendarPhotoFetchResult, error) {
 	result := calendarPhotoFetchResult{
 		photos: make(map[string]image.Image),
@@ -86,8 +84,6 @@ func fetchPhotosWithinBudget(parent, budgetCtx context.Context, photoURLs []stri
 
 	slots := make([]calendarPhotoFetchSlot, len(photoURLs))
 
-	// 개별 다운로드 실패는 slot에만 남는다. group에는 context를 묶지 않으므로 한 장의 실패나 panic이 나머지 다운로드를
-	// 멈추지 않는다.
 	var group errgroup.Group
 
 	group.SetLimit(calendarPhotoFetchWorkers)
@@ -102,7 +98,6 @@ func fetchPhotosWithinBudget(parent, budgetCtx context.Context, photoURLs []stri
 		})
 	}
 
-	// panic은 panicguard가 stack과 함께 기록했고, 그 사진의 slot은 실패로 남아 아래에서 디스크 캐시를 막는다.
 	if err := group.Wait(); err != nil {
 		result.cachePolicy.markDiskUncacheable()
 	}
@@ -129,7 +124,6 @@ func fetchPhotosWithinBudget(parent, budgetCtx context.Context, photoURLs []stri
 	return result, nil
 }
 
-// 상한 limit을 넘는 고유 URL이 있으면 truncated가 참이다. 이미 모은 URL의 중복과 사진 없는 항목은 상한을 넘긴 것으로 보지 않는다.
 func uniqueCalendarPhotoURLs(entries []domain.CalendarEntry, limit int) (photoURLs []string, truncated bool) {
 	seen := make(map[string]struct{}, min(len(entries), limit))
 
@@ -180,13 +174,11 @@ func (p *calendarCachePolicy) markUncacheable() {
 	p.diskCacheable = false
 }
 
-// 실패는 calendar에서 사진 없이 그리는 정상 경로라 Debug로만 남긴다.
 func fetchMemberPhoto(ctx context.Context, photoURL string) (image.Image, bool) {
 	url := thumbnailURL(photoURL, calendarPhotoThumbnailSize)
 
 	img, err := fetchImageWithContext(ctx, url)
 	if err != nil {
-		// 사진 실패는 정상 경로라 Debug가 꺼진 운영 레벨에서는 host 추출을 하지 않는다.
 		if slog.Default().Enabled(ctx, slog.LevelDebug) {
 			slog.Debug("calendar photo fetch skipped",
 				slog.String("photo_host", calendarPhotoURLHost(url)),

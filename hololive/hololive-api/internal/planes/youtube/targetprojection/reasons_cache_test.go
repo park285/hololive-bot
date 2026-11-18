@@ -46,7 +46,6 @@ func (tr *projectionCacheTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn,
 		return
 	}
 
-	// 서버 commit 이후, Refresh가 결과를 받아 캐시를 공개하기 전의 경합을 재현한다.
 	close(tr.committed)
 
 	select {
@@ -81,7 +80,6 @@ func TestReasonsCacheSkipsOnlyConfirmedGenerationAndReasons(t *testing.T) {
 	first := mustRefresh(t, refresher, input, projectionNow, "initial")
 	require.Equal(t, int64(1), tr.loads.Load(), "staging must still verify stored reasons")
 
-	// 같은 집합의 순서·중복은 normalize 이후의 identity를 바꾸지 않는다.
 	reordered := staticBuilder{targets: targets, reasons: []TargetReason{reasons[1], reasons[0], reasons[1]}}
 	mustRefresh(t, refresher, reordered, projectionNow.Add(time.Second), "canonical heartbeat")
 	require.Equal(t, int64(1), tr.loads.Load())
@@ -140,7 +138,6 @@ func TestReasonsCacheInvalidatesOtherRefresherAtSameHeartbeatClock(t *testing.T)
 	mustRefresh(t, refresher, input, projectionNow, "confirmed after foreign writer")
 	require.Equal(t, int64(2), tr.loads.Load())
 
-	// 구조 hash가 원래 값으로 돌아와도 퇴역 전 세대의 캐시를 재사용하지 않는다.
 	rotatedInput := staticBuilder{targets: slices.Clone(targets), reasons: foreign.reasons}
 	rotatedInput.targets[0].Priority++
 	mustRefresh(t, other, rotatedInput, projectionNow, "foreign structural change")
@@ -268,7 +265,6 @@ func TestReasonsCacheSerializesPublicationAcrossInterleavedCallers(t *testing.T)
 		t.Fatal(ctx.Err())
 	}
 
-	// 다른 인스턴스는 DB guard가 풀린 즉시 같은 세대를 바꿀 수 있다.
 	foreign := staticBuilder{targets: targets, reasons: slices.Clone(reasons)}
 
 	foreign.reasons[0].ReasonKey = "interleaved foreign writer"

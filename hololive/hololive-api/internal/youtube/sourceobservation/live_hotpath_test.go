@@ -57,7 +57,6 @@ func TestLiveSessionWriteFollowsLockedRow(t *testing.T) {
 	persistLockedLiveSession(t, pool, &session)
 	require.Equal(t, inserted, liveSessionXmin(t, pool, session.VideoID), "unchanged session must not be rewritten")
 
-	// reducer가 정한 값은 SQL이 다시 병합하지 않고 그대로 저장한다.
 	session.ScheduledStartTime, session.LastSeenAt = nil, now.Add(-time.Hour)
 	persistLockedLiveSession(t, pool, &session)
 	require.NotEqual(t, inserted, liveSessionXmin(t, pool, session.VideoID), "changed session must be written")
@@ -106,7 +105,6 @@ func persistLockedLiveSession(t *testing.T, pool *pgxpool.Pool, next *live.Sessi
 	}))
 }
 
-// 값이 그대로면 행을 다시 쓰지 않은 것이다.
 func liveSessionXmin(t *testing.T, pool *pgxpool.Pool, videoID string) string {
 	t.Helper()
 
@@ -176,7 +174,6 @@ func TestLiveHeadNoopPreservesReviewSnapshotButNewEvidenceInvalidatesIt(t *testi
 
 	assertLiveHeadWrites(t, pool, &session, 0)
 
-	// 이력을 적재하지 않은 저장은 배열을 지우지 않고 검토 snapshot도 무효화하지 않는다.
 	session.IgnoredAbsences = live.IgnoredAbsenceHistory{}
 
 	assertLiveHeadWrites(t, pool, &session, 0)

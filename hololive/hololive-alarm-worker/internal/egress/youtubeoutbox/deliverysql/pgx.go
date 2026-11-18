@@ -17,8 +17,6 @@ type DeliveryDB interface {
 	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
 }
 
-// Texts는 domain 문자열 타입 목록을 ANY($n::text[])에 바인딩할 []string으로 바꾼다.
-// 순서와 중복은 보존한다.
 func Texts[T ~string](values []T) []string {
 	out := make([]string, len(values))
 	for i, value := range values {

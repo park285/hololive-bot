@@ -43,7 +43,6 @@ func (s StaticSupportedContracts) Supports(version ContractVersion) bool {
 func InitialSupportedContracts() StaticSupportedContracts {
 	result := make(StaticSupportedContracts)
 
-	// 운영 이력 폐기가 완료된 YouTube 구세대는 받지 않는다. Holodex의 현행 generation 2는 유지한다.
 	for _, version := range []ContractVersion{
 		{contract.ProviderYouTubeJS, contract.KindLiveSnapshot, 1, contract.LiveSnapshotQueryContractGeneration},
 		{contract.ProviderYouTubeJS, contract.KindVideoLiveCheck, contract.VideoLifecycleSchemaVersion, contract.VideoLifecycleContractGeneration},
@@ -131,7 +130,6 @@ type ClaimedBatch struct {
 }
 
 type ClaimWork struct {
-	// AttemptCount는 해당 lease를 획득할 때 DB가 반환한 시도 횟수다.
 	AttemptCount    int
 	ObservationID   int64
 	LeaseToken      string
@@ -174,13 +172,8 @@ func applicationsOf[T ~struct{ EntityKind, EntityKey, Decision string }](items [
 }
 
 type ReconcileResult struct {
-	Applications []Application
-	// LiveRuntimeVideoIDs는 이 관측 저장이 youtube_live_runtime_state 입력을 바꿨을 수 있는 영상 key다.
-	// Finalize가 같은 트랜잭션 끝에 이 key로 수명 모델을 갱신하므로, 원본을 쓰는 writer는 빠짐없이 채워야 한다.
-	// 실제 변경 key의 상위집합이며 중복을 허용한다.
+	Applications        []Application
 	LiveRuntimeVideoIDs []string
-	// NotificationsQueued는 이 관측 저장이 youtube_notification_outbox 행을 넣었을 수 있음을 뜻한다. ON CONFLICT DO NOTHING과
-	// 이미 알려진 Shorts 제외 때문에 실제 삽입의 상위집합이며, commit 뒤 alarm-worker를 깨울지만 정한다.
 	NotificationsQueued bool
 	Unsupported         bool
 	EffectiveAt         time.Time
@@ -188,7 +181,6 @@ type ReconcileResult struct {
 }
 
 type RetryInput struct {
-	// ClaimBatch가 반환한 횟수를 그대로 전달하며 저장 시 동일 값인지 검증한다.
 	AttemptCount  int
 	ObservationID int64
 	LeaseToken    string
@@ -245,7 +237,6 @@ func (o ClaimOptions) validate() error {
 }
 
 func validateClaimKinds(kinds []contract.ObservationKind) error {
-	// 중복 없는 유효 kind만 받으므로 개수 상한은 kind 종류 수가 정한다.
 	if len(kinds) == 0 {
 		return errors.New("validate source observation claim: kinds are empty")
 	}

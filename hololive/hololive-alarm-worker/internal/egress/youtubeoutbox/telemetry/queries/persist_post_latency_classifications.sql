@@ -1,5 +1,3 @@
--- $1..$5는 같은 길이의 배열이며 호출자가 (kind, content_id)를 중복 없이 넘긴다.
--- 같은 (kind, content_id)를 가진 tracking 행은 모두 같은 분류 값으로 갱신된다.
 UPDATE youtube_content_alarm_tracking AS track
 SET latency_classification_status = v.latency_classification_status,
     delay_source = v.delay_source,

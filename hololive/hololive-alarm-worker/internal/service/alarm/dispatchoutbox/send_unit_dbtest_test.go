@@ -214,7 +214,6 @@ func TestAlarmDispatchClaimLeavesTerminalUnitMembers(t *testing.T) {
 	require.Equal(t, "dlq", status)
 }
 
-// 검색 경로에서 pg_catalog보다 앞선 schema의 함수가 내장 함수를 가리므로 claim의 ready 판정과 fence 시각을 µs 단위로 결정할 수 있다.
 func fixedNowPool(t *testing.T, pool *pgxpool.Pool, at time.Time) *pgxpool.Pool {
 	t.Helper()
 

@@ -10,7 +10,6 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-// identityMissingVideoCheck는 비공개·삭제 영상의 익명 player 응답처럼 identity 없이 UNKNOWN만 남기는 확인이다.
 func identityMissingVideoCheck(reason contract.LiveCheckUnknownReason) contract.VideoLiveCheckV1 {
 	return contract.VideoLiveCheckV1{
 		VideoID: testVideoID, Availability: contract.VideoAvailabilityUnknown, Method: contract.VideoAvailabilityMethodUnknown,

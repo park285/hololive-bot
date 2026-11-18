@@ -164,7 +164,6 @@ func TestSettingsHandler_SetRoomName_LogsMaskedRoomID(t *testing.T) {
 		var logs bytes.Buffer
 
 		logger := slog.New(slog.NewJSONHandler(&logs, nil))
-		// 운영 배선과 같은 stdout 전용 activity logger라 activity 줄도 같은 버퍼에서 함께 검사한다.
 		handler := &SettingsHandler{
 			Logger:   logger,
 			Activity: activity.NewActivityLogger(logger),

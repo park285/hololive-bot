@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package handlers
 
 import (
@@ -112,7 +92,6 @@ func (c *LiveCommand) sendLiveQuery(ctx context.Context, room string, request li
 
 	diagnostics := result.DiagnosticCounts()
 	if result.Status != livequery.Complete || diagnostics != (livequery.Diagnostics{}) {
-		// D1/D2 보존 증거는 조회를 막지 않지만 불일치 조사를 위해 기존 운영 로그에 남긴다.
 		reasons := result.ReasonCounts()
 		c.Deps().Logger.InfoContext(ctx, "live query incomplete",
 			slog.String("status", string(result.Status)),
@@ -146,7 +125,6 @@ func (c *LiveCommand) sendLiveQuery(ctx context.Context, room string, request li
 			return fmt.Errorf("collab members query canceled: %w", ctx.Err())
 		}
 
-		// 출연자를 뺀 목록으로 덮지 않고 방송 조회 실패로 알린다.
 		c.Deps().Logger.ErrorContext(ctx, "Failed to resolve live collab members", slog.Any("error", err))
 
 		if sendErr := c.Deps().SendError(ctx, room, messaging.ErrLiveStreamQueryFailed); sendErr != nil {

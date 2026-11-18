@@ -14,10 +14,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// UpcomingCandidateLimit은 기존 publisher의 한 batch 상한을 복구에도 적용한다.
 const UpcomingCandidateLimit = 1000
 
-// UpcomingCandidate는 최초 선정한 category와 방별 payload를 보존한다.
 type UpcomingCandidate struct {
 	DedupeKey    string
 	ChannelID    string
@@ -25,14 +23,12 @@ type UpcomingCandidate struct {
 	Outcome      string
 }
 
-// UpcomingCandidateStore는 발행 전 선정 후보를 저장하고 복구·종료한다.
 type UpcomingCandidateStore interface {
 	Stage(context.Context, string, time.Time, []*domain.AlarmNotification) error
 	Pending(context.Context, time.Time) ([]UpcomingCandidate, error)
 	Finish(context.Context, map[string][]string, time.Time) error
 }
 
-// UpcomingCandidates는 dispatch ledger와 같은 PostgreSQL의 선정 후보 저장소다.
 type UpcomingCandidates struct{ db upcomingCandidateDB }
 
 type upcomingCandidateDB interface {
@@ -54,9 +50,6 @@ type upcomingCandidateInput struct {
 	Notification *domain.AlarmNotification `json:"notification"`
 }
 
-// Stage는 저장 응답이 불명확하면 성공을 반환하지 않는다.
-// Commit 뒤 응답 소실은 동일 key 재선정 또는 Pending의 ledger 조회로 복구한다.
-// 저장할 upcoming 후보가 없으면 DB를 호출하지 않는다.
 func (s *UpcomingCandidates) Stage(ctx context.Context, channelID string, now time.Time, notifications []*domain.AlarmNotification) error {
 	if s.db == nil {
 		return errors.New("stage upcoming candidates: database is nil")
@@ -106,7 +99,6 @@ func stageUpcomingInputs(ctx context.Context, db upcomingCandidateDB, channelID 
 	return nil
 }
 
-// 큰 fanout도 기존 publish batch 크기로 나누되 모든 chunk를 한 transaction으로 commit해 일부만 저장되지 않게 한다.
 func (s *UpcomingCandidates) stageChunks(ctx context.Context, channelID string, now time.Time, inputs []upcomingCandidateInput) (resultErr error) {
 	beginner, ok := s.db.(interface {
 		Begin(context.Context) (pgx.Tx, error)
@@ -139,7 +131,6 @@ func (s *UpcomingCandidates) stageChunks(ctx context.Context, channelID string, 
 	return nil
 }
 
-// 상태가 pending인 행만 바꾸며 기존 delivery·claim·불명 전송 증거를 수정하지 않는다.
 func (s *UpcomingCandidates) Finish(ctx context.Context, keysByOutcome map[string][]string, now time.Time) error {
 	for outcome, keys := range keysByOutcome {
 		if len(keys) == 0 {

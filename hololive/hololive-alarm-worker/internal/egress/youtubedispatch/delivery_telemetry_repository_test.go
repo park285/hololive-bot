@@ -105,7 +105,6 @@ func (deliveryTelemetryTestAlarmTrackingModel) TableName() string {
 	return testTableContentAlarmTracking
 }
 
-// TransitionStore가 전이 트랜잭션 안에서 순번을 매겨 한 번만 기록한다.
 func TestDeliveryTelemetryRepository_EnqueueRejectsDuplicateDeliveryAttempt(t *testing.T) {
 	t.Parallel()
 
@@ -308,9 +307,7 @@ func TestDeliveryTelemetryRepository_MarkRetryReleasesLock(t *testing.T) {
 	locked, err := repository.FetchAndLockPending(ctx, 10, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, locked, 1)
-	require.NoError(t, repository.MarkRetryBatch(ctx, []int64{locked[0].ID}, time.Millisecond, "emit failed"))
-
-	time.Sleep(2 * time.Millisecond)
+	require.NoError(t, repository.MarkRetryBatch(ctx, []int64{locked[0].ID}, 0, "emit failed"))
 
 	again, err := repository.FetchAndLockPending(ctx, 10, time.Minute)
 	require.NoError(t, err)

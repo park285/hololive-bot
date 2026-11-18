@@ -45,7 +45,6 @@ test("concurrent Innertube init shares one promise", async () => {
 });
 
 test("collection Innertube is created without an upstream config request", async () => {
-  // config 요청 실패를 SDK가 삼키면 이후 수집이 config 없는 세션에 고정되므로 생성 중 upstream 호출이 없어야 합니다.
   const requests = [];
   const innertube = await createInnertube({
     fetchImpl: async (input) => {
@@ -74,7 +73,6 @@ test("prepare creates the collection and live check Innertubes outside a request
   });
   t.after(() => fetchers.close());
   await fetchers.prepare();
-  // PO 발급 상태는 첫 라이브 확인 RPC 전부터 helper /health에 실립니다.
   assert.equal(fetchers.proofStatus()?.state, "COLD");
   const controller = new AbortController();
   await assert.rejects(

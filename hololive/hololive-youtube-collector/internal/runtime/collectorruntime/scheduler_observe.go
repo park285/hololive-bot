@@ -14,8 +14,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
-// observePublishError는 관측 kind별 publish 결과만 센다. Fence 손실의 lease_lost 계측은 callback join 뒤
-// handleRunError가 phase 표식을 보고 한 번만 기록한다.
 func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output collection.RunOutput, err error) {
 	if supersededError(err) {
 		e.observePublishOutcome(spec.Provider, output, outcomeSuperseded)
@@ -56,8 +54,6 @@ func (e *collectionExecutor) releaseProvider(provider contract.Provider) {
 	}
 }
 
-// observePublished는 commit이 끝난 뒤에만 호출된다. Inserted·duplicate는 durable 수락으로 보고 수락 시각을 남기며,
-// checkpoint가 실제로 전진한 관측만 수락 간격을 기록한다. Collision은 수락이 아니다.
 func (e *collectionExecutor) observePublished(output collection.RunOutput, result sourceobservation.PublishBatchResult) {
 	committedAt := time.Now().UTC()
 
@@ -202,8 +198,6 @@ func (e *collectionExecutor) retrySchedule(err error) (collection.RetrySchedule,
 		retryAt = now.Add(bounds.Minimum + (bounds.Maximum-bounds.Minimum)/2)
 	}
 
-	// HTTP 429/503 및 helper cooldown의 명시적 하한만 보존합니다.
-	// HelperBusy 등 다른 진단의 hint는 기존 일반 backoff 상한을 유지합니다.
 	if (hint.Kind() == collecterr.RetryAt || hint.Kind() == collecterr.RetryAfter) &&
 		collecterr.CodeOf(err) == contract.ErrorCooldown && collecterr.ClassOf(err) == contract.ClassCooldown {
 		if retryAt.Before(minAt) {
@@ -238,8 +232,6 @@ func clampRetryAt(retryAt, minAt, maxAt time.Time) time.Time {
 	return retryAt.UTC()
 }
 
-// logFailure는 job 단위 실패를 기록한다. 종료로 scheduler context가 취소된 뒤의 CANCELED는 자체 취소라 INFO로 남긴다.
-// 호출자는 attempt metric과 durable 진단을 그대로 CANCELED로 기록한다.
 func (e *collectionExecutor) logFailure(ctx context.Context, phase, code, class, detail string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
 	if e.logger == nil {
 		return

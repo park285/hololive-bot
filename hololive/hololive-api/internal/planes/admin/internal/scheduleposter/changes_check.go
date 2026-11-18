@@ -12,7 +12,6 @@ import (
 
 const maxMatchZoneChars = 40
 
-// 지난 시각 검사는 칸의 날짜나 시각을 새로 정하는 판정에만 한다. 지난 방송의 취소·휴방 공지는 반영한다.
 var momentKinds = []posterstore.ChangeKind{
 	posterstore.ChangeAdded, posterstore.ChangeMoved, posterstore.ChangeConfirmed, posterstore.ChangeTimeChanged,
 }
@@ -22,7 +21,6 @@ type matchCandidate struct {
 	start  *string
 	status posterstore.RowStatus
 	text   string
-	// target은 ApplyChanges(rows, prior)에서의 위치이고 새 칸이면 -1이다. 이 글의 변경을 더 적용해도 앞 위치는 그대로다.
 	target int
 }
 
@@ -36,7 +34,6 @@ type itemJudge struct {
 	added   int
 }
 
-// judgeItems는 대응 항목마다 변경 하나를 같은 순서로 돌려주며, prior에는 이 글보다 (PostedAt, ID)가 앞선 변경만 넣어야 한다.
 func judgeItems(
 	post posterstore.Post, weekStart, weekEnd time.Time, rows []posterstore.Row, prior []posterstore.Change, items []matchItem,
 ) []posterstore.Change {
@@ -148,7 +145,6 @@ func (j *itemJudge) locate(item *matchItem, candidate *matchCandidate) string {
 	return ""
 }
 
-// redirect는 같은 날 같은 시각의 칸을 대상으로 삼는다. 지난 시각 검사가 그 칸 기준의 판정을 봐야 하므로 checkTime보다 먼저 한다.
 func (j *itemJudge) redirect(_ *matchItem, candidate *matchCandidate) string {
 	if candidate.target < 0 && candidate.start != nil {
 		candidate.target = slices.IndexFunc(j.base, func(slot posterstore.Slot) bool {
@@ -220,7 +216,6 @@ func (j *itemJudge) place(_ *matchItem, candidate *matchCandidate) string {
 	return ""
 }
 
-// kind는 휴방·취소를 옮김보다 먼저 본다. 옮긴 방송의 상태는 planned·tentative뿐이다.
 func (j *itemJudge) kind(slot *posterstore.Slot, candidate *matchCandidate) posterstore.ChangeKind {
 	switch {
 	case candidate.status == posterstore.RowOff:
@@ -424,7 +419,6 @@ func sameMoment(dayA time.Time, startA string, dayB time.Time, startB string) bo
 	return dayA.Equal(dayB) && startA == startB
 }
 
-// clockStamp는 검증한 시각을 게시 시각과 같은 "YYYY-MM-DD HH:MM" 꼴로 맞춰, 문자열 순서가 시간 순서가 되게 한다.
 func clockStamp(day time.Time, start string) string {
 	day, start = posterstore.NormalizeDayTime(day, start)
 
@@ -439,12 +433,10 @@ func later(a, b time.Time) time.Time {
 	return b
 }
 
-// 모델은 근거를 옮기며 본문의 줄바꿈·공백을 빼거나 바꾸므로 공백을 모두 뺀 문자열로 견준다.
 func dropSpaces(text string) string {
 	return strings.Join(strings.Fields(text), "")
 }
 
-// foldItemText는 text가 대응·번역 지시문의 한 줄에 들어가므로 줄바꿈을 " / "로 접고 다른 제어 문자를 공백으로 바꾼다.
 func foldItemText(text string) string {
 	text = strings.TrimSpace(text)
 	text = strings.NewReplacer("\r\n", " / ", "\n", " / ", "\r", " / ", "\u2028", " / ", "\u2029", " / ").Replace(text)

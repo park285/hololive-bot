@@ -26,10 +26,6 @@ type RuntimeRouterOptions struct {
 	InternalReadyResponder func(*gin.Context)
 	WorkerRegistry         *workercontract.Registry
 
-	// TrustRemoteAddrOnly가 true이면 c.ClientIP()가 TCP RemoteAddr만 반영하도록
-	// TrustedPlatform과 trusted proxy를 모두 비운다. CF-Connecting-IP/X-Forwarded-For 등
-	// 위조 가능한 헤더를 무시해야 하는 직결(예: Tailscale) 형상에서만 켠다.
-	// zero value(false)는 기존 동작(gin.PlatformCloudflare)을 유지한다.
 	TrustRemoteAddrOnly bool
 }
 
@@ -109,10 +105,6 @@ func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts *RuntimeRou
 	return router, nil
 }
 
-// configureRuntimeClientIPTrust는 c.ClientIP()의 신뢰 소스를 설정한다.
-// 옵션 trustRemoteAddrOnly가 true이면 TrustedPlatform과 trusted proxy를 비워
-// 위조 가능한 헤더를 무시하고 TCP RemoteAddr만 신뢰한다(직결 형상).
-// 그렇지 않으면 기존 Cloudflare 형상(trusted proxies + PlatformCloudflare)을 유지한다.
 func configureRuntimeClientIPTrust(router *gin.Engine, trustRemoteAddrOnly bool) error {
 	if trustRemoteAddrOnly {
 		if err := router.SetTrustedProxies(nil); err != nil {

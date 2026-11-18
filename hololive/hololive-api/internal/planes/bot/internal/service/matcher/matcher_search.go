@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package matcher
 
 import (
@@ -51,7 +31,6 @@ func (mm *Matcher) maybeCleanupMatchCache() {
 	mm.matchCacheLastCleanup = time.Now()
 }
 
-// 매칭에 실패하면 (nil, false, nil)을 반환하며, 이 미발견 결과도 캐시에 저장한다.
 func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Channel, bool, error) {
 	snapshot, err := mm.getSnapshot(ctx)
 	if err != nil {
@@ -106,7 +85,6 @@ func (mm *Matcher) storeMatch(cacheKey string, channel *domain.Channel, snapshot
 	}
 }
 
-// evictOneMatchLocked 는 matchCacheMu 보유 상태에서 한 엔트리를 제거한다.
 func (mm *Matcher) evictOneMatchLocked(now time.Time) bool {
 	cutoff := now.Add(-mm.matchCacheTTL)
 
@@ -144,7 +122,6 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, snapshot *matcherSnaps
 	queryNorm := normalizeMatcherTerm(query)
 
 	channel := mm.finalizeCandidate(mm.resolveSnapshotCandidate(snapshot, queryNorm))
-	// 운영 기본 레벨(info)에서 매칭 실패 질의마다 HMAC 가명을 계산해 버리지 않게 먼저 확인한다.
 	if channel == nil && mm.logger.Enabled(ctx, slog.LevelDebug) {
 		mm.logger.Debug("No match found in internal data",
 			slog.String("query_token", sharedprivacylog.Pseudonym(queryNorm)),
@@ -154,7 +131,6 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, snapshot *matcherSnaps
 	return channel, channel != nil
 }
 
-// 멤버 데이터 없이 구성한 Matcher는 snapshot과 같이 빈 데이터로 보고 domain.ErrMemberNotFound를, 조회 실패는 그 오류를 돌려준다.
 func (mm *Matcher) GetMemberByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
 	if mm == nil || mm.membersData == nil {
 		return nil, domain.ErrMemberNotFound
@@ -168,8 +144,6 @@ func (mm *Matcher) GetMemberByChannelID(ctx context.Context, channelID string) (
 	return member, nil
 }
 
-// "이름 (그룹)" 형식을 파싱하고, 동명이인 발생 시 AmbiguousMatchError를 반환합니다.
-// 매칭에 실패하면 (nil, false, nil)을 반환합니다.
 func (mm *Matcher) FindBestMatchWithCandidates(ctx context.Context, query string) (*domain.Channel, bool, error) {
 	member, _, err := mm.FindMemberProfile(ctx, query)
 	if err != nil || member == nil {
@@ -179,7 +153,6 @@ func (mm *Matcher) FindBestMatchWithCandidates(ctx context.Context, query string
 	return mm.memberToChannel(member), true, nil
 }
 
-// FindMemberProfile은 채널을 공유하는 멤버도 개별 프로필로 구분한다.
 func (mm *Matcher) FindMemberProfile(ctx context.Context, query string) (*domain.Member, bool, error) {
 	name, org := ParseNameWithOrg(query)
 
@@ -219,7 +192,6 @@ func (mm *Matcher) memberToChannel(m *domain.Member) *domain.Channel {
 	}
 }
 
-// 등록되지 않은 채널은 결과에 넣지 않으므로 호출자가 원천 응답의 이름을 그대로 쓴다. 멤버 snapshot을 만들지 못하면 오류다.
 func (mm *Matcher) MemberDisplayNames(ctx context.Context, channelIDs []string) (map[string]string, error) {
 	snapshot, err := mm.getSnapshot(ctx)
 	if err != nil {

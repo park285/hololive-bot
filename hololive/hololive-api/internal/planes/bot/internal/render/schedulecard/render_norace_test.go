@@ -1,8 +1,5 @@
 //go:build !race
 
-// 렌더는 race 계측에서 수십 배 느려 단일 스레드 렌더 검사는 race가 아닌 실행에서만 돈다.
-// scripts/ci/go-test-nonrace.sh가 race 빌드와 별도로 실행한다.
-
 package schedulecard
 
 import (

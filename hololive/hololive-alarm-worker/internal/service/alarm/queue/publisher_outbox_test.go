@@ -160,7 +160,6 @@ func TestPublisherPreservesNonPrefixReceiptsAcrossChunkError(t *testing.T) {
 	require.Equal(t, 3, result.ProcessedDeliveries)
 }
 
-// claimKeys가 notification과 길이가 다르면 비어 있더라도 claim 없는 envelope으로 채우지 않고 저장 전에 거절한다.
 func TestPublisherPublishBatchRejectsClaimKeyCountMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -198,7 +197,6 @@ func TestNewPublisherRejectsMissingOutboxAndNonPositiveBatchLimit(t *testing.T) 
 	}
 }
 
-// wakeup은 outbox 적재 뒤 부가 작업이므로 호출자 취소와 분리하고, Valkey 지연이 발행 루프를 붙잡지 않게 짧은 상한 안에서 보낸다.
 func TestPublisherWakeupIgnoresCallerCancellationWithinShortDeadline(t *testing.T) {
 	t.Parallel()
 

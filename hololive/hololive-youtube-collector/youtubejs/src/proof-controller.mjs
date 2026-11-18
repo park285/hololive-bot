@@ -4,7 +4,6 @@ import { getHeaders } from "bgutils-js/utils";
 import { ProofBrokerClient, ProofError } from "./proof-broker.mjs";
 import { runWithoutRequestContext } from "./request-context.mjs";
 
-// upstream BgUtils의 공개 WEB 요청 식별자이며 계정/운영 credential이 아닙니다.
 const requestKey = "O43z0dpjhgX20SCx4KAo";
 const createURL = "https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa/Create";
 const integrityURL = "https://www.youtube.com/api/jnn/v1/GenerateIT";
@@ -17,17 +16,8 @@ const integrityTokenPattern = /^[A-Za-z0-9+/_-]+={0,2}$/;
 
 /** @typedef {{ generation: string, deadline: number, refreshAt: number, expiresAt: string }} ProofSession */
 
-/** 네트워크는 신뢰된 helper가 소유하고 외부 interpreter는 별도 broker에만 전달합니다. */
 export class ProofController {
-  /**
-   * @param {{
-   *   fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
-   *   userAgent: string,
-   *   broker?: ProofBrokerClient,
-   *   clock?: () => number,
-   *   wallClock?: () => number,
-   * }} options
-   */
+  /** @param {{ fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch, userAgent: string, broker?: ProofBrokerClient, clock?: () => number, wallClock?: () => number, }} options */
   constructor(options) {
     if (typeof options.fetchImpl !== "function" || !text(options.userAgent, 1_024)) {
       throw new ProofError("proof_configuration");
@@ -76,8 +66,6 @@ export class ProofController {
   }
 
   /**
-   * 마지막 generation/만료 확인과 player 호출 사이에 다른 await를 두지 않습니다.
-   * 발급 실패는 재시도가 아니라 기존 단일 무토큰 player 경로를 유지합니다.
    * @template T
    * @param {string} videoId
    * @param {(token?: string) => Promise<T>} send
@@ -96,9 +84,6 @@ export class ProofController {
         token = await this.broker.mint(session.generation, videoId, mintSignal);
         this.mintedTotal += 1;
       } catch (error) {
-        // broker는 worker IO 중 요청이 끊기면 그 세대를 퇴역시키므로, 취소된 mint 뒤에도 세대를 재사용하지 않습니다.
-        // dispatch 전 취소로 세대가 남았다면 다음 발급의 freshGeneration이 한 번 reset합니다.
-        // 옛 세대의 늦은 실패 역시 이미 준비된 새 세대를 무효화하지 않습니다.
         if (!this.stop.signal.aborted && this.session === session) {
           this.session = undefined;
           this.state = "UNAVAILABLE";
@@ -128,7 +113,6 @@ export class ProofController {
       try {
         const generation = await this.broker.freshGeneration(this.stop.signal);
         this.ownedGeneration = generation;
-        // 신뢰된 SDK의 교체 기동을 마친 뒤 prepare부터 발급 전체에 15초를 적용합니다.
         const signal = AbortSignal.any([this.stop.signal, AbortSignal.timeout(15_000)]);
         const session = await this.issue(generation, signal);
         signal.throwIfAborted();
@@ -145,13 +129,20 @@ export class ProofController {
     }).finally(() => { this.attempt = undefined; });
   }
 
-  /** @param {string} generation @param {AbortSignal} signal @returns {Promise<ProofSession>} */
+  /**
+   * @param {string} generation
+   * @param {AbortSignal} signal
+   * @returns {Promise<ProofSession>}
+   */
   async issue(generation, signal) {
     await this.broker.prepare(generation, this.userAgent, signal);
     signal.throwIfAborted();
     let calls = 0;
     const headers = { ...getHeaders(), "user-agent": this.userAgent };
-    /** @param {string} url @param {unknown[] | undefined} payload */
+    /**
+     * @param {string} url
+     * @param {unknown[] | undefined} payload
+     */
     const upstream = async (url, payload) => {
       signal.throwIfAborted();
       if (++calls > 3) throw new ProofError("proof_request_budget");
@@ -225,7 +216,6 @@ export class ProofController {
     try {
       await this.broker.retire(generation, AbortSignal.timeout(1_000));
     } catch (error) {
-      // 손실된 reset 응답을 재전송하지 않습니다. 다음 발급은 freshGeneration으로 교체를 입증합니다.
       if (!(error instanceof ProofError) || !["broker_unavailable", "broker_generation_mismatch"].includes(error.code)) {
         this.cleanupError = safeCode(error);
       }
@@ -247,7 +237,10 @@ export class ProofController {
   }
 }
 
-/** @param {Response} response @param {AbortSignal} signal */
+/**
+ * @param {Response} response
+ * @param {AbortSignal} signal
+ */
 async function readBounded(response, signal) {
   if (!response.body) throw new ProofError("attestation_structure");
   const reader = response.body.getReader();
@@ -269,7 +262,10 @@ async function readBounded(response, signal) {
   }
 }
 
-/** @param {string} raw @returns {unknown} */
+/**
+ * @param {string} raw
+ * @returns {unknown}
+ */
 function parseJSON(raw) {
   try {
     return JSON.parse(raw);
@@ -278,7 +274,11 @@ function parseJSON(raw) {
   }
 }
 
-/** @param {unknown} value @param {number} limit @returns {value is string} */
+/**
+ * @param {unknown} value
+ * @param {number} limit
+ * @returns {value is string}
+ */
 function text(value, limit) {
   return typeof value === "string" && value.length > 0 && Buffer.byteLength(value) <= limit;
 }

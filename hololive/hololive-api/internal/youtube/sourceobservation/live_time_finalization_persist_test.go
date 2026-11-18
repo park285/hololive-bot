@@ -15,7 +15,6 @@ import (
 
 const providerTimesSource = "provider"
 
-// 종료 사유(endReason)가 비면 head가 없다.
 type endedFixture struct {
 	origin     string
 	endReason  string
@@ -172,7 +171,6 @@ func TestTimeFinalizationReplacesObservedTimesWithArchiveTimes(t *testing.T) {
 
 	assertApplicationDecision(t, h.pool, id, liveSessionEntityKind, videoTimeFinalized)
 
-	// 확정 뒤 같은 영상의 늦은 LIVE 판정도 ENDED 세션의 확정 시각을 관측 시각으로 되돌리지 않는다.
 	if err := dbx.InPgxTx(t.Context(), h.pool, func(tx dbx.Tx) error {
 		return persistLateLivePositive(t, tx, id+1, slot.Add(time.Hour))
 	}); err != nil {
@@ -236,10 +234,9 @@ func storedTimeBoundScenarios() map[string]storedTimeBoundScenario {
 			},
 			payload: archiveAt(0, 0), outcome: finalizationFinalized,
 		},
-		"end before live positive slack": {payload: archiveAt(0, -15*time.Minute-time.Second), outcome: finalizationConflict, reason: finalizationRuleEndBeforePositive},
-		"start after tolerance":          {payload: archiveAt(15*time.Minute+time.Second, 0), outcome: finalizationConflict, reason: finalizationRuleStartMismatch},
-		"start within tolerance":         {payload: archiveAt(15*time.Minute, 0), outcome: finalizationFinalized},
-		// 시작 시각 없이 늦게 감지한 방송은 저장 시작이 감지 시각이라 실제 시작이 훨씬 이르다.
+		"end before live positive slack":  {payload: archiveAt(0, -15*time.Minute-time.Second), outcome: finalizationConflict, reason: finalizationRuleEndBeforePositive},
+		"start after tolerance":           {payload: archiveAt(15*time.Minute+time.Second, 0), outcome: finalizationConflict, reason: finalizationRuleStartMismatch},
+		"start within tolerance":          {payload: archiveAt(15*time.Minute, 0), outcome: finalizationFinalized},
 		"late detected start is replaced": {payload: archiveAt(-90*time.Minute, 0), outcome: finalizationFinalized},
 		"start unobserved is filled": {
 			edit:    func(f *endedFixture) { f.startedAt = nil },
@@ -325,7 +322,6 @@ func TestTimeFinalizationRetriesUnknownOnScheduleUntilExhausted(t *testing.T) {
 				attempt+1, valueOr(got.outcome), got.attempts, got.nextAttemptAt, valueOr(got.reason), next)
 		}
 
-		// 예정 시각 전의 관측은 시도로 세지 않는다.
 		early := h.observeAt(t, next.Add(-time.Minute), unknown)
 		assertApplicationDecision(t, h.pool, early, liveSessionEntityKind, videoLifecycleKeepEnded)
 

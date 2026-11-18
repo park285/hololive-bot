@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package domain_test
 
 import (
@@ -97,7 +77,6 @@ func TestOutboxKind_ToTemplateKey(t *testing.T) {
 			want: domain.TemplateKeyOutboxCommunity,
 		},
 		{
-			// 알 수 없는 종류 → TemplateKeyOutboxVideo (default)
 			name: "알 수 없는 종류 → TemplateKeyOutboxVideo",
 			kind: domain.OutboxKind("UNKNOWN"),
 			want: domain.TemplateKeyOutboxVideo,
@@ -221,7 +200,6 @@ func TestThumbnailsJSON_Value(t *testing.T) {
 				return
 			}
 
-			// 유효한 경우 string 타입이어야 한다 (pgx jsonb 컬럼 요구사항)
 			s, ok := val.(string)
 			if !ok {
 				t.Fatalf("Value() 타입 = %T, want string", val)
@@ -244,7 +222,6 @@ func TestThumbnailsJSON_Scan(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			// nil 입력 → nil ThumbnailsJSON, 오류 없음
 			name:    "nil 입력",
 			input:   nil,
 			wantNil: true,
@@ -263,7 +240,6 @@ func TestThumbnailsJSON_Scan(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// 유효하지 않은 JSON → 오류 반환
 			name:    "잘못된 JSON",
 			input:   []byte(`{not valid json`),
 			wantNil: false,

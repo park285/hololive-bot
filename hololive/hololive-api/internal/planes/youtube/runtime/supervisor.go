@@ -362,7 +362,6 @@ func (r *Runtime) deadLetterAndForget(ctx context.Context, work sourceobservatio
 		youtubeConsumeTotal.WithLabelValues(consumeResultDeadLetterError).Inc()
 
 		if retryableObservationError(deadLetterErr) {
-			// 기록하지 못한 PROCESSING 행은 lease 만료 뒤 기존 claim 경로가 회수합니다.
 			r.Logger.ErrorContext(ctx, "youtube plane dead letter failed; awaiting lease recovery",
 				slog.Int64("observation_id", work.ObservationID), slog.Any("error", deadLetterErr))
 
@@ -393,7 +392,6 @@ func (r *Runtime) retryAndForget(ctx context.Context, work sourceobservation.Cla
 		youtubeConsumeTotal.WithLabelValues(consumeResultRetryError).Inc()
 
 		if retryableObservationError(retryErr) {
-			// 새 재시도를 만들지 않고 기존 lease 만료 회수와 시도 횟수 제한에 맡깁니다.
 			r.Logger.ErrorContext(ctx, "youtube plane retry failed; awaiting lease recovery",
 				slog.Int64("observation_id", work.ObservationID), slog.Any("error", retryErr))
 

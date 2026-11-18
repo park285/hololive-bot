@@ -16,9 +16,6 @@ var expiredPendingBounded = promauto.NewGauge(prometheus.GaugeOpts{
 	Help: "Freshness를 지난 PENDING delivery 수. 기존 batch size까지만 집계한다.",
 })
 
-// SampleQueue는 worker 관측의 youtube_delivery queue 표본이다. ReadySnapshot 값을 돌려주고, 부모 outbox.created_at이
-// freshness를 지난 PENDING delivery 수를 batchSize까지만 세어 hololive_youtube_delivery_expired_pending_bounded에
-// 기록한다. 두 조회 중 하나라도 실패하면 gauge를 바꾸지 않고 오류를 돌려준다.
 func SampleQueue(ctx context.Context, pool *pgxpool.Pool, lockTimeout, freshness time.Duration, batchSize int) (workercontract.QueueValues, error) {
 	values, err := ReadySnapshot(ctx, pool, lockTimeout, freshness, batchSize)
 	if err != nil {
@@ -35,8 +32,6 @@ func SampleQueue(ctx context.Context, pool *pgxpool.Pool, lockTimeout, freshness
 	return values, nil
 }
 
-// ReadySnapshot은 request leader가 아니라 claim 가능한 delivery 행 수를 반환한다.
-// 신선도는 부모 outbox.created_at, 대기 시간은 retry/만료 lock의 예약 임계값이며 모두 claim과 같은 DB 시계로 판정한다.
 func ReadySnapshot(ctx context.Context, pool *pgxpool.Pool, lockTimeout, freshness time.Duration, batchSize int) (workercontract.QueueValues, error) {
 	var (
 		depth      int64

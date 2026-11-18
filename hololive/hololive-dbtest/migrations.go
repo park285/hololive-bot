@@ -1,26 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
-// Package dbtest는 pgx 마이그레이션 테스트를 위한 PostgreSQL 하니스를 제공한다.
-// prod SSOT migration(hololive-api/scripts/migrations)을 격리 스키마에 그대로
-// 적용하여 test/prod schema drift를 제거한다.
 package dbtest
 
 import (
@@ -80,31 +57,22 @@ func migrationFingerprint() (string, error) {
 }
 
 const (
-	// 모노레포 루트를 식별하는 파일이다.
 	repoRootMarker = "build-all.sh"
 
-	// 모노레포 루트 기준 prod migration SSOT 경로다.
 	migrationsRelDir = "hololive/hololive-api/scripts/migrations"
 
-	// 자동 탐색을 우회하는 override env다.
 	migrationsDirEnv = "HOLOLIVE_MIGRATIONS_DIR"
 
 	epoch3BaselineMigration = "001_schema_epoch3_baseline.sql"
 	dbtestLedgerSchema      = "hololive_dbtest_internal"
 )
 
-// ApplyMigrations는 manifest.txt 순서대로 prod migration SQL을 pool이 가리키는
-// (search_path 설정된) 스키마에 적용한다.
-//
-// 디렉터리 탐색 우선순위: HOLOLIVE_MIGRATIONS_DIR env → CWD에서 위로 build-all.sh
-// 마커를 찾아 migrationsRelDir append.
 func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	dir, err := resolveMigrationsDir()
 	if err != nil {
 		return fmt.Errorf("apply migrations: resolve dir: %w", err)
 	}
 
-	// manifest 해석은 러너와 같은 dbmigrate.Manifest가 소유한다(필드 수·순서·중복 검증 포함).
 	entries, err := dbmigrate.Manifest(os.DirFS(dir))
 	if err != nil {
 		return fmt.Errorf("apply migrations: read manifest: %w", err)

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package youtubedispatch
 
 import (
@@ -58,7 +38,6 @@ func (d *SendEngine) dispatchDeliveryRows(
 
 	groups = append(frozenGroups, groups...)
 
-	// orphan row 처리
 	for i := range orphanRows {
 		d.recordDeliveryFailure(&result, orphanRows[i].OutboxID)
 	}
@@ -85,8 +64,6 @@ func (d *SendEngine) dispatchDeliveryRows(
 	return result.DispatchResult
 }
 
-// rowOutboxes는 rows가 가리키는 outbox만 고른다. 호출자의 outboxByID에는 claim했지만 이번에 발송하지 않는 행의 outbox도
-// 있으며, 그 outbox는 렌더하지 않는다.
 func rowOutboxes(rows []domain.YouTubeNotificationDelivery, outboxByID map[int64]domain.YouTubeNotificationOutbox) map[int64]domain.YouTubeNotificationOutbox {
 	out := make(map[int64]domain.YouTubeNotificationOutbox, len(rows))
 
@@ -117,7 +94,6 @@ func (d *SendEngine) dispatchGroup(
 		groupOutboxByID[group.outboxes[i].ID] = group.outboxes[i]
 	}
 
-	// 단건 그룹: 기존 개별 dispatch 경로
 	if len(group.rows) == 1 {
 		d.dispatchDeliveryRow(ctx, &group.rows[0], groupOutboxByID, formattedMessages, formatFailures, result)
 
@@ -421,11 +397,8 @@ func (d *SendEngine) logGroupedSendFallback(
 		slog.Any("error", sendErr))
 }
 
-// errSendLeaseBudgetExhausted는 남은 lease가 발송 한 번과 정산 여유보다 짧아 provider를 부르지 않은 실패다.
 var errSendLeaseBudgetExhausted = errors.New("send lease budget exhausted")
 
-// checkSendLeaseBudget은 계약의 Send lease budget 규칙이다. 남은 lease가 sendLeaseBudget보다 짧으면 발송 결과를
-// 정산하기 전에 stale sweep이 행을 격리할 수 있으므로 provider를 부르지 않는다.
 func (d *SendEngine) checkSendLeaseBudget(startedAt time.Time) error {
 	remaining := d.config.LockTimeout - time.Since(startedAt)
 	if required := d.config.sendLeaseBudget(); remaining < required {
@@ -466,7 +439,6 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 	}
 
 	for i := range attempt.members {
-		// 취소 뒤 아직 보내지 않은 fallback에 새 상태 예산을 연속 할당하지 않는다.
 		if ctx.Err() != nil {
 			return
 		}

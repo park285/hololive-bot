@@ -13,8 +13,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-// runtimeIrisBaseURLResolver는 생성 시 받은 설정만으로 Base URL을 해석한다. 해석 중 env를 다시
-// 읽지 않으므로 기동 때 검증한 정책과 실제로 쓰는 정책이 갈라지지 않는다. URL 파일 내용만 동적으로 다시 읽는다.
 type runtimeIrisBaseURLResolver struct {
 	fallbackBaseURL  string
 	baseURLFilePath  string
@@ -40,7 +38,6 @@ func newRuntimeIrisBaseURLResolver(config settings.IrisConfig) (*runtimeIrisBase
 		}
 	}
 
-	// 허용 집합이 비면 URL 파일의 모든 host를 거절하게 되므로 설정 오류로 먼저 드러낸다(fail-closed).
 	if resolver.baseURLFilePath != "" && len(resolver.allowedHosts) == 0 {
 		return nil, fmt.Errorf("IRIS_BASE_URL_FILE requires %s or %s", irisH3ServerNameEnv, irisBaseURLAllowedHostsEnv)
 	}

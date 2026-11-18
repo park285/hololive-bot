@@ -182,7 +182,6 @@ func TestWorkerProfileDeclaresDomainAgePolicies(t *testing.T) {
 	}
 }
 
-// Iris는 발송을 최소 2.5초 간격으로 처리하므로 일괄 발송의 handoff 완료가 발송 attempt_timeout보다 늦을 수 있다.
 func TestValidateWorkerProfileAlarmHandoffHorizonCoversAttemptTimeout(t *testing.T) {
 	settingstest.UseProfileFixture(t, "testdata/stack-worker-profile-alarm-worker.json")
 
@@ -218,7 +217,6 @@ func TestValidateWorkerProfileAlarmHandoffHorizonCoversAttemptTimeout(t *testing
 	}
 }
 
-// youtube_delivery도 같은 Iris 발송 큐를 거치므로 handoff 확인 기한을 발송 시도 시간과 따로 둔다.
 func TestValidateWorkerProfileDeliveryHandoffHorizonCoversAttemptTimeout(t *testing.T) {
 	for _, worker := range []struct {
 		name    string

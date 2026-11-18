@@ -18,16 +18,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-// ErrNilQuerier는 NewRepository에 nil 또는 typed-nil Querier가 들어왔을 때 반환된다.
-// 구성 시점에 거절해 이후 메서드가 nil DB로 panic하지 않게 한다.
 var ErrNilQuerier = errors.New("delivery telemetry repository: db is nil")
 
 type Repository struct {
 	db dbx.Querier
 }
 
-// NewRepository는 pool·transaction 등 dbx.Querier로 telemetry repository를 만든다.
-// Nil 또는 typed-nil이면 ErrNilQuerier를 반환하므로 호출자는 startup/transaction 오류로 처리해야 한다.
 func NewRepository(db dbx.Querier) (*Repository, error) {
 	if reflectutil.IsNil(db) {
 		return nil, ErrNilQuerier
@@ -66,7 +62,6 @@ func (r *Repository) PrepareRows(
 			continue
 		}
 
-		// post_id는 기록 주체(TransitionStore)가 검증한 logical key다. content_id로 채우지 않고 누락을 오류로 드러낸다.
 		if row.PostID == "" {
 			return nil, fmt.Errorf("delivery %d attempt %d: post_id is empty", row.DeliveryID, row.AttemptOrdinal)
 		}
@@ -190,8 +185,6 @@ func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []YouTubeNot
 		args = appendTelemetryRowArgs(args, &rows[i])
 	}
 
-	// 시도 식별자 중복은 unique 위반으로 lifecycle 전이 트랜잭션 전체를 rollback한다.
-
 	if _, err := r.db.Exec(ctx, sb.String(), args...); err != nil {
 		return fmt.Errorf("enqueue delivery telemetry: %w", err)
 	}
@@ -221,8 +214,6 @@ func appendTelemetryRowArgs(args []any, row *YouTubeNotificationDeliveryTelemetr
 		row.AttemptStartedAt, row.AttemptFinishedAt, row.EventAt, row.NextAttemptAt, row.LockedAt, row.LoggedAt, row.Error)
 }
 
-// FetchAndLockPending은 기록할 telemetry 행을 골라 lease(locked_at)를 한 문장으로 획득한다.
-// 만료(lockTimeout)가 지난 lease의 행은 다시 획득할 수 있고, 다른 인스턴스가 잡은 행은 건너뛴다.
 func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]YouTubeNotificationDeliveryTelemetry, error) {
 	if batchSize <= 0 {
 		return nil, nil
@@ -245,7 +236,6 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 		return nil, nil
 	}
 
-	// UPDATE ... RETURNING은 순서를 보장하지 않으므로 기록 순서를 (event_at, id)로 되돌린다.
 	slices.SortFunc(locked, func(a, b YouTubeNotificationDeliveryTelemetry) int {
 		return cmp.Or(a.EventAt.Compare(b.EventAt), cmp.Compare(a.ID, b.ID))
 	})

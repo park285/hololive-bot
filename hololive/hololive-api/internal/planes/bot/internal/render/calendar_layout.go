@@ -5,12 +5,9 @@ import (
 )
 
 const (
-	scaleFactor     = 4
-	canvasWidth     = 620 * scaleFactor
-	maxCanvasPixels = 48_000_000
-	// 최종 출력 크기(카카오 인라인 표시 근사). 내부는 canvasWidth(고해상도)로 그린 뒤
-	// calendarOutputWidth로 다운스케일해 전송한다 = SSAA + 카카오 재압축 손실 최소화.
-	// 항목이 많으면 compact<1로 비례 축소해 출력이 1024x1536 비율 안에 들어오게 한다.
+	scaleFactor          = 4
+	canvasWidth          = 620 * scaleFactor
+	maxCanvasPixels      = 48_000_000
 	calendarOutputWidth  = 1024
 	calendarOutputHeight = 1536
 	calendarTargetInnerH = canvasWidth * calendarOutputHeight / calendarOutputWidth

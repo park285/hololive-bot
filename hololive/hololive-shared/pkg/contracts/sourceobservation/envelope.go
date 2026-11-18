@@ -15,7 +15,6 @@ const (
 	MaxSourceEventFutureSkew              = 15 * time.Minute
 )
 
-// MaxProjectionTargetCount는 API와 collector가 공유하는 완전한 projection target 집합 상한입니다.
 const MaxProjectionTargetCount = 10_000
 
 type Provider string
@@ -65,13 +64,6 @@ const (
 	StatusDeadLetter Status = "DEAD_LETTER"
 )
 
-// LeaseProof는 collector의 lease 전이와 publish 문장이 모두 다시 대조하는 소유 증명입니다.
-// 한 lease 행 안에서는 acquire만 FenceEpoch를 올리며 ProjectionGeneration·ScheduledFor도 그때만 바뀌므로
-// 소유 손실은 FenceEpoch로 드러납니다. 그러나 retention이 RETIRED 세대의 lease 행을 지운 뒤 acquire가
-// 다시 INSERT하면 FenceEpoch는 1부터 다시 시작하고 OwnerInstance는 호스트 고정값이라, 멈춰 있던 이전
-// 소유자와 (JobKey, OwnerInstance, FenceEpoch)가 같아질 수 있습니다. 재사용되지 않는 ProjectionGeneration이
-// 이 경우를 구분합니다. ScheduledFor는 소유 판정에는 중복이지만 envelope의 scheduled_for를 lease slot에
-// 묶는 slot identity라 함께 대조합니다.
 type LeaseProof struct {
 	JobKey               string    `json:"job_key"`
 	CollectionJobKind    string    `json:"collection_job_kind"`
@@ -167,8 +159,6 @@ func PrepareEnvelope(envelope Envelope) (Envelope, error) {
 	return envelope, nil
 }
 
-// validatePrepared는 PrepareEnvelope가 방금 만든 canonical payload·scope를 재정규화 없이 재사용해
-// Validate와 같은 구조·해시 검증을 수행한다. 외부 입력 검증은 항상 Validate를 사용한다.
 func (e *Envelope) validatePrepared(canonicalPayload, canonicalScope []byte) error {
 	if err := e.validateEnvelopeStructure(); err != nil {
 		return fmt.Errorf("validate envelope: %w", err)

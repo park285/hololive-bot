@@ -55,7 +55,6 @@ func (c streamCast) joins(stream *posterstore.OfficialStream, channelID string) 
 		slices.ContainsFunc(stream.Guests, func(name string) bool { return c.index.Resolve(name) == channelID })
 }
 
-// streamEntry의 머리 줄과 줄 이름은 대응 지시문(match.txt)이 읽는 형식이다.
 func (c streamCast) streamEntry(stream *posterstore.OfficialStream, channelID string) string {
 	hosts := stream.ChannelID == channelID
 	host := c.names[stream.ChannelID]
@@ -181,7 +180,6 @@ func (s *Service) streamEntries(
 	return entries
 }
 
-// streamAudience는 방송을 여는 멤버를 다른 사람 글의 대상에서 뺀다. 그 멤버의 일정은 본인 안내 글이 반영한다.
 func (s *Service) streamAudience(stream *posterstore.OfficialStream, target Target, cast streamCast) []string {
 	audience := []string{target.ChannelID}
 

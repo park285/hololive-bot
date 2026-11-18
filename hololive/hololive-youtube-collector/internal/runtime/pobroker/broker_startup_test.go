@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -19,8 +21,12 @@ import (
 )
 
 func TestServeDoesNotReportHealthyBeforeWorkerLoads(t *testing.T) {
-	script := "#!/bin/sh\nIFS= read -r release\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nsleep 30\n"
-	broker := New("revision", fakeNode(t, "loading-node", script), "unused")
+	dir := t.TempDir()
+	gate := filepath.Join(dir, "load")
+	require.NoError(t, syscall.Mkfifo(gate, 0o600))
+
+	script := "#!/bin/sh\nfor gate do :; done\nIFS= read -r release < \"$gate\"\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nsleep 30\n"
+	broker := New("revision", fakeNode(t, "loading-node", script), gate)
 
 	var config net.ListenConfig
 
@@ -44,7 +50,13 @@ func TestServeDoesNotReportHealthyBeforeWorkerLoads(t *testing.T) {
 		}
 	})
 
-	process := waitForStartedWorker(t, broker)
+	root, err := os.OpenRoot(dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+
+	release, err := root.OpenFile("load", os.O_WRONLY, 0)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, release.Close()) })
 
 	var dialer net.Dialer
 
@@ -62,7 +74,7 @@ func TestServeDoesNotReportHealthyBeforeWorkerLoads(t *testing.T) {
 	_, err = conn.Read(firstByte[:])
 	require.ErrorIs(t, err, os.ErrDeadlineExceeded, "health became available before worker loading")
 
-	_, err = process.stdin.Write([]byte("load\n"))
+	_, err = release.WriteString("load\n")
 	require.NoError(t, err)
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
 
@@ -127,7 +139,6 @@ func TestServeStartupDeadlineClosesListenerAndReapsWorker(t *testing.T) {
 
 		select {
 		case serveErr := <-done:
-			// 본문이 결과를 읽었으면 닫힌 channel의 nil이 오고, 읽기 전에 실패했으면 기동 deadline 오류가 온다.
 			if serveErr != nil && !errors.Is(serveErr, context.DeadlineExceeded) {
 				t.Errorf("Serve() after silent startup error = %v, want startup deadline", serveErr)
 			}
@@ -136,9 +147,6 @@ func TestServeStartupDeadlineClosesListenerAndReapsWorker(t *testing.T) {
 		}
 	})
 
-	process := waitForStartedWorker(t, broker)
-
-	// 운영과 같은 기동 예산 전달 경로로 deadline 뒤 listener와 worker가 회수되는지 확인한다.
 	select {
 	case err := <-done:
 		require.ErrorIs(t, err, context.DeadlineExceeded)
@@ -149,7 +157,7 @@ func TestServeStartupDeadlineClosesListenerAndReapsWorker(t *testing.T) {
 	require.ErrorIs(t, listener.Close(), net.ErrClosed)
 
 	select {
-	case <-process.done:
+	case <-broker.worker.done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed-out startup left the worker running")
 	}
@@ -172,7 +180,6 @@ func TestServeKeepsConnectionsUntilRetirementClosesThem(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, roundTrip(t, active, http.MethodDelete, "/v1/session", string(body)))
 
-	// 서버 IdleTimeout보다 훨씬 먼저 닫혀야 퇴역이 닫은 것입니다.
 	require.NoError(t, idle.conn.SetReadDeadline(idleSince.Add(time.Second)))
 
 	_, err = idle.reader.ReadByte()
@@ -252,28 +259,99 @@ func TestFlushedResponsesHaveContentLength(t *testing.T) {
 	}
 }
 
-// client(youtubejs/src/proof-broker.mjs)는 유휴 연결을 1초 뒤 닫지만 Node event loop가 멈추면 그보다 늦게 재사용할 수 있습니다.
 func TestServeKeepsIdleConnectionPastClientStallWindow(t *testing.T) {
-	_, socket, _ := serveKeepAliveBroker(t)
+	broker, socket, listener := newKeepAliveBroker(t)
+	idleDeadline := make(chan time.Duration, 1)
+	serveBroker(t, broker, &idleDeadlineListener{Listener: listener, deadline: idleDeadline})
+
 	conn := dialBroker(t, socket)
 
 	require.Equal(t, http.StatusOK, roundTrip(t, conn, http.MethodGet, "/health", ""))
-	time.Sleep(2500 * time.Millisecond)
+
+	select {
+	case remaining := <-idleDeadline:
+		require.Greater(t, remaining, 2500*time.Millisecond)
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not start waiting for the next request")
+	}
+
 	require.Equal(t, http.StatusOK, roundTrip(t, conn, http.MethodGet, "/health", ""))
+}
+
+type idleDeadlineListener struct {
+	net.Listener
+
+	deadline chan<- time.Duration
+}
+
+func (l *idleDeadlineListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, fmt.Errorf("accept keep-alive connection: %w", err)
+	}
+
+	return &idleDeadlineConn{Conn: conn, deadline: l.deadline}, nil
+}
+
+type idleDeadlineConn struct {
+	net.Conn
+
+	deadline  chan<- time.Duration
+	responded bool
+}
+
+func (c *idleDeadlineConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+
+	c.responded = true
+
+	if err != nil {
+		return n, fmt.Errorf("write response: %w", err)
+	}
+
+	return n, nil
+}
+
+func (c *idleDeadlineConn) SetReadDeadline(t time.Time) error {
+	if c.responded && c.deadline != nil && t.After(time.Now()) {
+		c.deadline <- time.Until(t)
+
+		c.deadline = nil
+	}
+
+	if err := c.Conn.SetReadDeadline(t); err != nil {
+		return fmt.Errorf("set read deadline: %w", err)
+	}
+
+	return nil
 }
 
 func serveKeepAliveBroker(t *testing.T) (broker *Broker, socket string, done <-chan error) {
 	t.Helper()
 
-	const script = "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nsleep 30\n"
+	broker, socket, listener := newKeepAliveBroker(t)
 
-	broker = New("revision", fakeNode(t, "keepalive-node", script), "unused")
-	socket = filepath.Join(t.TempDir(), "worker.sock")
+	return broker, socket, serveBroker(t, broker, listener)
+}
+
+func newKeepAliveBroker(t *testing.T) (*Broker, string, net.Listener) {
+	t.Helper()
+
+	const script = "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nIFS= read -r release\n"
+
+	broker := New("revision", fakeNode(t, "keepalive-node", script), "unused")
+	socket := filepath.Join(t.TempDir(), "worker.sock")
 
 	var config net.ListenConfig
 
 	listener, err := config.Listen(t.Context(), "unix", socket)
 	require.NoError(t, err)
+
+	return broker, socket, listener
+}
+
+func serveBroker(t *testing.T, broker *Broker, listener net.Listener) <-chan error {
+	t.Helper()
 
 	served := make(chan error, 1)
 
@@ -287,7 +365,6 @@ func serveKeepAliveBroker(t *testing.T) (broker *Broker, socket string, done <-c
 		broker.retire(ExitSignal)
 
 		select {
-		// 본문이 결과를 이미 읽었으면 닫힌 channel의 nil이 온다.
 		case serveErr := <-served:
 			if serveErr != nil {
 				t.Errorf("Serve() after retirement error = %v, want nil", serveErr)
@@ -297,7 +374,7 @@ func serveKeepAliveBroker(t *testing.T) (broker *Broker, socket string, done <-c
 		}
 	})
 
-	return broker, socket, served
+	return served
 }
 
 type brokerConn struct {
@@ -327,7 +404,6 @@ func roundTrip(t *testing.T, c brokerConn, method, path, body string) int {
 		request.Header.Set("Content-Type", "application/json")
 	}
 
-	// 첫 요청은 worker 기동이 끝날 때까지 accept 대기열에 머뭅니다.
 	require.NoError(t, c.conn.SetDeadline(time.Now().Add(10*time.Second)))
 	require.NoError(t, request.Write(c.conn))
 
@@ -340,27 +416,4 @@ func roundTrip(t *testing.T, c brokerConn, method, path, body string) int {
 	require.False(t, response.Close, "broker closed the connection after a normal response")
 
 	return response.StatusCode
-}
-
-func waitForStartedWorker(t *testing.T, broker *Broker) *worker {
-	t.Helper()
-
-	deadline := time.Now().Add(5 * time.Second)
-
-	for time.Now().Before(deadline) {
-		broker.mu.RLock()
-
-		process := broker.worker
-		broker.mu.RUnlock()
-
-		if process != nil {
-			return process
-		}
-
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	t.Fatal("worker did not start")
-
-	return nil
 }

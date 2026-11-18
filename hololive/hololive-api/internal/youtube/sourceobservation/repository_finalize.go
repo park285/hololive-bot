@@ -120,8 +120,6 @@ func (r *Repository) finalizeTx(
 		return ReconcileResult{}, fmt.Errorf("complete finalize observation: %w", err)
 	}
 
-	// 수명 모델 갱신을 트랜잭션의 마지막 공유 쓰기로 둔다. 영상 잠금을 보유한 뒤에는 다른 행 잠금을 기다리지 않는다.
-	// 거절 분기는 원본을 쓰지 않으므로 갱신할 key가 없다.
 	if refreshErr := refreshLiveRuntimeState(ctx, tx, result.LiveRuntimeVideoIDs); refreshErr != nil {
 		return ReconcileResult{}, refreshErr
 	}
@@ -222,8 +220,6 @@ func writeFinalizeApplications(ctx context.Context, tx dbx.Tx, observation *Obse
 		return nil
 	}
 
-	// 공통 관측 정보는 한 번만 전송하고, 검증된 entity 결과를 한 문장으로 저장합니다.
-	// 세 배열은 하나의 backing slice를 나누어 payload 복사와 행별 DB 왕복을 피합니다.
 	count := len(applications)
 	values := make([]string, 3*count)
 	kinds := values[:count:count]

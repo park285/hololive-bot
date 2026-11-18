@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package checking
 
 import (
@@ -55,8 +35,7 @@ type fakeYouTubeLiveSessionSource struct {
 	recentTerminalRooms   map[string][]string
 	loadRecentChannelArgs [][]string
 	sentRoomsSince        map[string]time.Time
-	// sentRoomsAt은 PostgreSQL 조회처럼 발송 시각이 stream별 하한 이후인 방만 근거로 돌려준다.
-	sentRoomsAt map[string]map[string]time.Time
+	sentRoomsAt           map[string]map[string]time.Time
 }
 
 func (s *fakeYouTubeLiveSessionSource) LoadRecentSessions(
@@ -64,7 +43,6 @@ func (s *fakeYouTubeLiveSessionSource) LoadRecentSessions(
 	ids []string,
 	_ time.Time,
 ) ([]PersistedYouTubeLiveSession, error) {
-	// 실제 PostgreSQL 조회처럼 기한이 지난 context에서는 실패한다.
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -351,6 +329,12 @@ func newYouTubeCheckerScenarioServer(t *testing.T, scenario, channelID, streamID
 			return
 		}
 
+		if scenario == "timeout" {
+			<-r.Context().Done()
+
+			return
+		}
+
 		writeYouTubeCheckerScenarioResponse(t, w, scenario, channelID, streamID, startScheduled)
 	}))
 }
@@ -364,9 +348,6 @@ func writeYouTubeCheckerScenarioResponse(t *testing.T, w http.ResponseWriter, sc
 	case "ok", "dedup":
 		writeYouTubeTestResponse(t, w, buildUpcomingResponse(channelID, streamID, startScheduled))
 	case "not_found":
-		writeYouTubeTestResponse(t, w, `[]`)
-	case "timeout":
-		time.Sleep(150 * time.Millisecond)
 		writeYouTubeTestResponse(t, w, `[]`)
 	case "5xx":
 		w.WriteHeader(http.StatusInternalServerError)
@@ -767,7 +748,6 @@ func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *
 }
 
 func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing.T) {
-	// 전역 counter 증가분을 정확히 보므로 병렬로 돌리지 않는다.
 	const (
 		channelID = "UC_TEST_CHANNEL"
 		roomID    = testRoomID1
@@ -1480,7 +1460,6 @@ func TestYouTubeCheckerCheck_HolodexHangLeavesBudgetForPersistedSessions(t *test
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tier.NewTieredScheduler(logger), dedupService, 0, persistedSource, nil, logger)
 	require.NoError(t, err)
 
-	// 운영 비율(주기 45초, Holodex 25초)을 축소한다. 한도가 없으면 Holodex가 주기 기한까지 붙잡아 저장 세션 조회도 실패한다.
 	checker.holodexBudget = 200 * time.Millisecond
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)

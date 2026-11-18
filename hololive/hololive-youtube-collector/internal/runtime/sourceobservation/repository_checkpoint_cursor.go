@@ -11,9 +11,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// LatestCheckpointCursor는 (provider, kind, subject)의 현재 observation contract generation에 속한 checkpoint 중
-// 가장 최근 durable cursor를 읽는다. 이전 contract generation의 checkpoint는 보지 않으며, 현재 generation의
-// checkpoint가 없거나 cursor가 NULL이면 nil을 반환한다. 읽기 전용이며 lease·publish 경계와 무관하다.
 func (r *Repository) LatestCheckpointCursor(
 	ctx context.Context,
 	provider contract.Provider,

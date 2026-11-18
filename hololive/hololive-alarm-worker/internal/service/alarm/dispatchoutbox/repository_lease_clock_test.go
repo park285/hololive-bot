@@ -41,7 +41,6 @@ func TestRouteFailuresChecksExpiryAfterAllRowLocks(t *testing.T) {
 					}
 				}()
 
-				// 두 행일 때는 앞 행의 잠금을 얻고 뒤 행을 기다리는 동안 앞 lease만 만료된다.
 				_, err = blocker.Exec(ctx, "SELECT id FROM alarm_dispatch_deliveries WHERE id=$1 FOR UPDATE", ids[len(ids)-1])
 				require.NoError(t, err)
 

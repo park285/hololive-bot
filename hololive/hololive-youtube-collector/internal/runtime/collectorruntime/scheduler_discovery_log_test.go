@@ -39,7 +39,6 @@ func TestDiscoveryFailureLogIsThrottledWhileCounterCountsEveryCycle(t *testing.T
 
 		for range failedCycles {
 			scheduler.discoverOnce(t.Context())
-			// 운영 기본 acquisition cadence(1초)로 cycle 간격을 맞춘다.
 			time.Sleep(time.Second)
 		}
 

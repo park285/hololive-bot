@@ -106,7 +106,6 @@ po_restore_previous() { printf 'po_restore_previous %s\\n' "$*" >> "$CASE/calls"
         if target:
             await_file(case / ('restoring' if target.startswith('restore') else 'entered'), proc)
             if target.endswith('group'):
-                # 변경 워커는 소유자가 만든 별도 작업 프로세스 그룹에서 실행된다.
                 worker = int((case / 'recovery/worker-pid').read_text())
                 assert os.getpgid(int((case/'command.pid').read_text())) == worker if (case/'command.pid').exists() else True
                 os.killpg(worker, signo)
@@ -138,7 +137,6 @@ for target, signo, status in [('child',signal.SIGTERM,143), ('child',signal.SIGI
 
 case, actual = run_case('known-failure', 'native_cutover_run failed bash -c "exit 7"')
 assert actual == 7 and (case/'restored').exists() and not (case/'recovery').exists()
-# 변경 전 상태 기록 본문을 가짜 systemctl로 실행합니다. 재시작 대기는 실행 중, 실패·정지는 멈춘 상태로 기록합니다.
 record_block = source[source.index('collector_prechange_enabled=false\n'):source.index('\nstop_collector_unit_and_require_inactive()')]
 for profile_name in ('desired-profile.json', 'worker-profile.json'):
     (work / profile_name).write_text('{}\n')
@@ -160,7 +158,6 @@ systemctl() {{
     assert result.returncode == 0, (active_state, result.stderr)
     assert result.stdout.split('\n')[0].split(' ') == [want_running, str(enabled).lower(), active_state], (active_state, result.stdout)
 
-# 점검 창에서 멈춰 있던 collector는 이전 release로 되돌리되 시작하지 않고, 변경 전 활성화 상태만 복원합니다.
 for enabled in [True, False]:
     case, actual = run_case(f'stopped-before-change-{enabled}', 'native_cutover_run failed bash -c "exit 7"', prechange_running=False, prechange_enabled=enabled)
     calls = (case/'calls').read_text().splitlines()
@@ -192,7 +189,6 @@ for mode, status in [('write_failure',9), ('read_failure',8)]:
     if (case/'recovery/terminal').exists():
         assert (case/'recovery/terminal').stat().st_mode & 0o777 == 0o600
 
-# 미확정 복구 디렉터리가 있으면 후속 writer를 실행하지 않는다.
 for occupied in (False, True):
     guard_case = work / ('guard-occupied' if occupied else 'guard-clear')
     guard_case.mkdir()
@@ -225,7 +221,6 @@ native_post_cutover_log_check
 '''],capture_output=True)
 assert result.returncode == 2
 
-# PO phase 안의 첫 실패에서 다음 활성화로 넘어가지 않는지 실제 함수로 확인합니다.
 po_case = work/'po-phase'
 (po_case/'new/po-sandbox').mkdir(parents=True)
 revision = 'a'*40

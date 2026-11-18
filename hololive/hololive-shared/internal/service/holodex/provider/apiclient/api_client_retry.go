@@ -44,7 +44,6 @@ func (c *APIClient) waitHolodexRequestBackoff(ctx context.Context, attempt, maxA
 }
 
 func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, attempt, maxAttempts int) bool {
-	// 부모 ctx 취소 시 불필요한 재시도 방지
 	if ctx.Err() != nil {
 		return false
 	}
@@ -62,7 +61,6 @@ func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, att
 	}
 
 	if attempt < maxAttempts-1 {
-		// 중간 시도는 진단용이다. 재시도가 끝내 실패하면 오류를 받은 호출자가 한 번만 기록한다.
 		c.logger.Debug("Request failed, retrying",
 			slog.Any("error", err),
 			slog.String("failure_kind", failureKind),

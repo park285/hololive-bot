@@ -9,7 +9,6 @@ required_udp_buffer="$6"
 swapfile_size_mib="$7"
 EXPECTED_REVISION="$8"
 [[ "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo 'full native release revision required' >&2; exit 1; }
-# 앞서 불러온 ap-host-native-po.sh가 이 값을 소유한다.
 po_service="${po_service:?PO helper fragment must be loaded}"
 po_socket="${po_socket:?PO helper fragment must be loaded}"
 po_unit_file="${po_unit_file:?PO helper fragment must be loaded}"
@@ -32,8 +31,6 @@ normalize_runtime_payload_permissions() {
   sudo -n test -d "$root/youtubejs" || return
   sudo -n test ! -L "$root/youtubejs" || return
 
-  # 서비스 계정은 root 소유 helper graph를 읽고 순회할 수 있어야 한다.
-  # AP 호스트의 chmod는 -P를 지원하지 않으므로 find가 링크를 제외하고 순회합니다.
   sudo -n find -P "$root/youtubejs" \
     \( -type d -o -type f \) -exec chmod a+rX -- {} +
 }
@@ -62,12 +59,8 @@ require_node_version /usr/bin/node
 sudo -n install -d -m 0755 -o root -g root "$releases_root"
 sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive
 sudo -n install -d -m 0750 -o root -g root /etc/hololive-bot
-# collector unit의 ReadWritePaths가 이 경로를 요구한다. 새 호스트에 없으면 systemd가 226/NAMESPACE로 기동을 거부한다.
 sudo -n install -d -m 0755 -o root -g root /var/lib/hololive-bot
 sudo -n install -d -m 0755 -o root -g root /etc/sysctl.d
-# collector 로그는 앱(shared-go logging의 lumberjack)이 LOG_MAX_SIZE_MB(기본 5)마다 회전하고 압축 백업을 archive로
-# 옮긴다. 이 설정은 앱 회전이 멈춰 파일이 10M를 넘었을 때만 회전하는 안전망이다. daily나 maxsize를 두면 앱 회전과
-# 별도로 매일 copytruncate 회전이 일어나므로 size만 둔다. copytruncate에서는 create가 효과가 없어 두지 않는다.
 sudo -n tee /etc/logrotate.d/hololive-bot >/dev/null <<'LOGROTATE'
 /var/log/hololive-bot/*.log {
     size 10M
@@ -112,7 +105,6 @@ SYSCTL
 sudo -n sysctl -w vm.swappiness=10 >/dev/null
 
 native_cutover_claim "$releases_root/$release_id"
-# 준비 중 실패도 guard와 산출물을 남깁니다. 다음 apply 전에 소유 worker와 runtime을 확인합니다.
 old_target=""
 if [[ -L "$current_link" ]]; then
   old_target="$(readlink -f "$current_link" || true)"
@@ -138,7 +130,6 @@ if [[ -z "$old_target" && -n "$old_previous_target" ]]; then
 fi
 release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$current_link")"
 
-# 새 릴리스 경로를 독점 생성합니다. 검증 실패나 동시 배포도 기존 복구 산출물을 덮어쓰지 않습니다.
 sudo -n mkdir "$release_dir"
 sudo -n rsync -a --delete "$payload/" "$release_dir/"
 sudo -n chown -R -P root:root "$release_dir"
@@ -151,7 +142,6 @@ sudo -n tar -xf "$release_dir/po-sandbox/rootfs.tar" -C "$po_install_root" --no-
 sudo -n chown -R -P root:root "$po_install_root"
 po_validate_release "$release_dir"
 sudo -n chmod 0755 "$release_dir" "$release_dir/bin" "$release_dir/bin/youtube-collector" "$release_dir/bin/healthcheck" "$release_dir/bin/youtube-collector-wrapper"
-# 검증한 사본만 release에 고정한다. mirror 갱신은 실행 중인 binary/profile pair를 바꾸지 않는다.
 sudo -n install -m 0444 -o root -g root "$worker_profile" "$release_dir/worker-profile.json"
 sudo -n systemd-run --quiet --wait --pipe --collect \
   --property=User=hololive --property=Group=opc --property=PrivateNetwork=yes \
@@ -202,8 +192,6 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
   ' sh "$old_target"
 fi
 
-# 실패 복원은 변경 전 collector 실행 상태까지 되돌린다. 점검 창에서 멈춘 collector를 이전 release로 다시 띄우면
-# 새 schema 위에서 구 writer가 돈다. 재시작 대기(activating)는 실행 중으로 보고, 실패(failed)는 멈춘 상태로 본다.
 collector_prechange_enabled=false
 collector_prechange_running=false
 collector_prechange_state="$(systemctl show "$unit" -p ActiveState --value 2>/dev/null || true)"
@@ -230,10 +218,6 @@ stop_collector_unit_and_require_inactive() {
   fi
 }
 
-# PO issuer를 collector보다 먼저 멈춘다. collector는 종료하면서 소유 generation을 DELETE로 반납하는데, broker가 살아
-# 있으면 retire 뒤 exit 0하고 Restart=always(RestartSec=1s)로 다시 떠서 곧바로 이 스크립트에 다시 멈춰진다.
-# broker가 먼저 멈추면 그 DELETE는 broker_unavailable로 끝나고 collector는 재전송 없이 무시한다(proof-controller.mjs retireOwned).
-# socket을 먼저 멈춰 service가 Requires=로 같은 transaction에서 멈추게 하고, 그 사이 socket activation이 service를 다시 띄우지 못하게 한다.
 stop_native_units_and_require_inactive() {
   if sudo -n systemctl is-active --quiet "$po_socket"; then
     sudo -n systemctl stop "$po_socket"
@@ -244,8 +228,6 @@ stop_native_units_and_require_inactive() {
   stop_collector_unit_and_require_inactive
 }
 
-# 실패하면 이전 release로 복원하고, 첫 설치라면 불완전한 unit을 제거한다.
-# set -E로 ERR trap이 subshell에도 상속되므로 부모 shell에서만 복원해 중복 실행을 막는다.
 native_restore_recorded_runtime() {
   stop_native_units_and_require_inactive
   if [[ -n "$old_target" && -d "$old_target" ]]; then
@@ -257,7 +239,6 @@ native_restore_recorded_runtime() {
     native_previous_link_restore "$releases_root" "$previous_link" "$rollback_contract_dir/previous-before-cutover"
     po_restore_previous "$old_target"
     sudo -n systemctl daemon-reload
-    # 실행 중이던 collector만 다시 시작한다. 멈춰 있던 collector는 변경 전 활성화 상태만 되돌린다.
     if [[ "${collector_prechange_running:?}" == true ]]; then
       sudo -n systemctl enable --now "$unit"
     else
@@ -285,7 +266,6 @@ restore_native_after_failed_cutover() {
   if [[ "${native_outcome_unknown:-false}" == true ]]; then
     exit "$status"
   fi
-  # if/!/&&/|| 조건 안의 subshell은 set -e를 무시해 실패한 복원 단계를 지나친다. 조건 밖에서 실행해 첫 실패에서 멈추고 상태를 받는다.
   set +e
   native_signal_status=0
   native_cutover_run restore native_restore_recorded_runtime

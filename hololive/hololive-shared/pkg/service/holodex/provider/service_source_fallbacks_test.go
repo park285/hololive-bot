@@ -11,9 +11,6 @@ import (
 	apiclient "github.com/kapu/hololive-shared/internal/service/holodex/provider/apiclient"
 )
 
-// Holodex 채널 일정 조회는 원천 오류를 그대로 돌려준다.
-// YouTube scraper·공식 일정·개별 조회로 보충하지 않고, 보충 결과를 캐시하지도 않는다.
-
 func TestGetChannelSchedule_ReturnsRetryableHolodexErrorWithoutScraperFallback(t *testing.T) {
 	var officialRequests atomic.Int32
 

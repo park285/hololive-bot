@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# Docker Compose 로그 보조 명령 단일 진입점
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-# 불러온 stream·canary 라이브러리가 SCRIPT_PATH를 사용한다.
 # shellcheck disable=SC2034
 SCRIPT_PATH="${BASH_SOURCE[0]}"
 

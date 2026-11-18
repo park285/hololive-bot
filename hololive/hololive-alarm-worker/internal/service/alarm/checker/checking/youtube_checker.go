@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package checking
 
 import (
@@ -45,13 +25,9 @@ import (
 const (
 	channelProcessingConcurrency = 16
 
-	// Holodex live 조회가 scheduler의 45초 주기 안에서 쓸 수 있는 최대 시간이다.
-	// 시도당 20초·최대 4회인 client가 주기 예산을 모두 쓰지 않도록 시도 한 번만 끝나게 두고, 나머지 20초는
-	// persisted live session 예외 계약(contracts/alarm.md)에 따른 저장 세션·구독·이름 조회에 남긴다.
 	youtubeHolodexLiveStatusBudget = 25 * time.Second
 )
 
-// YouTubeChecker는 Holodex live status 기반 알림 후보를 생성한다.
 type YouTubeChecker struct {
 	cacheClient         alarmstore.SubscriberCache
 	holodexService      *holodexprovider.Service
@@ -59,9 +35,7 @@ type YouTubeChecker struct {
 	tierScheduler       *tier.TieredScheduler
 	dedupService        *dedup.Service
 	persistedLiveSource YouTubeLiveSessionSource
-	// subscribers는 구독 cache와 구독 DB에 묶인 checker 수명 resolver다. 같은 채널·종류의 동시 DB 조회를 합친다.
-	subscribers *alarmstore.SubscriberResolver
-	// pendingSubscribers는 cache를 거치지 않고 구독 DB 사실만 읽는 resolver로, 예약 후보 취소 판단에 쓴다.
+	subscribers         *alarmstore.SubscriberResolver
 	pendingSubscribers  *alarmstore.SubscriberResolver
 	lookupSubscribers   func(context.Context, string, string, domain.AlarmType) ([]string, error)
 	upcomingCandidates  dispatchoutbox.UpcomingCandidateStore
@@ -71,8 +45,6 @@ type YouTubeChecker struct {
 	logger              *slog.Logger
 }
 
-// NewYouTubeCheckerWithPersistedLiveSource는 저장된 방송 근거와 구독 DB를 사용하는 체커를 생성한다.
-// 구독 DB인 subscriptionDB가 없으면 UNIT B 멤버별 대상 선정과 구독 cache가 비어 있는 채널의 구독 확정은 오류로 처리한다.
 func NewYouTubeCheckerWithPersistedLiveSource(
 	cacheClient alarmstore.SubscriberCache,
 	holodexService *holodexprovider.Service,
@@ -127,7 +99,6 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 	return checker, nil
 }
 
-// Check는 targetPolicy 기준으로 upcoming/live-catchup 알림 후보를 생성한다.
 func (c *YouTubeChecker) Check(ctx context.Context, targetPolicy targetpolicy.TargetMinutePolicy) ([]*domain.AlarmNotification, error) {
 	now := time.Now().UTC()
 
@@ -155,7 +126,6 @@ func (c *YouTubeChecker) Check(ctx context.Context, targetPolicy targetpolicy.Ta
 	}
 
 	if c.upcomingCandidates != nil {
-		// 새 후보도 저장된 snapshot으로 반환해 동일 key의 재평가가 본문을 바꾸지 않는다.
 		out = withoutUpcomingNotifications(out)
 
 		recovered, recoverErr := c.recoverUpcomingCandidates(ctx, liveEvidence.currentProviderStreams, now)
@@ -234,7 +204,6 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 				return fmt.Errorf("stage selected candidates: %w", err)
 			}
 
-			// 조회 시각은 선정 후보의 durable commit 이후에만 평가 완료로 인정한다.
 			c.tierScheduler.UpdateChannelState(now, work.channelID, work.streams)
 
 			appendYouTubeChannelNotifications(mu, notifications, channelNotifications)

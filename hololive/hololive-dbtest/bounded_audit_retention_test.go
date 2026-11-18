@@ -123,7 +123,6 @@ func TestProvenanceRetentionDeletesOnlyUnreferencedRows(t *testing.T) {
 		t.Fatalf("release resolver transaction: %v", err)
 	}
 
-	// 첫 창이 끝까지 지나갔으므로 커서가 처음으로 돌아온 뒤 풀린 행을 지운다.
 	deleted := int64(0)
 
 	for range 3 {
@@ -146,7 +145,6 @@ func TestProvenanceResolverRecreatesRowDeletedByConcurrentRetention(t *testing.T
 
 	pool := NewPool(t)
 	ctx := t.Context()
-	// 원본 삽입에 쓸 payload를 만들고, 그 원본이 참조하는 사전 행은 정리 대상에서 빠진다.
 	insertRetentionObservation(t, pool, "live_snapshot", time.Now().UTC(), "seed-job")
 
 	deletedID := resolveProvenance(t, pool, "raced-job")
@@ -191,7 +189,7 @@ func TestProvenanceResolverRecreatesRowDeletedByConcurrentRetention(t *testing.T
 		published <- publishResult{id: id, err: err}
 	}()
 
-	waitForLockWaiter(t, pool)
+	waitForLockWaiter(t, pool, gc.Conn().PgConn().PID())
 
 	if err := gc.Commit(ctx); err != nil {
 		t.Fatalf("commit retention: %v", err)
@@ -331,7 +329,7 @@ func provenanceIDs(t *testing.T, pool *pgxpool.Pool) []int {
 	return ids
 }
 
-func waitForLockWaiter(t *testing.T, pool *pgxpool.Pool) {
+func waitForLockWaiter(t *testing.T, pool *pgxpool.Pool, blocker uint32) {
 	t.Helper()
 
 	deadline := time.Now().Add(10 * time.Second)
@@ -342,16 +340,14 @@ func waitForLockWaiter(t *testing.T, pool *pgxpool.Pool) {
 		if err := pool.QueryRow(t.Context(), `
 			SELECT EXISTS (
 				SELECT 1 FROM pg_catalog.pg_stat_activity
-				WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()
-			)`).Scan(&waiting); err != nil {
+				WHERE $1::int = ANY(pg_blocking_pids(pid))
+			)`, blocker).Scan(&waiting); err != nil {
 			t.Fatalf("read lock waiters: %v", err)
 		}
 
 		if waiting {
 			return
 		}
-
-		time.Sleep(20 * time.Millisecond)
 	}
 
 	t.Fatal("resolver did not wait on the provenance row locked by retention")

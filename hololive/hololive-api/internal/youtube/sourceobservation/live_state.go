@@ -43,15 +43,12 @@ func loadLiveState(ctx context.Context, tx dbx.Tx, channelIDs, videoIDs []string
 		ids = append(ids, videoID)
 	}
 
-	// positive clock을 잠근 뒤에만 replay 필요 여부를 알 수 있다. 먼저 scalar만 읽고,
-	// 부재를 평가하는 관측만 loadLiveAbsencesForPositive에서 필요한 이력을 적재한다.
 	if err := loadLiveHeads(ctx, tx, &state, ids, ids); err != nil {
 		return live.State{}, fmt.Errorf("load live heads: %w", err)
 	}
 
 	markHeadlessHistoriesLoaded(&state)
 
-	// head를 읽은 뒤라 종료 후보 유무로 동결 여부를 판정할 수 있다. ids는 이후 쓰지 않으므로 제자리에서 거른다.
 	if err := loadLivePendingEnds(ctx, tx, &state, pendingLoadIDs(&state, ids)); err != nil {
 		return live.State{}, fmt.Errorf("load live pending ends: %w", err)
 	}
@@ -59,8 +56,6 @@ func loadLiveState(ctx context.Context, tx dbx.Tx, channelIDs, videoIDs []string
 	return state, nil
 }
 
-// 동결된 D2 pending은 어떤 판정도 읽거나 바꾸지 않으므로 잠그지도 읽지도 않는다. 읽지 않은 행은 Decision에 없어 다시 쓰이지 않고, pending 삭제는 dirty 세션으로 한정되는데 동결
-// 세션은 dirty가 되지 않으므로 지워지지도 않는다.
 func pendingLoadIDs(state *live.State, ids []string) []string {
 	return slices.DeleteFunc(ids, func(videoID string) bool {
 		session, ok := state.Sessions[videoID]
@@ -69,11 +64,6 @@ func pendingLoadIDs(state *live.State, ids []string) []string {
 	})
 }
 
-// frozenEndedSession은 종료 후보가 남지 않은 저장된 ENDED 세션이다. 이 세션의 positive는 reducer가 KEEP_ENDED로
-// 두고 반복 종료·취소와 부재·저장 종료 재적용은 건너뛰며, next_end_check_at이 없어 due 정리도 하지 않는다.
-// 영상 확인과 finalizer도 이 세션에서는 pending을 비교하기 전에 멈춘다. 판정은 session·head 행을 잠근 뒤라
-// 이 트랜잭션 안에서 바뀌지 않는다. 저장된 session 없이 head만 남은 영상과 후보가 남은 ENDED는 지금처럼
-// pending을 읽는다.
 func frozenEndedSession(session *live.SessionState) bool {
 	return session.Present && session.Status == domain.LiveStatusEnded &&
 		session.Clock.EndCandidateObservationID == nil && session.Clock.NextEndCheckAt == nil
@@ -129,7 +119,6 @@ func scanLiveSession(rows pgx.Rows) (live.SessionState, error) {
 	return session, nil
 }
 
-// 저장된 head가 없으면 저장된 이력도 없다. 미적재로 남기면 reducer가 부재 적용에서 실패한다.
 func markHeadlessHistoriesLoaded(state *live.State) {
 	for videoID := range state.Sessions {
 		session := state.Sessions[videoID]
@@ -166,7 +155,6 @@ func loadLiveHeads(ctx context.Context, tx dbx.Tx, state *live.State, videoIDs, 
 	return nil
 }
 
-// loadLiveIgnoredAbsences는 이미 잠근 head의 이력만 읽는다. 미적재와 적재된 빈 배열을 구분한다.
 func loadLiveIgnoredAbsences(ctx context.Context, tx dbx.Tx, state *live.State, videoIDs []string) error {
 	if len(videoIDs) == 0 {
 		return nil
@@ -271,7 +259,6 @@ func scanLiveHead(rows pgx.Rows) (live.SessionState, error) {
 	session.Status = domain.LiveStatus(status)
 	session.LastAbsenceScheduledFor = absenceSched
 
-	// 열은 NOT NULL이므로 NULL은 질의가 이력을 생략했다는 뜻이다. 0값(미적재)으로 둔다.
 	if ignored != nil {
 		session.IgnoredAbsences = live.LoadedIgnoredAbsences(*ignored)
 	}

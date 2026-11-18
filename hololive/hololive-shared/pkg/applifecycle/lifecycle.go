@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package applifecycle
 
 import (
@@ -32,16 +12,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// StartHooks는 runtime 공통 시작 단계(HTTP 시작)만 담는다. 백그라운드 작업의 시작·취소·대기는 각 runtime이
-// 직접 소유한다.
 type StartHooks struct {
 	Logger          *slog.Logger
 	ServerAddr      string
 	StartHTTPServer func(errCh chan<- error)
 }
 
-// ShutdownHooks는 runtime 공통 종료 단계(HTTP 종료)만 담는다. 고유 종료 단계는
-// 각 runtime이 Shutdown 반환 뒤 이어서 실행하고 오류를 직접 합친다.
 type ShutdownHooks struct {
 	Logger             *slog.Logger
 	ShutdownHTTPServer func(ctx context.Context) error

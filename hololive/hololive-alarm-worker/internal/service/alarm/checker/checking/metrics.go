@@ -17,7 +17,6 @@ type checkerMetricSet struct {
 	liveGuardrailTotal    *prometheus.CounterVec
 }
 
-// checkerMetrics는 YouTubeChecker 생성자가 먼저 호출해, 등록 실패 panic이 첫 관측이 아니라 기동에서 드러난다.
 var checkerMetrics = sync.OnceValue(func() *checkerMetricSet {
 	return &checkerMetricSet{
 		upcomingDecisionTotal: promauto.NewCounterVec(

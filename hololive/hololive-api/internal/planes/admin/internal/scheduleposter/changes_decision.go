@@ -36,7 +36,6 @@ type postDecisionRequest struct {
 	Questions postQuestions `json:"questions"`
 }
 
-// 판별 결합 규칙의 정밀도·재현율은 이 문구와 순서로 측정했다. 바꾸면 다시 측정해야 한다.
 var postDecisionQuestions = postQuestions{
 	ScheduleInfo: decisionQuestion{
 		Type: "noul",
@@ -87,7 +86,6 @@ type postDecisionResponse struct {
 	} `json:"usage"`
 }
 
-// Decisions API 자체의 400은 code가 문자열이고, 게이트웨이의 400은 정수다.
 type postDecisionError struct {
 	Error struct {
 		Code    any    `json:"code"`
@@ -116,8 +114,6 @@ func (j *geminiJudge) classifyPost(ctx context.Context, body string) (postAnswer
 	return decodePostDecision(raw)
 }
 
-// postDecisionFailure가 글 탓으로 닫는 400은 안전 차단뿐이다. 다른 400은 요청 꼴·키·할당량 문제라 글 탓으로 두면 모든 글이 종단된다.
-// 글 reason은 관리 API 계약의 닫힌 enum이라 Decisions 오류 코드는 오류 문구에만 남긴다.
 func postDecisionFailure(status int, raw []byte) error {
 	var failure postDecisionError
 

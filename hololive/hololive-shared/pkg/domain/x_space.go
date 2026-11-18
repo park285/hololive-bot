@@ -14,9 +14,6 @@ var (
 	xSpaceChannelPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 )
 
-// XSpaceDispatchPayload는 직접 개설한 스페이스의 최초 관측을 고정한 발송 자료다.
-// ChannelID는 기존 LIVE 구독을 찾는 채널이며 SpaceID는 X의 식별자다. 멤버 표시명은 담지 않고 렌더 때 members에서 정한다.
-// 제목 변경은 이미 만들어진 시작 이벤트의 내용이나 정체성을 바꾸지 않는다.
 type XSpaceDispatchPayload struct {
 	SpaceID   string    `json:"space_id"`
 	CreatorID string    `json:"creator_id"`
@@ -45,7 +42,6 @@ func (p *XSpaceDispatchPayload) Validate() error {
 	return nil
 }
 
-// URL은 검증된 스페이스의 공개 참여 링크를 반환한다. 외부 제공 URL을 사용하지 않는다.
 func (p *XSpaceDispatchPayload) URL() string {
 	return "https://x.com/i/spaces/" + p.SpaceID
 }

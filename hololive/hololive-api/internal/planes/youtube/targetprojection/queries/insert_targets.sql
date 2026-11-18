@@ -1,7 +1,3 @@
--- $7은 직전 CURRENT generation(없으면 NULL)이다. scheduling identity가 같은 row만 membership 시작
--- generation과 created_at(논리적 membership 시작 시각)을 함께 이어받는다. 직전 값이 NULL이거나
--- 새·변경·재등록 row이면 이 generation($1)과 현재 transaction 시각에서 시작한다. 무관한 generation
--- 교체가 미획득 target의 due 기준 시각을 되돌리지 않게 한다.
 INSERT INTO youtube_collection_targets (
     projection_generation, subject_key, observation_kind,
     priority, poll_interval_ms, enabled,

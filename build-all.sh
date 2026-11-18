@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# 중앙 Quadlet이 쓰는 production image를 Podman으로 빌드하고 revision label을 검증한다.
-# 배포는 하지 않는다. 중앙 배포는 docs/current/runbooks/release.md의 전송·Quadlet 기동 절차가 소유한다.
 
 set -Eeuo pipefail
 
@@ -25,7 +23,6 @@ read_version() {
     printf '%s\n' "${lines[0]}"
 }
 
-# 이미지 이름은 Quadlet unit의 기본 Image=와 같다. 중앙 unit은 배포 때 sha256 identity로 고정한다.
 declare -A IMAGE_BY_SERVICE=(
     [hololive-api]=localhost/hololive-api:prod
     [hololive-alarm-worker]=localhost/hololive-alarm-worker:prod
@@ -108,8 +105,6 @@ if [[ "${BUILD_ONLY}" == false && ${#TARGET_SERVICES[@]} -eq 0 ]]; then
     exit 2
 fi
 
-# arm64 image의 RUN은 x86_64 build host에서 binfmt 등록이 있어야 실행된다. 자동 설치는 host 변경이므로
-# 하지 않고 등록이 없으면 빌드 전에 멈춘다.
 BUILD_PLATFORM="${HOLOLIVE_BUILD_PLATFORM:-}"
 platform_args=()
 if [[ -n "${BUILD_PLATFORM}" ]]; then
@@ -180,7 +175,6 @@ fi
 
 if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
     BUILD_SERVICES=("${TARGET_SERVICES[@]}")
-    # collector와 PO issuer는 같은 source revision으로 짝지어 배포한다.
     if [[ " ${BUILD_SERVICES[*]} " == *" youtube-collector "* && " ${BUILD_SERVICES[*]} " != *" youtube-po-c "* ]]; then
         BUILD_SERVICES+=(youtube-po-c)
     fi
@@ -191,8 +185,6 @@ fi
 build_service() {
     local service="$1"
     local image="${IMAGE_BY_SERVICE[$service]}"
-    # HEALTHCHECK 등 docker 형식 메타데이터를 보존하고 docker-archive 저장 전후 config digest(identity)가 같도록
-    # docker 형식으로 만든다.
     local -a args=(build "${platform_args[@]}" --format docker --tag "${image}"
         --build-arg "REVISION=${REVISION}" --label "org.opencontainers.image.revision=${REVISION}")
 

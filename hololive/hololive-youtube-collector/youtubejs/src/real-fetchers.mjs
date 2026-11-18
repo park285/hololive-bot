@@ -11,12 +11,7 @@ import { ScheduleLookupCache } from "./schedule-cache.mjs";
 /** @typedef {import("./upstream-feeds.d.ts").InnertubeFetch} InnertubeFetch */
 
 /**
- * @param {{
- *   fetchImpl?: InnertubeFetch,
- *   singleAttemptFetchImpl?: InnertubeFetch,
- *   createInnertubeImpl?: typeof createInnertube,
- *   createLiveCheckInnertubeImpl?: typeof createLiveCheckInnertube,
- * }} [options]
+ * @param {{ fetchImpl?: InnertubeFetch, singleAttemptFetchImpl?: InnertubeFetch, createInnertubeImpl?: typeof createInnertube, createLiveCheckInnertubeImpl?: typeof createLiveCheckInnertube, }} [options]
  * @returns {FetcherSet}
  */
 export function createRealFetchers(options = {}) {
@@ -30,7 +25,6 @@ export function createRealFetchers(options = {}) {
   let liveCheckInnertubePromise;
   /** @type {ProofController | undefined} */
   let proof;
-  // 예정 영상 일정 확인은 helper 프로세스 수명 동안 채널 RPC 사이에서 재사용합니다.
   const scheduleCache = new ScheduleLookupCache();
 
   async function innertubeClient() {
@@ -38,7 +32,6 @@ export function createRealFetchers(options = {}) {
     return innertubePromise;
   }
 
-  // 라이브 확인은 기존 수집 Innertube의 재시도 transport를 공유하지 않고, 단일 시도 transport에 묶인 별도 인스턴스를 씁니다.
   async function liveCheckInnertubeClient() {
     liveCheckInnertubePromise ??= initLiveCheckInnertube({ fetchImpl: singleAttemptFetchImpl }).then((client) => {
       const userAgent = client.session.user_agent;
@@ -49,7 +42,6 @@ export function createRealFetchers(options = {}) {
           "live check session user agent does not match its client context",
         );
       }
-      // 단일 시도 transport 부재는 createLiveCheckInnertube와 ProofController 생성자가 각각 거부합니다.
       proof = new ProofController({ fetchImpl: /** @type {InnertubeFetch} */ (singleAttemptFetchImpl), userAgent });
       return client;
     });
@@ -82,8 +74,6 @@ export function createRealFetchers(options = {}) {
     async fetchVideoLiveCheck(fetchOptions) {
       return fetchVideoLiveCheck(await liveCheckInnertubeClient(), fetchOptions.videoId, Date.now, proof);
     },
-    // 수집·라이브 확인 Innertube와 PO 발급 controller는 bootstrap에서 요청 context 밖에 만듭니다. 첫 RPC의 취소·제한 시간에
-    // 묶이지 않고, 생성 실패는 READY 전에 helper를 FAULTED로 끝내므로 실패한 생성을 RPC에서 다시 시도하지 않습니다.
     async prepare() {
       await innertubeClient();
       await liveCheckInnertubeClient();

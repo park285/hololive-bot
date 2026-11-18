@@ -165,8 +165,6 @@ func nextCelebrationRunAt(now time.Time, checkHourKST int) time.Time {
 	return next
 }
 
-// grace를 후속 cycle에 적용하면 방금 실행한 boundary를 당일로 되돌려 같은 날 재실행
-// 루프가 생기므로, 이 함수는 재시작 직후 첫 cycle에서만 호출해야 한다.
 func firstCelebrationRunAt(now time.Time, checkHourKST int) time.Time {
 	kstNow := toKSTForSchedule(now)
 	todayAt := time.Date(kstNow.Year(), kstNow.Month(), kstNow.Day(), checkHourKST, 0, 0, 0, kstNow.Location())

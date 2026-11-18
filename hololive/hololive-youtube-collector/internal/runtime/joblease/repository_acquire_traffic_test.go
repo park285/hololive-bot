@@ -76,7 +76,6 @@ func checkAcquireTrafficScenario(t *testing.T, mode string, exact bool) {
 		previous = proof
 
 		if state == "missing" {
-			// BEFORE INSERT는 ON CONFLICT보다 먼저 실행된다. 기존 행 경로의 삽입 시도 자체를 검출한다.
 			if _, err := pool.Exec(t.Context(), `CREATE FUNCTION reject_lease_insert() RETURNS trigger
 				LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'existing lease attempted INSERT'; END; $$;
 				CREATE TRIGGER reject_lease_insert BEFORE INSERT ON youtube_collection_job_leases

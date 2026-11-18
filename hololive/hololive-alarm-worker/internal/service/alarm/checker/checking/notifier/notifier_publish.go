@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package notifier
 
 import (
@@ -61,7 +41,6 @@ func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend)
 
 			published++
 		} else if !terminal[i] {
-			// 비성공 terminal의 기존 claim은 보존하고, 충돌·미확정 입력만 재평가 가능하게 한다.
 			n.releaseClaimsBestEffort(ctx, item.claimKeys, "failed to release unaccepted publish claims")
 		}
 	}
@@ -93,9 +72,6 @@ func publishReceiptResults(receipts []dispatchoutbox.PublishReceipt, itemCount i
 	return accepted, terminal
 }
 
-// notifiedWrites는 batch 안에서 stream별로 이미 기록한 notified hash 필드다. 같은 stream·예정 시각·분이면 방이 달라도
-// 같은 필드를 쓰므로 한 번만 기록한다. MarkAsNotified는 예정 시각이 바뀌면 hash를 비우므로, 다른 예정 시각이 오면
-// 그 stream의 기록을 새로 세어 방마다 기록하던 때와 같은 최종 hash를 남긴다.
 type notifiedWrites map[string]notifiedSchedule
 
 type notifiedSchedule struct {

@@ -29,7 +29,6 @@ func (s *TransitionStore) adjudicateRowApply(
 		return rowApplyAdjudication{result: applyResultWithRules(ApplyConflict, nil, rules)}
 	}
 
-	// fence 미스는 다른 실행·회수 경로가 행을 가져갔다는 증거라 호출자가 버릴 수 없게 오류로도 돌려준다.
 	if miss, ok := errors.AsType[*sendfence.MissError](applyErr); ok {
 		return rowApplyAdjudication{result: applyResultWithRules(fenceMissOutcome(miss), nil, rules), err: applyErr}
 	}

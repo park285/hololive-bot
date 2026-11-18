@@ -1,4 +1,3 @@
-// Package dispatchops는 관리자용 발송 원장 조회와 감사 가능한 재처리를 제공합니다.
 package dispatchops
 
 import (
@@ -15,23 +14,16 @@ import (
 )
 
 const (
-	// PageSize는 조회 한 페이지의 최대 행 수입니다.
-	PageSize = 50
-	// FailureBreakdownLimit는 실패 원인별 최대 항목 수입니다.
+	PageSize              = 50
 	FailureBreakdownLimit = 10
-	// MaxReplaySize는 재처리할 수 있는 외부 발송 묶음의 최대 행 수입니다.
-	MaxReplaySize = 100
+	MaxReplaySize         = 100
 )
 
 var (
-	// ErrInvalidInput은 상태 변경 전에 거부한 잘못된 관리자 입력입니다.
 	ErrInvalidInput = errors.New("invalid dispatch operation input")
-	// ErrNotFound는 해당 발송 기록이 없음을 나타냅니다.
-	ErrNotFound = errors.New("dispatch delivery not found")
-	// ErrConflict는 상태나 묶음 구성이 달라져 재처리하지 않았음을 나타냅니다.
-	ErrConflict = errors.New("dispatch delivery changed or cannot be replayed")
-	// ErrUnavailable은 PostgreSQL 의존성이 연결되지 않았음을 나타냅니다.
-	ErrUnavailable = errors.New("dispatch operations unavailable")
+	ErrNotFound     = errors.New("dispatch delivery not found")
+	ErrConflict     = errors.New("dispatch delivery changed or cannot be replayed")
+	ErrUnavailable  = errors.New("dispatch operations unavailable")
 )
 
 var statuses = [...]string{
@@ -47,7 +39,6 @@ var statuses = [...]string{
 
 var errorCodeFilter = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
-// Delivery는 본문과 전송용 내부 식별자를 제외한 발송 상태입니다. Bigint는 문자열로 유지합니다.
 type Delivery struct {
 	ID            string     `json:"id"`
 	EventID       string     `json:"eventId"`
@@ -70,36 +61,29 @@ type Delivery struct {
 	CancelledAt   *time.Time `json:"cancelledAt"`
 }
 
-// Filter는 상태·채팅방·채널·알림 유형·오류 코드와 ID 커서로 조회 범위를 제한합니다.
-// 비어 있는 Status는 DLQ와 격리 상태를 함께 조회합니다.
 type Filter struct{ Status, RoomID, ChannelID, BeforeID, AlarmType, ErrorCode string }
 
-// Page는 ID 내림차순 조회 결과입니다. NextBeforeId가 비어 있으면 마지막 페이지입니다.
 type Page struct {
 	Items        []Delivery `json:"items"`
 	NextBeforeID string     `json:"nextBeforeId"`
 }
 
-// StatusCount는 보존 중인 원장 전체의 상태별 건수와 가장 오래된 생성 시각입니다.
 type StatusCount struct {
 	Status   string    `json:"status"`
 	Count    string    `json:"count"`
 	OldestAt time.Time `json:"oldestAt"`
 }
 
-// Summary는 보존 중인 전체 원장 집계입니다. 제한 시간을 넘기면 부분 집계 없이 실패합니다.
 type Summary struct {
 	Counts     []StatusCount `json:"counts"`
 	ObservedAt time.Time     `json:"observedAt"`
 }
 
-// FailureCount는 실패 분류 값과 문자열 bigint 건수입니다.
 type FailureCount struct {
 	Value string `json:"value"`
 	Count string `json:"count"`
 }
 
-// FailureBreakdown은 실패 보관·격리 원장의 단일 스냅샷 분포입니다.
 type FailureBreakdown struct {
 	Total      string         `json:"total"`
 	ErrorCodes []FailureCount `json:"errorCodes"`
@@ -109,14 +93,11 @@ type FailureBreakdown struct {
 	ObservedAt time.Time      `json:"observedAt"`
 }
 
-// Revision은 확인한 행의 낙관적 잠금 토큰입니다. UpdatedAt의 소수초를 보존해야 합니다.
 type Revision struct {
 	ID        string    `json:"id"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// Detail은 현재 발송 항목과 외부 발송 묶음 전체의 재처리 검토 대상입니다.
-// ReplayBlocked가 비어 있을 때만 replayTargets를 그대로 사용해 재처리할 수 있습니다.
 type Detail struct {
 	Delivery       Delivery   `json:"delivery"`
 	Group          []Delivery `json:"group"`
@@ -125,9 +106,6 @@ type Detail struct {
 	ReplayBlocked  string     `json:"replayBlocked"`
 }
 
-// RequeueRequest는 묶음 전체에 대한 명시적 재처리 요청입니다.
-// OperatorID는 API key 보유자가 전달하는 감사 식별자입니다. Gateway에서는 반드시
-// 인증된 사용자에 결합해야 하며 브라우저 입력을 그대로 전달해서는 안 됩니다.
 type RequeueRequest struct {
 	OperatorID       string     `json:"operatorId"`
 	Reason           string     `json:"reason"`
@@ -135,12 +113,10 @@ type RequeueRequest struct {
 	Targets          []Revision `json:"targets"`
 }
 
-// RequeueResult는 retry로 변경하고 감사 기록을 남긴 ID입니다. 실제 발송 완료를 뜻하지 않습니다.
 type RequeueResult struct {
 	IDs []string `json:"ids"`
 }
 
-// Action은 발송 원장에 기록된 운영자 행위입니다.
 type Action struct {
 	ID               string    `json:"id"`
 	DeliveryID       string    `json:"deliveryId"`
@@ -153,13 +129,11 @@ type Action struct {
 	CreatedAt        time.Time `json:"createdAt"`
 }
 
-// ActionPage는 해당 발송 항목의 감사 이력을 ID 내림차순으로 반환합니다.
 type ActionPage struct {
 	Items        []Action `json:"items"`
 	NextBeforeID string   `json:"nextBeforeId"`
 }
 
-// ParseID는 부호·공백·선행 0을 허용하지 않는 양의 PostgreSQL bigint를 검사합니다.
 func ParseID(value string) (int64, error) {
 	id, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != value {
@@ -273,7 +247,6 @@ func replayBlock(group []Delivery) string {
 			return "group_not_terminal_failure"
 		}
 
-		// 서로 다른 발송 식별자를 섞지 않습니다. send_unit_id는 migration 301부터 NOT NULL입니다.
 		if item.RoomID != first.RoomID || item.SendUnitID != first.SendUnitID {
 			return "group_identity_mismatch"
 		}

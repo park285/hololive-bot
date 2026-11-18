@@ -123,8 +123,6 @@ func listEvidence(observation *Observation, videos []content.Entity, coverage co
 	}
 }
 
-// entitiesFromItems는 payload 항목을 reducer 입력으로 옮깁니다. Publication이 없는 항목(shorts_list 항목과 공개 근거를
-// 싣지 않은 video_list 항목)은 canonical 반영은 그대로 하되 신규성 근거가 없는 항목으로 판정됩니다.
 func entitiesFromItems(items []contract.VideoListItemV1, shorts bool) []content.Entity {
 	entities := make([]content.Entity, 0, len(items))
 	for i := range items {

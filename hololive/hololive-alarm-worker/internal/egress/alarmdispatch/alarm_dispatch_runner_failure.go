@@ -107,7 +107,6 @@ func (r *Runner) persistMarkSendingFailure(ctx context.Context, envelopes []disp
 func (r *Runner) persistPostSendingFailure(ctx context.Context, group alarmDispatchGroup, cause error) error {
 	envelopes := group.envelopes
 
-	// 명시적 unknown 증거는 함께 전달된 pre-handoff 오류보다 우선하며 재발급하지 않는다.
 	if sendoutcome.Classify(cause) == sendoutcome.OutcomeUnknown {
 		return r.quarantinePostSendingFailure(ctx, envelopes, cause)
 	}
@@ -116,7 +115,6 @@ func (r *Runner) persistPostSendingFailure(ctx context.Context, group alarmDispa
 		return r.reissueFailedRequest(ctx, group, cause)
 	}
 
-	// 응답 유실은 저장된 최종 본문·경로·membership·ID를 그대로 재사용할 수 있을 때만 재시도한다.
 	if isAlarmDispatchNotAdmittedRetryableFailure(cause) ||
 		(group.request != nil && isAlarmDispatchAmbiguousPostSendFailure(cause)) {
 		if err := r.persistSendingRetry(ctx, envelopes, cause); err != nil {
@@ -149,9 +147,6 @@ func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []dispatchou
 
 		return nil
 	}, func(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) error {
-		// 'sending' 잔류 행은 leased 전용 Requeue(RouteFailures fence)에 매칭되지 않아
-		// 일시적 infra 오류가 QuarantineStaleSending의 terminal quarantine으로 굳는다.
-		// fallback도 sending fence로 전량 retry 복원한다.
 		return r.consumer.RouteSendingFailures(ctx, envelopes, nil)
 	}); err != nil {
 		return err
@@ -202,7 +197,6 @@ func claimKeysForAlarmDispatchEnvelopes(envelopes []dispatchoutbox.AlarmQueueEnv
 	return claimKeys
 }
 
-// 이 행들은 현재 소유자·회수 경로의 것이므로 재시도하거나 claim key를 해제하지 않는다.
 func unappliedFailureRoutingIDs(err error) ([]int64, bool) {
 	miss, ok := errors.AsType[*sendfence.MissError](err)
 	if !ok {
@@ -247,8 +241,6 @@ const (
 	alarmDispatchRetryableMaxAttempts = 6
 )
 
-// attempt*5s 선형 백오프에서 3회는 누적 15s라 Iris 재기동(30~60s)을 넘기지 못하고
-// 대기 물량 전체를 DLQ로 흘린다. 일시적 원인만 6회(누적 75s)로 늘린다.
 func alarmDispatchMaxAttemptsForCause(cause error) int {
 	if isAlarmDispatchRetryablePostSendFailure(cause) {
 		return alarmDispatchRetryableMaxAttempts
@@ -341,7 +333,6 @@ func nextAlarmDispatchRetry(envelope *dispatchoutbox.AlarmQueueEnvelope, cause e
 	return retry
 }
 
-// 그 밖의 미스는 외부 호출 뒤라 행을 되돌리지 않고 오류로 보고한다.
 func (r *Runner) reissueFailedRequest(ctx context.Context, group alarmDispatchGroup, cause error) error {
 	retry, terminal := prepareDispatchFailure(group.envelopes, cause)
 	if len(terminal) == 0 {

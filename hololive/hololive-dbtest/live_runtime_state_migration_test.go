@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	// 현재 일치 영수증과 함께 seedLiveReviewComparison이 만드는 영상이다.
 	liveRuntimeReviewedVideo = "array"
 )
 
@@ -19,7 +18,6 @@ func assertLiveRuntimeState(t *testing.T, db LiveRuntimeStateReader) {
 	require.Equal(t, [3]int64{}, LiveRuntimeStateDrift(t, db), "누락·잉여·값 변경")
 }
 
-// 진단 SQL이 늘 0을 내면 운영 점검도 정상으로 오판하므로, 집계를 직접 손상시켜 종류마다 한 건씩 세는지 확인한다.
 func TestLiveRuntimeStateDriftCountsEachMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -156,7 +154,6 @@ func TestLiveRuntimeStateRefreshKeepsUnchangedRow(t *testing.T) {
 	assertLiveRuntimeState(t, tx)
 }
 
-// 증거 FK의 SET NULL은 수명 모델 입력이 아니므로 retention 삭제는 갱신 key 없이도 오라클과 일치한다.
 func TestLiveRuntimeStateObservationDeleteKeepsState(t *testing.T) {
 	t.Parallel()
 
@@ -227,7 +224,6 @@ func TestLiveRuntimeStateRecordingValidationAndCAS(t *testing.T) {
 	}
 }
 
-// 고정 snapshot은 잠금 대기 중 커밋된 원본을 놓치므로 refresh가 READ COMMITTED 밖에서 거부되어야 한다.
 func TestLiveRuntimeStateRefreshRejectsSnapshotIsolation(t *testing.T) {
 	pool := NewPool(t)
 

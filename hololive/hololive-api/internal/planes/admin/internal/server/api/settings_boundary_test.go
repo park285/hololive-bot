@@ -50,7 +50,6 @@ func TestSettingsRejectUnknownFieldsBeforePersistenceOrApply(t *testing.T) {
 }
 
 func TestRoomNameAbsentFromProductionAndActivityLogs(t *testing.T) {
-	// stdout를 사용하는 실제 운영 sanitizer를 거치므로 이 검사는 병렬 실행하지 않는다.
 	const canary = "PRIVATE_ROOM_NAME_CANARY"
 
 	output, err := os.CreateTemp(t.TempDir(), "stdout-")

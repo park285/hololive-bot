@@ -86,8 +86,6 @@ func validatePartialKinds(observations []contract.Envelope, failed []contract.Ob
 	return nil
 }
 
-// PartialFailureClassAllowed는 같은 slot 재시도로 회복될 수 있는 실패만 PARTIAL로 남깁니다. 생성 측(runner)과
-// 검증 측(publish 전 결과 검증)이 이 정책 하나를 함께 씁니다.
 func PartialFailureClassAllowed(class contract.FailureClass) bool {
 	switch class {
 	case contract.ClassTransient, contract.ClassTimeout, contract.ClassCooldown, contract.ClassResourceLimit:
@@ -108,7 +106,6 @@ func (r *CollectResult) Kind() CollectResultKind {
 	return r.kind
 }
 
-// Output은 불변 수집 결과를 공유합니다. 가변 데이터가 필요한 호출자는 결과의 방어적 조회를 사용합니다.
 func (r *CollectResult) Output() RunOutput {
 	if r == nil {
 		return RunOutput{}

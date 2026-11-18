@@ -10,8 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// cache.Client(god interface)와 mock이 narrow ClaimKeyReleaser를 그대로 만족하는지
-// 컴파일 타임에 고정한다. 이것이 파트1 동등성(소비자는 좁은 메서드 집합만 의존)의 보증이다.
 var (
 	_ ClaimKeyReleaser = cache.Client(nil)
 	_ ClaimKeyReleaser = (*cache.Service)(nil)

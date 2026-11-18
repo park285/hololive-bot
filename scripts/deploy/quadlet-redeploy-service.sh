@@ -1,17 +1,4 @@
 #!/usr/bin/env bash
-# 중앙(hololive-seoul) hololive-api·hololive-alarm-worker의 image 교체 helper다. 아래 순서를 Quadlet drop-in으로
-# 지킨다. collector c는 po-central-cutover.sh가 소유한다.
-#  1. preflight: root, 배포 트리 revision(sync-opt-current.sh의 .source-revision)과 image revision label 일치,
-#     image 존재·platform, primary fence 부재, unit 실행 중, PostgreSQL 연결 예산
-#  2. 실행 중 이전 pair 보존(capture). drop-in이 없는 첫 도입은 prepare로 실행 중 image를 먼저 고정해 이후 자동
-#     재시작이 tag 이동을 따라가지 않게 한다. 이어서 rollback drop-in과 이전 image의 --check-worker-profile
-#  3. candidate pair·--check-worker-profile·verify-source
-#  4. 활성화 전에 hololive-db-migrate의 image를 drop-in(50-migrator-image.conf)으로 고정하고 migration 실행
-#  5. candidate drop-in 활성화, daemon-reload, restart(Notify=healthy가 health gate), verify-live·NRestarts
-# 활성화를 시작한 뒤 실패하면 자동으로 되돌리지 않고 failed_after_activation으로 보고한다. 이전 pair
-# 복원은 스키마·admission 호환성 승인 뒤 quadlet-rollback-service.sh --check·--apply로 한다. 어느 단계도 재시도하지 않는다.
-# --quiesce는 두 Iris 소비자의 pair를 보존한 뒤 함께 정지·영속 mask한다. 외부 Iris 전환 뒤
-# --resume은 같은 release를 재검증하고 두 후보를 모두 설치한 다음에만 mask를 해제한다.
 set -Eeuo pipefail
 
 die() { echo "[quadlet-redeploy] $*" >&2; exit 1; }
@@ -63,8 +50,6 @@ for service in "${services[@]}"; do
 done
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-# 운영(root)은 경로를 고정하고 배포 트리의 사본만 실행한다. 테스트만 비root로 HOLOLIVE_QUADLET_TEST_ROOT 아래를 쓴다
-# (quadlet-prestart.sh·worker-profile-pair.py와 같은 접두어).
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
   [[ -z "${HOLOLIVE_QUADLET_TEST_ROOT:-}" ]] || die "HOLOLIVE_QUADLET_TEST_ROOT is only for non-root tests"
   prefix=""
@@ -81,7 +66,6 @@ if [[ -z "$prefix" && "$ROOT_DIR" != "$deploy_root" ]]; then
 fi
 pair_tool="$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py"
 releases="$deploy_root/artifacts/worker-profile/releases"
-# source sync·rollback·collector c와 unit 및 drop-in을 공유하므로 같은 중앙 잠금을 유지한다.
 lock_dir="$prefix/run/lock"
 install -d -m 0755 "$lock_dir"
 exec 9>"$lock_dir/hololive-quadlet-redeploy.lock"
@@ -115,11 +99,9 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
-# 알림 dispatcher는 중앙 하나뿐이다. sync-opt-current.sh와 같이 build-control host kapu에서는 거부한다.
 if [[ "$(hostname -s)" == kapu && "${HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED:-}" != 1 ]]; then
   die "refusing to redeploy central units on build-control host kapu"
 fi
-# 모든 중앙 unit은 fence 표식이 있으면 기동하지 않는다(ConditionPathExists=!).
 assert_no_fence_marker() {
   local marker
   for marker in fence.intent fenced; do
@@ -142,7 +124,6 @@ if [[ "$mode" == resume ]]; then
 else
   for service in "${services[@]}"; do
     [[ -f "$quadlet_dir/$service.container" ]] || die "installed unit missing: $quadlet_dir/$service.container"
-    # Quadlet은 정지할 때 container를 지우므로 이전 loaded profile을 먼저 보존한다.
     systemctl is-active --quiet "$service.service" ||
       die "$service.service must be running so its loaded profile pair can be retained"
     if [[ "$mode" == quiesce ]]; then
@@ -158,7 +139,6 @@ revision="$(<"$deploy_root/.source-revision")"
 [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || die "deploy tree revision is not a full commit: $deploy_root/.source-revision"
 host_arch="$(podman info --format '{{.Host.Arch}}')"
 
-# 이후 조회·고정은 identity로 한다. 그 사이 tag가 옮겨져도 검사한 image와 고정하는 image가 같다.
 resolve_image() {
   local ref="$1" title="$2" status=0 id value
   podman image exists "$ref" || status="$?"
@@ -296,7 +276,6 @@ for service in "${services[@]}"; do
 done
 systemctl daemon-reload
 if [[ "$mode" == resume ]]; then
-  # 두 drop-in을 모두 게시하기 전에는 API의 Wants가 구형 worker를 기동하지 못하게 한다.
   systemctl unmask "${units[@]}"
 fi
 for service in "${services[@]}"; do
@@ -306,7 +285,6 @@ for service in "${services[@]}"; do
   restarts_before="$(systemctl show "$unit" -p NRestarts --value)"
   printf '%s\n' "$restarts_before" >"$release/nrestarts-before"
   echo "[RESTART] $unit (NRestarts before=$restarts_before)"
-  # worker를 먼저 기동하고 API를 뒤에 둬 Wants 관계에서도 같은 후보 쌍만 실행한다.
   systemctl restart "$unit"
   stage=verify
   systemctl is-active --quiet "$unit" || die "$unit is not active after restart"

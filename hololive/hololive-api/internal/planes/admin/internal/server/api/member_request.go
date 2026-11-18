@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// CreateMemberRequest는 생성 SQL이 저장하는 입력만 받는다. Name은 slug에도 저장된다.
 type CreateMemberRequest struct {
 	Name            string          `json:"name"`
 	ChannelID       string          `json:"channelId"`

@@ -146,7 +146,6 @@ func TestPersistPostLatencyClassificationsWritesAllIdentitiesInOneStatement(t *t
 
 	counting.execCalls = 0
 
-	// 중복 identity는 한 번만 갱신 대상이 된다.
 	require.NoError(t, repository.PersistPostLatencyClassificationsByIdentities(ctx, append(identities, identities[0], identities[1])))
 	require.Equal(t, 1, counting.execCalls, "classification writes must be one batched statement, not one Exec per identity")
 
@@ -167,7 +166,6 @@ func TestTrackingIdentityQueriesMatchKindContentPairsOnly(t *testing.T) {
 	repository := mustNewTestRepository(t, pool)
 	base := time.Date(2026, time.June, 2, 12, 0, 0, 0, time.UTC)
 
-	// 요청 쌍 (COMMUNITY_POST, pair-a), (NEW_SHORT, pair-b)의 교차 조합도 tracking에 존재한다.
 	seedClassificationTracking(ctx, t, pool, domain.OutboxKindCommunityPost, "pair-a", "pair-a", base)
 	seedClassificationTracking(ctx, t, pool, domain.OutboxKindNewShort, "pair-b", "pair-b", base)
 	seedClassificationTracking(ctx, t, pool, domain.OutboxKindNewShort, "pair-a", "pair-a", base)
@@ -215,7 +213,6 @@ func TestPersistPostLatencyClassificationsAppliesFirstTimelineRowToSharedIdentit
 	repository := mustNewTestRepository(t, pool)
 	base := time.Date(2026, time.June, 3, 12, 0, 0, 0, time.UTC)
 
-	// 같은 (kind, content_id)를 가진 tracking 행 둘은 timeline에서 별도 행이지만 같은 분류로 갱신된다.
 	seedClassificationTracking(ctx, t, pool, domain.OutboxKindCommunityPost, "shared", "shared-canonical-1", base)
 	seedClassificationTracking(ctx, t, pool, domain.OutboxKindCommunityPost, "shared", "shared-canonical-2", base.Add(-time.Hour))
 

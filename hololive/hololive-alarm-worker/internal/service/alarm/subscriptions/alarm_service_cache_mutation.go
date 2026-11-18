@@ -12,8 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-// 호출자는 mutation mutex를 보유한다. 종류별 positive set을 모두 지운 뒤에만 DB 변경을 시작하므로
-// 변경 뒤 조회는 오래된 set 대신 DB read-through로 확정된다.
 func (as *AlarmService) invalidateChannelSubscribers(ctx context.Context, channelID string, alarmTypes domain.AlarmTypes) error {
 	for _, alarmType := range alarmTypes {
 		if err := as.cache.Del(ctx, as.channelSubscribersKeyByType(channelID, alarmType)); err != nil {
@@ -25,7 +23,6 @@ func (as *AlarmService) invalidateChannelSubscribers(ctx context.Context, channe
 }
 
 func (as *AlarmService) prepareAddedAlarmCache(ctx context.Context, channelID string, alarmTypes domain.AlarmTypes) error {
-	// 새 채널은 먼저 발견 가능하게 만든다. commit 전에는 DB 구독이 없으므로 수신 방이 생기지 않는다.
 	if err := as.cacheAlarmChannelRegistry(ctx, channelID); err != nil {
 		return fmt.Errorf("register channel before commit: %w", err)
 	}

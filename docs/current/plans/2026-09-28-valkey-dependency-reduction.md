@@ -1,13 +1,11 @@
 # Hololive Valkey 선택적 축소 빅뱅 fadeout 계획
 
-**Decisions:** `DEC-20260928-hololive-valkey-bigbang-fadeout` (governing), `DEC-20260731-legacy-fade-out-no-dual-path` (constraint)
-
 ## Execution capsule
 
 **Goal:** 필요한 Valkey 기능을 유지하고, 두 중복 기능의 구 코드·연결·설정 소비를 하나의 완결된 패치에서 제거한다.
 **Context:** 제거 집합은 membernews room mirror와 hololive:members이다. 이전 B1/B2 중간 writer 릴리스와 exported 구 API 보존안은 폐기한다.
 **Constraints:** 사용자가 D1/D2 전체 구현, 공개 backend Go API·hash 전용 CLI/env 폐기, YouTube 공유 channel 대표 이름 정규화를 승인했다. 운영 전환·key 회수·Git publication은 승인 범위가 아니다. 패치는 dual path·호환 shim·no-op API 없이 보호용 Valkey와 PG durable state를 보존한다.
-**Evidence:** `docs/review/2026-09-28-valkey-bigbang-fadeout-audit.md`, `docs/review/2026-09-28-alarm-membernews-valkey-audit.md`, 앞선 리뷰와 코드·테스트·runbook. 과거 감사는 정적 근거이며, 준비 확인과 구현 검증은 아래 기록에서 구분한다. 운영 검증은 미수행이다.
+**Evidence:** 앞선 리뷰와 코드·테스트·runbook. 과거 감사는 정적 근거이며, 준비 확인과 구현 검증은 아래 기록에서 구분한다. 운영 검증은 미수행이다.
 **Success:** 제거 기능의 활성 생산·소비·선택 경로가 0이고, 유지 기능 회귀와 전체 모듈 검증이 통과한다. runtime 전환·data residue 회수는 별도 증거로 기록한다.
 **Output:** 한 worktree revision의 D1/D2 source fadeout(S)과 대응 검증 근거. R/D는 별도 승인 작업이다.
 
@@ -15,9 +13,9 @@
 
 사용자의 두 요구를 함께 적용합니다. 필요한 공유 임시 상태와 유의미한 캐시는 Valkey에 유지합니다. 제거하기로 정한 기능은 새로운 설계를 도입하는 지점에서 완전히 종료합니다.
 
-[빅뱅 감사](../../review/2026-09-28-valkey-bigbang-fadeout-audit.md)는 직전 플랜에서 F01~F10을 확인했습니다. [선택적 유지 리뷰](../../review/2026-09-28-valkey-selective-retention-review.md)와 [실행 준비 리뷰](../../review/2026-09-28-valkey-implementation-readiness-review.md)의 정적 사실은 참고하되, 전환 방식과 완료 기준은 이 문서를 따릅니다.
+직전 계획의 F01~F10은 정적 감사에서 확인한 내용입니다. 전환 방식과 완료 기준은 이 문서를 따릅니다.
 
-[알람·멤버 뉴스 심층 감사](../../review/2026-09-28-alarm-membernews-valkey-audit.md)의 N01~N09를 반영했습니다. D1/D2 범위는 같으며 뉴스 실행 잠금·PG 발송 경로·구독 간 연결을 유지 명세와 B19~B27 검증으로 구체화합니다.
+알람·멤버 뉴스 심층 감사의 N01~N09를 반영했습니다. D1/D2 범위는 같으며 뉴스 실행 잠금·PG 발송 경로·구독 간 연결을 유지 명세와 B19~B27 검증으로 구체화합니다.
 
 **패치는 하나입니다.** reader만 바꿔 배포하고 writer는 다음 릴리스에 지우는 B1/B2는 사용하지 않습니다. 구현 중 의존 순서에 따른 편집·테스트는 가능하지만 최종 merge/build 대상에는 아래 제거 집합이 모두 포함되어야 합니다. 일부만 완료하고 빅뱅 fadeout 완료라고 표시하지 않습니다. 범위를 줄여야 한다면 사유와 제거 집합부터 다시 확정합니다.
 
@@ -417,7 +415,7 @@ B05~B10/B13/B14/B24/B25를 검증합니다. 기존 matcher allocation budget과 
 
 ### V36 변경·artifact·전환 검토
 
-`git diff --check`와 `./scripts/architecture/ci-boundary-gate.sh`를 수행합니다. [현재 계획 규칙](../../../../docs/agent-workflows/README.md)에 따라 DEC/PLN 등록·lifecycle·폐기된 카탈로그 검사기는 실행 조건이 아닙니다. 기존 애플리케이션 계약·필수 코드 게이트·사용자 승인 경계는 그대로 유지합니다.
+`git diff --check`와 `./scripts/architecture/ci-boundary-gate.sh`를 수행합니다. 기존 애플리케이션 계약·필수 코드 게이트·사용자 승인 경계는 그대로 유지합니다.
 
 필요한 이미지 build는 `./build-all.sh --build-only --no-bump` 등 기존 build-only 경로로 준비하며 운영 artifact는 clean reviewed full SHA·대상 architecture·image ID를 고정합니다. 출판 승인 시 `scripts/ci/pre-push-gate.sh`가 별도 필수입니다. cutover는 owning ops의 필요한 정적 배포 계약과 no-build 절차를 적용하며, 이 문서 때문에 전체 stack/runtime을 재배포하지 않습니다.
 
@@ -428,7 +426,7 @@ B05~B10/B13/B14/B24/B25를 검증합니다. 기존 matcher allocation budget과 
 1. source/CLI 계약 삭제와 이름 정규화, 외부 consumer 확인을 포함한 **전체 D1/D2 패치 범위**의 검토가 필요합니다. 발견한 consumer를 조용히 예외 처리하거나 no-op을 남기지 않습니다.
 2. C0~C5의 실제 host/process 목록·downtime·quiesce·supervisor·artifact set·rollback preflight는 운영 준비에서 확정합니다. 준비가 없으면 API·alarm-worker의 mixed fleet를 허용하는 식으로 전환 방식을 약화하지 않습니다. collector·PO는 C5b에서 같은 SHA로 올립니다.
 3. cleanup 권한·정확한 key 소유·수용 기간은 별도입니다. 운영 데이터 회수 미실행을 코드/런타임 구현 실패와 혼동하지 않습니다.
-4. 공개 backend Go API·hash 전용 CLI/env 폐기와 공유 channel 이름 정규화를 포함한 D1/D2 구현은 사용자 승인에 따라 아래 구현 기록의 worktree에서 수행했습니다. DEC/PLN 상태나 lifecycle 등록을 승인 대용 또는 추가 실행 게이트로 사용하지 않습니다.
+4. 공개 backend Go API·hash 전용 CLI/env 폐기와 공유 channel 이름 정규화를 포함한 D1/D2 구현은 사용자 승인에 따라 아래 구현 기록의 worktree에서 수행했습니다.
 
 이전 selective-retention 제안의 필요한 Valkey 유지 방향은 보존하되 단계적 전달안은 철회했습니다. 후속 실행자는 이 문서의 새로운 marker와 빅뱅 감사의 제거 명세를 사용합니다. 이전 패킷 일부의 테스트 결과를 새 전체 patch의 완료 근거로 승계하지 않습니다.
 

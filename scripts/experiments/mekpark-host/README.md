@@ -30,14 +30,14 @@ node scripts/experiments/mekpark-host/fetch-public-titles.mjs
 ## 학습과 재현
 
 ```bash
-uv run --locked scripts/experiments/mekpark-host/experiment.py
-uv run --locked scripts/experiments/mekpark-host/experiment.py --output .tmp/mekpark-host-ml-reproduce
+uv run --locked --project scripts/experiments/mekpark-host scripts/experiments/mekpark-host/experiment.py
+uv run --locked --project scripts/experiments/mekpark-host scripts/experiments/mekpark-host/experiment.py --output .tmp/mekpark-host-ml-reproduce
 cmp .tmp/mekpark-host-ml/results.json .tmp/mekpark-host-ml-reproduce/results.json
 cmp .tmp/mekpark-host-ml/dataset.json .tmp/mekpark-host-ml-reproduce/dataset.json
 ```
 
-Python 3.15와 scikit-learn 1.9.1을 사용하며 PEP 723 metadata와 `experiment.py.lock`이 실험
-환경을 고정한다. Go 기준선은 `mekparkhost/cmd/classify-titles`로 실제 판별기를 호출한다.
+실험 디렉터리의 `pyproject.toml`은 Python 3.15와 scikit-learn 1.9.1을 지정하고 `uv.lock`은
+간접 의존성까지 버전을 고정한다. Go 기준선은 `mekparkhost/cmd/classify-titles`로 실제 판별기를 호출한다.
 
 9월 6일 보고서는 당시 입력과 규칙으로 고정된 결과다. 현재 규칙·제목 표본으로 실행한 결과와
 입력 hash는 달라진다. 신규 표본의 시각을 `event-times.json`이나 공개 metadata에 반영하기
@@ -64,7 +64,7 @@ C는 0.5/2/8 중 학습 자료의 3-fold StratifiedGroupKFold macro F1로 선택
 확인할 때는 다음처럼 실행한다. 이 명령은 재학습하지 않는다.
 
 ```bash
-uv run --locked scripts/experiments/mekpark-host/experiment.py \
+uv run --locked --project scripts/experiments/mekpark-host scripts/experiments/mekpark-host/experiment.py \
   --unit unit-b --predict '【ホロドリ】EXフルコン出来ると思ったら？'
 ```
 
@@ -73,7 +73,6 @@ uv run --locked scripts/experiments/mekpark-host/experiment.py \
 
 ## 결과의 해석
 
-[2026-09-06 결과](../../../docs/review/mekpark-host-ml-20260906.md)에 실제 실행 결과를 기록했다.
 316개 고유 영상 중 221건으로 학습하고 48건을 시간 순서로 분리해 평가했다. 원문 모델은
 48/48, 이름·태그·이모지 제거 모델은 31/48이었다. 후자는 인위적으로 입력을 바꾼 시험이며
 실제 이름 없는 제목 전체의 정확도를 뜻하지 않는다.

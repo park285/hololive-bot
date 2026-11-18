@@ -144,5 +144,4 @@ REMOTE
     < "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py"
 }
 
-# AP host는 모두 host-native다(ap-host.sh). Quadlet collector b·c의 완료 검사는 po-central-cutover.sh check가 소유한다.
 run_native_completion_check

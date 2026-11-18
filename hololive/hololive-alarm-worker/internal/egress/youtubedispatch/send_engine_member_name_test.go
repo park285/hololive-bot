@@ -24,7 +24,6 @@ func TestDispatchDeliveryRows_GroupedFormatFailureRetriesWholeGroup(t *testing.T
 		memberNames format.MemberNameSource
 		groupBody   string
 	}{
-		// 표시명 정본 조회가 실패한다. 대체 문구로 보내지 않는다.
 		{name: "member name lookup failed", memberNames: failingMemberNames{err: errors.New("db down")}, groupBody: "{{range .Items}}{{.Title}} {{.URL}}\n{{end}}"},
 	}
 
@@ -108,8 +107,7 @@ func TestDispatchDeliveryRows_PerRoomMemberNameComesFromCanonicalSource(t *testi
 	cases := []struct {
 		name        string
 		memberNames format.MemberNameSource
-		// wantName이 비어 있으면 misc/vtuber_fallback 문구를 기대한다.
-		wantName string
+		wantName    string
 	}{
 		{name: "registered name", memberNames: staticMemberNames{testChannelCh1: "페코라"}, wantName: "페코라"},
 		{name: "missing name uses fallback string", memberNames: staticMemberNames{}},
@@ -153,7 +151,6 @@ func TestDispatchDeliveryRows_PerRoomMemberNameLookupFailureRetriesWithoutSendin
 	}
 }
 
-// 사전 렌더는 이번에 발송하는 행의 outbox만 포맷하고, claim했지만 발송하지 않는 행의 outbox는 표시명도 조회하지 않는다.
 func TestDispatchDeliveryRows_PreFormatsOnlyDispatchedRowOutboxes(t *testing.T) {
 	t.Parallel()
 

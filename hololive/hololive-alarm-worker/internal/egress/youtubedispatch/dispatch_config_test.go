@@ -75,7 +75,6 @@ func TestConfigValidateRejectsClaimWindowBelowReviveWindowPlusInterval(t *testin
 	require.NoError(t, config.Validate())
 }
 
-// lease가 발송 한 번의 예산보다 짧으면 grouped fallback 개별 발송이 매번 send_lease_budget으로 미뤄지므로 기동에서 거절한다.
 func TestConfigValidateRejectsLockTimeoutBelowSendLeaseBudget(t *testing.T) {
 	t.Parallel()
 

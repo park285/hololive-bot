@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# quadlet-redeploy-service.sh·quadlet-rollback-service.sh 흐름 테스트. 실제 helper를 비root 테스트 접두어
-# (HOLOLIVE_QUADLET_TEST_ROOT) 아래에서 실행하고 podman·systemctl·hostname과 worker-profile-pair.py 호출(python3)만
-# 가짜로 바꾼다. pair 도구의 검증은 worker-profile-pair_test.py가 소유한다. 단계 순서, 활성화 전 중단,
-# 명시적 복원과 복원 실패, preflight 무변경, 두 소비자의 hold·부분 게시·재개를 확인한다.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
@@ -34,7 +30,6 @@ cat >"${fakebin}/hostname" <<'EOF'
 echo hololive-seoul
 EOF
 
-# image 파일은 tag와 sha256 identity 두 이름으로 같은 속성(id·platform·title·revision)을 담는다.
 cat >"${fakebin}/podman" <<'EOF'
 #!/usr/bin/env bash
 state="${FAKE_STATE:?}"
@@ -59,7 +54,6 @@ case "$1 ${2:-}" in
 esac
 EOF
 
-# restart는 설치된 worker-profile drop-in이 고정한 pair로 container를 다시 만든다. 명시적 restart는 NRestarts를 0으로 둔다.
 cat >"${fakebin}/systemctl" <<'EOF'
 #!/usr/bin/env bash
 state="${FAKE_STATE:?}"
@@ -164,7 +158,6 @@ case "$1" in
 esac
 EOF
 
-# worker-profile-pair.py 호출만 받는다. pair 디렉터리와 drop-in 게시를 파일로 흉내 낸다.
 cat >"${fakebin}/python3" <<'EOF'
 #!/usr/bin/env bash
 state="${FAKE_STATE:?}"
@@ -240,7 +233,6 @@ add_image() {
   done
 }
 
-# case root: 배포 트리 revision 기록, 설치된 unit, compose.env, 적재된 image, 실행 중 unit 상태를 만든다.
 make_case() {
   local root="$1" service="$2" with_dropin="$3" api_revision="${4:-${REVISION}}" quadlet_dir
   quadlet_dir="${root}/etc/containers/systemd/hololive-bot"
@@ -279,12 +271,10 @@ installed_pair() {
   sed -n 's/^pair=//p' "$1/etc/containers/systemd/hololive-bot/$2.container.d/50-worker-profile.conf"
 }
 
-# 기대한 호출이 이 순서로 나타나는지 본다(사이의 다른 호출은 허용).
 assert_order() {
   local root="$1" label="$2" line=0 expected found
   shift 2
   for expected in "$@"; do
-    # 일치가 없을 때 grep의 1이 pipefail로 테스트를 조용히 끝내지 않게 한다. 판정은 아래 빈 값 검사가 한다.
     found="$(grep -nxF -- "${expected}" "${root}/state/calls" | awk -F: -v after="${line}" '$1 > after { print $1; exit }' || true)"
     [[ -n "${found}" ]] || { cat "${root}/state/calls" "${root}/out" >&2; fail "${label}: missing or out of order: ${expected}"; }
     line="${found}"
@@ -300,7 +290,6 @@ release_of() {
   find "$1/opt/hololive-bot/compose/current/artifacts/worker-profile/releases" -mindepth 1 -maxdepth 1 -type d
 }
 
-# 1. 정상 교체: 이전 pair 보존 → candidate 검사 → candidate migrator로 migration → 활성화·restart → verify-live.
 root="${tmp}/success"
 make_case "${root}" hololive-api true
 run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate ||
@@ -319,7 +308,6 @@ grep -q '^\[OUTCOME\] deployed service=hololive-api' "${root}/out" || fail "succ
 success_release="$(release_of "${root}")"
 [[ "$(cat "${success_release}/nrestarts-before")" == 3 ]] || fail "success: NRestarts baseline was not recorded"
 if [[ -x "${QUADLET_BIN}" ]]; then
-  # helper가 쓴 migrator drop-in이 실제 Quadlet 생성에서 compose.env 기반 ${HOLOLIVE_API_IMAGE}를 대신하는지 본다.
   units="${tmp}/success-units"
   mkdir -p "${units}"
   cp "${ROOT_DIR}/deploy/quadlet/hololive-bot/"* "${units}/"
@@ -330,7 +318,6 @@ if [[ -x "${QUADLET_BIN}" ]]; then
 fi
 pass "deploy retains the previous pair, migrates with the candidate image before activation and verifies the live pair"
 
-# 2. 첫 도입(drop-in 없음)·alarm-worker: prepare로 실행 중 image를 먼저 고정하고 같은 revision의 API image로 migration한다.
 root="${tmp}/first-adoption"
 make_case "${root}" hololive-alarm-worker false
 run_tool "${root}" first_adoption "${WORKER_HEX}" "${HELPER}" hololive-alarm-worker \
@@ -345,8 +332,6 @@ assert_no_call "${root}" "first adoption" '^pair capture '
 [[ "$(installed_pair "${root}" hololive-alarm-worker)" == candidate ]] || fail "first adoption: candidate pair is not active"
 pass "first adoption pins the running image with prepare and migrates with the same-revision API image"
 
-# 3. migration 실패, 또는 migration과 겹친 fence(condition으로 건너뛰어도 start는 0): 활성화 전에 멈추고
-# 실행 중 pair·unit을 바꾸지 않는다.
 for case_name in migration_failure fence_during_migration; do
   root="${tmp}/${case_name}"
   make_case "${root}" hololive-api true
@@ -361,9 +346,6 @@ for case_name in migration_failure fence_during_migration; do
   pass "${case_name}: the change stops before activation and leaves the running pair"
 done
 
-# 4·5. 활성화 뒤 실패(restart health gate 실패, verify 중 자동 재시작)은 자동으로
-# 되돌리지 않는다. 이번 배포가 migration을 적용했을 수 있으므로 이전 image 복원은 스키마·admission 호환성
-# 승인 뒤 운영자가 quadlet-rollback-service.sh로 한다. 승인 뒤 --apply는 이전 pair를 되살려 다시 확인한다.
 for case_name in health_failure auto_restart; do
   root="${tmp}/${case_name}"
   make_case "${root}" hololive-api true
@@ -387,7 +369,6 @@ for case_name in health_failure auto_restart; do
   pass "${case_name}: a failure after activation is reported without automatic rollback; the approved rollback restores the previous pair"
 done
 
-# 5-1. 이번 revision이 기본 unit 정의도 바꿨다면(sync가 먼저 설치), 롤백은 이전 image를 그 image가 돌던 unit으로 띄운다.
 root="${tmp}/unit-changed"
 make_case "${root}" hololive-api true
 unit_file="${root}/etc/containers/systemd/hololive-bot/hololive-api.container"
@@ -405,7 +386,6 @@ cmp -s "$(release_of "${root}")/rollback-replaced-hololive-api.container" "${roo
   fail "unit changed: the replaced base unit was not retained in the release"
 pass "a rollback restores the base unit definition the previous image ran with"
 
-# 5-2. 다른 helper가 실행 중이면 아무것도 바꾸지 않고 멈춘다(migrator drop-in·daemon-reload·migration 경합 방지).
 root="${tmp}/concurrent"
 make_case "${root}" hololive-api true
 mkdir -p "${root}/run/lock"
@@ -424,7 +404,6 @@ grep -q 'another central Quadlet writer is running' "${root}/out" || fail "concu
 [[ ! -s "${root}/state/calls" ]] || fail "concurrent: rollback made calls while locked out"
 exec 8>&-
 
-# 6. 승인된 되돌리기도 실패: rollback이 실패로 끝나고 release pair를 남긴다.
 root="${tmp}/restore-failure"
 make_case "${root}" hololive-api true
 if run_tool "${root}" restore_failure "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate; then
@@ -438,7 +417,6 @@ fi
   fail "restore failure: release pairs were not retained"
 pass "a failed restoration fails visibly and retains the release pairs"
 
-# 7·8. preflight 거부(배포 트리와 다른 migrator revision, 연결 예산 초과): pair·unit·release 저장소를 건드리지 않는다.
 root="${tmp}/revision-mismatch"
 make_case "${root}" hololive-alarm-worker true fedcba9876543210fedcba9876543210fedcba98
 if run_tool "${root}" revision_mismatch "${WORKER_HEX}" "${HELPER}" hololive-alarm-worker \
@@ -458,7 +436,6 @@ for root in "${root}" "${root_capacity}"; do
 done
 pass "preflight rejects a revision mismatch and an exhausted connection budget before any change"
 
-# 9. rollback --check는 이전 pair 검증만 하고 아무것도 바꾸지 않는다.
 root="${tmp}/success"
 : >"${root}/state/calls"
 run_tool "${root}" rollback_check "${API_HEX}" "${ROLLBACK}" "${success_release}" --check ||
@@ -467,7 +444,6 @@ assert_order "${root}" "rollback check" 'pair verify hololive-api previous' 'pai
 assert_no_call "${root}" "rollback check" '^(pair activate |systemctl )'
 pass "rollback --check verifies the retained pair without changes"
 
-# 두 서비스의 실제 상태를 분리하고 API의 Wants가 정지한 worker를 기동하는 효과도 모델링한다.
 FAKE_COORDINATED=true
 make_coordinated_case() {
   local root="$1" service

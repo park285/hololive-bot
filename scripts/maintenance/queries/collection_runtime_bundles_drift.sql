@@ -1,4 +1,3 @@
--- 운영 view와 독립적인 매핑으로 원본 집계를 재계산한다. dbtest와 운영 진단이 함께 사용한다.
 WITH mapping(kind, observation_kind, rpc_per_kind) AS (
     VALUES
         ('youtubejs_channel_live', 'live_snapshot', false),
@@ -31,7 +30,6 @@ WITH mapping(kind, observation_kind, rpc_per_kind) AS (
     FROM expected
     FULL JOIN public.youtube_collection_runtime_bundles actual USING (projection_generation, kind, subject_key)
 ), mapping_differences AS (
-    -- 중복도까지 비교해야 동일한 매핑 행이 추가돼도 정상으로 판정하지 않는다.
     (SELECT kind, observation_kind, rpc_per_kind FROM mapping
      EXCEPT ALL
      SELECT kind, observation_kind, rpc_per_kind FROM public.youtube_collection_runtime_kinds)
@@ -40,7 +38,6 @@ WITH mapping(kind, observation_kind, rpc_per_kind) AS (
      EXCEPT ALL
      SELECT kind, observation_kind, rpc_per_kind FROM mapping)
 ), mapping_drift AS (
-    -- 값 변경의 양방향 차이는 한 observation kind로 세고, 잘못된 NULL key도 포함한다.
     SELECT count(difference) AS changed_rows
     FROM (SELECT DISTINCT observation_kind FROM mapping_differences) difference
 )

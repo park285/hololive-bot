@@ -32,15 +32,12 @@ const (
 	lifecycleReasonUnknownError ytlifecycle.Reason = "provider_outcome_unknown"
 )
 
-// worker는 scheduler 종료를 10초 기다린다. 확정 결과의 전이·기존 재조회 전체는
-// 그 안의 한 5초 예산을 공유하고, provider 호출에는 이 context를 넘기지 않는다.
 const deliveryStateTimeout = 5 * time.Second
 
 func deliveryStateContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), deliveryStateTimeout)
 }
 
-// beginLifecycleOperation은 attempt의 행을 SENDING으로 전이하고, 확인되면 attempt.operation과 lease 기준 시각을 채운다.
 func (d *SendEngine) beginLifecycleOperation(
 	ctx context.Context,
 	attempt *deliveryAttempt,
@@ -49,7 +46,6 @@ func (d *SendEngine) beginLifecycleOperation(
 	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), deliveryStateTimeout)
 	defer cancel()
 
-	// DB는 locked_at을 호출 뒤에 채취하므로 이 시각부터 잰 경과 시간은 lease 소비를 작게 잡지 않는다.
 	startedAt := time.Now()
 	operation, applied, err := d.transition.BeginSending(ctx, attempt.rows, outboxMap(attempt.outboxes))
 	observeLifecycleApply("begin_sending", applied, err, len(attempt.rows))
@@ -120,8 +116,6 @@ func (d *SendEngine) applyStartedLifecycleFailure(
 	return true
 }
 
-// 첫 handoff 확인은 admission에서 min(5s, HandoffHorizon) 뒤다. 고정 요청이 없거나 requestId가 비었으면 CompleteSent가 거절하고 행은 SENDING으로 남아
-// stale sweep이 격리한다.
 func (d *SendEngine) completeLifecycleSent(
 	ctx context.Context,
 	attempt *deliveryAttempt,
@@ -154,7 +148,6 @@ func (d *SendEngine) completeLifecycleSent(
 	return true
 }
 
-// 논리 식별자를 해석할 수 없는 행은 발송하지 않고 시도를 쓰는 재시도 실패로 전이한다.
 func (d *SendEngine) selectDeliverableMembers(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
@@ -238,7 +231,6 @@ func deliveryLogAttrs(
 func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration) {
 	const defaultReason = lifecycleReasonUnknownError
 
-	// 결합 오류의 확정 실패보다 결과 불명 증거를 먼저 보존한다. 이 판정 전에는 저장 전이를 만들지 않는다.
 	if errors.Is(err, errDeliverySendOutcomeUnknown) || sendoutcome.Classify(err) == sendoutcome.OutcomeUnknown {
 		observeDeliveryOutcomeUnknown(string(defaultReason))
 
@@ -272,8 +264,6 @@ func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.R
 		return ytlifecycle.FailurePermanent, lifecycleReasonPermanent, 0
 	case errors.Is(err, iris.ErrRateLimited):
 		return ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, deliveryRetryAfter(err)
-	// ErrNotSent는 요청이 나가기 전 확정 실패라 부수효과가 없다. iris-client-go v4부터 ErrTransport와 겹치지 않으므로
-	// 따로 받아 v3에서 ErrTransport로 받던 재시도 분류를 유지한다.
 	case errors.Is(err, iris.ErrTransport), errors.Is(err, iris.ErrNotSent):
 		return ytlifecycle.FailureRetryable, lifecycleReasonTransport, deliveryRetryAfter(err)
 	default:

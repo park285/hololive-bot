@@ -1,4 +1,3 @@
--- sending_started_at이 $2 밀리초보다 오래된 sending을 결과 불명으로 격리한다. 판정·기록 시각은 clock 하나다.
 WITH clock AS MATERIALIZED (
     SELECT clock_timestamp() AS now
 ), picked AS (

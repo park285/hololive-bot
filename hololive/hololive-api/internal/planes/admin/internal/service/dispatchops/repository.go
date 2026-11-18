@@ -13,10 +13,8 @@ import (
 	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
-// Repository는 기존 dispatch 테이블을 사용하며 스키마 변경이나 외부 발송을 수행하지 않습니다.
 type Repository struct{ pool *pgxpool.Pool }
 
-// NewRepository는 관리자 저장소를 만듭니다. Nil pool에서는 모든 작업이 명시적으로 실패합니다.
 func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
 
 func (r *Repository) available() error {
@@ -27,7 +25,6 @@ func (r *Repository) available() error {
 	return nil
 }
 
-// Summary는 보존 중인 모든 발송 상태를 단일 PostgreSQL 스냅샷으로 집계합니다.
 func (r *Repository) Summary(ctx context.Context) (Summary, error) {
 	result := Summary{Counts: []StatusCount{}}
 
@@ -108,7 +105,6 @@ func (r *Repository) Failures(ctx context.Context) (FailureBreakdown, error) {
 	return result, nil
 }
 
-// List는 최대 PageSize개를 반환하며 커서는 상태 변화와 무관한 ID 내림차순입니다.
 func (r *Repository) List(ctx context.Context, filter Filter) (Page, error) {
 	result := Page{Items: []Delivery{}}
 
@@ -141,7 +137,6 @@ func (r *Repository) List(ctx context.Context, filter Filter) (Page, error) {
 	return result, nil
 }
 
-// Detail은 같은 스냅샷에서 대상과 묶음을 조회합니다. 본문이나 오류 원문은 공개하지 않습니다.
 func (r *Repository) Detail(ctx context.Context, id string) (Detail, error) {
 	result := Detail{ReplayTargets: []Revision{}, Group: []Delivery{}}
 
@@ -198,8 +193,6 @@ func (r *Repository) Detail(ctx context.Context, id string) (Detail, error) {
 	return result, nil
 }
 
-// Actions는 해당 발송 항목의 영속 감사 이력만 조회합니다. 상태나 로그를 생성하지 않습니다.
-// 보존 기한이 지나 삭제된 ID에는 빈 목록을 반환합니다.
 func (r *Repository) Actions(ctx context.Context, id, beforeID string) (ActionPage, error) {
 	result := ActionPage{Items: []Action{}}
 
@@ -305,7 +298,6 @@ func loadGroup(ctx context.Context, tx pgx.Tx, id int64, lock bool) ([]Delivery,
 }
 
 func rollback(ctx context.Context, tx pgx.Tx) {
-	// pgxdb.Rollback은 취소된 HTTP 요청에서도 요청 취소와 분리된 제한 시간 안에 연결을 정리합니다.
 	if err := pgxdb.Rollback(ctx, tx); err != nil {
 		slog.Error("dispatch operation rollback failed", slog.Any("error", err))
 	}

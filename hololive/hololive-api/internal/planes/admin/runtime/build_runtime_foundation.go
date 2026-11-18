@@ -10,9 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarmhttp"
 )
 
-// Alarm 데이터 원천은 alarm-worker HTTP provider 하나다(hololive-api bot·admin plane 공통).
-// ALARM_INTERNAL_URL은 config.LoadRuntime이 필수로 검증하므로 in-process AlarmService 분기는 두지 않고,
-// URL이 비면 오류로 끝낸다.
 func buildAlarmProvider(
 	appConfig *apiconfig.AdminPlaneConfig,
 	logger *slog.Logger,

@@ -16,34 +16,28 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-// BotPlaneConfig는 bot plane(Iris webhook 수신·명령 응답·durable inbox/outbox)이 소비하는 설정만 담는다.
-// 각 구획 env 형식은 그 구획 loader가, 역할 검증은 Validate가 소유한다.
 type BotPlaneConfig struct {
-	Environment      string
-	Server           settings.ServerConfig
-	InternalH3       sharedh3.ClientOptions
-	Iris             settings.IrisConfig
-	Kakao            KakaoConfig
-	Holodex          settings.HolodexConfig
-	OfficialSchedule settings.OfficialScheduleRuntimeConfig
-	Valkey           settings.ValkeyConfig
-	Postgres         settings.PostgresConfig
-	Bot              settings.BotConfig
-	Webhook          WebhookConfig
-	APIWorkerProfile *APIWorkerProfile
-	AlarmServiceURL  string
-	// BroadcastTypeGeminiKeyFile이 비어 있으면 미분류 방송의 Gemini 판정을 끈다.
+	Environment                string
+	Server                     settings.ServerConfig
+	InternalH3                 sharedh3.ClientOptions
+	Iris                       settings.IrisConfig
+	Kakao                      KakaoConfig
+	Holodex                    settings.HolodexConfig
+	OfficialSchedule           settings.OfficialScheduleRuntimeConfig
+	Valkey                     settings.ValkeyConfig
+	Postgres                   settings.PostgresConfig
+	Bot                        settings.BotConfig
+	Webhook                    WebhookConfig
+	APIWorkerProfile           *APIWorkerProfile
+	AlarmServiceURL            string
 	BroadcastTypeGeminiKeyFile string
 }
 
-// WebhookConfig는 bot webhook 수신 한도다. 값은 Stack Worker Profile의 bot_webhook_inbox에서만 온다.
 type WebhookConfig struct {
 	MaxBodyBytes int64
 	DedupTimeout time.Duration
 }
 
-// LoadBotPlaneRuntime은 bot plane 설정만 단독으로 읽고 검증한다. 전체 hololive-api 기동은 LoadRuntime을 쓰고,
-// 이 함수는 bot plane DB 설정만 필요한 운영 명령이 같은 env 계약(형식·역할 검증)을 거치게 한다.
 func LoadBotPlaneRuntime() (*BotPlaneConfig, error) {
 	if err := loadProcessEnv(); err != nil {
 		return nil, err
@@ -61,7 +55,6 @@ func LoadBotPlaneRuntime() (*BotPlaneConfig, error) {
 	return config, nil
 }
 
-// 환경 값 형식은 각 plane config가 자기 구획 loader로 검사한다.
 func loadProcessEnv() error {
 	if err := envload.DotEnv(); err != nil {
 		return fmt.Errorf("load dot env: %w", err)
@@ -70,9 +63,6 @@ func loadProcessEnv() error {
 	return nil
 }
 
-// loadInternalH3ClientOptions는 bot·admin plane 내부 서비스 H3 client의 TLS 경로와 이름을 전용 키 두 개에서만 읽는다.
-// 공통 서버 키(HOLOLIVE_H3_CERT_FILE, HOLOLIVE_H3_SERVER_NAME)로 대신하지 않는다.
-// 빈 값의 HTTPS 거절과 파일 검증은 client 생성자가 소유하여 HTTP-only runtime 기동을 보존한다.
 func loadInternalH3ClientOptions() sharedh3.ClientOptions {
 	return sharedh3.ClientOptions{
 		CACertFile: strings.TrimSpace(os.Getenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE")),
@@ -179,7 +169,6 @@ func (c *BotPlaneConfig) validateRequired() error {
 	return nil
 }
 
-// validatePlaneDependencies는 bot·admin plane이 같이 쓰는 DB·Holodex·공식 일정 검증 순서를 고정한다.
 func validatePlaneDependencies(
 	environment string,
 	postgres *settings.PostgresConfig,

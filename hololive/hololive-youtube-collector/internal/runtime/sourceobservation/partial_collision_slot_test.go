@@ -41,8 +41,7 @@ func TestRepeatedPartialCollisionAdvancesSlotAndKeepsFreshVideos(t *testing.T) {
 
 	for i, attempt := range attempts {
 		if i > 0 {
-			// 정상 cadence와 bounded defer가 실제 DB 시계에서 due가 된 뒤 재획득합니다.
-			time.Sleep(1100 * time.Millisecond)
+			makePartialSlotDue(t, pool, proof.JobKey)
 
 			lease, err := leases.Acquire(ctx, &spec, proof.OwnerInstance)
 			if err != nil {
@@ -80,6 +79,19 @@ func TestRepeatedPartialCollisionAdvancesSlotAndKeepsFreshVideos(t *testing.T) {
 	assertTableCount(t, pool, "source_observations", 4)
 	assertTableCount(t, pool, "source_observation_queue", 4)
 	assertTableCount(t, pool, "source_observation_collisions", 3)
+}
+
+func makePartialSlotDue(t *testing.T, pool *pgxpool.Pool, jobKey string) {
+	t.Helper()
+
+	if _, err := pool.Exec(t.Context(), `
+		UPDATE youtube_collection_job_leases
+		SET next_due_at = CASE WHEN slot_state = 'IDLE' THEN clock_timestamp() ELSE next_due_at END,
+		    retry_not_before = CASE WHEN slot_state = 'DEFERRED' THEN clock_timestamp() ELSE retry_not_before END
+		WHERE job_key = $1 AND slot_state IN ('IDLE', 'DEFERRED')
+	`, jobKey); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func partialSlotLeaseRepository(t *testing.T, pool *pgxpool.Pool) *joblease.Repository {

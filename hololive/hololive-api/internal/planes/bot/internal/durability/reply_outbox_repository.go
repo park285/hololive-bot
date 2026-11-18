@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package durability
 
 import (
@@ -54,7 +34,6 @@ func (o ReplyOutboxInsertOutcome) String() string {
 }
 
 const (
-	// ReplyOutboxAccepted는 Iris durable admission이 끝나고 handoff 확인을 기다리는 lease 없는 상태다.
 	ReplyOutboxAccepted             = "accepted"
 	ReplyOutboxHandoffCompleted     = "handoff_completed"
 	ReplyOutboxRetryablePreDispatch = "retryable_pre_dispatch"
@@ -65,8 +44,6 @@ const (
 	ReplyOutboxDiscarded            = "discarded"
 )
 
-// 발송 정산은 lease를 쥔 submitting 행만 바꾼다. Accepted는 Iris가 이미 수리한 뒤라 발송 경로가 다시
-// 쓰지 않고, handoff reconciler만 확인 결과로 전이한다(reply_outbox_handoff.go).
 type replyOutboxSettlementPolicy struct {
 	sql   string
 	retry bool
@@ -193,9 +170,6 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 	return out, nil
 }
 
-// 재처리는 가변 상태에서 바이트를 다시 만들어 내므로 같은 슬롯에 같은 바이트가 온다는
-// 보장이 없다. 불일치를 실패로 돌려주면 저장본 재발송까지 막혀 아무것도 전달되지 않으므로,
-// 여기서는 관측 신호로만 강등하고 발송 권한은 계속 저장본이 갖는다.
 func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, entry *ReplyOutboxEntry, payloadHash string) (ReplyOutboxInsertOutcome, error) {
 	var recordedHash, recordedClientRequestID string
 

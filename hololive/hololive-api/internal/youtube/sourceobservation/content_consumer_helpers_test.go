@@ -11,7 +11,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// 신규성 근거 자체를 다루지 않는 부재·title·충돌 테스트용이며, 근거 유무를 다루는 테스트는 videoListItemsEnvelope로 항목을 직접 고릅니다.
 func videoListEnvelope(
 	t *testing.T,
 	proof *contract.LeaseProof,
@@ -67,7 +66,6 @@ func channelVideoListEnvelope(
 	return prepareChannelListEnvelope(t, proof, channelID, contract.KindVideoList, generation, completeness, payload)
 }
 
-// Generation 2 항목 시각은 근거와 같아야 합니다.
 func trustedVideoItem(videoID string, publishedAt, checkedAt time.Time) contract.VideoListItemV1 {
 	return contract.VideoListItemV1{
 		VideoID: videoID, ChannelID: testChannelID, Title: videoID, PublishedAt: new(publishedAt),

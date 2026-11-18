@@ -19,7 +19,6 @@ func TestLiveStatementBatchFailureRollsBackEarlierChunks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 64세션의 session/head 128문장이 성공한 뒤 다음 전송에서 실패시킨다.
 	const firstChunkStatements = 2 * liveSessionBatchSize
 
 	statements := make([]dbx.Statement, 2*firstChunkStatements+1)
@@ -52,7 +51,6 @@ func TestLiveStatementBatchFailureRollsBackEarlierChunks(t *testing.T) {
 		t.Fatalf("earlier batch escaped transaction rollback: %d rows", count)
 	}
 
-	// 실패 후 정상 트랜잭션이 같은 입력 전체를 기록할 수 있어야 한다.
 	statements[firstChunkStatements].Args[0] = firstChunkStatements
 
 	if err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
@@ -75,7 +73,7 @@ func TestLiveStatementBatchesPreserveDeferredForeignKeyBoundary(t *testing.T) {
 
 	pool, _, _, _ := startLivePersist(t)
 	ctx := t.Context()
-	// SendBatch의 사전 prepare와 혼동하지 않도록 DDL은 별도 실행한다.
+
 	if _, err := pool.Exec(ctx, "CREATE TABLE hotpath_batch_parent (id integer PRIMARY KEY)"); err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +97,6 @@ func TestLiveStatementBatchesPreserveDeferredForeignKeyBoundary(t *testing.T) {
 		})
 	}
 
-	// 참조 대상은 다음 전송에 있다. 전송 경계가 커밋 경계가 되어서는 안 된다.
 	statements = append(statements, dbx.Statement{
 		SQL:       "INSERT INTO hotpath_batch_parent VALUES ($1)",
 		Args:      []any{1},

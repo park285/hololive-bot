@@ -20,6 +20,10 @@
 
 관리자 멤버 쓰기는 기존 생성 201·변경 200과 `status`·`message`를 유지하며 저장·캐시 결과를 `persisted`·`cacheSynced`·`memberId`·`replayed`로 구분합니다. 동일 생성 입력만 기존 행의 동기화를 복구하고 불일치는 409입니다. [API 서비스 계약](services/hololive-api.md#관리자-멤버-쓰기)의 Console projection 제한을 따릅니다. `settings.update`의 요청 경계는 알 수 없는 필드를 400으로 거부하며 다른 API의 decoder 정책을 일괄 변경하지 않습니다.
 
+## Holodex 외부 API 전송 예외
+
+Holodex 외부 API 클라이언트(`hololive/hololive-shared/internal/service/holodex/provider/apiclient`)만 TLS HTTP/2 전용으로 연결합니다. Holodex upstream의 HTTP/2 SETTINGS frame을 HTTP/1.x malformed response로 해석한 운영 장애가 재현돼 둔 예외이며, 내부 Iris 경로·ingress·server와 다른 외부 호출은 H3 또는 명시적 HTTP/1.1 계약을 유지합니다. Holodex가 HTTP/1.1 또는 H3를 안정적으로 지원한다는 upstream 계약과 회귀 증거가 확보되거나, 예외 경로가 Holodex 외부 API 클라이언트 밖으로 확장될 때 재검토합니다.
+
 ## Source Observation Ownership
 
 `alarm.http`의 관리 통계는 `GET /internal/alarm/count`와 shared `EntryCount` 응답을 사용한다. worker가 방·채널 쌍을 집계하고 admin plane은 전체 알림 목록을 적재하지 않는다. provider를 먼저 배포한 뒤 consumer를 배포한다.

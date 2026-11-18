@@ -120,7 +120,6 @@ func (s *leaseScheduler) discoveryRunners() []RegisteredRunner {
 func (s *leaseScheduler) discoverySnapshot() (free int, excluded []string, startCursor int) {
 	s.cycleMu.Lock()
 
-	// 제외 키를 복사하기 전에 revision을 고정해야 조회 시작 전의 작업 종료도 보존된다.
 	for id, state := range s.candidatePolls {
 		state.snapshotRevision = state.revision
 		s.candidatePolls[id] = state

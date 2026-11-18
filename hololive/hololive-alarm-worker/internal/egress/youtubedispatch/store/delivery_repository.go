@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package store
 
 import (
@@ -46,8 +26,6 @@ func NewDeliveryRepository(db deliverysql.DeliveryDB, logger *slog.Logger) *Deli
 
 const outboxAggregateFailedErrorText = "per-room delivery failed"
 
-// UpdateOutboxAggregateStatuses는 부모 outbox 집계를 자체 READ COMMITTED 트랜잭션 하나로 다시 계산한다. 부모를 ID
-// 순서로 잠근 뒤 다음 statement에서 자식을 집계한다.
 func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, outboxIDs []int64) error {
 	uniqueIDs := deliverysql.UniqueInt64s(outboxIDs)
 	if len(uniqueIDs) == 0 {
@@ -67,8 +45,6 @@ func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, 
 	return nil
 }
 
-// 이미 지워진 부모는 잠금 결과에 없다. 집계는 같은 트랜잭션의 뒤 statement(syncOutboxAggregates)가 하므로, 자식을 함께 바꾸는 호출자는 이 잠금을 자식 잠금보다 먼저 건다(보존
-// 정리·fanout과 같은 부모 → 자식 순서).
 func lockOutboxAggregateParents(ctx context.Context, tx dbx.Querier, outboxIDs []int64) error {
 	if len(outboxIDs) == 0 {
 		return nil
@@ -81,8 +57,6 @@ func lockOutboxAggregateParents(ctx context.Context, tx dbx.Querier, outboxIDs [
 	return nil
 }
 
-// 부모 잠금 뒤의 statement라 잠금 대기 전 snapshot으로 더 늦게 확정된 SENT를 덮어쓰지 않는다. 같은 트랜잭션이 앞서 바꾼 자식도 집계에 들어가므로 자식 전이와 함께 쓰면 부모 집계가 그
-// 전이와 함께 commit되거나 함께 되돌아간다. 새로 기록하는 outbox sent_at·terminal_at은 집계 문장이 채취한 DB 시계다.
 func syncOutboxAggregates(ctx context.Context, tx dbx.Querier, outboxIDs []int64) error {
 	if len(outboxIDs) == 0 {
 		return nil

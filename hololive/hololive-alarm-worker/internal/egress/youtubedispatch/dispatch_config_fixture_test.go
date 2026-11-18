@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// testDispatchConfig는 운영 worker profile의 youtube_delivery 값과 같은 테스트 기준값이다.
-// 생성자는 기본값을 채우지 않으므로 테스트가 명시 값을 넘긴다.
 func testDispatchConfig() Config {
 	return Config{
 		BatchSize:                   50,
@@ -32,7 +30,6 @@ func testDispatchConfig() Config {
 	}
 }
 
-// 지정한 bool 필드는 그대로 쓰고, claim 신선도 기간은 지정한 revive 기간과 주기의 합 이상으로 맞춘다.
 func withTestDispatchConfigDefaults(config *Config) *Config {
 	base := testDispatchConfig()
 

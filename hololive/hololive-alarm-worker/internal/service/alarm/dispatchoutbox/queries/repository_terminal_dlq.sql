@@ -1,4 +1,3 @@
--- 소유한 leased·sending claim을 같은 attempt에서 dlq로 끝낸다. 빈 error는 마지막 오류를 보존한다.
 WITH input AS MATERIALIZED (
     SELECT input.id, input.attempt_count, input.error, input.error_code
     FROM jsonb_to_recordset($1::jsonb) AS input(id BIGINT, attempt_count INT, error TEXT, error_code TEXT)

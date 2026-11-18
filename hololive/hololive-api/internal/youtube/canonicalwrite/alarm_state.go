@@ -9,7 +9,6 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-// 같은 (Kind, PostID) 행은 UpsertAlarmStateBatch가 입력 순서대로 병합하므로 정렬은 안정 정렬이어야 한다.
 func buildCommunityShortsAlarmStates(trackingRows []*domain.YouTubeContentAlarmTracking) []*domain.YouTubeCommunityShortsAlarmState {
 	states := make([]*domain.YouTubeCommunityShortsAlarmState, 0, len(trackingRows))
 

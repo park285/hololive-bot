@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# sync-opt-current.sh 행동 테스트. 실제 설치기를 user·mount namespace의 root로 실행하고, 설치 경로
-# (/etc/containers/systemd, /usr/local/libexec, /etc/stack-secrets, /etc/systemd/system, /etc/nftables.d)는
-# 그 namespace 안에서만 임시 디렉터리로 가린다. staging 검사는 실제 quadlet 생성기가 한다.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -28,7 +25,6 @@ cat >"${fakebin}/hostname" <<'EOF'
 #!/usr/bin/env bash
 echo hololive-seoul
 EOF
-# unit 상태 조회는 inactive·disabled로 보고, 나머지 호출은 기록만 한다.
 cat >"${fakebin}/systemctl" <<'EOF'
 #!/usr/bin/env bash
 printf 'systemctl %s\n' "$*" >>"${SYNC_TEST_EVENTS:?}"
@@ -37,14 +33,12 @@ case "$1" in
   is-enabled) exit 1 ;;
 esac
 EOF
-# map-root-user namespace에는 uid 1000이 없어 런타임 데이터 chown을 기록만 한다.
 cat >"${fakebin}/chown" <<'EOF'
 #!/usr/bin/env bash
 printf 'chown %s\n' "$*" >>"${SYNC_TEST_EVENTS:?}"
 EOF
 chmod +x "${fakebin}"/*
 
-# 설치기가 git archive로 읽는 배포 원본만 담은 fixture 저장소를 만든다.
 make_repo() {
   local repo="$1" path
   mkdir -p "${repo}"
@@ -58,7 +52,6 @@ make_repo() {
     mkdir -p "${repo}/$(dirname "${path}")"
     cp -R "${ROOT_DIR}/${path}" "${repo}/${path}"
   done
-  # 실행 트리 소유권 검사는 실제 호스트 경로 chain을 보므로 호출 인자만 기록한다.
   cat >"${repo}/scripts/deploy/verify-exec-tree-ownership.sh" <<'EOF'
 #!/usr/bin/env bash
 printf 'verify %s\n' "$#" >>"${SYNC_TEST_EVENTS:?}"
@@ -72,7 +65,6 @@ commit_repo() {
   git -C "$1" -c user.name=fixture -c user.email=fixture@example.invalid commit -qm "$2"
 }
 
-# 호스트 경로 대역과 이전 설치 상태(옛 unit, worker profile drop-in, 옛 x-spaces drop-in, 이전 current)를 만든다.
 make_host() {
   local host="$1" x_spaces="$2" installed="${1}/etc-containers-systemd/hololive-bot"
   mkdir -p "${host}"/{etc-containers-systemd,usr-local-libexec,etc-stack-secrets/hololive-bot,etc-systemd-system,etc-nftables.d,run-lock}
@@ -134,7 +126,6 @@ assert_rejected_without_change() {
 base_repo="${tmp}/repo-base"
 make_repo "${base_repo}"
 
-# 1. 정상 설치: staged unit·x-spaces drop-in이 설치되고 설치기가 소유하지 않는 drop-in은 보존된다.
 host="${tmp}/host-ok"
 make_host "${host}" 1
 run_sync "${host}" "${base_repo}" || { cat "${host}/out" >&2; fail "valid units were rejected"; }
@@ -169,7 +160,6 @@ grep -q '^verify ' "${host}/events" || fail "exec-tree ownership verification di
 ! compgen -G "${host}/opt/.quadlet-check.*" >/dev/null || fail "Quadlet check directory was left behind"
 pass "valid units install with x-spaces drop-ins, keep the worker-profile drop-in and record the source revision"
 
-# 2. 생성되지 않는 staged unit은 아무것도 설치하지 않는다.
 broken_repo="${tmp}/repo-broken-unit"
 cp -R "${base_repo}" "${broken_repo}"
 printf '[Container]\nContainerName=broken\n' >"${broken_repo}/deploy/quadlet/hololive-bot/broken.container"
@@ -179,7 +169,6 @@ make_host "${host}" 1
 assert_rejected_without_change "${host}" "${broken_repo}" "broken staged unit"
 pass "a staged unit that does not generate leaves /opt, prestart, units and daemon state untouched"
 
-# 3. x-spaces drop-in은 켜졌을 때만 검사 대상이며, 생성 실패 시 아무것도 설치하지 않는다.
 dropin_repo="${tmp}/repo-broken-dropin"
 cp -R "${base_repo}" "${dropin_repo}"
 printf '[Container]\nUnknownKeyForSyncTest=1\n' \
@@ -197,7 +186,6 @@ installed="${host}/etc-containers-systemd/hololive-bot"
   fail "x-spaces drop-in stayed installed with HOLOLIVE_X_SPACES_ENABLED=0"
 pass "x-spaces drop-ins are part of the staged check only when enabled"
 
-# 4. 호스트 compose.env의 pool 값이 PostgreSQL 연결 예산을 넘으면 아무것도 설치하지 않는다.
 host="${tmp}/host-capacity"
 make_host "${host}" 0
 printf 'BOT_POSTGRES_POOL_MAX_CONNS=40\n' >>"${host}/etc-stack-secrets/hololive-bot/compose.env"
@@ -205,7 +193,6 @@ assert_rejected_without_change "${host}" "${base_repo}" "connection budget" \
   "PostgreSQL connection budget check failed"
 pass "an exhausted PostgreSQL connection budget leaves /opt, prestart, units and daemon state untouched"
 
-# 5. artifact-only 갱신은 현재 runtime bytes·mode를 유지하고 작업 트리의 미검토 설정을 복사하지 않는다.
 host="${tmp}/host-preserved-runtime"
 make_host "${host}" 0
 for path in data logs backups runtime-config artifacts/worker-profile; do
@@ -229,7 +216,6 @@ for backup in "${host}/opt/"current.bak-*; do
 done
 pass "artifact-only sync preserves runtime bytes and metadata without copying runtime configuration"
 
-# 6. 같은 revision을 다시 반영해도 기존 backup을 덮거나 보존 개수만으로 지우지 않는다.
 host="${tmp}/host-retained-backups"
 make_host "${host}" 0
 for number in 1 2 3 4; do

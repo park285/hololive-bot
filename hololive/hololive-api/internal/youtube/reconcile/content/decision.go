@@ -14,7 +14,6 @@ func refreshNotifications(session *reduceSession) {
 	if session.evidence.Kind == contract.KindShortsList {
 		candidates = session.applied
 		if !session.state.Initialized {
-			// 알림 기준 목록은 전체 이력 수집이 아니라 앞선 유효 목록의 저장으로 확정됩니다.
 			candidates = nil
 		}
 	}
@@ -24,8 +23,6 @@ func refreshNotifications(session *reduceSession) {
 			continue
 		}
 
-		// 예정 Premiere는 발견 시 알리지 않는다. 같은 근거로 확정되는 live 세션의 분 전·시작 알림이 공개 알림을 소유하며,
-		// 신규성 판정은 이미 끝났으므로 공개 전환 뒤에도 NEW_VIDEO를 만들지 않는다.
 		if entity.IsPremiere != nil && *entity.IsPremiere {
 			continue
 		}
@@ -58,7 +55,6 @@ func contentWindowInitialized(state *State, evidence *Evidence) bool {
 		return true
 	}
 
-	// 부분 목록은 존재를 증명하지만 빈 부분 목록은 최초 기준 목록이 될 수 없습니다.
 	return state.Initialized || len(evidence.Videos) > 0 || completeEligible(evidence)
 }
 

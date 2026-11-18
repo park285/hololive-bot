@@ -2,7 +2,6 @@
 set -euo pipefail
 
 root_dir="$(git rev-parse --show-toplevel)"
-# 로컬 후보는 별도 manifest로 검사하여 공유 production 태그를 바꾸지 않는다.
 [[ "$#" -le 1 ]] || { echo "usage: $0 [manifest]" >&2; exit 2; }
 manifest="${1:-$root_dir/scripts/ci/final-image-scan-manifest.txt}"
 . "$root_dir/scripts/ci/go-tooling.sh"
@@ -38,7 +37,6 @@ while IFS='|' read -r source platform image; do
         exit 1
       }
       scan_args+=(--image-src podman --platform "$platform")
-      # 태그가 바뀌어도 Trivy와 바이너리 추출이 같은 불변 이미지를 사용한다.
       image="$(podman image inspect --format '{{.Id}}' "$image")"
       ;;
     *)
@@ -81,7 +79,6 @@ while IFS='|' read -r source platform image; do
     [[ -f "$artifact.bin" && ! -L "$artifact.bin" ]]
     sha256sum "$artifact.bin" >"$artifact.sha256"
     "$govulncheck_bin" -mode=extract "$artifact.bin" >"$artifact.extract.json"
-    # stripped binary의 module-level fallback은 코드 부재의 증명이 아니다.
     jq -se 'length == 2 and .[0].name == "govulncheck-extract" and .[0].version == "0.1.0"
       and .[1].goos == "linux" and .[1].goarch == "arm64"
       and (.[1].pkgSymbols | type == "array" and length > 0)' "$artifact.extract.json" >/dev/null

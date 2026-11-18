@@ -1,5 +1,3 @@
--- reducer가 정한 행($2~$16)을 그대로 쓴다. 지금 행이 잠금 안에서 읽은 행($17~$31)과 다르면 0행으로 끝나며,
--- 호출자가 충돌로 보고한다. 제목은 NULL을 빈 문자열로 읽으므로 바뀌지 않은 제목은 $4를 NULL로 보내 저장 표현을 유지한다.
 UPDATE youtube_live_sessions AS session
 SET channel_id = $2,
     status = $3,

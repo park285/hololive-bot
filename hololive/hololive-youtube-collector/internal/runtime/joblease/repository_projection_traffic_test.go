@@ -87,7 +87,6 @@ func (c *candidateTraffic) reset() {
 	c.oracle.Store(0)
 }
 
-// paired_elapsed는 이전·현재 fleet의 교차 실행 전체이며 개별 SQL 지연이 아닙니다.
 func (c *candidateTraffic) report(t *testing.T, phase string, start time.Time) {
 	t.Helper()
 	t.Logf("phase=%s paired_elapsed=%s wire_rx=%d wire_tx=%d header_reads=%d candidate_reads=%d old_candidate_reads=%d", phase, time.Since(start), c.rx.Load(), c.tx.Load(), c.headers.Load(), c.candidates.Load(), c.oracle.Load())
@@ -100,7 +99,6 @@ func measuredCandidatePool(t *testing.T, base *pgxpool.Pool) (*pgxpool.Pool, *ca
 	config := base.Config()
 
 	config.MaxConns, config.MinConns = 1, 0
-	// SQL page의 wire 비용만 비교한다. 호스트 부하에 따라 달라지는 유휴 연결 ping은 측정에서 제외한다.
 	config.ShouldPing = func(context.Context, pgxpool.ShouldPingParams) bool { return false }
 
 	dial := config.ConnConfig.DialFunc
@@ -131,7 +129,6 @@ func measuredCandidatePool(t *testing.T, base *pgxpool.Pool) (*pgxpool.Pool, *ca
 	return pool, traffic
 }
 
-// 다음 due 힌트 추가 이후 wire byte는 측정값이지 비증가 계약이 아닙니다. 지연과 EXPLAIN 실행시간은 측정값이며 CPU 사용률 또는 운영 환경 성능을 뜻하지 않습니다.
 func TestProjectionCandidateTraffic(t *testing.T) {
 	for _, count := range []int{620, 1240, contract.MaxProjectionTargetCount} {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
@@ -392,7 +389,6 @@ func (f *candidateTrafficFleet) arguments() []any {
 func (f *candidateTrafficFleet) advanceEligibility(t *testing.T, cycle int) {
 	t.Helper()
 
-	// 매 cycle 실제 후보가 출입하므로 eligibility version만 읽고 page를 재사용하는 회귀도 잡습니다.
 	_, err := f.base.Exec(t.Context(), `UPDATE youtube_collection_targets SET not_before=CASE WHEN $2::boolean THEN NULL ELSE TIMESTAMPTZ '2099-01-01' END WHERE projection_generation=$1 AND subject_key='channel:00001'`, f.generation, cycle%2 == 0)
 	if err != nil {
 		t.Fatal(err)
@@ -458,7 +454,6 @@ func (f *candidateTrafficFleet) report(t *testing.T, state string, started time.
 			t.Fatalf("불완전한 동시 cycle: AP%d header=%d candidate=%d", ap, traffic.headers.Load(), reads)
 		}
 
-		// 11개 sentinel 포함 후보와 header만 전송하며 대상 수가 커져도 전체 roster를 보내지 않는다.
 		const bytesPerCycle = 8 * 1024
 
 		if bytes := traffic.rx.Load() + traffic.tx.Load(); bytes > 120*bytesPerCycle {
@@ -506,7 +501,6 @@ func (f *candidateTrafficFleet) explainMode(t *testing.T, state, mode string) {
 		t.Fatal(err)
 	}
 
-	// EXECUTE의 인수는 고정 fixture 값과 DB가 발급한 정수 generation뿐입니다.
 	explain := fmt.Sprintf(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) EXECUTE candidate_traffic_plan(%d,ARRAY['community_page']::text[],'youtubejs','community_collect',ARRAY[]::text[],10)`, f.generation)
 
 	var raw []byte
@@ -579,7 +573,6 @@ func seedCandidateTrafficState(t *testing.T, pool *pgxpool.Pool, generation int6
 	case "new":
 		return
 	case "not-due":
-		// 완료한 lease의 불변식 next_due_at = scheduled_for + poll_interval을 지킨다. 실효 due는 둘 중 이른 값이다.
 		if _, err := pool.Exec(t.Context(), `INSERT INTO youtube_collection_job_leases (job_key,provider,job_class,collection_job_kind,subject_key,projection_generation,poll_interval_ms,scheduled_for,next_due_at)
             SELECT 'collector:youtubejs:community_collect:'||subject_key,'youtubejs','SUBJECT','community_collect',subject_key,$1,60000,TIMESTAMPTZ '2099-01-01'-INTERVAL '1 minute',TIMESTAMPTZ '2099-01-01'
             FROM youtube_collection_targets WHERE projection_generation=$1`, generation); err != nil {

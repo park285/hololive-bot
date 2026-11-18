@@ -10,8 +10,6 @@
 
 ## Plan controls
 
-**Decisions:** `DEC-20260904-hololive-karing-regular-chat-egress` (governing), `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership` (constraint), `DEC-20260730-hololive-alarm-egress-lease-removed` (constraint), `DEC-20260517-iris-karing-runtime-capability` (context)
-
 - 기준 source revision은 `hololive-bot@69b2a76b5473a568eda2672e17e6068888a85fdf`이며 현재 변경은 커밋되지 않은 첫 구현을 정정합니다.
 - 일반채팅 여부는 `kakaoroom.Catalog`가 positive fact로 확인해야 합니다. 조회 실패나 미확인 방을 일반채팅으로 추정해 Karing을 보내지 않습니다.
 - 오픈채팅은 기존 `BOT_MARKDOWN_REPLIES`가 활성화된 경우 `SendMarkdown`, 비활성화된 경우 `kakaoformat.Render` 일반 텍스트를 사용합니다.
@@ -125,14 +123,13 @@ From `hololive-bot`:
 
 두 Karing flag presence는 거부하고 `ALARM_SHORT_LINK_BASE_URL`은 정상 로드되어야 하며 build 결과 외 tracked artifact가 생기지 않아야 합니다.
 
-### V05 — Architecture, contract and catalog boundary
+### V05 — 아키텍처와 계약 문서 검증
 
-From `hololive-bot`, then `iris-stack`:
+`hololive-bot`에서 실행합니다.
 
 ```bash
 bash scripts/architecture/check-contract-map.sh
 git diff --check
-bash ../tools/checks/check-decision-catalog.sh check --submodules
 ```
 
 모든 명령이 exit 0이어야 하고 gate는 alarm-worker Markdown을 금지하지 않고 일반채팅 전용 Karing의 room selector와 두 퇴역 flag만 검증해야 합니다.

@@ -162,7 +162,6 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 		{RoomID: "room-live-only", ChannelID: "UC_LIVE_ONLY", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 	}
 
-	// subscriber cache rebuild가 쓰는 타입별 구독 set을 그대로 채운다.
 	for _, alarm := range alarms {
 		for _, alarmType := range alarm.AlarmTypes {
 			cacheStore.addSetMembers(alarmkeys.BuildChannelSubscriberKey(alarm.ChannelID, alarmType), []string{alarm.RoomID})

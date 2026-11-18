@@ -8,8 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
-// ValidateServerRuntime은 HTTP listener를 여는 runtime의 공통 기동 조건을 검사한다.
-// Listener 포트, H3 transport 입력, API 인증 키 순서로 첫 위반을 돌려준다.
 func ValidateServerRuntime(environment string, server *ServerConfig) error {
 	if server == nil {
 		return errors.New("server config is required")
@@ -30,8 +28,6 @@ func ValidateServerRuntime(environment string, server *ServerConfig) error {
 	return nil
 }
 
-// ValidateIrisEgressInputs는 Iris webhook을 받아 Iris로 직접 응답하는 runtime이 webhook·bot 토큰과 base URL 원천을
-// 모두 받았는지 검사한다.
 func ValidateIrisEgressInputs(iris *IrisConfig) error {
 	if iris == nil {
 		return errors.New("iris config is required")
@@ -44,7 +40,6 @@ func ValidateIrisEgressInputs(iris *IrisConfig) error {
 	return ValidateIrisClientInputs(iris)
 }
 
-// ValidateIrisClientInputs는 webhook을 받지 않고 Iris로 발송만 하는 runtime이 bot 토큰과 base URL 원천을 받았는지 검사한다.
 func ValidateIrisClientInputs(iris *IrisConfig) error {
 	if iris == nil {
 		return errors.New("iris config is required")
@@ -58,7 +53,6 @@ func ValidateIrisClientInputs(iris *IrisConfig) error {
 		return errors.New("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
-	// URL 파일의 host는 bot token을 실은 요청의 목적지라 허용 집합 없이 받지 않는다(fail-closed).
 	if strings.TrimSpace(iris.BaseURLFile) != "" && strings.TrimSpace(iris.H3ServerName) == "" && len(iris.BaseURLAllowedHosts) == 0 {
 		return errors.New("IRIS_BASE_URL_FILE requires IRIS_H3_SERVER_NAME or IRIS_BASE_URL_ALLOWED_HOSTS")
 	}
@@ -66,8 +60,6 @@ func ValidateIrisClientInputs(iris *IrisConfig) error {
 	return nil
 }
 
-// ValidateHolodexConfig는 Holodex 요청 시간·수·간격 설정을 검사한다. API 키 필수 여부는 runtime이
-// runtimepolicy.ValidateHolodexAPIKey로 따로 결정한다.
 func ValidateHolodexConfig(config *HolodexConfig) error {
 	if config == nil {
 		return errors.New("holodex config is required")
@@ -84,7 +76,6 @@ func ValidateHolodexConfig(config *HolodexConfig) error {
 	return nil
 }
 
-// ValidateOfficialScheduleRuntimeConfig는 공식 일정 클라이언트 설정과 응답 본문 상한을 검사한다.
 func ValidateOfficialScheduleRuntimeConfig(config OfficialScheduleRuntimeConfig) error {
 	if err := runtimepolicy.ValidateOfficialScheduleBaseURL(config.OfficialSchedule.BaseURL); err != nil {
 		return fmt.Errorf("validate official schedule base URL: %w", err)

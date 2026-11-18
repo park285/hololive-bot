@@ -10,7 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/alicebob/miniredis/v2"
 
@@ -87,9 +87,6 @@ func TestCalendarCardRenderer_RenderCalendarImage_UsesTransportFriendlyCanvas(t 
 		t.Fatalf("png.Decode() error = %v", decErr)
 	}
 
-	// 최종 출력은 카카오 표시폭에 맞춘 calendarOutputWidth로 고정한다.
-	// 내부는 고해상도(canvasWidth)로 그린 뒤 이 폭으로 SSAA 다운스케일하므로,
-	// 카카오가 인라인 표시 시 추가 다운스케일/재압축을 거의 하지 않는다.
 	if got, want := img.Bounds().Dx(), calendarOutputWidth; got != want {
 		t.Fatalf("output width = %d, want %d (kakao display width)", got, want)
 	}
@@ -153,58 +150,63 @@ func TestAwaitCalendarRenderCallRejectsMissingImageData(t *testing.T) {
 }
 
 func TestCalendarCardRenderer_CoalescesConcurrentColdRenders(t *testing.T) {
-	pngData := tinyPNG(t)
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		pngData := tinyPNG(t)
 
-	var requests atomic.Int32
+		var requests atomic.Int32
 
-	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		requests.Add(1)
-		time.Sleep(40 * time.Millisecond)
+		withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requests.Add(1)
+			<-release
 
-		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
-	})))
+			return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
+		})))
 
-	renderer := NewCalendarCardRenderer()
-	entries := []domain.CalendarEntry{{
-		Kind: domain.CelebrationKindBirthday,
-		Member: &domain.Member{
-			ShortKoreanName: testShortKoreanName,
-			Photo:           testAvatarURL,
-		},
-		Day: 15,
-	}}
+		renderer := NewCalendarCardRenderer()
+		entries := []domain.CalendarEntry{{
+			Kind: domain.CelebrationKindBirthday,
+			Member: &domain.Member{
+				ShortKoreanName: testShortKoreanName,
+				Photo:           testAvatarURL,
+			},
+			Day: 15,
+		}}
 
-	start := make(chan struct{})
-	errCh := make(chan error, 12)
+		start := make(chan struct{})
+		errCh := make(chan error, 12)
 
-	var wg sync.WaitGroup
+		var wg sync.WaitGroup
 
-	for range 12 {
-		wg.Go(func() {
-			<-start
+		for range 12 {
+			wg.Go(func() {
+				<-start
 
-			data, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
-			if err == nil && !isPNGData(data) {
-				err = errors.New("render returned invalid PNG")
-			}
+				data, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
+				if err == nil && !isPNGData(data) {
+					err = errors.New("render returned invalid PNG")
+				}
 
-			errCh <- err
-		})
-	}
-
-	close(start)
-	wg.Wait()
-	close(errCh)
-
-	for err := range errCh {
-		if err != nil {
-			t.Fatal(err)
+				errCh <- err
+			})
 		}
-	}
 
-	if got := requests.Load(); got != 1 {
-		t.Fatalf("photo requests = %d, want 1 coalesced cold render", got)
-	}
+		close(start)
+		synctest.Wait()
+		close(release)
+		wg.Wait()
+		close(errCh)
+
+		for err := range errCh {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if got := requests.Load(); got != 1 {
+			t.Fatalf("photo requests = %d, want 1 coalesced cold render", got)
+		}
+	})
 }
 
 func TestCalendarCardRenderer_RenderCalendarImage_ReusesSharedCacheAcrossRenderers(t *testing.T) {
@@ -556,7 +558,6 @@ func TestEntryDisplayName(t *testing.T) {
 
 	m := newCalendarMetrics(1)
 
-	// 이름 없는 멤버의 표시값은 message_strings calendar/unknown(DB 정본)이다.
 	m.strings = loadSeededCalendarStore(t)
 
 	for _, tt := range tests {
@@ -596,21 +597,11 @@ func (s *pngPhotoServer) Close() {
 func newPNGServer(t *testing.T, requests *atomic.Int32) *pngPhotoServer {
 	t.Helper()
 
-	return newDelayedPNGServer(t, requests, 0)
-}
-
-func newDelayedPNGServer(t *testing.T, requests *atomic.Int32, delay time.Duration) *pngPhotoServer {
-	t.Helper()
-
 	pngData := tinyPNG(t)
 	previous := photoClient
 
 	photoClient = newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests.Add(1)
-
-		if delay > 0 {
-			time.Sleep(delay)
-		}
 
 		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 	}))

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# 격리 issuer와 Quadlet 수집기(c: 중앙 hololive-seoul, b: iris-seoul)를 kapu에서 Podman으로 빌드하고 검증된 이미지를
-# 전송한다. 두 호스트 모두 rootful Podman Quadlet이며 원격 교체는 lib/po-central-remote.sh가 소유한다.
 set -Eeuo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "$root/scripts/deploy/lib/source-revision.sh"
@@ -9,7 +7,6 @@ usage() { echo "Usage: $0 <c|b> deploy | <c|b> rollback|check <remote-root>/back
 [[ $# -ge 2 && $# -le 3 ]] || usage
 slot="$1"
 shift
-# slot마다 원격 호스트·배포 루트가 고정된다. 승인·SSH 대상 변수도 slot 이름을 담아 다른 slot에 새지 않게 한다.
 case "$slot" in
   c) remote_root=/opt/hololive-bot/compose ;;
   b) remote_root=/opt/hololive-bot/collector-b ;;
@@ -39,7 +36,6 @@ if [[ "$mode" == deploy ]]; then
   local_stage="$(mktemp -d)"
   trap 'rm -rf "$local_stage"' EXIT
   "$root/scripts/build/build-po-sandbox-artifact.sh" arm64 "$revision" "$version" "$local_stage/issuer" podman
-  # 원격 podman load가 :prod를 바로 옮기지 않도록 :candidate 이름으로 저장한다. :prod는 원격 cutover가 옮긴다.
   collector_image=localhost/hololive-youtube-collector:candidate
   podman build --platform linux/arm64 --format docker \
     --tag "$collector_image" \

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package durability
 
 import (
@@ -68,7 +48,6 @@ var mustSQL = func() func(string) string {
 	}
 }()
 
-// 고정 SQL은 패키지 초기화 때 한 번만 읽는다. 없는 자산은 그 경로의 첫 호출이 아니라 기동에서 드러난다.
 var (
 	commandExecutionClaimSQL        = mustSQL("command_execution_claim.sql")
 	commandExecutionCompleteSQL     = mustSQL("command_execution_complete.sql")
@@ -113,7 +92,6 @@ var (
 	ErrInvalidArgument   = errors.New("durability: invalid argument")
 )
 
-// 123_create_bot_durable_admission_tables.sql의 CHECK와 짝을 이룬다 — 한쪽만 바꾸면 전이가 실패한다.
 const (
 	roomIDRuneLimit         = 256
 	messageIDRuneLimit      = 512
@@ -137,7 +115,6 @@ func ensurePool(pool *pgxpool.Pool) error {
 	return nil
 }
 
-// 운영 exec 모드에서 pgx는 []byte를 bytea로 인코딩해 jsonb 캐스트가 깨진다 — dispatchoutbox jsonbRecordsetParam과 같은 계약.
 func jsonbParam(raw []byte) string {
 	return string(raw)
 }
@@ -212,7 +189,6 @@ func requireClientRequestID(value string) (string, error) {
 	return trimmed, nil
 }
 
-// lease는 밀리초로 절단돼 SQL에 들어가므로, 1ms 미만은 태어나자마자 만료된 lease가 된다.
 func leaseMilliseconds(lease time.Duration) (int64, error) {
 	if lease < time.Millisecond {
 		return 0, errors.Join(ErrInvalidArgument, errors.New("lease duration must be at least 1ms"))
@@ -221,8 +197,6 @@ func leaseMilliseconds(lease time.Duration) (int64, error) {
 	return lease.Milliseconds(), nil
 }
 
-// CHECK 위반은 전이 자체를 실패시켜 행을 claim 상태에 가둔다. 진단 문자열 때문에 원장이 막히는 것보다
-// 잘린 진단이 낫고, 잘렸다는 사실과 원래 길이를 남겨 사후 조사에서 오독하지 않게 한다.
 func clampColumnText(value string, limitBytes int) string {
 	if limitBytes <= 0 || len(value) <= limitBytes {
 		return value

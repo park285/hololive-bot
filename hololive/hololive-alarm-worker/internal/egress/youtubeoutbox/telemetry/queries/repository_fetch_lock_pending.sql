@@ -1,7 +1,3 @@
--- 기록 대상 선택과 lease(locked_at) 획득을 한 문장으로 묶는다. FOR UPDATE SKIP LOCKED는 다른
--- 인스턴스가 잡고 있는 행을 기다리지 않고 건너뛰고, 잠근 뒤의 재검사는 그사이 lease가 갱신된 행을 뺀다.
--- UPDATE ... RETURNING은 순서를 보장하지 않으므로 호출자가 (event_at, id) 순으로 다시 정렬한다.
--- RETURNING 열 순서는 repository_scan.go의 scanTelemetryRow와 같아야 한다.
 WITH picked AS (
     SELECT id
     FROM youtube_notification_delivery_telemetry

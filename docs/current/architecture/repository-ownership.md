@@ -44,11 +44,10 @@ YouTube outbox dispatcher도 `hololive-alarm-worker/internal/egress/youtubedispa
 
 - API canonical writer와 worker dispatcher의 module 소유권은 Go `internal/` 컴파일러 경계가 보장합니다.
 - 공유 SDK 표면의 import 위치를 고정하는 문자열 gate는 두지 않습니다. 발송·저장 동작의 회귀는 해당 패키지 시험으로 확인합니다.
-- `repository-ownership.allowlist`는 PostgreSQL table의 owner/writer/reader 선언이며 gate 입력이 아닙니다. `check-sql-ownership.py`는 SQL 안전 정책을, `check-repository-ownership.sh`는 API·template의 native 실행 권한 제한을 검사합니다.
+- `repository-ownership.allowlist`는 PostgreSQL table의 owner/writer/reader 선언이며 gate 입력이 아닙니다. `check-sql-ownership.py`는 SQL 안전 정책을, golangci-lint `depguard`의 `hololive-native-exec` 규칙은 API·template의 native 실행 권한 제한을 검사합니다.
 
 ## Validation
 
 ```bash
-./scripts/architecture/check-repository-ownership.sh
 ./scripts/architecture/ci-boundary-gate.sh
 ```

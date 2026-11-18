@@ -25,11 +25,6 @@ const (
 
 const maxStoredErrorBytes = 2048
 
-// bearer 패턴이 kv 패턴보다 먼저 돌아야 "Authorization: Bearer x"에서 값 잔여물이 남지 않는다.
-// KV 패턴은 대괄호로 감싼 값 전체를 먼저 소비해 bracket-prefixed secret도 남김없이 지운다.
-// 치환 산출물 [redacted]도 같은 분기로 다시 치환되므로 결과는 멱등이고,
-// quoted 패턴의 opener 앞글자 제한은 닫는 quote를 여는 quote로 오인해
-// 두 인용구 사이 평문까지 지우는 것을 막는다.
 var (
 	storedErrorBearerPattern = regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/=%!-]+`)
 	storedErrorKVPattern     = regexp.MustCompile(`(?i)\b([\w.-]*(?:authorization|token|secret|password|passwd|credential|cookie|signature)|api[-_]?key|apikey)["']?\s*[:=]\s*["']?(?:\[[^\s"',;)}]+|[^\s"',;)\]}]+)`)
@@ -109,7 +104,6 @@ func classifyInfraErrorCode(cause error) string {
 		return ErrorCodeNetwork
 	}
 
-	// ErrNotSent(egress 거부·dial 전 resolve 실패)는 ErrTransport가 아니므로 함께 network로 분류한다.
 	if errors.Is(cause, iris.ErrTransport) || errors.Is(cause, iris.ErrNotSent) {
 		return ErrorCodeNetwork
 	}

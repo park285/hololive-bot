@@ -18,7 +18,6 @@ func (n failingMemberNames) GetMemberName(context.Context, string) (string, erro
 	return "", n.err
 }
 
-// recordingMemberNames는 표시명을 조회한 채널을 차례로 기록하고 표시명이 없는 것으로 돌려준다.
 type recordingMemberNames struct {
 	mu       sync.Mutex
 	channels []string

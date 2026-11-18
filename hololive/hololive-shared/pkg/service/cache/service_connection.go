@@ -90,12 +90,11 @@ func cacheClientOptions(config Config, addr string) (valkey.ClientOption, error)
 		opts.TLSConfig = transport
 		opts.Dialer = net.Dialer{Timeout: constants.ValkeyTimeout.DialTimeout}
 		opts.Sentinel = valkey.SentinelOption{
-			MasterSet: config.SentinelMasterSet,
-			Username:  config.SentinelUsername,
-			Password:  config.SentinelPassword,
-			TLSConfig: transport,
-			Dialer:    opts.Dialer,
-			// 알림을 놓친 전환도 회복하되 직접 주소로 돌아가는 대체 경로는 만들지 않는다.
+			MasterSet:               config.SentinelMasterSet,
+			Username:                config.SentinelUsername,
+			Password:                config.SentinelPassword,
+			TLSConfig:               transport,
+			Dialer:                  opts.Dialer,
 			TopologyRefreshInterval: 5 * time.Second,
 		}
 
@@ -132,7 +131,6 @@ func cacheClientOptions(config Config, addr string) (valkey.ClientOption, error)
 	return opts, nil
 }
 
-// Close는 멱등이며 valkey client 닫기는 오류를 돌려주지 않으므로 항상 nil을 반환한다.
 func (c *Service) Close() error {
 	c.closeOnce.Do(func() {
 		if c.client == nil {

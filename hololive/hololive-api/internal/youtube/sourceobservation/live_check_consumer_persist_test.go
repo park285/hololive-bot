@@ -59,7 +59,6 @@ func TestChannelLiveCheckStoresLatestWithoutLiveLifecycle(t *testing.T) {
 	}
 
 	assertTableCount(t, pool, "youtube_live_pending_ends", 0)
-	// 앞선 COMPLETE live_snapshot의 slot 하나만 남고 채널 확인은 slot을 더하지 않는다.
 	assertTableCount(t, pool, "youtube_live_absence_slots", 1)
 	assertApplicationDecision(t, pool, id, channelLiveCheckEntityKind, liveCheckDecisionApplied)
 }
@@ -93,8 +92,6 @@ func TestChannelLiveCheckOlderObservationKeepsNewerUnknown(t *testing.T) {
 	assertApplicationDecision(t, pool, olderID, channelLiveCheckEntityKind, liveCheckDecisionNotNewer)
 }
 
-// 같은 effective_at에서는 observation_id가 큰 관측이 이기고, retention으로 ID가 지워진 최신값은
-// 같은 시각의 관측이 순서를 증명할 수 없으므로 유지된다.
 func TestChannelLiveCheckSameEffectiveTimeOrdering(t *testing.T) {
 	t.Parallel()
 
@@ -211,7 +208,6 @@ var untrustedVideoCheckCases = []struct {
 		decision: videoLifecycleIdentityMismatch,
 	},
 	{
-		// 시작을 관측한 LIVE의 identity_missing은 수명을 바꾸지 않고 해소 불가 추적만 시작한다.
 		name: "identity missing",
 		payload: func(*contract.LeaseProof) contract.VideoLiveCheckV1 {
 			return unknownVideoCheck(contract.LiveCheckReasonIdentityMissing)
@@ -550,7 +546,6 @@ func consumeLiveChecks(ctx context.Context, t *testing.T, consumer *Consumer) {
 	}
 }
 
-// 관측 ID 제거는 retention의 ON DELETE SET NULL 결과를 재현한다.
 func moveChannelLiveCheckClock(t *testing.T, pool *pgxpool.Pool, at time.Time, clearObservation bool) {
 	t.Helper()
 

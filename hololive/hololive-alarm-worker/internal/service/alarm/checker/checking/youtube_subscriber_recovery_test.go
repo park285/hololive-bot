@@ -94,7 +94,6 @@ func TestYouTubeCheckerCheck_RecoversEvictedSubscriberSetFromDB(t *testing.T) {
 		require.NoError(t, repo.Add(t.Context(), alarm))
 	}
 
-	// 구독 set이 evict된 상태: registry에는 채널이 있지만 alarm:channel_subscribers:{ch}가 없다.
 	checker, cacheClient := newSubscriberRecoveryChecker(t, pool)
 
 	notifications, err := checker.Check(t.Context(), testTargetPolicy())
@@ -102,7 +101,6 @@ func TestYouTubeCheckerCheck_RecoversEvictedSubscriberSetFromDB(t *testing.T) {
 	require.Len(t, notifications, 1)
 	require.Equal(t, testRoomID1, notifications[0].RoomID)
 
-	// read-through: PG 결과는 이번 cycle에만 쓰고, 동시 구독 해지와 경합하지 않도록 set을 다시 채우지 않는다.
 	warmed, err := cacheClient.SMembers(t.Context(), alarmkeys.BuildChannelSubscriberKey(recoveryChannelID, domain.AlarmTypeLive))
 	require.NoError(t, err)
 	require.Empty(t, warmed)
@@ -116,7 +114,6 @@ func TestYouTubeCheckerCheck_CachedSubscribersDoNotHidePendingDBFailure(t *testi
 	require.NoError(t, err)
 
 	notifications, err := checker.Check(t.Context(), testTargetPolicy())
-	// cache만으로 구독자를 확정해도 durable 미발행 후보 조회 실패를 숨기지 않는다.
 	require.ErrorIs(t, err, errSubscriberDBUnavailable)
 	require.ErrorContains(t, err, "load pending")
 	require.Empty(t, notifications)

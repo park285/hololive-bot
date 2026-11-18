@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package template
 
 import (
@@ -59,8 +39,6 @@ func NewRenderer(pool *pgxpool.Pool, logger *slog.Logger) *Renderer {
 	}
 }
 
-// 저장 완료 후 시작한 호출은 새 버전을 사용하며, 저장과 겹친 호출은 이전 버전을 사용할 수 있습니다. 템플릿 획득 대기는 최대 5초이며 더 짧은 호출자 deadline을 보존합니다. 실행은 호출자 취소와
-// 출력·단계·시간 예산을 따르며 실패하면 부분 결과 없이 오류를 돌려줍니다. 본문 변형은 발송 경로가 정하며, 그 변형의 행이 없으면 다른 변형으로 대체하지 않고 ErrTemplateNotFound입니다.
 func (r *Renderer) Render(ctx context.Context, key domain.TemplateKey, channelID string, format domain.TemplateFormat, data any) (string, error) {
 	tmpl, err := r.getTemplate(ctx, key, channelID, format)
 	if err != nil {
@@ -70,10 +48,6 @@ func (r *Renderer) Render(ctx context.Context, key domain.TemplateKey, channelID
 	return executeTemplate(ctx, tmpl, data)
 }
 
-// templateFuncs는 공용 함수와 크기를 늘릴 수 있는 builtin(print·printf·println·html·js·urlquery)의 제한판입니다.
-// 결과가 입력보다 커질 수 있는 함수는 모두 파생 값 불변식(renderer_guard.go)을 지키며, 상한 안에서는 원래 함수와
-// 같은 결과를 냅니다. Trim·displayline·trustedlink·default·contains·hasPrefix·formatNumber·timeAgo·add는 결과가 입력
-// 크기를 넘지 않거나 고정 길이입니다.
 var templateFuncs = template.FuncMap{
 	"truncate":       boundedTruncate,
 	"displayline":    normalizeTemplateDisplayLine,
@@ -96,16 +70,15 @@ var templateFuncs = template.FuncMap{
 	"stripTags":      guardStringFunc("stripTags", stripTags),
 	"urlEncode":      guardStringFunc("urlEncode", urlEncode),
 	"mdsafe":         guardStringFunc("mdsafe", kakaotext.MarkdownLiteral),
-	// 복사할 명령어는 숨은 문자를 삽입하지 않고 Markdown 이스케이프로 보호합니다.
-	"mdescape": guardStringFunc("mdescape", kakaoformat.EscapeMarkdown),
-	"print":    boundedPrint,
-	"printf":   boundedSprintf,
-	"println":  boundedPrintln,
-	"html":     boundedHTML,
-	"js":       boundedJS,
-	"urlquery": boundedURLQuery,
-	"add":      func(a, b int) int { return a + b },
-	"dict":     boundedDict,
+	"mdescape":       guardStringFunc("mdescape", kakaoformat.EscapeMarkdown),
+	"print":          boundedPrint,
+	"printf":         boundedSprintf,
+	"println":        boundedPrintln,
+	"html":           boundedHTML,
+	"js":             boundedJS,
+	"urlquery":       boundedURLQuery,
+	"add":            func(a, b int) int { return a + b },
+	"dict":           boundedDict,
 }
 
 func toInt64(v any) (int64, bool) {
@@ -173,13 +146,12 @@ func isReflectFloat(kind reflect.Kind) bool {
 
 func uintToInt64(u uint64) (int64, bool) {
 	if u > math.MaxInt64 {
-		return 0, false // 오버플로우
+		return 0, false
 	}
 
 	return int64(u), true
 }
 
-// 호출자는 이 값을 기존과 같이 %v 표기로 출력합니다.
 func floatToInt64(f float64) (int64, bool) {
 	if math.IsNaN(f) || f >= 0x1p63 || f < -0x1p63 {
 		return 0, false
@@ -201,7 +173,6 @@ func formatNumber(v any) string {
 	return formatNumberInt64(n)
 }
 
-// 부호를 문자열에서 분리해 MinInt64도 재귀 없이 처리합니다.
 func formatNumberInt64(n int64) string {
 	digits := strconv.FormatInt(n, 10)
 	sign := ""
@@ -269,7 +240,6 @@ func formatNumberKRInt64(n int64) string {
 	return sign + formatTenths(roundedTenths(n, 100_000_000), "억")
 }
 
-// 부호를 뒤집기 전에 몫과 나머지로 나누므로 MinInt64의 크기(2^63)도 overflow 없이 다룹니다.
 func roundedTenths(n, unit int64) int64 {
 	step := unit / 10
 	quotient, remainder := n/step, n%step

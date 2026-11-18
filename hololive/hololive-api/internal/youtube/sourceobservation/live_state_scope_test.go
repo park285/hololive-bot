@@ -23,16 +23,13 @@ import (
 )
 
 const (
-	scopeChannelID = "UC_SCOPE"
-	// 종료 후보 없이 pending(D2)이 남은 ENDED 세션이다.
+	scopeChannelID      = "UC_SCOPE"
 	scopeEndedPendingID = "end-1"
 	scopeEndedSeventhID = "end-7"
 	scopeEndedLastID    = "end-40"
 	scopeNewUpcomingID  = "new-up"
 )
 
-// loadUnscopedLiveState는 축소 전 적재의 oracle이다. 주어진 영상을 상태와 관계없이 모두 읽고
-// 무시한 부재 이력도 생략하지 않는다.
 func loadUnscopedLiveState(ctx context.Context, tx dbx.Tx, videoIDs []string) (live.State, error) {
 	state := live.State{Sessions: map[string]live.SessionState{}, PendingEnds: map[string]live.PendingEnd{}}
 	if err := loadLiveSessions(ctx, tx, &state, nil, videoIDs); err != nil {
@@ -105,15 +102,12 @@ func seedLiveScopeFixture(t *testing.T, pool *pgxpool.Pool, base time.Time) {
 		        $1::timestamptz - interval '1 hour', NULL, true, true),
 		       ('orphan-1', $2, 'EXPLICIT_END', 905, $1::timestamptz - interval '1 hour', $1::timestamptz - interval '1 hour',
 		        $1::timestamptz - interval '1 hour', NULL, true, true)`, base, scopeChannelID)
-	// head-1은 session 행 없이 ENDED head만 남은 영상이고 orphan-1은 session·head가 모두 없는 영상(D1)이다.
-	// 둘 다 저장된 session이 없어 종료를 새로 보관하므로 payload에 오르면 pending을 계속 읽는다.
 	seed(`
 		INSERT INTO youtube_live_reconciliation_heads (video_id, status, last_upcoming_positive_at, last_upcoming_positive_seen_at,
 		    last_live_positive_at, last_live_positive_seen_at, ended_at, end_reason, ignored_absence_scheduled_for)
 		VALUES ('head-1', 'ENDED', $1::timestamptz - interval '3 hours', $1::timestamptz - interval '3 hours',
 		        $1::timestamptz - interval '3 hours', $1::timestamptz - interval '3 hours', $1::timestamptz - interval '2 hours',
 		        'EXPLICIT_END', ARRAY[$1::timestamptz - interval '4 hours'])`, base)
-	// end-due는 session이 ENDED인데 head에 due candidate가 남은 행이다. 채널 범위 적재가 이 정리를 놓치면 안 된다.
 	seed(`
 		INSERT INTO youtube_live_reconciliation_heads (video_id, status, last_upcoming_positive_at, last_upcoming_positive_seen_at,
 		    last_live_positive_at, last_live_positive_seen_at, end_candidate_kind, end_candidate_observation_id, next_end_check_at,
@@ -189,20 +183,17 @@ func requireSameLiveDecision(t *testing.T, full *live.State, fullDecision, narro
 		delete(fullPending, pending.VideoID)
 	}
 
-	// full에만 있는 pending은 축소 적재가 읽지 않은 행이며 reducer도 바꾸지 않아야 한다.
 	for videoID := range fullPending {
 		require.Equal(t, full.PendingEnds[videoID], fullPending[videoID], "unloaded pending %s was changed", videoID)
 	}
 }
 
 type liveScopeScenario struct {
-	name          string
-	evidence      live.Evidence
-	payloadEnded  []string
-	unloadedEnded []string
-	// frozenPending는 payload에 오른 종료 후보 없는 ENDED 세션의 pending(D2)이다. 읽거나 잠그지 않는다.
-	frozenPending []string
-	// loadedPending는 종료 후보가 남은 ENDED와 기본 채널 범위 밖에서 payload로 오른 pending이다.
+	name              string
+	evidence          live.Evidence
+	payloadEnded      []string
+	unloadedEnded     []string
+	frozenPending     []string
 	loadedPending     []string
 	omitActiveHistory bool
 }
@@ -363,7 +354,6 @@ func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, channelVideoIDs []
 	require.NoError(t, err)
 
 	if scenario.omitActiveHistory {
-		// 축소 전 소비자는 positive replay가 없어도 현재 slot을 읽었다.
 		require.NoError(t, loadLiveAbsenceSlots(ctx, tx, &full, nil, nil,
 			scenario.evidence.ScheduledFor, scenario.evidence.Coverage.RequestedChannelIDs))
 	} else {
@@ -380,10 +370,8 @@ func checkLiveScopeScenario(t *testing.T, pool *pgxpool.Pool, channelVideoIDs []
 
 	requireSameLiveDecision(t, &full, fullDecision, narrowedDecision, omitted)
 
-	// due candidate 정리로 저장되는 ENDED는 생략한 이력도 비운다.
 	require.NoError(t, persistLiveDecision(ctx, tx, narrowed.Sessions, &narrowedDecision))
 
-	// 읽지 않은 동결 pending은 삭제 keep-list에 없어도 그 세션이 dirty가 아니므로 남는다.
 	for _, videoID := range scenario.frozenPending {
 		var observationID int64
 
@@ -444,7 +432,6 @@ func seedEndedHistoryFixture(t *testing.T, pool *pgxpool.Pool, base time.Time, h
 		    scheduled_for, ended_at, negative_eligible, scope_covers)
 		VALUES ('end-fin', $2, 'EXPLICIT_END', 900, $1, $1, $1, NULL, true, true),
 		       ('end-con', $2, 'EXPLICIT_END', 901, $1, $1, $1, NULL, true, true)`, base, testChannelID)
-	// session이 ENDED인데 head에 due candidate가 남은 행이다. finalizer는 end-fin을 먼저 고른다.
 	seed(`
 		INSERT INTO youtube_live_reconciliation_heads (video_id, status, last_live_positive_at, last_live_positive_seen_at,
 		    end_candidate_kind, end_candidate_observation_id, next_end_check_at, ignored_absence_scheduled_for)
@@ -482,7 +469,6 @@ func TestLiveEndedSessionSaveClearsIgnoredHistory(t *testing.T) {
 	require.True(t, liveHeadCandidateCleared(t, pool, "end-fin"))
 	require.False(t, liveHeadCandidateCleared(t, pool, "end-con"), "finalizer must handle one due head per call")
 
-	// YouTube.js streams 탭은 과거 ENDED를 payload에 싣는다. 채널 범위의 due candidate도 함께 정리된다.
 	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession("end-con", testStatusEnded))
 	require.True(t, liveHeadCandidateCleared(t, pool, "end-con"))
 
@@ -534,7 +520,6 @@ func TestLivePartialFirstPositiveReplaysAbsences(t *testing.T) {
 			defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 			if test.status == testStatusLive {
-				// 첫 LIVE 직후에도 이미 무시한 과거 slot은 다시 세지 않는다.
 				_, err = tx.Exec(ctx, `UPDATE youtube_live_reconciliation_heads
 					SET ignored_absence_scheduled_for=ARRAY[$2::timestamptz]
 					WHERE video_id=$1`, test.videoID, base.Add(10*time.Minute))
@@ -596,7 +581,6 @@ func TestLiveConsumedPartialMatchesFullyLoadedDecision(t *testing.T) {
 	evidence, err := liveEvidenceFromObservation(&observation)
 	require.NoError(t, err)
 
-	// 같은 slot의 정본 coverage가 이미 있어도 PARTIAL은 부재를 새로 만들거나 덮어쓰지 않는다.
 	_, err = pool.Exec(ctx, `
 		INSERT INTO youtube_live_absence_slots
 		    (observation_id, scheduled_for, evidence_sha256, effective_at, received_at, scope_sha256, coverage)
@@ -755,7 +739,6 @@ func TestLivePartialCurrentSlotReplaysAfterDelayedVideoCheck(t *testing.T) {
 			observation := publishHolodexReplayPartial(t, publisher, &holodexProof, companion)
 			before := assertPartialCurrentSlotReplay(t, pool, consumer, observation, completeID)
 
-			// 다음 PARTIAL에는 저장된 slot이 없으므로 빠진 LIVE를 새 부재로 세지 않는다.
 			holodexProof = advanceLease(ctx, t, pool, &holodexProof, time.Minute)
 			publishHolodexReplayPartial(t, publisher, &holodexProof, companion)
 			require.NoError(t, consumer.Consume(ctx, liveClaimOptions()))
@@ -799,7 +782,6 @@ func seedDelayedLivePromotion(t *testing.T, pool *pgxpool.Pool, publisher *publi
 	assertTableCount(t, pool, "youtube_live_absence_slots", 1)
 	require.Equal(t, testStatusUpcoming, liveSessionStatus(t, pool))
 
-	// 지원되는 schema/generation의 영상 확인을 실제 Claim/Finalize로 뒤늦게 소비한다.
 	publishLiveCheck(ctx, t, publisher, videoLiveCheckEnvelope(t, videoProof, liveVideoCheck(contract.VideoAvailabilityPublic)))
 	consumeLiveChecks(ctx, t, consumer)
 	require.Equal(t, testStatusLive, liveSessionStatus(t, pool))

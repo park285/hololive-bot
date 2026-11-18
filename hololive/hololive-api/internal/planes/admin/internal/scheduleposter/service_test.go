@@ -219,7 +219,6 @@ func testService(store *fakeStore, sources sourceClient, members ...*domain.Memb
 
 var xPages = map[string]string{"": "statuses_page1.json", "page2": "statuses_page2.json", "page3": "statuses_page3.json"}
 
-// collectEnd는 collect의 마지막 단계(ExpirePending)에서 수집이 끝났다고 알린다.
 type collectEnd struct {
 	*fakeStore
 

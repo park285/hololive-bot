@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package lifecycle
 
 import (
@@ -52,8 +32,6 @@ func NewBotLifecycle(logger *slog.Logger, cacheClient CacheReadiness, irisClient
 	}
 }
 
-// Start는 Valkey 미구성·준비 실패만 기동 오류로 돌려주고, 그 뒤에는 ctx가 끝날 때까지 돌아오지 않는다. Iris 준비
-// 확인 실패는 기동을 막지 않는다. 그동안 기록된 응답의 발송 재시도는 reply outbox가 맡는다.
 func (l *BotLifecycle) Start(ctx context.Context) error {
 	l.logInfo("Starting Hololive KakaoTalk Bot...")
 

@@ -1,9 +1,3 @@
-# /// script
-# requires-python = ">=3.15,<3.16"
-# dependencies = ["scikit-learn==1.9.1"]
-# ///
-"""공개 제목과 DB 표본으로 방송자 모델을 학습하고 고정 holdout에서 비교한다."""
-
 import argparse
 from collections import Counter
 from datetime import datetime
@@ -121,7 +115,6 @@ def load_rows(rules, terms):
             "group": selected["unit"] + ":" + re.sub(r"\W+", "", remove_identity(text, terms)),
         })
 
-    # 실제 Go 판별기의 출력을 사용하며 Python에 룰을 다시 구현하지 않는다.
     command = ["go", "run", "./hololive/hololive-shared/pkg/domain/mekparkhost/cmd/classify-titles"]
     request = [{key: row[key] for key in ("video_id", "channel_id", "title")} for row in rows]
     baseline = subprocess.run(command, cwd=ROOT, input=json.dumps(request, ensure_ascii=False), text=True,
@@ -348,7 +341,7 @@ def run(output):
                           "reviewed_single": {key: report["models"][variant]["reviewed_single"][key] for key in headline_keys}}, ensure_ascii=False), flush=True)
     report["baselines"]["rules_reviewed_single"] = score_predictions([row for row in reviewed if row["label"]], rule_predictions, labels)
     input_paths = [Path(__file__).resolve(), HERE / "public-titles.json", HERE / "event-times.json", HERE / "review-labels.json",
-                   HERE / "experiment.py.lock", DOMAIN / "rules.json", DOMAIN / "identify.go", DOMAIN / "testdata/title_corpus.json",
+                   HERE / "pyproject.toml", HERE / "uv.lock", DOMAIN / "rules.json", DOMAIN / "identify.go", DOMAIN / "testdata/title_corpus.json",
                    DOMAIN / "cmd/classify-titles/main.go"]
     report["input_sha256"] = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in input_paths}
     report["model_sha256"] = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(model_dir.glob("*.joblib"))}
@@ -378,7 +371,7 @@ def predict_saved(output, unit, title):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description="공개 제목과 DB 표본으로 방송자 모델을 학습하고 고정 holdout에서 비교한다.")
     parser.add_argument("--output", type=Path, default=ROOT / ".tmp/mekpark-host-ml")
     parser.add_argument("--predict", help="저장된 실험 모델로 제목 하나의 후보를 확인한다.")
     parser.add_argument("--unit", choices=("unit-b", "achrora"))

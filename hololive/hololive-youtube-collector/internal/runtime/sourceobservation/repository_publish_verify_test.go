@@ -67,7 +67,6 @@ func stalePublishContract(ctx context.Context, t *testing.T, pool *pgxpool.Pool,
 	}
 }
 
-// 자기 target 비활성은 lease membership 범위의 행 수를 바꾸므로 target 조회보다 앞선 membership 판정에서 거절된다.
 func TestPublishVerificationKeepsFailurePrecedence(t *testing.T) {
 	type breaker func(context.Context, *testing.T, *pgxpool.Pool, *contract.LeaseProof)
 

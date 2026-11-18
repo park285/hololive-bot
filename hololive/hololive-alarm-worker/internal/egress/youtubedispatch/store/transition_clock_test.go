@@ -76,7 +76,6 @@ func TestFanoutFailureRetryDueCountsFromDatabaseClockAfterLockWait(t *testing.T)
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
 
-	// 첫 실패의 다음 시도 횟수는 1이므로 지연은 RetryBackoff(1초) 한 번이다.
 	const backoff = time.Second
 
 	release := holdRowLock(t, pool, lockOutboxRowSQL, outboxID)
@@ -200,7 +199,6 @@ const (
 	lockOutboxRowSQL   = `SELECT id FROM youtube_notification_outbox WHERE id = $1 FOR UPDATE`
 )
 
-// 반환한 release는 전이가 그 잠금에서 기다리기 시작한 것을 확인하고 잠시 더 머문 뒤 잠금을 풀며, 푼 직전의 DB 시계를 돌려준다.
 func holdRowLock(t *testing.T, pool *pgxpool.Pool, lockQuery string, id int64) func() time.Time {
 	t.Helper()
 
@@ -219,13 +217,11 @@ func holdRowLock(t *testing.T, pool *pgxpool.Pool, lockQuery string, id int64) f
 			var waiting int64
 
 			err := pool.QueryRow(t.Context(), `
-				SELECT count(pid) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()
-			`).Scan(&waiting)
+				SELECT count(*) FROM pg_stat_activity WHERE $1::int = ANY(pg_blocking_pids(pid))
+			`, tx.Conn().PgConn().PID()).Scan(&waiting)
 
 			return err == nil && waiting > 0
 		}, 10*time.Second, 20*time.Millisecond, "transition never waited on the row lock")
-
-		time.Sleep(300 * time.Millisecond)
 
 		var releasedAt time.Time
 

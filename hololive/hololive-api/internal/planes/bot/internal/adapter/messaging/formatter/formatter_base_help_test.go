@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package formatter
 
 import (
@@ -35,8 +15,6 @@ import (
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// renderFailureMessage는 시드 message_strings error/command_processing_failed 문구다. 템플릿 렌더 실패 응답은
-// 코드 대체 문구 대신 이 DB 정본 문구를 쓴다.
 const renderFailureMessage = "❌ 명령 처리 중 오류가 발생했습니다."
 
 func setupFormatterTestStore(t *testing.T) *messagestrings.Store {
@@ -198,7 +176,6 @@ func TestGraduatedWarningPreservesLiteralAndProfileBoundary(t *testing.T) {
 		visible := kakaoformat.Render(message)
 		require.Contains(t, visible, warning, format)
 		require.Contains(t, visible, "\n\n"+profile, format)
-		// 강조는 RichText 변형에만 둔다.
 		require.Equal(t, format == domain.TemplateFormatRichText, strings.HasPrefix(message, "**"), format)
 	}
 }

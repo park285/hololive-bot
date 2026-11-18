@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package tier
 
 import (
@@ -28,10 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// dueCheckSlack은 정렬 tick이 깨어나는 지연이 tick마다 달라도 같은 주기의 점검을 놓치지 않게 하는 비교 허용치다.
-// 다음 tick 시작이 이전 tick 시작+간격보다 몇 ms 이르면 Tier1(1분) 채널이 한 tick을 건너뛰고 2분마다 점검된다.
-// 평가 창 slack(scheduler 패키지)과 같은 근거(tick 깨어남 지연 흡수)로 두며, 가장 짧은 Tier 간격(1분)보다 충분히 작아
-// 3분 이상 간격의 채널을 한 tick 앞당겨 점검하지 않는다.
 const dueCheckSlack = 15 * time.Second
 
 func reachedWithSlack(now, at time.Time) bool {
@@ -57,12 +33,11 @@ type TieredScheduler struct {
 func NewTieredScheduler(logger *slog.Logger) *TieredScheduler {
 	return &TieredScheduler{
 		states:        make(map[string]*channelScheduleState),
-		fullRefreshAt: time.Time{}, // zero value -> 첫 호출 시 즉시 full refresh
+		fullRefreshAt: time.Time{},
 		logger:        logger,
 	}
 }
 
-// UpdateChannelState도 같은 now를 받아야 다음 점검 시각이 처리 시간만큼 밀리지 않는다.
 func (ts *TieredScheduler) SelectDueChannels(now time.Time, channelIDs []string) []string {
 	ts.mu.Lock()
 
@@ -101,7 +76,6 @@ func (ts *TieredScheduler) SelectDueChannels(now time.Time, channelIDs []string)
 	return due
 }
 
-// UpdateChannelState는 평가를 끝낸 채널의 다음 점검 시각을 now(평가한 iteration 시각) 기준으로 정한다.
 func (ts *TieredScheduler) UpdateChannelState(now time.Time, channelID string, streams []*domain.Stream) {
 	nearest := nearestUpcomingStart(streams, now)
 

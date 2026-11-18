@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package formatter
 
 import (
@@ -48,7 +28,6 @@ func WithMessageStrings(store *messagestrings.Store) Option {
 	return func(f *ResponseFormatter) { f.messageStrings = store }
 }
 
-// WithLogger는 템플릿 렌더 오류를 기록할 logger를 주입한다. 주입하지 않으면 렌더 오류를 기록하지 않는다.
 func WithLogger(logger *slog.Logger) Option {
 	return func(f *ResponseFormatter) { f.logger = logger }
 }
@@ -65,7 +44,6 @@ func (f *ResponseFormatter) foldSeeMore(s string, foldEligible bool) string {
 	return templateview.FoldForSeeMore(s)
 }
 
-// renderResponse는 조회 렌더 실패 문구를 펼친 채 유지하고, 성공 본문에만 접기 정책을 적용한다.
 func (f *ResponseFormatter) renderResponse(ctx context.Context, key domain.TemplateKey, data any, foldEligible bool) string {
 	rendered, err := f.render(ctx, key, data)
 	if err != nil {
@@ -82,7 +60,6 @@ func (f *ResponseFormatter) render(ctx context.Context, key domain.TemplateKey, 
 
 	rendered, err := f.renderer.Render(ctx, key, "", replyFormat(ctx), data)
 	if err != nil {
-		// 호출자 대부분은 이 오류를 실패 문구로 바꾸고 버리므로 원인은 여기서 기록한다.
 		if f.logger != nil {
 			f.logger.ErrorContext(ctx, "template render failed", slog.String("template_key", string(key)), slog.Any("error", err))
 		}
@@ -127,7 +104,6 @@ func (f *ResponseFormatter) ResolveError(_ context.Context, key string) string {
 	return f.messageStrings.Text(messagestrings.Key{Namespace: messagestrings.NamespaceError, Name: key})
 }
 
-// 코드에 둔 대체 문구 대신 message_strings의 command_processing_failed(기동 검증 대상)를 쓴다.
 func (f *ResponseFormatter) renderFailureText() string {
 	if f == nil {
 		return ""
@@ -148,7 +124,6 @@ func (f *ResponseFormatter) GraduatedMemberWarning(ctx context.Context) string {
 		return text
 	}
 
-	// 문구는 두 변형 모두 literal로 보존하고, 강조는 RichText 변형에만 둔다.
 	literal := kakaoformat.EscapeMarkdown(warning)
 
 	if replyFormat(ctx) == domain.TemplateFormatRichText {

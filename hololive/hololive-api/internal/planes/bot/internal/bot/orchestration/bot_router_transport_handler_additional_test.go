@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package orchestration
 
 import (
@@ -76,7 +56,6 @@ func newDispatchingTransport(client bottransport.ReplyClient, responseFormatter 
 	return bottransport.NewCommandTransport(dispatchingReplyOutbox{client: client}, responseFormatter, opts...)
 }
 
-// withMessagePath는 NewBot 없이 필드로 조립한 시험용 Bot에 그 필드와 registry로 만든 ingress와 명령 실행기를 붙인다.
 func withMessagePath(b *Bot, registry *command.Registry) *Bot {
 	b.ingress = ingress.NewMessageIngress(b.messageAdapter, b.acl, b.logger, b.selfSender)
 	b.commandExecutor = orchcmd.NewCommandRouter(registry, b.logger, b.sendMessage, b.messageStrings, b.cache)
@@ -208,7 +187,6 @@ func (c *testIrisClient) Decrypt(_ context.Context, data string) (string, error)
 	return data, nil
 }
 
-// 시드 message_strings 문구. 코드 대체 문구가 없으므로 응답 문구는 DB 정본에서만 나온다.
 const (
 	seedUnknownCommandMessage    = "❌ 알 수 없는 명령입니다.\n!도움말에서 사용 가능한 명령을 확인할 수 있습니다."
 	seedCommandProcessingMessage = "❌ 명령 처리 중 오류가 발생했습니다."
@@ -390,7 +368,7 @@ func TestCommandTransportSendImageMethods(t *testing.T) {
 		client := &testIrisClient{}
 		transport := newDispatchingTransport(client, nil)
 
-		imageData := []byte{0x89, 0x50, 0x4E, 0x47} // PNG 매직 바이트
+		imageData := []byte{0x89, 0x50, 0x4E, 0x47}
 		err := transport.SendImage(ctx, testRoomID, imageData)
 		require.NoError(t, err)
 		assert.Equal(t, testRoomID, client.lastImageRoom)
@@ -459,7 +437,6 @@ func TestBotProcessMessageRepliesUnknownCommand(t *testing.T) {
 		messageStrings: messageStrings,
 	}, command.NewRegistry())
 
-	// 알 수 없는 command 경로: message_strings의 unknown_command 문구가 전송돼야 한다
 	sender := testSenderName
 	require.NoError(t, b.ProcessMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",

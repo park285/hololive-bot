@@ -44,8 +44,7 @@ func serveLongBodyTimeoutResponse(t *testing.T, w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// 본문을 다 읽은 뒤의 긴 응답은 본문 예산과 독립적이어야 한다.
-	time.Sleep(time.Minute)
+	synctest.Sleep(time.Minute)
 
 	if contextErr := r.Context().Err(); contextErr != nil {
 		t.Errorf("response context canceled: %v", contextErr)
@@ -90,8 +89,7 @@ func assertRuntimeBodyTimeout(t *testing.T, certFile, keyFile string, slowBody b
 	}()
 
 	synctest.Wait()
-	time.Sleep(2 * time.Minute)
-	synctest.Wait()
+	synctest.Sleep(2 * time.Minute)
 
 	select {
 	case <-done:

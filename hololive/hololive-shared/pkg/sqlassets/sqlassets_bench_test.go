@@ -6,9 +6,6 @@ import (
 	"testing/fstest"
 )
 
-// BenchmarkMustReader는 렌더(renderer_resolve.sql, 217B)와 배치 렌더
-// (renderer_resolve_batch.sql, 557B) 크기의 자산을 같은 이름으로 반복 읽는
-// 운영 호출 형태를 측정한다.
 func BenchmarkMustReader(b *testing.B) {
 	for _, size := range []struct {
 		name  string

@@ -108,8 +108,6 @@ func countPublishReceiptDuplicates(result *PublishBatchResult) {
 }
 
 func (r *PgxRepository) reconcilePublishCommit(ctx context.Context, envelopes []AlarmQueueEnvelope, commitErr error) (PublishBatchResult, error) {
-	// commit 응답 소실은 재발행하지 않고 안정적인 event/hash/delivery key를 한 번만 재조회한다.
-	// 취소된 요청도 최대 5초의 읽기 예산 안에서만 확인하며, 미확인 항목은 receipt를 주지 않는다.
 	verifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 

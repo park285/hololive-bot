@@ -19,7 +19,6 @@ type stopFunc func()
 
 func (f stopFunc) Stop() { f() }
 
-// 재시도는 요청 ctx 취소와 분리되어 scheduler Stop 외에는 끝낼 신호가 없고, infra를 먼저 닫으면 재시도가 닫힌 Valkey·PG client를 쓴다.
 func TestStopHolodexRetriesBeforeCleanupStopsRetriesFirst(t *testing.T) {
 	t.Parallel()
 

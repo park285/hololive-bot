@@ -12,7 +12,6 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
-// PostgreSQL이 없는 infra에서 켜진 runner를 조용히 끄지 않고 조립 오류로 드러낸다.
 func TestBackgroundRunnersRequirePostgres(t *testing.T) {
 	t.Parallel()
 

@@ -42,7 +42,6 @@ func TestInstanceIDIncludesPidForSameHostUniqueness(t *testing.T) {
 	}
 }
 
-// 여러 host의 worker가 같은 lease owner를 쓰면 claim 소유 판정이 어긋나기 때문이다.
 func TestInstanceIDRejectsHostnameFailure(t *testing.T) {
 	cases := map[string]func() (string, error){
 		"error": func() (string, error) { return "", errors.New("uname failed") },

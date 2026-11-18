@@ -7,12 +7,6 @@ import (
 	sharedenv "github.com/park285/shared-go/core/envutil"
 )
 
-// StrictEnv는 설정 로더 하나가 읽는 숫자·bool env를 shared-go 엄격 파서(*E)로 읽고 파싱 오류를 모은다.
-// 비엄격 파서처럼 잘못된 값을 경고 뒤 기본값으로 바꿔 기동을 이어 가지 않는다. 값이 없거나 공백뿐이면 기본값이다.
-//
-// 오류가 난 키의 반환값은 의미가 없다. 로더는 Err()가 nil이 아니면 만든 설정을 버리고 그 오류를 돌려준다.
-// 이 로더가 읽는 잘못된 키를 한 번의 기동 실패로 모두 보이도록 첫 오류에서 멈추지 않는다. 다른 로더의 오류와 합칠지는
-// 호출자가 정한다. 오류 문구는 키 이름만 담고 값은 담지 않는다.
 type StrictEnv struct {
 	errs []error
 }
@@ -25,12 +19,10 @@ func (e *StrictEnv) Bool(key string, def bool) bool {
 	return e.keep(sharedenv.BoolE(key, def))
 }
 
-// Seconds는 정수 초 단위 env를 읽는다. 기본값은 초 미만을 버린 값이고, time.Duration 범위를 넘으면 오류다.
 func (e *StrictEnv) Seconds(key string, def time.Duration) time.Duration {
 	return e.keep(StrictDurationUnitEnv(key, def, time.Second))
 }
 
-// Millis는 정수 밀리초 단위 env를 읽는다. 기본값은 밀리초 미만을 버린 값이고, time.Duration 범위를 넘으면 오류다.
 func (e *StrictEnv) Millis(key string, def time.Duration) time.Duration {
 	return e.keep(StrictDurationUnitEnv(key, def, time.Millisecond))
 }

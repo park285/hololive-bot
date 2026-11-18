@@ -45,12 +45,10 @@ func TestResolveUncachedChannelSubscribersByType_RecoversChannelsInOneQuery(t *t
 	require.ElementsMatch(t, []string{"room-a-live", "room-a-default"}, got[uncachedChannelA])
 	require.Equal(t, []string{"room-b-live"}, got[uncachedChannelB])
 
-	// read-through: 조회 뒤 SADD가 동시 구독 해지의 SREM을 되돌리지 않도록 set은 다시 채우지 않는다.
 	warmed, err := cacheClient.SMembers(ctx, alarmkeys.BuildChannelSubscriberKey(uncachedChannelA, domain.AlarmTypeLive))
 	require.NoError(t, err)
 	require.Empty(t, warmed)
 
-	// 구독 없는 채널도 캐시에 기록하지 않으며 다음 조회에서 DB를 다시 확인해 같은 결과를 낸다.
 	got, err = resolver.ResolveUncachedChannelSubscribersByType(ctx, []string{uncachedChannelC}, domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Empty(t, got)
@@ -67,13 +65,10 @@ func TestResolveUncachedChannelSubscribersByType_RequiresDatabase(t *testing.T) 
 	require.NoError(t, err)
 	require.Empty(t, got)
 
-	// 빈 set은 eviction과 구분되지 않으므로 cache만으로 구독 0을 확정하지 않는다.
 	_, err = cacheOnly.ResolveUncachedChannelSubscribersByType(ctx, []string{"UC_evicted"}, domain.AlarmTypeLive)
 	require.ErrorContains(t, err, "database is nil")
 }
 
-// 빈 set 채널은 cache를 다시 묻지 않고 정규화·중복 제거한 채널 전체를 한 번의 DB 조회로 확정한다. 결과는 입력 채널과
-// 정확히 대응해야 한다.
 func TestResolveUncachedChannelSubscribersByType_ResolvesAllChannelsInOneQueryWithoutCache(t *testing.T) {
 	t.Parallel()
 
@@ -109,7 +104,6 @@ func TestResolveUncachedChannelSubscribersByType_ResolvesAllChannelsInOneQueryWi
 
 	registerAlarmQueryHook(t, db, func() { queries++ })
 
-	// strict mock은 설정하지 않은 cache 호출에서 panic하므로 cache 왕복이 없음을 함께 확인한다.
 	got, err := NewSubscriberResolver(cachemocks.NewStrictClient(), db).ResolveUncachedChannelSubscribersByType(ctx, channelIDs, domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Equal(t, wantRooms, got)

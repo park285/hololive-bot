@@ -53,7 +53,6 @@ credential_case "explicit collector role" "hololive_collector_a|hololive|collect
   POSTGRES_USER=hololive_collector_a HOLOLIVE_COLLECTOR_A_PASSWORD=collector HOLOLIVE_DB_PASSWORD=runtime
 credential_case "explicit password wins" "hololive_collector_a|hololive|explicit" \
   POSTGRES_USER=hololive_collector_a POSTGRES_PASSWORD=explicit HOLOLIVE_COLLECTOR_A_PASSWORD=collector HOLOLIVE_DB_PASSWORD=runtime
-# 역할별 비밀번호가 없으면 다른 역할이나 admin(DB_PASSWORD) 비밀번호로 내려가지 않고 실행 전에 실패한다.
 credential_rejected_case() {
   local name="$1"
   shift

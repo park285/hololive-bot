@@ -19,7 +19,6 @@ import (
 
 const AdvisoryLockKey int64 = 0x484F4C4F41504901
 
-// MaxStatementTimeout은 승인된 점검 창에서도 무제한 문장 실행을 허용하지 않는다.
 const MaxStatementTimeout = 10 * time.Minute
 
 const (
@@ -32,9 +31,8 @@ type Config struct {
 	BaselineThrough        string
 	LockKey                int64
 	AllowBlockingIndexDrop bool
-	// StatementTimeout이 0이면 기존 4분 제한을 유지한다.
-	StatementTimeout time.Duration
-	Logf             func(format string, args ...any)
+	StatementTimeout       time.Duration
+	Logf                   func(format string, args ...any)
 }
 
 type Result struct {
@@ -150,8 +148,6 @@ func lockKey(cfg Config) int64 {
 	return AdvisoryLockKey
 }
 
-// session timeout(set_config)이 conn scope라 pool 실행으로 되돌리면 무효화된다 —
-// 모든 실행은 advisory lock을 쥔 pinned conn 하나에서 돌아야 한다.
 type guardedExecer struct {
 	conn                   *pgxpool.Conn
 	allowBlockingIndexDrop bool
@@ -165,8 +161,6 @@ func (e *guardedExecer) Exec(ctx context.Context, query string, args ...any) err
 	return nil
 }
 
-// dbmigrate.Execer는 non-nil return을 실패로 보고 호출자가 tx를 rollback한다 —
-// nil 검사 없이 감싸면 성공한 statement가 rollback을 유발한다.
 func txExecer(tx pgx.Tx) dbmigrate.Execer {
 	return func(ctx context.Context, query string, args ...any) error {
 		if _, err := tx.Exec(ctx, query, args...); err != nil {
@@ -177,8 +171,6 @@ func txExecer(tx pgx.Tx) dbmigrate.Execer {
 	}
 }
 
-// CONCURRENTLY 실패가 남긴 invalid index는 이름을 점유해 다음 실행의 IF NOT EXISTS를
-// no-op으로 만들 수 있다. 다른 운영 작업의 index를 건드리지 않도록 현재 파일의 대상만 정리한다.
 func (e *guardedExecer) execSegment(ctx context.Context, name string, segment sqlsplit.Segment) error {
 	if segment.Transactional {
 		if err := e.execTxSegment(ctx, name, segment.Statements); err != nil {

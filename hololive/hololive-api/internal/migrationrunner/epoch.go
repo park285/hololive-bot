@@ -14,7 +14,6 @@ import (
 
 const epoch3Baseline = "001_schema_epoch3_baseline.sql"
 
-// 핵심 제약: 기존 스키마 + 빈 ledger + watermark 미지정이면 전체 manifest를 applied로 stamp해 아직 미적용인 마이그레이션이 조용히 skip되는 사고가 나므로 거부한다.
 func reconcileBaseline(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, ledger dbmigrate.Ledger, entries []string, cfg Config) error {
 	count, err := ledgerCount(ctx, conn)
 	if err != nil {
@@ -122,7 +121,6 @@ func recordBaselineEntry(ctx context.Context, fsys fs.FS, ledger dbmigrate.Ledge
 	return nil
 }
 
-// manifest 밖 ledger 항목은 출처를 증명할 수 없어 거절한다. 빈 ledger는 reconcileBaseline이 처리한다.
 func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, entries []string) error {
 	if len(entries) == 0 {
 		return nil

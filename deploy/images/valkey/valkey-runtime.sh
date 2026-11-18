@@ -11,7 +11,6 @@ case "$mode" in
         [ -f "$seed" ] && [ ! -L "$seed" ] && [ -r "$seed" ] || { echo 'valkey-runtime: seed config is not a readable regular file' >&2; exit 1; }
         [ ! -L "$runtime" ] || { echo 'valkey-runtime: runtime config must not be a symlink' >&2; exit 1; }
         if [ ! -e "$runtime" ]; then
-            # 첫 기동만 seed를 복사한다. 재시작 때 Sentinel이 저장한 역할·주소를 덮어쓰지 않는다.
             temporary="$(mktemp "${runtime}.XXXXXX")"
             trap 'rm -f "$temporary"' EXIT HUP INT TERM
             cat "$seed" > "$temporary"
@@ -26,14 +25,12 @@ case "$mode" in
         ;;
     health|observe)
         [ "$#" -eq 4 ] || { echo 'valkey-runtime: expected password file, CA file and TLS port' >&2; exit 64; }
-        # 암호는 자식 프로세스 환경에만 넘기며 인자·로그에는 넣지 않는다.
         REDISCLI_AUTH="$(cat "$2")"
         export REDISCLI_AUTH
         set -- valkey-cli -e --raw --tls --cacert "$3" --user health -h 127.0.0.1 -p "$4"
         if [ "$mode" = health ]; then
             exec "$@" ping
         fi
-        # 원문은 출력하지 않고 완전한 영속성 상태만 숫자로 내보낸다.
         info="$("$@" info persistence)"
         enabled="" write_status="" rewrite_status=""
         carriage_return="$(printf '\r')"

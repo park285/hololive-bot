@@ -69,8 +69,7 @@ NFKC를 사용한다. 의존성 버전은 변경하지 않는다.
 포함하지 않는다.
 
 구독 조회 실패나 손상된 이벤트 payload는 기존 오류·재시도 경로로 보낸다. 이를 진행자 미상으로
-간주하지 않는다. 상세 검증과 운영 적용 조건은
-[구독 변경 보고서](../../../../../docs/review/unit-b-member-subscriptions-20260906.md)에 기록한다.
+간주하지 않는다.
 
 ## 표본과 한계
 
@@ -100,9 +99,12 @@ NFKC를 사용한다. 의존성 버전은 변경하지 않는다.
 저장소 루트에서 `go test -race -v ./hololive/hololive-shared/pkg/domain/mekparkhost`를 실행하면
 표본과 오탐 회귀를 검증하고 출처별 판별 범위를 출력한다.
 
-방송 유형 분류기와 함께 수행한 최신 표본 비교 및 검증은
-[2026-09-11 보고서](../../../../../docs/review/classifier-refinement-20260911.md)에 기록한다.
-
 공개 YouTube 제목을 추가한 오프라인 모델 학습과 비교는
 [`scripts/experiments/mekpark-host`](../../../../../scripts/experiments/mekpark-host/README.md)에 있다.
+저장소 루트에서 다음 명령으로 학습한다.
+
+```bash
+uv run --locked --project scripts/experiments/mekpark-host scripts/experiments/mekpark-host/experiment.py
+```
+
 이 실험은 현재 판별기나 운영 표시를 바꾸지 않는다.

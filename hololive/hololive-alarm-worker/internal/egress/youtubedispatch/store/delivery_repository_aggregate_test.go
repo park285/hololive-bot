@@ -90,7 +90,6 @@ func TestUpdateOutboxAggregateStatuses_AllSentMarksSentOnce(t *testing.T) {
 	require.Nil(t, lockedAt)
 	require.Empty(t, errText)
 
-	// sent_at·terminal_at은 집계 문장이 한 번 채취한 DB 시계라 같은 값이고 호출 구간 안에 있다.
 	terminalAt := readOutboxTerminalAt(ctx, t, pool, outboxID)
 	require.NotNil(t, terminalAt)
 	require.True(t, sentAt.Equal(*terminalAt), "sent_at %s and terminal_at %s must share one clock", sentAt, terminalAt)
@@ -272,8 +271,6 @@ func TestUpdateOutboxAggregateStatuses_MixedStatusPrecedence(t *testing.T) {
 	}
 }
 
-// legacyAggregateSyncCandidateSQL은 EXISTS/NOT EXISTS 전환 이전의 GROUP BY/HAVING 후보 선택을
-// 동등성 기준으로 보존합니다. 후보 집합, 오름차순, LIMIT 경계가 같아야 합니다.
 const legacyAggregateSyncCandidateSQL = `
 	SELECT d.outbox_id
 	FROM youtube_notification_delivery d

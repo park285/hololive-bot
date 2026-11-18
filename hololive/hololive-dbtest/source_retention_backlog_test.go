@@ -73,7 +73,6 @@ func TestSourceRetentionBacklogCombinesKindsAndCutoffs(t *testing.T) {
 	sql := readRetentionBacklogSQL(t)
 	tx := beginRetentionMeasurement(t, pool)
 
-	// 보호 대상 종류 하나라도 포화되면 다른 종류의 관측값·빈 상태와 무관하게 전체 결과는 미확정이다.
 	got, calls := measureRetentionBacklog(t, tx, sql,
 		[]string{communityPageKind, retentionLiveSnapshotKind, "live_check"},
 		[]time.Time{base.Add(time.Hour), base.Add(time.Hour), base.Add(time.Hour)}, 4)
@@ -82,7 +81,6 @@ func TestSourceRetentionBacklogCombinesKindsAndCutoffs(t *testing.T) {
 	require.Equal(t, new(false), got.known)
 	require.EqualValues(t, 5, calls)
 
-	// 경계 시각과 같은 행은 적체 근거·제한된 탐색 범위에 포함하지 않는다.
 	got, calls = measureRetentionBacklog(t, tx, sql,
 		[]string{retentionLiveSnapshotKind}, []time.Time{base.Add(-time.Hour)}, 1)
 	require.Nil(t, got.oldest)

@@ -37,8 +37,6 @@ func NewConsumerWithGraces(repo observationClaimFinalizer, grace, liveGrace time
 	}
 }
 
-// WithLiveUnresolvableGrace는 LIVE 영상의 identity_missing이 이어져야 하는 최소 지속 시간이다.
-// 첫 identity_missing 관측 뒤 이 시간이 지나고 채널 /live 음성이 신선할 때만 UNRESOLVABLE_VIDEO로 끝낸다.
 func (c *Consumer) WithLiveUnresolvableGrace(grace time.Duration) *Consumer {
 	if c == nil {
 		return nil
@@ -59,8 +57,6 @@ func (c *Consumer) WithChannelPolicy(policy ChannelPolicy) *Consumer {
 	return c
 }
 
-// WithWakeup은 알림 행을 담은 관측이 commit된 뒤 alarm-worker YouTube consumer를 깨울 신호를 정한다.
-// 값이 nil이면 consumer polling만 남는다.
 func (c *Consumer) WithWakeup(signaler *wakeup.Signaler) *Consumer {
 	if c == nil {
 		return nil
@@ -77,7 +73,6 @@ func (c *Consumer) ConsumeClaim(ctx context.Context, claim Claim) error {
 		return fmt.Errorf("finalize: %w", err)
 	}
 
-	// Finalize가 오류 없이 끝나면 트랜잭션이 commit됐다. 신호 실패는 처리 실패가 아니며 consumer polling이 행을 잡는다.
 	if out.NotificationsQueued {
 		c.wakeup.Signal(ctx)
 	}

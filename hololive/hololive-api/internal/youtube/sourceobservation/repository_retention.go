@@ -12,7 +12,6 @@ import (
 
 const MaxRetentionBatchSize = 1000
 
-// 운영 창 하나는 평균 약 0.7초라 보통 아래 시간 예산이 먼저 멈추고, 창이 빠를 때도 한 tick의 원본 삭제를 창 상한 × 배치 크기로 제한한다.
 const sourceRetentionMaxWindows = 8
 
 type RetentionConfig struct {
@@ -26,10 +25,6 @@ type RetentionConfig struct {
 	BatchSize             int
 }
 
-// RetentionResult는 앞 단계의 확정된 삭제량과 실패 대상을 함께 반환한다.
-// BacklogKnown이 참일 때만 BacklogAge가 유효하며, 0은 남은 삭제 후보가 없다는 뜻이다.
-// Scanned와 Traversals는 원본(source_observations) 단계만 채운다. Scanned는 커서가 지나간 후보 수로 삭제분을
-// 포함하므로 Scanned - Deleted가 보호·잠금으로 남긴 수이고, Traversals는 이 tick에 끝난 전체 순회 수다.
 type RetentionResult struct {
 	Table        string
 	FailedTable  string
@@ -118,8 +113,6 @@ func (r *Repository) runRetentionSteps(
 	return out, nil
 }
 
-// RetentionTables는 RunRetentionTick이 ByTable·FailedTable로 보고하는 테이블 이름을 실행 순서대로 돌려준다.
-// 지표 소비자가 같은 목록을 따로 적지 않도록 실행 단계 정의에서 이름만 읽으며, 단계 함수는 실행하지 않는다.
 func RetentionTables() []string {
 	steps := (*Repository)(nil).retentionSteps(context.Background(), RetentionConfig{}, time.Time{})
 	tables := make([]string, 0, len(steps))
@@ -182,13 +175,11 @@ func (r *Repository) retentionSteps(
 	}, r.auditRetentionSteps(ctx, cfg, now)...)
 }
 
-// 출처 사전을 마지막에 두어 같은 tick에서 원본 삭제로 참조가 사라진 사전 행까지 정리한다.
 func (r *Repository) auditRetentionSteps(
 	ctx context.Context,
 	cfg RetentionConfig,
 	now time.Time,
 ) []retentionStep {
-	// profile evidence·photo variant는 head가 현재 값을 갖는 감사 이력이라 원본 kind와 같은 기간만 남긴다.
 	profileAge := cfg.EvidenceAgeByKind[contract.KindChannelProfile]
 	photoAge := cfg.EvidenceAgeByKind[contract.KindChannelPhoto]
 
@@ -237,7 +228,6 @@ func (r *Repository) deleteRetentionBatches(steps []retentionStep) (RetentionRes
 
 	for _, step := range steps {
 		part, err := step.run()
-		// 원본 단계는 실패한 창 앞의 창을 이미 커밋했으므로 그 계수를 오류와 함께 보고한다.
 		if step.age > 0 && (err == nil || part.Deleted > 0 || part.Scanned > 0) {
 			part.Table = step.table
 
@@ -251,7 +241,6 @@ func (r *Repository) deleteRetentionBatches(steps []retentionStep) (RetentionRes
 		}
 
 		if err != nil {
-			// 앞 단계는 이미 별도로 커밋됐으므로 뒤 단계 오류에도 삭제량을 보존한다.
 			combined.FailedTable = step.table
 
 			return combined, fmt.Errorf("run source observation retention: %s: %w", step.table, err)
@@ -303,16 +292,12 @@ func (r *Repository) deleteAgedBatch(
 	return out, nil
 }
 
-// 삭제 0건이어도 커서가 전진하면 다음 창으로 넘어가 보호된 앞쪽 때문에 삭제 가능한 뒤쪽이 밀리지 않게 하고, 순회 완료·진척 없음·창 상한·시간 예산· 오류에서 멈춘다. 순회 완료에서 멈추므로 한 tick이
-// 같은 보호 순회를 다시 돌지 않는다.
 func (r *Repository) deleteEvidenceWindows(ctx context.Context, cfg RetentionConfig, now time.Time) (RetentionResult, error) {
 	kinds, cutoffs := evidencePolicies(cfg.EvidenceAgeByKind, now)
 	if len(kinds) == 0 {
 		return RetentionResult{}, nil
 	}
 
-	// 후속 payload·absence·checkpoint 정리와 적체 측정에 남은 시한의 절반을 남긴다. 첫 창은 이전처럼 항상 실행하고,
-	// 다음 창은 이번 tick에서 가장 느렸던 창만큼 걸려도 이 예산 안에 끝날 때만 시작한다.
 	deadline, bounded := ctx.Deadline()
 	budgetEnd := time.Now().Add(time.Until(deadline) / 2)
 
@@ -330,7 +315,6 @@ func (r *Repository) deleteEvidenceWindows(ctx context.Context, cfg RetentionCon
 
 		part, err := r.deleteEvidenceWindow(ctx, kinds, cutoffs, cfg.BatchSize)
 		if err != nil {
-			// 앞 창은 이미 커밋됐으므로 계수를 보존하고, 실패한 창은 다시 실행하지 않는다.
 			return out, err
 		}
 
@@ -360,7 +344,6 @@ type evidenceWindow struct {
 }
 
 func (r *Repository) deleteEvidenceWindow(ctx context.Context, kinds []string, cutoffs []time.Time, limit int) (evidenceWindow, error) {
-	// DB 함수가 exclusive live 전역 잠금 → 커서 → 원본 순서를 소유하며 삭제와 진행을 함께 커밋한다.
 	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (evidenceWindow, error) {
 		var window evidenceWindow
 
@@ -378,8 +361,6 @@ func (r *Repository) deleteEvidenceWindow(ctx context.Context, kinds []string, c
 	return out, nil
 }
 
-// 대부분의 사전 항목이 사용 중이어도 커서가 스캔 범위를 제한한다.
-// 외래 키·행 잠금·발행자의 KEY SHARE로 조회와 INSERT 사이에 페이로드가 삭제되지 않게 한다.
 func (r *Repository) deleteUnreferencedPayloadBatch(ctx context.Context, cfg RetentionConfig, now time.Time) (int64, error) {
 	if minEvidenceAge(cfg.EvidenceAgeByKind) == 0 {
 		return 0, nil
@@ -399,7 +380,6 @@ func (r *Repository) deleteUnreferencedPayloadBatch(ctx context.Context, cfg Ret
 	return removed, nil
 }
 
-// 사전 행에는 시각 열이 없어 기간 대신 참조 여부로 판정하며, 원본 보존이 꺼져 있으면 실행하지 않는다.
 func (r *Repository) deleteUnreferencedProvenanceBatch(ctx context.Context, cfg RetentionConfig) (int64, error) {
 	if minEvidenceAge(cfg.EvidenceAgeByKind) == 0 {
 		return 0, nil

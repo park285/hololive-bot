@@ -75,7 +75,6 @@ func (r *Repository) ProbeClaim(ctx context.Context, options ClaimOptions) error
 	return nil
 }
 
-// 종료 후보가 없으면 문장 하나, 있으면 집합 갱신 하나가 더해진다.
 func claimObservations(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -207,7 +206,6 @@ func (s *claimTerminalSet) deadLetter(ctx context.Context, tx dbx.Tx) error {
 	return nil
 }
 
-// 다른 트랜잭션의 순간적인 행 잠금은 읽기 전용 snapshot에서 관찰하지 않는다.
 func (r *Repository) ReadySnapshot(ctx context.Context, kinds []contract.ObservationKind, maxAttempts int) (workercontract.QueueValues, error) {
 	if err := r.validate(); err != nil {
 		return workercontract.QueueValues{}, fmt.Errorf("snapshot source observation queue: %w", err)

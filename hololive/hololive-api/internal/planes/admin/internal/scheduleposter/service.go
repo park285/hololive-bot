@@ -22,8 +22,7 @@ import (
 )
 
 const (
-	maxPages = 5
-	// FxTwitter 응답은 시간순이 아니고 오래된 리포스트가 섞이므로, 본인 원글로만 수집 범위와 멈춤을 판단한다.
+	maxPages           = 5
 	lookback           = 8 * 24 * time.Hour
 	retention          = 60 * 24 * time.Hour
 	purgeBatch         = 100
@@ -34,14 +33,11 @@ const (
 	initialTranslate   = 15 * time.Second
 )
 
-// 실패 사유는 관리자 화면에 그대로 보이는 분류다.
 const (
 	reasonSourceUnavailable = "source_unavailable"
 	reasonTranslationFailed = "translation_failed"
 )
 
-// posterTextExpr는 X 글(Go regexp)과 커뮤니티 글(PostgreSQL ~*)에 같이 쓰므로 두 문법이 같게 읽는 형태만 쓴다.
-// 予定만으로는 매일 올리는 「今日の配信予定」 공지까지 후보가 되므로 주 단위 문구만 받는다.
 const posterTextExpr = `週間|今週|来週|スケジュール|schedule|weekly`
 
 var posterTextPattern = regexp.MustCompile(`(?i)` + posterTextExpr)
@@ -90,7 +86,6 @@ type Service struct {
 	collectNow chan struct{}
 }
 
-// New의 apiKey가 비어 있으면 후보 자동 검토를 끈다.
 func New(ctx context.Context, config *Config, apiKey string, store *posterstore.Store, members memberSource, logger *slog.Logger) (*Service, error) {
 	if config == nil || store == nil || members == nil || logger == nil {
 		return nil, errors.New("schedule poster service requires config, store, members and logger")
@@ -142,12 +137,10 @@ func newService(
 	}
 }
 
-// translationRetryOptions는 일정표 행 추출·번역 재시도 예외 계약(docs/current/services/hololive-api.md)의 한도다.
 func translationRetryOptions() retry.RetryOptions {
 	return retry.RetryOptions{MaxAttempts: 10, BaseDelay: 5 * time.Second, MaxDelay: time.Minute, Jitter: 2 * time.Second}
 }
 
-// Start는 ctx가 끝날 때까지 돌아오지 않는다.
 func (s *Service) Start(ctx context.Context) {
 	s.logger.Info("Starting schedule poster service",
 		slog.Int("targets", len(s.config.Targets)),
@@ -265,7 +258,6 @@ func (s *Service) collect(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// collectCommunity는 자동 검토가 켜져 있으면 문구 패턴이 놓친 일정표(영어 글 등)까지 판정하도록 커뮤니티의 이미지 글을 모두 후보로 넣는다.
 func (s *Service) collectCommunity(ctx context.Context, channelIDs []string, now time.Time, autoReview bool) error {
 	pattern := posterTextExpr
 
@@ -285,7 +277,6 @@ func (s *Service) collectCommunity(ctx context.Context, channelIDs []string, now
 	return nil
 }
 
-// handOverUnreviewed는 자동 검토가 꺼졌으면 켜져 있던 동안 들어와 기다리던 후보가 목록·알림 없이 만료되지 않도록 바로 넘긴다.
 func (s *Service) handOverUnreviewed(ctx context.Context, now time.Time, autoReview bool) error {
 	before, reason := now, posterstore.ReviewReasonAutoReviewOff
 
@@ -305,7 +296,6 @@ func (s *Service) handOverUnreviewed(ctx context.Context, now time.Time, autoRev
 	return nil
 }
 
-// collectTarget은 페이지 도중 실패해도 그때까지 찾은 후보를 함께 돌려준다.
 func (s *Service) collectTarget(ctx context.Context, target Target, now time.Time) ([]posterstore.Candidate, error) {
 	cutoff := now.Add(-lookback)
 
@@ -362,7 +352,6 @@ func (s *Service) candidateFrom(item *status, target Target, postedAt time.Time)
 		return posterstore.Candidate{}, false
 	}
 
-	// Iris Console과 DB 제약은 X 출처 행의 원본을 이 호스트로만 받으므로, 다른 사진 하나가 수집 묶음 전체를 실패시키지 않게 미리 뺀다.
 	if host, ok := httpsHost(photo); !ok || host != imageHost {
 		s.logger.Warn("Schedule poster photo skipped: unexpected image URL",
 			slog.String("post_id", item.ID), slog.String("image_url", photo))
@@ -391,7 +380,6 @@ func (s *Service) candidateFrom(item *status, target Target, postedAt time.Time)
 	}, true
 }
 
-// collectThumbnails는 받지 못한 영상만 건너뛰고 나머지 썸네일은 받은 그림과 함께 후보로 넣는다.
 func (s *Service) collectThumbnails(ctx context.Context, now time.Time, autoReview bool) error {
 	var (
 		thumbnails []posterstore.ThumbnailCandidate
@@ -430,12 +418,10 @@ func imageSHA256(data []byte) string {
 }
 
 var (
-	// 원본 주소의 그림을 쓸 수 없다는 뜻이며 저장소 오류는 들지 않는다.
 	errImageUnavailable = errors.New("poster image unavailable")
 	errImageChanged     = fmt.Errorf("%w: it changed after it was collected", errImageUnavailable)
 )
 
-// posterImage는 저장한 그림이 있으면 원본 주소를 다시 받지 않는다. 썸네일은 같은 주소에서 그림이 바뀌기 때문이다.
 func (s *Service) posterImage(ctx context.Context, id int64, imageURL, collectedSHA256 string) (source, error) {
 	stored, found, err := s.images.Image(ctx, id)
 	if err != nil {
@@ -489,7 +475,6 @@ func (s *Service) retryOptions(posterID int64, stage string) retry.RetryOptions 
 	return options
 }
 
-// retryableTranslationError는 Vertex가 요청 자체를 거절한 오류(400·401·403·404)를 다시 보내도 같은 결과라 재시도에서 뺀다.
 func retryableTranslationError(err error) bool {
 	apiErr, ok := errors.AsType[genai.APIError](err)
 	if !ok {

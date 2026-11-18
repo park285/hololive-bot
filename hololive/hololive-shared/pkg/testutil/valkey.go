@@ -13,17 +13,14 @@ import (
 	"github.com/kapu/hololive-shared/internal/testredis"
 )
 
-// NewTestValkeyClient는 miniredis 기반 valkey 클라이언트와 miniredis 핸들을 반환합니다.
-// 클라이언트는 테스트 종료 시 닫힙니다.
 func NewTestValkeyClient(t *testing.T) (valkey.Client, *miniredis.Miniredis) {
 	t.Helper()
 
 	host, port, mini := testredis.StartMiniRedis(t)
 
 	client, err := valkey.NewClient(valkey.ClientOption{
-		InitAddress:  []string{net.JoinHostPort(host, strconv.Itoa(port))},
-		DisableCache: true,
-		// 테스트는 임의 키 조합(MGET/MSET) 검증이 많아 단일 클라이언트 모드가 필요합니다.
+		InitAddress:       []string{net.JoinHostPort(host, strconv.Itoa(port))},
+		DisableCache:      true,
 		ForceSingleClient: true,
 	})
 	if err != nil {

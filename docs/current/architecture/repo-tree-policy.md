@@ -28,9 +28,8 @@ Not at root — these were relocated and must not return:
 
 - `docs/current/` contains current operational source-of-truth documents.
 - `docs/current/` root is limited to core current docs and short compatibility bridges. Runbooks, service docs, contracts, architecture guidance, and review bundle policy belong in their purpose-specific subdirectories.
-- `docs/history/` contains completed or non-current records.
+- 완료한 계획과 인계·검증 자료는 Git 이력에서 확인합니다.
 - `docs/design/` contains proposals before they become current.
-- Large old plan kits belong under `docs/history/` after classification.
 
 ## Artifacts
 

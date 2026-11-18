@@ -14,7 +14,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// 기록 CAS가 모든 열을 보호한다.
 const fullLiveReviewSnapshotSQL = `
 	SELECT jsonb_build_object('session',to_jsonb(session),'head',to_jsonb(head),
 	           'pending',to_jsonb(pending),'availability',to_jsonb(availability.*)) AS snapshot
@@ -129,7 +128,6 @@ func TestLiveReviewSurvivesTechnicalRefreshAndReopensOnFacts(t *testing.T) {
 	insertLegacyFormatReceipt(t, pool, "30000000-0000-0000-0000-000000000001", videoID)
 	require.True(t, liveReviewClosed(ctx, t, pool, videoID))
 
-	// 관측 시각·head 갱신 시각·무시한 부재 slot 증가·같은 판정의 가용성 재확인은 검토를 다시 열지 않는다.
 	execLiveReviewStatements(t, pool, videoID,
 		`UPDATE youtube_live_sessions SET last_seen_at=now(),status_observed_at=now(),schedule_observed_at=now(),
 		        title_observed_at=now(),thumbnail_url='https://example.invalid/refreshed.jpg'
@@ -216,14 +214,12 @@ func TestLiveReviewRecordsOversizedHeadWithBoundedSnapshot(t *testing.T) {
 	require.Less(t, storedBytes, 16384)
 	require.Equal(t, fullDigest, digest, "record CAS must still cover the full current facts")
 
-	// 검토 뒤 부재 slot이 하나라도 늘면 기록 CAS가 거부한다.
 	_, err = pool.Exec(ctx, `UPDATE youtube_live_reconciliation_heads
 		SET ignored_absence_scheduled_for=ignored_absence_scheduled_for||now() WHERE video_id=$1`, videoID)
 	require.NoError(t, err)
 	require.Error(t, recordLiveReview(ctx, pool, "30000000-0000-0000-0000-000000000002", videoID, digest))
 	require.False(t, liveReviewClosed(ctx, t, pool, videoID))
 
-	// 같은 가용성 판정의 재확인도 기록 전에는 전체 원본 CAS를 무효화한다.
 	require.NoError(t, pool.QueryRow(ctx, `SELECT snapshot_sha256 FROM youtube_live_review_snapshot($1)`, videoID).Scan(&digest))
 
 	_, err = pool.Exec(ctx, `UPDATE youtube_video_availability SET observed_at=observed_at+interval '1 second' WHERE video_id=$1`, videoID)
@@ -254,7 +250,6 @@ func TestLiveReviewRecordsOversizedHeadWithBoundedSnapshot(t *testing.T) {
 	require.False(t, hasArray)
 	require.Equal(t, arrayHash, summaryHash)
 
-	// 이후 부재 slot 증가는 의미 사실이 아니므로 새 형식 영수증도 유지된다.
 	_, err = pool.Exec(ctx, `UPDATE youtube_live_reconciliation_heads
 		SET ignored_absence_scheduled_for=ignored_absence_scheduled_for||now(), updated_at=now() WHERE video_id=$1`, videoID)
 	require.NoError(t, err)

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package queue
 
 import (
@@ -35,9 +15,8 @@ import (
 )
 
 const (
-	AlarmDispatchWakeupQueue    = "alarm:dispatch:wakeup"
-	alarmDispatchWakeupGuardKey = "alarm:dispatch:wakeup:guard"
-	// 신호는 outbox 적재 뒤 부가 작업이므로 Valkey 지연이 발행 루프를 오래 붙잡지 않게 한다. 이 상한은 shared wakeup.Signaler와 같다.
+	AlarmDispatchWakeupQueue         = "alarm:dispatch:wakeup"
+	alarmDispatchWakeupGuardKey      = "alarm:dispatch:wakeup:guard"
 	alarmDispatchWakeupSignalTimeout = 500 * time.Millisecond
 )
 
@@ -46,8 +25,6 @@ type PublishConfig struct {
 	MaxDeliveriesPerBatch int
 }
 
-// WakeupCache는 Publisher가 dispatch wakeup 신호에 쓰는 cache 작업이다. 중복 신호 guard 선점(SetNX),
-// 신호 LPUSH(B·DoMulti), 신호 queue 만료(Expire)를 쓴다.
 type WakeupCache interface {
 	cache.KeyValueWriter
 	cache.KeyValueLifecycle
@@ -62,9 +39,6 @@ type Publisher struct {
 	now           func() time.Time
 }
 
-// NewPublisher는 PG dispatch outbox에 pending 행을 쓰고 wakeup을 보내는 발행자를 만든다. 유일한 발행 경로인
-// outbox는 필수이고, batch 한도는 RuntimeConfig.AlarmDispatchPublish가 검증한 양수여야 한다. 기본값으로 바꾸지
-// 않고 생성 오류로 드러낸다.
 func NewPublisher(c WakeupCache, outbox dispatchoutbox.Writer, config PublishConfig, logger *slog.Logger) (*Publisher, error) {
 	if outbox == nil {
 		return nil, errors.New("new alarm publisher: outbox repository is required")
@@ -119,7 +93,6 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 	return result, nil
 }
 
-// PublishDispatchBatch는 envelope을 pending delivery로 저장한다.
 func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
 	startedAt := time.Now()
 
@@ -155,7 +128,6 @@ func (p *Publisher) prepareDispatchEnvelopes(envelopes []dispatchoutbox.AlarmQue
 			envelopes[i].EnqueuedAt = p.now().UTC().Format(time.RFC3339)
 		}
 
-		// 버전이 없는 envelope을 V1으로 채우던 기본값은 지웠다. 모든 생산자가 버전을 명시하므로 다른 값은 생산자 결함이다.
 		if envelopes[i].Version != contractsalarm.QueueEnvelopeVersionV1 {
 			return fmt.Errorf("publish alarm dispatch batch: envelope %d: envelope version %d is unsupported (want %d)",
 				i, envelopes[i].Version, contractsalarm.QueueEnvelopeVersionV1)
@@ -226,7 +198,6 @@ func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []dispatch
 		end := min(start+limit, len(envelopes))
 
 		result, err := p.outbox.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: envelopes[start:end]})
-		// 뒤 chunk가 실패해도 이미 commit 또는 ledger 조회로 확인한 receipt는 보존한다.
 		for _, receipt := range result.Receipts {
 			receipt.Ordinal += start
 
@@ -260,8 +231,6 @@ func (p *Publisher) buildEnvelope(notification *domain.AlarmNotification, claimK
 	}
 }
 
-// publishWakeup은 outbox 적재가 끝난 뒤에만 부른다. 호출자 취소와 분리해 짧은 상한 안에서 보내고, 실패는 metric과
-// Warn으로만 드러내며 적재 결과를 바꾸지 않는다.
 func (p *Publisher) publishWakeup(ctx context.Context) {
 	if p.cache == nil {
 		return

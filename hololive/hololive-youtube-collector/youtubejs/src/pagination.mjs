@@ -25,7 +25,6 @@ export function continuationToken(feed) {
   const token = readUpstream(() => {
     if (feed instanceof Mixins.Feed && feed.has_continuation) {
       const headerContinuations = feed.page.header_memo?.getType(YTNodes.ContinuationItem, YTNodes.ContinuationItemView) ?? [];
-      // about 조회에 쓰는 header continuation은 목록의 이어보기 토큰이 아닙니다.
       const bodyContinuation = feed.memo.getType(YTNodes.ContinuationItem, YTNodes.ContinuationItemView)
         .find((continuation) => !headerContinuations.includes(continuation));
       return bodyContinuation?.endpoint.payload.token ?? "";
@@ -117,8 +116,6 @@ export function paginationResult({
   });
 }
 
-// pagination 네 필드는 이 모듈의 paginationResult만 만들므로, 생성기와 RPC 응답 검증기가 같은 규칙으로 확인하고
-// 위반은 upstream 데이터가 아니라 helper 자체 결함(helper_internal_invariant)으로 분류합니다.
 export function validatedPagination({ page_count, exhausted, continuity, termination_reason }) {
   if (!Number.isSafeInteger(page_count) || page_count < 1 || page_count > maxPagesLimit) {
     throw invariantFault("page_count is outside the pagination contract");
@@ -159,8 +156,6 @@ export async function paginate({
   const reserve = nonnegativeSafeInteger(reservedEnvelopeBytes, "reserved envelope bytes");
   assertResponseBudget(maxSuccessResponseBytes, reserve);
   const budget = new EncodedArrayBudget(maxSuccessResponseBytes, reserve);
-  // continuation token은 반복 감지에만 씁니다. 같은 목록이라도 요청마다 달라질 수 있고 수 KB까지
-  // 커지므로 응답에 실으면 observation scope가 흔들리고 coverage 계약의 길이 상한을 넘습니다.
   const seen = new Set();
   let pageCount = 0;
   let feed = firstPage;
@@ -184,7 +179,6 @@ export async function paginate({
         reason = "max_success_response_bytes";
         break;
       }
-      // 다음 next()가 metadata 조회를 시작할 수 있으므로 채택 직후 멈춥니다.
       if (budget.count() >= resultLimit) {
         reason = "max_results";
         break;
@@ -250,8 +244,6 @@ function assertParentRequestAlive() {
   }
 }
 
-// 앞 페이지까지의 성공으로 바꾸는 일시 간극은 연결·본문 수신 실패, transport가 분류한 upstream 5xx, 시간 초과뿐입니다.
-// runUpstream이 SDK 경계에서 감싼 오류도 원인 사슬로 판정합니다.
 function isContinuationTransient(error) {
   const code = classifyUpstreamError(error);
   if (code === "collection_timeout") return true;
@@ -264,7 +256,6 @@ function isContinuationTransient(error) {
   return false;
 }
 
-// transport·HTTP 실패가 아닌 일반 수집 실패는 SDK가 continuation 응답을 처리하지 못한 것이므로 parser drift입니다.
 function continuationFailure(error) {
   if (classifyUpstreamError(error) !== "collection_failed" || upstreamHTTPStatus(error) !== undefined) {
     return error;

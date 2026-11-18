@@ -9,8 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-// FreezeFallbackRequests는 grouped 요청의 확정 미전달 이후에만 호출한다.
-// 모든 owner를 잠가 개별 요청 전체를 고정하므로 부분 commit의 membership 재해석을 방지한다.
 func (s *TransitionStore) FreezeFallbackRequests(ctx context.Context, operation StartedOperation, requests []FrozenRequest) ([]FrozenRequest, error) {
 	if len(requests) != operation.OwnerCount() || !operation.Valid() {
 		return nil, errors.New("freeze fallback requests: incomplete operation")

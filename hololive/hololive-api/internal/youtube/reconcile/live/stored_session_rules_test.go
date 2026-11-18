@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 저장 SQL은 reducer 결과를 그대로 쓰므로 저장된 세션 행을 지키는 규칙은 모두 reducer 결과에서 확인한다.
 var storedSessionAt = time.Date(2026, time.August, 14, 1, 30, 0, 0, time.UTC)
 
 func stateWithSession(session *SessionState) *State {

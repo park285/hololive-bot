@@ -163,8 +163,6 @@ func TestDeferNotBeforeRejectsStaleFenceAndPreCanceledWrite(t *testing.T) {
 		t.Fatalf("wrong fence defer = %v", err)
 	}
 
-	// 쿼리 전 취소는 전송 자체를 거절합니다. 전송 후 ctx 오류는 autocommit UPDATE의
-	// 서버 취소·commit 완료를 증명하지 않으므로 미반영을 가정하지 않습니다.
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 

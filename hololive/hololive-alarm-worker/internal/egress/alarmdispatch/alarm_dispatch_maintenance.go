@@ -77,8 +77,6 @@ type alarmDispatchMaintenancePgxStore struct {
 	beginner *pgxpool.Pool
 }
 
-// NewMaintenanceRunner는 PostgreSQL pool이 있는 infra를 받는다. 조립 쪽(buildNotificationEgress)이 기동 때 pool을 먼저
-// 확인하고, 보존 limit은 config가 1~10000으로 맞춘 값을 SQL LIMIT으로 그대로 쓴다.
 func NewMaintenanceRunner(
 	infra *sharedmodules.InfraModule,
 	retentionConfig workerconfig.DispatchRetentionConfig,
@@ -155,7 +153,6 @@ func (r *alarmDispatchMaintenanceRunner) RunOnce(ctx context.Context) error {
 		return fmt.Errorf("sweep alarm dispatch retention: %w", err)
 	}
 
-	// lock 미획득과 COMMIT 결과 불명은 삭제 확정이 아니므로 계상하거나 재시도하지 않습니다.
 	if executed {
 		for i, target := range r.retentionTargets() {
 			observeAlarmDispatchRetentionDeletedRows(string(target.status), counts.terminal[i])
@@ -210,7 +207,6 @@ type alarmDispatchRetentionTarget struct {
 	retentionDays int
 }
 
-// 다른 인스턴스가 lock을 잡고 있으면 fn 없이 성공으로 끝난다.
 func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
 	ctx context.Context,
 	key int64,
@@ -287,8 +283,6 @@ func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 		return 0, fmt.Errorf("unsupported alarm dispatch retention status: %s", status)
 	}
 
-	// picked CTE는 행을 잠그지 않고 EvalPlanQual 때 다시 계산되지 않습니다. 바깥 DELETE가 status와
-	// 보존 시각을 다시 검사해야 대기 중에 requeue로 commit된 행을 최신 버전 기준으로 건너뜁니다.
 	tag, err := s.db.Exec(ctx, query, retentionDays, limit)
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)

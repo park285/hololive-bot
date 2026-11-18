@@ -66,7 +66,6 @@ func (s ContractSnapshot) ValidateKinds(kinds []contract.ObservationKind) error 
 	return nil
 }
 
-// RunInput은 lease가 고정한 job·subject·target 시야와 실행 한도를 runner에 전달합니다.
 type RunInput struct {
 	job                     JobContract
 	subject                 string
@@ -77,16 +76,12 @@ type RunInput struct {
 	maxSuccessResponseBytes int
 }
 
-// RunOutput은 생성 시 입력을 복사한 불변 수집 결과입니다.
-// 값 복사는 내부 저장소를 공유하며, 가변 관측 조회는 독립된 복사본을 반환합니다.
 type RunOutput struct {
 	observations      []contract.Envelope
 	cursors           []jsontext.Value
 	collectionLatency time.Duration
 }
 
-// NewRunInput은 lease 증명, job 계약, lease subject와 target 시야가 같은 job·세대를 가리킬 때만 입력을 만듭니다.
-// Lease 증명과 job key의 결합은 target snapshot 적재가 먼저 확인합니다.
 func NewRunInput(
 	job JobContract,
 	subject string,
@@ -157,7 +152,6 @@ func invalidRunInputError() error {
 	return collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection run input is invalid")
 }
 
-// GLOBAL job은 계약의 lease subject입니다.
 func (i *RunInput) Subject() string {
 	if i == nil {
 		return ""
@@ -209,7 +203,6 @@ func (i *RunInput) RequireLiveSnapshotMetadataGeneration() error {
 	case contract.ProviderHolodex:
 		expected = contract.LiveSnapshotMetadataContractGeneration
 	case contract.ProviderHololiveOfficial:
-		// 공식 일정 provider는 방송 snapshot을 발행하지 않습니다.
 		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "live snapshot provider is unsupported")
 	default:
 		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "live snapshot provider is unsupported")
@@ -275,7 +268,6 @@ func (i *RunInput) MaxSuccessResponseBytes() int {
 	return i.maxSuccessResponseBytes
 }
 
-// NewRunOutput은 payload와 source event 시각을 포함한 입력의 소유권을 복사로 확보합니다.
 func NewRunOutput(observations []contract.Envelope, latency time.Duration) (RunOutput, error) {
 	if len(observations) > MaxPublishBatchSize {
 		return RunOutput{}, collecterr.New(contract.ErrorResponseTooLarge, contract.ClassResourceLimit, "observation batch exceeds publish limit")
@@ -291,8 +283,6 @@ func NewRunOutput(observations []contract.Envelope, latency time.Duration) (RunO
 	}, nil
 }
 
-// NewRunOutputWithCursors는 관측과 같은 순서의 checkpoint cursor까지 복사로 소유합니다.
-// 빈 cursor는 해당 관측의 checkpoint가 cursor 없이 관측 식별자만 기록한다는 뜻입니다.
 func NewRunOutputWithCursors(observations []contract.Envelope, cursors []jsontext.Value, latency time.Duration) (RunOutput, error) {
 	if len(cursors) != len(observations) {
 		return RunOutput{}, collecterr.New(contract.ErrorInternalInvariant, contract.ClassInternal, "collection output cursor count is invalid")
@@ -329,8 +319,6 @@ func CompleteFromEnvelopes(envelopes []contract.Envelope, started time.Time) (Co
 	return NewCompleteResult(output), nil
 }
 
-// Observations는 payload와 source event 시각까지 복사한 독립 관측 목록을 반환합니다.
-// 발행 경로는 이 복사본 하나로 저장소 입력과 체크포인트를 만듭니다.
 func (o RunOutput) Observations() []contract.Envelope {
 	return cloneEnvelopes(o.observations)
 }
@@ -339,7 +327,6 @@ func (o RunOutput) CollectionLatency() time.Duration {
 	return o.collectionLatency
 }
 
-// Cursor는 [0, ObservationCount()) 범위 관측의 checkpoint cursor 복사본을 반환합니다. 커서가 없으면 nil입니다.
 func (o RunOutput) Cursor(index int) jsontext.Value {
 	if index < 0 || index >= len(o.cursors) {
 		return nil

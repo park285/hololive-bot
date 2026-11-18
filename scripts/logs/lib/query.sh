@@ -1,7 +1,5 @@
 # shellcheck shell=bash
 
-# 중앙 container는 rootful Podman store에 있다. 비root로 rootless store를 조회하면 container가 없어
-# 빈 결과가 나오므로 db-maintenance-exec.sh처럼 sudo로 같은 store를 읽는다.
 LOGS_PODMAN=(podman)
 if [[ "$(id -u)" -ne 0 ]]; then
   LOGS_PODMAN=(sudo -n podman)
@@ -22,7 +20,6 @@ compose_query_output() {
     echo "query: container=${service_name} since=${since} limit=${limit} mode=podman logs" >&2
   fi
 
-  # 중앙 container는 journald log driver를 쓰므로 podman logs가 같은 journal을 읽는다.
   output="$("${LOGS_PODMAN[@]}" logs \
     --timestamps \
     --since "${since}" \

@@ -355,7 +355,6 @@ func TestYouTubePlaneProductionRetentionRequiresBoundedPolicy(t *testing.T) {
 func TestYouTubePlaneLiveCheckRetentionBounds(t *testing.T) {
 	t.Parallel()
 
-	// 두 live-check 종류에도 다른 증거와 같은 절대 상한을 적용한다.
 	for name, set := range map[string]func(*YouTubePlaneRetentionConfig, time.Duration){
 		"channel live check": func(r *YouTubePlaneRetentionConfig, age time.Duration) { r.ChannelLiveCheckAge = age },
 		"video live check":   func(r *YouTubePlaneRetentionConfig, age time.Duration) { r.VideoLiveCheckAge = age },

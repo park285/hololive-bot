@@ -38,7 +38,6 @@ type Service struct {
 	streamCacheFills streamCacheFillGate
 }
 
-// Cache는 Holodex 서비스가 응답 cache(Get·Set)와 분산 rate limit(B·DoMulti)에 쓰는 cache 작업이다.
 type Cache interface {
 	cache.KeyValueReader
 	cache.KeyValueWriter
@@ -80,7 +79,6 @@ func NewHolodexService(holodexCfg *settings.HolodexConfig, baseURL, apiKey strin
 			return nil, fmt.Errorf("initialize holodex distributed rate limiter: %w", err)
 		}
 
-		// 같은 API key를 쓰는 다른 프로세스와 429 대기·circuit open을 함께 지킨다. 분산 rate limit과 같은 설정에 묶는다.
 		sharedDeadline, err = ratelimitvalkey.NewSharedDeadline(cacheClient)
 		if err != nil {
 			return nil, fmt.Errorf("initialize holodex shared deadline: %w", err)
@@ -92,8 +90,6 @@ func NewHolodexService(holodexCfg *settings.HolodexConfig, baseURL, apiKey strin
 		return nil, fmt.Errorf("initialize holodex API client: %w", err)
 	}
 
-	// API client가 *http.Transport에 HTTP/2 설정을 적용한 뒤 감싼다. 같은 *http.Client를 공유하므로
-	// 이후 모든 Holodex 요청이 hololive_http_client_*{client="holodex"}에 기록된다.
 	httpClient.Transport = httpclientmetrics.Instrument("holodex", httpClient.Transport)
 
 	service := &Service{

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package botruntime
 
 import (
@@ -115,8 +95,6 @@ func (r *BotRuntime) joinHTTPRequests(ctx context.Context) error {
 	return nil
 }
 
-// ShutdownHTTPServer는 H3·short-link·metrics·pprof를 같은 ctx 안에서 동시에 멈춘다. H3 정지는 idle 연결만 남으면
-// ctx가 끝날 때까지 기다리므로, 그 뒤에 나머지를 멈추면 그동안 열려 있던 listener의 연결 때문에 정지가 ctx 오류로 끝난다.
 func (r *BotRuntime) ShutdownHTTPServer(ctx context.Context) error {
 	if r == nil {
 		return nil

@@ -38,7 +38,6 @@ func (s *Store) SetMemberCardTemplate(ctx context.Context, memberID int, expecte
 	}
 
 	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
-		// 설정 행이 아직 없더라도 같은 멤버의 최초 변경을 직렬화한다. 잠금 획득 후 새 스냅샷에서 현재값을 읽는다.
 		locked, err := tx.Exec(ctx, lockTemplateMemberSQL, memberID)
 		if err != nil {
 			return fmt.Errorf("lock template member: %w", err)

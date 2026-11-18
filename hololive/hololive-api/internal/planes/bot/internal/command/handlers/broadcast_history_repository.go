@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package handlers
 
 import (
@@ -39,10 +19,8 @@ type pgBroadcastHistoryRepository struct {
 }
 
 const (
-	defaultBroadcastHistoryLimit = 8
-	maxBroadcastHistoryLimit     = 20
-	// 저장소 한 번 조회의 결과 상한이다. !방송이력의 사용자 지정 개수는 handler가
-	// maxBroadcastHistoryLimit로 먼저 줄이고, !방송시간 합산은 이 상한까지 모은다.
+	defaultBroadcastHistoryLimit     = 8
+	maxBroadcastHistoryLimit         = 20
 	maxBroadcastHistoryQueryLimit    = 50
 	broadcastHistoryPageSize         = 100
 	maxBroadcastHistoryPages         = 5
@@ -126,8 +104,6 @@ func newBroadcastHistoryCollector(query *handlercore.BroadcastHistoryQuery, sinc
 	}
 }
 
-// broadcastHistoryPageSizeFor는 한 페이지에서 결과로 쓸 행 수다. Type·TopicID 최종 판정은 Go에서 하고 SQL 주제 필터는
-// 비ASCII 주제 행을 통과시키므로, 둘 다 비어 SQL 행이 그대로 결과가 되는 조회만 표시 건수만큼 읽는다.
 func broadcastHistoryPageSizeFor(query *handlercore.BroadcastHistoryQuery, limit int) int {
 	if query.Type == "" && query.TopicID == "" {
 		return limit
@@ -362,7 +338,6 @@ func broadcastHistoryEntryMatches(query *handlercore.BroadcastHistoryQuery, entr
 	return true
 }
 
-// 이 우선순위가 youtube_live_sessions.history_sort_at과 같아야 페이지 경계의 행이 겹치거나 빠지지 않습니다.
 func broadcastHistorySortTime(entry *handlercore.BroadcastHistoryEntry) time.Time {
 	switch {
 	case entry.EndedAt != nil:

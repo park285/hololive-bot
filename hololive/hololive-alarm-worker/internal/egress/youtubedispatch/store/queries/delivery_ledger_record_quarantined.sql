@@ -35,7 +35,6 @@ INSERT INTO youtube_notification_delivery_ledger AS current (
         updated_at = GREATEST(current.updated_at, EXCLUDED.updated_at),
         quarantined_at = LEAST(current.quarantined_at, EXCLUDED.quarantined_at),
         source_delivery_id = COALESCE(current.source_delivery_id, EXCLUDED.source_delivery_id)
-    -- SENT는 우선하는 확정 증거이므로 늦은 quarantine으로 다시 쓰지 않는다.
     WHERE current.status = 'QUARANTINED'
       AND (EXCLUDED.first_recorded_at < current.first_recorded_at
            OR EXCLUDED.updated_at > current.updated_at

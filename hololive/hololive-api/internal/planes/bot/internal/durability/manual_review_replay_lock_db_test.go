@@ -92,7 +92,6 @@ func waitThroughManualReplayCutoff(ctx context.Context, t *testing.T, pool *pgxp
 	}, time.Second, 10*time.Millisecond)
 	require.True(t, blockedAt.Before(cutoff), "call must enter the lock wait before the cutoff")
 
-	// 호스트 시계와 무관하게 DB의 cutoff가 지난 후에만 행 잠금을 해제합니다.
 	_, err := pool.Exec(ctx, `SELECT pg_sleep(GREATEST(0,extract(epoch FROM ($1::timestamptz-clock_timestamp())))+0.05)`, cutoff)
 	require.NoError(t, err)
 }

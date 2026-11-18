@@ -16,12 +16,9 @@ import (
 )
 
 const (
-	protocolVersion = 1
-	operationLimit  = 8 * time.Second
-	requestLimit    = 1 << 20
-	// HTTP IdleTimeout인 idleConnectionLimit은 client free-socket timeout(youtubejs/src/proof-broker.mjs, 1초)보다
-	// 훨씬 길어야 합니다. Node event loop가 수 초 멈춰도 client가 먼저 유휴 연결을 닫을 여유를 두어,
-	// 서버가 이미 닫은 socket을 재사용하다 EPIPE(broker_unavailable)를 받는 경쟁을 줄입니다.
+	protocolVersion     = 1
+	operationLimit      = 8 * time.Second
+	requestLimit        = 1 << 20
 	idleConnectionLimit = 30 * time.Second
 )
 
@@ -51,11 +48,9 @@ type Broker struct {
 	expires         time.Time
 	leaseTimer      *time.Timer
 	retiring        bool
-	// exitReason은 처음 retiring을 표시한 호출의 원인이며 b.mu가 보호합니다.
-	exitReason ExitReason
-	retireOnce sync.Once
-	// retireErr는 retireOnce 안에서 쓰고 완료된 뒤에만 읽는다.
-	retireErr error
+	exitReason      ExitReason
+	retireOnce      sync.Once
+	retireErr       error
 }
 
 type envelope struct {
@@ -121,12 +116,7 @@ func New(revision, node, script string) *Broker {
 
 func (b *Broker) Generation() string { return b.generation }
 
-// Serve는 종료할 때까지 listener를 소유한다. 반환 후 Broker를 재사용하지 말고 프로세스를 끝내야 한다.
-// 정상 종료는 nil을 반환한다. VM·listener 정리를 확인하지 못하면 워커 출력을 제외한 오류를 반환한다.
 func (b *Broker) Serve(listener net.Listener, startupTimeout time.Duration) error {
-	// 연결 재사용과 client 우선 유휴 종료를 위해 keep-alive를 유지합니다.
-	// 유휴 연결은 client(youtubejs/src/proof-broker.mjs)가 idleConnectionLimit보다 먼저 닫도록 하고,
-	// 퇴역 시에는 retire의 server.Close가 유휴·진행 중 연결을 모두 즉시 닫습니다.
 	b.server = &http.Server{
 		Handler:           http.HandlerFunc(b.handle),
 		ReadHeaderTimeout: 2 * time.Second, ReadTimeout: operationLimit,
@@ -134,8 +124,6 @@ func (b *Broker) Serve(listener net.Listener, startupTimeout time.Duration) erro
 		MaxHeaderBytes: 8 << 10, ErrorLog: log.New(io.Discard, "", 0),
 	}
 
-	// 신뢰된 SDK의 cold import는 호출자가 정한 기동 준비 예산을 사용한다.
-	// 요청의 8초 예산과 분리하며 loaded 확인 전에는 health도 제공하지 않는다.
 	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
 	initErr := b.initializeWorker(ctx)
 
@@ -148,7 +136,6 @@ func (b *Broker) Serve(listener net.Listener, startupTimeout time.Duration) erro
 	}
 
 	err := b.server.Serve(listener)
-	// ErrServerClosed이면 retire가 이미 원인을 기록했으므로 아래 원인은 쓰이지 않습니다.
 	b.retire(ExitListenerFailed)
 
 	if errors.Is(err, http.ErrServerClosed) {
@@ -524,7 +511,7 @@ func (b *Broker) challenge(ctx context.Context, w http.ResponseWriter, v *challe
 		return
 	}
 
-	b.state = AwaitingIntegrity // prepare에서 시작한 만료 시한은 challenge 이후에도 유지합니다.
+	b.state = AwaitingIntegrity
 	b.mu.Unlock()
 
 	if !success(w, struct {
@@ -728,11 +715,9 @@ func failure(w http.ResponseWriter, status int, code string) {
 		return
 	}
 
-	// 쓰기 오류는 연결이 끊겼다는 뜻이며, 상태 변경 실패는 본문 전달 여부와 관계없이 해당 세대를 종료한다.
 	writeBody(w, status, encoded)
 }
 
-// 퇴역 응답은 Flush 직후 server.Close가 연결을 닫으므로, chunked 종료 표시가 잘리지 않게 길이를 먼저 보낸다.
 func writeBody(w http.ResponseWriter, status int, encoded []byte) bool {
 	w.Header().Set("Content-Length", strconv.Itoa(len(encoded)))
 	w.WriteHeader(status)

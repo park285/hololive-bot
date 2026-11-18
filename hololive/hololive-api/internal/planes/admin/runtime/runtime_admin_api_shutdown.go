@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package adminruntime
 
 import (
@@ -86,7 +66,6 @@ func (r *AdminAPIRuntime) ShutdownHTTPServer(ctx context.Context) error {
 
 	r.httpStopInit.Do(func() { r.httpStopGate = make(chan struct{}, 1) })
 
-	// 같은 listener의 Stop 작업은 한 owner만 실행한다. 미완료 작업은 다음 호출도 이 gate에서 기다린다.
 	select {
 	case r.httpStopGate <- struct{}{}:
 	case <-ctx.Done():
@@ -115,7 +94,6 @@ func (r *AdminAPIRuntime) ShutdownHTTPServer(ctx context.Context) error {
 			r.httpStopErr = stopErr
 		}
 
-		// 성공한 HTTP Shutdown은 net/http·quic-go가 실제 handler를 모두 join한 증거다.
 		r.httpQuiesced = stopErr == nil
 
 		reportErr := r.httpStopErr
@@ -157,7 +135,6 @@ func waitAdminBackground(ctx context.Context, done <-chan struct{}) error {
 	}
 }
 
-// ResourceUsersJoined는 과거 drain 오류와 독립적인 실제 작업 join 상태다.
 func (r *AdminAPIRuntime) ResourceUsersJoined() bool {
 	return r == nil || r.quiesced()
 }

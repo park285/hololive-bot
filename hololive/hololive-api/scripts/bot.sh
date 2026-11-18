@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Hololive Kakao Bot 로컬 단일 프로세스 보조 명령 단일 진입점
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -137,7 +136,6 @@ cmd_start() {
     fi
   fi
 
-  # kapu 로컬 의존 컨테이너는 Podman으로 띄운다. 런타임 선택 변수는 두지 않는다.
   echo "[CHECK] Checking Redis connection..."
   if ! command -v podman >/dev/null 2>&1; then
     echo "[ERROR] podman not found"

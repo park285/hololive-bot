@@ -17,7 +17,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// countingCollabMembers는 collabTestMembers와 같은 멤버를 돌려주며 전체 멤버 적재 횟수를 센다.
 type countingCollabMembers struct {
 	collabTestMembers
 
@@ -38,8 +37,6 @@ func collabRunnerTestEnvelope(roomID string, collabNames ...string) dispatchoutb
 	return envelope
 }
 
-// 콜라보 표기명 색인은 claim 배치마다 한 번만 만들어 그 배치의 모든 group이 쓰고, 다음 배치는 멤버를 다시 적재한다.
-// 콜라보 이름이 없는 배치는 멤버를 적재하지 않는다.
 func TestAlarmDispatchRunnerBuildsCollabIndexOncePerBatch(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
 	members := &countingCollabMembers{}
@@ -78,7 +75,6 @@ func (c *alarmRenderStatementCounter) TraceQueryStart(ctx context.Context, _ *pg
 func (*alarmRenderStatementCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {
 }
 
-// 두 본문 변형 렌더는 template 버전 확인을 한 문장으로 끝낸다. 파싱 cache가 찬 뒤에는 그 한 문장만 실행한다.
 func TestRenderTemplateVariantsResolvesBothVariantsInOneStatement(t *testing.T) {
 	counter := &alarmRenderStatementCounter{}
 	cfg := dbtest.NewPool(t).Config()

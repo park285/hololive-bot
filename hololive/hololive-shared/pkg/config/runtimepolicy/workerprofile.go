@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// PositiveValueProblems: 밀리초 설정이 1..30일 범위를 벗어나면 문제로 보고한다.
 func PositiveValueProblems(values map[string]int64) []string {
 	problems := make([]string, 0)
 

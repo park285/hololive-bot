@@ -24,7 +24,6 @@ func newAlarmDispatchTestRenderer(t *testing.T) *template.Renderer {
 	return template.NewRenderer(dbtest.NewPool(t), slog.Default())
 }
 
-// 코드 대체 문구가 없으므로 알림 문구와 placeholder는 DB 정본에서만 나온다.
 func newAlarmDispatchTestMessageStrings(t *testing.T) *messagestrings.Store {
 	t.Helper()
 
@@ -44,7 +43,6 @@ func newAlarmDispatchTestRendering(t *testing.T) (*template.Renderer, *messagest
 	return template.NewRenderer(pool, slog.Default()), store
 }
 
-// alarmGoldenChannelPrefix 뒤의 이름이 members 정본 표시명이다. 원천 채널 제목(Channel.Name)은 표시하지 않는다.
 const alarmGoldenChannelPrefix = "ch-golden-"
 
 type alarmGoldenMembers struct {

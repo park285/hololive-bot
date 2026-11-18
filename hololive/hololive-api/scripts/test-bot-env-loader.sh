@@ -64,7 +64,6 @@ for command in start restart; do
     fail "bot ${command} should reject removed --no-ready-wait option"
   fi
   grep -q "Unknown argument: --no-ready-wait" "${TMP_DIR}/out" || fail "expected ${command} unknown argument rejection"
-  # .env loader가 먼저 돌았다면 command substitution 거절이 stderr에 남는다. 인자 거절이 그보다 앞서야 한다.
   ! grep -q "command substitution" "${TMP_DIR}/err" || fail ".env was loaded before ${command} argument rejection"
 done
 

@@ -372,9 +372,6 @@ func seedRecoveryInputFixtureOutboxes(
 		NextAttemptAt: spec.retryReadyAt,
 		CreatedAt:     spec.pendingDetectedAt,
 	}
-	// idx_yno_kind_content·idx_ynd_outbox_room 유니크 인덱스 때문에 같은 (kind, content_id)나
-	// 같은 (outbox_id, room_id)로는 SENT 행을 둘 수 없어, content_id를 prefix 붙은 canonical 표기로 쓴 재등록 outbox로 만든다.
-	// content_id 문자열은 다르지만 payload canonical_post_id와 같은 logical ID로 정규화되므로 유효한 식별자다.
 	served = domain.YouTubeNotificationOutbox{
 		Kind:          spec.kind,
 		ChannelID:     spec.channelID,

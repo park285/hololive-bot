@@ -192,8 +192,6 @@ func TestRetainDeletesOnlyUnlockedRetiredProjectionState(t *testing.T) {
 	}
 
 	insertProjectionLease(t, pool, "retired-idle", first.Generation, "IDLE", projectionNow.Add(7*24*time.Hour))
-	// 삭제 함수는 lease 만료만 clock_timestamp()로 판정하므로, 고정 anchor 기준으로 잡으면
-	// 실제 시각이 anchor+7일을 넘긴 날부터 이 lease가 만료로 보여 테스트가 깨진다.
 	insertProjectionLease(t, pool, "retired-active", second.Generation, "ACTIVE", time.Now().Add(7*24*time.Hour))
 
 	result, err := refresher.Retain(ctx, projectionNow.Add(4*24*time.Hour), 24*time.Hour, 100)
@@ -394,7 +392,6 @@ func TestDefaultLiveChecksShareLiveSnapshotCadence(t *testing.T) {
 		t.Fatalf("live snapshot schedule = %+v", live)
 	}
 
-	// 독립 job들도 동일한 기본 재확인 주기와 freshness 예산을 사용한다.
 	for _, kind := range []contract.ObservationKind{contract.KindChannelLiveCheck, contract.KindVideoLiveCheck} {
 		got := byKind[kind]
 		if got.PollInterval != live.PollInterval || got.Priority != live.Priority || got.Enabled != live.Enabled {
@@ -446,7 +443,6 @@ func TestBuildPolicyTargetsRejectsInvalidLiveCheckVideos(t *testing.T) {
 		})
 	}
 
-	// 상한과 같은 후보 수는 유효한 projection이다.
 	atLimit := overflow[:MaxInputLiveCheckVideoCount]
 	if _, _, err := BuildPolicyTargets(PolicyInputs{
 		OperationalChannelIDs: []string{testOperationalChannelID},
@@ -524,7 +520,6 @@ func TestPolicyBuilderLiveCheckVideoFailuresPreserveLastGood(t *testing.T) {
 				Schedules: DefaultPolicySchedules(),
 			}
 
-			// 입력 오류는 runtime이 degraded로 기록하고 last-good generation을 유지하는 ErrInputRead로 분류된다.
 			if _, _, err := builder.Build(t.Context(), nil, projectionNow); !errors.Is(err, ErrInputRead) || !errors.Is(err, videosErr) {
 				t.Fatalf("Build() error = %v, want input read wrapping %v", err, videosErr)
 			}

@@ -53,7 +53,6 @@ export async function handleChannelRequest(rawBody, fetchChannel, maximumSuccess
       maxSuccessResponseBytes: payload.max_success_response_bytes,
     });
   }, maximumSuccessResponseBytes);
-  // 실패 전까지 보낸 예정 영상 조회도 collector 호출 예산에 반영되도록 오류 본문에 함께 싣습니다.
   const lookups = currentScheduleLookups();
   if (result.status !== 200 && lookups > 0) {
     return { status: result.status, body: { ...result.body, schedule_lookups: lookups } };
@@ -62,7 +61,6 @@ export async function handleChannelRequest(rawBody, fetchChannel, maximumSuccess
 }
 
 /**
- * 채널 /live 확인 RPC입니다. 결과 subject가 요청 채널과 다르면 관측으로 쓰지 않고 계약 위반으로 거부합니다.
  * @param {string} rawBody
  * @param {import("./contracts.d.ts").ChannelLiveCheckFetcher} fetchChannelLiveCheck
  * @param {number} [maximumSuccessResponseBytes]
@@ -81,7 +79,6 @@ export async function handleChannelLiveCheckRequest(rawBody, fetchChannelLiveChe
 }
 
 /**
- * 영상 상태 확인 RPC입니다. identity 확인 여부와 무관하게 결과 video_id는 요청 subject와 같아야 합니다.
  * @param {string} rawBody
  * @param {import("./contracts.d.ts").VideoLiveCheckFetcher} fetchVideoLiveCheck
  * @param {number} [maximumSuccessResponseBytes]

@@ -283,7 +283,6 @@ func TestBoundedError(t *testing.T) {
 		want string
 	}{
 		{name: "nil", err: nil, want: "youtube plane retry"},
-		// 3바이트 문자 683개는 2049바이트라 2048바이트 상한이 문자 중간에 걸린다.
 		{name: "over detail limit", err: errors.New(strings.Repeat("가", 683)), want: strings.Repeat("가", 682)},
 	}
 

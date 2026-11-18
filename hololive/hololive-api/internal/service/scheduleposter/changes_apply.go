@@ -11,7 +11,6 @@ import (
 	"unicode/utf8"
 )
 
-// PostStatus는 포스터 게시 뒤 멤버가 올린 글의 처리 상태이며 migration 020의 CHECK와 같은 값이다.
 type PostStatus string
 
 const (
@@ -33,7 +32,6 @@ func (s PostStatus) Valid() bool {
 	}
 }
 
-// ChangeKind는 글의 한 항목을 대상 칸과 견준 판정이며 migration 020의 CHECK와 같은 값이다.
 type ChangeKind string
 
 const (
@@ -54,7 +52,6 @@ func (k ChangeKind) Valid() bool {
 	return k == ChangeSame || k == ChangeRejected || k.Applied()
 }
 
-// Applied는 카드에 변화를 만든 판정인지 알려 준다. 같음(same)은 글이 말한 값을 덮지만 변화로 세지 않고, 거절(rejected)은 기록만 한다.
 func (k ChangeKind) Applied() bool {
 	switch k {
 	case ChangeTimeChanged, ChangeConfirmed, ChangeTentative, ChangeCancelled, ChangeOff,
@@ -79,20 +76,16 @@ const (
 	streamTitleKo        = "방송"
 )
 
-// Post는 포스터 게시 뒤 멤버가 X에 올린 원글이다. Body가 판별·대응·근거 검증의 유일한 본문이다.
-// Status와 MatchedPosterID·MatchedRowsAt은 PendingPosts가 읽은 값이고, RecordMatch는 지금 값이 이와 같을 때만 쓴다.
 type Post struct {
-	ID        int64
-	PostedAt  time.Time
-	Body      string
-	Status    PostStatus
-	CreatedAt time.Time
-	// MatchedPosterID·MatchedRowsAt은 마지막으로 대응한 행 묶음이며, 대응한 적이 없으면 zero다.
+	ID              int64
+	PostedAt        time.Time
+	Body            string
+	Status          PostStatus
+	CreatedAt       time.Time
 	MatchedPosterID int64
 	MatchedRowsAt   time.Time
 }
 
-// PostDecision의 Kind가 비면 판별 답을 저장하지 않는다(judge_failed).
 type PostDecision struct {
 	Status       PostStatus
 	Reason       string
@@ -100,19 +93,15 @@ type PostDecision struct {
 	Kind         string
 }
 
-// MatchResult의 Status는 PostMatched나 PostMatchFailed다.
 type MatchResult struct {
 	Status  PostStatus
 	Reason  string
 	Changes []Change
 }
 
-// Change는 글 하나의 한 항목에서 뽑은 일정 변경이다. 글이 말한 값만 담는다.
-// 대상은 원래 행 번호 Slot이거나 앞선 added 변경 (TargetPostID, TargetItem)이고, 둘 다 없는 added는 새 칸이다.
 type Change struct {
-	PostID int64
-	Item   int
-	// PostedAt은 적용 순서를 정한다. 저장소가 읽을 때 글에서 채우고, admin은 기록 전 적용에 쓰려고 직접 채운다.
+	PostID       int64
+	Item         int
 	PostedAt     time.Time
 	RecordedAt   time.Time
 	Kind         ChangeKind
@@ -120,45 +109,34 @@ type Change struct {
 	Slot         int
 	TargetPostID int64
 	TargetItem   int
-	// Day가 zero면 날짜를 바꾸지 않는다.
-	Day time.Time
-	// Start가 nil이면 시각을 바꾸지 않고 ""면 시각을 지운다.
-	Start *string
-	// Status가 ""면 상태를 바꾸지 않는다.
-	Status RowStatus
-	Text   string
-	// TitleKo가 ""면 한국어 다섯 칸(TitleKo, WithKo, PlaceKo, TagsKo, NoteKo)을 바꾸지 않는다.
-	TitleKo  string
-	WithKo   []string
-	PlaceKo  string
-	TagsKo   []string
-	NoteKo   string
-	Terms    []Term
-	DoubtKo  string
-	Warnings []string
-	// EditedAt은 관리자가 이 변경의 한국어 다섯 칸을 마지막으로 고친 시각이며 고친 적이 없으면 zero다. PolishSlot만 쓴다.
-	EditedAt time.Time
+	Day          time.Time
+	Start        *string
+	Status       RowStatus
+	Text         string
+	TitleKo      string
+	WithKo       []string
+	PlaceKo      string
+	TagsKo       []string
+	NoteKo       string
+	Terms        []Term
+	DoubtKo      string
+	Warnings     []string
+	EditedAt     time.Time
 }
 
-// Slot은 원래 행에 변경을 적용한 현재 일정 한 칸이다. EditedAt은 지금 한국어 칸을 정한 행이나 변경의 값이다. 더한 칸은 Ordinal이 0이고 AddedPostID·AddedItem이 그 칸을 만든 변경이다.
 type Slot struct {
 	Row
 
-	// Number는 대응 입력의 줄 번호로, 원래 행 뒤에 더한 칸을 적용 순서로 이은 위치 + 1이다.
 	Number      int
 	AddedPostID int64
 	AddedItem   int
-	// OrigDay·OrigStart는 포스터 값이다. 더한 칸은 비어 있다.
-	OrigDay   time.Time
-	OrigStart string
-	// MovedTo는 주 밖으로 옮긴 새 날짜다. 그 칸은 원래 날짜에 취소로 남는다.
-	MovedTo time.Time
-	// TimeChanged는 원래 행의 날짜·시각이 NormalizeDayTime으로 견줘 포스터 값과 다른지다.
+	OrigDay     time.Time
+	OrigStart   string
+	MovedTo     time.Time
 	TimeChanged bool
 	Steps       []Step
 }
 
-// Step은 칸에 반영한 변경 하나와 반영 직전의 날짜·시각이다.
 type Step struct {
 	Change
 
@@ -170,7 +148,6 @@ func PostURL(postID int64) string {
 	return "https://x.com/i/status/" + strconv.FormatInt(postID, 10)
 }
 
-// NormalizeDayTime은 24시 이상 표기를 다음 날 시각으로 바꾸고 시를 두 자리로 맞춘다. 시각이 비었거나 형식이 아니면 그대로 돌려준다.
 func NormalizeDayTime(day time.Time, start string) (time.Time, string) {
 	if !rowTimePattern.MatchString(start) {
 		return day, start
@@ -193,9 +170,6 @@ func sameDayTime(dayA time.Time, startA string, dayB time.Time, startB string) b
 	return dayA.Equal(dayB) && startA == startB
 }
 
-// ApplyChanges는 ordinal 순 행에 변경을 (PostedAt, PostID, Item) 순서로 적용한 현재 일정을 돌려준다. 입력은 바꾸지 않는다.
-// 같음은 글이 말한 날짜·시각·상태만 덮고 한국어 칸과 Steps는 그대로 둔다. 거절과 대상 칸을 찾지 못한 변경은 건너뛴다.
-// 결과는 원래 행 뒤에 더한 칸을 적용 순서로 잇는다.
 func ApplyChanges(rows []Row, changes []Change) []Slot {
 	slots := make([]Slot, len(rows), len(rows)+len(changes))
 	for i := range rows {
@@ -324,8 +298,6 @@ func (s *Slot) koreanStep() (*Change, bool) {
 	return nil, false
 }
 
-// ValidateChanges는 migration 020의 CHECK와 같은 조건을 DB에 가기 전에 검사한다. 거절 행은 사유와 칸 번호만 가질 수 있고,
-// 잘못된 UTF-8과 NUL 문자, 네 자리 연도가 아닌 날짜, 같은 글의 같은 항목 번호도 거부한다.
 func ValidateChanges(changes []Change) error {
 	type key struct {
 		postID int64

@@ -19,7 +19,6 @@ type subpath struct {
 	closed bool
 }
 
-// shape는 비영 감기 규칙으로 채운다. 반대 방향으로 감긴 하위 경로는 구멍이 된다.
 type shape struct{ subs []subpath }
 
 func (s *shape) MoveTo(x, y float64) { s.subs = append(s.subs, subpath{pts: []pt{{x, y}}}) }
@@ -72,7 +71,6 @@ func (s *shape) CubeTo(c1x, c1y, c2x, c2y, x, y float64) {
 	}
 }
 
-// Arc는 a0→a1(라디안)로 타원 호를 잇는다. Y가 아래로 커지므로 양의 방향이 시계 방향이다.
 func (s *shape) Arc(cx, cy, rx, ry, a0, a1 float64) {
 	n := curveSteps(math.Abs(a1-a0) * max(rx, ry))
 
@@ -117,7 +115,6 @@ func rot(a float64) affine {
 	return affine{c, -s, 0, s, c, 0}
 }
 
-// Then은 m을 먼저, n을 나중에 적용한 변환이다.
 func (m affine) Then(n affine) affine {
 	return affine{
 		n.A*m.A + n.B*m.D, n.A*m.B + n.B*m.E, n.A*m.C + n.B*m.F + n.C,

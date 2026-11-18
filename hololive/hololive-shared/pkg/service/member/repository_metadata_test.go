@@ -43,7 +43,6 @@ func TestRepositoryQueriesPreserveMemberMetadata(t *testing.T) {
 	assertMemberRepositoryMetadata(t, snapshot)
 	require.Equal(t, photo, snapshot.Photo)
 
-	// 단건 조회는 snapshot 적재와 같은 열을 읽으므로 snapshot과 같은 멤버를 돌려준다.
 	singleQueries := []struct {
 		name  string
 		query func() (*domain.Member, error)

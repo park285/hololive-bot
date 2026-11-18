@@ -1,6 +1,8 @@
 package subscriptions
 
 import (
+	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -10,35 +12,84 @@ import (
 )
 
 func TestLockCacheMutationRecordsContendedWait(t *testing.T) {
-	const (
-		operation = "lock-wait-test"
-		hold      = 30 * time.Millisecond
-	)
+	const operation = "lock-wait-test"
+
+	t.Cleanup(func() { alarmMetrics().mutationLockWait.DeleteLabelValues(operation) })
 
 	service := &AlarmService{}
-	before := mutationLockWaitSample(t, operation)
+	started := make(chan time.Time)
 
 	service.cacheMutationMu.Lock()
 
-	released := make(chan struct{})
-
 	go func() {
-		time.Sleep(hold)
-		service.cacheMutationMu.Unlock()
-		close(released)
+		started <- service.lockCacheMutation(operation)
 	}()
 
-	startedAt := service.lockCacheMutation(operation)
-	waited := time.Since(startedAt)
+	if !waitForMutationLockContention(started) {
+		service.cacheMutationMu.Unlock()
+		t.Fatal("lockCacheMutation returned while the test still held cacheMutationMu")
+	}
 
+	for observedAt := time.Now(); time.Since(observedAt) == 0; {
+		runtime.Gosched()
+	}
+
+	releasedAt := time.Now()
 	service.cacheMutationMu.Unlock()
-	<-released
+
+	startedAt := <-started
+	service.cacheMutationMu.Unlock()
 
 	after := mutationLockWaitSample(t, operation)
 
-	require.GreaterOrEqual(t, waited, hold, "작업 시작 시각은 lock 대기 전이어야 한다")
-	require.Equal(t, before.GetSampleCount()+1, after.GetSampleCount())
-	require.GreaterOrEqual(t, after.GetSampleSum()-before.GetSampleSum(), hold.Seconds())
+	require.True(t, startedAt.Before(releasedAt), "start time must precede lock release")
+	require.Equal(t, uint64(1), after.GetSampleCount())
+	require.GreaterOrEqual(t, after.GetSampleSum(), releasedAt.Sub(startedAt).Seconds())
+}
+
+func waitForMutationLockContention(started <-chan time.Time) bool {
+	lockMutation := runtime.FuncForPC(reflect.ValueOf((*AlarmService).lockCacheMutation).Pointer()).Name()
+	records := make([]runtime.StackRecord, runtime.NumGoroutine())
+
+	for {
+		select {
+		case <-started:
+			return false
+		default:
+		}
+
+		n, ok := runtime.GoroutineProfile(records)
+		if !ok {
+			records = make([]runtime.StackRecord, n)
+
+			continue
+		}
+
+		for i := range records[:n] {
+			if mutationLockInStack(records[i].Stack(), lockMutation) {
+				return true
+			}
+		}
+
+		runtime.Gosched()
+	}
+}
+
+func mutationLockInStack(stack []uintptr, lockMutation string) bool {
+	frames := runtime.CallersFrames(stack)
+
+	for {
+		frame, more := frames.Next()
+		if frame.Function == "sync.(*Mutex).Lock" {
+			caller, _ := frames.Next()
+
+			return caller.Function == lockMutation
+		}
+
+		if !more {
+			return false
+		}
+	}
 }
 
 func mutationLockWaitSample(t *testing.T, operation string) *dto.Histogram {

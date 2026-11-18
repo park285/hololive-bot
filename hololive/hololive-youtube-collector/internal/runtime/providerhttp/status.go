@@ -141,8 +141,6 @@ func RedactError(err error, secrets ...string) error {
 	return collecterr.WithRetry(base, collecterr.RetryOf(err))
 }
 
-// collecterr는 미분류 생성자를 노출하지 않는다. 평문 문자열 오류는 context/transient 판정에
-// 걸리지 않으므로 FromContext가 항상 기본 버킷(Internal, unclassified)으로 떨어뜨린다.
 func unclassifiedRedacted(redactedErr error) error {
 	return collecterr.FromContext(redactedErr)
 }

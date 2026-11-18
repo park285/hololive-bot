@@ -1,6 +1,7 @@
 package migrationrunner
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -641,8 +642,6 @@ func TestRealManifestBaselineWithoutChecksumRefuses(t *testing.T) {
 	assertMigrationRecorded(t, pool, "002_drop_x_space_login_attempts.sql", false)
 }
 
-// 182 적용 전 DB라도 epoch-1 ledger 잔재가 있으면 SQL을 실행하기 전에 거부한다.
-
 func TestRealManifestEditedBaselineFailsChecksum(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	runMigrations(t, pool, migrations.FS, "")
@@ -658,8 +657,6 @@ func TestRealManifestEditedBaselineFailsChecksum(t *testing.T) {
 		t.Fatalf("Run() error = %v, want immutable baseline checksum mismatch", err)
 	}
 }
-
-// epoch-1(R1) manifest로 epoch-2 ledger를 가진 DB를 다시 적용하는 rollback 창은 닫혔다. 잔재로 보고 거부한다.
 
 func TestRealManifestPrefilledLedgerWithoutChecksumsRefuses(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
@@ -1029,24 +1026,19 @@ func TestAdvisoryLockSessionEvictClosesConnAndReleasesLock(t *testing.T) {
 	}
 	defer other.Release()
 
-	deadline := time.Now().Add(5 * time.Second)
+	exitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
 	for {
 		var alive bool
 
-		if queryErr := other.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = $1)", holderPID).Scan(&alive); queryErr != nil {
+		if queryErr := other.QueryRow(exitCtx, "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = $1)", holderPID).Scan(&alive); queryErr != nil {
 			t.Fatalf("query holder backend: %v", queryErr)
 		}
 
 		if !alive {
 			break
 		}
-
-		if time.Now().After(deadline) {
-			t.Fatalf("holder backend %d still alive 5s after EvictAfterUnlockFailure", holderPID)
-		}
-
-		time.Sleep(10 * time.Millisecond)
 	}
 
 	contender := pgxAdvisoryLockSession{conn: other}

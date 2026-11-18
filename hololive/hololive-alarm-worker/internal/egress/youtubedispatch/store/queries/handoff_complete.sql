@@ -1,6 +1,4 @@
--- handoff_completed를 확인으로 기록한다. 멤버 delivery·원장은 SENT 그대로이고 요청의 다음 확인을 지우고 확인 시각을
--- 남긴다. 멤버를 바꾸지 않으므로 멤버 fence는 보지 않는다(members_match는 TRUE).
-/* handoff_request_fence */, updated AS (
+/* fragment:handoff_request_fence */, updated AS (
     UPDATE youtube_notification_send_request r
     SET handoff_next_check_at = NULL,
         handoff_checked_at = clock.now

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package handlers
 
 import (
@@ -32,7 +12,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 )
 
-// BroadcastClassification은 방송 유형과 판정 근거(topic/title/reviewed/unknown)를 담는다.
 type BroadcastClassification struct {
 	Type   broadcasttype.Type
 	Source string
@@ -66,7 +45,6 @@ type broadcastTypeRules struct {
 	GameTag        broadcastGameTagRules           `json:"game_title_tag"`
 	ReviewedVideos map[string]broadcastVideoReview `json:"reviewed_videos,omitempty"`
 
-	// gameTopicTags는 game 주제 ID를 제목 표기로 바꾼 것이다. 주제와 제목 태그가 같은 게임 목록을 쓰게 한다.
 	gameTopicTags []string
 }
 
@@ -101,8 +79,6 @@ var broadcastTitleOverrideStrengths = map[broadcasttype.Type]map[broadcastTitleS
 	},
 }
 
-// ClassifyBroadcastWithSource는 주제·제목 우선순위에 따라 유형과 근거를 반환한다.
-// 명시적인 멤버 한정 제목은 다른 주제보다 우선하며, 근거가 없으면 unknown을 유지한다.
 func ClassifyBroadcastWithSource(topicID, title string) BroadcastClassification {
 	topicType := classifyBroadcastTopic(topicID)
 	titleClass := classifyBroadcastTitle(title)
@@ -213,7 +189,6 @@ func classifyBroadcastTitleByKeyword(normalized, rejectScope, leadTag string, ru
 	return broadcasttype.Unknown, false
 }
 
-// reject는 boundary 없는 substring 검사라 «Winning Post10»처럼 숫자가 붙은 표기도 걸러낸다.
 func broadcastRejectScopeMatches(rejectScope string, keywords []string) bool {
 	for _, keyword := range keywords {
 		if keyword != "" && strings.Contains(rejectScope, keyword) {
@@ -240,8 +215,6 @@ func titleLooksLikeGameBroadcast(normalized, leadTag string) bool {
 	return containsAnyBroadcastKeyword(normalized, broadcastRules.GameTag.Contains)
 }
 
-// 게임 주제 이름은 첫 제목 태그의 시작일 때만 인정한다. «forza horizon 6»처럼 속편·부제는 뒤에 붙지만,
-// 태그 중간의 일반 단어(«dark hours»의 ark)까지 게임명으로 보지 않는다.
 func hasAnyBroadcastKeywordPrefix(value string, keywords []string) bool {
 	for _, keyword := range keywords {
 		if keyword != "" && strings.HasPrefix(value, keyword) && hasBroadcastKeywordBoundary(value, 0, len(keyword)) {
@@ -334,9 +307,6 @@ func isASCIIBroadcastKeyword(value string) bool {
 	return true
 }
 
-// 일본어 제목은 영문 게임명 앞뒤에 공백 없이 가나·한자가 붙고(«APEXやる»),
-// 속편 번호가 바로 이어진다(«Portal2»). 비ASCII 인접과 뒤따르는 숫자는 경계로 인정해야
-// 실제 매치가 살아남고, ASCII 문자 인접만 오탐(«off»의 ff, «content»의 nte)으로 거른다.
 func hasBroadcastKeywordBoundary(value string, start, end int) bool {
 	if start > 0 {
 		r, _ := utf8.DecodeLastRuneInString(value[:start])
@@ -397,7 +367,6 @@ func normalizeBroadcastText(value string) string {
 		switch r {
 		case '\u200b', '\u200c', '\u200d', '\ufeff':
 			return -1
-		// NFKC\ub294 \uace1\uc120 \uc544\ud3ec\uc2a4\ud2b8\ub85c\ud53c\ub97c \ubc14\uafb8\uc9c0 \uc54a\uc544 \u00abDragon\u2019s Dogma\u00bb\uac00 \uc8fc\uc81c\u00b7\ud0a4\uc6cc\ub4dc\uc758 '\uc640 \uc5b4\uae0b\ub09c\ub2e4.
 		case '\u2019':
 			return '\''
 		default:

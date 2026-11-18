@@ -62,7 +62,6 @@ func recordChat(t *testing.T, store *scheduleposter.Store, item scheduleposter.P
 	return recorded
 }
 
-// requeueRows는 request_rows.sql처럼 재추출을 예약하되 주가 끝났는지 보지 않는다. 고정 날짜 픽스처가 실행 날짜와 무관하게 재추출 대기를 만들기 위해서다.
 func requeueRows(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 

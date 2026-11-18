@@ -20,7 +20,6 @@ const (
 	planModeForceCustom  = "force_custom_plan"
 )
 
-// preparedPlanModes는 cache_statement exec mode에서 한 연결이 거칠 수 있는 두 계획 경로입니다.
 var preparedPlanModes = []string{planModeForceGeneric, planModeForceCustom}
 
 func TestFanoutSQLPreparedModesPreservePendingGuard(t *testing.T) {
@@ -90,7 +89,6 @@ func TestFanoutSQLSkipsLockedRowAndReclaimsAfterRollback(t *testing.T) {
 	require.Equal(t, firstID, claimed[0].ID)
 }
 
-// 운영 기본 exec mode(cache_statement)의 generic/custom plan 양쪽에서 상태 가드를 검증하는 데 씁니다.
 func preparePlanModeSQLTest(t *testing.T, pool *pgxpool.Pool, mode, name, query string) pgx.Tx {
 	t.Helper()
 

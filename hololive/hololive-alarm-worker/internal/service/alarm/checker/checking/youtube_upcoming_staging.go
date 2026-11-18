@@ -21,7 +21,7 @@ func (c *YouTubeChecker) stageUpcomingChannel(ctx context.Context, work *youtube
 	}
 
 	batch := &unstagedYouTubeCandidates{work: *work, notifications: notifications, evaluatedAt: now}
-	// 실패한 실행의 선정 결과는 다음 조회 전에 재저장한다. 한 cycle의 채널별 결과만 보유한다.
+
 	c.unstagedMu.Lock()
 
 	if c.unstagedUpcoming == nil {

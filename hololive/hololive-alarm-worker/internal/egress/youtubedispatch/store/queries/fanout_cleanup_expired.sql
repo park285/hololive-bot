@@ -1,5 +1,3 @@
--- 보존 기간과 lease 만료는 문장 첫머리에서 한 번 채취한 DB 시계(clock)로 판정한다.
--- $1 PENDING, $2 보존 기간 ms, $3 lease ms, $4 한도.
 WITH clock AS MATERIALIZED (
     SELECT sampled.at - $2::bigint * INTERVAL '1 millisecond' AS created_cutoff,
            sampled.at - $3::bigint * INTERVAL '1 millisecond' AS lock_cutoff

@@ -1,5 +1,4 @@
 # shellcheck shell=bash
-# native 배포의 변경 결과만 기록합니다. argv·출력·환경 값은 복구 기록에 남기지 않습니다.
 native_recovery_dir=/opt/hololive-bot/youtube-collector/cutover-recovery
 
 native_recovery_require_clear() {
@@ -12,7 +11,6 @@ native_recovery_require_clear() {
 }
 
 native_cutover_claim() {
-  # 원자적 mkdir가 동시 배포와 미확정 이전 변경을 함께 거절합니다.
   sudo -n mkdir -m 0700 "$native_recovery_dir"
   sudo -n sh -c 'umask 077; printf "%s\n" "$1" > "$2/release"; printf "%s\n" "$3" > "$2/owner-pid"' \
     sh "$1" "$native_recovery_dir" "$BASHPID"
@@ -20,7 +18,6 @@ native_cutover_claim() {
 
 native_cutover_signal() {
   native_signal_status="$1"
-  # wait가 중단됐을 때는 실행 중인 worker의 완료를 먼저 확인합니다.
   if [[ "${native_phase_active:-false}" != true && "${native_restoring:-false}" != true ]]; then
     native_restoring=true
     restore_native_after_failed_cutover "$1"
@@ -58,7 +55,6 @@ native_cutover_run() {
     return "$native_signal_status"
   fi
   [[ "$-" != *m* ]] || monitor_was_set=true
-  # job control가 worker에 별도 소유 process group과 살아 있는 SIGINT를 줍니다.
   set -m
   # shellcheck disable=SC2034 # 연결된 ERR handler가 실행 중 변경의 미확정 상태를 읽습니다.
   native_phase_started=true
@@ -85,16 +81,13 @@ native_cutover_run() {
     native_cutover_unknown
     return "$worker_status"
   }
-  # 조건 문맥은 wait에만 적용합니다. worker의 실제 함수는 set -e를 유지합니다.
   wait "$native_worker_pid" || worker_status=$?
   if (( ${native_signal_status:-0} != 0 )); then
-    # 부모에만 신호가 오면 worker는 계속 실행됩니다. 완료 관찰은 5초에 한정합니다.
     for (( signal_wait=0; signal_wait<50; signal_wait++ )); do
       kill -0 "$native_worker_pid" 2>/dev/null || break
       sleep 0.1
     done
     if kill -0 "$native_worker_pid" 2>/dev/null; then
-      # 이 배포가 만든 worker group에만 전달합니다. daemon 결과를 복원 성공으로 추정하지 않습니다.
       kill -TERM -- "-$native_worker_pid" 2>/dev/null || true
       native_cutover_unknown
       native_worker_pid=""

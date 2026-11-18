@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package database
 
 import (
@@ -39,12 +19,10 @@ type PostgresService struct {
 	logger *slog.Logger
 }
 
-// PostgresConfig의 SSLRootCert는 pgxdb Config.SSLRootCert로 그대로 넘긴다. 이 경로는 shared-go pgxdb의
-// POSTGRES_SSLROOTCERT env 폴백에 기대지 않는다.
 type PostgresConfig struct {
 	Host          string
 	Port          int
-	SocketPath    string // UDS 경로 (비어있으면 TCP 사용)
+	SocketPath    string
 	User          string
 	Password      string
 	Database      string
@@ -74,7 +52,6 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 	return &PostgresService{pool: pool, logger: logger}, nil
 }
 
-// Preflight는 연결 없이 실제 pool과 같은 설정·TLS 파일·예약 용량을 검사한다.
 func Preflight(config *PostgresConfig) error {
 	cfg, opts, err := postgresOptions(config)
 	if err != nil {
@@ -93,8 +70,6 @@ func postgresOptions(config *PostgresConfig) (pgxdb.Config, pgxdb.Options, error
 		return pgxdb.Config{}, pgxdb.Options{}, errors.New("postgres config is nil")
 	}
 
-	// pgxdb는 빈 sslmode를 거부(fail-closed)하므로, 설정이 비면 verify-full 기본값을
-	// 호출측인 여기서 명시적으로 해소한다. TLS posture는 절대 낮추지 않는다.
 	sslMode := strings.TrimSpace(config.SSLMode)
 	if sslMode == "" {
 		sslMode = "verify-full"
@@ -133,8 +108,6 @@ func postgresOptions(config *PostgresConfig) (pgxdb.Config, pgxdb.Options, error
 	}, nil
 }
 
-// MinConns=0은 plane 검증(validatePlanePool·validatePool)이 허용하는 "idle 연결 없음" 선택이고 pgxdb도 0을 그대로 pgx에 넘기는 계약이므로 기본값으로 바꾸지
-// 않는다. 미설정 기본값은 LoadPostgresConfig가 이미 채운다.
 func resolvePoolConns(config *PostgresConfig) (minConns, maxConns int, err error) {
 	if config.PoolMinConns < 0 {
 		return 0, 0, fmt.Errorf("postgres pool min conns must not be negative: %d", config.PoolMinConns)
@@ -156,8 +129,6 @@ func (ps *PostgresService) GetPool() *pgxpool.Pool {
 	return ps.pool
 }
 
-// Close는 pool을 닫는다. 종료 중 Ping·GetPool이 같은 필드를 읽으므로 nil로 바꾸지 않고
-// 멱등인 pgxpool.Pool.Close에 맡긴다. 닫힌 pool의 Ping은 pgxpool의 closed pool 오류로 끝난다.
 func (ps *PostgresService) Close() error {
 	if ps.pool != nil {
 		ps.pool.Close()

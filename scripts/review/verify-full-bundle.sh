@@ -403,7 +403,6 @@ def validate_v1_manifest(members: list[str], fields: dict[str, str], file_lines:
     actual_hashes = payload_hashes(payload_members)
     compare_hash_sets(actual_hashes, manifest_hashes, "manifest")
 
-    # 번들 내부 manifest는 무결성만 확인하며 신뢰 출처(authenticity)는 별도 기준으로 고정한다.
     if trusted_reference_path is None:
         expected_hashes = current_checkout_hashes(fields)
         expected_label = "current checkout"

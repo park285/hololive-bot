@@ -1,6 +1,5 @@
 import { boundedFetch, collectSpaces, CollectionError, failureReport, validateCookies } from './client.mjs';
 
-// 예외 원문을 남기지 않으므로 운영 로그에서 원인 범위를 좁히도록 실패한 단계를 함께 보고한다.
 let stage = 'input';
 try {
   let input = '';
@@ -11,7 +10,6 @@ try {
   const request = JSON.parse(input);
   const userIDs = request.user_ids;
   const cookies = validateCookies(request.cookies);
-  // 전용 단발 프로세스에서만 교체한다. 의존성의 웹 자료 요청도 같은 경계를 따른다.
   globalThis.fetch = boundedFetch(globalThis.fetch);
   stage = 'library';
   const { ClientTransaction, fetchXDocument } = await import('x-client-transaction-id');

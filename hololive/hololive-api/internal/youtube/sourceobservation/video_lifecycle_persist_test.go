@@ -137,8 +137,6 @@ func TestVideoLifecycleUnobservedSessionRejectsAmbiguousOrOlderFacts(t *testing.
 					t.Fatal(err)
 				}
 			case "positive after end":
-				// 확인 관측보다는 이르지만 ended_at보다 늦고 grace 안에서 관측된 positive다. live clock이 없는
-				// 시작 미관측 경로는 grace 없이 바로 끝내므로 consumer가 이 positive를 보고 거부해야 한다.
 				if _, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_reconciliation_heads
                     (video_id,status,last_upcoming_positive_at,last_upcoming_positive_seen_at)
                     VALUES ($1,'UPCOMING',$2,now())`, testVideoID, proof.ScheduledFor.Add(-30*time.Second)); err != nil {
@@ -206,7 +204,6 @@ func TestVideoLifecycleUnobservedEndAcceptsLaggedPositiveAfterGrace(t *testing.T
 	assertTableCount(t, pool, "youtube_live_pending_ends", 0)
 }
 
-// Holodex live_snapshot의 EffectiveAt은 수집 예정 시각이라 positive 시각이 YouTube의 실제 종료보다 늦어지는 운영 순서를 재현한다.
 func startLiveWithLaggedPositive(t *testing.T, grace time.Duration) (*pgxpool.Pool, *Repository, *Consumer, contract.LeaseProof, time.Time) {
 	t.Helper()
 
@@ -234,7 +231,6 @@ func TestVideoLifecycleLiveEndAcceptsPositiveAfterEndedAt(t *testing.T) {
 			ctx := t.Context()
 
 			if laggedUpcoming {
-				// 시작을 관측한 LIVE의 일반 명시적 종료는 UPCOMING positive를 종료 차단 근거로 보지 않는다.
 				if _, err := pool.Exec(ctx, `UPDATE youtube_live_reconciliation_heads
                     SET last_upcoming_positive_at=$2,last_upcoming_positive_seen_at=$2 WHERE video_id=$1`,
 					testVideoID, videoProof.ScheduledFor.Add(-time.Second)); err != nil {
@@ -305,7 +301,6 @@ func TestVideoLifecycleLiveEndWaitsForGraceAfterLaggedPositive(t *testing.T) {
 	assertTableCount(t, pool, "youtube_notification_outbox", 0)
 }
 
-// 확인 관측 시각과 같거나 늦은 positive는 확인 뒤에도 방송이 이어졌다는 근거이므로 종료 사실을 버린다.
 func TestVideoLifecycleLiveEndRetainsPositiveAtCheckTime(t *testing.T) {
 	t.Parallel()
 

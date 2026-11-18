@@ -1,7 +1,5 @@
-// X 웹 내부 API만 사용한다. 공식 API 키, 공급자 URL, 유료 대체 경로는 받지 않는다.
 const fleetPath = '/i/api/fleets/v1/avatar_content';
 const spacePath = '/i/api/graphql/kZ9wfR8EBtiP0As3sFFrBA/AudioSpaceById';
-// X 웹 앱에 공개된 application bearer다. 계정 인증 값은 부모 프로세스의 stdin으로만 받는다.
 const webBearer = 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
 const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
 const features = {
@@ -24,7 +22,6 @@ const cookieValuePattern = /^[a-zA-Z0-9_-]{16,512}$/;
 const userIDPattern = /^[0-9]{1,20}$/;
 const broadcastIDPattern = /^[a-zA-Z0-9]{1,64}$/;
 
-/** 원문·쿠키 없이 고정 오류 코드와 제한된 HTTP 진단 정보만 전달한다. */
 export class CollectionError extends Error {
   constructor(code, cooldownSeconds = 0, httpStatus = 0, apiCodes = []) {
     super(code);
@@ -35,31 +32,23 @@ export class CollectionError extends Error {
   }
 }
 
-// 라이브러리가 정한 오류 이름은 임의 문자열일 수 있으므로 JavaScript 내장 종류만 진단에 남긴다.
 const builtinErrorNames = new Set(['Error', 'TypeError', 'SyntaxError', 'RangeError', 'ReferenceError', 'AbortError', 'TimeoutError']);
 
-/**
- * helper 실패를 stdout 결과 문서로 바꾼다. 예외 메시지·stack·요청 객체에는 인증 정보가 포함될 수 있으므로
- * 고정 오류 코드, 실패 단계, 내장 오류 종류와 Node 오류 코드 형식의 값만 남긴다.
- */
 export function failureReport(error, stage) {
   if (error instanceof CollectionError) {
     return { error: error.code, stage, cooldown_seconds: error.cooldownSeconds, http_status: error.httpStatus, api_codes: error.apiCodes };
   }
   const errorName = builtinErrorNames.has(error?.name) ? error.name : 'other';
-  // fetch 실패는 TypeError 하나로 감싸이므로 DNS·연결 원인은 cause의 코드에서만 구분된다.
   const errorCode = [error?.code, error?.cause?.code].find((value) => typeof value === 'string' && nodeErrorCodePattern.test(value)) ?? '';
   return { error: 'collector_failed', stage, error_name: errorName, error_code: errorCode, cooldown_seconds: 0, http_status: 0, api_codes: [] };
 }
 
-/** 요청 ID 라이브러리의 통신까지 공개 웹 자료와 두 읽기 경로로 한정한다. */
 export function boundedFetch(fetchImpl) {
   return async (input, init = {}) => {
     const url = new URL(input instanceof Request ? input.url : input);
     const method = (init.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const api = url.origin === 'https://x.com' && [fleetPath, spacePath].includes(url.pathname);
     const asset = url.origin === 'https://abs.twimg.com' && clientWebAssetPathPattern.test(url.pathname);
-    // 로그아웃 상태의 /home은 로그인 화면으로 redirect되므로 요청 ID 라이브러리는 /i/jf/ 앱 셸만 읽는다.
     const appShell = url.href === 'https://x.com/i/jf/';
     if (method !== 'GET' || url.username || url.password || (!api && !asset && !appShell)) {
       throw new CollectionError('forbidden_endpoint');
@@ -98,7 +87,6 @@ function object(value) {
   return value;
 }
 
-/** cookie 헤더에 삽입할 두 값만 허용하며 다른 브라우저 정보를 받지 않는다. */
 export function validateCookies(value) {
   object(value);
   for (const key of ['auth_token', 'ct0']) {
@@ -110,7 +98,6 @@ export function validateCookies(value) {
   return { auth_token: value.auth_token, ct0: value.ct0 };
 }
 
-/** 사용자 ID를 한 번에 최대 100개 조회하고 직접 개설한 Running 스페이스만 반환한다. */
 export async function collectSpaces(userIDs, cookies, transaction, fetchImpl) {
   if (!Array.isArray(userIDs) || userIDs.length < 1 || userIDs.length > 100 ||
       userIDs.some((id) => typeof id !== 'string' || !userIDPattern.test(id)) ||
@@ -138,7 +125,6 @@ export async function collectSpaces(userIDs, cookies, transaction, fetchImpl) {
       if (res.status === 403) throw new CollectionError('api_error', 0, res.status);
       throw new CollectionError(res.ok ? 'invalid_response' : 'upstream', 0, res.status);
     }
-    // 403은 접근 거부도 포함한다. 메시지 원문은 버리고 문서화된 인증 오류 번호만 판정한다.
     const apiCodes = Array.isArray(data.errors)
       ? [...new Set(data.errors.map((error) => error?.code)
         .filter((code) => Number.isSafeInteger(code) && code >= 0 && code <= 65535))].slice(0, 8)

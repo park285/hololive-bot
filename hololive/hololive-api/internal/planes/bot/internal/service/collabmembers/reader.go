@@ -1,4 +1,3 @@
-// Package collabmembers는 공식 스케줄이 기록한 방송별 콜라보 출연자를 명령 응답 표시명으로 읽는다.
 package collabmembers
 
 import (
@@ -22,7 +21,6 @@ var sqlAssets embed.FS
 
 var officialCollaboTalentNamesSQL = sqlassets.MustReader(sqlAssets, "queries")("official_collabo_talent_names.sql")
 
-// Video는 콜라보 출연자를 찾을 방송이다. 호스트 채널은 출연자 목록에서 뺀다.
 type Video struct {
 	ID            string
 	HostChannelID string
@@ -37,12 +35,10 @@ type Reader struct {
 	members domain.MemberDataProvider
 }
 
-// New는 기존 bot-plane pool과 멤버 데이터를 재사용하며 새 연결이나 수집 작업을 만들지 않는다.
 func New(pool *pgxpool.Pool, members domain.MemberDataProvider) *Reader {
 	return &Reader{db: pool, members: members}
 }
 
-// 출연자가 없는 영상은 결과에 넣지 않는다. 공식 스케줄 조회나 멤버 적재가 실패하면 출연자를 뺀 결과로 바꾸지 않고 오류로 돌려준다.
 func (r *Reader) DisplayNames(ctx context.Context, videos []Video) (map[string][]string, error) {
 	hosts := make(map[string]string, len(videos))
 	for _, video := range videos {

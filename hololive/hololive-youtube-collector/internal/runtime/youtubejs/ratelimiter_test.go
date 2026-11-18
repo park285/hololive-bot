@@ -93,7 +93,6 @@ func TestRateLimiterCanceledWaitReleasesReservation(t *testing.T) {
 	})
 }
 
-// 되돌리면 뒤 예약의 간격이 사라진다.
 func TestRateLimiterCanceledWaitKeepsLaterReservation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		limiter := NewRateLimiter(2 * time.Second)

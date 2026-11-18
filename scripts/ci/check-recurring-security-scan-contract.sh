@@ -16,7 +16,6 @@ git ls-files '*package-lock.json' | LC_ALL=C sort -u >"$tmp_dir/npm-locks"
 cmp -s scripts/ci/npm-audit-manifest.txt "$tmp_dir/npm-locks" ||
   fail "npm audit manifest does not cover the exact tracked lockfile corpus"
 
-# 배포 원본은 중앙 Quadlet unit의 기본 image다.
 sed -n 's/^Environment=[A-Z0-9_]*_IMAGE=//p' deploy/quadlet/*/*.container | LC_ALL=C sort -u >"$tmp_dir/final-images"
 cut -d'|' -f3 scripts/ci/final-image-scan-manifest.txt | LC_ALL=C sort >"$tmp_dir/manifest-images"
 cmp -s "$tmp_dir/manifest-images" "$tmp_dir/final-images" ||
@@ -30,7 +29,6 @@ else
   fail "final image manifest must list only arm64 local builds"
 fi
 
-# 최종 이미지 스캔 정책은 발견 시 실패하고 어떤 억제도 두지 않는다.
 . scripts/ci/final-image-scan-policy.sh
 check_trivy_args() {
   local label="$1" arg key value

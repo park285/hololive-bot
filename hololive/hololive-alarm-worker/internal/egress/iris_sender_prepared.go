@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// 판정은 여기서 한 번만 하며 고른 경로의 변형만 쓴다.
 func (s *IrisMessageSender) PrepareMessageRequest(ctx context.Context, roomID string, message delivery.MessageVariants) (body, route string, err error) {
 	if s == nil || s.client == nil {
 		return "", "", errors.New("iris message sender: client is nil")
@@ -24,9 +23,6 @@ func (s *IrisMessageSender) PrepareMessageRequest(ctx context.Context, roomID st
 	return kakaoformat.Render(message.Plain), "text", nil
 }
 
-// SendPreparedMessage는 저장된 요청을 재해석하지 않아 설정 변경 뒤에도 같은 ID의 payload를 보존한다. 모든 경로는
-// 202가 durable admission을 증명하면 handoff를 기다리지 않고 그 Iris requestId를 바로 돌려주며, 이 성공은 durable
-// admission만 뜻한다. 증명하지 못하면 결과 불명 오류다. 각 원장의 handoff reconciler가 handoff 결과를 확인한다.
 func (s *IrisMessageSender) SendPreparedMessage(ctx context.Context, roomID, body, route, clientRequestID string) (string, error) {
 	if s == nil || s.client == nil {
 		return "", errors.New("iris message sender: client is nil")

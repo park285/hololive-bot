@@ -1,7 +1,5 @@
 # X 스페이스 감지와 관리자 재연결
 
-`DEC-20260919-hololive-x-spaces`, `DEC-20260919-x-spaces-admin-reconnect`,
-`DEC-20260924-x-spaces-manual-cookie-reconnect`를 따른다.
 
 alarm-worker가 X 웹 내부 API를 조회하고, 직접 개설한 스페이스의 시작 링크를 해당 멤버의 기존 `LIVE` 구독 방에 보낸다. 공식 유료 API·유료 공급자·녹음·게스트 참여 추적은 사용하지 않는다. X 세션은 무효화될 수 있으며 영구 인증이나 자동 로그인 성공을 보장하지 않는다.
 

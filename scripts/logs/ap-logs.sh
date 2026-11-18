@@ -60,7 +60,6 @@ case "$SERVICE" in
     ;;
 esac
 
-# native AP는 collector 로그를 /var/log/hololive-bot/<service>.log로 남긴다.
 for service in "${services[@]}"; do
   echo "== $service =="
   logfile="/var/log/hololive-bot/${service}.log"

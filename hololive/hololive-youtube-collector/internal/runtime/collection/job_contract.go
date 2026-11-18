@@ -1,5 +1,3 @@
-// Package collection은 수집 job 카탈로그, target 시야, 실행 입력·결과와 lease 결과 sentinel을 소유하는 순수 코어입니다.
-// 저장소 adapter(joblease, sourceobservation)와 provider runner가 이 패키지를 공유하며, 이 패키지는 SQL에 의존하지 않습니다.
 package collection
 
 import (
@@ -199,8 +197,6 @@ func (j JobContract) Validate() error {
 
 type StaticJobContracts map[JobID]JobContract
 
-// Definition은 불변 private handle을 공유한다. 슬라이스 getter가 방어적 복사를 반환하므로 호출자가
-// 계약 상태를 변경할 수 없다.
 func (s StaticJobContracts) Definition(id JobID) (JobContract, bool) {
 	definition, ok := s[id]
 	return definition, ok

@@ -169,7 +169,6 @@ func (r orbitRow) segment(from, to int) orbitRow {
 	return r
 }
 
-// [lo, hi)는 원래 날짜의 방송 범위, from과 to는 각각 첫 방송의 시작 줄과 마지막 방송의 끝 줄(미포함)이다.
 type orbitPiece struct {
 	day      *orbitGroup
 	lo, hi   int
@@ -270,7 +269,6 @@ func orbitPieces(f *fontSet, days []day) []orbitPiece {
 				continue
 			}
 
-			// 한 방송이 빈 페이지보다 길 때만 줄 사이도 페이지 경계가 된다.
 			for k := range row.lines() {
 				h := orbitTitleLH
 
@@ -297,7 +295,6 @@ func layoutOrbit(pieces []orbitPiece) []orbitPage {
 		penalty             float64
 	}
 
-	// 가능한 경계 중 장 수, 방송 도중 끊는 횟수, 남는 공간의 편차 순으로 최소화한다.
 	best := make([]cut, len(pieces)+1)
 	for i := len(pieces) - 1; i >= 0; i-- {
 		best[i].pages = len(best)
@@ -321,7 +318,6 @@ func layoutOrbit(pieces []orbitPiece) []orbitPage {
 			spare := orbitCapacity - used
 
 			if spare < 0 {
-				// 마지막 방송까지 포함되면 순번 표기 여백이 없어질 수 있다.
 				if used-current.height()+current.content+2*orbitPad > orbitCapacity {
 					break
 				}

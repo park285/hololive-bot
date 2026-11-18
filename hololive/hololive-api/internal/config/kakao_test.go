@@ -25,8 +25,6 @@ func TestLoadKakaoConfigDefaultsWhenACLVariablesAreUnset(t *testing.T) {
 	}
 }
 
-// KAKAO_ROOMS는 ACL 첫 초기화 seed다. 방 이름 기본값은 chatID 단일 식별에서 어떤 방과도 매칭되지 않는
-// 죽은 whitelist 행이 되므로, 값이 없으면 채우지 않고 필수값 검증이 기동 실패로 드러낸다.
 func TestLoadKakaoConfigHasNoRoomDefault(t *testing.T) {
 	settingstest.UnsetEnv(t, "KAKAO_ROOMS")
 

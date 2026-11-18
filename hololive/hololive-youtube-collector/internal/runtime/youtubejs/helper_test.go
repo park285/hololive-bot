@@ -510,7 +510,6 @@ func TestHLP008(t *testing.T) {
 	}
 }
 
-// wait goroutine이 waited를 닫기 전에 child가 이미 회수된 경우에도 종료 신호 실패를 정리 오류로 올리지 않는다.
 func TestSignalAfterChildReapedIsNotAnError(t *testing.T) {
 	t.Parallel()
 
@@ -649,7 +648,6 @@ func TestHLP011(t *testing.T) {
 	assertNoResidue(t, base)
 }
 
-// collector가 spawn한 Node helper의 V8 heap 한도가 Node 몫으로 제한되는지 실제 프로세스로 확인한다.
 func TestHLP013(t *testing.T) {
 	base := shortRuntimeBase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
@@ -773,8 +771,6 @@ func testHLP012SpawnFail(t *testing.T) {
 	assertNoResidue(t, base)
 }
 
-// shortRuntimeRoot는 TestMain이 TMPDIR 바로 아래 만든 짧은 디렉터리로, 시험 이름이 경로에 들어가는
-// t.TempDir를 쓰면 긴 TMPDIR에서 helper socket 경로가 maxUnixSocketPathBytes를 넘기 때문에 둔다.
 var (
 	shortRuntimeRoot string
 	shortRuntimeSeq  atomic.Int64

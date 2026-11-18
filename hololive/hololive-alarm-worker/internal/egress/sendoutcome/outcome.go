@@ -1,4 +1,3 @@
-// Package sendoutcome는 Iris 발송 오류의 공통 의미를 분류합니다.
 package sendoutcome
 
 import (
@@ -11,9 +10,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
-// Kind는 발송 결과의 증거를 나타냅니다. 재시도 허용은 각 저장소 정책이 결정합니다. Success는 Iris durable
-// admission까지만 뜻하고 handoff 결과는 각 원장의 handoff reconciler가 확인합니다. OutcomeUnknown은 Iris 쪽 결과
-// 불명 증거(409 `CLIENT_REQUEST_ID_OUTCOME_UNKNOWN` 또는 admission을 증명하지 못한 202)입니다.
 type Kind uint8
 
 const (
@@ -23,12 +19,8 @@ const (
 	TransportAmbiguous
 )
 
-// ErrAdmissionOutcomeUnknown은 202 응답이 durable admission을 증명하지 못했음(빈 응답, Markdown의 success·queued
-// 누락, requestId 없음)을 나타냅니다.
 var ErrAdmissionOutcomeUnknown = errors.New("iris reply admission outcome unknown")
 
-// Classify는 sender 호출 이후 결과를 분류합니다. 호출 전 취소는 호출자가 먼저 검사해야 합니다.
-// TransportAmbiguous는 동일한 저장 request의 재시도 정책을 적용할 수 있도록 확정 unknown과 구분합니다.
 func Classify(err error) Kind {
 	if err == nil {
 		return Success
@@ -42,7 +34,6 @@ func Classify(err error) Kind {
 		return TransportAmbiguous
 	}
 
-	// 결합 오류의 확정 실패가 다른 분기의 응답 소실 증거를 가리면 안 된다.
 	if joined, ok := errors.AsType[interface {
 		error
 		Unwrap() []error
@@ -52,7 +43,6 @@ func Classify(err error) Kind {
 		return TransportAmbiguous
 	}
 
-	// ErrNotSent는 요청이 나가기 전에 확정된 실패라 결과 불명이 아니다(iris-client-go v4는 ErrTransport와 겹치지 않게 둔다).
 	if errors.Is(err, iris.ErrNotSent) {
 		return Failed
 	}
@@ -73,26 +63,16 @@ func Classify(err error) Kind {
 	return Failed
 }
 
-// Reissuable은 오류가 Iris의 확정 pre-handoff 실패(409 `CLIENT_REQUEST_ID_FAILED`)이고 결합된 결과 불명·응답 소실
-// 증거가 없을 때만 참입니다. 이때만 새 요청 세대로 다시 보내도 중복 발화가 생기지 않습니다.
 func Reissuable(err error) bool {
 	return Classify(err) == Failed && iris.IsPreHandoffClientRequestIDConflict(err)
 }
 
-// AttemptRules는 원장마다 다른 attempt outcome 판정 입력입니다. 영값은 원장 고유 오류가 없고 미분류 오류를 failed로
-// 셉니다.
 type AttemptRules struct {
-	// TimeoutCause는 원장이 자체 발송 예산 초과에 붙이는 오류이며 context.DeadlineExceeded와 같이 timeout입니다.
-	TimeoutCause error
-	// OutcomeUnknownCause는 원장이 결과 불명으로 판정한 발송 오류에 붙이는 오류입니다.
-	OutcomeUnknownCause error
-	// UnclassifiedOutcomeUnknown이 참이면 Iris 실패 sentinel이 없는 오류를 원장이 결과 불명으로 다루므로
-	// outcome_unknown으로 셉니다.
+	TimeoutCause               error
+	OutcomeUnknownCause        error
 	UnclassifiedOutcomeUnknown bool
 }
 
-// AttemptOutcome은 시작된 provider 호출 한 번의 결과를 바꿉니다. 우선순위는 명시적 결과 불명 증거, timeout, canceled,
-// 응답 소실 가능 오류, 확정 실패 순이며 호출 중 panic은 호출자가 셉니다.
 func AttemptOutcome(err error, rules AttemptRules) workercontract.AttemptOutcome {
 	kind := Classify(err)
 
@@ -119,7 +99,6 @@ func irisFailure(err error) bool {
 		errors.Is(err, iris.ErrTransport) || errors.Is(err, iris.ErrNotSent)
 }
 
-// TransportError 자체의 결합 원인은 모든 분기가 전달 전 실패를 증명해야 한다.
 func transportCauseKnownUnsent(err error) bool {
 	if joined, ok := errors.AsType[interface {
 		error
@@ -141,7 +120,6 @@ func transportCauseKnownUnsent(err error) bool {
 	return ok
 }
 
-// 결합 오류의 첫 HTTP 오류가 확정 실패여도 다른 분기의 결과 불명 증거를 보존한다.
 func containsStructuredUnknown(err error) bool {
 	if iris.HTTPErrorCode(err) == iris.HTTPErrorCodeClientRequestIDOutcomeUnknown {
 		return true

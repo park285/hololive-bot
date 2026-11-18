@@ -9,7 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
-// 호출자 취소로 끝난 org는 원천 실패가 아니므로 Failed가 아니라 Canceled에 담는다. 실패로 세면 취소된 요청이 공식 일정 fallback·재시도·실패 metric을 일으킨다.
 type orgFetchResult struct {
 	Attempted int
 	Succeeded int
@@ -60,7 +59,6 @@ func runOrgFetchesParallel(ctx context.Context, parallelism int, orgs []string, 
 
 			var outcome orgFetchOutcome
 
-			// panic은 org 실패로 센다. panicguard가 복구 사실을 로그로 남긴다.
 			if err := panicguard.RunE(nil, panicscope.BackgroundTask, "holodex-org-fetch", func() error {
 				outcome = runOrgFetch(ctx, org, run)
 

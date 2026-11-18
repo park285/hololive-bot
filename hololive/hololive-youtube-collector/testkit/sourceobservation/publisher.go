@@ -1,4 +1,3 @@
-// Package sourceobservation은 peer 모듈의 DB 시험에서 실제 collector publisher를 연결합니다.
 package sourceobservation
 
 import (
@@ -14,7 +13,6 @@ import (
 	store "github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
-// ErrTargetDisabled는 실제 publisher가 발행 job의 emission·target을 거절한 오류다.
 var ErrTargetDisabled = collection.ErrTargetDisabled
 
 type CheckpointEntry struct {

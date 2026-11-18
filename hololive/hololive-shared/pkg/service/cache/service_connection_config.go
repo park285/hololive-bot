@@ -61,6 +61,5 @@ func cacheTLSConfig(caFile string) (*tls.Config, error) {
 		return nil, errors.New("cache CA file contains no certificates")
 	}
 
-	// ServerName은 연결할 때 주소에서 정한다. 전환된 primary도 고유 SAN 검증을 받는다.
 	return &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}, nil
 }

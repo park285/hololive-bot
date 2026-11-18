@@ -12,8 +12,6 @@ import (
 
 const maxCheckpointCursorBytes = 16384
 
-// 카운트·바이트·cursor 크기 상한은 preflightPublishBatch가 복사 전 가드로 이미 검증했다는
-// 전제 위에서만 호출된다. 단독 호출 시 해당 상한은 검증되지 않는다.
 func validatePublishBatch(input *PublishBatchInput) error {
 	if err := validatePublishBatchObservations(input); err != nil {
 		return fmt.Errorf("validate publish batch observations: %w", err)
@@ -69,7 +67,6 @@ func validatePublishBatchObservation(input *PublishBatchInput, index int, seen m
 		return fmt.Errorf("%w: observation %d: %w", ErrInvalidEnvelope, index, err)
 	}
 
-	// 소유한 복사본만 바꿔 검증한 크기·digest와 실제 저장 표현을 일치시킨다.
 	observation.Payload = canonicalPayload
 
 	identity := observationIdentity(observation)

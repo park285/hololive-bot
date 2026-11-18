@@ -37,12 +37,10 @@ type SettingsActivityLogger interface {
 	Log(entryType, summary string, details []slog.Attr)
 }
 
-// RoomNameSetter는 관리 화면이 알림 서비스에 요구하는 방 이름 변경 작업만 제공한다.
 type RoomNameSetter interface {
 	SetRoomName(ctx context.Context, roomID, roomName string) error
 }
 
-// SettingsHandler는 settings·방 이름·X 세션 관리 route를 처리한다. 저장·적용 순서 gate는 newSettingsHandler가 채운다.
 type SettingsHandler struct {
 	adminsettings.SettingsApplier
 
@@ -55,7 +53,6 @@ type SettingsHandler struct {
 	operations     *settingsOperationGate
 }
 
-// 소비자인 iris-console은 scraperProxyEnabled를 보내지 않고 요청에 들어오면 거절한다.
 type updateSettingsRequest struct {
 	AlarmAdvanceMinutes *int `json:"alarmAdvanceMinutes"`
 }
@@ -89,8 +86,6 @@ func (h *SettingsHandler) requireApplier(c *gin.Context) bool {
 	return true
 }
 
-// 요청 필드 roomName은 필수이고, 공백뿐인 값은 지정을 해제해 관리 목록이 Kakao 방 이름으로 돌아가게 한다. 저장 폭(room_id 100자, 이름 255자)을 넘으면 worker 호출 전에
-// 400으로 거절한다.
 func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	var req struct {
 		RoomID   string  `json:"roomId" binding:"required"`
@@ -140,7 +135,6 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 		slog.String("room_name", sharedprivacylog.Pseudonym(roomName)),
 	)
 
-	// activity는 운영에서 같은 logger의 stdout으로 나가므로 room_id도 privacylog 규칙으로 기록한다.
 	roomToken := sharedprivacylog.IdentifierToken(roomID)
 	h.logActivity("name_update", "Room name set", []slog.Attr{
 		slog.String("room_id", roomToken),

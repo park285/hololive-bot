@@ -152,8 +152,6 @@ func TestLiveReviewTypedReceiptsPreserveJSONBConsumerSemantics(t *testing.T) {
 					require.NoError(t, execErr)
 				}
 
-				// 불변 원본 영수증은 유지하고 rollback되는 트랜잭션 안에서 파생 사실만 교체합니다.
-				// 현재 snapshot의 기존 JSON 의미 함수를 써 새 decoder를 oracle에 포함하지 않습니다.
 				tag, err := tx.Exec(t.Context(), `
 					TRUNCATE youtube_live_review_receipt_facts;
 					INSERT INTO youtube_live_review_receipt_facts(receipt_id,video_id,recorded_at,facts)

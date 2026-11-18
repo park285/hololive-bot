@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package messaging
 
 import (
@@ -161,7 +141,6 @@ func (ma *MessageAdapter) tryScheduleCommand(command string, args []string, raw 
 
 var scheduleCommandAliases = []string{"일정", "스케줄", "schedule", "멤버", "member"}
 
-// schedulePosterCommandAliases의 "스케쥴"은 일정 명령 별칭 "스케줄"과 한 글자 다른 별도 명령이다.
 var schedulePosterCommandAliases = []string{"스케쥴"}
 
 func (ma *MessageAdapter) trySchedulePosterCommand(command string, args []string, raw string) (*ParsedCommand, bool) {

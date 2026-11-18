@@ -27,7 +27,6 @@ function fixture(t, options = {}) {
     async fetchImpl(url, init) {
       requests.push(url);
       await options.beforeFetch?.(url, init);
-      // 실제 transport처럼 상속된 collection 취소도 적용합니다.
       currentRequestSignal()?.throwIfAborted();
       init.signal.throwIfAborted();
       if (url.endsWith("/Create")) {
@@ -330,7 +329,6 @@ test("a canceled collection mint drops the generation the broker retires on requ
   const minted = [];
   const f = fixture(t, { broker: { async mint(generation, _video, signal) {
     minted.push(generation);
-    // 실제 broker는 worker IO 중 요청이 끊기면 그 세대를 퇴역시키므로(ExitRequestAborted) 이후 mint는 실패합니다.
     if (retiredByAbort.has(generation)) throw new ProofError("broker_unavailable");
     if (minted.length > 1) return "current-proof";
     started.resolve();
@@ -349,7 +347,6 @@ test("a canceled collection mint drops the generation the broker retires on requ
   assert.equal(f.controller.status().state, "UNAVAILABLE");
   assert.equal(f.controller.status().last_error, "mint_aborted");
 
-  // 퇴역한 세대로 다시 mint하지 않고, 시작 간격이 지나면 새 세대를 발급해 붙입니다.
   await f.player();
   assert.deepEqual(minted, ["generation-1"]);
   f.advance(300_000);

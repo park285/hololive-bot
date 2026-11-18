@@ -43,7 +43,6 @@ func newTestDispatcherForSend(t *testing.T, sender *testSender) *Dispatcher {
 
 	cache := cachemocks.NewLenientClient()
 
-	// 기본 renderer는 dispatcher의 seed DB를 함께 사용해 같은 테스트의 중복 DB를 만들지 않는다.
 	return newDispatcherForTest(t, nil, cache, sender, nil, slog.New(slog.DiscardHandler), &Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
@@ -504,7 +503,6 @@ func TestSendDeliveryMessageRejectsMissingClientRequestIDWithoutSending(t *testi
 	}
 }
 
-// 발송 전 검증이 거절한 요청은 provider에 닿지 않았으므로 결과 불명이 아니라 invalid_send_request 영구 실패다.
 func TestLifecycleProviderFailureClassifiesPreSendRejectionAsInvalidRequest(t *testing.T) {
 	t.Parallel()
 
@@ -691,7 +689,6 @@ func TestDispatchDeliveryRows_GroupedSendFailureRetriesGroupedBatch(t *testing.T
 }
 
 func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *testing.T) {
-	// 전역 counter 증가분을 정확히 보므로 병렬로 돌리지 않는다.
 	renderer := newShortsGroupAndSingleTemplateRenderer(t)
 	sender := &groupedPermanentFailureSender{}
 	db := newDeliveryPool(t)

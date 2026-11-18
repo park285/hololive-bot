@@ -41,15 +41,12 @@ DDL_RE = re.compile(
 )
 SELECT_RE = re.compile(r"\bSELECT\b", re.IGNORECASE)
 
-# lease 유효성은 wall clock, 후보·projection 조회는 문장 시각을 쓴다.
-# 잠금 완료 뒤 평가되는지는 SQL 토큰만으로 증명하지 않고 기존 DB 경합 시험이 맡는다.
 COLLECTOR_LEASE_QUERIES = "hololive/hololive-youtube-collector/internal/runtime/joblease/queries"
 ALARM_DISPATCH_QUERIES = "hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries"
 YOUTUBE_RUNTIME_QUERIES = "hololive/hololive-api/internal/planes/youtube/runtime/queries"
 YOUTUBE_DELIVERY_QUERIES = "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries"
 CLOCK_QUERY_POLICIES = (
     (f"{COLLECTOR_LEASE_QUERIES}/repository_lease_*.sql", "clock_timestamp"),
-    # 함수 이름으로 바꾼 lease 자산은 접두사 glob에 걸리지 않아 하나씩 적는다.
     *((f"{COLLECTOR_LEASE_QUERIES}/{name}", "clock_timestamp") for name in (
         "complete_current_lease.sql",
         "defer.sql",
@@ -403,7 +400,6 @@ def check_sql_clocks(path: Path, sql: str) -> list[Finding]:
     for index, (offset, token) in enumerate(tokens):
         quoted = token.startswith('"')
         name = token[1:-1].replace('""', '"') if quoted else token.lower()
-        # PostgreSQL 시계 함수는 모두 인자가 없다. CTE·별칭의 열 목록 선언은 호출이 아니다.
         function_call = (
             index + 2 < len(tokens)
             and tokens[index + 1][1] == "("
@@ -428,7 +424,6 @@ def check_outbox_insert(path: Path, sql: str) -> list[Finding]:
     if not rel(path).startswith("hololive/hololive-api/internal/youtube/canonicalwrite/queries/"):
         return []
     code = " ".join(token.lower().strip('"') for _, token in iter_sql_code_tokens(sql))
-    # 재관측 INSERT가 이미 발송 중이거나 완료된 원장 상태를 되돌리면 중복 발송할 수 있다.
     rewrite = re.search(
         r"\binsert into (?:public \. )?youtube_notification_outbox\b"
         r"(?:(?!\binsert into\b)[^;])*?\bdo update\b",

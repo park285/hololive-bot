@@ -94,7 +94,7 @@ DB에 남은 업무 상태 전이 정책을 소유 모듈의 Go 코드로 모으
 제안: 원장의 SENT를 "Iris durable admission 완료"로 정의하고, handoff 폴링을 발송 경로에서 제거한다. text 경로는 이미 이 의미다.
 
 - 바뀌는 것: markdown 경로의 `waitForReplyHandoff` 제거, `sendoutcome` 4종에서 handoff 계열 제거, dispatchoutbox quarantine 임계 3배 규칙 제거, attempt timeout과 폴링 분리. 봇 plane의 `accepted` 상태와 자체 ladder도 같은 정의로 축소 가능하다.
-- 유지되는 것: `DEC-20260731-reply-outcome-unknown-fail-closed`. 재발송하지 않으므로 위배가 아니다. admission 호출 자체의 transport ambiguity 재시도와 409 `CLIENT_REQUEST_ID_FAILED` 세대 재발급은 admission 단계에 남는다.
+- 유지되는 것: 발송 결과를 알 수 없으면 재발송하지 않는다. admission 호출 자체의 transport ambiguity 재시도와 409 `CLIENT_REQUEST_ID_FAILED` 세대 재발급은 admission 단계에 남는다.
 - Iris 문서로 확인한 사실(`Iris/docs/contracts/current.md` "Reply dispatch outcome", `Iris/docs/architecture/current.md` §1):
   - admission 이후 `retrySafe = true`인 pre-dispatch 실패는 Iris가 `queued`로 되돌려 자체 재시도한다. 재시작 뒤에도 `queued` 행은 durable 큐가 replay한다.
   - dispatch 시작 뒤의 연결 끊김·timeout·취소·응답 손상은 `outcome_unknown`이며 Iris가 재전송하지 않는다.

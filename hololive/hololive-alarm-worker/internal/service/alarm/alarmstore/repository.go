@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package alarmstore
 
 import (
@@ -50,8 +30,6 @@ func newRepositoryWithQuerier(querier dbx.Querier) *Repository {
 	return &Repository{pool: querier}
 }
 
-// Iris webhook은 방 제목을 싣지 않는다. 방 ID와 같은 RoomName은 Kakao 방 이름이 아니므로 빈 이름으로 저장해 upsert가 기존 Kakao 방 이름과
-// room_name_updated_at을 방 ID로 덮어쓰지 않게 한다.
 func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 	alarmTypes := alarm.AlarmTypes
 	if len(alarmTypes) == 0 {
@@ -133,7 +111,6 @@ func (r *Repository) FindByRoom(ctx context.Context, roomID string) ([]*domain.A
 	return out, nil
 }
 
-// HasChannelSubscriptions는 캐시 유실과 구독 0을 구분하기 위해 영속 구독의 존재를 확인한다.
 func (r *Repository) HasChannelSubscriptions(ctx context.Context, channelID string) (bool, error) {
 	var exists bool
 
@@ -161,7 +138,6 @@ func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string,
 	return out, nil
 }
 
-// 행이 없거나 두 값이 모두 비면 빈 문자열이며, 알림 표시 단계가 misc/vtuber_fallback 문구를 쓴다.
 func (r *Repository) GetMemberName(ctx context.Context, channelID string) (string, error) {
 	query := getMemberNameSQL
 

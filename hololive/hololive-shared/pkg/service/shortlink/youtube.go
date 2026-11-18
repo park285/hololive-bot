@@ -11,12 +11,10 @@ import (
 
 const youtubeVideoIDLength = 11
 
-// YouTubeBuilder는 허용된 public HTTPS origin과 YouTube video ID로만 단축 링크를 만듭니다.
 type YouTubeBuilder struct {
 	origin string
 }
 
-// NewYouTubeBuilder는 빈 값을 비활성 구성으로 허용하고 나머지는 origin 형태로 제한합니다.
 func NewYouTubeBuilder(rawOrigin string) (YouTubeBuilder, error) {
 	origin := strings.TrimSpace(rawOrigin)
 	if origin == "" {
@@ -87,7 +85,6 @@ func (b YouTubeBuilder) URL(videoID string) (string, bool) {
 	return b.origin + shortlinkcontracts.YouTubePathPrefix + videoID, true
 }
 
-// ValidYouTubeVideoID는 YouTube의 11-byte URL-safe ID 형식만 허용합니다.
 func ValidYouTubeVideoID(videoID string) bool {
 	if len(videoID) != youtubeVideoIDLength {
 		return false

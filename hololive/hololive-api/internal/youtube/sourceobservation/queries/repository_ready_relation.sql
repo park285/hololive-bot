@@ -1,11 +1,9 @@
 replay_epoch AS MATERIALIZED (
-    -- singleton 상한은 빈 epoch 테이블의 과대 추정과 JIT 비용을 막는다.
     SELECT cutoff_received_at
     FROM source_observation_replay_epoch
     WHERE singleton
     LIMIT 1
 ), active_backlog AS MATERIALIZED (
-    -- 활성 backlog 단일 pass는 미래·임대·시도 소진 목록 선두도 보존한다.
     SELECT queue.observation_id,
            queue.available_at,
            CASE WHEN queue.status = 'PROCESSING' THEN queue.lease_expires_at ELSE queue.available_at END AS eligible_at,

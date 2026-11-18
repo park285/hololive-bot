@@ -73,7 +73,6 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitTargetsAcrossUnrelatedUp
 
 	logger := slog.New(slog.DiscardHandler)
 
-	// API admin writer는 settings.Settings를 그대로 기록한다. alarmAdvanceMinutes만 바뀐 파일도 저장된 target 목록을 쓴다.
 	raw, err := jsonv2.Marshal(settings.Settings{AlarmAdvanceMinutes: 15, TargetMinutes: []int{30, 15, 5, 1}})
 	if err != nil {
 		t.Fatalf("marshal settings: %v", err)

@@ -1,4 +1,3 @@
--- 다음 확인은 지평(accepted_at + horizon)을 넘기지 않는다. 지평 시각의 확인이 마지막 확인이다.
 UPDATE bot_reply_outbox
 SET handoff_next_check_at = LEAST(
         clock_timestamp() + ($4::bigint * INTERVAL '1 millisecond'),

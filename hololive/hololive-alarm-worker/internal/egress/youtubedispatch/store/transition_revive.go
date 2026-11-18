@@ -95,8 +95,6 @@ func (s *TransitionStore) reviveFailedOnce(
 	return result, transitions, nil
 }
 
-// reviveFailedTx는 lease 만료·신선도를 후보 SQL의 DB 시계(checked_at)로 판정하고, 되살린 행의 next_attempt_at은
-// 전이 문장의 DB 시계로 정한다.
 func (s *TransitionStore) reviveFailedTx(
 	ctx context.Context,
 	tx dbx.Querier,

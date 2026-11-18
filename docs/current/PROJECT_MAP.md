@@ -2,7 +2,7 @@
 
 Module and runtime inventory for the `hololive-bot` workspace.
 
-This file is the current runtime ownership authority. Completed handoffs, incident reports, historical architecture snapshots, and verification captures belong under `docs/history/` and must not define current procedures.
+이 문서가 현재 런타임별 책임을 정합니다. 완료한 작업의 인계·검증 자료와 과거 아키텍처는 Git 이력에서 확인합니다. 과거 기록이나 장애 보고서는 현재 운영 절차가 아닙니다.
 
 ## Module Inventory
 

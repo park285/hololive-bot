@@ -1,9 +1,8 @@
--- published_poster.sql이 고른 확정본의 행 묶음을 읽는다.
 WITH poster AS (
     SELECT id, week_start, week_end, rows_extracted_at, posted_at, rows_status, rows_day_shift
     FROM schedule_posters
     WHERE id = (
-/* published_poster */
+/* fragment:published_poster */
     )
 )
 SELECT poster.id, poster.week_start, poster.week_end, poster.rows_extracted_at, poster.posted_at, poster.rows_status = 'pending',

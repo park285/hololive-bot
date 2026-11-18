@@ -88,7 +88,6 @@ func requireExpiredLeaseRecovered(t *testing.T, r *Runtime, pool *pgxpool.Pool, 
 	require.NoError(t, err)
 	require.Empty(t, beforeExpiry.Claims)
 
-	// 긴 실제 lease를 기다리지 않고 격리 DB에서 만료 시각만 앞당깁니다.
 	_, err = pool.Exec(t.Context(), `UPDATE source_observation_queue SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE observation_id=$1`, failedID)
 	require.NoError(t, err)
 

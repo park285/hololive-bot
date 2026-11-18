@@ -1,6 +1,3 @@
--- 확정 진행 행과, 확정이면 세션·head 시각을 한 statement로 쓴다.
--- 진행 행은 잠근 뒤 읽은 상태($15~$17)일 때만 갱신한다. 다르면 행을 돌려주지 않아 호출자가 트랜잭션을 실패시킨다.
--- 새 행의 observed_* 사본은 확정 전 세션 시각이고, 기존 행의 사본과 queue는 바꾸지 않는다.
 WITH progress AS (
     INSERT INTO youtube_live_time_finalizations AS finalization (
         video_id, queue, outcome, reason, attempts, deferrals, retry_base_at, next_attempt_at,

@@ -34,7 +34,6 @@ func (b *trackedThumbnailBody) Read(p []byte) (int, error) {
 		return out, nil
 	}
 
-	// io.ReadAll은 io.EOF를 == 로 비교하므로, 감싸면 정상 종료가 읽기 실패로 뒤바뀐다.
 	if errors.Is(err, io.EOF) {
 		return out, io.EOF
 	}

@@ -19,7 +19,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// owner가 원천에서 대기할 때 follower의 첫 캐시 읽기 완료를 관측한다.
 type streamFillObservationKey struct{}
 
 type streamFillReadObserver struct {

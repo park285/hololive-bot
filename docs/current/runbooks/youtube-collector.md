@@ -70,14 +70,14 @@ Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 
 
 ## Live absence evidence activation
 
-`DEC-20260926-hololive-live-absence-evidence`의 로컬 준비 산출물은 migration 218(새 kind·가용성/채널 확인 저장소), 219(구 LIVE coverage 부분 인덱스 제거), 220(표준 Count 0 문구)입니다. 아직 운영 적용·배포·fleet 활성화 승인이 아닙니다.
+방송 부재 근거 수집을 위한 로컬 준비 산출물은 migration 218(새 kind·가용성/채널 확인 저장소), 219(구 LIVE coverage 부분 인덱스 제거), 220(표준 Count 0 문구)입니다. 아직 운영 적용·배포·fleet 활성화 승인이 아닙니다.
 
 1. 승인된 릴리스 계획에서 기존 API reader와 collector의 drain/교체 창을 정합니다. 218의 저장소와 두 새 kind decoder/claim/target을 갖춘 API를 collector보다 먼저 준비합니다. `live_snapshot` 기존 generation은 변경하지 않고 새 kind만 generation 1로 시작합니다.
 2. 219는 구 LiveQuery가 더 이상 211 인덱스를 쓰지 않는 전환 시점에 적용합니다. 전체 manifest를 한 번에 적용하려면 구 API reader를 중단한 승인된 교체 창에서 migration → 새 API 순서를 지킵니다. 실행 중 구 API에서 인덱스를 먼저 지워 1초 예산을 훼손하지 않습니다. 212의 scheduled_for 인덱스는 유지합니다.
 3. API의 두 kind consume, 5초 target refresh, stale LIVE 영상 target과 freshness clock을 확인한 뒤 새 Go binary와 helper를 같은 bundle로 collector fleet에 반영합니다. `channel_live_check` target이 없는 상태에서 새 channel job을 먼저 활성화하면 exact-subject acquisition이 실패합니다.
 4. 새 evidence retention 기본값은 각 7일입니다. `YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS`, `YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS`는 API 설정이며 기존 production positive-age/승인 검증을 따릅니다. 74채널·2분이면 채널 확인은 하루 53,280건입니다. 운영 storage/WAL·재수집 부하와 generation 전환으로 폐기되는 in-flight를 비교합니다.
 
-`DEC-20260927-live-check-slot-isolation`의 분리 job 계약은 공유-job collector와 혼합 실행하지 않습니다. 기존 공유-job collector를 먼저 drain/중지하고 API의 snapshot-only `youtubejs_channel_live` 및 check-only `youtubejs_channel_live_check` 계약을 반영한 뒤 새 collector를 시작합니다. 미배포 로컬 준비물에는 추가 schema migration이 필요하지 않습니다. 이미 공유-job 버전을 사용한 환경이라면 마지막 채널 확인 슬롯과 겹치는 최초 독립 슬롯의 duplicate/collision 가능성을 전환 계획에서 확인하고, 다음 독립 cadence의 새 관측까지 coverage를 검증합니다. 기존 관측·lease·pending을 임의 삭제하지 않습니다. 롤백도 양쪽 collector를 동시에 발행시키지 않도록 같은 drain 경계를 지킵니다.
+분리 job 계약은 공유-job collector와 혼합 실행하지 않습니다. 기존 공유-job collector를 먼저 drain/중지하고 API의 snapshot-only `youtubejs_channel_live` 및 check-only `youtubejs_channel_live_check` 계약을 반영한 뒤 새 collector를 시작합니다. 미배포 로컬 준비물에는 추가 schema migration이 필요하지 않습니다. 이미 공유-job 버전을 사용한 환경이라면 마지막 채널 확인 슬롯과 겹치는 최초 독립 슬롯의 duplicate/collision 가능성을 전환 계획에서 확인하고, 다음 독립 cadence의 새 관측까지 coverage를 검증합니다. 기존 관측·lease·pending을 임의 삭제하지 않습니다. 롤백도 양쪽 collector를 동시에 발행시키지 않도록 같은 drain 경계를 지킵니다.
 
 롤백은 새 collector의 발행을 먼저 멈추고 새 kind 큐·재처리 요구를 확인합니다. 새 decoder가 필요한 backlog가 있으면 해당 API decoder를 유지하며, 새 canonical/evidence/pending을 삭제하지 않습니다. 219 적용 뒤 구 API로 돌아가려면 구 query의 인덱스 재준비까지 승인된 롤백 절차에 포함해야 합니다. 220은 사용자 지정 본문과 채널 override, 멤버 지정 안내를 건드리지 않습니다.
 
@@ -199,15 +199,15 @@ helper는 같은 채널·video ID의 player 예정 시각을 프로세스 메모
 
 제한 목록은 중복·정상 sessions와의 중첩·다른 채널·미지 사유를 거부하며 최대 32개입니다. Go adapter는 유효 sessions만 `PARTIAL` live observation으로 발행하고 해당 poll을 완료합니다. 제한 행만 남은 빈 sessions도 PARTIAL입니다. 다음 기존 poll에서 다시 관측하며 추가 재시도·별도 provider·과거 시각 재사용을 하지 않습니다. 제한 영상의 canonical 상태와 마지막 확인 시각은 갱신하지 않습니다. PARTIAL의 부재는 종료·취소 근거가 아니며 개별 영상의 명시적 종료는 기존 consumer 규칙으로 처리합니다.
 
-`youtube_collection_completeness_total{provider="youtubejs",kind="live_snapshot",completeness="PARTIAL"}`와 위 WARN을 함께 확인합니다. poll 성공·readiness·freshness는 모든 영상의 일정 확보를 뜻하지 않습니다. helper WARN은 원천 관측 기록이며 실제 발행 여부는 observation publish 결과로 확인합니다. Collector 팀이 이 예외를 소유하며 renderer 변경 또는 다른 접근 제한의 독립 재현 근거가 생기면 `DEC-20260911-youtube-restricted-schedule-isolation`에 따라 범위를 재검토합니다.
+`youtube_collection_completeness_total{provider="youtubejs",kind="live_snapshot",completeness="PARTIAL"}`와 위 WARN을 함께 확인합니다. poll 성공·readiness·freshness는 모든 영상의 일정 확보를 뜻하지 않습니다. helper WARN은 원천 관측 기록이며 실제 발행 여부는 observation publish 결과로 확인합니다. Collector 팀이 이 예외를 소유하며 renderer 변경 또는 다른 접근 제한의 독립 재현 근거가 생기면 범위를 재검토합니다.
 
 32개 후보 초과, identity/schema/time drift, 미지의 UNPLAYABLE 또는 위 접근 제한에 해당하지 않는 시각 부재는 terminal `parser_drift`입니다. 해당 collection은 observation과 checkpoint를 저장하지 않습니다. `youtube_collection_attempts_total`과 bounded `YouTube collection job failed` 로그로 판정합니다. 목록과 player 사이에 `LIVE`가 확인되거나 처음부터 `LIVE`로 발견된 방송은 예정 시각을 만들지 않고 정상 live catch-up 경로를 유지합니다.
 
-`youtubei.js@18.3.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, `src/live-check.test.mjs`, 전체 helper test와 typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 전체 fork나 vendoring은 `DEC-20260911-youtube-restricted-schedule-isolation`의 review trigger가 충족될 때만 다시 결정합니다.
+`youtubei.js@18.3.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, `src/live-check.test.mjs`, 전체 helper test와 typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 원시 Actions 접근 제거로 장애 수정이 막히거나 어댑터 밖의 상위 파서 지연이 독립적으로 두 번 확인될 때만 전체 포크나 벤더링을 재검토합니다.
 
 ## Isolated PO Token lifecycle
 
-`DEC-20260927-hololive-egress-po-production`에 따라 정상 PO Token 발급은 trusted helper의 네트워크 controller와 별도 격리 issuer로 나눕니다. `bgutils-js 4.0.3` / `jsdom 31.0.0` interpreter는 collector/helper 안에서 실행하지 않습니다. native issuer는 `RootDirectory`·`DynamicUser`·`PrivateNetwork`·`AF_UNIX`로, Quadlet(b·c·d) issuer는 별도 non-root/read-only/network-none 컨테이너로 실행합니다. 상한은 512MiB, PID 32, CPU 1 core이며 앱 비밀·DB·helper socket을 공유하지 않습니다.
+정상 PO Token 발급은 trusted helper의 네트워크 controller와 별도 격리 issuer로 나눕니다. `bgutils-js 4.0.3` / `jsdom 31.0.0` interpreter는 collector/helper 안에서 실행하지 않습니다. native issuer는 `RootDirectory`·`DynamicUser`·`PrivateNetwork`·`AF_UNIX`로, Quadlet(b·c·d) issuer는 별도 non-root/read-only/network-none 컨테이너로 실행합니다. 상한은 512MiB, PID 32, CPU 1 core이며 앱 비밀·DB·helper socket을 공유하지 않습니다.
 
 - issuer는 요청을 받기 전에 같은 격리 worker에서 신뢰된 SDK import를 완료하고 `loaded` 확인을 기다립니다. 기본 기동 준비 상한은 30초이며 CLI `--startup-timeout`은 양수·최대 90초만 허용합니다. 페이지 I/O 지연으로 실제 30초 deadline을 넘긴 native AP는 unit에서 90초를 명시합니다. helper의 기존 `YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS`도 native host env에서 90초로 두고, collector 전체 `BuildTimeout`은 native unit의 `youtube-collector --startup-timeout 90s`로 맞춥니다. 다른 실행 방식의 기본값은 바꾸지 않습니다. 실패하면 worker와 listener를 종료하며 HTTP health는 loaded 뒤에만 성공합니다. native 배포/복원은 45회/2초 간격의 bounded health 관측 뒤 collector를 시작하고, 완료 시점에 두 unit의 `NRestarts=0`을 확인합니다. 관측은 PO 발급이나 upstream 요청을 만들지 않으며 sandbox·자원 제한을 완화하지 않습니다.
 - PostgreSQL 최초 pool Ping은 기존 5초입니다. 현재 shared-go는 이 값을 초기 연결뿐 아니라 pool 수명 동안의 연결 제한에도 반영하므로 이 값 자체를 늘리지 않습니다. native unit의 `--wait-for-database`는 초기 pool Ping의 context deadline만 실패 pool 정리 후 5초 간격으로 재시도합니다. 전체 Build 기한은 helper 준비까지 합해 최대 90초이며 DB가 이를 소진해도 별도 시간을 더 주지 않습니다. 인증·TLS·설정 오류와 취소는 즉시 실패하고, 기한 안에 DB가 준비되지 않으면 기존 실패·재시작 경로로 종료합니다. 인자를 주지 않는 실행 방식은 단일 시도이며 업무 획득·쿼리·운영 재접속·업무 재시도·접속 수·역할·TLS 검증은 변하지 않습니다. `collector_database_startup_wait` 로그는 고정된 `reason=connection_deadline`만 추가하며 원본 오류·DSN·credential은 추가하지 않습니다.

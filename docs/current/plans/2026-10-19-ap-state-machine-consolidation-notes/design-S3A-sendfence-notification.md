@@ -7,7 +7,7 @@
 ## 0. 결론 요약
 
 1. **공통 기반은 작게 둔다.** 새 패키지 `internal/egress/sendfence`(sendoutcome 옆)는 typed miss 오류, 같은 문장에서 돌려받은 행 관측값의 분류, SQL 규약(잠금 뒤 clock CTE 한 곳, 시각 대신 `*_ms` 정수)만 가진다. 테이블별 SQL·runner·재시도 정책은 공유하지 않는다. 범용 상태머신 엔진은 계획 §1에서 금지했다.
-2. **notification-delivery는 권고안 (i)로 처리한다.** `notification_delivery_outbox`와 API producer는 그대로 두고, worker 소비자만 공통 fence 기반으로 옮긴다. 행을 `alarm_dispatch_deliveries`로 옮기는 (ii)는 현행 계약 `DEC-20260926-hololive-outbox-v3-convergence`와 `PROJECT_MAP.md:94-100`("does not merge the notification delivery and alarm dispatch ledgers")을 뒤집는다. 또 계획 §1이 4.2 결정 전까지 유지하라고 한 순서·재시도·rearm·보존 의미를 모두 바꾼다. 그래서 (ii)는 사용자 결정이 필요한 open question으로 분리했다.
+2. **notification-delivery는 권고안 (i)로 처리한다.** `notification_delivery_outbox`와 API producer는 그대로 두고, worker 소비자만 공통 fence 기반으로 옮긴다. 행을 `alarm_dispatch_deliveries`로 옮기는 (ii)는 `PROJECT_MAP.md:94-100`("does not merge the notification delivery and alarm dispatch ledgers")을 뒤집는다. 또 계획 §1이 4.2 결정 전까지 유지하라고 한 순서·재시도·rearm·보존 의미를 모두 바꾼다. 그래서 (ii)는 사용자 결정이 필요한 open question으로 분리했다.
 3. **"kind·period_key·room 순서 제약을 send unit 그룹 키로 표현"은 코드와 맞지 않는다.** 실제 순서 제약은 room별 FIFO 하나(`outbox_ready_predicate.sql:4-12`)다. (kind, content_id=period_key:room)은 순서가 아니라 유일성 키(`idx_ndo_kind_content`)다. alarm-dispatch의 그룹 키는 "한 메시지로 묶을 멤버"를 뜻한다. room을 그룹 키로 쓰면 서로 다른 digest가 한 메시지로 합쳐진다. 그래서 순서는 그룹 키와 별도의 **serial lane**으로 표현해야 한다(§3.5).
 4. **alarm-dispatch fence 정리(3b)의 내용**은 다음과 같다.
    - 모든 소유자 전이는 행 튜플 (status, locked_by, attempt_count)을 검사한다.
@@ -276,7 +276,7 @@ var ErrGenerationExhausted = errors.New("send request generations exhausted")
 
 | 항목 | (i) 테이블·producer 유지, worker 소비자가 공통 fence 기반 사용 | (ii) `alarm_dispatch_deliveries`로 행 이관 | (iii) worker 측 bridge(소스 행 claim → alarm_dispatch 게시 → 소스 행 handed-off) |
 |---|---|---|---|
-| 계약 | 현행 그대로. PROJECT_MAP·DEC 위반 없음 | **DEC-20260926 반전, PROJECT_MAP:98-100 위반**. 사용자 결정 필요 | DEC가 삭제한 v1·v2→v3 bridge의 재도입. 사용자 결정 필요 |
+| 계약 | 현행 그대로. 원장 분리 계약을 지킨다 | **PROJECT_MAP:98-100의 원장 분리 계약을 뒤집는다**. 사용자 결정 필요 | 폐기한 v1·v2→v3 브리지를 다시 도입한다. 사용자 결정 필요 |
 | producer·배포 | worker 단독 배포 | API producer가 alarm_dispatch event·delivery·unit을 써야 한다. 삽입 로직은 worker internal(`dispatchoutbox/repository_insert.go`, `dedupe_key.go`, `dispatch_group.go`)이라 shared로 옮기거나 API 전용 writer를 새로 만든다. worker 선배포 → API 전환 → 구 테이블 drain → 구 소비자 삭제의 다중 릴리스 | API 무변경. worker 1회 배포 + notification status CHECK migration(`HANDED_OFF`) |
 | 순서(room FIFO) | 현행 SQL 유지 | send unit에 serial lane 열 + 고빈도 alarm claim SQL에 NOT EXISTS 추가(전 경로 claim 비용 증가) | (ii)와 같음 |
 | 재시도·격리 의미 | 현행 유지 | 고정 backoff·MaxRetries vs 5s 선형·3/6회, TransportAmbiguous 격리 vs 재시도. 계획 §1에 따라 소스별 정책 분기가 runner에 필요 | (ii)와 같음 |
@@ -289,11 +289,11 @@ var ErrGenerationExhausted = errors.New("send request generations exhausted")
 | 재사용 근거 | — | 소비 측 digest 경로가 이미 있다. 렌더 `alarm_dispatch_render.go:76-100`, 그룹 키 `alarm_dispatch_group.go:133-140`, dedupe `dispatch_group.go:53-54`, `dedupe_key.go:72,159-165` | 같음 |
 
 **권고: (i).** 근거는 세 가지다.
-- (ii)·(iii)은 현행 정본 계약(DEC + PROJECT_MAP)을 뒤집는다.
+- (ii)·(iii)은 현행 정본 계약(PROJECT_MAP)을 뒤집는다.
 - 계획 §1이 4.2 결정 전까지 유지하라고 한 순서·재시도 한도·보존 정책을 모두 바꾸거나, 소스별 분기로 다시 구현해야 한다.
 - API·worker 교차 배포와 rollback 차단 조건(`rollback.md:50-70`)을 다시 만든다.
 
-(ii)의 실익(단일 reconciler, 패키지 삭제)은 실제로 있다. 그래서 open question으로 올린다. 사용자가 단일 원장을 원하면 4단계 이후 별도 계획으로 DEC를 갱신하고 진행한다. 그때 alarm-dispatch 소비 측 digest 경로가 재사용 기반이다.
+(ii)의 실익(단일 reconciler, 패키지 삭제)은 실제로 있다. 그래서 open question으로 올린다. 사용자가 단일 원장을 원하면 4단계 이후 별도 계획으로 원장 분리 계약을 변경하고 진행한다. 그때 alarm-dispatch 소비 측 digest 경로가 재사용 기반이다.
 
 반대로 (i)을 택하면 소비 측 `delivery_digest` 잔재가 생산자 없는 죽은 경로가 된다. 대상은 위 렌더·그룹·dedupe 분기와 `domain.DeliveryDigestDispatchPayload`, `rollback.md` preflight다. 처리는 open question 2로 남겼다. 유지 근거는 rollback preflight가 그 행 존재를 검사하는 운영 절차라는 점이다. 3a 범위에서는 손대지 않는다.
 
@@ -467,7 +467,7 @@ bool을 고정하던 assertion이 있는 갱신 대상 시험 파일
 ## 8. open questions (사용자 결정)
 
 1. notification 단일 원장 흡수 (ii)/(iii)
-   - DEC-20260926 반전과 PROJECT_MAP 계약 변경이 필요하다.
+   - PROJECT_MAP 계약 변경이 필요하다.
    - 순서·재시도·rearm·identity·보존 의미가 바뀌거나 소스별 분기가 필요하다.
    - 권고는 (i)로 지금 진행하고, 단일 원장은 4단계 뒤 별도 결정으로 미루는 것이다.
 2. (i) 확정 시 alarm-dispatch 소비 측 `delivery_digest` 잔재를 삭제할지 유지할지

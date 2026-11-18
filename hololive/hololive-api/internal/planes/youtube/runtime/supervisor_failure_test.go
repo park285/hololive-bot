@@ -132,7 +132,6 @@ func TestWorkerContinuesAfterRetryDBSlotTimeout(t *testing.T) {
 
 		go r.runWorker(t.Context(), errCh)
 
-		// 첫 consume와 Retry의 슬롯 대기가 모두 만료된 뒤 다음 작업의 슬롯을 엽니다.
 		time.Sleep(2*r.Config.TransactionTimeout + time.Millisecond)
 		<-r.dbSem
 		synctest.Wait()

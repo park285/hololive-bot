@@ -9,7 +9,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// 이 attempt가 어긋나면 DLQ 전이가 fence에 막혀 배치 반환과 재claim이 반복된다.
 func TestConsumerDrainMovesUndecodableRetriedRowToDLQ(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newTestRepository(t, pool)

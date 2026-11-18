@@ -6,7 +6,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// claim key 접두어는 배포 전후 worker가 같은 Valkey claim을 읽는 저장 형식이다.
 func TestNotifyClaimKeyPrefixes(t *testing.T) {
 	t.Parallel()
 

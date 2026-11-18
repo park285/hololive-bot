@@ -70,7 +70,6 @@ func (c *APIClient) handleServerError(ctx context.Context, status, attempt, maxA
 		slog.Int("status", status),
 	)
 
-	// circuit이 열렸으면 추가 재시도 없이 즉시 중단합니다.
 	if c.IsCircuitOpen() {
 		return true, NewAPIError(fmt.Sprintf("Server error: %d", status), status)
 	}

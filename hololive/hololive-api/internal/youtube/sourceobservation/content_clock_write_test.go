@@ -88,7 +88,6 @@ func TestSameStoredContentClockDetectsEveryPersistedColumn(t *testing.T) {
 	stored := populatedContentClock()
 	same := populatedContentClock()
 
-	// 0037 인자는 video_id 키 하나와 값 열이다. 값 열을 추가하면 이 표에도 변형을 추가해야 비교 누락을 잡는다.
 	if values := len(contentClockStatement(&stored, nil).Args) - 1; values != len(mutations) {
 		t.Fatalf("0037 has %d value columns but %d mutations; add a mutation for each new column", values, len(mutations))
 	}

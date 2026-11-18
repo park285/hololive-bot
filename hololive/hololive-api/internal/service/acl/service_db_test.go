@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package acl
 
 import (
@@ -77,7 +57,6 @@ func TestNewACLService_FirstInitBlacklistMode(t *testing.T) {
 
 	assertACLSettingValue(t, pool, dbKeyMode, "blacklist")
 
-	// list_type이 blacklist인지 확인
 	ctx := t.Context()
 
 	rows, err := pool.Query(ctx, "SELECT room_id, list_type FROM acl_rooms")
@@ -105,7 +84,6 @@ func TestNewACLService_FirstInitBlacklistMode(t *testing.T) {
 
 func TestNewACLService_ExistingDBStateWins(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	// 기존 DB에 데이터가 있으면 기본값 대신 DB 값을 사용해야 한다
 	mustCreateACLSetting(t, pool, dbKeyEnabled, testDBEnabledFalse)
 	mustCreateACLSetting(t, pool, dbKeyMode, "blacklist")
 	mustCreateACLRoom(t, pool, "-9001", listTypeBlacklist)
@@ -362,14 +340,12 @@ func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
 		t.Fatalf("AddRoom whitelist: added=%v err=%v", added, addErr)
 	}
 
-	// 블랙리스트 모드로 전환 후 같은 이름의 방 추가 (다른 list_type이므로 가능)
 	assertACLSetMode(t, service, ACLModeBlacklist)
 
 	if added, addErr := service.AddRoom(t.Context(), currentACLMode(service), "2003"); addErr != nil || !added {
 		t.Fatalf("AddRoom blacklist: added=%v err=%v", added, addErr)
 	}
 
-	// DB에 두 개의 레코드가 있어야 함 (같은 room_id, 다른 list_type)
 	var roomCount int64
 
 	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM acl_rooms WHERE room_id = $1", "2003").Scan(&roomCount); err != nil {
@@ -380,7 +356,6 @@ func TestACLService_AddRemoveRoomWithListType(t *testing.T) {
 		t.Fatalf("expected 2 rooms with same ID but different list_type, got %d", roomCount)
 	}
 
-	// 블랙리스트에서 제거해도 화이트리스트는 유지
 	if removed, removeErr := service.RemoveRoom(t.Context(), currentACLMode(service), "2003"); removeErr != nil || !removed {
 		t.Fatalf("RemoveRoom blacklist: removed=%v err=%v", removed, removeErr)
 	}

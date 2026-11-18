@@ -111,21 +111,28 @@ func lockLeaseRow(t *testing.T, pool *pgxpool.Pool, jobKey string) *heldLeaseRow
 	return &heldLeaseRow{pool: pool, tx: tx, pid: pid}
 }
 
-func (h *heldLeaseRow) waitForBlockedWriter(t *testing.T) {
+func (h *heldLeaseRow) waitForBlockedWriter(t *testing.T) int32 {
 	t.Helper()
 
-	waitForCondition(t, "publish blocked on the held lease row", func() bool {
-		var blocked bool
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
 
-		err := h.pool.QueryRow(t.Context(), `
-			SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1::int = ANY (pg_blocking_pids(pid)))
-		`, h.pid).Scan(&blocked)
-		if err != nil {
-			t.Fatal(err)
+	for {
+		var pid int32
+
+		err := h.pool.QueryRow(ctx, `
+			SELECT pid FROM pg_stat_activity WHERE $1::int = ANY(pg_blocking_pids(pid))
+		`, h.pid).Scan(&pid)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
 		}
 
-		return blocked
-	})
+		if err != nil {
+			t.Fatalf("wait for publish to block on held lease: %v", err)
+		}
+
+		return pid
+	}
 }
 
 func (h *heldLeaseRow) release(t *testing.T) {
@@ -429,19 +436,5 @@ func assertSubjectObservations(t *testing.T, pool *pgxpool.Pool, subject string,
 
 	if count != want {
 		t.Fatalf("%s observations = %d, want %d", subject, count, want)
-	}
-}
-
-func waitForCondition(t *testing.T, name string, ready func() bool) {
-	t.Helper()
-
-	deadline := time.Now().Add(5 * time.Second)
-
-	for !ready() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", name)
-		}
-
-		time.Sleep(10 * time.Millisecond)
 	}
 }

@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// LiveCheckContractGeneration은 channel_live_check의 계약 세대이며, video_live_check는 VideoLifecycleContractGeneration을 쓴다.
-// 기존 live_snapshot 세대와 독립적으로 증가한다.
 const LiveCheckContractGeneration int64 = 1
 
 const (
@@ -65,8 +63,6 @@ type VideoLiveCheckCoverageV1 struct {
 	VideoID string `json:"video_id"`
 }
 
-// ChannelLiveCheckV1은 채널 /live 주소 해석 결과다. LiveQuery 채널 판정 전용이며
-// live reducer·pending·absence slot 입력이 아니다.
 type ChannelLiveCheckV1 struct {
 	ChannelID                string                     `json:"channel_id"`
 	Outcome                  ChannelLiveCheckOutcome    `json:"outcome"`
@@ -76,8 +72,6 @@ type ChannelLiveCheckV1 struct {
 	Coverage                 ChannelLiveCheckCoverageV1 `json:"coverage"`
 }
 
-// VideoLiveCheckV1은 영상 player 사실 관측이다. 선택 boolean과 시각은 nil(원시 필드 없음)을
-// 명시적 false/값과 구분해 보존한다.
 type VideoLiveCheckV1 struct {
 	VideoID                 string                   `json:"video_id"`
 	ChannelID               string                   `json:"channel_id,omitempty"`
@@ -119,13 +113,11 @@ var (
 		LiveCheckReasonRequestFailed,
 		LiveCheckReasonAvailabilityUnclassified,
 	}
-	// 식별자 확인 이전에서 끝난 사유는 identity가 확인된 관측에 올 수 없다.
 	identityUnconfirmedReasons = []LiveCheckUnknownReason{
 		LiveCheckReasonIdentityMissing,
 		LiveCheckReasonIdentityMismatch,
 		LiveCheckReasonRequestFailed,
 	}
-	// 영상 확인에서 identity가 확인되지 않은 UNKNOWN이 가질 수 있는 첫 실패 사유다.
 	videoIdentityStageReasons = []LiveCheckUnknownReason{
 		LiveCheckReasonIdentityMissing,
 		LiveCheckReasonIdentityMismatch,
@@ -138,7 +130,6 @@ func (k ObservationKind) isLiveCheck() bool {
 	return k == KindChannelLiveCheck || k == KindVideoLiveCheck
 }
 
-// 두 kind는 YouTube.js 단독 관측이며 연속성 개념이 없다.
 func validateLiveCheckEnvelope(provider Provider, kind ObservationKind, continuity Continuity) error {
 	if !kind.isLiveCheck() {
 		return nil
@@ -193,7 +184,6 @@ func (p *ChannelLiveCheckV1) NegativeLiveEvidence() bool {
 		(p.Outcome == ChannelLiveCheckUpcomingVideo || p.Outcome == ChannelLiveCheckChannelPage)
 }
 
-// 가용성만 불명확한 availability_unclassified 외의 UNKNOWN 사유는 수명 사실을 무효화한다.
 func (p *VideoLiveCheckV1) LifecycleFactsTrusted() bool {
 	return p.IdentityConfirmed &&
 		(p.UnknownReason == "" || p.UnknownReason == LiveCheckReasonAvailabilityUnclassified)
@@ -203,7 +193,6 @@ func (p *VideoLiveCheckV1) CurrentlyLive() bool {
 	return p.LifecycleFactsTrusted() && (isTrue(p.IsLive) || isTrue(p.IsLiveNow))
 }
 
-// 현재 LIVE가 아닌 조건은 isLive 생략과 명시적 false 모두를 포함한다.
 func (p *VideoLiveCheckV1) VerifiedEndedAt() (time.Time, bool) {
 	if !p.LifecycleFactsTrusted() || p.EndedAt == nil || isTrue(p.IsLive) || p.IsLiveNow == nil || *p.IsLiveNow {
 		return time.Time{}, false
@@ -428,7 +417,6 @@ func (p *VideoLiveCheckV1) hasResponseFacts() bool {
 		p.StartedAt != nil || p.EndedAt != nil || p.ScheduledAt != nil || p.WaitingStateConfirmed != nil
 }
 
-// 모순된 원시 사실은 contradictory_fields UNKNOWN으로만 보존한다.
 func (p *VideoLiveCheckV1) validateLifecycleFacts(observedAt time.Time) error {
 	if p.IsLive != nil && p.IsLiveNow != nil && *p.IsLive != *p.IsLiveNow {
 		return errors.New("video live check is_live and is_live_now disagree")
@@ -457,8 +445,6 @@ func (p *VideoLiveCheckV1) validateLifecycleFacts(observedAt time.Time) error {
 	return nil
 }
 
-// validateAvailabilityFacts는 가용성 분류가 원시 isPrivate 값으로만 성립하게 한다.
-// 필드가 없는 응답에 기본값을 두지 않는다.
 func (p *VideoLiveCheckV1) validateAvailabilityFacts() error {
 	switch p.Availability {
 	case VideoAvailabilityPublic:

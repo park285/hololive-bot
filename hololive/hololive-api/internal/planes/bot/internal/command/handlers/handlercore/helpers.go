@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package handlercore
 
 import (
@@ -32,8 +12,6 @@ import (
 
 var ErrMemberLookupHandled = errors.New("member lookup handled")
 
-// BlockGraduatedMember는 채널 대표가 졸업했으면 졸업 차단 응답을 보내고 true를 반환한다. 대표가 없으면 졸업이 아니고,
-// 조회 실패는 추측하지 않고 오류다.
 func BlockGraduatedMember(ctx context.Context, deps *Dependencies, room, channelID string) (bool, error) {
 	if deps.Matcher == nil {
 		return false, nil
@@ -59,7 +37,6 @@ func BlockGraduatedMember(ctx context.Context, deps *Dependencies, room, channel
 	return true, nil
 }
 
-// 동명이인 또는 미발견인 경우 사용자-facing 응답을 보내고 ErrMemberLookupHandled를 반환한다.
 func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, room, memberName, commandExample string) (*domain.Channel, error) {
 	member, err := lookupMemberProfile(ctx, deps, room, memberName, commandExample)
 	if err != nil {
@@ -108,7 +85,6 @@ func lookupMemberProfile(ctx context.Context, deps *Dependencies, room, memberNa
 		return nil, ErrMemberLookupHandled
 	}
 
-	// 응답을 보내지 않았으므로 handled로 보고하지 않고 matcher 불변식 위반을 오류로 드러낸다.
 	if member == nil {
 		return nil, errors.New("member matcher returned found without member")
 	}
@@ -130,7 +106,6 @@ func replyMemberLookupFailure(ctx context.Context, deps *Dependencies, room, com
 	return nil
 }
 
-// !라이브, !일정, !예정 명령에서 사용한다. 동명이인 응답과 졸업 멤버 차단을 함께 처리한다.
 func FindActiveMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, room, memberName, commandExample string) (*domain.Channel, error) {
 	channel, err := FindMemberWithCandidatesOrError(ctx, deps, room, memberName, commandExample)
 	if err != nil {

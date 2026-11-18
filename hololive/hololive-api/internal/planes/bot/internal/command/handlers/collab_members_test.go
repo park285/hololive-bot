@@ -44,7 +44,6 @@ func TestWithCollabMembersReplacesOfficialNamesOnCopies(t *testing.T) {
 		t.Fatalf("collab names = %v", got[0].CollaboTalentNames)
 	}
 
-	// 공식 일정 fallback이 담은 공식 표기명은 조회 결과가 없으면 표시하지 않는다.
 	if got[1].CollaboTalentNames != nil || got[2] != solo || got[3] != nil {
 		t.Fatalf("unexpected streams: fallback=%v solo=%p nil=%v", got[1].CollaboTalentNames, got[2], got[3])
 	}

@@ -34,13 +34,11 @@ func TestSourceRetentionWindowReportsProgressAndTraversal(t *testing.T) {
 	base := seedBoundedRetention(t, pool, 2500, 500)
 	cutoff := base.Add(time.Hour)
 
-	// 보호 500건 뒤 삭제 가능한 300건에서 상한을 채우면, 커서는 마지막 삭제 행까지만 전진한다.
 	require.Equal(t, retentionWindow{deleted: 300, passed: 800}, deleteRetentionWindow(t, pool, cutoff, 300))
 	require.Equal(t, retentionWindow{deleted: 300, passed: 300}, deleteRetentionWindow(t, pool, cutoff, 300))
 	require.Equal(t, retentionWindow{deleted: 1000, passed: 1000}, deleteRetentionWindow(t, pool, cutoff, 1000))
 	require.Equal(t, retentionWindow{deleted: 400, passed: 400, completed: true}, deleteRetentionWindow(t, pool, cutoff, 1000))
 
-	// 새 순회는 보호 prefix를 지나며 삭제 0건이어도 진척을 보고하고, 끝에서 다시 완료를 보고한다.
 	require.Equal(t, retentionWindow{passed: 500, completed: true}, deleteRetentionWindow(t, pool, cutoff, 1000))
 	requireRetentionCount(t, pool, 500)
 }

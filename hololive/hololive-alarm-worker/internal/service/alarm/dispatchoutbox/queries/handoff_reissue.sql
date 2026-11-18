@@ -1,8 +1,4 @@
--- Iris가 dispatch 전에 포기한(failed) 요청을 새 세대와 멤버 전원의 retry 전이로 한 문장에 기록한다. 멤버는
--- attempt_count + 1, next_attempt_at = clock + $5 밀리초, sent_at 없음으로 돌아가고 단위는 새 ID($8)·세대 + 1과
--- 빈 handoff 확인 상태가 된다. 다음 claim은 고정 본문을 새 ID로 다시 보낸다. 멤버 조건이 어긋났으면 멤버를 바꾸지
--- 않고 확인을 닫는다.
-/* handoff_fence */, updated AS (
+/* fragment:handoff_fence */, updated AS (
     UPDATE alarm_dispatch_deliveries d
     SET status = 'retry',
         attempt_count = d.attempt_count + 1,

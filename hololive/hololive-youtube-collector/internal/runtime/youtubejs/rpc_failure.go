@@ -27,7 +27,6 @@ func helperStatusError(status int, payload []byte) error {
 		return protocolMismatch(errors.New("youtube.js helper status/body tuple mismatch"))
 	}
 
-	// helper는 조회가 없으면 필드를 생략하므로 명시적 0도 protocol 위반입니다.
 	if decoded.ScheduleLookups != nil && (*decoded.ScheduleLookups < 1 || *decoded.ScheduleLookups > ChannelLiveMaxScheduleLookups) {
 		return protocolMismatch(errors.New("youtube.js helper error schedule lookups are outside the protocol limit"))
 	}
@@ -45,7 +44,6 @@ func helperStatusError(status int, payload []byte) error {
 	return &scheduleLookupError{lookups: lookups, err: failure}
 }
 
-// 이 오류가 없으면 helper가 조회 수를 보고하지 못한 것입니다. 분류는 감싼 helper 오류를 그대로 따릅니다.
 type scheduleLookupError struct {
 	lookups int
 	err     error

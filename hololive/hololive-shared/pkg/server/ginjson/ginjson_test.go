@@ -33,7 +33,6 @@ func TestRespond(t *testing.T) {
 		t.Errorf("응답 바디에 기대 필드 없음: %s", body)
 	}
 
-	// 유효한 JSON인지 확인
 	var out map[string]string
 
 	if err := jsonv2.Unmarshal([]byte(strings.TrimSpace(body)), &out); err != nil {
@@ -127,7 +126,7 @@ func TestJSON_WriteContentType(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		preset string // 사전 설정할 Content-Type 값 (빈 문자열이면 설정 안 함)
+		preset string
 		wantCT string
 	}{
 		{

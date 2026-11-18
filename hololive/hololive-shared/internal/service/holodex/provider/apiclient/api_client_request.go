@@ -73,7 +73,6 @@ func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method, path s
 		return nil, true, fmt.Errorf("context canceled before request: %w", ctxErr)
 	}
 
-	// 첫 시도는 DoRequest 진입에서 확인했습니다. 재시도 사이에 다른 프로세스가 연 circuit도 따릅니다.
 	if attempt > 0 {
 		if err := c.rejectIfSharedCircuitOpen(ctx); err != nil {
 			return nil, true, fmt.Errorf("reject if shared circuit open: %w", err)
@@ -86,7 +85,6 @@ func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method, path s
 
 	defer c.releaseSemaphore()
 
-	// 세마포어 대기와 429 cooldown 뒤 실제 요청 직전에 로컬 간격을 적용합니다.
 	if err := c.waitForRateLimiter(ctx, path); err != nil {
 		return nil, true, fmt.Errorf("wait for rate limiter: %w", err)
 	}
@@ -168,9 +166,6 @@ func (c *APIClient) handleHolodexRequestError(
 	return true, fmt.Errorf("HTTP request failed: %w", err)
 }
 
-// http.Client.Do는 *url.Error를 최상위로 돌려주고 그 URL에는 채널 목록 같은 query 전체가 들어 있다.
-// 오류가 로그로 퍼질 때 수백 자 query가 붙지 않도록 query만 떼고, Op·Err는 그대로 두어
-// *url.Error 타입과 Timeout() 판정을 보존한다.
 func redactRequestURLQuery(err error) error {
 	urlErr, ok := errors.AsType[*url.Error](err)
 	if !ok {
@@ -215,7 +210,6 @@ func (c *APIClient) newRequest(ctx context.Context, method, reqURL, apiKey strin
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-APIKEY", apiKey)
-	// Holodex API Terms 준수를 위해 정직한 User-Agent 사용 (Section 6: Attribution)
 	req.Header.Set("User-Agent", holodexUserAgent)
 
 	return req, nil

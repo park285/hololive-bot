@@ -59,7 +59,6 @@ func TestPersistVideosTxChunksVideosOutboxAndWatermark(t *testing.T) {
 		`SELECT `+watermarkColumns+` FROM youtube_content_watermarks WHERE channel_id = $1 AND watermark_type = $2`, testChannelID, domain.WatermarkTypeVideo)
 	require.Equal(t, "video-054", watermark.LastContentID)
 
-	// 다시 관측한 영상은 갱신하고, 같은 (kind, content_id) outbox는 ON CONFLICT DO NOTHING으로 하나만 남긴다.
 	require.NoError(t, commitVideos(ctx, pool, []*domain.YouTubeVideo{{
 		VideoID:   "video-000",
 		ChannelID: testChannelID,

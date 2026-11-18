@@ -42,7 +42,6 @@ func TestCollectionTargetSnapshotIncludesUnqueuedAndExcludesInactive(t *testing.
 
 	assertExecutableCollectionSamples(t, samples)
 
-	// 현재 viewer target이 없어도 양방향 상태 불일치와 예정 시각 초과를 집계합니다.
 	live := samples[0]
 	got := [...]int64{live.live, live.upcoming, live.other, live.stateMismatch, live.pastDue, live.pastDue7d}
 
@@ -125,7 +124,6 @@ func TestCollectionTargetSnapshotDefersSleepingTargets(t *testing.T) {
 			continue
 		}
 
-		// video-stale(fixture)과 video-awake만 확인 가능하고 미완료다. video-slept는 완료 나이가 커도 잠들어 있다.
 		got := [...]int64{s.targets, s.neverCompleted, s.stale, s.due}
 		if got != [...]int64{4, 2, 0, 2} || s.oldestDueAge < 60 || s.oldestCompletionAge != 0 {
 			t.Fatalf("video live snapshot = %+v", s)
@@ -269,8 +267,6 @@ func collectionStateVisits(node collectionStatePlanNode) float64 {
 func assertExecutableCollectionSamples(t *testing.T, samples []collectionTargetSample) {
 	t.Helper()
 
-	// 방송 탭 snapshot과 채널 /live 확인은 채널마다 각자 job으로 RPC 1회를 보낸다.
-	// disabled 채널 확인 target은 수요에 들어가지 않는다.
 	wantRates := map[string]float64{
 		"community_collect":            1.0 / 120,
 		"youtubejs_content":            2.0 / 120,
@@ -308,7 +304,6 @@ func assertCollectionJobProgress(t *testing.T, s *collectionTargetSample) {
 			t.Fatalf("live collection snapshot = %+v", s)
 		}
 	case "youtubejs_channel_live_check":
-		// 같은 채널의 오래된 방송 탭 완료가 확인 job의 최근 완료·다음 슬롯을 가리지 않는다.
 		got := [...]int64{s.targets, s.stale, s.neverCompleted, s.due}
 		if got != [...]int64{2, 0, 1, 1} || s.oldestCompletionAge < 30 || s.oldestCompletionAge >= 600 || s.oldestDueAge < 600 {
 			t.Fatalf("channel live check collection snapshot = %+v", s)

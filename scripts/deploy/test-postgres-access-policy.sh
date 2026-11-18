@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# 일회용 PG18.7 제품 검사. 포트 공개·운영 환경·운영 데이터를 사용하지 않는다.
 set -euo pipefail
-# kapu 사용자 계정의 rootless Podman에서만 실행한다. SELinux host에서 저장소 파일을 relabel하지 않도록
-# 일회용 검사 container는 label을 끈다. 원격 연결 설정이 있으면 거부한다.
 if [[ -n "${CONTAINER_HOST:-}${CONTAINER_CONNECTION:-}" ]] || [[ "$(podman info --format '{{.Host.Security.Rootless}}')" != true ]]; then
   echo 'policy test requires local rootless Podman without connection overrides' >&2
   exit 2
@@ -21,14 +18,12 @@ cleanup() {
   rm -rf "$fixture"
 }
 trap cleanup EXIT
-# 이미 빌드된 고정 PostgreSQL 이미지만 재사용하며 내려받거나 빌드하지 않는다.
 podman image inspect "$image" >/dev/null
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=holo-postgres \
   -addext subjectAltName=DNS:holo-postgres \
   -keyout "$fixture/server.key" -out "$fixture/server.crt" >/dev/null 2>&1
 chmod 0755 "$fixture"
 chmod 0644 "$fixture/server.crt"
-# 서버 진입점이 합성 테스트 파일을 전용 데이터 tmpfs로 복사한다.
 chmod 0644 "$fixture/server.key"
 podman network create --internal --subnet 172.31.249.0/24 "$network" >/dev/null
 podman volume create --driver local --opt type=tmpfs --opt device=tmpfs \
@@ -97,7 +92,6 @@ for role in postgres_admin hololive_migrator hololive_scraper iris_db_nightly ho
   fi
 done
 [[ "$(client postgres_exporter verify-full postgres)" == t ]]
-# 마이그레이션은 네트워크 없이 읽기 전용 소켓 마운트로 실행 가능해야 한다.
 podman run --rm --pull never --security-opt label=disable --network none \
   --mount "type=volume,src=$socket,dst=/var/run/postgresql,readonly" \
   --entrypoint psql "$image" \

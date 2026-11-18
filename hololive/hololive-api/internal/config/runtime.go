@@ -1,5 +1,3 @@
-// Package config: 단일 hololive-api 프로세스가 호스팅하는 bot·admin plane과
-// YouTube background plane의 설정을 소유한다.
 package config
 
 import (
@@ -20,9 +18,6 @@ import (
 
 const defaultAdminAPIPort = 30006
 
-// RuntimeConfig는 단일 hololive-api 프로세스가 호스팅하는 bot/admin HTTP plane과
-// YouTube background plane을 담는다. 각 plane은 자체 bounded DB pool을 explicit bulkhead로
-// 유지하고, 프로세스 전역의 logging·GC·signal 처리는 부모 runtime이 소유한다.
 type RuntimeConfig struct {
 	Bot     *BotPlaneConfig
 	Admin   *AdminPlaneConfig

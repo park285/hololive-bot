@@ -11,8 +11,9 @@ stack AGENTS.md의 기준에 따라 checker 자체 테스트, 문서 동기화�
 ## 실행 순서
 
 `scripts/architecture/ci-boundary-gate.sh`는 비밀·로컬 산출물 추적,
-SQL 안전 정책, native 실행 권한 제한과 topology 설정 일치를
+SQL 안전 정책과 topology 설정 일치를
 검사한 뒤 환경 파일·health gate·서비스 선택·AP QUIC UDP 버퍼 판정·원격 로그 동기화의 동작 테스트를 실행합니다.
+native 실행 권한 제한은 golangci-lint `depguard`가 맡습니다.
 
 Go 파일·함수 크기는 golangci-lint의 `revive` `file-length-limit`(비테스트 파일 800줄)과
 `funlen`(함수 120줄)이 검사합니다. 복잡도는 설정된 린터가 맡으며 별도 구조 예산 검사는 없습니다.
@@ -37,7 +38,7 @@ NilAway는 고정 바이너리의 `go vet -vettool` unitchecker로 의존성 분
 
 | 검사 | 스크립트 | 실패 조건 |
 |---|---|---|
-| native 실행 권한 | `check-repository-ownership.sh` | hololive-api나 shared template 실행기가 `os/exec`·`plugin`을 import함 |
+| native 실행 권한 | golangci-lint `depguard` `hololive-native-exec` 규칙(iris-stack `tools/lint/golangci.template.yml`) | hololive-api나 shared template 실행기의 비시험 파일이 `os/exec`·`plugin`을 import함 |
 | SQL 안전 정책 | `check-sql-ownership.sh`·`.py` | 런타임 DDL, wildcard projection, 불완전 쿼리, lease·조회 시계 위반 또는 재관측 INSERT의 기존 발송 상태 덮어쓰기 |
 | 네트워크 경계 | `check-topology-parity.sh` | 호스트 주소와 방화벽·DB·ingress·중앙 Quadlet·collector Podman unit 설정 불일치 |
 | 비밀 유출 | `check-tracked-local-artifacts.sh`·`scripts/refactor/grep-sensitive-logs.sh` | 비밀·운영 산출물 추적 또는 인증 값·응답 원문 로깅 |

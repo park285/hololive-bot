@@ -19,8 +19,6 @@ import (
 
 const manualReplayReason = "incident INC-2026-0801 verified Iris repair"
 
-// replyOutboxManualReplayArtifactSQL은 운영자가 psql로 실행하는 artifact의 psql 변수를 bind 인자로 바꾼 문장이다.
-// 시험은 production 정본인 이 artifact를 그대로 실행한다.
 var replyOutboxManualReplayArtifactSQL = strings.NewReplacer(
 	":'outbox_id'", "$1",
 	":'operator_actor'", "$2",
@@ -286,7 +284,6 @@ func TestManualReviewReplayRejectsUnboundedOrUnsafeMetadata(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `UPDATE bot_reply_outbox
 		SET status = 'manual_review' WHERE message_id = $1 RETURNING id`, entry.MessageID).Scan(&id))
 
-	// 운영자 입력 검증은 psql artifact의 DB 함수가 소유한다. 거절은 상태를 바꾸지 않는 결과 값으로 돌아온다.
 	for _, input := range []struct{ actor, reason string }{
 		{actor: "operator with spaces", reason: "ticket-1"},
 		{actor: testOperatorEmail, reason: strings.Repeat("r", 257)},
@@ -459,7 +456,7 @@ func TestManualReviewReplayGrantAllowsRetryableReclaimWithoutDuplicateAudit(t *t
 	})
 	require.NoError(t, err)
 	require.True(t, applied)
-	time.Sleep(5 * time.Millisecond)
+	advanceReplyRetry(ctx, t, pool, first.ID)
 
 	second, err := repo.Claim(ctx, "manual-replay-retryable-b", time.Minute)
 	require.NoError(t, err)

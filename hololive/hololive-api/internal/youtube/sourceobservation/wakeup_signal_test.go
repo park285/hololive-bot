@@ -15,7 +15,6 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-// alarm-worker YouTube consumer와 맞춘 신호 queue key다.
 const youtubeWakeupQueue = "youtube:delivery:wakeup"
 
 type finalizeResultStub struct {
@@ -131,7 +130,6 @@ func TestCommunityConsumerSignalsAfterNotificationCommit(t *testing.T) {
 		}
 	}
 
-	// 채널의 첫 관측은 기준선이라 알림 행이 없으므로 깨우지 않는다.
 	consumeCommunityPost("post-base")
 	assertTableCount(t, pool, "youtube_notification_outbox", 0)
 

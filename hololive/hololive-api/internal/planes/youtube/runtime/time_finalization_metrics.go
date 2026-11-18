@@ -70,7 +70,6 @@ func scanTimeFinalizationSamples(rows pgx.Rows) ([]timeFinalizationSample, error
 }
 
 func (m *timeFinalizationMetrics) observe(samples []timeFinalizationSample) {
-	// 최종 상태·사유 변경으로 사라진 조합을 남기지 않는다. 실패한 조회는 이 함수를 호출하지 않는다.
 	m.outcomes.Reset()
 
 	for _, s := range samples {

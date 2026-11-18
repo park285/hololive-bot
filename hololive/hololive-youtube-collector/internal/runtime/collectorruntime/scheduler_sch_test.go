@@ -350,8 +350,9 @@ func TestSCH011PanicReportsFatalAndStopsAdmission(t *testing.T) {
 
 func TestSCH012StopDrainsQueueAndQueuedSet(t *testing.T) {
 	scheduler := newLifecycleScheduler(t)
-	// 이 테스트는 실행 없이 scheduler join의 큐 배수만 검증한다.
+
 	scheduler.workers = 0
+
 	if err := scheduler.Start(t.Context()); err != nil {
 		t.Fatal(err)
 	}

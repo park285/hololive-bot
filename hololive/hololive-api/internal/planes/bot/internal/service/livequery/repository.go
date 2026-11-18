@@ -23,7 +23,6 @@ type snapshotDB interface {
 
 type Repository struct{ db snapshotDB }
 
-// New는 기존 bot-plane pool을 재사용하며 새 연결이나 수집 작업을 만들지 않는다.
 func New(pool *pgxpool.Pool) *Repository {
 	return &Repository{db: pool}
 }

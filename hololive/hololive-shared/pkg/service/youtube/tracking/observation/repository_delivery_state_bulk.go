@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// bulkAlarmSentMarkInputs는 tracking 행을 기본 키 (kind, canonical_content_id)로만 찾는다.
 type bulkAlarmSentMarkInputs struct {
 	kinds               []string
 	canonicalContentIDs []string

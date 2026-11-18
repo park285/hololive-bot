@@ -18,13 +18,11 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 )
 
-// 발송 경로는 저장된 최종 요청의 일부이며 재시도 때 다시 판정하지 않는다.
 const (
 	SendRouteText     = "text"
 	SendRouteRichText = "richtext"
 )
 
-// SendRequest는 하나의 send unit이 모든 세대에서 공유하는 최종 외부 요청이다.
 type SendRequest struct {
 	Body                string
 	Route               string
@@ -36,29 +34,22 @@ type SendRequest struct {
 	Generation          int
 }
 
-// ErrSendRequestUnpinned는 fence는 맞지만 아직 요청을 고정하지 않았다는 정상 분기다.
 var ErrSendRequestUnpinned = errors.New("alarm send request not yet pinned")
 
-// SendRequestRepository는 전체 send unit의 요청과 generation을 소유권 fence 아래 저장한다. 미스는
-// *sendfence.MissError이며, 재발급 세대를 모두 썼으면 sendfence.ErrGenerationExhausted다.
 type SendRequestRepository interface {
 	LoadSendRequest(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, expectedID string) (*SendRequest, error)
 	PinSendRequest(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, expectedID string, request SendRequest) (*SendRequest, error)
 	ReissueSendRequest(ctx context.Context, unitID int64, workerID string, request *SendRequest, updates []FailureUpdate) error
 }
 
-// LoadSendRequest는 고정된 요청을 읽으며 fence는 맞지만 미고정이면 ErrSendRequestUnpinned를 반환한다.
 func (r *PgxRepository) LoadSendRequest(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, expectedID string) (*SendRequest, error) {
 	return r.prepareSendRequest(ctx, unitID, claims, workerID, expectedID, nil)
 }
 
-// PinSendRequest는 첫 발송 전에만 요청을 고정하고 이미 고정된 경우 저장된 요청을 반환한다.
 func (r *PgxRepository) PinSendRequest(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, expectedID string, request SendRequest) (*SendRequest, error) {
 	return r.prepareSendRequest(ctx, unitID, claims, workerID, expectedID, &request)
 }
 
-// prepareSendRequest는 단위를 잠그고 단위 멤버 전원의 fence(leased·소유자·attempt·lease·멤버십·멤버 종단·요청 ID)를
-// 확인한 뒤 고정 요청을 읽거나 candidate로 고정한다.
 func (r *PgxRepository) prepareSendRequest(
 	ctx context.Context,
 	unitID int64,
@@ -125,7 +116,6 @@ func (r *PgxRepository) prepareSendRequest(
 	return request, nil
 }
 
-// 새 요청은 text/richtext만 허용한다. 기존 markdown은 prepareSendRequest의 고정 스냅샷 반환 경로로 읽는다.
 func fillPinnedRequest(request, candidate *SendRequest, ids []int64) error {
 	if candidate.Route != SendRouteText && candidate.Route != SendRouteRichText {
 		return errors.New("pin send request: unsupported route")
@@ -154,7 +144,6 @@ func lockSendRequest(ctx context.Context, tx pgx.Tx, unitID int64) (*SendRequest
 	return &request, nil
 }
 
-// 고정하지 못하면 다른 고정이 앞선 것이므로 단위 전원을 request_changed 미스로 보고한다.
 func pinSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, request *SendRequest, claims []DeliveryClaim) error {
 	rows, err := tx.Query(ctx, sendRequestPinSQL, unitID, request.Body, request.Route, request.BodyHash, request.DeliveryIDs, request.BaseClientRequestID)
 	if err != nil {
@@ -182,9 +171,6 @@ func pinSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, request *SendR
 	return fmt.Errorf("pin send request: %w", sendfence.Check(fenceActionPinSendRequest, fencedTargetIDs(claims), observed))
 }
 
-// ReissueSendRequest는 확정된 pre-handoff 실패를 새 세대와 멤버 전원의 retry 전이로 한 문장에 기록한다. 인자 request는
-// 이 claim에서 fence 아래 읽은 고정 요청이며, SQL은 그 client_request_id·세대가 그대로일 때만 바꾼다. 저장 뒤
-// 종료돼도 다음 claim은 새 ID와 기존 본문을 그대로 복구한다.
 func (r *PgxRepository) ReissueSendRequest(ctx context.Context, unitID int64, workerID string, request *SendRequest, updates []FailureUpdate) error {
 	if request.Generation >= iris.ReplyReissueMaxGenerations {
 		return sendfence.ErrGenerationExhausted
@@ -218,8 +204,6 @@ func (r *PgxRepository) ReissueSendRequest(ctx context.Context, unitID int64, wo
 		unitID, jsonbRecordsetParam(raw), workerID, request.ClientRequestID, request.Generation, nextID)
 }
 
-// BeginSendRequest는 고정된 전체 membership·요청 ID·소유권·lease를 한 문장에서 다시 확인하고 단위 전원을 sending으로
-// 바꾼다. 하나라도 맞지 않으면 아무 행도 바꾸지 않고 *sendfence.MissError를 돌려준다.
 func (r *PgxRepository) BeginSendRequest(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, expectedID string, lease time.Duration) error {
 	leaseMS, err := leaseMilliseconds(lease)
 	if err != nil {

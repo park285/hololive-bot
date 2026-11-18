@@ -90,7 +90,6 @@ func TestBotHTTP3SlowWebhookBodyExitsBeforeAuthentication(t *testing.T) {
 		}()
 
 		synctest.Wait()
-		// 가상 시계만 진행하고 FIN은 보내지 않아 실제 본문 읽기의 종료를 확인한다.
 		time.Sleep(time.Minute)
 		synctest.Wait()
 

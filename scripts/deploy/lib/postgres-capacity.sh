@@ -45,7 +45,6 @@ postgres_capacity_assert_policy_target() {
     local pipes capacity reserve
     local server_limit="" server_limit_rows=0 used=0
     local superuser_reserved="" superuser_reserved_rows=0
-    # exporter·야간 작업 할당 뒤에도 일반 제어 슬롯 셋을 남긴다.
     local min_reserve=3
     local -A seen_owners=() role_limits=() role_used=()
 
@@ -73,7 +72,6 @@ postgres_capacity_assert_policy_target() {
         if [[ "${line}" == @superuser-reserved\|* ]]; then
             ((superuser_reserved_rows += 1))
             superuser_reserved="${line#*|}"
-            # 앞자리 0은 bash 산술에서 8진수로 해석되므로 허용하지 않는다.
             [[ "${superuser_reserved}" =~ ^(0|[1-9][0-9]*)$ ]] || {
                 echo "[pg-capacity] policy has an invalid @superuser-reserved" >&2
                 return 1
@@ -147,7 +145,6 @@ postgres_capacity_assert_policy_target() {
         return 1
     fi
 
-    # superuser 예약 슬롯은 비슈퍼유저 앱 역할이 쓸 수 없으므로 reserve에서 뺀다(PG 거부 조건과 같은 기준).
     reserve=$((server_limit - superuser_reserved - used))
     if (( reserve < min_reserve )); then
         echo "[pg-capacity] connection budget exhausted: max=${server_limit} superuser_reserved=${superuser_reserved} allocated=${used} reserve=${reserve}, want reserve >= ${min_reserve}" >&2

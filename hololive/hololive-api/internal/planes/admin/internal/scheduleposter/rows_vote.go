@@ -17,13 +17,11 @@ import (
 )
 
 const (
-	extractRuns   = 3
-	extractQuorum = 2
-	// 서로 다른 칸으로 남기는 원문 유사도 기준이며 하니스 compare.match_rows와 같다.
+	extractRuns       = 3
+	extractQuorum     = 2
 	sameDaySimilarity = 0.6
 	anyDaySimilarity  = 0.85
-	// Python difflib의 autojunk와 같다. 200자 이상인 쪽에서 1%+1번 넘게 나온 글자는 짝을 찾는 데 쓰지 않는다.
-	autojunkMinRunes = 200
+	autojunkMinRunes  = 200
 )
 
 type voteSlot struct {
@@ -35,7 +33,6 @@ func (s *voteSlot) seen() []*extractedRow {
 	return slices.DeleteFunc(slices.Clone(s.by), func(row *extractedRow) bool { return row == nil })
 }
 
-// voteExtracted는 하니스 score.vote처럼 결과들의 행을 짝지어 칸마다 다수결로 합친다. 모든 결과가 같으면 첫 결과와 같다.
 func voteExtracted(runs [][]extractedRow) ([]extractedRow, error) {
 	var kept, dropped []*voteSlot
 
@@ -131,8 +128,6 @@ func voteRow(got []*extractedRow, runs int) extractedRow {
 		field.set(got[slices.IndexFunc(got, func(r *extractedRow) bool { return field.value(r) == key })])
 	}
 
-	// 칸마다 고른 날짜·시작이 서로 다른 시간대로 읽은 실행에서 올 수 있어, 변환한 시각을 카드가 단정하지 않게 한다.
-	// 시각 없는 칸의 빈 시간대는 저장 때 시각 있는 칸을 따르므로 견주지 않는다.
 	timed := slices.DeleteFunc(slices.Clone(got), func(r *extractedRow) bool { return r.Start == nil })
 	if slices.ContainsFunc(timed, func(r *extractedRow) bool { return zoneKey(r.TZ) != zoneKey(timed[0].TZ) }) {
 		notes = append(notes, warning("E10 실행 간 시간대 불일치", shownValues(timed, func(r *extractedRow) string { return zoneKey(r.TZ) })))
@@ -142,7 +137,6 @@ func voteRow(got []*extractedRow, runs int) extractedRow {
 		}
 	}
 
-	// 같은 조각(인원수 등)이 원문과 배지를 오가므로, 따로 고르면 조각이 양쪽에서 모두 사라질 수 있다.
 	text, agreed := mostCommon(got, textBadgesKey)
 
 	row.Text, row.Badges = text.Text, text.Badges
@@ -166,7 +160,6 @@ func statusSplitsOnAiring(got []*extractedRow) bool {
 	return slices.ContainsFunc(got, func(row *extractedRow) bool { return airs(row.Status) != first })
 }
 
-// voteStatus는 방송 있음·없음이 갈린 칸을 카드가 단정하지 않도록 tentative로 둔다.
 func voteStatus(got []*extractedRow) posterstore.RowStatus {
 	if statusSplitsOnAiring(got) {
 		return posterstore.RowTentative
@@ -217,7 +210,6 @@ func countFunc(got []*extractedRow, match func(*extractedRow) bool) int {
 	return count
 }
 
-// 결과의 실행 순번은 응답이 온 순서와 무관하므로 값을 정렬해 보여 준다.
 func shownValues(got []*extractedRow, value func(*extractedRow) string) string {
 	shown := make([]string, len(got))
 	for i, row := range got {
@@ -254,7 +246,6 @@ func zoneKey(tz *string) string {
 	return zone.key
 }
 
-// key가 같아도 저장한 표기에 따라 바꾼 행인지와 변경 감지 건너뜀이 달라진다.
 func votedZone(got []*extractedRow, from *extractedRow) *string {
 	key := zoneKey(from.TZ)
 	best, bestCount, bestPlain := from, 0, false
@@ -334,7 +325,6 @@ func badgeForm(badge string) string {
 	return strings.Trim(strings.Join(strings.Fields(cases.Fold().String(norm.NFKC.String(badge))), " "), " #＃")
 }
 
-// clockKey는 validateExtracted를 통과한 H:MM·HH:MM 시각만 받는다.
 func clockKey(clock *string) string {
 	if clock == nil {
 		return ""
@@ -392,7 +382,6 @@ type pairCandidate struct {
 	i, j  int
 }
 
-// pairRuns는 하니스 compare.match_rows와 같은 순서로 a와 b의 행을 짝짓는다. 짝과 짝을 찾지 못한 b의 번호를 돌려준다.
 func pairRuns(a []*extractedRow, b []extractedRow) ([][2]int, []int) {
 	p := &runPairing{
 		a: a, b: b, keysA: make([][]rune, len(a)), keysB: make([][]rune, len(b)),
@@ -475,7 +464,6 @@ func (p *runPairing) take(score func(i, j int) (float64, bool)) {
 	}
 }
 
-// similarity는 Python difflib.SequenceMatcher(None, a, b).ratio()와 같다.
 func similarity(a, b []rune) float64 {
 	total := len(a) + len(b)
 	if total == 0 {
@@ -557,7 +545,6 @@ func longestMatch(a, b []rune, positions map[rune][]int, span runeSpan) (int, in
 		lengths = next
 	}
 
-	// autojunk로 뺀 글자도 찾은 짝의 양옆으로는 이어 붙인다.
 	for besti > span.alo && bestj > span.blo && a[besti-1] == b[bestj-1] {
 		besti, bestj, best = besti-1, bestj-1, best+1
 	}

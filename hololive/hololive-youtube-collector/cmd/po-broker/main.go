@@ -98,11 +98,9 @@ func run(args []string) int {
 		reportStartupFailure(os.Stderr, serveErr)
 	}
 
-	// signal 감시를 멈추기 전에 기록해, 그 사이 도착한 signal도 원인 줄을 남긴 뒤 종료하게 합니다.
 	report(broker.ExitReason())
 	stopWatching()
 
-	// http.Server.Serve는 반환하면서 listener를 닫으므로 ErrClosed만 정상 결과다.
 	closeErr := listener.Close()
 	if serveErr != nil || (closeErr != nil && !errors.Is(closeErr, net.ErrClosed)) {
 		return 1
@@ -111,7 +109,6 @@ func run(args []string) int {
 	return 0
 }
 
-// reportStartupFailure는 고정 분류만 기록하며 원본 오류·워커 출력·요청은 노출하지 않습니다.
 func reportStartupFailure(w io.Writer, err error) {
 	classification := "unclassified"
 
@@ -122,20 +119,16 @@ func reportStartupFailure(w io.Writer, err error) {
 		classification = "canceled"
 	}
 
-	// 진단 기록 실패는 기존 종료 상태를 바꾸지 않습니다.
 	if _, writeErr := fmt.Fprintf(w, "po-broker startup_failure=%s\n", classification); writeErr != nil {
 		return
 	}
 }
 
-// exitReporter는 프로세스 종료 원인을 stderr에 한 줄만 기록합니다. 고정 어휘의
-// 원인과 broker가 만든 generation만 쓰고 요청·token·worker 출력은 쓰지 않습니다.
 func exitReporter(w io.Writer, generation string) func(pobroker.ExitReason) {
 	var once sync.Once
 
 	return func(reason pobroker.ExitReason) {
 		once.Do(func() {
-			// stderr 기록 실패는 종료 상태를 바꾸지 않습니다.
 			if _, err := fmt.Fprintf(w, "po-broker exit reason=%s generation=%s\n", reason, generation); err != nil {
 				return
 			}
@@ -143,8 +136,6 @@ func exitReporter(w io.Writer, generation string) func(pobroker.ExitReason) {
 	}
 }
 
-// 상속받은 무시(SIG_IGN)는 Go runtime이 존중하는 SIGINT에만 해당하므로 그때 SIGINT를 감시하지 않습니다. Notify가 무시를 풀면 받은 SIGINT로 원인 줄만 남기고 종료하지 못한
-// 채, 감시가 끝난 뒤의 SIGTERM까지 삼키기 때문입니다. SIGTERM은 상속 상태와 관계없이 항상 감시하고 종료합니다.
 func watchTermination(report func(pobroker.ExitReason), retired func() pobroker.ExitReason) (stop func()) {
 	watched := []os.Signal{syscall.SIGTERM}
 
@@ -169,10 +160,8 @@ func watchTermination(report func(pobroker.ExitReason), retired func() pobroker.
 		}
 
 		report(reason)
-		// 두 signal 모두 감시 전 처리로 되돌려, 이 goroutine이 끝난 뒤 도착한 signal을 삼키지 않습니다.
 		signal.Reset(syscall.SIGTERM, syscall.SIGINT)
 
-		// 자기 프로세스로의 signal은 실패하지 않습니다. 실패해도 종료 요청을 삼키지 않습니다.
 		if err := syscall.Kill(os.Getpid(), sig); err != nil {
 			os.Exit(1)
 		}
@@ -228,7 +217,6 @@ func inheritedListener(listenFD int) (net.Listener, error) {
 		return nil, errListenFD
 	}
 
-	// FileListener는 descriptor를 복제하므로 원본은 성공 여부와 관계없이 닫는다.
 	listener, err := net.FileListener(file)
 	closeErr := file.Close()
 
@@ -259,7 +247,6 @@ func socketListener(ctx context.Context, socket string) (net.Listener, error) {
 		return nil, fmt.Errorf("listen socket: %w", err)
 	}
 
-	// 전용 issuer UID 65532와 collector group 1000이 같은 AF_UNIX IPC를 공유하므로 group 쓰기가 필요하다.
 	if err = os.Chmod(socket, 0o660); err != nil { // #nosec G302 -- 교차 UID 소켓 IPC에 group 접근이 필수다
 		return nil, fmt.Errorf("chmod socket: %w", errors.Join(err, listener.Close()))
 	}
@@ -267,7 +254,6 @@ func socketListener(ctx context.Context, socket string) (net.Listener, error) {
 	return listener, nil
 }
 
-// removeStaleSocket은 listener가 없음을 증명한 socket inode만 제거한다.
 func removeStaleSocket(ctx context.Context, socket string) error {
 	info, err := os.Lstat(socket)
 	if errors.Is(err, os.ErrNotExist) {
@@ -289,7 +275,6 @@ func removeStaleSocket(ctx context.Context, socket string) error {
 		return errors.Join(errSocketActive, conn.Close())
 	}
 
-	// 연결 거부만 소켓의 수신자가 없다는 증거다. 시간 초과·권한 오류에서는 소켓을 삭제하면 안 된다.
 	if !errors.Is(err, syscall.ECONNREFUSED) {
 		return fmt.Errorf("probe socket: %w", err)
 	}
@@ -305,8 +290,6 @@ func check(path string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	// healthcheck도 응답을 읽은 뒤 client가 유휴 연결을 정리하도록 keep-alive를 유지합니다.
-	// 서버의 유휴 제한까지 기다리지 않고 CloseIdleConnections로 연결 수명을 끝냅니다.
 	transport := &http.Transport{
 		Proxy: nil,
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {

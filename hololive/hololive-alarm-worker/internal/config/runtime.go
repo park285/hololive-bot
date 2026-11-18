@@ -10,31 +10,25 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-// RuntimeConfig는 alarm-worker가 소비하는 설정만 담는다. 공통 env 형식 검증은 shared settings 정책을 다시 쓰고,
-// 역할 조립과 검증(worker profile, notification 소유권, dispatch retention)은 이 패키지가 소유한다.
 type RuntimeConfig struct {
-	Environment  string
-	Server       settings.ServerConfig
-	Iris         settings.IrisConfig
-	Holodex      settings.HolodexConfig
-	Valkey       settings.ValkeyConfig
-	Postgres     settings.PostgresConfig
-	Notification settings.NotificationConfig
-	Logging      settings.LoggingConfig
-	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
-	SettingsFilePath string
-	// MarkdownReplies: BOT_MARKDOWN_REPLIES. 예약 알림 본문도 bot 응답과 같은 Markdown 표시 정책을 쓴다.
-	MarkdownReplies    bool
-	AlarmWorkerProfile *AlarmWorkerProfile
-	DispatchRetention  DispatchRetentionConfig
-	// AlarmDispatchPublish: ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH. wakeup 여부는 worker profile alarm_dispatch.wakeup_enabled가 소유한다.
+	Environment          string
+	Server               settings.ServerConfig
+	Iris                 settings.IrisConfig
+	Holodex              settings.HolodexConfig
+	Valkey               settings.ValkeyConfig
+	Postgres             settings.PostgresConfig
+	Notification         settings.NotificationConfig
+	Logging              settings.LoggingConfig
+	SettingsFilePath     string
+	MarkdownReplies      bool
+	AlarmWorkerProfile   *AlarmWorkerProfile
+	DispatchRetention    DispatchRetentionConfig
 	AlarmDispatchPublish AlarmDispatchPublishConfig
 	NotificationRoles    NotificationRoles
 	Celebration          CelebrationRunnerConfig
 	XSpaces              XSpacesConfig
 }
 
-// AlarmDispatchPublishConfig는 알림 발행자가 outbox에 한 번에 넣는 delivery 상한이다.
 type AlarmDispatchPublishConfig struct {
 	MaxDeliveriesPerBatch int
 }
@@ -108,8 +102,6 @@ func loadRuntimeSections() (*RuntimeConfig, error) {
 	}, nil
 }
 
-// loadRoleSections는 alarm-worker의 worker profile, dispatch retention, 발행 batch 한도, 알림 역할과
-// background runner 설정을 채운다.
 func loadRoleSections(config *RuntimeConfig) error {
 	profile, err := LoadWorkerProfile()
 	if err != nil {
@@ -121,7 +113,6 @@ func loadRoleSections(config *RuntimeConfig) error {
 		return fmt.Errorf("load alarm dispatch retention config: %w", err)
 	}
 
-	// 잘못된 batch 한도는 기본값으로 바꾸지 않고 기동 오류로 드러낸다.
 	maxDeliveries, err := envload.RequiredPositiveIntEnv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000)
 	if err != nil {
 		return fmt.Errorf("load alarm dispatch publish config: %w", err)
@@ -142,8 +133,6 @@ func loadRoleSections(config *RuntimeConfig) error {
 	return nil
 }
 
-// validateEgressInputs는 발송 입력만 요구한다. Webhook을 받지 않고 room ACL도 소비하지 않는 alarm-worker는
-// IRIS_WEBHOOK_TOKEN은 settings.LoadIrisConfig가 읽지만 검사·사용하지 않고, KAKAO_ROOMS·KAKAO_ACL_*는 읽지 않는다.
 func validateEgressInputs(iris *settings.IrisConfig, holodexAPIKey string) error {
 	if err := settings.ValidateIrisClientInputs(iris); err != nil {
 		return fmt.Errorf("validate iris client inputs: %w", err)

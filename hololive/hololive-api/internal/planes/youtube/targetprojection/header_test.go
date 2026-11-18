@@ -19,7 +19,6 @@ type projectionTupleKey struct {
 	key   string
 }
 
-// projectionTupleVersions는 값 비교로 놓치는 no-op UPDATE까지 실제 MVCC tuple identity로 관측한다.
 func projectionTupleVersions(tb testing.TB, pool *pgxpool.Pool) map[projectionTupleKey]string {
 	tb.Helper()
 
@@ -114,7 +113,6 @@ func TestHeartbeatAppliesValidityChangesAcrossRestarts(t *testing.T) {
 				{"restart same TTL", time.Hour, 3*time.Second + 900*time.Nanosecond, 3 * time.Second, time.Hour + 3*time.Second},
 				{"same PostgreSQL microsecond", MinValidity, 3*time.Second + 100*time.Nanosecond, 3 * time.Second, 8 * time.Second},
 			} {
-				// 매 호출마다 재생성하여 메모리 상태 없이 DB header만으로 정책과 호출 순서를 보존하는지 확인한다.
 				refresher, err := NewRefresher(f.pool, step.validity)
 				require.NoError(t, err)
 
@@ -172,7 +170,6 @@ func TestHeartbeatWritesOnlyHeaderAndVersionsChangedEligibility(t *testing.T) {
 	requireEligibilityVersion(t, f.pool, first.Generation, 1)
 	assertGenerationValidUntil(t, f.pool, first.Generation, f.base.Add(61*time.Minute))
 
-	// guard를 뒤늦게 얻은 호출의 과거 시각으로 기존 header 유효기간을 줄이지 않는다.
 	mustRefresh(t, f.refresher, input, f.base.Add(30*time.Second), "reordered heartbeat clock")
 	assertGenerationValidUntil(t, f.pool, first.Generation, f.base.Add(61*time.Minute))
 
@@ -230,7 +227,6 @@ func TestFailedRefreshNeverRenewsHeaderOrEligibility(t *testing.T) {
 		require.Equal(t, before, projectionTupleVersions(t, f.pool))
 	}
 
-	// reason INSERT 실패는 이미 실행한 target eligibility/header 갱신도 함께 rollback해야 한다.
 	_, err := f.pool.Exec(t.Context(), `
 		CREATE FUNCTION reject_projection_reason_test() RETURNS trigger LANGUAGE plpgsql AS $$
 		BEGIN RAISE EXCEPTION 'injected reason write failure'; END; $$;

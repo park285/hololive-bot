@@ -1,4 +1,3 @@
-// Package livequery는 확정된 YouTube 방송과 검증된 채널 확인 사실의 읽기 계약을 소유한다.
 package livequery
 
 import (
@@ -54,7 +53,6 @@ type Item struct {
 	ObservedAt  time.Time  `json:"observed_at"`
 }
 
-// Diagnostics는 현재 후보에서 제외하되 운영 조사에 보존하는 종료 증거 개수다.
 type Diagnostics struct {
 	RetainedOrphanEnds  int `json:"retained_orphan_ends"`
 	EndedPendingEnds    int `json:"ended_pending_ends"`
@@ -85,7 +83,6 @@ func (r Result) ReasonCounts() map[Reason]int {
 	return counts
 }
 
-// 채널이 어긋난 ENDED pending은 두 관련 채널에 각각 남으므로 합계는 고유 DB 행 수가 아니다.
 func (r Result) DiagnosticCounts() Diagnostics {
 	var counts Diagnostics
 

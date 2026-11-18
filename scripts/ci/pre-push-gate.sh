@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# pre-push-gate: push 전 필수 품질 게이트.
-# iris-stack/.githooks/pre-push가 직접 호출한다(전역 hook은 attribution만 검사).
-# PR fast gate(.github/workflows/ci.yml)와 별개로 release 판본 정책, 배포·운영 스크립트 테스트,
-# scripts/ci/local-ci.sh 전체 검증과 govulncheck를 게시 전에 로컬에서 실행한다.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,14 +8,11 @@ if (( $# > 0 )); then
   exit 2
 fi
 
-# 게이트(특히 NilAway)의 호스트 메모리 고갈을 막는다.
-# 준비 단계를 두 번 실행하지 않도록 다른 작업보다 먼저 scope로 다시 실행한다.
 if [[ -z "${PRE_PUSH_GATE_SCOPED:-}" ]] \
   && command -v systemd-run >/dev/null 2>&1 \
   && systemd-run --user --scope --quiet -p MemoryHigh=1G true >/dev/null 2>&1; then
   echo "[pre-push] memory scope: MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G} MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}"
   export PRE_PUSH_GATE_SCOPED=1
-  # 부모 cgroup을 벗어나는 scope에도 종료 상한을 두어 기동 fixture를 회수한다.
   exec systemd-run --user --scope --quiet \
     -p RuntimeMaxSec=2h \
     -p KillMode=control-group \
@@ -34,11 +27,8 @@ route_resolved=false
 route_exact=false
 cd "${ROOT_DIR}"
 
-# Go가 manifest의 요구사항으로 toolchain을 선택하며 명시한 환경값은 유지한다.
 export GOTOOLCHAIN="${GOTOOLCHAIN-auto}"
 
-# hook이 주입한 GIT_DIR 등이 남으면 linked worktree나 tmp 레포 대상 git 호출이
-# 본 레포를 조작하므로 게이트 진입 시 일괄 해제한다.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
 
 resolve_route() {
@@ -46,8 +36,6 @@ resolve_route() {
     return 0
   fi
 
-  # 정확한 push 범위(BASE_SHA..HEAD_SHA)가 있을 때만 docs-only skip과 테스트 생략을 연다.
-  # 범위가 없으면(새 branch·삭제·수동 실행) origin/main 기준 변경 집합은 라우팅에만 쓴다.
   if [[ -n "${BASE_SHA:-}" && -n "${HEAD_SHA:-}" ]]; then
     route_range="${BASE_SHA}..${HEAD_SHA}"
     if ! changed_files="$(git diff --name-only "${route_range}")"; then
@@ -114,9 +102,6 @@ inputs_changed() {
   return 1
 }
 
-# 배포·운영 스크립트 테스트는 테스트 자신이나 대상 스크립트가 push 범위에서 바뀔 때만 실행한다.
-# 범위를 못 얻었거나 PRE_PUSH_MODE=full 이면 전량 실행한다. 선언된 입력이 저장소에 없으면
-# 경고 뒤 실행한다.
 run_if_changed() {
   local test="$1" input inputs_valid=true
   shift
@@ -159,11 +144,14 @@ run_content_gates() {
     return 0
   fi
 
+  echo "[pre-push] stack lint rules and comment ban (ast-grep, SQL, TLA+, Lean)"
+  bash scripts/ci/verify-tools.sh scan
+  echo "[pre-push] formal verification (TLC, Lean)"
+  bash scripts/ci/verify-tools.sh formal
+
   run_if_changed scripts/deploy/admin-bind_test.sh scripts/deploy/lib/admin-bind.sh scripts/deploy/quadlet-prestart.sh \
     scripts/deploy/lib/public-bind-mounts.sh scripts/systemd/admin-dashboard-ingress.nft
-  # 중앙 Quadlet 원본이 systemd unit으로 생성되지 않으면 해당 서비스가 기동되지 않는다.
   if echo "$changed_files" | grep -q '^deploy/quadlet/'; then
-    # 상대 경로를 주면 quadlet은 unit을 하나도 읽지 않고 rc=0으로 끝난다.
     QUADLET_UNIT_DIRS="${ROOT_DIR}/deploy/quadlet/hololive-bot" /usr/libexec/podman/quadlet -dryrun >/dev/null
   fi
   run_if_changed scripts/deploy/sync-opt-current_test.sh \
@@ -220,7 +208,6 @@ run_content_gates() {
   fi
 }
 
-# 취약점 데이터는 계속 바뀌므로 문서·버전만 바뀐 정확한 범위 외에는 매번 검사한다.
 run_dependency_hygiene() {
   local module govulncheck_bin
   resolve_route

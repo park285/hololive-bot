@@ -251,7 +251,6 @@ func TestVideoLiveCheckRunnerRecordsRequestFailureAsUnknown(t *testing.T) {
 				Coverage: contract.VideoLiveCheckCoverageV1{VideoID: liveCheckTestVideoID},
 			}
 
-			// 요청 실패는 채널을 추정하지 않고 관측 시각의 사실 없는 UNKNOWN으로 남는다.
 			if observation.Completeness != contract.CompletenessUnknown || observation.ObservedAt.Before(before) ||
 				!observation.ScheduledFor.Equal(input.Lease().ScheduledFor) || !reflect.DeepEqual(payload, failed) {
 				t.Fatalf("request failure observation = %#v payload=%#v", observation, payload)
@@ -300,7 +299,6 @@ type stopCheckCase struct {
 	err        error
 }
 
-// stopCheckCases는 관측으로 바꾸면 안 되는 실패다. 수집 context 종료는 원인 분류와 무관하게 발행을 막는다.
 func stopCheckCases() []stopCheckCase {
 	live := func(t *testing.T) context.Context {
 		t.Helper()

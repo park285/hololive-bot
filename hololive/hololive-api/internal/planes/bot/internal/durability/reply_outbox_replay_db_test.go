@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package durability
 
 import (
@@ -74,7 +54,7 @@ func TestReplyOutboxOutcomeUnknownIsResendable(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, applied)
-	time.Sleep(5 * time.Millisecond)
+	advanceReplyRetry(ctx, t, pool, claim.ID)
 
 	resend, err := repo.Claim(ctx, "token-b", durabilityTestLease)
 	require.NoError(t, err)
@@ -231,6 +211,13 @@ func assertAmbiguousRowBeforeHorizonStaysClaimable(
 	assert.Equal(t, int32(2), resend.Attempts)
 }
 
+func expireReplyLease(ctx context.Context, t *testing.T, pool *pgxpool.Pool, clientRequestID string) {
+	t.Helper()
+
+	_, err := pool.Exec(ctx, `UPDATE bot_reply_outbox SET lease_until = lease_until - interval '1 millisecond' WHERE client_request_id = $1`, clientRequestID)
+	require.NoError(t, err)
+}
+
 func assertFinalCrashedAttemptIsNotRequeued(
 	ctx context.Context,
 	t *testing.T,
@@ -251,7 +238,7 @@ func assertFinalCrashedAttemptIsNotRequeued(
 	require.NoError(t, err)
 	require.NotNil(t, claim)
 	assert.Equal(t, repo.maxAttempts, claim.Attempts)
-	time.Sleep(20 * time.Millisecond)
+	expireReplyLease(ctx, t, pool, entry.ClientRequestID)
 
 	reclaim, err := repo.ReclaimExpired(ctx, 100)
 	require.NoError(t, err)
@@ -286,7 +273,7 @@ func TestReplyOutboxExpiredLeaseRecovers(t *testing.T) {
 
 		_, err = repo.Claim(ctx, testClaimToken, time.Millisecond)
 		require.NoError(t, err)
-		time.Sleep(20 * time.Millisecond)
+		expireReplyLease(ctx, t, pool, entry.ClientRequestID)
 
 		reclaim, err := repo.ReclaimExpired(ctx, 100)
 		require.NoError(t, err)

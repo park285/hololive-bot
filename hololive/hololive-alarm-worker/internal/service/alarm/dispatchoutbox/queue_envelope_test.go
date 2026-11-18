@@ -79,7 +79,6 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 func TestAlarmQueueEnvelope_WireFormatDecode(t *testing.T) {
 	t.Parallel()
 
-	// 저장 payload의 snake_case wire 형식이며 alarm_type이 없으면 decode가 거절한다.
 	wireJSON := `{
 		"notification": {
 			"alarm_type": "LIVE",
@@ -140,7 +139,6 @@ func TestAlarmQueueEnvelope_OmitsScheduleChangeMessage(t *testing.T) {
 		t.Fatalf("Marshal 실패: %v", err)
 	}
 
-	// schedule_change_message는 빈 문자열이면 직렬화에 포함되지 않아야 함
 	var raw map[string]any
 
 	if err := jsonv2.Unmarshal(data, &raw); err != nil {
@@ -165,7 +163,6 @@ func TestAlarmQueueEnvelope_OmitsScheduleChangeMessage(t *testing.T) {
 	}
 }
 
-// 저장 payload의 notification.alarm_type 누락은 Live로 채우지 않고 decode 오류다.
 func TestAlarmQueueEnvelope_UnmarshalRejectsMissingAlarmType(t *testing.T) {
 	t.Parallel()
 

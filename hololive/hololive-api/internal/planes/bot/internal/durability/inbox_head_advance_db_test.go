@@ -173,7 +173,6 @@ func TestBeginLockedMessageTxHoldsTheAdmissionOrderingLock(t *testing.T) {
 		"ending the settlement transaction must release the ordering key lock")
 }
 
-// lockOrderingKeyWithTimeout은 admit 경로와 같은 lockInboxOrderingKey로 잠금을 시도한다.
 func lockOrderingKeyWithTimeout(ctx context.Context, t *testing.T, pool *pgxpool.Pool, orderingKey string) error {
 	t.Helper()
 

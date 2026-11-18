@@ -133,8 +133,6 @@ if [[ "${print_sql}" == "true" ]]; then
   exit 0
 fi
 
-# database_url_without_secrets는 --dbname 인자(ps로 보임)로 넘길 URL에 비밀값이 들 수 없음을 확인한다. 대괄호 host 안의
-# '?' 때문에 질의 시작을 정확히 집을 수 없고 libpq는 키 둘레 공백을 버리고 decode하므로, 키는 허용 목록과 그대로 비교한다.
 database_url_without_secrets() {
   local LC_ALL=C
   local rest param
@@ -142,7 +140,6 @@ database_url_without_secrets() {
 
   [[ "$1" =~ ^postgres(ql)?:// && "$1" != *[[:cntrl:]]* ]] || return 1
   rest="${1#*://}"
-  # 인코딩하지 않은 '/'가 든 비밀번호는 libpq가 user info로 읽지 않아도 인자에 남으므로 첫 '@' 앞의 ':'를 모두 막는다.
   [[ "${rest}" != *@* || "${rest%%@*}" != *:* ]] || return 1
   [[ "${rest%%/*}" != *@* ]] || rest="${rest#*@}"
   [[ "${rest}" == *\?* ]] || return 0
@@ -178,7 +175,6 @@ run_psql() {
   shift
 
   if [[ -n "${DATABASE_URL:-}" ]]; then
-    # libpq는 PGDATABASE 환경변수의 URL을 접속 문자열로 풀지 않으므로 --dbname으로 넘긴다.
     PGSERVICEFILE=/dev/null psql -X -v ON_ERROR_STOP=1 --dbname="${DATABASE_URL}" -o "${out_file}" "$@"
   else
     psql -X -v ON_ERROR_STOP=1 -o "${out_file}" "$@"

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package sqlsplit
 
 import (
@@ -31,14 +11,6 @@ type Segment struct {
 	Statements    []string
 }
 
-// Segments는 statement 분할에 top-level BEGIN;/COMMIT; 블록 경계를 더한다.
-//
-// 각 statement를 autocommit으로 실행하는 러너(pgxpool)는 BEGIN을 보내면 그 커넥션이
-// 트랜잭션 상태(TxStatus != 'I')로 release돼 pgxpool이 즉시 파기한다 — BEGIN이
-// 침묵 해체되고 내부 문장이 각각 autocommit되며 COMMIT은 WARNING으로 성공
-// 처리된다. 따라서 러너는 BEGIN/COMMIT 토큰을 직접 실행하면 안 되고, 이 함수가
-// 반환하는 Transactional segment를 단일 커넥션의 실제 트랜잭션으로 감싸야 한다.
-// BEGIN/COMMIT 토큰 자체는 segment에 포함되지 않는다.
 func Segments(sql string) ([]Segment, error) {
 	parser := segmentParser{}
 

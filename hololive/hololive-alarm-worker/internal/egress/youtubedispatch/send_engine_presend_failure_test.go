@@ -15,7 +15,6 @@ import (
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// legacyRouteSender는 DB CHECK가 아직 허용하지만 발송 경로가 거절하는 구형 route로 요청을 고정한다.
 type legacyRouteSender struct {
 	calls atomic.Int32
 }
@@ -80,8 +79,7 @@ func TestSendEngineFallbackWithoutLeaseBudgetSkipsProvider(t *testing.T) {
 	t.Parallel()
 
 	f := newSettlementFixture(t, 2, func() {})
-	// 필요한 잔여 lease는 DeliverySendTimeout + max(2*PollInterval, 5s)다. 이 값을 LockTimeout과 같게 두면
-	// grouped 발송이 쓴 시간만큼 개별 발송 예산이 모자란다.
+
 	f.engine.config.DeliverySendTimeout = f.engine.config.LockTimeout - 5*time.Second
 	f.sender.beforeReturn = func(context.Context, int) error { return iris.ErrPermanent }
 

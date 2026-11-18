@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# target_value가 허용된 간접 참조로 대상 변수를 결정한다.
 # shellcheck disable=SC2034
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -12,8 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 이 열이 인덱스 key(식 인덱스가 참조하는 열 포함)에 들어 있으면 갱신마다 새 인덱스 항목을 쓰고 HOT이 막힌다. 예정 시각이 있는 세션은 방송 이력 정렬값 (history_sort_at)도 그대로이므로
-// 모든 갱신이 HOT이어야 한다.
 func TestLiveSessionRepeatedObservationIsHeapOnlyUpdate(t *testing.T) {
 	t.Parallel()
 
@@ -67,7 +65,6 @@ func TestLiveSessionRepeatedObservationIsHeapOnlyUpdate(t *testing.T) {
 
 	var updated, hot int64
 
-	// 현재 트랜잭션의 갱신 수는 통계 flush와 무관하게 바로 보인다.
 	err = tx.QueryRow(ctx, `
 		SELECT pg_stat_get_xact_tuples_updated('public.youtube_live_sessions'::regclass),
 		       pg_stat_get_xact_tuples_hot_updated('public.youtube_live_sessions'::regclass)

@@ -14,7 +14,6 @@ type memberAdminCache interface {
 	InvalidateAll(context.Context) error
 }
 
-// MemberMutationResult는 정본 저장과 캐시 전파 결과를 구분한다.
 type MemberMutationResult struct {
 	Persisted   bool `json:"persisted"`
 	CacheSynced bool `json:"cacheSynced"`
@@ -22,7 +21,6 @@ type MemberMutationResult struct {
 	Replayed    bool `json:"replayed"`
 }
 
-// MemberAdminService는 관리자 멤버 쓰기와 커밋 기록·캐시 동기화 순서를 소유한다.
 type MemberAdminService struct {
 	repository *member.Repository
 	cache      memberAdminCache
@@ -85,7 +83,6 @@ func (s *MemberAdminService) RemoveAlias(ctx context.Context, id int, kind, valu
 
 func (s *MemberAdminService) committed(ctx context.Context, id int, replayed bool, kind, summary string, details []slog.Attr, alias string) MemberMutationResult {
 	result := MemberMutationResult{Persisted: true, MemberID: id, Replayed: replayed}
-	// 캐시 오류나 요청 취소가 이미 커밋된 변경의 활동 기록을 건너뛰게 하지 않는다.
 	if !replayed && s.activity != nil {
 		details = append(details, slog.Int("member_id", id), slog.Bool("persisted", true))
 		s.activity.Log(kind, summary, details)

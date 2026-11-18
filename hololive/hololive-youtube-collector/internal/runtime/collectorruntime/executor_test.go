@@ -140,7 +140,6 @@ func TestResultInvariantRecordsFailedAttemptOnce(t *testing.T) {
 	}
 }
 
-// 계약 밖 failure tuple은 기본 class로 수리하지 않는다.
 func TestInvalidFailureTupleDefersAndCountsViolation(t *testing.T) {
 	var fatal []error
 

@@ -334,7 +334,6 @@ for (const [name, args, message] of [
     const dir = await mkdtemp(join(tmpdir(), "youtubejs-args-"));
     try {
       const socketPath = join(dir, "helper.sock");
-      // 쓸 수 있는 socket 경로를 주어, 인자를 대체값으로 받아 기동하면 listen 실패가 아니라 timeout 종료로 드러나게 합니다.
       const result = spawnSync(
         process.execPath,
         [fileURLToPath(new URL("./server.mjs", import.meta.url)), ...args.map((arg) => arg === "{socket}" ? socketPath : arg)],
@@ -364,11 +363,7 @@ function rpcBody(fields) {
   return JSON.stringify({ protocol_version: 1, max_success_response_bytes: 1048576, ...fields });
 }
 
-/**
- * 운영 진입점 listenUnix로 임시 socket에 helper를 띄웁니다.
- * listenUnix는 socket 삭제를 Go에 맡기고 프로세스 umask를 077로 바꾸므로, 종료할 때 임시 디렉터리째 지웁니다.
- * @param {Partial<import("./contracts.d.ts").FetcherSet>} [fetchers]
- */
+/** @param {Partial<import("./contracts.d.ts").FetcherSet>} [fetchers] */
 async function startHelper(fetchers = {}) {
   const dir = await mkdtemp(join(tmpdir(), "youtubejs-helper-"));
   const socketPath = join(dir, "helper.sock");

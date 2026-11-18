@@ -47,7 +47,6 @@ func requireHandoffWindowRejection(t *testing.T, aliasRows int) {
 func seedLogicalGroupWindowNoise(t *testing.T, pool *pgxpool.Pool, contentID, roomID string, aliasRows int) {
 	t.Helper()
 
-	// NEW_VIDEO는 content_id가 정본이다. 여기서는 payload 후보로만 걸리는 다른 키가 한도 창을 차지한다.
 	_, err := pool.Exec(t.Context(), `
 		WITH inserted AS (
 			INSERT INTO youtube_notification_outbox(kind, channel_id, content_id, payload, status, attempt_count, created_at, terminal_at)

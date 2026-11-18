@@ -101,8 +101,6 @@ func TestUpcomingCommand_Execute_AllUpcoming_GoldenPath(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	// members 등록 채널은 정본 표시명, 미등록 채널은 응답 이름을 쓰며 공유될 수 있는 원천 스트림은 바꾸지 않는다.
-	// 콜라보 출연자는 해당 방송에만 붙는다.
 	for _, want := range []string{"소라|테스트 방송 1|미코, 스이세이\n", "Guest Ch.|테스트 방송 2|"} {
 		if !strings.Contains(sentMessage, want) {
 			t.Fatalf("upcoming message = %q, want %q", sentMessage, want)

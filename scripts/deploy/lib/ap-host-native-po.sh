@@ -1,5 +1,4 @@
 # shellcheck shell=bash
-# 시간 상한이 있는 native 배포·롤백 원격 스크립트에서 불러온다.
 po_service=hololive-youtube-po.service
 po_socket=hololive-youtube-po.socket
 po_unit_file=/etc/systemd/system/hololive-youtube-po.service
@@ -7,8 +6,6 @@ po_socket_file=/etc/systemd/system/hololive-youtube-po.socket
 
 po_wait_ready() {
   local release="$1" _
-  # health는 SDK import가 끝난 worker를 보장한다. 이 조회는 발급하지 않으며
-  # native의 90초 준비 한도를 포함하도록 45회/2초 간격으로만 관찰한다.
   for _ in {1..45}; do
     if sudo -n -u hololive "$release/po-sandbox/rootfs/app/bin/po-broker" --healthcheck --socket /run/hololive-youtube-po/worker.sock; then
       return 0
@@ -37,8 +34,6 @@ po_verify_units() (
   local release="$1" service_file="$2" socket_file="$3" working
   working="$(mktemp -d)" || exit
   trap 'rm -rf "$working"' EXIT
-  # systemd-analyze는 RootDirectory를 무시하고 host에서 ExecStart를 검사한다.
-  # 설치 unit은 보존하고 검사용 복사본의 실행 경로만 실제 rootfs로 해석한다.
   python3 - "$service_file" "$working/hololive-youtube-po.service" "$release" <<'PY' || exit
 from pathlib import Path
 import sys
@@ -72,7 +67,6 @@ po_snapshot_previous() {
 po_restore_previous() {
   local previous="${1:-}" contract state stop_status=0
   sudo -n systemctl disable --now "$po_service" "$po_socket" >/dev/null 2>&1 || stop_status=$?
-  # 없는 unit의 기존 정리 계약은 유지하되 중단된 systemctl을 완료로 간주하지 않습니다.
   (( stop_status < 128 )) || return "$stop_status"
   if [[ -z "$previous" ]]; then
     state=absent

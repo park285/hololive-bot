@@ -23,17 +23,11 @@ var maxCanonicalSafeIntegerString = strconv.FormatInt(MaxCanonicalJSONSafeIntege
 
 var errCanonicalJSONTooLarge = errors.New("canonical JSON size exceeds limit")
 
-// canonicalJSONMemberSpan은 출력 버퍼에 이미 기록된 object member 한 개의 위치다.
-// Name은 정렬 키로 쓰는 decode된 이름의 names arena 범위이고,
-// member는 출력 버퍼 안의 `"name":value` 범위다.
 type canonicalJSONMemberSpan struct {
 	nameStart, nameEnd     int
 	memberStart, memberEnd int
 }
 
-// canonicalJSONWriter는 입력 token을 중간 any/map/slice 트리 없이 출력 버퍼로 바로 흘려 쓴다.
-// Object만 UTF-16 code unit 순서 정렬을 위해 member 범위를 기록했다가 필요할 때 재배치한다.
-// Members와 names는 중첩 object가 stack처럼 쌓고 되돌리는 공유 작업 공간이다.
 type canonicalJSONWriter struct {
 	decoder  *jsontext.Decoder
 	members  []canonicalJSONMemberSpan
@@ -42,8 +36,6 @@ type canonicalJSONWriter struct {
 	reorder  []byte
 }
 
-// CanonicalizeJSON은 source-observation-canonical-json-v1 규칙으로 단일 JSON 값을 정규화한다.
-// 중복 이름, 잘못된 UTF-8, 고립 surrogate, 안전 정수 범위 밖 숫자, 128 초과 중첩, 후행 값은 거부한다.
 func CanonicalizeJSON(raw []byte) ([]byte, error) {
 	if len(raw) == 0 {
 		return nil, errors.New("payload is empty")
@@ -53,7 +45,6 @@ func CanonicalizeJSON(raw []byte) ([]byte, error) {
 		return nil, fmt.Errorf("%w: payload exceeds %d bytes", errCanonicalJSONTooLarge, MaxPayloadBytes)
 	}
 
-	// bytes.Buffer 입력은 decoder가 복사 없이 raw를 직접 읽게 한다. decoder는 입력을 쓰지 않는다.
 	writer := canonicalJSONWriter{
 		decoder: jsontext.NewDecoder(bytes.NewBuffer(raw)),
 		reorder: []byte{},
@@ -89,7 +80,6 @@ func (w *canonicalJSONWriter) appendValue(destination []byte, depth int) ([]byte
 		jsontext.KindString, jsontext.KindNumber, jsontext.KindEndObject, jsontext.KindEndArray:
 	}
 
-	// Peek 오류는 ReadValue가 같은 오류를 다시 보고한다.
 	return w.appendScalar(destination)
 }
 
@@ -105,7 +95,6 @@ func (w *canonicalJSONWriter) appendScalar(destination []byte) ([]byte, error) {
 	case jsontext.KindNumber:
 		return appendCanonicalJSONNumber(destination, value)
 	case jsontext.KindNull, jsontext.KindTrue, jsontext.KindFalse:
-		// literal은 decoder가 검증한 정확한 철자 그대로가 정규형이다.
 		return append(destination, value...), nil
 	case jsontext.KindInvalid, jsontext.KindBeginObject, jsontext.KindEndObject,
 		jsontext.KindBeginArray, jsontext.KindEndArray:
@@ -114,7 +103,6 @@ func (w *canonicalJSONWriter) appendScalar(destination []byte) ([]byte, error) {
 	return nil, fmt.Errorf("canonical JSON scalar: unexpected json value %q", value.Kind())
 }
 
-// Decoder가 검증한 escape 없는 JSON 문자열에는 따옴표, 역슬래시, 제어 문자가 없으므로 원문이 곧 정규형이다.
 func (w *canonicalJSONWriter) appendString(destination []byte, quoted jsontext.Value) ([]byte, error) {
 	if bytes.IndexByte(quoted, '\\') < 0 {
 		return append(destination, quoted...), nil
@@ -161,7 +149,6 @@ func (w *canonicalJSONWriter) appendArray(destination []byte, depth int) ([]byte
 	return append(destination, ']'), nil
 }
 
-// 재배치는 구간 길이를 바꾸지 않으므로 바깥 object가 기록한 범위는 계속 유효하다.
 func (w *canonicalJSONWriter) appendObject(destination []byte, depth int) ([]byte, error) {
 	if depth >= MaxCanonicalJSONDepth {
 		return nil, fmt.Errorf("canonical json nesting exceeds %d", MaxCanonicalJSONDepth)
@@ -203,7 +190,6 @@ func (w *canonicalJSONWriter) appendObject(destination []byte, depth int) ([]byt
 	return destination, nil
 }
 
-// appendMember의 이름 중복 검사는 decoder 기본 설정(AllowDuplicateNames=false)이 decode된 이름 기준으로 수행한다.
 func (w *canonicalJSONWriter) appendMember(destination []byte, depth int) ([]byte, error) {
 	quotedName, err := w.decoder.ReadValue()
 	if err != nil {
@@ -277,7 +263,6 @@ func (w *canonicalJSONWriter) sortObjectMembers(
 	return append(destination, '}')
 }
 
-// 첫 번째로 다른 code point의 UTF-16 순서가 전체 순서를 결정하므로 변환 버퍼 없이 비교한다.
 func compareJSONNamesUTF16(left, right []byte) int {
 	for len(left) > 0 && len(right) > 0 {
 		leftRune, leftSize := utf8.DecodeRune(left)
@@ -293,7 +278,6 @@ func compareJSONNamesUTF16(left, right []byte) int {
 	return cmp.Compare(len(left), len(right))
 }
 
-// U+E000..U+FFFF는 보조 평면의 상위 surrogate(0xD800..0xDBFF)보다 뒤에 정렬되어야 한다.
 func utf16CodeUnitOrder(character rune) rune {
 	if character >= 0xE000 && character <= 0xFFFF {
 		return character + utf8.MaxRune + 1
@@ -302,8 +286,6 @@ func utf16CodeUnitOrder(character rune) rune {
 	return character
 }
 
-// appendCanonicalJSONString은 decode된 유효 UTF-8 문자열을 JCS 규칙으로 따옴표 처리한다.
-// 따옴표, 역슬래시, U+0020 미만 제어 문자만 escape하고 나머지 byte 구간은 그대로 복사한다.
 func appendCanonicalJSONString(destination, value []byte) []byte {
 	destination = append(destination, '"')
 
@@ -347,7 +329,6 @@ func appendEscapedJSONByte(destination []byte, character byte) []byte {
 	}
 }
 
-// 소수점/지수가 없는 정수 표기는 문법상 선행 0이 없으므로 -0과 범위만 확인하고 그대로 복사한다.
 func appendCanonicalJSONNumber(destination []byte, raw jsontext.Value) ([]byte, error) {
 	if len(raw) == 0 {
 		return nil, errors.New("canonical JSON number is empty")

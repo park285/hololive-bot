@@ -1,5 +1,3 @@
--- 실패 원장의 잠금과 리비전 검증은 호출자의 직렬화 트랜잭션에서 수행합니다.
--- 발송 식별자, 실패 기록과 본문은 보존하고 외부 발송을 예약하지 않습니다.
 WITH target AS (
     SELECT id, status FROM alarm_dispatch_deliveries
     WHERE id = ANY($1::bigint[]) AND status IN ('dlq', 'quarantined')

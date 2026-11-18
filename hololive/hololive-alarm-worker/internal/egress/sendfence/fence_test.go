@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// 각 시험은 필요한 조건만 거짓으로 바꾼다.
 func matched(id int64) Observation {
 	return Observation{
 		ID: id, Status: "SENDING",

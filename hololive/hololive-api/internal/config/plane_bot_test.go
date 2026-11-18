@@ -219,7 +219,6 @@ func TestLoadBotPlaneRuntimeDevelopmentAllowsWeakPostgresSSLMode(t *testing.T) {
 	}
 }
 
-// 사진 동기화는 admin plane loader가 검사한다.
 func TestLoadBotPlaneRuntimeRejectsInvalidCommonEnvValues(t *testing.T) {
 	for key, value := range map[string]string{
 		"POSTGRES_PORT": "not-a-number",
@@ -238,7 +237,6 @@ func TestLoadBotPlaneRuntimeRejectsInvalidCommonEnvValues(t *testing.T) {
 	}
 }
 
-// 알림 주기·사전 알림 분 설정은 admin plane만 읽는다. 단독으로 적재하는 bot plane 설정은 그 값의 형식 오류로 실패하지 않는다.
 func TestLoadBotPlaneRuntimeDoesNotReadNotificationEnv(t *testing.T) {
 	setBotPlaneEnv(t)
 	t.Setenv("CHECK_INTERVAL_SECONDS", "not-a-number")
@@ -295,7 +293,6 @@ func TestBotPlaneValidateRejectsNotificationEgressOwner(t *testing.T) {
 	}
 }
 
-// 내부 client는 서버용 키를 대신 쓰지 않고 전용 설정만 적재한다. HTTPS 필수값 검증은 client 생성 시점에 한다.
 func TestLoadInternalH3ClientOptionsKeepsDedicatedStartupValues(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/server-only.crt")
 	t.Setenv("HOLOLIVE_H3_SERVER_NAME", "server-only.example")

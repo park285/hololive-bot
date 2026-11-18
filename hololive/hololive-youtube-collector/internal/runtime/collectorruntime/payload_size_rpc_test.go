@@ -64,7 +64,6 @@ func TestCommunityRPCPayloadStorageBoundaryAndScheduler(t *testing.T) {
 					return result, nil
 				}
 
-				// 이전 계약으로 준비된 envelope가 publish 경계에 도착해도 size cause를 보존한다.
 				observations := result.Output().Observations()
 
 				observations[0].Payload = oversized

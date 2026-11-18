@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""활성 pair가 release 저장소에서만 게시되고, 중앙 drop-in이 실제 Quadlet unit을 고정하는지 검사한다."""
 import hashlib
 import importlib.util
 import json
@@ -42,10 +41,8 @@ class PairToolTest(unittest.TestCase):
         self.quadlet_root = Path(self.tmp.name) / "host"
         bin_dir = Path(self.tmp.name) / "bin"
         bin_dir.mkdir()
-        # 중앙 서비스는 podman으로 고정된다. Podman의 .Id는 sha256: 접두어가 없다.
         image = [{"Id": IMAGE_HEX, "Architecture": "arm64", "Os": "linux",
                   "Config": {"Labels": {"org.opencontainers.image.revision": "b" * 40}}}]
-        # run은 후보 검사 container다. argv를 기록하고 지정한 종료 코드를 돌려준다.
         (bin_dir / "podman").write_text(
             "#!/bin/sh\n"
             "if [ \"$1\" = run ]; then printf '%s\\n' \"$@\" > \"$FAKE_RUN_LOG\"; exit \"${FAKE_RUN_STATUS:-0}\"; fi\n"
@@ -124,7 +121,6 @@ class PairToolTest(unittest.TestCase):
         self.assertFalse(self.run_log.exists())
 
     def test_recorded_base_unit_is_covered_by_the_pair_checksum(self):
-        # 롤백은 pair가 기록한 기본 unit을 설치하므로, 그 파일이 바뀐 pair는 검증에서 거부되어야 한다.
         spec = importlib.util.spec_from_file_location("worker_profile_pair", TOOL)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -213,7 +209,6 @@ class PairToolTest(unittest.TestCase):
         installed = units / "hololive-api.container.d/50-worker-profile.conf"
         installed.chmod(0o644)
         installed.write_bytes((candidate / "50-worker-profile.conf").read_bytes())
-        # drop-in만 새 후보인 중단 지점에서 기존 포인터와 새 후보를 함께 검증한다.
         result = self.verify_retained(previous, candidate)
         self.assertEqual(result.returncode, 0, result.stderr)
         result = self.tool("activate", "hololive-api", str(candidate), str(self.root))
@@ -239,7 +234,6 @@ class ResolvedPairTest(unittest.TestCase):
         for source in remote.iterdir():
             if source.is_file():
                 shutil.copy2(source, self.units / source.name)
-        # 원격 배포와 같은 파일 목록으로 만든 payload에서 실제 렌더러를 실행한다.
         payload = self.root / "payload"
         payload.mkdir()
         subprocess.run(["rsync", "-a", "--files-from=" + str(ROOT / "scripts/deploy/po-central-files.txt"),
@@ -277,7 +271,6 @@ class ResolvedPairTest(unittest.TestCase):
         version = self.root / "deploy/hololive/hololive-api/VERSION"
         version.parent.mkdir(parents=True)
         version.write_text("13.4.0\n")
-        # 실제 렌더러가 서비스·네트워크 경계를 넘으면 즉시 실패한다.
         binary = self.root / "bin"
         binary.mkdir()
         for name in ("podman", "systemctl", "ip", "nft", "tailscale"):
@@ -339,7 +332,6 @@ class ResolvedPairTest(unittest.TestCase):
             files = [args[index + 1] for index, arg in enumerate(args) if arg == "--env-file"]
             for name in files:
                 path = Path(name)
-                # 회귀가 생겨도 운영 /run 파일은 읽지 않고 합성 live 경로에서만 재현한다.
                 if path.parent == Path("/run/hololive-bot/quadlet-env"):
                     path = self.root / "run/quadlet-env" / path.name
                 content = path.read_text()
@@ -389,12 +381,10 @@ class ResolvedPairTest(unittest.TestCase):
                 ("youtube-collector", "hololive-bot_youtube-po-c-socket", "ro,idmap"),
                 ("youtube-collector-b", "hololive-youtube-po-b-socket", "ro")):
             with self.subTest(service=service):
-                # 각 사례는 별도 fixture에서 실제 unit과 .volume 선언을 사용한다.
                 fixture = ResolvedPairTest()
                 fixture.setUp()
                 try:
                     fixture.case(service)
-                    # 기본 unit 밖의 호스트 MCS 정책도 실제 generator를 거친다.
                     dropins = fixture.units / (fixture.module.QUADLET_UNITS[service] + ".d")
                     dropins.mkdir()
                     (dropins / "50-mcs-level.conf").write_text(

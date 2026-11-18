@@ -91,7 +91,6 @@ func TestValidateAlarmWorkerOwnershipRejectsUnsupportedSchedulerRole(t *testing.
 	}
 }
 
-// LoadRuntime은 알림 역할 env의 앞뒤 공백을 지워 설정에 담는다.
 func TestLoadRuntimeReadsNotificationRoles(t *testing.T) {
 	setRuntimeEnv(t)
 	t.Setenv(runtimepolicy.NotificationEgressRoleEnv, " owner ")

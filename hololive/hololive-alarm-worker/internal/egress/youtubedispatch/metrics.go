@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package youtubedispatch
 
 import (
@@ -38,8 +18,6 @@ const (
 	liveCatchupSuppressionResultCacheError    = "cache_error"
 	liveCatchupSuppressionResultInvalidMarker = "invalid_marker"
 
-	// 묶음(grouped) 전송 fallback 결과다. 개별 요청을 저장해 발송을 시작하면 started이고, 개별 요청을 만들거나 저장하지
-	// 못하면 나머지 둘 중 하나다. 이때 그룹은 SENDING에 남아 stale sweeper가 quarantine한다.
 	groupedSendFallbackResultStarted       = "started"
 	groupedSendFallbackResultPrepareFailed = "prepare_failed"
 	groupedSendFallbackResultFreezeFailed  = "freeze_failed"
@@ -76,8 +54,6 @@ type outboxMetricSet struct {
 	outboxAggregateLag           prometheus.Histogram
 }
 
-// outboxMetrics는 NewDispatcher와 handoff reconciler 생성자가 먼저 호출해, label 없는 counter·histogram을 기동부터
-// 0으로 노출한다.
 var outboxMetrics = sync.OnceValue(func() *outboxMetricSet {
 	return &outboxMetricSet{
 		enqueueOutboxesTotal: promauto.NewCounterVec(

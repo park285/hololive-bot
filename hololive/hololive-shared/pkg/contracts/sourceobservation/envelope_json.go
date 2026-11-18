@@ -28,9 +28,7 @@ func decodeStrictJSON(raw []byte, destination any) error {
 	return nil
 }
 
-// 미지 member 거부는 뒤따르는 jsonv2.Unmarshal이 맡는다.
 func validateJSONStructure(raw []byte) error {
-	// bytes.Buffer 입력은 decoder가 복사 없이 raw를 직접 읽게 한다. decoder는 입력을 쓰지 않는다.
 	decoder := jsontext.NewDecoder(bytes.NewBuffer(raw))
 
 	for {
@@ -59,8 +57,6 @@ func validateJSONStructure(raw []byte) error {
 	return nil
 }
 
-// canonicalJSON은 jsonv2.Marshal이 잘못된 UTF-8을 거부하고 CanonicalizeJSON이 중첩 상한을 소유하므로
-// 별도의 사전 순회 없이 인코딩한다.
 func canonicalJSON(value any) ([]byte, error) {
 	encoded, err := jsonv2.Marshal(value)
 	if err != nil {

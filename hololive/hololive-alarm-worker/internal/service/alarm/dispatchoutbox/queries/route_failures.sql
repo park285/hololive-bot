@@ -1,5 +1,3 @@
--- 발송 전 실패를 retry·dlq로 정산한다. 입력 attempt_count는 전이 뒤 값이라 행의 claim attempt + 1이어야 한다.
--- 배치 뒤쪽 행의 잠금 대기까지 끝난 뒤 채취한 clock 하나로 lease 만료를 판정하고 next_attempt_at을 계산한다.
 WITH input AS MATERIALIZED (
     SELECT input.id, input.attempt_count, input.retry_after_ms, input.error, input.error_code,
            input.target_status, input.mark_dlq

@@ -30,7 +30,6 @@ func (h *Helper) Healthy(ctx context.Context) error {
 	return nil
 }
 
-// 상태 검증은 호출자가 소유합니다.
 func (h *Helper) readHealth(ctx context.Context) (HealthResponse, error) {
 	if h == nil || h.health == nil {
 		return HealthResponse{}, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "youtube.js helper is not configured")

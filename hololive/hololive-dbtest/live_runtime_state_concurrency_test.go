@@ -91,7 +91,7 @@ func waitSecondTxBlockedByFirst(ctx context.Context, t *testing.T, pool *pgxpool
 
 	firstPID := first.Conn().PgConn().PID()
 	secondPID := second.Conn().PgConn().PID()
-	// 시간 지연으로 겹침을 추정하지 않고 second가 first의 잠금을 실제로 기다리는지 확인한다.
+
 	require.Eventually(t, func() bool {
 		var blocked bool
 

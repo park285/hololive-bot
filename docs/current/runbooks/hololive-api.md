@@ -51,7 +51,7 @@ Epoch activation은 irreversible production data write이고 통합 `hololive-ap
 
 4. 출력의 `activated=true`와 non-zero `cutoff_received_at`을 확인합니다. 재실행에서 `activated=false`이면 기존 cutoff와 attribution이 그대로인지 확인하며 새 epoch로 간주하지 않습니다.
 5. 같은 epoch-aware `hololive-api`를 `sudo systemctl start hololive-api.service`로 시작하고(alarm-worker는 실행 중이므로 `Wants=`가 새로 띄우는 peer는 없습니다) health/readiness와 `replay_epoch_expired` audit를 확인한 뒤 collector를 재개합니다.
-6. 이 epoch를 기준으로 하던 YouTube delivery ledger backfill은 운영에서 2026-09-01 완료됐고(T18 2026-09-26 재확인: singleton `schema_version=1`, `completed_at` 있음), backfill 명령과 alarm-worker의 완료 gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. Migration 227은 적용 시점에 완료 전제를 검사합니다. 적용 전 singleton 원본·복구 SQL을 보존한 뒤 migration 229는 227 적용 기록과 현재 singleton 완료 상태를 잠금 아래 다시 검사하고, state DROP과 229 적용 기록을 한 transaction으로 커밋합니다. 229 적용 기록 없이 table이 사라진 상태는 자동 복구하지 않습니다. Runner의 별도 checksum 기록이 연결 단절로 빠지면 다음 실행은 실패하므로 적용 기록과 checksum을 조사한 뒤 복구합니다.
+6. 이 epoch를 기준으로 하던 YouTube delivery ledger backfill은 운영에서 2026-09-01 완료됐고(T18 2026-09-26 재확인: singleton `schema_version=1`, `completed_at` 있음), backfill 명령과 alarm-worker의 완료 gate는 지웠습니다. Migration 227은 적용 시점에 완료 전제를 검사합니다. 적용 전 singleton 원본·복구 SQL을 보존한 뒤 migration 229는 227 적용 기록과 현재 singleton 완료 상태를 잠금 아래 다시 검사하고, state DROP과 229 적용 기록을 한 transaction으로 커밋합니다. 229 적용 기록 없이 table이 사라진 상태는 자동 복구하지 않습니다. Runner의 별도 checksum 기록이 연결 단절로 빠지면 다음 실행은 실패하므로 적용 기록과 checksum을 조사한 뒤 복구합니다.
 
 Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 시작하지 않습니다. 기존 image rollback tag는 더 이상 안전한 rollback target이 아니며, 사전 관찰한 epoch-aware image를 유지하거나 source processing을 중지한 채 fix-forward합니다.
 

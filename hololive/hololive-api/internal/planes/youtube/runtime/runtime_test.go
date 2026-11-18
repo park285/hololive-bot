@@ -36,7 +36,6 @@ func TestRuntimeClaimsEverySupportedObservationKind(t *testing.T) {
 		got[kind] = true
 	}
 
-	// 수집 계약이 지원하는 kind를 claim하지 않으면 관측이 queue에 남아 canonical에 반영되지 않는다.
 	for version := range sourceobservation.InitialSupportedContracts() {
 		if !got[version.Kind] {
 			t.Fatalf("missing claim kind %s", version.Kind)
@@ -212,73 +211,75 @@ func TestUnknownClaimErrorFailsSupervisor(t *testing.T) {
 }
 
 func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
-	var (
-		claimed atomic.Bool
-		retried atomic.Int64
-	)
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			claimed atomic.Bool
+			retried atomic.Int64
+		)
 
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	claimer := fakeClaimer{
-		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
-			if claimed.Swap(true) {
-				return sourceobservation.ClaimedBatch{}, nil
-			}
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		claimer := fakeClaimer{
+			claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+				if claimed.Swap(true) {
+					return sourceobservation.ClaimedBatch{}, nil
+				}
 
-			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{
-				{ObservationID: 1, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
-				{ObservationID: 2, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
-			}}, nil
-		},
-		retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
-			retried.Add(1)
+				return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{
+					{ObservationID: 1, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
+					{ObservationID: 2, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
+				}}, nil
+			},
+			retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
+				retried.Add(1)
 
-			if input.ObservationID != 2 {
-				t.Fatalf("retry id = %d, want unsent 2", input.ObservationID)
-			}
+				if input.ObservationID != 2 {
+					t.Fatalf("retry id = %d, want unsent 2", input.ObservationID)
+				}
 
-			return contract.StatusPending, nil
-		},
-	}
-	runtime := newTestRuntime(t, claimer, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
-			select {
-			case <-entered:
-			default:
-				close(entered)
-			}
-
-			<-release
-
-			return nil
-		},
-	})
-
-	runtime.Config.ConsumerWorkers = 1
-	runtime.workCh = make(chan sourceobservation.ClaimWork)
-
-	ctx := t.Context()
-	runtime.Start(ctx, make(chan error, 1))
-
-	awaitSignal(t, entered, "worker did not start")
-
-	done := shutdownAsync(t, runtime)
-
-	time.Sleep(20 * time.Millisecond)
-	close(release)
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("shutdown: %v", err)
+				return contract.StatusPending, nil
+			},
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("shutdown did not finish")
-	}
+		runtime := newTestRuntime(t, claimer, fakeConsumer{
+			consume: func(context.Context, sourceobservation.Claim) error {
+				select {
+				case <-entered:
+				default:
+					close(entered)
+				}
 
-	if retried.Load() < 1 {
-		t.Fatal("unsent claim was not retried after canceled shutdown context")
-	}
+				<-release
+
+				return nil
+			},
+		})
+
+		runtime.Config.ConsumerWorkers = 1
+		runtime.workCh = make(chan sourceobservation.ClaimWork)
+
+		ctx := t.Context()
+		runtime.Start(ctx, make(chan error, 1))
+
+		awaitSignal(t, entered, "worker did not start")
+
+		done := shutdownAsync(t, runtime)
+
+		synctest.Wait()
+		close(release)
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("shutdown: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("shutdown did not finish")
+		}
+
+		if retried.Load() < 1 {
+			t.Fatal("unsent claim was not retried after canceled shutdown context")
+		}
+	})
 }
 
 func TestShutdownReleasesInFlightWhenWorkerDoesNotJoin(t *testing.T) {
@@ -348,56 +349,58 @@ func TestShutdownReleasesInFlightWhenWorkerDoesNotJoin(t *testing.T) {
 }
 
 func TestShutdownReturnsReleaseFailure(t *testing.T) {
-	var claimed atomic.Bool
+	synctest.Test(t, func(t *testing.T) {
+		var claimed atomic.Bool
 
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	runtime := newTestRuntime(t, fakeClaimer{
-		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
-			if claimed.Swap(true) {
-				return sourceobservation.ClaimedBatch{}, nil
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		runtime := newTestRuntime(t, fakeClaimer{
+			claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+				if claimed.Swap(true) {
+					return sourceobservation.ClaimedBatch{}, nil
+				}
+
+				return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{
+					{ObservationID: 10, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
+					{ObservationID: 11, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
+				}}, nil
+			},
+			retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
+				if input.ObservationID != 11 {
+					t.Fatalf("retry id = %d, want unsent 11", input.ObservationID)
+				}
+
+				return "", errors.New("release failed")
+			},
+		}, fakeConsumer{
+			consume: func(context.Context, sourceobservation.Claim) error {
+				close(entered)
+				<-release
+
+				return nil
+			},
+		})
+
+		runtime.Config.ConsumerWorkers = 1
+		runtime.workCh = make(chan sourceobservation.ClaimWork)
+		runtime.Start(t.Context(), make(chan error, 1))
+
+		awaitSignal(t, entered, "worker did not start")
+
+		done := shutdownAsync(t, runtime)
+
+		synctest.Wait()
+		close(release)
+
+		select {
+		case err := <-done:
+			if err == nil || !strings.Contains(err.Error(), "release failed") {
+				t.Fatalf("Shutdown() error = %v, want release failure", err)
 			}
-
-			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{
-				{ObservationID: 10, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
-				{ObservationID: 11, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
-			}}, nil
-		},
-		retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
-			if input.ObservationID != 11 {
-				t.Fatalf("retry id = %d, want unsent 11", input.ObservationID)
-			}
-
-			return "", errors.New("release failed")
-		},
-	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
-			close(entered)
-			<-release
-
-			return nil
-		},
-	})
-
-	runtime.Config.ConsumerWorkers = 1
-	runtime.workCh = make(chan sourceobservation.ClaimWork)
-	runtime.Start(t.Context(), make(chan error, 1))
-
-	awaitSignal(t, entered, "worker did not start")
-
-	done := shutdownAsync(t, runtime)
-
-	time.Sleep(20 * time.Millisecond)
-	close(release)
-
-	select {
-	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), "release failed") {
-			t.Fatalf("Shutdown() error = %v, want release failure", err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("shutdown did not finish")
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("shutdown did not finish")
-	}
+	})
 }
 
 func TestEmptyViewerRosterDoesNotFailProjectionRefresh(t *testing.T) {

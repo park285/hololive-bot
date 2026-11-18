@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package domain
 
 import (
@@ -140,16 +120,15 @@ func (a AlarmTypes) Contains(t AlarmType) bool {
 	return slices.Contains(a, t)
 }
 
-// Alarm은 채팅방의 채널 또는 UNIT B 멤버별 구독과 알림 종류를 저장한다.
 type Alarm struct {
-	ID         int        `json:"id"`                  // DB 기본 키
-	RoomID     string     `json:"room_id"`             // 카카오톡 방 ID
-	UserID     string     `json:"user_id"`             // 카카오톡 사용자 ID
-	ChannelID  string     `json:"channel_id"`          // YouTube 채널 ID
-	HostID     string     `json:"host_id,omitempty"`   // 비어 있으면 전체 채널 구독
-	RoomName   string     `json:"room_name,omitempty"` // 방 이름 (캐싱용)
-	UserName   string     `json:"user_name,omitempty"` // 사용자 이름 (캐싱용)
-	AlarmTypes AlarmTypes `json:"alarm_types"`         // 알람 타입 (LIVE, COMMUNITY, SHORTS)
+	ID         int        `json:"id"`
+	RoomID     string     `json:"room_id"`
+	UserID     string     `json:"user_id"`
+	ChannelID  string     `json:"channel_id"`
+	HostID     string     `json:"host_id,omitempty"`
+	RoomName   string     `json:"room_name,omitempty"`
+	UserName   string     `json:"user_name,omitempty"`
+	AlarmTypes AlarmTypes `json:"alarm_types"`
 	CreatedAt  time.Time  `json:"created_at"`
 }
 

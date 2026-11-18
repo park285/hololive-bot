@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# 이전 mirror에서 새로 추정한 profile은 rollback pair가 아니다. 검증된 release 산출물만 허용한다.
 native_profile_pair_validate() {
   local release="$1" env_file="$2"
   sudo -n test -f "$release/worker-profile.json" || {

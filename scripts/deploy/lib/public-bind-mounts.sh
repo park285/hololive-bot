@@ -17,7 +17,6 @@ prepare_admin_dashboard_ingress_bind_mount() {
     local root="$1"
     local template="${root}/deploy/nginx/admin-dashboard-ingress.conf.template"
     local config="${HOLOLIVE_INGRESS_CONF:-/run/hololive-bot/admin-dashboard-ingress.conf}"
-    # systemd가 compose.env에서 읽은 값을 그대로 받는다.
     local bind_ip="${HOLOLIVE_BOT_PORT_BIND_IP:-}"
 
     if [[ -z "${bind_ip}" ]]; then

@@ -39,7 +39,6 @@ func TestFetchHololiveChannelList_PaginatesOnceAndServesListCache(t *testing.T) 
 		t.Fatalf("fetchHololiveChannelList() = %d channels, want channels from both pages", len(firstResult))
 	}
 
-	// 목록 캐시 덕분에 두 번째 조회는 upstream 목록을 다시 받지 않는다.
 	repeatResult, err := service.fetchHololiveChannelList(t.Context())
 	if err != nil {
 		t.Fatalf("fetchHololiveChannelList() repeat error = %v", err)
@@ -57,7 +56,6 @@ func TestFetchHololiveChannelList_PaginatesOnceAndServesListCache(t *testing.T) 
 	}
 }
 
-// 사진이 없거나 빈 문자열인 채널은 사진 맵에 넣지 않는다.
 func TestHololiveChannelPhotos_SkipsChannelsWithoutPhoto(t *testing.T) {
 	t.Parallel()
 

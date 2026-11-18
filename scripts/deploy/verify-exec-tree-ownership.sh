@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# non-root 소유는 소유자가 chmod 후 내용을 언제든 교체할 수 있으므로, root systemd 실행
-# 트리는 쓰기 비트가 아니라 소유권까지 root 여야 안전하다(03e6dca8).
-
 violations=0
 
 report() {

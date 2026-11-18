@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package orchestration
 
 import (
@@ -106,8 +86,6 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 	return nil
 }
 
-// AcceptsMessage는 webhook payload를 durable inbox에 저장하기 전에 ProcessMessage와
-// 동일한 결정적 ingress 조건을 적용합니다.
 func (b *Bot) AcceptsMessage(ctx context.Context, message *webhook.Message) bool {
 	return b.ingress.Accepts(ctx, message)
 }
@@ -143,9 +121,6 @@ func commandRequestContext(ctx context.Context, cmdCtx *botcommand.CommandContex
 	return ctx
 }
 
-// canonicalReplyIdentity는 durable inbox와 같은 키 형태의 message id를 응답 정체성으로 쓴다. 빈 message id는
-// durable admit이 inbox에 넣기 전에 거절하므로 여기까지 오지 않는다. 재전달마다 다른 응답 id가 생기면 중복
-// 발화가 되므로 대체 식별자를 만들지 않는다.
 func canonicalReplyIdentity(message *webhook.Message) string {
 	if message == nil || message.JSON == nil {
 		return ""

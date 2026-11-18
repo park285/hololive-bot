@@ -13,9 +13,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
-// NewClientWithAPIKeyStrict는 alarm service client를 만든다. H3를 쓰는 https origin의 transport 구성 오류
-// (CA 누락, server name 누락, transport 생성 실패)를 대체 경로 없이 오류로 돌려주므로, 이 생성자를 쓰는
-// bot/admin runtime 조립은 listener가 트래픽을 받기 전에 실패한다.
 func NewClientWithAPIKeyStrict(baseURL, apiKey string, logger *slog.Logger, options sharedh3.ClientOptions) (*Client, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
@@ -44,7 +41,6 @@ func NewClientWithAPIKeyStrict(baseURL, apiKey string, logger *slog.Logger, opti
 	}, nil
 }
 
-// 소유 plane이 요청을 모두 끝낸 뒤 부른다. 닫지 않으면 worker의 graceful shutdown이 이 연결을 QUIC idle timeout까지 기다린다.
 func (c *Client) Close() error {
 	if c == nil {
 		return nil

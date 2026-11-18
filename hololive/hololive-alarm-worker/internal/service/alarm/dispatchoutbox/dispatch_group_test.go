@@ -73,7 +73,6 @@ func TestBuildDispatchGroupKeyCelebrationUsesMemberIDOnly(t *testing.T) {
 		}
 	}
 
-	// 채널을 공유하거나 채널이 바뀐 멤버도 MemberID로만 묶는다. ChannelID로 대신 묶던 폴백은 지웠다.
 	if BuildDispatchGroupKeyFromEnvelope(envelope(101, "UC_old")) != BuildDispatchGroupKeyFromEnvelope(envelope(101, "UC_new")) {
 		t.Fatal("channel change must not split one member's celebration group")
 	}

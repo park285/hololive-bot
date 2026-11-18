@@ -182,7 +182,6 @@ func requireEquivalentScopeSessions(t *testing.T, fullDecision, narrowedDecision
 		want, got := fullDecision.Sessions[i], narrowedDecision.Sessions[i]
 
 		if _, ok := omitted[got.VideoID]; ok {
-			// reducer는 적재하지 않은 ENDED 이력을 끝까지 미적재로 두고 저장 계층이 비운다.
 			if _, loaded := got.IgnoredAbsences.Slots(); loaded {
 				t.Fatalf("%s: omitted history became loaded", got.VideoID)
 			}
@@ -226,7 +225,6 @@ func requireEquivalentScopeDecision(t *testing.T, full *State, fullDecision, nar
 		delete(fullPending, pending.VideoID)
 	}
 
-	// full에만 있는 pending은 축소 적재가 읽지 않은 행이며 reducer도 바꾸지 않아야 한다.
 	for videoID := range fullPending {
 		if !reflect.DeepEqual(full.PendingEnds[videoID], fullPending[videoID]) {
 			t.Fatalf("unloaded pending %s was changed by the full reducer", videoID)
@@ -319,7 +317,6 @@ func checkScopeScenario(t *testing.T, scenario *scopeScenario) {
 
 	requireEquivalentScopeDecision(t, &full, fullDecision, narrowedDecision, omitted)
 
-	// 대조군: due candidate가 남은 ENDED는 payload 밖이어도 정리되어 저장 대상이 된다.
 	due, ok := dirtySession(&fullDecision, scopeDueID)
 	if !ok || due.Clock.NextEndCheckAt != nil || due.Clock.EndCandidateKind != nil {
 		t.Fatalf("due candidate on ENDED was not cleared: ok=%t %+v", ok, due.Clock)

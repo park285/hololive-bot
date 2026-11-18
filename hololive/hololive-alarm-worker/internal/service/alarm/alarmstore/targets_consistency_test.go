@@ -88,7 +88,6 @@ func TestSubscriberReadThroughPreservesConcurrentMutation(t *testing.T) {
 					require.NoError(t, err)
 				}
 
-				// 구독 추가 후 set eviction이 있어도 다음 조회는 DB에서 새 구독을 확인해야 한다.
 				if add {
 					require.NoError(t, client.Del(ctx, key))
 				}

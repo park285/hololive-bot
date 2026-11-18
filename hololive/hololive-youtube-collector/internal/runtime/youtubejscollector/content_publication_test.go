@@ -434,7 +434,6 @@ func requireClassifiedTimes(t *testing.T, got *contract.VideoPublicationV1, resu
 	}
 }
 
-// 테스트 입력은 모두 같은 slot을 쓰므로, 다음 poll을 흉내 낼 때 씁니다.
 func earlierSlot(t *testing.T, raw []byte) []byte {
 	t.Helper()
 

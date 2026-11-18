@@ -11,8 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// NewCollectorSessionPool은 pool과 같은 데이터베이스에 붙되 연결마다 session_user를 role로 바꾼 pool을 돌려줍니다.
-// 이 role은 데이터베이스의 public 객체 권한을 모두 받으므로, 이 pool의 거부는 권한이 아니라 trigger에서 나옵니다.
 func NewCollectorSessionPool(tb testing.TB, pool *pgxpool.Pool, role string) *pgxpool.Pool {
 	tb.Helper()
 
@@ -63,7 +61,6 @@ func grantCollectorSessionRole(ctx context.Context, pool *pgxpool.Pool, role str
 	return nil
 }
 
-// role은 클러스터 전역이라 병렬 패키지가 같은 이름을 동시에 만들 수 있고, 그 경쟁은 42710 또는 23505로 끝난다.
 func isDuplicateRole(err error) bool {
 	pgErr, ok := errors.AsType[*pgconn.PgError](err)
 

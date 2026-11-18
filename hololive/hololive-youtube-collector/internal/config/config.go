@@ -1,5 +1,3 @@
-// Package config: youtube-collector 런타임 전용 설정을 소유한다.
-// 외부 fetch·lease·checkpoint 소유권이 collector에 있으므로 그 설정도 여기에 둔다.
 package config
 
 import (
@@ -24,7 +22,6 @@ const (
 	maxYouTubeJSTimeout      = 10 * time.Minute
 )
 
-// Config는 collector의 수집 동시성, 제한과 lease 예산을 보관합니다.
 type Config struct {
 	InstanceID               string
 	TotalWorkers             int
@@ -52,17 +49,14 @@ type Config struct {
 	YouTubeJSRequestTimeout  time.Duration
 	YouTubeJSStartupTimeout  time.Duration
 	YouTubeJSShutdownTimeout time.Duration
-	// YouTubeJSNodePath·YouTubeJSScriptPath는 배포가 YOUTUBEJS_NODE·YOUTUBEJS_SCRIPT로 고정한 helper 절대 경로다.
-	// 비었거나 절대·정규 경로의 일반 파일이 아니면 helper 기동이 실패하며, 다른 후보 경로로 넘어가지 않는다.
-	YouTubeJSNodePath       string
-	YouTubeJSScriptPath     string
-	MaxPages                int
-	MaxSuccessResponseBytes int
-	MaxTargetRosterRows     int
-	RequestInterval         time.Duration
+	YouTubeJSNodePath        string
+	YouTubeJSScriptPath      string
+	MaxPages                 int
+	MaxSuccessResponseBytes  int
+	MaxTargetRosterRows      int
+	RequestInterval          time.Duration
 }
 
-// DefaultConfig는 profile이 소유하지 않는 provider·환경 기본값만 반환합니다.
 func DefaultConfig() Config {
 	return Config{
 		ReadinessTimeout:         2 * time.Second,
@@ -93,7 +87,6 @@ func (c *Config) Validate(holodexTimeout, officialTimeout time.Duration) error {
 	return nil
 }
 
-// validateProfilePolicy는 프로필 소유 값만 검증하여 운영 환경 없이 기동 전 수치 경계를 확인합니다.
 func (c *Config) validateProfilePolicy() error {
 	if err := c.validateLeaseTiming(); err != nil {
 		return fmt.Errorf("validate lease timing: %w", err)
@@ -186,7 +179,6 @@ func (c *Config) validateEnvPhaseTimeouts() error {
 		return err
 	}
 
-	// helper health 검사는 readiness 응답 예산 안에서 끝나야 하므로 readiness timeout보다 짧아야 한다.
 	if c.HelperHealthTimeout < minCollectorPhaseTimeout || c.HelperHealthTimeout >= c.ReadinessTimeout {
 		return fmt.Errorf("YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS must be at least %s and less than YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS (%s)",
 			minCollectorPhaseTimeout, c.ReadinessTimeout)

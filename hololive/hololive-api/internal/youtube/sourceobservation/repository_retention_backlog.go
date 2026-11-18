@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// 보호 중인 원본이 조회 한도를 채우면 적체 없음으로 단정하지 않는다.
-// 감사 행은 원본과 함께 삭제되므로 별도 적체나 보존 정책이 없다.
 func (r *Repository) measureRetentionBacklogs(ctx context.Context, cfg RetentionConfig, now time.Time, result *RetentionResult) error {
 	kinds, cutoffs := evidencePolicies(cfg.EvidenceAgeByKind, now)
 	if len(kinds) == 0 {

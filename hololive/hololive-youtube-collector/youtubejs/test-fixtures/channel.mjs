@@ -6,7 +6,6 @@ const tabMethods = new Map([
   ["getVideos", "videos"], ["getShorts", "shorts"], ["getCommunity", "posts"], ["getLiveStreams", "streams"],
 ]);
 
-/** 원시 증거는 실제 adapter로 만들고 매핑 단위 테스트의 getter만 교체합니다. */
 export async function channelFixture(overrides = {}, tabs = ["featured", "videos", "shorts", "posts", "streams"], selected = "featured") {
   const innertube = await Innertube.create({
     retrieve_player: false, generate_session_locally: true, enable_session_cache: false,

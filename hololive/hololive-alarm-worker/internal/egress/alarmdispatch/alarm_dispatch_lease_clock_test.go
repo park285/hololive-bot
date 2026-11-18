@@ -172,7 +172,6 @@ func seedAlarmLeaseClockConsumer(ctx context.Context, t *testing.T, pool *pgxpoo
 		_, err = base.PinSendRequest(ctx, envelopes, dispatchoutbox.SendRequest{Body: "frozen body", Route: dispatchoutbox.SendRouteText})
 		require.NoError(t, err)
 
-		// runner 밖에서 고정했으므로 봉투를 고정된 단위를 claim한 상태로 맞춘다.
 		envelopes[0].RequestUnpinned = false
 	}
 
@@ -211,7 +210,6 @@ func expireAlarmLeaseDuringUnitWait(ctx context.Context, t *testing.T, pool *pgx
 	require.NoError(t, blocker.Commit(ctx))
 }
 
-// lease가 만료된 미발송 claim은 Load·Pin·Begin 어느 단계에서 막혀도 행을 바꾸지 않고 만료 lease 회수에 맡긴다.
 func assertAlarmLeaseClockRouting(ctx context.Context, t *testing.T, pool *pgxpool.Pool, envelope *dispatchoutbox.AlarmQueueEnvelope) {
 	t.Helper()
 

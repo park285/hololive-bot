@@ -11,7 +11,6 @@ import (
 	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
-// 모델 응답은 신뢰할 수 없는 데이터라 디코드 전에 크기를 막는다.
 const maxRowsResponseBytes = 512 << 10
 
 type rowModel interface {
@@ -20,16 +19,15 @@ type rowModel interface {
 }
 
 type extractedRow struct {
-	Date   string                `json:"date"`
-	Start  *string               `json:"start"`
-	End    *string               `json:"end"`
-	TZ     *string               `json:"tz"`
-	Status posterstore.RowStatus `json:"status"`
-	Text   string                `json:"text"`
-	Badges []string              `json:"badges"`
-	// Updates는 변경 감지가 이 칸에 적용한 글 text다. 모델 응답에는 없는 칸이다.
-	Updates       []string `json:"-"`
-	Disagreements []string `json:"-"`
+	Date          string                `json:"date"`
+	Start         *string               `json:"start"`
+	End           *string               `json:"end"`
+	TZ            *string               `json:"tz"`
+	Status        posterstore.RowStatus `json:"status"`
+	Text          string                `json:"text"`
+	Badges        []string              `json:"badges"`
+	Updates       []string              `json:"-"`
+	Disagreements []string              `json:"-"`
 }
 
 type translatedRow struct {
@@ -135,7 +133,6 @@ func translateSchema() *genai.Schema {
 	}
 }
 
-// rowsRequestConfig의 Timeout은 SDK가 x-server-timeout으로도 보내므로 Vertex 처리 상한이 되고, 넘으면 504다.
 func rowsRequestConfig(stage RowStageConfig, system string, schema *genai.Schema) *genai.GenerateContentConfig {
 	return &genai.GenerateContentConfig{
 		HTTPOptions:       &genai.HTTPOptions{Timeout: new(stage.timeout())},

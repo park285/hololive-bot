@@ -2,7 +2,7 @@
 
 ## Summary
 
-alarm-worker의 grouped message path는 방 유형과 무관하게 YouTube 원본 URL 대신 짧은 고정 목적지 URL을 사용할 수 있습니다(alarm-worker는 Karing template을 보내지 않습니다, `DEC-20260926-hololive-karing-egress-disposition`). `hololive-api` bot plane은 정상 사용자를 YouTube로 리다이렉트하고 KakaoTalk 링크 스크랩 요청은 리다이렉트 전에 거부하여 자동 섬네일 수집을 차단합니다.
+alarm-worker의 grouped message path는 방 유형과 무관하게 YouTube 원본 URL 대신 짧은 고정 목적지 URL을 사용할 수 있습니다(alarm-worker는 Karing template을 보내지 않습니다). `hololive-api` bot plane은 정상 사용자를 YouTube로 리다이렉트하고 KakaoTalk 링크 스크랩 요청은 리다이렉트 전에 거부하여 자동 섬네일 수집을 차단합니다.
 
 ## Contract ID
 

@@ -65,7 +65,6 @@ func TestRefreshCarriesMembershipOnlyForUnchangedTargets(t *testing.T) {
 	first := f.refresh(0, "initial", community, videos, video)
 	initialCommunity := f.requireMemberSince("initial community", first.Generation, community, first.Generation)
 
-	// not_before만 바뀌면 generation과 membership은 그대로이고 값만 갱신된다.
 	video.NotBefore = projectionNow.Add(3 * time.Minute)
 
 	freshness := f.refresh(time.Minute, "freshness only", community, videos, video)
@@ -77,18 +76,15 @@ func TestRefreshCarriesMembershipOnlyForUnchangedTargets(t *testing.T) {
 		t.Fatalf("freshness-only not_before = %+v, want %s", got.notBefore, video.NotBefore)
 	}
 
-	// 무관한 영상 target 추가는 새 generation을 만들지만 기존 row의 membership과 논리적 시작 시각을 보존한다.
 	second := f.refresh(2*time.Minute, "unrelated add", community, videos, video, added)
 	f.assertUnrelatedAddCarriesMembership(first.Generation, second, initialCommunity, community, video, added)
 
-	// 자신의 cadence 변경은 새 membership이다.
 	videos.PollInterval = 10 * time.Minute
 
 	third := f.refresh(3*time.Minute, "own cadence change", community, videos, video, added)
 	f.requireMemberSince("cadence change", third.Generation, videos, third.Generation)
 	f.requireMemberSince("cadence change of another target community", third.Generation, community, first.Generation)
 
-	// 해제 뒤 재등록(ABA)은 과거 membership을 되살리지 않는다.
 	removed := f.refresh(4*time.Minute, "remove community", videos, video, added)
 	readded := f.refresh(5*time.Minute, "re-add community", community, videos, video, added)
 
@@ -170,7 +166,6 @@ func (v *membershipValidity) require(label string, kinds []string, exact bool, s
 }
 
 func TestMembershipValidityFollowsJobScope(t *testing.T) {
-	// 유효성 함수는 DB statement 시각으로 validity를 보므로 실제 시각으로 refresh한다.
 	f := newProjectionFixture(t, time.Now())
 
 	videos := TargetSpec{SubjectKey: subjectChannelA, ObservationKind: contract.KindVideoList, Priority: 50, PollInterval: 5 * time.Minute, Enabled: true}
@@ -188,23 +183,19 @@ func TestMembershipValidityFollowsJobScope(t *testing.T) {
 	valid.require("empty scope fails closed", nil, true, subjectChannelA, 0, false)
 	valid.require("count drift", contentKinds, true, subjectChannelA, 1, false)
 
-	// 다른 영상 target 추가: 같은 kind의 다른 subject는 exact content job에 무관하지만 global 범위에는 변경이다.
 	f.refresh(time.Second, "unrelated add", videos, shorts, other, unrelated)
 	valid.require("content after unrelated add", contentKinds, true, subjectChannelA, 2, true)
 	valid.require("exact video after unrelated add", videoKinds, true, "vid-1", 1, true)
 	valid.require("global video scope after add", videoKinds, false, "global", 1, false)
 
-	// 자신의 cadence 변경은 같은 수여도 새 membership이라 거부된다.
 	shorts.PollInterval = 10 * time.Minute
 	f.refresh(2*time.Second, "own cadence", videos, shorts, other, unrelated)
 	valid.require("content after own cadence change", contentKinds, true, subjectChannelA, 2, false)
 
-	// 자신의 disable은 범위 수 감소로 거부된다.
 	other.Enabled = false
 	f.refresh(3*time.Second, "disable", videos, shorts, other, unrelated)
 	valid.require("video after disable", videoKinds, true, "vid-1", 1, false)
 
-	// 다시 enable한 generation의 proof도 해제 뒤 같은 scheduling 재등록(ABA)을 받아들이지 않는다.
 	other.Enabled = true
 	valid.proof = f.refresh(4*time.Second, "re-enable", videos, shorts, other, unrelated).Generation
 
@@ -216,7 +207,6 @@ func TestMembershipValidityFollowsJobScope(t *testing.T) {
 
 	valid.require("video after ABA", videoKinds, true, "vid-1", 1, false)
 
-	// 유효한 CURRENT가 없으면 연속 membership인 proof도 유효하지 않다.
 	valid.proof = latest.Generation
 
 	valid.require("unrelated exact video at latest generation", videoKinds, true, "vid-2", 1, true)

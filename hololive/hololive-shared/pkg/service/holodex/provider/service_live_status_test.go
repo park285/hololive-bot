@@ -163,7 +163,7 @@ func TestGetChannelsLiveStatus_DoesNotHydrateNonIndieMissingOrg(t *testing.T) {
 func TestGetChannelsLiveStatus_AppliesIndieOrgOverride(t *testing.T) {
 	t.Parallel()
 
-	const channelID = "UCt30jJgChL8qeT9VPadidSw" // 시구레 우이(しぐれうい)
+	const channelID = "UCt30jJgChL8qeT9VPadidSw"
 
 	override, ok := constants.IndieChannelOrgOverrides[channelID]
 

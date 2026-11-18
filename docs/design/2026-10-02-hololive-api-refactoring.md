@@ -1,6 +1,6 @@
 # Hololive 통합 리팩토링 계획
 
-API 책임·성능 분석과 저장소 폴더·파일 개편안을 합친 **단일 실행 계획**입니다. 기존 링크를 보존하기 위해 이 파일을 정본으로 재사용합니다. [API 심층 분석](2026-10-02-hololive-api-deep-analysis.md)과 [저장소 구조 분석](2026-10-02-repository-layout-refactoring.md)은 코드 근거·실험·이동표를 소유하는 참고 문서이며 별도의 실행 순서를 운영하지 않습니다.
+API 책임·성능 분석과 저장소 폴더·파일 개편안을 합친 **단일 실행 계획**입니다. 기존 링크를 보존하기 위해 이 파일을 정본으로 재사용합니다. API 심층 분석과 저장소 구조 분석은 코드 근거·실험·이동표를 소유하는 참고 문서이며 별도의 실행 순서를 운영하지 않습니다.
 
 목표는 **동작과 결과 계약 복원 → 작은 패키지 결합 제거 → API 구성 및 shared 책임 회수 → observation 이관**입니다. 동작을 보존하는 작은 성능 개선은 구조 이관과 독립적으로 진행하고, namespace·Node·최상위 폴더 개편은 필요가 입증된 범위만 후순위로 진행합니다. 최초 통합은 문서 작업이었으며, 아래 착수 기록부터 제품 구현 결과를 구분하여 기록합니다.
 
@@ -82,7 +82,7 @@ API 책임·성능 분석과 저장소 폴더·파일 개편안을 합친 **단�
 - **Holodex 현행 오류 계약 유지**: origin 100ms·6 caller에서 성공은 1회 fetch/마지막 106.9ms, 실패는 6회 fetch/마지막 605.7ms였습니다. 비용은 확인됐지만 오류 공유는 독립 caller의 취소·실패 예산을 바꿉니다. 새 negative cache나 실패 공유를 추가하지 않습니다.
 - **A3·Node·최상위 경로 개편은 채택하지 않습니다.** 실제 소유권과 구성 결합은 현재 module 위치에서 분리됐습니다. 추가 namespace 단축은 fan-out을 줄이지 않으며, Node/최상위 이동은 테스트 탐색·fixture·배포 경로의 추가 이행 비용에 비해 제품 이득이 확인되지 않았습니다. 기존 `hololive/hololive-*` module identity와 helper 설치 위치를 유지합니다. private claim/send 분할도 계획의 명시적 제외 범위를 유지합니다.
 
-실행 근거: [matrix](evidence/2026-10-02-hololive-api-implementation/membernews-matrix.txt), [값·순서 동등성](evidence/2026-10-02-hololive-api-implementation/membernews-matrix-equality.txt), [후보 query plan](evidence/2026-10-02-hololive-api-implementation/membernews-query-plans.txt), [SQL 경계 수정 전 재현](evidence/2026-10-02-hololive-api-implementation/membernews-boundary-before.txt), [수정 후 회귀](evidence/2026-10-02-hololive-api-implementation/membernews-boundary-after.txt), [집계 갱신 전후 plan](evidence/2026-10-02-hololive-api-implementation/dispatch-count-plans.txt), [H3 비용](evidence/2026-10-02-hololive-api-implementation/h3-transport-cost.txt), [Holodex/초기 합성 실행](evidence/2026-10-02-hololive-api-implementation/initial-h3-holodex-probes.txt). 마지막 파일은 최초 H3 임시 시험의 package-name 오류도 그대로 보존하며, H3 결과는 수정 후 별도 성공한 `h3-transport-cost.txt`를 기준으로 합니다. 새 성능 gate나 timing 합격선을 추가하지 않았습니다.
+실행 근거: matrix, 값·순서 동등성, 후보 query plan, SQL 경계 수정 전 재현, 수정 후 회귀, 집계 갱신 전후 plan, H3 비용, Holodex/초기 합성 실행. 마지막 파일은 최초 H3 임시 시험의 package-name 오류도 그대로 보존하며, H3 결과는 수정 후 별도 성공한 `h3-transport-cost.txt`를 기준으로 합니다. 새 성능 gate나 timing 합격선을 추가하지 않았습니다.
 
 ### 이전 통합 검증 — 후속 수정 전
 
@@ -152,7 +152,7 @@ API 책임·성능 분석과 저장소 폴더·파일 개편안을 합친 **단�
 | admin DB fixture 대안 | 기존8개 integration 시험이 현재 전체 migration의 NewPool에서 통과 | 다른 fixture까지 자동 전환 가능하다는 뜻은 아님 |
 | Node 경로 부정 실험 | nested test 누락, strict 목록 누락, helper fixture 경로 단절을 재현 | 현재 평면 배치의 제품 결함으로 일반화하지 않음 |
 
-근거는 [API 확장 자료](evidence/2026-10-02-hololive-api-expansion/), [경로 개편 자료](evidence/2026-10-02-repository-layout/)와 각 보고서에 보존합니다. embed557개·검토한 경로 계약29개는 이동 검토 범위이며 새 구조 gate가 아닙니다. DB factory와 HTTP 기능 edge를 함께 끊는 가설의 **기존 shared 도달51→36**도 새 package를 제외한 반사실 그래프이며 실제 build/성능 결과가 아닙니다. DB 구성만 분리한 값은51→48입니다.
+근거는 API 확장 자료, 경로 개편 자료와 각 보고서에 보존합니다. embed557개·검토한 경로 계약29개는 이동 검토 범위이며 새 구조 gate가 아닙니다. DB factory와 HTTP 기능 edge를 함께 끊는 가설의 **기존 shared 도달51→36**도 새 package를 제외한 반사실 그래프이며 실제 build/성능 결과가 아닙니다. DB 구성만 분리한 값은51→48입니다.
 
 ## 실행 순서와 완료 기준
 
@@ -213,7 +213,7 @@ worker config 회수는 strict leaf 접근성만 선행하면 됩니다. alarmdi
 
 완료 기준: 실제 양 구현의 DB 시험에서 publish/checkpoint/complete/defer, canonical/intent/receipt/offset의 원자성, 실패 우선순위, stale token·fencing, Shorts 순서, generation/replay epoch, payload dictionary/GC/FK/ACL을 보존합니다. 운영 replay나 epoch 활성화를 검증으로 실행하지 않습니다.
 
-worker 회수와 observation 이관은 어느 쪽부터도 가능합니다. canonical clock 시험의 owner/import를 해당 단계에서 함께 바꾸면 됩니다. API 구성 전체나 성능 작업을 불필요한 선행 gate로 두지 않습니다. 상세 [Go·SQL·caller·테스트 이동표](2026-10-02-hololive-api-deep-analysis.md#observation-이관의-파일과-테스트-배치를-확정합니다)를 사용하되 자동 method hint보다 수동 claim 시험 검토를 우선합니다.
+worker 회수와 observation 이관은 어느 쪽부터도 가능합니다. canonical clock 시험의 owner/import를 해당 단계에서 함께 바꾸면 됩니다. API 구성 전체나 성능 작업을 불필요한 선행 gate로 두지 않습니다. 상세 Go·SQL·caller·테스트 이동표를 사용하되 자동 method hint보다 수동 claim 시험 검토를 우선합니다.
 
 ### 6. 동작 보존 범위부터 성능 개선
 
@@ -237,7 +237,7 @@ worker 회수와 observation 이관은 어느 쪽부터도 가능합니다. cano
 
 **결정: 최상위 경로는 유지합니다.** 현재 module 위치에서 소유권 분리가 완료됐고 추가 이동의 제품 이득이 확인되지 않았습니다. `apps/{api,alarm-worker,youtube-collector}`, `libs/hololive`, `tests/dbtest`는 기본 목표가 아닙니다. 필요가 남으면 module 위치 안정성의 현재 tree policy를 개정하고 파일 이동만의 별도 변경으로 수행합니다. module identity까지 동시에 바꾸거나 새 경로 registry를 만들지 않습니다.
 
-정확한 `go.work` use·sibling replace·cmd package identity·build-id verifier·Docker COPY/ignore·AP manifest·CI test/integration/race·npm 경로 소비자를 함께 갱신합니다. 깊이가 같은 `hololive/hololive-api → apps/api` 이동에서 `../../.golangci.yml` 같은 상대 깊이 참조까지 일괄 치환하지 않습니다. collecterr import path가 바뀔 때만 부모 lint template의 해당 예외를 갱신합니다. [직접 검토한 경로 계약29개](evidence/2026-10-02-repository-layout/reviewed-path-contracts.tsv)를 사용하되 lexical 검토 집합의 모든 행을 수정 목록으로 취급하지 않습니다.
+정확한 `go.work` use·sibling replace·cmd package identity·build-id verifier·Docker COPY/ignore·AP manifest·CI test/integration/race·npm 경로 소비자를 함께 갱신합니다. 깊이가 같은 `hololive/hololive-api → apps/api` 이동에서 `../../.golangci.yml` 같은 상대 깊이 참조까지 일괄 치환하지 않습니다. collecterr import path가 바뀔 때만 부모 lint template의 해당 예외를 갱신합니다. 당시 경로 계약 29개를 직접 검토했으며, 문자열 검색으로 찾은 모든 행을 수정 대상으로 보지는 않았습니다. 검토표는 커밋 `682792e0f`의 `docs/design/evidence/2026-10-02-repository-layout/reviewed-path-contracts.tsv`에 있습니다.
 
 ## 공통 검증과 완료 판정
 

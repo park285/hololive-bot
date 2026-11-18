@@ -8,11 +8,8 @@ const LiveSnapshotMetadataContractGeneration int64 = 2
 
 const LiveSnapshotQueryContractGeneration int64 = 3
 
-// LiveScheduleObservationMaxAge는 재사용 일정의 원래 관측 시각이 이번 lease 슬롯보다 앞설 수 있는 최대 폭이다.
-// 재사용 상한(helper 10분)과 job 대기 상한(1시간)을 넉넉히 덮고, 그보다 오래된 값은 잘못된 시계로 보고 거부한다.
 const LiveScheduleObservationMaxAge = 6 * time.Hour
 
-// LiveSnapshotQueryV1은 반환 항목이 아니라 실제 조회한 범위와 완결성을 증명한다.
 type LiveSnapshotQueryV1 struct {
 	ChannelID        string   `json:"channel_id"`
 	Source           string   `json:"source"`
@@ -45,15 +42,13 @@ type ShortsListV1 struct {
 }
 
 type LiveSessionV1 struct {
-	VideoID      string     `json:"video_id"`
-	ChannelID    string     `json:"channel_id"`
-	Status       string     `json:"status"`
-	Title        string     `json:"title,omitempty"`
-	TopicID      string     `json:"topic_id,omitempty"`
-	ThumbnailURL string     `json:"thumbnail_url,omitempty"`
-	ScheduledAt  *time.Time `json:"scheduled_at,omitempty"`
-	// ScheduleObservedAt은 ScheduledAt을 이번 슬롯이 아니라 앞선 lease 슬롯에서 확인해 재사용했을 때만 그 슬롯 시각을 싣는다.
-	// 없으면 ScheduledAt은 이 관측의 effective time에 확인한 값이다.
+	VideoID            string     `json:"video_id"`
+	ChannelID          string     `json:"channel_id"`
+	Status             string     `json:"status"`
+	Title              string     `json:"title,omitempty"`
+	TopicID            string     `json:"topic_id,omitempty"`
+	ThumbnailURL       string     `json:"thumbnail_url,omitempty"`
+	ScheduledAt        *time.Time `json:"scheduled_at,omitempty"`
 	ScheduleObservedAt *time.Time `json:"schedule_observed_at,omitzero"`
 	StartedAt          *time.Time `json:"started_at,omitempty"`
 	EndedAt            *time.Time `json:"ended_at,omitempty"`

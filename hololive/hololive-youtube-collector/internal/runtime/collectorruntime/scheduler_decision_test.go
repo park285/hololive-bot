@@ -43,7 +43,6 @@ func TestRunFailureDecisionCancellationEvidence(t *testing.T) {
 	}
 }
 
-// Cleanup timeout에서 callback terminal 처리로 돌아가거나 renew/publish 손실을 중복 집계하지 않는다.
 func TestLeaseRunDecisionUsesSupervisionEvidence(t *testing.T) {
 	t.Parallel()
 

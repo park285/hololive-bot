@@ -142,7 +142,6 @@ func TestSettingsAPIHandler_UpdateSettings_AppliesAlarmAdvanceOnceAndWritesOnce(
 	}
 }
 
-// 다른 적용 경로(Pub/Sub 재적용)가 없으므로 성공으로 보고하면 운영자가 worker가 옛 값으로 도는 걸 알 수 없다.
 func TestSettingsAPIHandler_UpdateSettings_ReportsWorkerApplyFailure(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -196,8 +195,6 @@ func TestSettingsAPIHandler_UpdateSettings_RejectsZeroBeforeStoreAndWorker(t *te
 	}
 }
 
-// settings.update 응답과 settings.json 형식을 고정한다. 응답 settings와 파일은 shared settings.Settings가, runtime 키는
-// admin settings 결과 타입이 정하므로 두 패키지 중 하나만 바뀌어도 iris-console·alarm-worker 계약이 깨진다.
 func TestSettingsAPIHandler_UpdateSettings_PreservesWireAndStoredFileShape(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)

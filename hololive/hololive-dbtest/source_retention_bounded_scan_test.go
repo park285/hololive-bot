@@ -71,7 +71,6 @@ func TestSourceRetentionBoundsWindowAndRollsBackCursor(t *testing.T) {
 	require.Zero(t, cursor, "rollback은 commit되지 않은 창의 진척을 남기지 않는다")
 	requireRetentionCount(t, pool, 11000)
 
-	// 새 연결도 같은 영속 커서를 이어받으며 다시 첫 1000개만 검사한다.
 	require.Equal(t, retentionWindow{passed: 1000}, deleteRetentionWindow(t, pool, base.Add(time.Hour), 1000))
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT cursor_id FROM source_observation_retention_state`).Scan(&cursor))
 	require.Equal(t, windowEnd, cursor)
@@ -115,7 +114,6 @@ func TestSourceRetentionFixedSweepRevisitsDespiteNewTail(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, deleteRetentionBatch(t, pool, kinds, cutoffs, 1), 1)
 	assertRetentionObservationsExist(t, pool, []int64{late})
-	// 최초 순회 상한까지 완료되면 새 tail보다 앞의 해제된 prefix가 먼저 재방문된다.
 	require.Len(t, deleteRetentionBatch(t, pool, kinds, cutoffs, 1000), 1000)
 	require.Equal(t, []int64{late}, deleteRetentionBatch(t, pool, kinds, cutoffs, 1000))
 	requireRetentionCount(t, pool, 0)
@@ -160,7 +158,6 @@ func TestSourceRetentionRevisitsAfterPolicyChangeAndMissingHorizon(t *testing.T)
 	cutoff := base.Add(time.Hour)
 	require.Empty(t, deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{cutoff}, 1))
 
-	// 진행 커서 뒤의 순회 상한이 사라지고, 앞쪽에 새 kind의 오래된 원본이 생긴다.
 	_, err := pool.Exec(t.Context(), `DELETE FROM source_observations WHERE observation_key=sha256('bounded-1001'::bytea)`)
 	require.NoError(t, err)
 
@@ -171,7 +168,6 @@ func TestSourceRetentionRevisitsAfterPolicyChangeAndMissingHorizon(t *testing.T)
 	_, err = pool.Exec(t.Context(), `DELETE FROM source_observation_queue`)
 	require.NoError(t, err)
 
-	// cutoff와 활성 kind 집합이 다시 넓어져도 앞쪽을 잃지 않고 최신 원본은 보존한다.
 	kinds := []string{communityPageKind, "live_snapshot"}
 	cutoffs := []time.Time{cutoff, cutoff}
 	first := deleteRetentionBatch(t, pool, kinds, cutoffs, 1000)

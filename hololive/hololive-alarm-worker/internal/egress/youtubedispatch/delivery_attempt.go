@@ -13,20 +13,14 @@ type claimedDelivery struct {
 	outbox domain.YouTubeNotificationOutbox
 }
 
-// deliveryAttempt의 요청은 모든 members가 공유한다. 고정 뒤에는 저장된 요청만
-// 사용하고, singleton fallback은 원래 member와 그 소유권으로 별도 시도를 만든다.
-// 필드 irisRequestID는 발송이 성공했을 때 Iris 202가 돌려준 requestId이며 로그에 남기지 않는다.
 type deliveryAttempt struct {
 	members       []claimedDelivery
 	request       deliverySendRequest
 	operation     store.StartedOperation
 	irisRequestID string
 
-	// sendingStartedAt은 operation을 만든 BeginSending 호출 직전 시각이다. grouped fallback은 이 시각부터 남은 lease를 잰다.
 	sendingStartedAt time.Time
 
-	// 기존 영속 전이·formatter·audit API에 넘기는 읽기 전용 투영이다.
-	// 생성 때 한 번 만들고 singleton은 같은 backing array를 사용한다.
 	rows     []domain.YouTubeNotificationDelivery
 	outboxes []domain.YouTubeNotificationOutbox
 }
@@ -53,7 +47,6 @@ func (a *deliveryAttempt) singleton(i int) deliveryAttempt {
 	}
 }
 
-// 결과와 그 잠금은 같은 배치에 속하며 작업 goroutine 종료 뒤에만 결과를 반환한다.
 type deliveryDispatchResult struct {
 	DispatchResult
 

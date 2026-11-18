@@ -319,7 +319,7 @@ func TestSourceRetentionProtectsProjectionLeaseAndActiveSessions(t *testing.T) {
 	}
 
 	eligible := insertRetentionObservation(t, pool, communityPageKind, base, "eligible")
-	// generation 번호를 명시하여 세 가지 보호를 서로 독립적으로 검증한다.
+
 	_, err := pool.Exec(t.Context(), `INSERT INTO youtube_collection_projection_generations
 		(generation,status,row_count,projection_sha256,valid_until,activated_at) OVERRIDING SYSTEM VALUE
 		VALUES (9001,'CURRENT',0,repeat('a',64),now(),now()),
@@ -369,8 +369,6 @@ func TestSourceRetentionProtectsProjectionLeaseAndActiveSessions(t *testing.T) {
 	}
 }
 
-// 오래 이어지는 UPCOMING 세션(프리챗 등)은 스냅샷마다 application이 쌓인다. 세션별 최신 근거만 보호해야
-// 보관 기간이 지난 과거 스냅샷이 세션 종료까지 무기한 남지 않는다.
 func TestSourceRetentionProtectsOnlyLatestActiveSessionApplication(t *testing.T) {
 	t.Parallel()
 
@@ -400,7 +398,6 @@ func TestSourceRetentionProtectsOnlyLatestActiveSessionApplication(t *testing.T)
 
 	assertRetentionObservationsExist(t, pool, []int64{latest})
 
-	// 같은 video_id라도 다른 kind의 더 새 application은 세션 근거를 대체하지 않는다.
 	otherKind := insertRetentionObservation(t, pool, communityPageKind, cutoff.Add(30*time.Minute), "session-other-kind")
 	if _, err := pool.Exec(t.Context(), `INSERT INTO source_observation_applications
 		(observation_id,entity_kind_id,entity_key,decision_id)
@@ -413,7 +410,6 @@ func TestSourceRetentionProtectsOnlyLatestActiveSessionApplication(t *testing.T)
 		t.Fatalf("other-kind application released session evidence: deleted %v", got)
 	}
 
-	// 보관 기간 안의 새 근거가 들어오면 이전 최신 근거도 보호에서 풀린다.
 	recent := insertRetentionObservation(t, pool, communityPageKind, cutoff.Add(time.Hour), "session-recent")
 	if _, err := pool.Exec(t.Context(), `INSERT INTO source_observation_applications
 		(observation_id,entity_kind_id,entity_key,decision_id)

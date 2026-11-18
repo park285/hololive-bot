@@ -1,5 +1,3 @@
-// Package envload: settings core와 plane 패키지가 함께 쓰는 환경변수 원시 helper다.
-// 여기에는 core 설정 타입에 의존하지 않는 것만 둔다. 타입을 다루는 로더는 core가 소유한다.
 package envload
 
 import (
@@ -13,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
-// DotEnv: 런타임 로더가 기동 시 한 번 호출하는 .env 로드다. 파일이 없으면 무시한다.
 func DotEnv() error {
 	if err := sharedenv.LoadDotenv(sharedenv.DotenvOptions{}); err != nil {
 		return fmt.Errorf("load .env: %w", err)
@@ -43,12 +40,10 @@ func CommaSeparated(value string) []string {
 	return result
 }
 
-// HolodexAPIKey는 정본 HOLODEX_API_KEY를 읽고 앞뒤 공백을 제거한다.
 func HolodexAPIKey() string {
 	return sharedenv.String("HOLODEX_API_KEY", "")
 }
 
-// RequiredPositiveIntEnv: 값이 있으면 양의 정수여야 하고, 없으면 fallback을 쓴다.
 func RequiredPositiveIntEnv(key string, fallback int) (int, error) {
 	raw, found := os.LookupEnv(key)
 	if !found {
@@ -101,7 +96,6 @@ func requiredPositiveDurationUnitEnv(key string, fallback, unit time.Duration) (
 	return value, nil
 }
 
-// StrictDurationUnitEnv: unit 배수로 해석하며 time.Duration 범위를 넘으면 거부한다.
 func StrictDurationUnitEnv(key string, fallback, unit time.Duration) (time.Duration, error) {
 	value, err := sharedenv.Int64E(key, int64(fallback/unit))
 	if err != nil {

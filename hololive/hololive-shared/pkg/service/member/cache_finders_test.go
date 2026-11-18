@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package member
 
 import (
@@ -42,7 +22,6 @@ func TestCache_LoadAllMembers_ReturnsError(t *testing.T) {
 	}
 }
 
-// Epoch이 불확실해 PostgreSQL을 직접 읽는 우회 경로는 공유 적재가 아니므로 호출자 취소를 그대로 따른다.
 func TestCache_BypassHonorsCallerCancellation(t *testing.T) {
 	cache := newEpochTestCache(&fakeMemberEpochAuthority{epoch: 1})
 	cache.authorityHealthy.Store(false)
@@ -78,7 +57,6 @@ func TestCache_BypassHonorsCallerCancellation(t *testing.T) {
 	}
 }
 
-// 우회 경로의 전체 멤버 조회는 PostgreSQL 결과로 답하되 snapshot을 게시하지 않는다.
 func TestCache_BypassDoesNotPublishSnapshot(t *testing.T) {
 	cache := newEpochTestCache(&fakeMemberEpochAuthority{epoch: 1})
 	cache.authorityHealthy.Store(false)

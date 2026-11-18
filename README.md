@@ -52,7 +52,7 @@ bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 �
 
 ## 모듈 경로 계약 (Module Path Contract)
 
-`hololive/*`의 다섯 `go.mod`가 쓰는 `github.com/kapu/*` 모듈 경로는 go.work 전용 계약이다. 이 경로는 루트 `go.work`와 각 `go.mod`의 `replace ../…` 지시문으로만 해석되며 `go get`으로 받을 수 없다. 다섯 업무 모듈 분리는 루트 `go.work`의 `use` 목록이 소유하며, 이 목록에서 빠진 모듈은 아래 `go build`/`go test` 명령에서 바로 해석 실패한다. 외부 소비자가 없으므로 원격 경로와 맞추는 작업은 `hololive-shared`가 contracts·domain 수준으로 줄어든 뒤 모듈 수 축소와 함께 재검토한다(`DEC-20260902-hololive-module-layout-go-work-only`).
+`hololive/*`의 다섯 `go.mod`가 쓰는 `github.com/kapu/*` 모듈 경로는 go.work 전용 계약이다. 이 경로는 루트 `go.work`와 각 `go.mod`의 `replace ../…` 지시문으로만 해석되며 `go get`으로 받을 수 없다. 다섯 업무 모듈 분리는 루트 `go.work`의 `use` 목록이 소유하며, 이 목록에서 빠진 모듈은 아래 `go build`/`go test` 명령에서 바로 해석 실패한다. 외부 소비자가 없으므로 원격 경로와 맞추지 않는다. 이 계약은 2026-12-01 이후 재검토하며, 계기는 `hololive-shared`가 contracts·domain·다중 소비자 패키지만 남아 모듈 수 축소가 가능해지거나 외부 소비자가 hololive 모듈을 `go get`으로 가져와야 하는 경우다.
 
 shared-go 최초 분리 버전인 root `v2.24.0` 및 core/postgres/transport `v1.0.0`의 게시·공식 checksum·다섯 업무 모듈의 실제 공개 pin 검증을 완료했습니다. 로컬 소스 통합은 게시 버전·checksum·CI 출처 검증을 대신하지 않습니다. 기존 업무 모듈 sibling replace는 유지하되 신규 shared-go `replace`는 개발용 go.work/임시 modfile에만 둡니다.
 

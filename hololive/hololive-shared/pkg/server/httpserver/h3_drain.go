@@ -10,16 +10,6 @@ import (
 	"github.com/quic-go/quic-go/http3"
 )
 
-// h3RequestDrain은 HTTP/3 handler에서 실행 중인 요청 수를 센다.
-//
-// 세기 시작하는 지점은 handler 진입이다. 의존하는 quic-go의 http3.Server는 요청 stream을 자기 accept loop에서
-// 받아 곧바로 HEADERS를 파싱하고 그 사이에 끼어들 hook이 없다. ConnContext는 연결 단위이고 *quic.Conn에는 열린 stream을 세는
-// API가 없으며, NewRawServerConn으로 accept loop를 직접 돌리면 GOAWAY를 보내는 control stream에 접근하지 못한다.
-// 그래서 stream은 받았지만 HEADERS가 덜 도착한 요청은 세지 않는다.
-//
-// 이 틈은 판정을 성공 쪽으로만 바꾼다. 시한에 그런 stream만 남으면 shutdownH3Server는 nil을 돌려주지만 abort가
-// 연결을 닫는다. 그 요청은 handler에 닿지 않았으므로 서버 쪽 부수효과가 없고 client는 연결 종료 오류를 받는다.
-// GOAWAY 뒤의 새 stream은 quic-go가 H3_REQUEST_REJECTED로 거절하므로 이 틈은 GOAWAY 전에 받은 stream에 한정된다.
 type h3RequestDrain struct {
 	active atomic.Int64
 }
@@ -37,23 +27,15 @@ func (d *h3RequestDrain) wrap(next http.Handler) http.Handler {
 	})
 }
 
-// drained는 실행 중인 요청이 없음을 셀 수 있을 때만 true다. NewRuntimeHTTPServers 밖에서 만든 서버(nil drain)는
-// 요청을 세지 않으므로 drain을 증명하지 못한다.
 func (d *h3RequestDrain) drained() bool {
 	return d != nil && d.active.Load() == 0
 }
 
-// shutdownH3Server는 quic-go Shutdown으로 GOAWAY를 보내고 client가 연결을 닫기를 ctx 안에서 기다린다.
-// 요청이 끝나도 quic-go는 client가 닫지 않은 연결을 기다리고, CONNECTION_CLOSE 없이 사라진 client 연결은 QUIC idle
-// timeout까지 남아 종료 시한을 넘길 수 있다. 그래서 시한에 실행 중인 handler가 없으면 남은 idle 연결을 닫고 성공한다.
-// 실행 중인 handler가 있으면 그 요청을 끊으므로 ctx 오류를 종료 실패로 돌려준다(HEADERS 파싱 중인 stream은
-// h3RequestDrain 참고).
 func shutdownH3Server(ctx context.Context, server *http3.Server, drain *h3RequestDrain) error {
 	if server == nil {
 		return nil
 	}
 
-	// quic-go는 자기 ctx가 끝나면 Close로 연결과 요청을 끊는다. 끊기 전에 실행 중인 요청을 세도록 ctx를 직접 끝낸다.
 	shutdownCtx, abort := context.WithCancel(context.WithoutCancel(ctx))
 	defer abort()
 
@@ -75,7 +57,6 @@ func shutdownH3Server(ctx context.Context, server *http3.Server, drain *h3Reques
 
 		abort()
 
-		// abort한 Shutdown은 끊긴 shutdownCtx의 취소를 돌려준다. 같은 순간 정상 종료가 먼저 끝났다면 그 결과는 위 분기와 같이 판정한다.
 		if err := <-done; err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("HTTP/3 server shutdown failed: %w", err)
 		}

@@ -2,7 +2,6 @@
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-# 실제 배포 함수와 실행 구간을 임시 runtime에 적용해 완료 판정과 복원 부작용을 검증합니다.
 python3 - "$root" <<'PY'
 import json
 import socket
@@ -24,7 +23,6 @@ def function(source, name):
 
 
 def run(body, state, case):
-    # 운영 배포처럼 원격 본문을 bash -s의 stdin으로 보내 자식 명령의 stdin 소비까지 재현한다.
     result = subprocess.run(
         ['bash', '-s', '--', str(state), case, str(root)],
         input=body, capture_output=True, text=True, timeout=20,
@@ -117,14 +115,12 @@ for case in ('success', 'journal_failure', 'error_log', 'grep_failure', 'ordinar
         print(f'[PASS] native {case}: exit={result.returncode}, current={expected_current}, previous={expected_previous}, runtime={expected_runtime}')
 
 
-# 중앙(c)과 iris-seoul(b)은 rootful Podman Quadlet이다. 실제 원격 본문을 가짜 podman·systemctl·pair tool로 실행해
-# issuer 우선 교체, 이전 drop-in 복원, 후보 검사 실패의 무변경을 검증한다. b는 slot별 이름과 원장 증명 생략만 본다.
 central_functions = '\n'.join(
     match.group() for match in re.finditer(r'^([a-z_]+)\(\) \{\n.*?^\}', central, re.M | re.S)
     if match.group(1) not in ('require_collector_lease_migration', 'restore_after_failed_cutover')
 )
 central_config = central[central.index('manifest="../'):central.index('[[ "$(stat')]
-central_main = central[central.index('# 이 본문은 ssh bash -s'):]
+central_main = central[central.index('{\nif [[ "$mode" == rollback ]]'):]
 old_revision, new_revision = 'a' * 40, 'b' * 40
 old_id, new_id = 'sha256:' + 'a' * 64, 'sha256:' + 'b' * 64
 change = '20261003T000000Z'
@@ -302,7 +298,6 @@ collector_rollback = f'localhost/hololive-youtube-collector:rollback-{change}'
 issuer_rollback = f'localhost/hololive-youtube-po-sandbox:rollback-{change}'
 mutations = ('podman tag ', 'podman load ', 'podman image rm ', 'systemctl restart ', 'systemctl stop ', 'systemctl daemon-reload', 'pair activate ')
 central_cases = {
-    # case: (exit status, restored to previous pair)
     'success': (0, False), 'absent_success': (0, False),
     'substitution_failure': (1, True), 'deploy_logs_collector': (5, True), 'deploy_error_log': (1, True),
     'deploy_grep_failure': (2, True), 'signal_TERM': (143, True), 'signal_HUP': (129, True),
@@ -359,7 +354,6 @@ for slot, case in runs:
             previous_pair = current / 'artifacts/worker-profile/releases' / backup.name / service / 'previous'
             previous_pair.mkdir(parents=True)
             (previous_pair / 'profile.json').write_text('retained profile')
-            # 이전 image가 돌던 기본 unit. sync가 이미 새 revision의 unit을 설치한 상황을 만든다.
             (previous_pair / 'unit.container').write_text('[Container]\n# previous revision\n')
             (backup / 'issuer.state').write_text('present')
             (backup / 'collector.revision').write_text(old_revision)
@@ -412,12 +406,10 @@ for slot, case in runs:
             require(not any(call.startswith('pair activate ') and call.endswith('/previous') for call in calls), f'{label}: no previous pair activation', result)
             require(len(restarts) == 1, f'{label}: no restoration restart while manager outcome is unknown', result)
         elif case in ('missing_receipt', 'collector_stopped', 'inventory_failure'):
-            # 이전 pair 기준점을 만들 수 없으면 백업·태그·적재 전에 원인을 남기고 멈춘다.
             require(not backup.exists() and not changed, f'{label}: no partial backup or runtime change', result)
         elif is_check:
             require(not changed, f'{label}: check has no mutations', result)
         elif case in ('candidate_check_failure', 'absent_candidate_check_failure', 'activation_failure'):
-            # 후보 검사·drop-in 게시 실패는 :prod tag·drop-in·실행 중 pair를 바꾸지 않는다.
             require(not restarts, f'{label}: no unit restart', result)
             require(image_file(state, collector_prod).read_text() == 'old', f'{label}: collector tag baseline', result)
             require((image_file(state, issuer_prod).exists()) != issuer_absent, f'{label}: issuer tag baseline', result)
@@ -425,7 +417,6 @@ for slot, case in runs:
             require(image_file(state, 'localhost/hololive-youtube-collector:candidate').read_text() == 'new', f'{label}: candidate retained for inspection', result)
         if case in ('success', 'absent_success'):
             require(restarts == [f'systemctl restart {unit}' for unit in (issuer_unit, collector_unit)], f'{label}: issuer-first restart order', result)
-            # 원장 증명은 중앙 주 서버의 관리 socket이 있는 c에서만 한다.
             require(('lease-proof' in calls) == (slot == 'c'), f'{label}: lease proof only on central', result)
             require((state / 'dropin').read_text().strip() == 'candidate', f'{label}: candidate drop-in active', result)
             require(json.loads((live_po / 'rootfs-manifest.json').read_text())['source_revision'] == new_revision, f'{label}: issuer receipt promoted', result)
@@ -437,7 +428,6 @@ for slot, case in runs:
         if case == 'restore_failure':
             require((state / 'collector.runtime').read_text() == 'old', f'{label}: failed restore leaves the unrestarted collector', result)
         if case == 'rollback':
-            # 이전 image를 새 unit 정의로 띄우지 않도록 보존한 기본 unit도 되돌리고, 바뀐 unit은 release에 남긴다.
             release_dir = current / 'artifacts/worker-profile/releases' / backup.name / service
             require((state / f'units/hololive-youtube-collector-{slot}.container').read_text() == '[Container]\n# previous revision\n', f'{label}: previous base unit restored', result)
             require((release_dir / f'rollback-replaced-hololive-youtube-collector-{slot}.container').read_text() == '[Container]\n', f'{label}: replaced base unit retained', result)

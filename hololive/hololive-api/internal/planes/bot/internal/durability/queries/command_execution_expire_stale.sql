@@ -1,5 +1,3 @@
--- 결과를 모르는 claim을 되살리면 이미 발송된 응답이 다시 나가므로, 회수는 하지 않고 terminal로만 닫는다.
--- UNIQUE(message_id) + ON CONFLICT DO NOTHING 때문에 닫힌 뒤에도 재claim은 계속 0 rows다.
 WITH candidate AS MATERIALIZED (
     SELECT id
     FROM bot_command_executions

@@ -33,7 +33,6 @@ import (
 func infrastructureConfig(t *testing.T) *apiconfig.RuntimeConfig {
 	t.Helper()
 
-	// production provider의 CLIENT TRACKING을 실제로 지원하는 격리된 Valkey만 사용한다.
 	address := os.Getenv("TEST_VALKEY_ADDR")
 	if address == "" {
 		t.Skip("TEST_VALKEY_ADDR must identify an owned test Valkey")
@@ -51,11 +50,9 @@ func infrastructureConfig(t *testing.T) *apiconfig.RuntimeConfig {
 	postgres := settings.PostgresConfig{Host: pg.Host, Port: int(pg.Port), User: pg.User, Password: pg.Password, Database: pg.Database, SSLMode: "disable", PoolMinConns: 0, PoolMaxConns: 2}
 	valkey := settings.ValkeyConfig{Host: host, Port: port}
 
-	// infra가 process 하나의 Holodex 서비스를 bot plane 설정으로 만들므로 env 기본값을 그대로 쓴다.
 	holodex, err := settings.LoadHolodexConfig()
 	require.NoError(t, err)
 
-	// 조립만 확인하므로 외부 Holodex에 닿지 않는 loopback 주소와 시험 키를 쓴다.
 	holodex.BaseURL = "http://127.0.0.1:1"
 	holodex.APIKey = "test-holodex-key"
 
@@ -108,7 +105,6 @@ func TestAPIInfrastructureSharesCacheButSeparatesRuntimePools(t *testing.T) {
 		require.Equal(t, time.Second, pools[i].Config().PingTimeout)
 	}
 
-	// ACL은 process에 하나만 있고, 관리 변경은 같은 인스턴스의 판정에 바로 보인다.
 	require.NotNil(t, infra.acl)
 	require.False(t, infra.acl.IsRoomAllowed("3001"))
 
@@ -237,7 +233,6 @@ func TestAPIInfrastructureOwnsOneHolodexService(t *testing.T) {
 	require.NotNil(t, infra.holodex)
 }
 
-// process 하나의 Holodex 서비스는 bot plane 설정(HOLODEX_BASE_URL, HOLODEX_API_KEY 등)으로 만들어야 한다.
 func TestBuildHolodexServiceUsesBotPlaneHolodexConfig(t *testing.T) {
 	t.Parallel()
 
@@ -280,8 +275,6 @@ func TestBuildHolodexServiceUsesBotPlaneHolodexConfig(t *testing.T) {
 	}
 }
 
-// newHolodexTestMemberCache는 migration 시드 DB를 읽는 member cache다. 공식 일정 식별 색인은 멤버 적재에 실패하면
-// 기동 오류이므로 Holodex 서비스 시험도 실제 멤버 원천을 준다.
 func newHolodexTestMemberCache(t *testing.T) *member.Cache {
 	t.Helper()
 

@@ -217,7 +217,6 @@ func newSettlementFixture(t *testing.T, count int, cancel context.CancelFunc) *s
 
 	engine.config.MaxRetries = 3
 	engine.config.RetryBackoff = time.Minute
-	// 운영 조립처럼 엔진과 전이 저장소가 같은 lease를 쓰고, fallback 개별 발송 예산(DeliverySendTimeout + 5s)이 남게 한다.
 	engine.config.LockTimeout = time.Minute
 	engine.config.DeliverySendTimeout = 30 * time.Second
 
@@ -882,7 +881,6 @@ func reclaimReissuedSettlement(t *testing.T, f *settlementFixture) *deliveryGrou
 	require.NoError(t, err)
 	require.Empty(t, claimed, "committed reissue retains normal retry backoff")
 
-	// 테스트에서 due 시각만 앞당겨 대기 경과를 재현한다. 상태·잠금·version은 실제 claim이 전이한다.
 	_, err = f.pool.Exec(t.Context(), `UPDATE youtube_notification_delivery SET next_attempt_at=clock_timestamp()-interval '1 second' WHERE id=ANY($1)`, collectDeliveryIDs(f.rows))
 	require.NoError(t, err)
 

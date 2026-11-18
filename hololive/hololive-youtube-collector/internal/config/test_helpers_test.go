@@ -6,7 +6,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
-// 테스트가 패키지 디렉터리에서 실행되므로 상대 경로로 둔다.
 const collectorProfileFixture = "testdata/stack-worker-profile-youtube-collector.json"
 
 const collectorInstanceC = "youtube-collector-c"

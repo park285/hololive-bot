@@ -38,7 +38,6 @@ func TestHourOfDayEnvReadsValidValues(t *testing.T) {
 	}
 }
 
-// 키가 없을 때만 기본값을 쓴다.
 func TestHourOfDayEnvUsesDefaultWhenUnset(t *testing.T) {
 	settingstest.UnsetEnv(t, "TEST_WORKER_CONFIG_HOUR")
 
@@ -47,7 +46,6 @@ func TestHourOfDayEnvUsesDefaultWhenUnset(t *testing.T) {
 	assert.Equal(t, 9, hour)
 }
 
-// 잘못된 값과 빈 값은 기본값으로 바뀌지 않고 key를 담은 오류가 된다.
 func TestHourOfDayEnvRejectsInvalidValues(t *testing.T) {
 	for _, value := range []string{"", "  ", "noon", "-1", "24", "99"} {
 		t.Setenv("TEST_WORKER_CONFIG_HOUR", value)
@@ -58,7 +56,6 @@ func TestHourOfDayEnvRejectsInvalidValues(t *testing.T) {
 	}
 }
 
-// runner 스위치의 잘못된 값은 "꺼짐"으로 읽히지 않고 기동 오류로 드러난다.
 func TestLoadRuntimeRejectsInvalidBackgroundRunnerSwitch(t *testing.T) {
 	setBackgroundRunnerRuntimeEnv(t)
 	t.Setenv(celebrationRunnerEnabledEnv, "maybe")
@@ -68,7 +65,6 @@ func TestLoadRuntimeRejectsInvalidBackgroundRunnerSwitch(t *testing.T) {
 	}
 }
 
-// 켜진 runner의 잘못된 설정 값은 기본값으로 바뀌지 않고 기동 오류가 되고, 꺼진 runner의 같은 키는 읽지 않는다.
 func TestLoadRuntimeValidatesBackgroundRunnerConfigOnlyWhenEnabled(t *testing.T) {
 	for _, tc := range []struct {
 		switchKey, key, value string
@@ -119,7 +115,6 @@ func TestLoadRuntimeReadsEnabledBackgroundRunnerConfig(t *testing.T) {
 	})
 }
 
-// 수집 설정 파일이 있으면 세션 키 파일도 있어야 한다. 키만 있는 것은 수집이 꺼진 상태다.
 func TestLoadRuntimeXSpacesPaths(t *testing.T) {
 	const (
 		configFile = "/run/hololive-bot/x-spaces/config.json"

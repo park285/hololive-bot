@@ -12,8 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 )
 
-// AddAlarm은 채팅방의 채널·멤버별 알림 종류를 저장하고 새 종류가 추가됐는지 반환한다. 구독 캐시는 DB 변경 전에
-// 무효화하므로 commit 뒤에는 캐시 작업이 없다.
 func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
 	startedAt := as.lockCacheMutation("add")
 	defer as.cacheMutationMu.Unlock()
@@ -46,7 +44,6 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 		return false, nil
 	}
 
-	// commit 이후 요청이 취소되거나 cache가 끊겨도 오래된 positive set을 읽지 않게 한다.
 	if err := as.prepareAddedAlarmCache(ctx, mutation.record.ChannelID, mutation.newlyAddedTypes); err != nil {
 		opErr = err
 		return false, fmt.Errorf("prepare alarm cache before commit: %w", err)
@@ -56,7 +53,6 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheCleanupTimeout)
 		defer cancel()
 
-		// commit 결과가 불명확해도 DB를 다시 쓰지 않고 registry만 실제 구독에 맞춘다.
 		opErr = errors.Join(persistErr, as.cleanupChannelRegistryIfEmpty(cleanupCtx, mutation.record.ChannelID))
 
 		return false, fmt.Errorf("persist add alarm mutation: %w", opErr)

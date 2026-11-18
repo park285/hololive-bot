@@ -108,8 +108,6 @@ for name in "${ordered[@]:keep}"; do
       ;;
   esac
 
-  # 추적 중인 파일은 절대 지우지 않는다. artifacts/*는 gitignore 대상이지만
-  # .gitignore 부정 규칙으로 추적 예외가 생길 수 있어, 경로마다 직접 확인한다.
   if ! git -C "$REPO_ROOT" check-ignore -q -- "$candidate_real"; then
     printf '  SKIP (not gitignored)   %s\n' "$name" >&2
     skipped=$((skipped + 1))

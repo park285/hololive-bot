@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package messagestrings
 
 import (
@@ -47,8 +27,6 @@ type queryRunner interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// Store는 message_strings를 기동 시 한 번 적재하고 조회한다. 운영 중 재적재나 코드 대체 문구는 없다.
-// 각 runtime은 Load·Validate 실패 시 기동을 거절한다.
 type Store struct {
 	pool   queryRunner
 	logger *slog.Logger
@@ -77,8 +55,6 @@ func (s *Store) Load(ctx context.Context) error {
 	return nil
 }
 
-// Requirements는 runtime이 기동 때 확인할 message_strings 계약이다. Keys는 값이 비어 있지 않아야 하고,
-// Namespaces는 동적 key로 조회하는 namespace라 적어도 한 행이 있어야 한다.
 type Requirements struct {
 	Keys       []Key
 	Namespaces []string
@@ -117,14 +93,12 @@ func (s *Store) Validate(requirements Requirements) error {
 	return nil
 }
 
-// 검증된 key에서는 일어나지 않으므로 metric이 오르면 검증 목록 누락이나 Load 누락 같은 조립 결함이다.
 func (s *Store) Text(key Key) string {
 	value, _ := s.Lookup(key.Namespace, key.Name)
 
 	return value
 }
 
-// 없으면 ("", false)이며 호출자가 원문을 쓴다.
 func (s *Store) Lookup(namespace, key string) (string, bool) {
 	if s == nil {
 		observeLookupMiss(lookupMissReasonUnloaded, namespace)

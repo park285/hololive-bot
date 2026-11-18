@@ -11,10 +11,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// StartStore는 첫 관측의 표시 정보를 고정하여 제목 변경에 따른 원장 충돌을 막는다.
 type StartStore struct{ Pool *pgxpool.Pool }
 
-// Remember는 같은 스페이스의 최초 스냅샷을 반환한다. 신규 방은 이 자료로만 수렴한다.
 func (s StartStore) Remember(ctx context.Context, payload domain.XSpaceDispatchPayload) (domain.XSpaceDispatchPayload, error) {
 	raw, err := jsonv2.Marshal(payload)
 	if err != nil {
@@ -25,7 +23,6 @@ func (s StartStore) Remember(ctx context.Context, payload domain.XSpaceDispatchP
 		return payload, fmt.Errorf("store X space start: %w", err)
 	}
 
-	// 별도 statement의 새 snapshot으로 동시 INSERT가 commit한 행도 읽는다.
 	if err := s.Pool.QueryRow(ctx, loadStartSQL, payload.SpaceID).Scan(&raw); err != nil {
 		return payload, fmt.Errorf("read X space start: %w", err)
 	}

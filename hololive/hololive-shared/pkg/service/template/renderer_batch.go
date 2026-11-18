@@ -9,7 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// RenderRequest는 RenderBatch의 항목 하나입니다. 채널 override와 본문 변형 선택은 Render와 같습니다.
 type RenderRequest struct {
 	Key       domain.TemplateKey
 	ChannelID string
@@ -17,7 +16,6 @@ type RenderRequest struct {
 	Data      any
 }
 
-// RenderResult는 RenderBatch의 항목별 결과입니다. Err가 있으면 Text는 비어 있습니다.
 type RenderResult struct {
 	Text string
 	Err  error
@@ -34,8 +32,6 @@ type templateLookup struct {
 	err  error
 }
 
-// 호출 시작 전에 끝난 저장은 모든 항목에 보이며 저장과 겹친 호출은 이전 버전을 쓸 수 있습니다(Render와 같은 경계). 결과는 요청과 같은 순서·길이입니다. Template 부재와 실행 실패는 항목별
-// Err이며, 버전 조회 실패와 취소는 결과 없이 오류를 돌려줍니다. 템플릿 획득 대기는 호출 전체에 최대 5초입니다.
 func (r *Renderer) RenderBatch(ctx context.Context, requests []RenderRequest) ([]RenderResult, error) {
 	if len(requests) == 0 {
 		return []RenderResult{}, nil
@@ -70,7 +66,6 @@ func (r *Renderer) RenderBatch(ctx context.Context, requests []RenderRequest) ([
 		results[i].Text = text
 	}
 
-	// 실행까지 가지 않은 항목만 있어도 취소된 호출은 결과 없이 실패합니다.
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("render batch: %w", err)
 	}
@@ -83,7 +78,6 @@ func (request RenderRequest) selector() templateSelector {
 }
 
 func (r *Renderer) getTemplates(ctx context.Context, requests []RenderRequest) (map[templateSelector]templateLookup, error) {
-	// Render와 같이 최초 pool 대기부터 제한하며 소스 재확인으로 예산을 연장하지 않습니다.
 	ctx, cancel := context.WithTimeout(ctx, templateLoadTimeout)
 	defer cancel()
 
@@ -149,8 +143,6 @@ func (r *Renderer) getTemplates(ctx context.Context, requests []RenderRequest) (
 	return lookups, nil
 }
 
-// resolveTemplates는 선택자마다 채널 override를 기본값보다 우선해 현재 행과 버전을 한 문장으로 고릅니다.
-// 반환 map의 key는 selectors의 위치이며 행이 없는 선택자는 빠집니다.
 func (r *Renderer) resolveTemplates(ctx context.Context, selectors []templateSelector) (map[int]cacheKey, error) {
 	keys := make([]string, len(selectors))
 	channels := make([]string, len(selectors))

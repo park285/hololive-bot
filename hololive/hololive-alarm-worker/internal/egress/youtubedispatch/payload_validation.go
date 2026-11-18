@@ -8,8 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// validateOutboxPayload는 실패한 행을 묶음에서 빼 개별 발송하게 한다. 식별자는 video_id·post_id 대신 outbox ContentID나
-// canonical_post_id도 인정하는 기존 호환 기준이지만, 묶음 URL은 video_id·post_id로만 만든다.
 func validateOutboxPayload(item *domain.YouTubeNotificationOutbox) bool {
 	switch item.Kind {
 	case domain.OutboxKindNewVideo:

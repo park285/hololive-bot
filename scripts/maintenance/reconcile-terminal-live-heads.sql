@@ -1,5 +1,3 @@
--- 명시적으로 승인한 과거 projection 복구만 수행한다. preview 원본을 private 파일에 보존한다.
--- psql -v expected_count=N -v expected_digest=PREVIEW_DIGEST -f THIS_FILE
 \set ON_ERROR_STOP on
 \if :{?expected_count}
 \else
@@ -15,7 +13,6 @@ BEGIN;
 SET LOCAL statement_timeout = '10s';
 SET LOCAL lock_timeout = '3s';
 SET LOCAL TIME ZONE 'UTC';
--- 스냅샷·session·head보다 먼저 exclusive 전역 잠금을 잡아 모든 관측 writer를 배제한다.
 SELECT public.lock_youtube_live_runtime_state();
 SELECT set_config('iris.live_head_repair.expected_count', :'expected_count', true);
 SELECT set_config('iris.live_head_repair.expected_digest', :'expected_digest', true);
@@ -29,7 +26,6 @@ BEGIN
        OR current_setting('iris.live_head_repair.expected_digest') !~ '^[0-9a-f]{32}$' THEN
         RAISE EXCEPTION 'invalid bounded snapshot precondition';
     END IF;
-    -- 원본 표에는 사용자 trigger가 없어야 한다. 수명 모델은 아래에서 명시적으로 갱신한다.
     IF EXISTS (SELECT 1 FROM pg_trigger t
                WHERE t.tgrelid IN ('public.youtube_live_sessions'::regclass,
                                    'public.youtube_live_reconciliation_heads'::regclass)
@@ -58,13 +54,11 @@ DECLARE
     actual_digest text;
     changed integer;
 BEGIN
-    -- 전역 잠금 뒤 정본 session → head, 각 단계는 video_id 순서.
     PERFORM p.video_id FROM public.youtube_live_sessions p
     JOIN terminal_head_repair t USING (video_id) ORDER BY p.video_id FOR UPDATE OF p;
     PERFORM h.video_id FROM public.youtube_live_reconciliation_heads h
     JOIN terminal_head_repair t USING (video_id) ORDER BY h.video_id FOR UPDATE OF h;
 
-    -- 잠금 대기 중 변경을 재검사하고 잠금 획득 뒤의 원본으로만 차분을 검증한다.
     UPDATE terminal_head_repair t SET original_head = to_jsonb(h), canonical_end = p.ended_at
     FROM public.youtube_live_sessions p JOIN public.youtube_live_reconciliation_heads h USING (video_id)
     WHERE t.video_id = h.video_id;
@@ -99,7 +93,6 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'terminal head repair postcondition failed';
     END IF;
-    -- 바꾼 head의 수명 모델 행을 같은 트랜잭션에서 재계산한다.
     PERFORM public.refresh_youtube_live_runtime_state(ARRAY(
         SELECT video_id FROM terminal_head_repair ORDER BY video_id));
 END $$;

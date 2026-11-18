@@ -27,7 +27,6 @@ func (r *identityRepository) FindByIdentity(ctx context.Context, kind domain.Out
 		return nil, fmt.Errorf("find tracking by identity: canonical identity: %w", err)
 	}
 
-	// 행은 기본 키 (kind, canonical_content_id) 하나로 찾는다.
 	var records []domain.YouTubeContentAlarmTracking
 
 	if err := dbx.SelectSQL(ctx, r.db, &records, "find tracking by identity: query row",
@@ -43,7 +42,6 @@ func (r *identityRepository) FindByIdentity(ctx context.Context, kind domain.Out
 	return &records[0], nil
 }
 
-// tracking upsert의 갱신 식은 상수 조각만으로 정해지므로 호출마다 조립하지 않고 초기화 때 한 번 만든다.
 const (
 	trackingFinalActualPublishedExpr = `COALESCE(youtube_content_alarm_tracking.actual_published_at, EXCLUDED.actual_published_at)`
 	trackingFinalAlarmSentExpr       = `CASE

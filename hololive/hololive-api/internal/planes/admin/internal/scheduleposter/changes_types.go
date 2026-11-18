@@ -34,7 +34,6 @@ type postAnswer struct {
 	Kind         string
 }
 
-// matchItem은 대응 모델이 돌려준 항목이다. 글 본문에서 나온 신뢰할 수 없는 값이라 judgeItems가 검증한 뒤에만 쓴다.
 type matchItem struct {
 	Row      *int                  `json:"row"`
 	Date     string                `json:"date"`
@@ -45,19 +44,14 @@ type matchItem struct {
 	Evidence string                `json:"evidence"`
 }
 
-// errChangeServiceFailed는 어느 글도 처리할 수 없는 실패다(키·권한·할당량·요청 꼴·연결 실패). 기록하지 않고 그 tick의 남은 대상을 모두 멈춘다.
 var errChangeServiceFailed = errors.New("schedule poster change detection service failed")
 
-// errChangeOutcomeUnknown은 글 탓인지 알 수 없는 실패다. 기록하지 않고 그 멤버를 멈추며, 종단 기준이 지난 글은 reasonUnavailable로 닫는다.
 var errChangeOutcomeUnknown = errors.New("schedule poster change outcome is unknown")
 
-// errMatchBlocked는 Vertex가 대응 입력을 차단한 것이다. 다시 보내도 같으므로 재시도하지 않는다.
 var errMatchBlocked = errors.New("schedule poster match input blocked")
 
-// errBadAnswer는 모델 응답을 해석할 수 없거나 스키마를 어긴 것이다. 대응은 재시도 한 묶음의 모든 시도가 이 실패일 때만 reasonBadAnswer로 닫는다.
 var errBadAnswer = errors.New("schedule poster model answer is malformed")
 
-// postFaultError는 글 때문에 처리할 수 없다는 뜻이다. 다시 보내도 같으므로 재시도하지 않고 reason으로 바로 닫는다.
 type postFaultError struct {
 	reason string
 	err    error

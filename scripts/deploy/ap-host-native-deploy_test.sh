@@ -59,7 +59,6 @@ if [[ -z "${permission_fn}" ]]; then
 elif (
   sudo() {
     [[ "${1:-}" != "-n" ]] || shift
-    # 운영 AP의 구형 coreutils에서도 실행 가능한 명령이어야 합니다.
     if [[ "${1:-}" == chmod && " $* " == *" -P "* ]]; then
       return 1
     fi
@@ -124,13 +123,9 @@ env XDG_RUNTIME_DIR="${native_test_runtime}" DBUS_SESSION_BUS_ADDRESS="unix:path
   bash "${ROOT_DIR}/scripts/deploy/ap-host-native-cutover_test.sh"
 
 native_units_fns="$(awk '/^stop_collector_unit_and_require_inactive\(\) \{/,/^}$/; /^stop_native_units_and_require_inactive\(\) \{/,/^}$/; /^native_restore_recorded_runtime\(\) \{/,/^}$/; /^restore_native_after_failed_cutover\(\) \{/,/^}$/; /^native_cutover_failed\(\) \{/,/^}$/; /^arm_native_cutover_restore\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
-# cutover 최상위 정지 단계: 복원 ERR trap 설치부터 새 release의 첫 설치 변경 직전까지다.
 cutover_stop_step='arm_native_cutover_restore; native_cutover_run stop stop_native_units_and_require_inactive'
 stop_fixture="$(mktemp -d)"
 trap 'rm -rf "${stop_fixture}"' EXIT
-# 가짜 systemctl은 active unit을 파일로 두고 호출을 기록한다. socket stop은 Requires=처럼 service도 멈춘다.
-# collector_sticks가 있으면 disable --now 뒤에도 collector가 active로 남는다. sudo는 systemctl만 실행하고
-# 나머지 host 변경(install/ln/rm)은 기록만 한다. po_restore_fails가 있으면 이전 PO 복원이 실패한다.
 run_native_units() (
   local state="$1" script="$2"
   po_service=hololive-youtube-po.service
@@ -144,7 +139,6 @@ run_native_units() (
   # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 경로입니다.
   releases_root="${state}/releases" previous_link="${state}/previous"
   mkdir -p "${old_target}"
-  # 기존 unit 순서 fixture는 실제 명령 완료를 동기 실행합니다. 신호/receipt는 별도 실제 child 회귀가 소유합니다.
   native_cutover_run() {
     shift
     # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 완료 상태입니다.
@@ -152,8 +146,6 @@ run_native_units() (
     ( set -e; "$@"; )
   }
   native_cutover_release_guard() { :; }
-  # 이 fixture는 유효한 이전 pair를 전제로 unit 정지/복원 전이를 검사한다.
-  # 실제 checksum·profile 검증은 아래 독립 release fixture가 실행한다.
   native_rollback_validate() { [[ -d "$1" ]]; }
   sudo() {
     [[ "${1:-}" != "-n" ]] || shift
@@ -190,7 +182,6 @@ run_native_units() (
   eval "${script}"
 )
 run_native_stop() { run_native_units "$1" stop_native_units_and_require_inactive; }
-# 원격 script처럼 set -e가 살아 있도록 조건(if/!/&&/||) 밖에서 실행하고 종료 상태를 native_rc에 남긴다.
 run_native_case() {
   set +e
   run_native_units "$1" "$2" >"$1/stdout" 2>"$1/stderr"
@@ -250,7 +241,6 @@ else
   pass "ap-host-native cutover fails closed while the collector stays active"
 fi
 
-# 실패한 cutover는 ERR trap으로 복원하고 원래 실패 상태(여기서는 false의 1)로 끝난다.
 failed_cutover='set -Eeuo pipefail; arm_native_cutover_restore; false'
 restore_warning='could not be restored'
 restore_state="$(stop_case restore "${running_units[@]}")"
@@ -276,7 +266,6 @@ else
   record_fail "ap-host-native failed-cutover restore must stop at a failed step, warn, and keep the cutover status"
 fi
 
-# set -E로 ERR trap이 명령 치환에도 상속된다. 치환 안의 실패도 복원은 cutover shell에서 한 번만 하고 원래 상태로 끝난다.
 substitution_state="$(stop_case restore-substitution "${running_units[@]}")"
 run_native_case "${substitution_state}" 'set -Eeuo pipefail; arm_native_cutover_restore; ready="$(false)"; printf "%s\n" "${ready}"'
 if (( native_rc == 1 )) &&
@@ -489,10 +478,8 @@ else
   record_fail "ap-host-native rollback orchestration must succeed when restore and completion checks pass"
 fi
 
-# 두 번째 SSH 호출은 실제 복원 payload입니다.
 restore_payload="${tmp}/success/call-2.stdin"
 
-# 수동 rollback이 원격에 보낸 payload에서 검증 뒤 첫 복원 변경 전까지의 정지 단계를 같은 가짜 systemctl로 실행한다.
 rollback_stop_step="$(awk '/^native_rollback_validate "[$]previous_target"$/ { on = 1; next } on && /^sudo -n install / { exit } on' "${restore_payload}")"
 rollback_state="$(stop_case rollback "${running_units[@]}")"
 run_native_case "${rollback_state}" "set -euo pipefail; ${rollback_stop_step}"

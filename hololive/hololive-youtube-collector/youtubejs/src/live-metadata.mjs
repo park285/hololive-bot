@@ -1,7 +1,6 @@
 import { runUpstream } from "./upstream-errors.mjs";
 import { hasRFC3339Shape, isCalendarRFC3339 } from "./rfc3339.mjs";
 
-// raw player scheduledStartTime의 epoch seconds 형식이며 라이브 확인 해석기와 공유합니다.
 export const epochSecondsPattern = /^[1-9]\d*$/;
 
 export async function fetchLiveMetadata(innertube, videoId) {
@@ -38,7 +37,6 @@ export async function fetchLiveMetadata(innertube, videoId) {
   return parseRawLiveMetadata(response.data, id);
 }
 
-/** 요청 영상의 엄격한 live 상태·예정 시각과, 시각이 가려진 경우의 확인된 접근 제한 사유를 추출합니다. */
 export function parseRawLiveMetadata(raw, expectedVideoId) {
   if (!isRecord(raw)) {
     throw parserDrift("raw player data is not an object");
@@ -97,7 +95,6 @@ export function parseRawLiveMetadata(raw, expectedVideoId) {
   };
 }
 
-// 멤버십 안내가 예정 시각을 가린 실제 응답만 분류하며 번역된 reason 문자열은 판정에 쓰지 않습니다.
 function hasPaidAccessRestriction(playabilityStatus) {
   if (playabilityStatus?.status !== "UNPLAYABLE" || playabilityStatus.errorScreen == null) {
     return false;
@@ -115,7 +112,6 @@ function hasPaidAccessRestriction(playabilityStatus) {
   return true;
 }
 
-// 실제 UPCOMING 응답은 microformat 대신 offline slate에 epoch seconds를 제공할 수 있습니다.
 function offlineSlateStartTimestamp(playabilityStatus, expectedVideoId) {
   if (playabilityStatus == null) {
     return undefined;

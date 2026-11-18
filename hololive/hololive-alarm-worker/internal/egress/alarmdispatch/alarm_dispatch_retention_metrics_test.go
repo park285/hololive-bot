@@ -21,7 +21,6 @@ import (
 
 const retentionMetricDeliveryTable = "alarm_dispatch_deliveries"
 
-// 등록된 전역 counter의 delta를 검사하므로 이 테스트와 하위 테스트는 병렬 실행하지 않습니다.
 func TestAlarmDispatchRetentionMetricsRollbackEveryPhase(t *testing.T) {
 	for _, phase := range []struct {
 		name  string
@@ -101,7 +100,6 @@ func TestAlarmDispatchRetentionMetricsCommitBoundary(t *testing.T) {
 			case "commit_rejected":
 				installAlarmDispatchRetentionFault(t, pool, "alarm_dispatch_events", "", "RAISE EXCEPTION 'deferred retention failure' USING ERRCODE = 'P0001';", true)
 			case "commit_response_lost":
-				// 실제 commit 후 응답만 유실시켜 caller가 삭제를 재시도하거나 확정으로 계상하지 않음을 검사합니다.
 				store.resultErr = lostResponse
 			}
 

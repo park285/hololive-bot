@@ -195,7 +195,6 @@ func seedPendingClaimGateDelivery(
 	return delivery
 }
 
-// (kind, content_id) 유니크 때문에 content_id는 canonical 표기를 쓴다.
 func recordServedClaimGateDelivery(
 	t *testing.T,
 	db *pgxpool.Pool,
@@ -430,7 +429,6 @@ func TestProcessPendingDeliveriesSentLedgerAfterPrepareBlocksSend(t *testing.T) 
 	require.Equal(t, string(domain.OutboxStatusPending), pending.Status)
 	require.NotNil(t, pending.LockedAt)
 
-	// 잠금 만료를 기다리지 않도록 claim 시각만 과거로 옮긴다.
 	_, err = db.Exec(ctx, "UPDATE youtube_notification_delivery SET locked_at = $2 WHERE id = $1", row.ID, now.Add(-time.Hour))
 	require.NoError(t, err)
 
@@ -547,7 +545,6 @@ func TestOutcomeUnknownInOneRoomDoesNotDeferOtherRoomOfSamePost(t *testing.T) {
 
 	outbox, postID := newTwoRoomClaimGateOutbox(t, db, "unknown-split", now.Add(-2*time.Minute))
 
-	// BatchSize 1에서 결과 불명 방이 먼저 claim되도록 due 시각을 앞에 둔다.
 	deliveries := make([]domain.YouTubeNotificationDelivery, 0, 2)
 
 	for i, roomID := range []string{unknownRoom, nextRoom} {

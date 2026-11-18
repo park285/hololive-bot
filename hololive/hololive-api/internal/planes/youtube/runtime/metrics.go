@@ -50,7 +50,6 @@ var youtubeWorkQueueUtilization = promauto.NewGauge(prometheus.GaugeOpts{
 	Help: "Fraction of the bounded in-process YouTube plane work queue currently occupied.",
 })
 
-// consume_total의 result 라벨 값이다.
 const (
 	consumeResultSuccess         = "success"
 	consumeResultRetry           = "retry"
@@ -61,7 +60,6 @@ const (
 	consumeResultDeadLetterError = "dead_letter_error"
 )
 
-// 드문 실패도 첫 사건부터 increase()/rate()에 잡히도록 consume 결과마다 0 시리즈를 미리 만든다.
 var youtubeConsumeResults = []string{
 	consumeResultSuccess,
 	consumeResultRetry,
@@ -77,14 +75,12 @@ var youtubeConsumeTotal = precreateCounterVec(promauto.NewCounterVec(prometheus.
 	Help: "YouTube plane consume outcomes after collector publish.",
 }, []string{"result"}), youtubeConsumeResults)
 
-// projection 보존 단계가 삭제·실패를 보고하는 table 라벨 값이다.
 const (
 	projectionRetentionLeasesTable      = "youtube_collection_job_leases"
 	projectionRetentionReasonsTable     = "youtube_collection_target_reasons"
 	projectionRetentionTargetsTable     = "youtube_collection_targets"
 	projectionRetentionGenerationsTable = "youtube_collection_projection_generations"
-	// 실패한 source 보존 단계의 테이블을 특정하지 못한 경우의 table 라벨 값이다.
-	retentionUnknownTable = "none"
+	retentionUnknownTable               = "none"
 )
 
 var youtubeRetentionTables = slices.Concat(sourceobservation.RetentionTables(), []string{
@@ -99,8 +95,6 @@ var youtubeRetentionDeletedTotal = precreateCounterVec(promauto.NewCounterVec(pr
 	Help: "Total rows deleted by the YouTube plane retention worker.",
 }, []string{"table"}), youtubeRetentionTables)
 
-// 원본 보존은 커서로 만료 원본을 순회한다. 삭제 수(youtubeRetentionDeletedTotal)만으로는 보호 행을 지나는 진척과
-// 순회 주기를 알 수 없으므로 검사량과 순회 완료를 따로 센다. 검사량 - 삭제량이 보호·잠금으로 남긴 수다.
 var youtubeRetentionSourceScannedTotal = promauto.NewCounter(prometheus.CounterOpts{
 	Name: "hololive_youtube_plane_retention_source_scanned_total",
 	Help: "Expired source observations the retention cursor moved past, including deleted ones; subtracting the source_observations deleted total gives the rows kept as protected or locked.",
@@ -116,7 +110,6 @@ var youtubeRetentionErrorsTotal = precreateCounterVec(promauto.NewCounterVec(pro
 	Help: "Total YouTube plane retention ticks that failed.",
 }, []string{"table"}), slices.Concat(youtubeRetentionTables, []string{retentionUnknownTable}))
 
-// Retention tick의 phase 라벨 값이다. 두 단계는 비용 분포가 달라 같은 시리즈에 섞지 않는다.
 const (
 	retentionPhaseSource     = "source"
 	retentionPhaseProjection = "projection"
@@ -157,7 +150,6 @@ var dbOperationLabels = []string{
 	string(dbOperationCollectionSnapshot),
 }
 
-// 슬롯 상한(DBOperationConcurrency)을 넘는 작업이 누구 때문에 얼마나 기다렸는지 가르기 위해 1 ms~30 s를 덮는다.
 var dbSlotBuckets = []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
 
 var youtubeDBSlotWaitSeconds = precreateObserverVec(promauto.NewHistogramVec(prometheus.HistogramOpts{
@@ -176,7 +168,6 @@ func observeSeconds(vec *prometheus.HistogramVec, label string, started time.Tim
 	vec.WithLabelValues(label).Observe(time.Since(started).Seconds())
 }
 
-// 첫 증가에 시리즈가 생기면 Prometheus가 그 샘플을 기준점으로 삼아 첫 사건을 0으로 센다.
 func precreateCounterVec(vec *prometheus.CounterVec, values []string) *prometheus.CounterVec {
 	for _, value := range values {
 		vec.WithLabelValues(value)

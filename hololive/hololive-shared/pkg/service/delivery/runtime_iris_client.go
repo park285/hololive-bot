@@ -21,12 +21,6 @@ const (
 
 var errRuntimeIrisClientClosed = errors.New("runtime iris client: client is closed")
 
-// RuntimeIrisClient는 IRIS_BASE_URL_FILE 회전을 따라 Iris client를 다시 묶는다.
-//
-// 회전으로 교체된 client는 시간 grace가 아니라 in-flight 참조 수로 닫는다. 각 호출은 시작할 때
-// 현재 binding을 acquire하고 끝날 때 release하며, current 자리도 참조 하나를 가진다. 그래서 교체
-// 뒤 마지막 호출이 release하는 순간에만 이전 client가 닫히고, retry를 포함해 진행 중인 요청은
-// 끊기지 않는다. Refresh는 호출 goroutine에서 single-flight로 실행하며 resolver panic을 복구하지 않는다.
 type RuntimeIrisClient struct {
 	resolveBaseURL func() (string, error)
 	h3DialGuard    *runtimeIrisH3DialGuard
@@ -42,7 +36,6 @@ type RuntimeIrisClient struct {
 	closed            bool
 }
 
-// 참조 수는 mu 아래에서만 바꾼다.
 type runtimeIrisBinding struct {
 	baseURL string
 	client  *iris.APIClient
@@ -51,8 +44,6 @@ type runtimeIrisBinding struct {
 
 var _ iris.BotClient = (*RuntimeIrisClient)(nil)
 
-// NewRuntimeIrisClient는 typed Iris 설정으로 client를 만든다. 빈 token, 빈 Base URL 원천, 초기 Base URL
-// 해석·client 생성 오류는 지연하지 않고 즉시 반환한다. 옵션 opts는 기본 옵션 뒤에 적용된다.
 func NewRuntimeIrisClient(ctx context.Context, config settings.IrisConfig, logger *slog.Logger, opts ...iris.ClientOption) (*RuntimeIrisClient, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -158,7 +149,6 @@ func (c *RuntimeIrisClient) snapshotFreshLocked() bool {
 	return !c.resolveValidUntil.IsZero() && c.now().Before(c.resolveValidUntil) && (c.resolveErr != nil || c.current != nil)
 }
 
-// Defer는 대기자를 깨우기만 하고 panic을 복구하지 않으므로, resolver나 client 생성의 panic은 refresh를 시작한 호출자에게 전파된다.
 func (c *RuntimeIrisClient) refresh(done chan struct{}) {
 	var (
 		baseURL string
@@ -192,7 +182,6 @@ func (c *RuntimeIrisClient) refresh(done chan struct{}) {
 		return
 	}
 
-	// 해석한 Base URL을 마지막에 적용해 호출자 옵션이 회전 대상을 덮지 못하게 한다.
 	opts := make([]iris.ClientOption, 0, len(c.clientOpts)+1)
 
 	opts = append(opts, c.clientOpts...)
@@ -265,7 +254,6 @@ func (c *RuntimeIrisClient) closeClient(client *iris.APIClient) {
 	}
 }
 
-// Close는 이후 호출을 거절한다. 진행 중인 호출이 있으면 현재 client는 마지막 release가 닫는다.
 func (c *RuntimeIrisClient) Close() error {
 	c.mu.Lock()
 
@@ -294,9 +282,6 @@ func (c *RuntimeIrisClient) Close() error {
 
 	return nil
 }
-
-// 위임 메서드는 시그니처가 달라 공통 헬퍼로 합치지 않는다. 각 메서드는 binding을 acquire해 호출이
-// 끝날 때까지 참조를 유지하고, SDK 오류는 %w로 감싸 errors.Is 분류(ErrNotSent·ErrTransport 등)를 보존한다.
 
 func (c *RuntimeIrisClient) SendMessageAccepted(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	binding, err := c.acquire(ctx)
@@ -373,7 +358,6 @@ func (c *RuntimeIrisClient) SendMarkdown(ctx context.Context, room, markdown str
 	return out, nil
 }
 
-// SendRichText는 Markdown 본문을 Iris가 카카오 네이티브 서식으로 변환해 보내게 한다.
 func (c *RuntimeIrisClient) SendRichText(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	binding, err := c.acquire(ctx)
 	if err != nil {
@@ -404,7 +388,6 @@ func (c *RuntimeIrisClient) GetReplyStatus(ctx context.Context, requestID string
 	return out, nil
 }
 
-// Ping은 GET /ready를 한 번 확인한다. 재시도와 로그는 호출자가 소유한다.
 func (c *RuntimeIrisClient) Ping(ctx context.Context) error {
 	binding, err := c.acquire(ctx)
 	if err != nil {

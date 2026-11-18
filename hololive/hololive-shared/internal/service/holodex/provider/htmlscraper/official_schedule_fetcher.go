@@ -359,7 +359,6 @@ func validateOfficialScheduleContentType(contentType string) error {
 	return nil
 }
 
-// newOfficialScheduleSourceError는 항상 non-nil 원인을 받아 분류 사유를 붙인 오류를 만든다.
 func newOfficialScheduleSourceError(reason officialScheduleReason, statusCode int, err error) error {
 	return &officialScheduleSourceError{reason: reason, statusCode: statusCode, err: err}
 }

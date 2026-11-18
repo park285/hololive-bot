@@ -66,8 +66,6 @@ func TestLiveCheckRPCBoundsBudgetAndKeepsAbsentFactsDistinct(t *testing.T) {
 	}
 }
 
-// helper의 video_live_check published_at은 정확한 시각으로 decode되고, 없으면 nil로 남아 근거 없음과 구분됩니다.
-// 목록 응답의 content 항목은 is_upcoming 표시만 받고 이전 is_premiere 필드는 계약 불일치로 거부합니다.
 func TestNoveltyFieldsCrossTheHelperBoundaryExactly(t *testing.T) {
 	t.Parallel()
 

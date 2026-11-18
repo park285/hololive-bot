@@ -837,7 +837,6 @@ func newPaginatedEnvelope(t *testing.T, kind ObservationKind, payload jsontext.V
 
 	scheduledFor := time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC)
 
-	// 영상 목록은 공개 근거 세대를 사용하고, 공통 라이브 fixture는 메타데이터 계약을 검사한다.
 	var generation int64
 
 	switch kind {

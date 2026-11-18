@@ -17,7 +17,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// FrozenRequest는 한 provider 호출의 불변 본문·수신 방·membership과 현재 ID 세대다.
 type FrozenRequest struct {
 	BaseID      string
 	RoomID      string
@@ -72,8 +71,6 @@ func (s *TransitionStore) LoadFrozenRequests(ctx context.Context, deliveryIDs []
 	return requests, nil
 }
 
-// FreezeRequest는 준비 fence를 잠근 상태에서 최초 요청만 저장한다. 이미 고정된 요청이 있으면
-// 현재 템플릿으로 다시 만들지 않고 저장된 요청을 돌려준다.
 func (s *TransitionStore) FreezeRequest(ctx context.Context, deliveries []domain.YouTubeNotificationDelivery, request FrozenRequest) (FrozenRequest, error) {
 	var frozen FrozenRequest
 
@@ -218,7 +215,6 @@ func loadFrozenRequest(ctx context.Context, db dbx.Querier, id string) (FrozenRe
 	return request, nil
 }
 
-// AdvanceRequestGeneration은 확정 pre-handoff 실패의 새 세대와 정규 retry 전이를 원자 저장한다.
 func (s *TransitionStore) AdvanceRequestGeneration(ctx context.Context, operation StartedOperation, request FrozenRequest) (FrozenRequest, error) {
 	if !operation.Valid() || request.Generation >= iris.ReplyReissueMaxGenerations {
 		return FrozenRequest{}, errors.New("advance request generation: invalid operation or exhausted generations")
@@ -298,7 +294,6 @@ func verifyStartedRequestOwners(ctx context.Context, tx dbx.Querier, operation S
 	return nil
 }
 
-// CleanupOrphanRequests는 기존 terminal retention 뒤 참조가 사라진 본문만 제한된 batch로 삭제한다.
 func (s *TransitionStore) CleanupOrphanRequests(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
 	if limit <= 0 {
 		return 0, errors.New("cleanup orphan requests: invalid limit")

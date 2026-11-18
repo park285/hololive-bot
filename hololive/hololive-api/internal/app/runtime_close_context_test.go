@@ -56,7 +56,6 @@ func TestRuntimeCloseContextResumesActualPlaneCleanupAfterDeadline(t *testing.T)
 		finish()
 		synctest.Wait()
 
-		// 실제 plane이 photo 작업을 join하면 첫 종료 오류를 보존한 채 뒤 회수 단계를 한 번 실행한다.
 		for range 2 {
 			if err := runtime.CloseContext(t.Context()); !errors.Is(err, firstErr) {
 				t.Fatalf("resumed close lost its first error: %v", err)

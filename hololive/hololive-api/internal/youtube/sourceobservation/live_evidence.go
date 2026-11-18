@@ -45,8 +45,6 @@ func loadLivePendingEnds(ctx context.Context, tx dbx.Tx, state *live.State, vide
 	return nil
 }
 
-// 먼저 잠근 positive clock으로 과거 부재 replay 여부를 정한다. 일반 PARTIAL도 현재 slot의
-// 저장된 coverage는 복원하되, 그 slot에서 보인 영상의 무시 이력은 읽지 않는다.
 func loadLiveAbsencesForPositive(ctx context.Context, tx dbx.Tx, state *live.State, evidence *live.Evidence) error {
 	var (
 		channels              []string
@@ -100,8 +98,6 @@ func loadLiveCurrentAbsences(ctx context.Context, tx dbx.Tx, state *live.State, 
 		return nil
 	}
 
-	// PARTIAL 자체는 부재를 만들지 않지만 다른 kind의 늦은 positive 뒤에는 저장된 slot이
-	// 처음 적용될 수 있다. reducer가 현재 slot에서 건너뛰는 payload 영상만 이력을 생략한다.
 	seen := make(map[string]struct{}, len(evidence.Sessions))
 	for i := range evidence.Sessions {
 		seen[evidence.Sessions[i].VideoID] = struct{}{}
@@ -139,8 +135,6 @@ func liveIgnoredAbsenceLoadIDs(state *live.State, evidence *live.Evidence) []str
 
 		if (session.LifecycleOrigin == live.OriginMetadataOnly || session.LifecycleOrigin == live.OriginLegacyUnknown) &&
 			session.Clock.LastUpcomingPositiveAt == nil && session.Clock.LastLivePositiveAt == nil {
-			// positive 적용 뒤에는 metadata도 observed가 되어 replay 대상이 된다.
-			// 승격되는 영상의 기존 이력을 빈 배열로 간주하거나 생략하면 안 된다.
 			promoted := slices.ContainsFunc(evidence.Sessions, func(fact live.SessionFact) bool {
 				return fact.VideoID == videoID &&
 					((fact.Status == "UPCOMING" && session.Status != domain.LiveStatusLive) ||
@@ -164,7 +158,6 @@ func loadLiveAbsenceSlots(ctx context.Context, tx dbx.Tx, state *live.State, cha
 		return nil
 	}
 
-	// 현재 slot은 이미 처리된 coverage가 정본이다. history를 생략해도 같은 slot을 새로 세면 안 된다.
 	var (
 		rows pgx.Rows
 		err  error
@@ -222,7 +215,6 @@ func persistLiveEvidence(ctx context.Context, tx dbx.Tx, decision *live.Decision
 		return fmt.Errorf("persist pending ends: %w", err)
 	}
 
-	// Decision에 없는 전역 pending을 지우면 다른 채널의 아직 도착하지 않은 positive를 잃는다.
 	if _, err := tx.Exec(ctx, repositoryLivePendingEndsDeleteSQL, sessionIDs, pendingIDs); err != nil {
 		return fmt.Errorf("delete settled pending ends: %w", err)
 	}

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package alarmstore
 
 import (
@@ -61,7 +41,6 @@ func TestAlarmTypeQueriesUseContainment(t *testing.T) {
 	requireAlarmRoomIDs(t, subscribers, []string{"room-live"})
 }
 
-// 읽기 쪽은 빈 alarm_types를 기본 종류로 해석하지 않으므로, 빈 배열 행은 DB가 저장 시점에 거절해야 한다.
 func TestAlarmsRejectEmptyAlarmTypes(t *testing.T) {
 	t.Parallel()
 
@@ -76,7 +55,6 @@ func TestAlarmsRejectEmptyAlarmTypes(t *testing.T) {
 	}
 }
 
-// 표시명은 members 정본만 쓴다. 멤버 데이터에 한국어 표시명이 없는 채널은 빈 값이다.
 func TestMemberNameQueriesUseOnlyMemberDisplayName(t *testing.T) {
 	t.Parallel()
 
@@ -179,7 +157,6 @@ func TestListAlarmEntriesPrefersKakaoRoomNameOverRoomIDPlaceholder(t *testing.T)
 	repository := &Repository{pool: pool}
 	baseTime := time.Date(2026, time.September, 1, 9, 0, 0, 0, time.UTC)
 
-	// 옛 버전이 남긴 혼합 행: 실제 이름 행이 먼저, 방 ID 자리표시자 행이 더 최근 room_name_updated_at·더 큰 id로 들어 있다.
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO alarms (room_id, user_id, channel_id, room_name, alarm_types, room_name_updated_at)
 		VALUES
@@ -196,7 +173,6 @@ func TestListAlarmEntriesPrefersKakaoRoomNameOverRoomIDPlaceholder(t *testing.T)
 		t.Fatalf("SetRoomDisplayName() error = %v", err)
 	}
 
-	// 옛 API(방 ID)와 v7.0.1 API(빈 이름)의 재등록·새 채널 등록.
 	addWithoutKakaoName := func(channelID, roomName string) {
 		t.Helper()
 

@@ -2,7 +2,7 @@
 
 ## Decision boundary
 
-`DEC-20260825-hololive-shared-public-path-scoped-retention`에 따라 public path closeout은 `hololive-shared/pkg` 디렉터리 전체 삭제가 아닙니다. 단일 runtime 실행 구현은 module `internal/`로 이동하고, cross-runtime 계약·진성 다중 소비자·producer/consumer 양측 계약면만 shared에 남기는 것이 완료 조건입니다.
+public path closeout은 `hololive-shared/pkg` 디렉터리 전체 삭제가 아닙니다. 단일 runtime 실행 구현은 module `internal/`로 이동하고, cross-runtime 계약·진성 다중 소비자·producer/consumer 양측 계약면만 shared에 남기는 것이 완료 조건입니다.
 
 ## Current state
 

@@ -19,8 +19,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-// 2249×운영 4종 + 알림 3종 + 영상 1000종 + 전역 1종 = 허용 최대 10000 target입니다.
-// 검토된 UPCOMING 500개와 과거 영수증 15000개는 실제 rosterReader 경로로 제외합니다.
 func newCollectionGuardLoad(t *testing.T) (*pgxpool.Pool, *targetprojection.Refresher, targetprojection.PolicyBuilder, [4]*pgxpool.Pool) {
 	t.Helper()
 
@@ -79,7 +77,6 @@ type collectionGuardSample struct {
 	err        error
 }
 
-// 전체 acquisition/provider/consume 지연을 측정하는 함수가 아닙니다.
 func readCollectionSharedGuard(ctx context.Context, pool *pgxpool.Pool) (sample collectionGuardSample) {
 	started := time.Now()
 
@@ -114,7 +111,6 @@ func readCollectionSharedGuard(ctx context.Context, pool *pgxpool.Pool) (sample 
 	return sample
 }
 
-// 채널 장벽은 잠금 상태를 재현하기 위한 것이며 성능 수치에 포함하지 않습니다.
 func TestCollectionRealPolicyGuardCancellationAndExpiry(t *testing.T) {
 	pool, refresher, builder, readers := newCollectionGuardLoad(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
@@ -123,7 +119,6 @@ func TestCollectionRealPolicyGuardCancellationAndExpiry(t *testing.T) {
 
 	var before time.Time
 
-	// header 쓰기도 guard를 따르므로 writer가 잠그기 전에 만료를 예약한다.
 	require.NoError(t, pool.QueryRow(ctx, `UPDATE youtube_collection_projection_generations
 		SET valid_until=clock_timestamp()+interval '5 seconds' WHERE status='CURRENT' RETURNING valid_until`).Scan(&before))
 
@@ -153,7 +148,6 @@ func TestCollectionRealPolicyGuardCancellationAndExpiry(t *testing.T) {
 
 	waitCollectionGuardReaders(ctx, t, pool, pids[:])
 
-	// 대기 reader의 statement가 만료 전에 시작했음을 확인하고 DB 시각의 자연 만료를 기다린다.
 	waitCollectionHeaderExpiry(ctx, t, pool, pids[:], before)
 	cancelReader()
 
@@ -304,7 +298,6 @@ func awaitCollectionGuardSample(ctx context.Context, t *testing.T, done <-chan c
 	}
 }
 
-// 벽시계 임계값은 합격 조건이 아닙니다. 측정 범위는 최대 입력의 실제 Refresh와 공유 guard SQL/조회 transaction이며 수집→intent가 아닙니다.
 func TestCollectionRealPolicySharedGuardLoad(t *testing.T) {
 	_, refresher, builder, readers := newCollectionGuardLoad(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
@@ -383,7 +376,6 @@ func collectionGuardPercentile(sorted []time.Duration, percent int) time.Duratio
 
 var _ targetprojection.Builder = collectionPausedPolicy{}
 
-// Reader를 기다리거나 Build 종료를 늦추지 않으므로 인위적인 장벽 지연을 측정하지 않습니다.
 type collectionObservedPolicy struct {
 	builder targetprojection.PolicyBuilder
 	entered chan struct{}

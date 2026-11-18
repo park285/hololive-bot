@@ -244,8 +244,9 @@ func appendPreparedBatchRow(
 	collision := addPreparedEvent(events, &event, result)
 
 	delivery.PayloadHash = event.PayloadHash
-	// 같은 room/event의 서로 다른 payload 후보도 DB winner와 대조하기 전에는 합치지 않는다.
+
 	candidateKey := delivery.DedupeKey + "\x00" + delivery.PayloadHash
+
 	if _, exists := seenDeliveries[candidateKey]; !exists {
 		seenDeliveries[candidateKey] = struct{}{}
 
@@ -368,7 +369,6 @@ func prepareBatchDeliveriesForInsert(
 		winnerHashes[eventRows[i].EventKey] = eventRows[i].PayloadHash
 	}
 
-	// DB에 이미 있는 event 및 concurrent insert winner의 hash가 권위자다.
 	for i := range collisions {
 		winnerHashes[collisions[i].Event.EventKey] = collisions[i].ExistingPayloadHash
 	}
@@ -385,21 +385,18 @@ func prepareBatchDeliveriesForInsert(
 		return nil, nil, fmt.Errorf("bind delivery payload identity: %w", err)
 	}
 
-	// 거절한 entry는 정상 delivery의 분할 경계나 멱등성 ID에도 영향을 주지 않는다.
 	assignSendUnits(deliveries)
 
 	return collisions, deliveries, nil
 }
 
 func resolveEventCollisions(collisions []eventCollision, eventIDs map[string]int64, winnerHashes map[string]string, result *PublishBatchResult) []eventCollision {
-	// Deadlock 재시도는 같은 prepared 입력을 다시 사용하므로 원본을 압축하지 않는다.
 	resolved := make([]eventCollision, 0, len(collisions))
 	for i := range collisions {
 		collision := collisions[i]
 		winnerHash := winnerHashes[collision.Event.EventKey]
 
 		if collision.Event.PayloadHash == winnerHash {
-			// 앞선 batch 후보와 충돌했어도 실제 DB winner와 같은 payload는 정상 entry다.
 			result.HashConflictEvents--
 			continue
 		}

@@ -29,8 +29,6 @@ type publisher interface {
 	PublishDispatchBatch(context.Context, []dispatchoutbox.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error)
 }
 
-// Runner는 세션 검증, 현재 방송 조회와 LIVE 구독 방 발송 의도를 순차적으로 처리한다.
-// 실제 egress·재시도·결과 불명 처리는 기존 dispatch 원장만 소유한다.
 type Runner struct {
 	config    Config
 	sessions  sessionStore
@@ -42,7 +40,6 @@ type Runner struct {
 	now       func() time.Time
 }
 
-// NewRunner는 외부 조회를 시작하지 않고 명시적 수집 범위와 의존성을 검증한다.
 func NewRunner(config Config, store sessionStore, starts startStore, collector Collector, pub publisher,
 	rooms func(context.Context, string) ([]string, error), logger *slog.Logger,
 ) (*Runner, error) {
@@ -57,7 +54,6 @@ func NewRunner(config Config, store sessionStore, starts startStore, collector C
 	return &Runner{config: config, sessions: store, starts: starts, collector: collector, publisher: pub, rooms: rooms, logger: logger, now: time.Now}, nil
 }
 
-// 조회는 겹치지 않으며 취소 시 helper 회수가 끝난 뒤 반환한다.
 func (r *Runner) Start(ctx context.Context) error {
 	for ctx.Err() == nil {
 		if err := r.RunOnce(ctx); err != nil && ctx.Err() == nil {
@@ -72,8 +68,6 @@ func (r *Runner) Start(ctx context.Context) error {
 	return nil
 }
 
-// RunOnce는 검증 성공한 후보만 승격하고 새 세대가 아닌 결과는 폐기한다.
-// 활성 세션의 인증 거부는 다음 조회 주기에 한 번 더 확인한 뒤 재연결을 요구한다.
 func (r *Runner) RunOnce(ctx context.Context) error {
 	snapshot, err := r.sessions.Snapshot(ctx)
 	if err != nil {
@@ -97,14 +91,11 @@ func (r *Runner) RunOnce(ctx context.Context) error {
 		}
 	}
 
-	// 같은 만료 세션으로 반복 로그인하거나 계속 요청하지 않는다. 관리자 재연결을 기다린다.
 	if snapshot.Active == nil || snapshot.State == "auth_required" {
 		return nil
 	}
 
 	observations, collectErr := r.collector.Collect(ctx, *snapshot.Active, userIDs)
-	// 단일 401/403 뒤 같은 쿠키가 정상 동작한 사례가 있어, 첫 거부만으로 수집을 멈추지 않는다.
-	// DB에 대기를 남겨 재시작도 확인 횟수를 초기화하지 못하게 한다.
 	if failure, ok := errors.AsType[*CollectionError](collectErr); ok && failure.Code == "authentication" && snapshot.LastError != "authentication_pending" {
 		pending := *failure
 
@@ -205,7 +196,6 @@ func (r *Runner) publish(ctx context.Context, observations []Observation) error 
 		}
 
 		age := r.now().Sub(payload.StartedAt)
-		// 장시간 장애 뒤 오래된 방송을 새 시작 알림으로 보내지 않는다.
 		if age < -time.Minute || age > 15*time.Minute {
 			continue
 		}

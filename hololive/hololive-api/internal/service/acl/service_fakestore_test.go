@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package acl
 
 import (
@@ -37,13 +17,11 @@ func pgUniqueViolation(constraint string) error {
 	}
 }
 
-// 실제 pgx에는 저장소 콜백 훅이 없으므로, 기존 fault-injection 테스트를 이 fake의 메서드별 hook으로 동등 재현한다.
 type fakeACLStore struct {
 	mu       sync.Mutex
 	settings map[string]string
 	rooms    map[roomKey]struct{}
 
-	// hook: 연산 직전 호출. 에러 반환 시 연산 실패.
 	getSettingHook    func(key string) error
 	createSettingHook func(key, value string) error
 	upsertHook        func(key, value string) error
@@ -135,7 +113,6 @@ func (f *fakeACLStore) ListRooms(_ context.Context) ([]Room, error) {
 	return rooms, nil
 }
 
-// CreateRoom은 실 SQL의 ON CONFLICT (room_id, list_type) DO NOTHING처럼 이미 있는 행을 쓰지 않고 false를 돌려준다.
 func (f *fakeACLStore) CreateRoom(_ context.Context, roomID, listType string) (bool, error) {
 	if f.createRoomHook != nil {
 		if err := f.createRoomHook(roomID, listType); err != nil {

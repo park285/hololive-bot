@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package ingress
 
 import (
@@ -92,8 +72,6 @@ func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) 
 	return i.prepare(ctx, message, true)
 }
 
-// Accepts는 observation이나 command-received 부수효과 없이 메시지가 durable inbox에
-// 들어갈 수 있는지 반환합니다. Prepare가 이 경로와 durable 처리에서 쓰는 ingress 조건을 소유합니다.
 func (i *MessageIngress) Accepts(ctx context.Context, message *webhook.Message) bool {
 	_, ok := i.prepare(ctx, message, false)
 
@@ -107,7 +85,6 @@ func (i *MessageIngress) prepare(ctx context.Context, message *webhook.Message, 
 
 	chatID := message.Room
 	userID, userName := resolveUser(message)
-	// chatID가 canonical room id가 아니면 방 제목이 로그로 새므로 로그에는 가명 attr만 넘긴다. ACL과 응답 송신은 raw chatID를 쓴다.
 	roomAttr := sharedprivacylog.RoomIDAttr(chatID)
 
 	if i.shouldSkipSender(ctx, message, roomAttr, userName) {
@@ -250,8 +227,6 @@ func (i *MessageIngress) isSelfSender(sender string) bool {
 	return canonical == i.selfSender
 }
 
-// debugEnabled는 Debug 전용 attr을 만들기 전에 확인한다. 운영 기본 레벨(info)에서 명령 메시지마다 attr slice를
-// 할당하고 버리지 않게 하려는 것이며, 핸들러의 Enabled는 ctx와 무관하므로 기록 여부는 바뀌지 않는다.
 func (i *MessageIngress) debugEnabled(ctx context.Context) bool {
 	return i.logger != nil && i.logger.Enabled(ctx, slog.LevelDebug)
 }

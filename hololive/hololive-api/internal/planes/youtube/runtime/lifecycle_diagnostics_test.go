@@ -80,7 +80,6 @@ func observeLifecycleMetrics(t *testing.T, pool *pgxpool.Pool) *collectionTarget
 		t.Fatal(scanErr)
 	}
 
-	// 새 registry가 DB 영수증과 원본만으로 동일한 현재 집계를 복원한다.
 	metrics := newCollectionTargetMetrics(prometheus.NewPedanticRegistry())
 	metrics.observe(samples, time.Now(), nil)
 

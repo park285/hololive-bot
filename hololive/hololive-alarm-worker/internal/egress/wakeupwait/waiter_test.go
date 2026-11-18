@@ -25,7 +25,6 @@ func (o *recordingObserver) PollSleep(afterFailure bool, _ time.Duration) {
 	o.afterFailure = afterFailure
 }
 
-// hololive-api Signaler가 보낸 신호를 같은 channel key로 바로 소비하고, 신호가 없으면 poll 주기까지 상한을 늘린다.
 func TestDeliveryWaiterConsumesSignalAndBacksOffToPollInterval(t *testing.T) {
 	client, _ := testutil.NewTestCacheServiceWithMini(t.Context(), t)
 
@@ -65,7 +64,6 @@ func TestDeliveryWaiterConsumesSignalAndBacksOffToPollInterval(t *testing.T) {
 	}
 }
 
-// BRPOP 상한(BackoffMax)과 실패 때 대기(PollInterval)는 따로 정해진다. 이 둘을 alarm dispatch는 다른 프로필 키로 받는다.
 func TestWaiterCapsSignalWaitAtBackoffMaxAndSleepsPollIntervalOnFailure(t *testing.T) {
 	client, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
 	observer := &recordingObserver{}
@@ -107,7 +105,6 @@ func TestWaiterCapsSignalWaitAtBackoffMaxAndSleepsPollIntervalOnFailure(t *testi
 	}
 }
 
-// Valkey가 없거나 실패하면 poll 주기만큼 잠들어 wakeup 이전과 같은 주기로 조회한다.
 func TestDeliveryWaiterFallsBackToPollInterval(t *testing.T) {
 	client, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
 

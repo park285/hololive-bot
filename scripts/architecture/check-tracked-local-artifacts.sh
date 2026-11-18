@@ -26,7 +26,6 @@ forbidden_patterns=(
 is_allowed_exception() {
   local path="$1"
   case "${path}" in
-    # 검증된 입력 목록과 SHA256SUMS로 고정된 NilAway 소스 패치다.
     scripts/ci/nilaway-models/models.patch)
       return 0
       ;;
@@ -85,7 +84,6 @@ while IFS= read -r path; do
 done < <(
   {
     git -C "${ROOT_DIR}" ls-files -s | sed -E $'s/^[0-9]+ [0-9a-f]+ [0-9]+\t//'
-    # 삭제를 stage한 금지 산출물은 제거 중이므로 위반으로 세지 않는다.
     git -C "${ROOT_DIR}" diff --cached --name-only --no-renames --diff-filter=d
   } | sort -u
 )

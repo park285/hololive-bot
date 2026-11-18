@@ -48,15 +48,12 @@ func TestBreaker_RecordSuccess_ResetsCounter(t *testing.T) {
 	threshold := 3
 	b := newTestBreaker(threshold, 30*time.Second)
 
-	// threshold - 1 회 실패
 	for range threshold - 1 {
 		b.RecordFailure()
 	}
 
-	// 성공 후 카운터 리셋
 	b.RecordSuccess()
 
-	// 다시 threshold - 1 회 실패해도 열리지 않아야 함
 	for range threshold - 1 {
 		b.RecordFailure()
 	}
@@ -76,7 +73,6 @@ func TestBreaker_RecordSuccess_DoesNotCloseOpenBreaker(t *testing.T) {
 
 	b.RecordSuccess()
 
-	// 시간 기반 reset이므로 RecordSuccess만으로는 닫히지 않음
 	if !b.IsOpen() {
 		t.Fatal("breaker should remain open after RecordSuccess (time-based reset only)")
 	}
@@ -113,14 +109,12 @@ func TestBreaker_RetryAfter(t *testing.T) {
 	resetTimeout := 30 * time.Second
 	b := newTestBreaker(1, resetTimeout)
 
-	// closed 상태
 	if got := b.RetryAfter(); got != 0 {
 		t.Fatalf("RetryAfter() = %v, want 0 when closed", got)
 	}
 
 	b.RecordFailure()
 
-	// open 상태: 남은 시간이 양수여야 함
 	remaining := b.RetryAfter()
 	if remaining <= 0 || remaining > resetTimeout {
 		t.Fatalf("RetryAfter() = %v, want (0, %v]", remaining, resetTimeout)
@@ -161,12 +155,10 @@ func TestBreaker_ConcurrentRecordFailure(t *testing.T) {
 
 	wg.Wait()
 
-	// 50회 실패는 threshold(100) 미만이므로 열리지 않아야 함
 	if b.IsOpen() {
 		t.Fatal("breaker should not be open after 50 failures with threshold 100")
 	}
 
-	// 50회 더 실패 → threshold 도달
 	for range goroutines {
 		wg.Go(func() {
 			b.RecordFailure()
@@ -181,8 +173,6 @@ func TestBreaker_ConcurrentRecordFailure(t *testing.T) {
 }
 
 func TestBreaker_RecordFailure_ConcurrentTransitionOpensOnce(t *testing.T) {
-	// CAS 전이 검증: threshold 경계에서 다수 goroutine이 동시에 RecordFailure해도
-	// open 전이(true 반환)는 정확히 1회여야 한다(openedAt 오염·중복 전이 방지).
 	b := newTestBreaker(2, 30*time.Second)
 	b.RecordFailure()
 
@@ -229,7 +219,6 @@ func TestBreaker_RecordFailure_OpenedAtFixedOnceOpen(t *testing.T) {
 
 		synctest.Sleep(2 * time.Millisecond)
 
-		// open 상태에서 추가 RecordFailure → openedAt 갱신 금지
 		b.RecordFailure()
 		b.RecordFailure()
 		b.RecordFailure()
@@ -243,7 +232,6 @@ func TestBreaker_RecordFailure_OpenedAtFixedOnceOpen(t *testing.T) {
 
 func TestBreaker_AfterReset_ThresholdRequiredAgain(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		// M3 핵심: timeout 경과 후 reset → failures=0 → threshold 미달로 즉시 재open 없음
 		b := newTestBreaker(3, 10*time.Millisecond)
 
 		for range 3 {
@@ -256,12 +244,10 @@ func TestBreaker_AfterReset_ThresholdRequiredAgain(t *testing.T) {
 
 		synctest.Sleep(20 * time.Millisecond)
 
-		// Allow()로 reset
 		if !b.Allow() {
 			t.Fatal("Allow() should return true after resetTimeout")
 		}
 
-		// reset 후 단 1회 실패로는 열리지 않아야 함
 		b.RecordFailure()
 
 		if b.IsOpen() {
@@ -275,19 +261,16 @@ func TestBreaker_AllowResetsOnTimeout(t *testing.T) {
 		b := newTestBreaker(1, 10*time.Millisecond)
 		b.RecordFailure()
 
-		// open 상태
 		if b.Allow() {
 			t.Fatal("Allow() should be false immediately after open")
 		}
 
-		// resetTimeout 경과
 		synctest.Sleep(20 * time.Millisecond)
 
 		if !b.Allow() {
 			t.Fatal("Allow() should return true after resetTimeout elapsed")
 		}
 
-		// Allow() 호출로 reset됐으므로 closed 상태여야 함
 		if b.IsOpen() {
 			t.Fatal("breaker should be closed after Allow() triggered reset")
 		}

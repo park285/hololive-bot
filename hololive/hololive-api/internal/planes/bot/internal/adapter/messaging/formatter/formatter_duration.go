@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// 내림은 진행 중 방송의 경과 표기와 같은 기준이며, 표기한 길이가 실제보다 길어지지 않게 한다.
 func formatBroadcastDuration(d time.Duration) string {
 	minutes := int64(d / time.Minute)
 	if minutes < 1 {

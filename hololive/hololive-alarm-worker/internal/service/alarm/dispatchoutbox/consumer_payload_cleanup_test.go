@@ -39,7 +39,6 @@ func (r *payloadCleanupRecorder) DelMany(_ context.Context, keys []string) (int6
 	return int64(len(keys)), nil
 }
 
-// 저장 payload의 notification.alarm_type은 필수다.
 const minimalEnvelopePayload = `{"notification":{"alarm_type":"LIVE"}}`
 
 func TestConsumerRejectsPayloadBeforeReleasingClaims(t *testing.T) {
@@ -57,7 +56,6 @@ func TestConsumerRejectsPayloadBeforeReleasingClaims(t *testing.T) {
 			events: map[int64]EventRecord{1: {ID: 1, Payload: []byte(minimalEnvelopePayload)}},
 		},
 		{name: "missing event", record: Record{EventID: 1}},
-		// event_id가 없는 행은 스키마(NOT NULL)상 생기지 않지만, 생겨도 event 누락과 같이 DLQ로 격리한다.
 		{name: "no event id", record: Record{}},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {

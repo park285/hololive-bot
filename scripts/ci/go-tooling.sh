@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# local-ci.sh가 사용하는 Go 도구 설치·최소 지원 버전 검증 헬퍼.
 
 GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.9.0}"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v2.15.0}"

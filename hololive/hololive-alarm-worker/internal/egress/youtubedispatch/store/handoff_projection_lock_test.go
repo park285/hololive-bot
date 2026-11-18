@@ -88,7 +88,6 @@ func TestHandoffSettlementDefersWhenLogicalGroupGainsParent(t *testing.T) {
 
 	defer func() { cancel(); workers.Wait() }()
 
-	// 정산은 부모 id를 사전 조회한 뒤 부모 잠금에서 기다린다. 그 사이 같은 논리 키의 SENT follower가 새 outbox로 들어온다.
 	waitHandoffBlockedBy(ctx, t, pool, blocker)
 
 	addedOutboxID, addedID := insertSentHandoffFollower(ctx, t, pool, unit)

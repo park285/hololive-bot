@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package botruntime
 
 import (
@@ -122,7 +102,6 @@ func TestBotRuntimeShutdown_ClosesWebhookHandler(t *testing.T) {
 	}
 }
 
-// BotRuntime의 단계와 실제 Bot lifecycle이 같은 logger를 쓰므로 세 단계의 실행 순서를 한 줄로 확인할 수 있다.
 type shutdownOrderLog struct {
 	mu       sync.Mutex
 	messages []string
@@ -164,7 +143,6 @@ func TestBotRuntimeShutdownRunsHTTPWebhookBotInOrderAndContinuesAfterErrors(t *t
 	webhookCloser := &testWebhookCloser{err: webhookErr}
 	runtime := &BotRuntime{Bot: newShutdownOrderBot(t, logger), Logger: logger, webhookHandlerCloser: webhookCloser}
 
-	// 처리 중인 요청을 남긴 채 취소된 context로 종료해 HTTP 단계가 반드시 실패하게 한다.
 	finishRequest, responseDone := startBlockedShortLinkRequest(t, runtime)
 
 	shutdownCtx, cancel := context.WithCancel(t.Context())
@@ -229,7 +207,6 @@ func startBlockedShortLinkRequest(t *testing.T, runtime *BotRuntime) (finish fun
 	runtime.prepareHTTPHandlers()
 	server.Start()
 	t.Cleanup(server.Close)
-	// Cleanup은 역순으로 실행되므로 handler를 먼저 풀어 server.Close가 처리 중인 요청을 기다리다 멈추지 않게 한다.
 	t.Cleanup(finish)
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)

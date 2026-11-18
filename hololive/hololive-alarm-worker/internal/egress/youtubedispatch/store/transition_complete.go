@@ -13,10 +13,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
 
-// CompleteSent는 owner와 follower를 SENT로 전이하고 같은 트랜잭션에서 tracking 발송 표시·성공 telemetry·SENT 원장과
-// 고정 요청의 handoff admission(Iris requestId, 첫 확인 시각)을 기록한다. 고정 요청을 멤버보다 먼저 잠가 claim과 같은
-// 요청 → 멤버 순서를 지키고, 요청 세대·멤버가 이번 발송과 다르면 SENT 전이 없이 conflict다. 이때 community/shorts의
-// post 단위 발송 표시는 MarkAlarmSentBatch가 가장 이른 발송 시각으로 수렴시킨다.
 func (s *TransitionStore) CompleteSent(
 	ctx context.Context,
 	operation StartedOperation,
@@ -99,7 +95,6 @@ func (s *TransitionStore) confirmSentPostState(
 	return result, nil
 }
 
-// completeSentTransitions는 owner와 follower를 SENT로 올리며, sent_at은 전이 문장의 DB 시계로 기록한다.
 func completeSentTransitions(operation StartedOperation) ([]rowTransition, error) {
 	groups := sortedStartedGroups(operation.groups)
 	transitions := make([]rowTransition, 0, len(groups))
@@ -150,8 +145,6 @@ func completeSentTransitions(operation StartedOperation) ([]rowTransition, error
 	return transitions, nil
 }
 
-// completeSentOnce는 SENT 전이가 기록한 DB 시계를 tracking 발송 표시·telemetry·ledger의 발송 시각이자 handoff
-// admission 시각으로 함께 쓴다.
 func (s *TransitionStore) completeSentOnce(
 	ctx context.Context,
 	operation StartedOperation,
@@ -205,7 +198,6 @@ func (s *TransitionStore) completeSentOnce(
 	return touched, nil
 }
 
-// 성공 시도 telemetry는 tracking의 alarm_sent_at을 반영한 뒤, 분류 저장보다 먼저 기록해 분류가 이 시도를 포함하게 한다.
 func recordSentTrackingAndTelemetry(
 	ctx context.Context,
 	tx dbx.Querier,
@@ -233,8 +225,6 @@ func recordSentTrackingAndTelemetry(
 	return nil
 }
 
-// validateSentTracking은 commit 응답 유실 뒤 post-state를 확인할 때 community/shorts owner의 post 단위 발송 표시가
-// alarm_state 또는 tracking에 남았는지 읽는다. 없으면 같은 트랜잭션이 기록했어야 할 결과가 빠진 것이다.
 func validateSentTracking(ctx context.Context, db dbx.Querier, operation StartedOperation) error {
 	repository := observation.NewRepository(db)
 	seen := make(map[string]struct{})

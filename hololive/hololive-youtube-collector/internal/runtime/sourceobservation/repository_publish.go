@@ -17,14 +17,10 @@ type sqlPublishFenceVerifier struct {
 	jobs collection.StaticJobContracts
 }
 
-// 발행 트랜잭션은 항상 pgxpool에서 시작하므로 이 능력이 없으면 순차 경로로 바꾸지 않고 오류로 드러낸다.
 type publishVerificationBatchSender interface {
 	SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
 }
 
-// 서버 실행과 결과 판정 순서는 projection guard(share) → lease(FOR UPDATE) → job membership → target → contract이며, collector의
-// acquire·CompleteCurrent와 같은 잠금 순서다. Guard 대기 뒤의 문장은 새 snapshot에서 평가되므로 API 전환 중 기다린 publish가 사라진 generation을 보고 거절되지
-// 않는다. 앞선 판정이 실패하면 이미 획득한 뒤쪽 잠금도 트랜잭션과 함께 롤백됩니다.
 func (v sqlPublishFenceVerifier) Verify(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -47,7 +43,6 @@ func (v sqlPublishFenceVerifier) Verify(
 		return errors.New("verify publish fence: batch results are nil")
 	}
 
-	// 판정이 앞에서 끝나도 남은 응답을 회수해 연결을 다음 문장에 쓸 수 있게 한다.
 	defer func() {
 		if closeErr := results.Close(); closeErr != nil {
 			err = errors.Join(err, fmt.Errorf("close publish verification batch: %w", closeErr))
@@ -88,7 +83,6 @@ func (v sqlPublishFenceVerifier) verifyPublishResults(
 	proof *contract.LeaseProof,
 	observations []contract.Envelope,
 ) error {
-	// 소유 손실이 projection 부재보다 우선한다. 다른 소유자의 lease를 superseded로 해제하려 하지 않게 한다.
 	projectionErr := verifyProjection(results)
 
 	job, err := v.loadPublishFence(results, proof)
@@ -119,7 +113,6 @@ func (v sqlPublishFenceVerifier) verifyPublishResults(
 	return nil
 }
 
-// Provider는 관측에서 가져오며, 실제 lease 행의 provider·job 종류와 다르면 loadPublishFence가 fence 손실로 거절한다.
 func (v sqlPublishFenceVerifier) publishMembershipScope(proof *contract.LeaseProof, observations []contract.Envelope) (collection.MembershipScope, error) {
 	if len(observations) == 0 {
 		return collection.MembershipScope{}, fmt.Errorf("verify publish fence: %w: observations are empty", ErrInvalidEnvelope)

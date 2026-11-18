@@ -74,9 +74,8 @@ handoff 결과(`handoff_completed`, `failed`, `outcome_unknown`, 진행 중)는 
 reconciler만 각자의 원장(alarm dispatch send unit, YouTube 고정 요청)에서 관측하며, 발송
 경로는 handoff 결과를 갖지 않습니다.
 
-Alarm-worker does not send Karing templates
-(`DEC-20260926-hololive-karing-egress-disposition`, superseding
-`DEC-20260904-hololive-karing-regular-chat-egress`). The Karing chunk planner,
+alarm-worker는 Karing 템플릿을 보내지 않습니다.
+The Karing chunk planner,
 per-chunk request IDs, and the `karing.kakaolink` contract were removed with it.
 Alarm dispatch는 `BeginSending` 전에 최종 본문·text/richtext 경로·멤버·base ID·generation을 고정합니다.
 재시도와 재시작은 고정 요청을 그대로 재사용합니다.
@@ -264,7 +263,7 @@ type AlarmQueueRetryMetadata struct {
 
 Live alarm notifications keep using `Notification` and `ValidateLiveDispatchRoute`.
 Celebration notifications use `SourceKind=celebration` with `Celebration.Kind` `birthday` or `anniversary` only. Any other kind is rejected by `ValidateCanonicalDispatch` before publish and by the egress envelope check before send, including deliveries whose request body is already pinned, so it ends as a pre-send failure (retry, then DLQ) and is never sent.
-YouTube 예정 최초공개는 발견 시 알리지 않는다. hololive-api는 `UPCOMING_PREMIERE` 영상에 `NEW_VIDEO` outbox를 만들지 않으며, 공개 전환 뒤에도 만들지 않는다. 구독자 알림은 live 세션(`youtube_live_sessions.is_premiere=true`)이 일반 방송과 같은 규칙으로 소유한다: upcoming 분 전 알림(`선행공개 N분 전`)과 일정 변경 알림, 그리고 분 전 target을 모두 지난 뒤 발견돼 분 전 알림을 받지 못한 방의 live catchup 시작 알림(`선행공개 시작`)이다. 이 계약은 `DEC-20260830-hololive-premiere-content-owned-notifications`의 `NEW_VIDEO` 소유와 live 후보 제외를 대체한다.
+YouTube 예정 최초공개는 발견 시 알리지 않는다. hololive-api는 `UPCOMING_PREMIERE` 영상에 `NEW_VIDEO` outbox를 만들지 않으며, 공개 전환 뒤에도 만들지 않는다. 구독자 알림은 live 세션(`youtube_live_sessions.is_premiere=true`)이 일반 방송과 같은 규칙으로 소유한다: upcoming 분 전 알림(`선행공개 N분 전`)과 일정 변경 알림, 그리고 분 전 target을 모두 지난 뒤 발견돼 분 전 알림을 받지 못한 방의 live catchup 시작 알림(`선행공개 시작`)이다. 이 계약은 기존 `NEW_VIDEO` 소유와 live 후보 제외를 대체한다.
 YouTube live/video/community/shorts rows are produced in `youtube_notification_outbox`; `alarm-worker` claims those rows, resolves rooms, renders with `internal/egress/youtubedispatch/format`, sends through Iris/Kakao, and writes per-room delivery state. After committing rows `hololive-api` sends a payload-free Valkey wakeup (`youtube:delivery:wakeup`); polling still claims rows without it (`QUEUE_AND_PUBSUB_CONTRACTS.md`).
 
 HTTP 요청·응답 wire 타입은 패키지 `hololive/hololive-shared/pkg/contracts/alarm` 한 곳(`wire.go`, `/count` 응답 `EntryCount`는 `contracts.go`)에 있으며 worker handler와 `alarmhttp` client가 같은 타입을 씁니다. 필수 값 검사는 worker handler(`hololive/hololive-alarm-worker/internal/service/alarm/httpapi/handler.go`)가 합니다.
@@ -310,11 +309,11 @@ DB에 구독 채널이 없을 때만 신규 채널 하나로 registry를 초기�
 
 UNIT B 구독 스키마(`alarms.host_id`와 그 어휘 CHECK, `(room_id, channel_id, host_id)` 고유 색인)는 epoch-3 baseline에
 포함되어 있다. `(room_id, channel_id)`만의 고유 색인은 없으므로 이전 `(room_id, channel_id)` upsert는 실행할 수 없다.
-당시 운영 전환 조건과 검증은 [변경 보고서](../../review/unit-b-member-subscriptions-20260906.md)에 있다.
+복구할 때 멤버별 구독을 삭제하거나 전체 채널 구독으로 합치지 않는다. 새 스키마와 호환되고 저장된 `host_id`를 보존하는 수정본을 사용해야 한다.
 
 ### 멤버 표시명 예외 계약
 
-`DEC-20260926-hololive-source-fallbacks-retirement`는 계약 없는 원천·표시 폴백을 오류 반환 단일 경로로 바꾸고,
+계약 없는 원천·표시 폴백을 오류 반환 단일 경로로 바꾸고,
 알림 멤버 표시명 폴백 하나만 예외로 남겼다. 2026-10-02에 제거 조건을 확인했다. 두 지표(`hololive_alarm_member_name_fallback_channels`,
 `hololive_alarm_member_name_caller_fallback_total`)가 30일 동안 0이었고, 운영 DB 읽기 전용 조회에서 구독 채널 21개 모두
 members 한국어 표시명을 가졌다. 그래서 중간 단계(최신 `alarms.member_name`, alarm cache 기록 때 호출자 값)와 두 지표를 지웠다.

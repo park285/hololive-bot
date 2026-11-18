@@ -27,23 +27,23 @@ func acceptReply(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository,
 	return claim.ID
 }
 
-func claimOneHandoffDue(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository) ReplyHandoffClaim {
+func advanceHandoffChecks(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository) {
 	t.Helper()
 
-	deadline := time.Now().Add(5 * time.Second)
+	_, err := repo.pool.Exec(ctx, `UPDATE bot_reply_outbox SET handoff_next_check_at = handoff_next_check_at - interval '1 millisecond'
+		WHERE status = 'accepted'`)
+	require.NoError(t, err)
+}
 
-	for {
-		claims, err := repo.ClaimHandoffDue(ctx, 10, time.Minute)
-		require.NoError(t, err)
+func claimOneHandoffDue(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository) ReplyHandoffClaim {
+	t.Helper()
+	advanceHandoffChecks(ctx, t, repo)
 
-		if len(claims) > 0 || time.Now().After(deadline) {
-			require.Len(t, claims, 1)
+	claims, err := repo.ClaimHandoffDue(ctx, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, claims, 1)
 
-			return claims[0]
-		}
-
-		time.Sleep(5 * time.Millisecond)
-	}
+	return claims[0]
 }
 
 func completeReplyHandoff(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository, claim *ReplyOutboxClaim) {
@@ -72,7 +72,7 @@ func TestReplyHandoffClaimSkipsLockedRowsAndSoftClaimsWhatItReturns(t *testing.T
 	firstID := acceptReply(ctx, t, repo, first, "iris-first")
 	secondID := acceptReply(ctx, t, repo, second, "iris-second")
 
-	time.Sleep(10 * time.Millisecond)
+	advanceHandoffChecks(ctx, t, repo)
 
 	locker, err := pool.Begin(ctx)
 	require.NoError(t, err)
@@ -184,7 +184,6 @@ func TestReplyHandoffSettlementsShapeTheRow(t *testing.T) {
 	}
 }
 
-// 세대는 그 claim의 reissue ladder가 409 FAILED를 보고 올린다.
 func TestReplyHandoffFailedReturnsTheStoredReplyToTheClaimQueue(t *testing.T) {
 	pool := newDurabilityPool(t)
 	repo := newTestReplyOutboxRepository(pool)
@@ -201,7 +200,7 @@ func TestReplyHandoffFailedReturnsTheStoredReplyToTheClaimQueue(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, applied)
-	time.Sleep(5 * time.Millisecond)
+	advanceReplyRetry(ctx, t, pool, claim.ID)
 
 	resend, err := repo.Claim(ctx, "token-resend", durabilityTestLease)
 	require.NoError(t, err)

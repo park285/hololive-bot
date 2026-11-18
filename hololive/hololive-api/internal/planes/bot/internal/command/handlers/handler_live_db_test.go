@@ -15,7 +15,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// forbiddenLiveProvider는 nil StreamProvider만 품어 명령이 provider를 부르면 panic으로 시험이 실패한다.
 type forbiddenLiveProvider struct {
 	domain.StreamProvider
 }

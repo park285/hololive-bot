@@ -64,7 +64,6 @@ type testMembers struct {
 	lookupErr error
 }
 
-// 멤버 적재 실패는 빈 색인으로 바꾸지 않고 오류다.
 func TestBuildReturnsMemberLoadError(t *testing.T) {
 	t.Parallel()
 

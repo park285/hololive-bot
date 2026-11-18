@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Holodex 채널·일정·live-status 조회는 scraper를 보조 원천으로 쓰지 않는다.
 func newScraperServiceForTest(
 	httpClient *http.Client,
 	logger *slog.Logger,
@@ -32,7 +31,6 @@ func newScraperServiceForTest(
 		},
 	)
 	if err != nil {
-		// 고정 멤버 목록은 적재 오류가 없으므로 여기서 실패하면 test double 구성이 잘못된 것이다.
 		panic(fmt.Sprintf("newScraperServiceForTest: %v", err))
 	}
 

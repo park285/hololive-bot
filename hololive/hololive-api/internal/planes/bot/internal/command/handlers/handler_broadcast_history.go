@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package handlers
 
 import (
@@ -49,7 +29,6 @@ const (
 	MaxBroadcastHistoryDays     = 365
 )
 
-// 사용자-facing 응답을 이미 보냈으니 호출자는 추가 응답 없이 종료해야 한다.
 var errBroadcastHistoryHandled = errors.New("broadcast history request handled")
 
 func NewBroadcastHistoryCommand(deps *handlercore.Dependencies) *BroadcastHistoryCommand {
@@ -339,16 +318,8 @@ func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntr
 	return result
 }
 
-// maxBroadcastEndUncertainty는 종료 시각을 표시하고 방송 길이를 계산할 수 있는 종료 오차 상한이다.
-// YouTube가 종료 시각을 주지 않으면 ended_at은 종료를 관측한 시각이라, 실제 종료는 마지막 live 확인 시각과
-// ended_at 사이에 있다. 채널 부재로 늦게 종료된 세션은 이 간격이 며칠까지 벌어진다. 5분은 !라이브가 방송 중으로
-// 인정하는 확인 신선도 상한과 같다. 확인 시각은 수집 예정 시각으로 기록되어 YouTube 종료 시각보다 늦을 수 있으므로
-// ended_at이 확인 시각보다 이른 쪽도 같은 상한까지 허용한다.
 const maxBroadcastEndUncertainty = 5 * time.Minute
 
-// legacyLifecycleOrigin 기록은 수명 추적 도입 전에 저장된 시각이라 started_at이 실제 시작보다 수 시간 늦을 수 있다.
-// YouTube 아카이브(provider) 시각으로 확정되기 전에는 시작·길이 대신 저장 시각을 표시한다. 판정은 head나 LIVE 확인이
-// 아니라 origin으로 한다.
 const legacyLifecycleOrigin = "legacy_unknown"
 
 func trustedBroadcastStartedAt(entry *handlercore.BroadcastHistoryEntry) *time.Time {
@@ -368,7 +339,6 @@ func broadcastHistoryStartedAt(entry *handlercore.BroadcastHistoryEntry) time.Ti
 	return *startedAt
 }
 
-// 시작이 없으면 길이를 계산하지 않고 저장 종료 시각만 표시한다.
 func verifiedBroadcastEndedAt(entry *handlercore.BroadcastHistoryEntry) time.Time {
 	startedAt := trustedBroadcastStartedAt(entry)
 	if startedAt == nil || entry.EndedAt == nil {
@@ -395,7 +365,6 @@ func verifiedBroadcastEndedAt(entry *handlercore.BroadcastHistoryEntry) time.Tim
 	return *entry.EndedAt
 }
 
-// 시작 시각이 있으면 formatter가 시작 시각을 표시하므로 이 값을 쓰지 않는다.
 func broadcastHistoryFallbackTime(entry *handlercore.BroadcastHistoryEntry) (time.Time, string) {
 	for _, candidate := range []struct {
 		at    *time.Time

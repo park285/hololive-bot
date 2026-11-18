@@ -217,7 +217,6 @@ func TestCandidatesIncludeLastMaximumLegalSubject(t *testing.T) {
 	}
 }
 
-// 만료된 기존 행이 잠겨 있어도 missing으로 오인해 INSERT 충돌을 기다려서는 안 된다.
 func TestAcquireSkipsLockedExpiredLease(t *testing.T) {
 	t.Parallel()
 

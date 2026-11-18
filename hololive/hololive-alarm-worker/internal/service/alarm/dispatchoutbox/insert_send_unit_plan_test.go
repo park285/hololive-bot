@@ -22,8 +22,6 @@ const (
 	insertPlanInputRows    = 10
 )
 
-// 입력 recordset 열 형식이 unit_key의 character(64)와 다르면 비교가 text로 바뀌어 인덱스를 못 쓰고 보존 기간 안의 send unit 전체를 읽는다. 운영 풀은 prepared
-// statement를 재사용하므로 custom plan과 generic plan을 모두 확인한다.
 func TestInsertDeliveryBatchLooksUpSendUnitsByUnitKey(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -104,7 +102,6 @@ func explainInsertDeliveryBatch(ctx context.Context, t *testing.T, pool *pgxpool
 	tx, err := conn.Begin(ctx)
 	require.NoError(t, err)
 
-	// EXPLAIN ANALYZE는 delivery를 실제로 넣으므로 다음 모드가 같은 데이터로 계획되게 되돌린다.
 	defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 	_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = "+mode)
@@ -113,7 +110,6 @@ func explainInsertDeliveryBatch(ctx context.Context, t *testing.T, pool *pgxpool
 	_, err = tx.Exec(ctx, "PREPARE insert_delivery_plan AS "+insertDeliveryBatchSQL)
 	require.NoError(t, err)
 
-	// prepared statement는 rollback 뒤에도 연결에 남으므로 풀에 돌려주기 전에 지운다.
 	defer func() {
 		_, deallocateErr := conn.Exec(context.WithoutCancel(ctx), "DEALLOCATE insert_delivery_plan")
 		require.NoError(t, deallocateErr)
@@ -139,11 +135,10 @@ func explainInsertDeliveryBatch(ctx context.Context, t *testing.T, pool *pgxpool
 }
 
 type insertPlanNode struct {
-	NodeType string  `json:"Node Type"`
-	Relation string  `json:"Relation Name"`
-	Rows     float64 `json:"Actual Rows"`
-	Loops    float64 `json:"Actual Loops"`
-	// 필터와 lossy bitmap 재검사가 버린 행도 heap에서 읽은 행이다.
+	NodeType         string           `json:"Node Type"`
+	Relation         string           `json:"Relation Name"`
+	Rows             float64          `json:"Actual Rows"`
+	Loops            float64          `json:"Actual Loops"`
 	RemovedByFilter  float64          `json:"Rows Removed by Filter"`
 	RemovedByRecheck float64          `json:"Rows Removed by Index Recheck"`
 	Plans            []insertPlanNode `json:"Plans"`

@@ -265,7 +265,7 @@ $refresh$;
 5. `so/live_finalizer.go:71` 뒤에 같은 호출.
 6. 외부 호출(HTTP 등)은 이 트랜잭션들에 없다(`finalizeTx` 콜백은 DB 작업뿐). 추가하지 않는다.
 
-비용: 트리거는 원본 문장마다 refresh(+guard)를 호출했다(2026-10-15 측정 `docs/current/plans/2026-10-15-sql-db-review-handoff.md:572-576`: refresh 5.6회/초·평균 2.585ms, pending upsert 2.698ms에 refresh 포함). 2b는 트랜잭션당 1회. 단 K는 316 필터 없는 상위집합이다. live_snapshot에서 dirty 세션은 대부분 head positive 시각도 바뀌어(316 입력) 트리거도 refresh하던 key라 차이가 작다고 본다 [INFERENCE]. 2a의 extra-key 지표(5.2)로 확인하고, 크면 PG18 `RETURNING old.*/new.*`로 316 열 비교를 쓰기 SQL 옆에 두는 정밀화를 검토한다(2b 범위 밖, 측정 근거가 생길 때만).
+비용: 트리거는 원본 문장마다 refresh(+guard)를 호출했다(2026-10-15 측정: refresh 5.6회/초·평균 2.585ms, pending upsert 2.698ms에 refresh 포함). 2b는 트랜잭션당 1회. 단 K는 316 필터 없는 상위집합이다. live_snapshot에서 dirty 세션은 대부분 head positive 시각도 바뀌어(316 입력) 트리거도 refresh하던 key라 차이가 작다고 본다 [INFERENCE]. 2a의 extra-key 지표(5.2)로 확인하고, 크면 PG18 `RETURNING old.*/new.*`로 316 열 비교를 쓰기 SQL 옆에 두는 정밀화를 검토한다(2b 범위 밖, 측정 근거가 생길 때만).
 
 ---
 

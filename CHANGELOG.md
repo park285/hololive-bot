@@ -8,6 +8,15 @@
 
 ## 미출시
 
+- 결정 기록을 폐기하고 완료한 작업의 계획·검증 자료를 정리했습니다. 과거 결정과 근거는 Git 이력에서 확인할 수 있습니다.
+- **lint 경계:** hololive-api와 저장 template 실행기의 `os/exec`·`plugin` import 금지를 `rg` 스크립트(`check-repository-ownership.sh`) 대신 스택 golangci 템플릿의 `depguard` 규칙이 검사합니다. 시험 파일 제외와 대상 경로는 그대로이며, 문자열 리터럴을 import로 오인하던 일은 없어집니다. 같은 템플릿의 `encoding/json` v1·대체 codec·외부 UUID import 금지, v1 동작 복원 JSON option·legacy sort·untyped atomic·정적 target `errors.As` 금지(`forbidigo`), `TODO`·`FIXME`·`HACK`·`XXX` 주석 금지(`godox`)도 적용됩니다. 실행 코드는 바뀌지 않습니다.
+- **주석 금지:** 기계 지시문을 뺀 Go·SQL·JavaScript·shell·Python 주석과 doc 주석을 지웠습니다. shell heredoc으로 실행하는 Python 본문도 같은 검사를 받습니다. Go 파일별 MIT 머리글도 지웠으며 라이선스 고지는 루트 `LICENSE`가 유지합니다. youtubejs JSDoc은 tsc checkJs가 읽는 타입 전용 형식만 남깁니다. checksum 원장에 묶인 적용된 migration 31개는 `scripts/ci/sql-immutable-migrations.txt`에 두고 바이트를 유지합니다. pre-push gate가 `bash scripts/ci/verify-tools.sh scan`으로 강제합니다.
+- **SQL 조각 치환:** 주석 표식 문자열 치환 대신 `sqlassets.WithFragment`가 `/* fragment:<name> */` 표식을 정확히 한 번 바꾸며, 표식이 없거나 둘 이상이면 초기화가 실패합니다. youtube dispatch store, dispatch outbox, schedule poster 쿼리가 이 경로를 씁니다.
+- **형식 검증:** `verification/tla/CollectionJobLease/`, `verification/tla/AlarmDispatchClaim/`, `verification/lean/JSONNameOrder/`가 수집 lease, 알람 발송 claim, canonical 이름 순서를 검사합니다. `AlarmDispatchClaimBug.cfg`는 소비자가 여럿일 때만 드러나는 반례이며 현재 단일 소비자 배포에서는 도달하지 않습니다.
+- **테스트:** 실제 시간을 기다리던 `time.Sleep` 61곳을 synctest·채널 동기화로 바꾸고, 이름 순서와 template 치환 fuzz 대상을 추가했습니다. 시각 여유에 기대던 `TestLeaseSchedulerDefersCooldownUntilRetryAt`은 고정 deadline의 정확한 비교로, `TestLockCacheMutationRecordsContendedWait`는 goroutine profile로 잠금 대기를 확인하는 방식으로 바꿨습니다.
+- **런타임 검증:** `scripts/verify/hololive-runtime.sh`가 실제 hololive-api와 alarm-worker를 일회용 인프라로 구동하고, `docs/feature-map/`이 기능별 검증 경계를 정리합니다.
+- **mekpark-host 실험:** 인라인 스크립트 metadata와 `experiment.py.lock` 대신 `scripts/experiments/mekpark-host/pyproject.toml`·`uv.lock`이 실험 환경을 고정합니다. 실행 명령은 `uv run --locked --project scripts/experiments/mekpark-host scripts/experiments/mekpark-host/experiment.py`이며 고정한 패키지 버전과 해시는 그대로입니다.
+
 ## v19.1.0 - 2026-11-18
 
 - `!스케쥴`의 카드 양식(기존·궤도)을 Iris Console 멤버 관리에서 개별 설정합니다. 채팅 명령은 그대로이며 궤도 카드는 실제 편성 기간만 표시하며 밀집 편성을 한 앨범으로 보냅니다. 이미지 예산을 벗어나면 일부 PNG 대신 전체 편성 파일 하나를 보냅니다. 공유 채널도 이름으로 고른 멤버의 양식·사진을 사용합니다. migration 032가 소피아의 초기 양식을 궤도로 지정하며, 다른 멤버는 기존 양식을 유지합니다.
@@ -982,7 +991,7 @@
 - 관측 저장량을 줄입니다. migration 238–242는 JSONB(LZ4) payload를 kind/schema/canonical profile+전체 32바이트 digest로 공유하고 슬롯별 관측은 독립 보존합니다. bounded backfill, 참조 보호 GC, 손상 시 오류, 동시 insert 가시성 검증을 포함합니다. 구 payload 열·backfill 함수와 임시 index는 cutover에서 제거합니다. API와 collector fleet의 coordinated cutover가 필요하며 구 이미지 단독 rollback은 불가능합니다.
 - 보관 기본값을 일반 원본 7일·schedule/absence 14일·profile/photo 30일·live-check 2일로 조정합니다. PROCESSED queue 1일·DLQ 14일·collision/replay 30일·application 추가 유예 3일·checkpoint 2일·RETIRED projection 7일입니다. 보호된 active/pending/head 조건은 유지하고 운영 master 값은 자동 변경하지 않습니다.
 - migration 235–237은 application의 orphan 제외 부분 UNIQUE, reasons+targets 실제 행 수로 제한한 projection 정리와 table-local vacuum 설정을 적용합니다. application 결과는 한 INSERT로 묶고 발행 fence/contract 검증은 한 pipeline으로 보냅니다. 새 fallback·재수집·dual writer·런타임 의존성은 없습니다.
-- 상세 측정·미달 목표·운영 승인과 적용 결과는 [실행 기록](docs/current/plans/2026-09-29-youtube-storage-reduction.md#실행-기록--2026-09-29), 이행·복구는 [API runbook](docs/current/runbooks/hololive-api.md#youtube-관측-저장-구조-전환)에 기록합니다. 백업 삭제·물리 공간 회수는 전환과 분리하여 승인받습니다.
+- 상세 측정·미달 목표·운영 승인과 적용 결과는 실행 기록, 이행·복구는 [API runbook](docs/current/runbooks/hololive-api.md#youtube-관측-저장-구조-전환)에 기록합니다. 백업 삭제·물리 공간 회수는 전환과 분리하여 승인받습니다.
 
 ## v7.1.1 - 2026-10-01
 

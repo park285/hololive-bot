@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package holodexprovider
 
 import (
@@ -44,12 +24,10 @@ var supportedStreamOrgParams = []string{
 	constants.HolodexAPIParams.OrgAll,
 }
 
-// SupportedStreamOrgParams는 호출자가 바꿔도 되는 사본을 돌려준다.
 func SupportedStreamOrgParams() []string {
 	return slices.Clone(supportedStreamOrgParams)
 }
 
-// org 미지정 시 Hololive를 기본값으로 사용합니다.
 func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domain.Stream, error) {
 	resolvedOrg, err := resolveStreamOrg(org)
 	if err != nil {
@@ -92,17 +70,13 @@ func (h *Service) GetUpcomingStreams(ctx context.Context, hours int) ([]*domain.
 	return out, nil
 }
 
-// org 미지정 시 Hololive를 기본값으로 사용합니다.
 func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org string) ([]*domain.Stream, error) {
 	resolvedOrg, err := resolveStreamOrg(org)
 	if err != nil {
 		return nil, fmt.Errorf("resolve stream org: %w", err)
 	}
 
-	// /users/live에는 시간 상한이 없으므로 원천·공식 일정·캐시에 같은 요청 범위를 적용합니다.
-	// /live의 168시간 제한과 별개로 공식 일정과 캐시 키는 원래 hours를 유지합니다.
 	filterUpcoming := func(streams []*domain.Stream) []*domain.Stream {
-		// 조회 중 예정 시각이 지난 방송도 기존처럼 제외하도록 결과를 받은 뒤 시각을 잡습니다.
 		now := time.Now()
 
 		var until time.Time
@@ -214,10 +188,8 @@ func resolveStreamOrg(org string) (string, error) {
 }
 
 var streamOrgAliases = map[string]string{
-	"":     constants.HolodexAPIParams.OrgHololive,
-	"holo": constants.HolodexAPIParams.OrgHololive,
-	// "indie"는 e4dc4e710 이전 공개 query 값이다. API 소유자가 기존 호출자를
-	// 모두 "independents"로 전환할 때 제거한다.
+	"":      constants.HolodexAPIParams.OrgHololive,
+	"holo":  constants.HolodexAPIParams.OrgHololive,
 	"indie": constants.HolodexAPIParams.OrgIndie,
 	strings.ToLower(constants.HolodexAPIParams.OrgHololive): constants.HolodexAPIParams.OrgHololive,
 	strings.ToLower(constants.HolodexAPIParams.OrgVSpo):     constants.HolodexAPIParams.OrgVSpo,

@@ -35,10 +35,8 @@ func TestTransitionApplyPreparedFailureRecordsOwnerAttemptTelemetry(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, result.Outcome)
 
-	// post_id는 claim 경로와 같은 canonical logical ID(contentid.ResolveDeliveryLogicalID)다.
 	postID := "short:short-telemetry-prepared"
 
-	// owner와 follower는 서로 다른 delivery이므로, owner 한 행뿐인 정확한 목록은 follower가 기록하지 않았음을 뜻한다.
 	require.NotEqual(t, followerID, ownerID)
 	require.Equal(t, []transitionTelemetryRow{{
 		DeliveryID: ownerID, AttemptOrdinal: 1, PostID: postID,
@@ -75,7 +73,6 @@ func TestTransitionAttemptTelemetryOrdinalKeepsAttemptCountAfterRetention(t *tes
 	pool := dbtest.NewPool(t)
 
 	ownerID, _ := seedTransitionShortLogicalGroup(t, pool, "short-telemetry-retained", "room-telemetry-retained")
-	// 앞선 세 번의 실패 시도 telemetry는 retention cleanup으로 이미 지워졌고 attempt_count만 남은 상태다.
 	_, err := pool.Exec(ctx, `UPDATE youtube_notification_delivery SET attempt_count = 3 WHERE id = $1`, ownerID)
 	require.NoError(t, err)
 
@@ -142,7 +139,6 @@ func seedTransitionShortLogicalGroup(t *testing.T, pool *pgxpool.Pool, videoID, 
 
 	var ids [2]int64
 
-	// 두 outbox의 content_id는 같은 short logical key로 정규화되어 한 logical group(owner 하나, follower 하나)을 이룬다.
 	for index, contentID := range []string{videoID, " " + videoID + " "} {
 		var outboxID int64
 
@@ -165,7 +161,6 @@ func seedTransitionShortLogicalGroup(t *testing.T, pool *pgxpool.Pool, videoID, 
 	return ids[0], ids[1]
 }
 
-// poller가 만드는 payload처럼 canonical_post_id는 prefix가 붙은 logical ID다.
 func transitionShortTelemetryPayload(videoID string) string {
 	return `{"canonical_post_id":"short:` + videoID + `","video_id":"` + videoID + `","title":"telemetry"}`
 }

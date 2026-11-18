@@ -416,7 +416,6 @@ func TestRendererBodyReadCachesActualVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 메타데이터 조회와 본문 조회 사이에 저장이 완료된 상황입니다.
 	if _, err := pool.Exec(t.Context(), `UPDATE notification_templates SET body='LATEST' WHERE id=$1`, ck.id); err != nil {
 		t.Fatal(err)
 	}

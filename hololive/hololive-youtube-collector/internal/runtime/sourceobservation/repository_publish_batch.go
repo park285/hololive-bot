@@ -182,8 +182,6 @@ func collectPublishSetRows(rows pgx.Rows, want int) (PublishBatchResult, bool, e
 		collision = collision || row.Outcome == PublishCollision
 	}
 
-	// 정상 순회 종료의 DB 오류를 누락 행 진단보다 먼저 보존한다.
-	// Scan 및 행 불변식 오류는 위에서 즉시 반환하므로 drain 오류로 덮지 않는다.
 	if err := rows.Err(); err != nil {
 		return PublishBatchResult{}, false, fmt.Errorf("publish source observation batch: read set result: %w", err)
 	}
@@ -209,7 +207,7 @@ func scanPublishSetRow(rows pgx.Rows) (PublishedObservation, error) {
 	}
 
 	row.Outcome = publishOutcome(collision, existed)
-	// DB가 반환한 같은 transaction 시각만 사용한다. 최초 수락·동일 slot·충돌에는 간격을 만들지 않는다.
+
 	if checkpointAdvanced && previousAcceptedAt != nil {
 		row.AcceptedInterval = time.Duration(max(0, acceptedAt.Sub(*previousAcceptedAt).Milliseconds())) * time.Millisecond
 		row.HasAcceptedInterval = true
@@ -246,7 +244,6 @@ func invalidPublishSetRow(row PublishedObservation, seen []bool, want int) bool 
 		return true
 	}
 
-	// 충돌은 checkpoint를 쓰지 않으므로 수락 간격이 있을 수 없다.
 	return row.HasAcceptedInterval && row.Outcome == PublishCollision
 }
 

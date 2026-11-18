@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package dbtest
 
 import (
@@ -43,22 +23,6 @@ var sharedTemplates = struct {
 	byKey map[string]*templateState
 }{byKey: make(map[string]*templateState)}
 
-// NewPool은 격리된 데이터베이스를 가진 *pgxpool.Pool을 반환한다.
-//
-// 동작:
-//   - TEST_DATABASE_URL이 있으면 그 DSN을, 없으면 testcontainers ephemeral PG를 base로 쓴다.
-//     base는 sync.Once로 테스트 바이너리당 1회만 확보된다(컨테이너 재기동 없음).
-//   - migration-complete template은 manifest fingerprint별로 한 번 만들고, 호출마다
-//     고유 데이터베이스(test_<unique>)를 template clone으로 생성한다.
-//   - t.Cleanup에 DROP DATABASE와 pool close를 등록한다.
-//
-// manifest 전체가 빈 DB에서 재생되는 이유: epoch baseline이 base 테이블과 cutoff
-// 상태를 복원하고 이후 suffix migration이 현재 상태까지 전진시키기 때문이다.
-//
-// 격리 단위가 per-schema가 아니라 per-database인 이유: prod migration 다수가 idempotent guard로
-// information_schema를 table_schema 한정 없이 조회한다(예: 037이 acl_rooms.list_type 존재 여부를
-// 전체 카탈로그에서 확인). 단일 DB 내 여러 스키마로 격리하면 한 스키마의 변경이 다른 스키마의
-// guard 판정을 오염시킨다. DB 단위로 격리하면 카탈로그가 완전히 분리되어 guard가 정확히 동작한다.
 func NewPool(tb testing.TB) *pgxpool.Pool {
 	tb.Helper()
 

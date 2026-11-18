@@ -51,7 +51,6 @@ func TestFinalizeRuntimeGuardPrecedesClaimAndRollsBackProjection(t *testing.T) {
 
 			waitObservationSettlementLock(ctx, t, pool, holder.Conn().PgConn().PID(), done)
 
-			// 전역 잠금 대기자가 claim을 먼저 잡았다면 NOWAIT가 실패한다.
 			_, err = holder.Exec(ctx, `SELECT observation_id FROM source_observation_queue
 				WHERE observation_id=$1 FOR UPDATE NOWAIT`, work.ObservationID)
 			require.NoError(t, err)
@@ -73,15 +72,12 @@ func TestFinalizeRuntimeGuardPrecedesClaimAndRollsBackProjection(t *testing.T) {
 
 			require.Equal(t, [3]int64{}, dbtest.LiveRuntimeStateDrift(t, pool))
 
-			// 성공과 롤백 모두 다음 배제 경로가 같은 전역 잠금을 다시 획득할 수 있어야 한다.
 			_, err = pool.Exec(ctx, `SELECT lock_youtube_live_runtime_state()`)
 			require.NoError(t, err)
 		})
 	}
 }
 
-// 관측 writer가 shared 전역 잠금을 쥔 동안 retention은 exclusive 잠금에서 후보를 잠그기 전에 기다리고,
-// 증거 FK 해제는 수명 모델 입력이 아니므로 갱신 없이도 모델이 오라클과 일치한다.
 func TestEvidenceRetentionGuardsBeforeCandidateAndPreservesAvailability(t *testing.T) {
 	for _, rollback := range []bool{false, true} {
 		t.Run(fmt.Sprintf("rollback=%t", rollback), func(t *testing.T) {
@@ -137,7 +133,6 @@ func TestEvidenceRetentionGuardsBeforeCandidateAndPreservesAvailability(t *testi
 
 			waitObservationSettlementLock(ctx, t, pool, holder.Conn().PgConn().PID(), done)
 
-			// retention 후보를 선잠그면 FK 갱신 writer와 반대 순서가 되므로 NOWAIT로 검증한다.
 			_, err = holder.Exec(ctx, `SELECT id FROM source_observations WHERE id=$1 FOR UPDATE NOWAIT`, id)
 			require.NoError(t, err)
 

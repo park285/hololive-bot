@@ -30,7 +30,10 @@ import {
 
 const communityRequestKeys = keySchema(["protocol_version", "channel_id", "max_results", "max_pages", "max_success_response_bytes"]);
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").CommunityRequest} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").CommunityRequest}
+ */
 function validateCommunityRequest(value) {
   const record = requestRecord(value);
   assertRequestKeys(record, communityRequestKeys);
@@ -44,7 +47,10 @@ function validateCommunityRequest(value) {
 
 const contentRequestKeys = keySchema(["protocol_version", "channel_id", "kind", "max_results", "max_pages", "max_success_response_bytes"]);
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").ContentRequest} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").ContentRequest}
+ */
 function validateContentRequest(value) {
   const record = requestRecord(value);
   assertRequestKeys(record, contentRequestKeys);
@@ -66,7 +72,10 @@ const channelRequestKeys = keySchema(
   ["max_schedule_lookups", "scheduled_for"],
 );
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").ChannelRequest} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").ChannelRequest}
+ */
 function validateChannelRequest(value) {
   const record = requestRecord(value);
   assertRequestKeys(record, channelRequestKeys);
@@ -74,7 +83,6 @@ function validateChannelRequest(value) {
   if (kind !== "live" && kind !== "metadata") {
     throw new RpcRequestError("kind must be live or metadata");
   }
-  // live 요청은 예정 영상 조회 상한을 반드시 지정하고, metadata 요청은 조회하지 않으므로 지정하지 않습니다.
   if ((kind === "live") !== Object.hasOwn(record, "max_schedule_lookups")) {
     throw new RpcRequestError("max_schedule_lookups must be present only for live requests");
   }
@@ -82,7 +90,6 @@ function validateChannelRequest(value) {
   if (lookups !== undefined && (!Number.isSafeInteger(lookups) || Number(lookups) < 0 || Number(lookups) > maxScheduleMetadataLookups)) {
     throw new RpcRequestError(`max_schedule_lookups must be an integer between 0 and ${maxScheduleMetadataLookups}`);
   }
-  // collector lease 슬롯 시각입니다. 재사용 일정의 원래 관측 시각을 API의 관측 시각과 같은 시계로 남기는 데만 씁니다.
   const scheduledFor = record.scheduled_for;
   if (scheduledFor !== undefined && (kind !== "live" || typeof scheduledFor !== "string" ||
       !isCalendarRFC3339(scheduledFor) || !Number.isFinite(Date.parse(scheduledFor)))) {
@@ -114,7 +121,10 @@ const channelProfileKeys = keySchema([], ["handle", "description", "country", "j
 const liveQueryKeys = keySchema(["channel_id", "source", "statuses", "exhausted", "access_restricted", "page_count"]);
 const unavailableLiveSessionKeys = keySchema(["video_id", "channel_id", "reason"]);
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").CommunityResult} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").CommunityResult}
+ */
 export function validateCommunityResponse(value) {
   const record = responseRecord(value);
   assertResponseKeys(record, communityResponseKeys);
@@ -126,7 +136,10 @@ export function validateCommunityResponse(value) {
   };
 }
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").ContentResult} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").ContentResult}
+ */
 export function validateContentResponse(value) {
   const record = responseRecord(value);
   assertResponseKeys(record, contentResponseKeys);
@@ -138,7 +151,10 @@ export function validateContentResponse(value) {
   };
 }
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").ChannelResult} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").ChannelResult}
+ */
 export function validateChannelResponse(value) {
   const record = responseRecord(value);
   assertResponseKeys(record, channelResponseKeys);
@@ -178,9 +194,7 @@ export function validateChannelResponse(value) {
   };
 }
 
-/** 예정 영상 조회 수는 실제 streams 조회(live_query)가 있을 때만 있으며 protocol 상한을 넘지 않습니다.
- * @param {Record<string, unknown>} record
- */
+/** @param {Record<string, unknown>} record */
 function validateScheduleLookups(record) {
   if (Object.hasOwn(record, "schedule_lookups") !== (record.live_query !== undefined)) {
     throw new RpcResponseError("schedule_lookups must accompany the live query proof");
@@ -213,7 +227,10 @@ function validateLiveQuery(parent, unavailableCount) {
     page_count: query.page_count };
 }
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").UnavailableLiveSession} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").UnavailableLiveSession}
+ */
 function validateUnavailableLiveSession(value) {
   const record = responseRecord(value);
   assertResponseKeys(record, unavailableLiveSessionKeys);
@@ -284,7 +301,10 @@ const contentItemKeys = keySchema(["video_id", "channel_id", "title"], ["is_upco
 const liveSessionKeys = keySchema(["video_id", "channel_id", "status"], ["title", "thumbnail_url", "scheduled_at", "schedule_observed_at", "started_at", "ended_at"]);
 const photoKeys = keySchema(["kind", "url", "width", "height"]);
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").CommunityPost} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").CommunityPost}
+ */
 function validateCommunityPost(value) {
   const record = responseRecord(value);
   assertResponseKeys(record, communityPostKeys);
@@ -304,7 +324,10 @@ function validateCommunityPost(value) {
   };
 }
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").Thumbnail} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").Thumbnail}
+ */
 function validateThumbnail(value) {
   const record = responseRecord(value);
   assertResponseKeys(record, thumbnailKeys);
@@ -315,7 +338,10 @@ function validateThumbnail(value) {
   };
 }
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").ContentItem} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").ContentItem}
+ */
 function validateContentItem(value) {
   const record = responseRecord(value);
   assertResponseKeys(record, contentItemKeys);
@@ -330,12 +356,14 @@ function validateContentItem(value) {
   };
 }
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").LiveSessionItem} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").LiveSessionItem}
+ */
 function validateLiveSession(value) {
   const record = responseRecord(value);
   assertResponseKeys(record, liveSessionKeys);
   const status = validateLiveStatus(record);
-  // 재사용 일정의 원래 조회 시각은 시각이 있는 UPCOMING 행에만 붙습니다.
   if (Object.hasOwn(record, "schedule_observed_at") && (status !== "UPCOMING" || !Object.hasOwn(record, "scheduled_at"))) {
     throw new RpcResponseError("schedule_observed_at requires an upcoming scheduled_at");
   }
@@ -352,7 +380,10 @@ function validateLiveSession(value) {
   };
 }
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").ChannelPhotoVariant} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").ChannelPhotoVariant}
+ */
 function validatePhoto(value) {
   const record = responseRecord(value);
   assertResponseKeys(record, photoKeys);
@@ -377,13 +408,19 @@ function pageLimits(record) {
   return { max_results: maxResults, max_pages: maxPages };
 }
 
-/** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").Pagination} */
+/**
+ * @param {Record<string, unknown>} record
+ * @returns {import("./contracts.d.ts").Pagination}
+ */
 function validatePagination(record) {
   const { page_count, exhausted, continuity, termination_reason } = record;
   return validatedPagination({ page_count, exhausted, continuity, termination_reason });
 }
 
-/** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").LiveStatus} */
+/**
+ * @param {Record<string, unknown>} record
+ * @returns {import("./contracts.d.ts").LiveStatus}
+ */
 function validateLiveStatus(record) {
   const value = nonemptyStringField(record, "status");
   if (value === "LIVE" || value === "UPCOMING" || value === "ENDED") {
@@ -392,7 +429,10 @@ function validateLiveStatus(record) {
   throw new RpcResponseError("live session status is invalid");
 }
 
-/** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").PhotoKind} */
+/**
+ * @param {Record<string, unknown>} record
+ * @returns {import("./contracts.d.ts").PhotoKind}
+ */
 function validatePhotoKind(record) {
   const value = nonemptyStringField(record, "kind");
   if (value === "avatar" || value === "banner") {

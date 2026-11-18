@@ -43,8 +43,6 @@ func WithLease(lease time.Duration) ConsumerOption {
 	}
 }
 
-// WithQuarantineThreshold는 stale sending 격리 기준이다. 값을 바꾸지 않고 그대로 두므로 생략·0·음수는 NewConsumer가
-// lease 미만 오류로 거부한다.
 func WithQuarantineThreshold(threshold time.Duration) ConsumerOption {
 	return func(c *Consumer) {
 		c.quarantineThreshold = threshold
@@ -67,9 +65,6 @@ func WithRecoveryBatchSize(size int) ConsumerOption {
 	}
 }
 
-// NewConsumer는 WithWorkerID가 없으면 "dispatcher:hostname:pid"를 lease owner로 쓴다. 호스트 이름을 얻지 못하면
-// 다른 이름으로 바꾸지 않고 생성 오류다. SQL이 lease를 밀리초 정수로 받으므로 lease가 1ms 미만이어도 생성 오류다.
-// 격리 기준은 lease 이상이어야 하며, 생략·0·음수를 포함해 lease보다 작으면 기본값으로 바꾸지 않고 생성 오류다.
 func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *slog.Logger, opts ...ConsumerOption) (*Consumer, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -109,11 +104,6 @@ func NewConsumer(repository Repository, claimReleaser ClaimKeyReleaser, logger *
 	return consumer, nil
 }
 
-// DrainBatch는 만료 claim을 복구하고 최대 maxItems개 delivery를 claim해 발송 입력을 복원합니다.
-// 복원 불가능한 delivery는 worker 소유권을 검증해 DLQ로 확정한 뒤 해당 dedup 키를 해제합니다.
-// 복원 실패 시 부분 발송 입력을 반환하지 않고, 확정된 DLQ를 제외한 배치의 lease를
-// 요청 취소와 독립된 최대 5초의 정리로 반환합니다. 정리 오류는 원인 오류와 함께 반환하며
-// attempt, send-unit, 미발송 dedup 키와 이미 확정된 DLQ 전이는 유지합니다.
 func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]AlarmQueueEnvelope, error) {
 	if c == nil || c.repository == nil {
 		return nil, errors.New("drain outbox batch: repository is nil")
@@ -151,8 +141,6 @@ func (c *Consumer) releaseFailedBatch(ctx context.Context, records []*Record, ca
 		return cause
 	}
 
-	// send-unit의 일부만 반환하면 안 되므로 복원 전후의 미발송 claim을 함께 반환합니다.
-	// 확정 여부가 불명확한 전이는 저장소의 leased·소유자·attempt fence로 보호합니다.
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 
@@ -203,7 +191,6 @@ func (c *Consumer) maybeRecover(ctx context.Context) {
 	}
 }
 
-// MarkSending은 그룹 전체 send unit을 고정 요청으로 발송 상태에 넣는다. 미스는 *sendfence.MissError로 돌려준다.
 func (c *Consumer) MarkSending(ctx context.Context, envelopes []AlarmQueueEnvelope) error {
 	claims := claimsFromEnvelopes(envelopes)
 	if len(claims) == 0 || len(envelopes) == 0 {
@@ -220,10 +207,6 @@ func (c *Consumer) MarkSending(ctx context.Context, envelopes []AlarmQueueEnvelo
 	return nil
 }
 
-// MarkDispatched는 그룹 전체 send unit의 Iris admission을 sent로 정산하고 Iris requestId의 첫 handoff 확인을
-// min(handoffcheck.FirstCheckDelay, handoffHorizon) 뒤로 예약한다. 지평 handoffHorizon은 handoff reconciler와 같은
-// alarm_dispatch executor attempt_timeout이라 첫 확인도 admission + 지평을 넘지 않는다. 미스는
-// *sendfence.MissError로 돌려준다.
 func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []AlarmQueueEnvelope, irisRequestID string, handoffHorizon time.Duration) error {
 	claims := claimsFromEnvelopes(envelopes)
 	if len(claims) == 0 {
@@ -240,7 +223,6 @@ func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []AlarmQueueEnv
 	return nil
 }
 
-// ReleaseLeased는 발송 전 claim을 같은 attempt로 반환해 다음 claim이 send unit 전원을 다시 모으게 한다.
 func (c *Consumer) ReleaseLeased(ctx context.Context, envelopes []AlarmQueueEnvelope) error {
 	if err := c.repository.ReleaseLeased(ctx, claimsFromEnvelopes(envelopes), c.workerID); err != nil {
 		return fmt.Errorf("release leased: %w", err)
@@ -336,8 +318,6 @@ func appendFailureUpdates(updates []FailureUpdate, envelopes []AlarmQueueEnvelop
 	return updates
 }
 
-// failureUpdateFromEnvelope은 runner가 정한 attempt·오류·지연을 옮긴다. 다음 시도 시각은 SQL이 잠금 뒤 채취한 clock에
-// RetryAfter를 더해 정하므로 한 문장에서 정산되는 멤버는 같은 기준 시각을 쓴다.
 func failureUpdateFromEnvelope(envelope *AlarmQueueEnvelope, target Status) (FailureUpdate, bool) {
 	if envelope.DispatchOutboxID <= 0 {
 		return FailureUpdate{}, false

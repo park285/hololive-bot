@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package settings
 
 import (
@@ -63,7 +43,6 @@ func TestSettingsService_LoadDefaultAndPersist(t *testing.T) {
 	}
 }
 
-// 생성자는 디렉터리를 만들지 않는다. 첫 Update가 상위 디렉터리를 만들고 저장해야 한다.
 func TestSettingsService_UpdateCreatesMissingParentDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "data")
 	filePath := filepath.Join(dir, "settings.json")
@@ -83,7 +62,6 @@ func TestSettingsService_UpdateCreatesMissingParentDirectory(t *testing.T) {
 	}
 }
 
-// 저장 파일의 알 수 없는 필드는 기동을 막지 않고, Update가 다시 쓴 파일에는 남지 않는다.
 func TestSettingsService_DropsUnknownStoredFieldsOnUpdate(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "settings.json")
@@ -197,7 +175,6 @@ func TestSettingsService_UpdateFailsWithoutClobberingExistingFileWhenDirIsReadOn
 		t.Fatalf("read seeded settings: %v", readErr)
 	}
 
-	// 디렉터리는 탐색에 x 비트가 필요해 0600 이하로 낮출 수 없다.
 	if err := os.Chmod(dir, 0o500); err != nil { //nolint:gosec // G302: 쓰기 불가 디렉터리 재현용 모드
 		t.Fatalf("Chmod() error = %v", err)
 	}
@@ -231,7 +208,6 @@ func TestSettingsService_UpdateFailsWithoutClobberingExistingFileWhenDirIsReadOn
 	}
 }
 
-// 저장 파일 검증은 settingssvc.ReadFile이 맡는다. 생성자는 읽을 수 없는 파일을 기본값으로 대신하지 않고 기동 오류로 돌려준다.
 func TestSettingsService_RejectsUnsupportedStoredFile(t *testing.T) {
 	filePath := filepath.Join(t.TempDir(), "settings.json")
 	if err := os.WriteFile(filePath, []byte(`{"alarmAdvanceMinutes":1}`), 0o600); err != nil {

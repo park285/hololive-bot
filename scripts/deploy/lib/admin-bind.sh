@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# Tailscale가 보고한 canonical literal만 실제 host publish에 사용할 수 있다.
-# DNS/IPv6 파서를 따로 만들지 않고 설치된 Tailscale의 주소 판정을 사용한다.
 admin_bind_assert_host() {
     local bind_ip="$1"
     case "${bind_ip}" in
@@ -14,7 +12,6 @@ admin_bind_assert_host() {
     fi
 }
 
-# PostgreSQL publish 주소는 topology 정본의 primary이자 이 호스트의 Tailscale 주소여야 한다.
 admin_postgres_bind_assert() {
     local root="$1" bind_ip="$2" primary="" name address
     while IFS='=' read -r name address; do
@@ -26,7 +23,6 @@ admin_postgres_bind_assert() {
     fi
 }
 
-# unit이 예전 ruleset으로 active인 경우도 source set/forward chain 확인에서 거절한다.
 admin_network_assert_firewall() {
     local expected_file="$1"
     local installed_file="$2"

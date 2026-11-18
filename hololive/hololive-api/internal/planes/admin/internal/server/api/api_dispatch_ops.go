@@ -21,9 +21,6 @@ const (
 	dispatchOpsMaxBody = 64 << 10
 )
 
-// DispatchOperations는 관리자 API가 사용하는 원장 조회 및 재처리 계약입니다.
-// 구현은 재처리와 감사 기록의 원자성 및 결과 불명 요청의 비재실행을 보장해야 합니다.
-//
 //nolint:interfacebloat // 원장 HTTP 계약의 7개 작업을 한 의존성으로 연결하므로 메서드 수 경고는 오탐입니다.
 type DispatchOperations interface {
 	Summary(context.Context) (dispatchops.Summary, error)
@@ -85,7 +82,6 @@ func dispatchError(c *gin.Context, err error) {
 		status, message = 503, "dispatch operations unavailable"
 	}
 
-	// DB 에러, SQL, 본문 및 운영 사유를 응답이나 로그에 그대로 노출하지 않습니다.
 	sharedserver.RespondError(c, status, message, nil)
 }
 

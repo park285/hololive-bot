@@ -1,6 +1,5 @@
 package messagestrings
 
-// Key는 message_strings 행의 key이며, Args는 값에 필요한 format 인자 수다.
 type Key struct {
 	Namespace string
 	Name      string
@@ -15,14 +14,12 @@ func key(namespace, name string, args int) Key {
 	return Key{Namespace: namespace, Name: name, Args: args}
 }
 
-// 시간 표기. `timefmt/relative_*` 시드는 코드가 조회하지 않으므로 필수 key가 아니다.
 var (
 	TimeFmtStreamTimeDays         = key(NamespaceTimeFmt, "stream_time_days", 2)
 	TimeFmtStreamTimeHoursMinutes = key(NamespaceTimeFmt, "stream_time_hours_minutes", 3)
 	TimeFmtStreamTimeMinutes      = key(NamespaceTimeFmt, "stream_time_minutes", 2)
 )
 
-// 이름·제목이 비었을 때 보이는 표시값. 코드 대체 문구가 아니라 DB 정본 문구다.
 var (
 	MiscVTuberFallback = key(NamespaceMisc, "vtuber_fallback", 0)
 	MiscTimeUnknown    = key(NamespaceMisc, "time_unknown", 0)
@@ -30,7 +27,6 @@ var (
 	MiscAlarmNoStream  = key(NamespaceMisc, "alarm_no_stream", 0)
 )
 
-// 기념일 카드.
 var (
 	CalendarHeaderMonth      = key(NamespaceCalendar, "header_month", 2)
 	CalendarSummary          = key(NamespaceCalendar, "summary", 3)
@@ -45,7 +41,6 @@ var MiscSchedulePosterNotFound = key(NamespaceMisc, "schedule_poster_not_found",
 
 var NotifyGraduatedMemberWarning = key(NamespaceNotify, "graduated_member_warning", 0)
 
-// AlarmTypeAll은 모든 알람 종류를 뜻하는 표시값이다. 개별 종류는 domain.AlarmType 문자열로 동적 조회한다.
 var AlarmTypeAll = key(NamespaceAlarmType, "ALL", 0)
 
 func TimeFmtKeys() []Key {
@@ -65,7 +60,6 @@ func NotifyKeys() []Key {
 	return []Key{NotifyGraduatedMemberWarning}
 }
 
-// AlarmWorkerEgressRequirements는 alarm-worker가 기동 시 확인하는 알람·YouTube 발송 문구 계약이다.
 func AlarmWorkerEgressRequirements() Requirements {
 	return Requirements{Keys: []Key{
 		MiscVTuberFallback, MiscAlarmNoTitle, MiscAlarmNoStream,

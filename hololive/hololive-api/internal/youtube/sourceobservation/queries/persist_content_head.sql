@@ -1,4 +1,3 @@
--- complete 근거와 기준 목록 시각은 각각 NULL을 덮지 않고 더 이른 시각만 남긴다.
 INSERT INTO youtube_content_channel_heads (
     channel_id,
     observation_kind,

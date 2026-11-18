@@ -77,7 +77,6 @@ if admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingres
 fi
 echo 'admin firewall preflight fixtures passed'
 
-# 실제 기동 진입점(Quadlet ExecStartPre)이 비밀 env를 쓰기 전에 거부하는지 확인한다.
 test_root="$fixture/prestart"
 mkdir -p "$test_root/bin" "$test_root/secrets" "$test_root/deploy/hololive/hololive-api" \
     "$test_root/deploy/scripts/systemd" "$test_root/deploy/deploy/topology"
@@ -143,12 +142,10 @@ grep -qx 'APP_VERSION=13.3.0' "$test_root/run/quadlet-env/hololive-api.env"
 [[ "$(stat -c '%a' "$test_root/run/quadlet-env/hololive-api.env")" == 600 ]]
 echo 'prestart moves runtime secrets into a private container env file'
 
-# Tailscale IPv6 admin bind는 허용 대상이므로 IPv4 주소만 찾다가 90초 뒤 실패하면 안 된다.
 sed -i 's/^HOLOLIVE_ADMIN_API_PORT_BIND_IP=.*/HOLOLIVE_ADMIN_API_PORT_BIND_IP=fd7a:115c:a1e0::8/' "$test_root/compose.env"
 timeout 20 bash -c "$(declare -f run_prestart invoke_prestart); test_root='$test_root' root='$root' run_prestart"
 echo 'prestart waits for an IPv6 tailnet admin bind on the IPv6 address family'
 
-# preview도 실제 prestart 진입점을 호출하며 운영 명령은 호출 즉시 실패하게 격리한다.
 printf 'WORKER_SECRET=synthetic\n' > "$test_root/secrets/alarm-worker.env"
 printf 'COLLECTOR_SECRET=synthetic\n' > "$test_root/secrets/youtube-collector.env"
 cat >> "$test_root/compose.env" <<'ENV'
@@ -197,7 +194,6 @@ assert_rejected_render() {
     fi
 }
 
-# stale runtime 파일은 그대로 두고 현재 Service 환경으로만 새 파일을 만든다.
 for unit in "${units[@]}"; do
     printf 'POSTGRES_PASSWORD=stale-secret\n' > "$test_root/run/quadlet-env/$unit.env"
     mkdir -m 0700 "$fixture/stale-$unit"
@@ -213,7 +209,6 @@ for unit in "${units[@]}"; do
     [[ ! -e "$test_root/run" ]]
 done
 
-# 값은 compose.env를 source하지 않고 systemd가 제공한 현재 process 환경을 쓴다.
 mkdir -m 0700 "$fixture/service-input"
 (set -a; . "$test_root/compose.env"; set +a
  export HOLOLIVE_DB_PASSWORD=service-override
@@ -223,7 +218,6 @@ grep -qx 'POSTGRES_PASSWORD=service-override' "$fixture/service-input/hololive-a
 grep -qx 'HOLODEX_API_KEY=' "$fixture/service-input/hololive-api.env"
 [[ ! -s "$fixture/render.log" ]]
 
-# 필수 값·여러 줄 비밀은 파일 공개 전에 거절하고 임시 파일도 남기지 않는다.
 for spec in \
     hololive-api:HOLOLIVE_DB_PASSWORD \
     hololive-api:LIVE_LOGS_PATH \
@@ -258,7 +252,6 @@ for unit in "${units[@]}"; do
     assert_rejected_render "$directory" reject_multiline_input
 done
 
-# compose 및 서비스별 env 문법 검증도 정상 경로의 소유 검증기를 그대로 거친다.
 cp "$test_root/compose.env" "$fixture/valid-compose.env"
 for invalid_line in 'INVALID' 'BAD KEY=value' 'LIVE_LOGS_PATH=duplicate' 'SPACE= value' 'SPACE=value ' $'COMMAND=$(id)' $'COMMAND=`id`' $'CONTROL=a\x01b'; do
     cp "$fixture/valid-compose.env" "$test_root/compose.env"
@@ -279,7 +272,6 @@ for spec in hololive-api:bot.env hololive-alarm-worker:alarm-worker.env hololive
     cp "$fixture/$secret_file" "$test_root/secrets/$secret_file"
 done
 
-# retained API 버전은 SemVer보다 넓은 기존 drop-in 허용 계약을 유지한다.
 mv "$test_root/deploy/hololive/hololive-api/VERSION" "$fixture/VERSION"
 directory="$fixture/version-missing"
 mkdir -m 0700 "$directory"
@@ -305,7 +297,6 @@ for unit in holo-postgres admin-dashboard-ingress collector-enabled ../hololive-
     assert_rejected_render "$directory" run_prestart --render-env "$unit" "$directory"
 done
 
-# 사설 디렉터리 권한과 기존 출력의 비덮어쓰기 계약을 확인한다.
 directory="$fixture/public-output"
 mkdir -m 0755 "$directory"
 assert_rejected_render "$directory" run_prestart --render-env hololive-api "$directory"

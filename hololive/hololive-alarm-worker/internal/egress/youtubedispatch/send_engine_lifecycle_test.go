@@ -255,7 +255,6 @@ func (s *lifecycleTransitionSpy) recordedPreparedFailures() []string {
 	return slices.Clone(s.preparedFailures)
 }
 
-// recordStartedFailure는 발송 시작 뒤 실패 전이를 "kind/reason/retryAfter/mode" 형태로 모은다.
 func (s *lifecycleTransitionSpy) recordStartedFailure(
 	kind ytlifecycle.FailureKind,
 	reason ytlifecycle.Reason,
@@ -283,7 +282,6 @@ func preparedFailureRecord(kind ytlifecycle.FailureKind, reason ytlifecycle.Reas
 	return fmt.Sprintf("%v/%v/%v", kind, reason, mode)
 }
 
-// transitionSpy는 단위 전이 대역으로 만든 dispatcher의 spy를 돌려준다.
 func transitionSpy(t *testing.T, d *Dispatcher) *lifecycleTransitionSpy {
 	t.Helper()
 

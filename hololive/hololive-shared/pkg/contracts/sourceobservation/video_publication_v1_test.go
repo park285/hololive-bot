@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// newPaginatedEnvelope의 관측 시각(slot + 1초)을 기준으로 한 공개 근거 시각들입니다.
 var (
 	publicationObservedAt = time.Date(2026, time.August, 14, 1, 0, 1, 0, time.UTC)
 	publicationCheckedAt  = publicationObservedAt.Add(-time.Second)

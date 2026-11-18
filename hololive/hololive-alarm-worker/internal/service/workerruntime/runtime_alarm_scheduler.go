@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package workerruntime
 
 import (
@@ -31,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
-// 취소·종료 대기는 AlarmWorkerRuntime(schedulerCancel·schedulerDone)이 소유한다.
 type alarmSchedulerHooks struct {
 	Logger    *slog.Logger
 	Start     func(ctx context.Context) error
@@ -118,7 +97,6 @@ func isContextTerminationTree(err error) bool {
 		return isContextTerminationTree(unwrapped)
 	}
 
-	// 중간 원인의 취소 sentinel만으로 scheduler의 실제 말단 오류를 무시하지 않습니다.
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 

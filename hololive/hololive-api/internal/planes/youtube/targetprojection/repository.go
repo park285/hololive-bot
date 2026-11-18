@@ -47,12 +47,11 @@ func (r *Refresher) Refresh(ctx context.Context, builder Builder, now time.Time)
 		return Result{}, errors.New("refresh youtube target projection: invalid refresher, builder, or time")
 	}
 
-	// commit과 캐시 공개까지 직렬화하여 늦게 끝난 호출이 새 캐시를 덮어쓰지 않게 한다.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	cache := r.reasons
-	// rollback·commit 결과 불명 모두 확인된 캐시를 폐기한다.
+
 	r.reasons = reasonsCache{}
 
 	now = now.UTC()
@@ -72,8 +71,6 @@ func (r *Refresher) Refresh(ctx context.Context, builder Builder, now time.Time)
 }
 
 func buildAndRefreshProjection(ctx context.Context, tx dbx.Tx, builder Builder, now, validUntil time.Time, cache *reasonsCache) (Result, error) {
-	// 입력 조회 전에 guard를 잠가 오래된 Build 결과가 뒤늦게 CURRENT를 덮어쓰지 않게 합니다.
-	// READ COMMITTED에서 대기 이후의 Build statement는 앞선 writer의 commit을 봅니다.
 	if err := lockProjectionGuard(ctx, tx); err != nil {
 		return Result{}, fmt.Errorf("lock projection guard: %w", err)
 	}
@@ -109,7 +106,6 @@ type currentProjection struct {
 	found      bool
 }
 
-// refreshTx는 buildAndRefreshProjection이 이미 획득한 guard 안에서 CURRENT를 조회·전환합니다.
 func refreshTx(ctx context.Context, tx dbx.Tx, targets []TargetSpec, reasons []TargetReason, hash string, now, validUntil time.Time, cache *reasonsCache, reasonsHash [32]byte) (Result, error) {
 	current, err := lockCurrent(ctx, tx)
 	if err != nil {
@@ -137,8 +133,6 @@ func sameProjection(current currentProjection, targets []TargetSpec, hash string
 	return current.found && current.rowCount == len(targets) && current.hash == hash
 }
 
-// extendUnchangedGeneration은 구조 identity를 유지하고 변경된 eligibility와 header heartbeat만 씁니다.
-// Not_before 변경이 하나라도 있으면 같은 transaction에서 eligibility_version을 한 번 올립니다.
 func extendUnchangedGeneration(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -169,7 +163,6 @@ func extendUnchangedGeneration(
 	return Result{Generation: current.generation, RowCount: len(targets), SHA256: hash}, nil
 }
 
-// NULL membership은 heartbeat로 복구하지 않으며, migration 또는 새 generation에서만 부여합니다.
 func extendTargets(ctx context.Context, tx dbx.Tx, generation int64, targets []TargetSpec) (bool, error) {
 	if len(targets) == 0 {
 		return false, nil
@@ -256,7 +249,6 @@ func insertStagingProjection(
 		return 0, fmt.Errorf("refresh youtube target projection: insert staging generation: %w", err)
 	}
 
-	// 이전 CURRENT가 없으면 모든 target이 이 generation에서 membership을 시작한다.
 	var previous *int64
 
 	if current.found {
@@ -315,7 +307,6 @@ func promoteStagingGeneration(ctx context.Context, tx dbx.Tx, current currentPro
 }
 
 func lockProjectionGuard(ctx context.Context, tx dbx.Tx) error {
-	// 기존 singleton을 실제로 갱신하여 collector와 직렬화하고 오래된 MVCC snapshot을 거부한다.
 	if _, err := tx.Exec(ctx, lockProjectionGuardSQL); err != nil {
 		return fmt.Errorf("refresh youtube target projection: lock projection guard: %w", err)
 	}
@@ -341,8 +332,6 @@ func lockCurrent(ctx context.Context, tx dbx.Tx) (currentProjection, error) {
 	return current, nil
 }
 
-// insertTargets는 직전 CURRENT의 같은 subject/kind/priority/poll/enabled row에서만 membership 시작
-// generation을 이어받습니다. 새·변경·재등록 row와 이전 API의 NULL row는 새 generation에서 시작합니다.
 func insertTargets(ctx context.Context, tx dbx.Tx, generation int64, previous *int64, targets []TargetSpec) error {
 	if len(targets) == 0 {
 		return nil

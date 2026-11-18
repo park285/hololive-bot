@@ -9,8 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// accepted에서 handoff reconciler가 갈 수 있는 곳이다. Failed만 재발송 큐로 돌아가고, 나머지는 재발송하지
-// 않는 종단이거나 payload를 보존한 수동 확인이다.
 var replyHandoffSettlementPolicies = map[string]replyOutboxSettlementPolicy{
 	ReplyOutboxHandoffCompleted:     {sql: replyOutboxHandoffTerminalSQL},
 	ReplyOutboxDead:                 {sql: replyOutboxHandoffTerminalSQL},
@@ -18,8 +16,6 @@ var replyHandoffSettlementPolicies = map[string]replyOutboxSettlementPolicy{
 	ReplyOutboxRetryablePreDispatch: {sql: replyOutboxHandoffRequeueSQL, retry: true},
 }
 
-// ReplyHandoffClaim은 handoff 확인을 위해 soft claim한 accepted 행이다. CheckToken은 claim이 밀어 둔
-// handoff_next_check_at이고 이후 전이의 CAS 토큰이다. Elapsed는 accepted_at부터 DB 시계로 잰 경과다.
 type ReplyHandoffClaim struct {
 	ID                   int64
 	IrisRequestID        string
@@ -30,8 +26,6 @@ type ReplyHandoffClaim struct {
 	ReplayHorizonExpired bool
 }
 
-// ReplyHandoffSettlement는 handoff 확인 결과에 따른 accepted 행의 전이다. RetryAfter는
-// retryable_pre_dispatch에서만 쓴다.
 type ReplyHandoffSettlement struct {
 	Claim      ReplyHandoffClaim
 	Status     string
@@ -39,7 +33,6 @@ type ReplyHandoffSettlement struct {
 	RetryAfter time.Duration
 }
 
-// 첫 handoff 확인 시각은 DB 시계 기준 firstCheck 뒤다.
 func (r *ReplyOutboxRepository) SettleAccepted(ctx context.Context, id int64, claimToken, irisRequestID string, firstCheck time.Duration) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return false, err
@@ -68,7 +61,6 @@ func (r *ReplyOutboxRepository) SettleAccepted(ctx context.Context, id int64, cl
 	return tag.RowsAffected() == 1, nil
 }
 
-// 프로세스가 확인 도중 멈추면 행은 softClaim 뒤에 다시 고를 수 있다.
 func (r *ReplyOutboxRepository) ClaimHandoffDue(ctx context.Context, batchSize int32, softClaim time.Duration) ([]ReplyHandoffClaim, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return nil, err
@@ -113,7 +105,6 @@ func (r *ReplyOutboxRepository) ClaimHandoffDue(ctx context.Context, batchSize i
 	return claims, nil
 }
 
-// 토큰이 바뀐 행은 다른 확인이 이미 처리했으므로 false를 돌려준다.
 func (r *ReplyOutboxRepository) SettleHandoff(ctx context.Context, settlement ReplyHandoffSettlement) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return false, err
@@ -147,7 +138,6 @@ func (r *ReplyOutboxRepository) SettleHandoff(ctx context.Context, settlement Re
 	return tag.RowsAffected() == 1, nil
 }
 
-// 반환값은 DB 시계로 잰 다음 확인까지의 대기다.
 func (r *ReplyOutboxRepository) RescheduleHandoff(ctx context.Context, claim ReplyHandoffClaim, step, horizon time.Duration) (time.Duration, bool, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return 0, false, err

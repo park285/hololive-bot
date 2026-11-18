@@ -9,16 +9,10 @@ import (
 	"time"
 )
 
-// fmtMaxPadding은 fmt가 받아들이는 width·precision 최댓값입니다. 더 큰 값은 fmt가 BADWIDTH/BADPREC로 거절합니다.
 const fmtMaxPadding = 1_000_000
 
-// fmtVerbOverhead는 verb 하나가 붙이는 오류 표기("%!d(BADPREC)", "%!v(MISSING)" 등)와 따옴표의 여유분입니다.
 const fmtVerbOverhead = 32
 
-// 파생 값 불변식: template 함수의 결과 크기(문자열 길이, 그 밖의 값은 measureTemplateValue 상한)는 출력 상한과
-// 가장 큰 입력 크기 중 큰 값을 넘지 않습니다. 모든 결과가 이 불변식을 지키므로 template이 만든 값은 64KiB와 가장 큰
-// 호출자 데이터 중 큰 값으로 묶이고, 반복 결합·escape·dict 중첩으로 크기를 키울 수 없습니다. 결과가 입력의 상수배를
-// 넘을 수 있는 함수는 할당 전에 결과 크기를 계산하고, 나머지는 입력의 상수배 할당 뒤 결과를 확인합니다.
 func derivedLimit(maxInputSize int) int {
 	return max(templateOutputMaxBytes, maxInputSize)
 }
@@ -35,7 +29,6 @@ func checkDerivedLen(name string, size, maxInputSize int) error {
 	return nil
 }
 
-// guardStringFunc는 결과가 입력의 상수배(UTF-8 보정·escape로 최대 6배)까지 커질 수 있는 문자열 함수의 결과를 제한합니다.
 func guardStringFunc(name string, fn func(string) string) func(string) (string, error) {
 	return func(s string) (string, error) {
 		out := fn(s)
@@ -47,7 +40,6 @@ func guardStringFunc(name string, fn func(string) string) func(string) (string, 
 	}
 }
 
-// boundedTruncate는 잘린 앞부분의 잘못된 UTF-8 보정(최대 3배)이 불변식을 넘지 않게 합니다.
 func boundedTruncate(maxLen int, s string) (string, error) {
 	out := truncateTemplateText(maxLen, s)
 	if err := checkDerivedLen("truncate", len(out), len(s)); err != nil {
@@ -69,7 +61,6 @@ func boundedDate(layout string, t time.Time) (string, error) {
 func boundedReplace(s, old, replacement string) (string, error) {
 	if growth := len(replacement) - len(old); growth > 0 {
 		limit := derivedLimit(max(len(s), len(old), len(replacement)))
-		// old가 비어 있으면 strings.Count는 ReplaceAll과 같은 삽입 위치 수(rune 수 + 1)를 돌려줍니다.
 		if count := strings.Count(s, old); count > 0 && count > (limit-len(s))/growth {
 			return "", derivedLimitError("replace", len(s)+count*growth, limit)
 		}
@@ -78,9 +69,7 @@ func boundedReplace(s, old, replacement string) (string, error) {
 	return strings.ReplaceAll(s, old, replacement), nil
 }
 
-// 원소 수도 이 크기로 제한되어 slice header 할당이 입력 크기의 상수배를 넘지 않습니다.
 func boundedSplit(s, sep string) ([]string, error) {
-	// sep가 비어 있으면 strings.Count는 rune 수 + 1을 돌려주며 실제 원소 수보다 하나 많게 계산합니다.
 	elements := strings.Count(s, sep) + 1
 	if size, limit := len(s)+2*elements+len("[]string")+2, derivedLimit(len(s)); size > limit {
 		return nil, derivedLimitError("split", size, limit)
@@ -89,7 +78,6 @@ func boundedSplit(s, sep string) ([]string, error) {
 	return strings.Split(s, sep), nil
 }
 
-// 입력 크기는 slice 출력 크기입니다.
 func boundedJoin(elems []string, sep string) (string, error) {
 	total := 0
 
@@ -123,7 +111,6 @@ func measureTemplateArgs(name string, args []any) (total, largest, leaves int, e
 	return total, largest, leaves, nil
 }
 
-// Separators는 인자 사이·끝에 붙는 최대 바이트 수입니다.
 func boundedConcat(name string, separators func(args int) int, fn func(...any) string) func(...any) (string, error) {
 	return func(args ...any) (string, error) {
 		total, largest, _, err := measureTemplateArgs(name, args)
@@ -149,7 +136,6 @@ func betweenArgs(args int) int { return max(args-1, 0) }
 
 func afterEachArg(args int) int { return args }
 
-// Dict 안에 dict를 거듭 넣어 출력 크기를 두 배씩 키우는 구성도 이 상한에서 멈춥니다.
 func boundedDict(values ...any) (map[string]any, error) {
 	if len(values)%2 != 0 {
 		return nil, errors.New("dict requires even number of arguments")
@@ -193,7 +179,6 @@ func boundedSprintf(format string, args ...any) (string, error) {
 		sizes:     make([]int, len(args)),
 		leaves:    make([]int, len(args)),
 		maxLeaves: 1,
-		// 명시적 인자 번호가 있으면 어느 verb든 어떤 인자도 다시 쓸 수 있어 가장 큰 인자로 계산합니다.
 		reordered: strings.IndexByte(format, '[') >= 0,
 	}
 
@@ -224,7 +209,6 @@ func boundedSprintf(format string, args ...any) (string, error) {
 	return out, nil
 }
 
-// Fmt는 slice·map의 원소마다 width를 적용하므로 leaf 수를 곱합니다. 인자 번호가 없는 형식은 fmt와 같은 순서로 인자를 배정하고, 있으면 가장 큰 인자를 씁니다.
 type fmtVerbBound struct {
 	args       []any
 	sizes      []int
@@ -239,7 +223,6 @@ type fmtVerbBound struct {
 	indexed    bool
 }
 
-// 합이 budget을 넘으면 그 즉시 budget+1을 돌려줍니다.
 func (b *fmtVerbBound) total(format string) int {
 	total := 0
 
@@ -268,7 +251,6 @@ func (b *fmtVerbBound) total(format string) int {
 	return b.addExtraArgs(total)
 }
 
-// 없는 인자는 "%!d(MISSING)"이며 오류 표기 여유에 포함됩니다.
 func (b *fmtVerbBound) verbArg(consumes bool) (size, leaves int) {
 	if b.reordered {
 		return b.maxArgSize, b.maxLeaves
@@ -281,7 +263,6 @@ func (b *fmtVerbBound) verbArg(consumes bool) (size, leaves int) {
 	return b.sizes[b.consumed], b.leaves[b.consumed]
 }
 
-// Verb 안에 인자 번호를 쓴 형식에는 fmt가 EXTRA를 붙이지 않습니다. 남은 인자만 세므로 정상 형식은 인자 크기를 두 번 세지 않습니다.
 func (b *fmtVerbBound) addExtraArgs(total int) int {
 	if b.indexed || b.consumed >= len(b.args) {
 		return total
@@ -299,9 +280,6 @@ func (b *fmtVerbBound) addExtraArgs(total int) int {
 	return total
 }
 
-// scanVerb는 fmt.doPrintf와 같은 순서(flag → 인자 번호 → width → '.' → 인자 번호 → precision → 인자 번호)로
-// verb 앞부분을 읽어 padding 합과 verb 위치를 돌려줍니다. '*'는 width와 precision 자리에서만 인자를 하나씩 쓰며,
-// 그 밖의 문자는 fmt처럼 verb로 다룹니다.
 func (b *fmtVerbBound) scanVerb(format string, i int) (padding, verb int) {
 	for i < len(format) && strings.IndexByte("#0+- ", format[i]) >= 0 {
 		i++
@@ -341,8 +319,6 @@ func (b *fmtVerbBound) widthOrPrecision(format string, i int, afterIndex bool) (
 	return value, next, afterIndex
 }
 
-// argIndex는 fmt.argNumber처럼 이 위치의 '['를 인자 번호로 읽습니다. 번호를 쓴 형식은 EXTRA 표기를 생략하고 verb마다
-// 가장 큰 인자로 계산합니다. 닫는 괄호가 없으면 fmt처럼 한 글자만 건너뜁니다.
 func (b *fmtVerbBound) argIndex(format string, i int) (next int, found bool) {
 	if i >= len(format) || format[i] != '[' {
 		return i, false
@@ -361,7 +337,6 @@ func (b *fmtVerbBound) argIndex(format string, i int) (next int, found bool) {
 	return i + end + 2, digits != "" && numberEnd == len(digits) && number <= fmtMaxPadding
 }
 
-// parseFmtNum은 fmt.parsenum과 같이 숫자를 읽습니다. 값이 너무 커지면 fmt처럼 형식 끝으로 건너뜁니다.
 func parseFmtNum(s string, i int) (value, next int) {
 	for ; i < len(s) && s[i] >= '0' && s[i] <= '9'; i++ {
 		if value > fmtMaxPadding {
@@ -374,8 +349,6 @@ func parseFmtNum(s string, i int) (value, next int) {
 	return value, i
 }
 
-// starArg는 '*'가 쓰는 인자의 width 값입니다. 순서대로 배정되는 형식은 실제 인자를, 번호를 쓴 형식은 가장 큰 정수
-// 인자를 씁니다. Fmt처럼 인자가 남아 있을 때만 인자 위치를 옮깁니다.
 func (b *fmtVerbBound) starArg() int {
 	value := b.star()
 
@@ -396,10 +369,8 @@ func (b *fmtVerbBound) verbSize(format string, verb, padding, argSize, argLeaves
 	if verb < len(format) {
 		switch format[verb] {
 		case 'q':
-			// \xff·\u00e9처럼 바이트당 최대 4바이트로 escape합니다.
 			factor = 4
 		case 'x', 'X':
-			// "% x"는 바이트당 16진수 2자리와 공백을 씁니다.
 			factor = 3
 		}
 	}
@@ -421,12 +392,9 @@ func (b *fmtVerbBound) star() int {
 	return b.starBound
 }
 
-// fmtIntArg는 fmt.intFromArg처럼 정수 인자의 절댓값을 width로 씁니다. 정수가 아니거나 fmt 상한을 넘으면 fmt가
-// BADWIDTH로 거절해 padding이 없습니다.
 func fmtIntArg(arg any) int {
 	var n int64
 
-	// fmt는 time.Duration처럼 이름 있는 정수도 허용하므로 구체 타입 대신 Kind를 확인합니다.
 	value := reflect.ValueOf(arg)
 
 	if value.CanInt() {

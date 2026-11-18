@@ -6,7 +6,6 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MODE="${2:---dry-run}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 AP_SWAPFILE_SIZE_MIB="${AP_SWAPFILE_SIZE_MIB:-2048}"
-# 별도 주소 기본값 없이 비밀이 아닌 주 서버 소유 정보만 읽는다.
 AP_POSTGRES_HOST=""
 while IFS='=' read -r host_name host_address; do
   if [[ "$host_name" == central ]]; then AP_POSTGRES_HOST="$host_address"; fi
@@ -72,7 +71,6 @@ release_id="${RELEASE_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$REPO_ROOT" rev-p
 native_release_id_validate "$release_id"
 
 if [[ "$AP_GOAMD64" != v1 ]]; then
-  # 지원하지 않는 CPU에서는 새 바이너리가 기동하지 못하므로 빌드·전송 전에 거절합니다.
   if ! ap_remote_bash "$AP_GOAMD64" <<'REMOTE'
 /lib64/ld-linux-x86-64.so.2 --help | grep -Fq "x86-64-$1 (supported"
 REMOTE
@@ -120,7 +118,6 @@ write_host_env() {
     printf 'POSTGRES_POOL_MIN_CONNS=2\n'
     printf 'POSTGRES_POOL_MAX_CONNS=%s\n' "$AP_POSTGRES_POOL_MAX_CONNS"
     printf 'POSTGRES_SOCKET_PATH=\n'
-    # 물리 메모리가 956MiB인 호스트라 예산식(768M−Node 192MiB−여유 32MiB)보다 낮게 둔다.
     printf 'GOMEMLIMIT=384MiB\n'
     printf 'GOGC=100\n'
     printf 'GIN_MODE=release\n'

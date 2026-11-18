@@ -18,15 +18,11 @@ type Batch struct {
 	Watermark     *domain.YouTubeContentWatermark
 }
 
-// Window는 커뮤니티 payload를 canonical post ID 기준으로 한 번 정규화한 결과다. 같은 canonical ID로
-// 정규화되는 raw ID는 첫 등장 위치의 행 하나로 합치고, 정규화할 수 없는 ID는 건너뛴다.
 type Window struct {
 	channelID string
 	posts     []*domain.YouTubeCommunityPost
 }
 
-// NormalizeWindow는 payload를 변경하지 않고 canonical 게시글 행을 입력 순서대로 만든다. 뒤에 나온 alias는
-// 앞 행에서 비어 있는 값만 채운다.
 func NormalizeWindow(payload *contract.CommunityPayloadV1) Window {
 	posts := make([]*domain.YouTubeCommunityPost, 0, len(payload.Posts))
 	indexByPostID := make(map[string]int, len(payload.Posts))
@@ -155,7 +151,6 @@ func mergePost(dst *domain.YouTubeCommunityPost, src *contract.CommunityPostV1) 
 	}
 }
 
-// thumbnails는 빈 목록을 nil로 두어 행과 payload에 NULL·생략으로 남긴다.
 func thumbnails(src []contract.Thumbnail) domain.ThumbnailsJSON {
 	if len(src) == 0 {
 		return nil

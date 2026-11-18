@@ -551,7 +551,6 @@ func TestTransitionCleanupMixedFailedOutboxRequiresSentChildLedger(t *testing.T)
 			`, outboxID).Scan(&remaining))
 			require.Equal(t, tt.wantRemaining, remaining)
 
-			// 물리 행을 지워도 SENT 자식의 논리 ledger는 남아야 같은 논리 키의 재전송을 막습니다.
 			require.NoError(t, pool.QueryRow(ctx, `
 				SELECT COUNT(*)
 				FROM youtube_notification_delivery_ledger
@@ -562,8 +561,6 @@ func TestTransitionCleanupMixedFailedOutboxRequiresSentChildLedger(t *testing.T)
 	}
 }
 
-// 집계 규칙상 활성 자식이 없고 FAILED 자식이 하나라도 있으면 outbox는 FAILED입니다. FAILED 자식을 먼저 넣어 guard가 FAILED 자식을 처리한 뒤에도 SENT 자식의 ledger
-// 증거를 검사하는지 드러냅니다.
 func seedTransitionMixedFailedOutbox(
 	t *testing.T,
 	pool *pgxpool.Pool,
@@ -636,7 +633,6 @@ func TestTransitionCleanupGuardsFailedChildWithActiveLogicalSibling(t *testing.T
 	require.Equal(t, 1, activeDeliveryCount)
 }
 
-// FAILED는 ledger에 기록되지 않으므로 ledger 행은 만들지 않습니다.
 func markTransitionDeliveriesTerminalFailed(
 	t *testing.T,
 	pool *pgxpool.Pool,

@@ -151,9 +151,6 @@ function healthResponse(res) {
   res.end(JSON.stringify({ protocol_version: 1, generation: "generation", state: "IDLE", revision: "revision" }));
 }
 
-// po-broker(Go net/http)는 Keep-Alive timeout 힌트를 보내지 않고 IdleTimeout(30초) 뒤에야 닫습니다.
-// 서버 쪽 idle 종료를 끄면 제한 시간 안의 종료는 모두 client가 시작한 것입니다. client는 약 1초에 닫아야 하며,
-// 제한은 timer 지연 여유만 더한 값으로 broker IdleTimeout보다 훨씬 짧습니다.
 const clientCloseBoundMs = 2_000;
 
 test("sequential exchanges share one connection that the client closes about a second after going idle", async (t) => {

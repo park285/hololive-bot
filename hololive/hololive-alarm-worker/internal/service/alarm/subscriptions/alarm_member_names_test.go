@@ -34,8 +34,6 @@ func (p *countingMemberLookupProvider) FindMemberByChannelID(ctx context.Context
 	return p.mockMemberDataProvider.FindMemberByChannelID(ctx, channelID)
 }
 
-// 알람 목록의 멤버 이름은 members 정본의 DisplayName(short_korean_name→korean_name→english_name)이다.
-// 멤버 정본에 없는 채널은 채널 ID로 보이고, 조회 실패는 채널 ID 등 다른 이름으로 덮지 않는다.
 func TestListRoomAlarmsViewResolvesMemberNamesFromMembers(t *testing.T) {
 	lookupErr := errors.New("member database unavailable")
 
@@ -56,7 +54,6 @@ func TestListRoomAlarmsViewResolvesMemberNamesFromMembers(t *testing.T) {
 			wantName: testEnglishMemberName,
 		},
 		{
-			// DisplayName은 공백을 다듬지 않으므로 공백뿐인 short_korean_name이 korean_name을 가리고 목록은 채널 ID를 보여 준다.
 			name:     "blank short korean name",
 			provider: &mockMemberDataProvider{members: []*domain.Member{{ChannelID: testChannelID, Name: testEnglishMemberName, NameKo: "우사다 페코라", ShortKoreanName: " "}}},
 			wantName: testChannelID,
@@ -86,8 +83,6 @@ func TestListRoomAlarmsViewResolvesMemberNamesFromMembers(t *testing.T) {
 	}
 }
 
-// 관리 목록의 멤버 이름도 members 정본의 DisplayName이며 members에 없는 채널은 빈 이름이다. 여러 방이 구독한 채널도
-// 한 번만 조회하고, 조회 실패는 이름 없는 목록으로 바꾸지 않고 목록 오류로 돌려준다.
 func TestGetAllAlarmKeysResolvesMemberNamesFromMembers(t *testing.T) {
 	ctx := t.Context()
 	as := newTestAlarmService(t)

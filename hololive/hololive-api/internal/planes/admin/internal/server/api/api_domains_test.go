@@ -53,7 +53,6 @@ func TestNewDomainHandlersRejectsMissingRequiredDependency(t *testing.T) {
 	}
 }
 
-// 선택 의존성이 없으면 조립은 성공하고, 해당 endpoint만 문서화된 503을 돌려준다.
 func TestNewDomainHandlersOptionalDependenciesRespondUnavailable(t *testing.T) {
 	handlers, err := NewDomainHandlers(completeTestDeps(t))
 	if err != nil {

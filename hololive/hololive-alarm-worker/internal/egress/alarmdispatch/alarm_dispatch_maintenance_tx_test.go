@@ -22,7 +22,6 @@ func TestAlarmDispatchMaintenancePGWithAdvisoryLockRollsBackCallbackError(t *tes
 	eventID := seedAlarmDispatchRetentionEvent(t, pool)
 	callbackErr := errors.New("callback failed after delete")
 
-	// 콜백이 같은 트랜잭션에서 지운 행은 콜백 오류와 함께 되돌아가야 한다.
 	err := store.WithAdvisoryLock(t.Context(), 42, func(ctx context.Context, locked alarmDispatchMaintenanceDataStore) error {
 		pgStore, ok := locked.(alarmDispatchMaintenancePgxStore)
 		require.True(t, ok)
@@ -85,7 +84,6 @@ func TestAlarmDispatchMaintenancePGRetentionDeletesEveryTargetInLockedTransactio
 	}
 
 	require.NoError(t, runner.RunOnce(t.Context()))
-	// 종단 상태 네 개(sent·dlq·quarantined·취소)마다 한 번씩 지운다.
 	require.Equal(t, 4, store.deletedTerminal)
 	require.Equal(t, 1, store.deletedSendUnits)
 	require.Equal(t, 1, store.deletedEvents)
@@ -123,7 +121,6 @@ func TestAlarmDispatchRetentionDeleteSkipsRowRequeuedWhileWaitingForLock(t *test
 	expiredID := seedAlarmDispatchRetentionDLQ(t, pool, eventID, "retention-expired", dlqAt)
 	requeuedID := seedAlarmDispatchRetentionDLQ(t, pool, eventID, "retention-requeued", dlqAt)
 
-	// requeue가 먼저 행을 잠근 채 dlq -> retry를 적용하고, retention DELETE는 그 잠금을 기다리게 합니다.
 	requeueTx := beginAlarmDispatchRequeueHoldingLock(t, pool, requeuedID)
 	done := make(chan alarmDispatchDeleteResult, 1)
 
@@ -224,7 +221,6 @@ func seedAlarmDispatchRetentionDLQ(t *testing.T, pool *pgxpool.Pool, eventID int
 
 	var deliveryID int64
 
-	// 운영 행처럼 send unit과 dispatch group을 함께 둡니다(send_unit_id는 NOT NULL).
 	require.NoError(t, pool.QueryRow(t.Context(), `
 		WITH unit AS (
 			INSERT INTO alarm_dispatch_send_units (unit_key, dispatch_group_key, room_id, client_request_id)

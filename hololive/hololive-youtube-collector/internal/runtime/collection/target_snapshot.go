@@ -9,11 +9,8 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
-// Lease subject와 target subject의 저장 상한이며, 저장소의 job identity 검증과 같은 값입니다.
 const maxSubjectBytes = 256
 
-// TargetSnapshot은 lease가 고정한 projection 세대의 수집 대상 시야입니다.
-// 생성자가 정렬·중복·상한 불변식을 검증하며 조회는 방어적 복사본을 반환합니다.
 type TargetSnapshot struct {
 	generation   int64
 	membership   JobMembership
@@ -22,7 +19,6 @@ type TargetSnapshot struct {
 	subjects     map[contract.ObservationKind][]string
 }
 
-// NewExactTargetSnapshot은 한 subject의 요청 kind별 활성 여부로 EXACT_SUBJECT 시야를 만듭니다.
 func NewExactTargetSnapshot(
 	generation int64,
 	subject string,
@@ -54,7 +50,6 @@ func NewExactTargetSnapshot(
 	}, nil
 }
 
-// NewProjectionTargetSnapshot은 요청 kind별 roster로 CURRENT_PROJECTION 시야를 만들고 전체 행 수를 maxRows로 제한합니다.
 func NewProjectionTargetSnapshot(
 	generation int64,
 	requested []contract.ObservationKind,

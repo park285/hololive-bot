@@ -73,7 +73,6 @@ func (p ExecutionProfile) minimum() (time.Duration, error) {
 		return 0, errors.New("validate execution profile: reservation count overflows")
 	}
 
-	// 직전 작업의 마지막 예약부터 남은 간격도 첫 요청의 대기에 포함됩니다.
 	reservationCount := p.maxUpstreamCalls * p.providerInflight
 
 	limiterBudget, err := checkedMulDuration(reservationCount, p.rateInterval)

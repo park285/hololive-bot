@@ -16,7 +16,6 @@ const (
 	mekparkUnitBShortName = "유닛 B"
 )
 
-// 알림은 원천 채널 제목 대신 이 이름에 호스트 표기를 붙인다.
 type mekparkTestMembers struct {
 	collabTestMembers
 }

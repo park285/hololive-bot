@@ -183,8 +183,6 @@ func requireLiveStartEvidenceConvergence(t *testing.T, providers []contract.Prov
 	requireConfirmedLiveProjection(t, loadLiveStartProjection(t, pool), youtubeProof.ScheduledFor)
 }
 
-// Holodex live lease는 subject를 고정하지 않는 global live_snapshot 범위이므로, 실제 acquire라면 함께 등록된 channel live target까지 세었다. 이
-// fixture는 target을 lease 뒤에 추가하므로 그 acquisition 명단을 여기서 반영한다.
 func finalizeLeaseRosterCount(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseProof) {
 	t.Helper()
 

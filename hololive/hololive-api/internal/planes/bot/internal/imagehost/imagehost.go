@@ -22,9 +22,6 @@ func NewPolicy(hosts, suffixes []string) Policy {
 	return Policy{exact: exact, suffixes: suffixes}
 }
 
-// AvatarHosts는 봇 아바타 경로(멤버 채널 사진) 전용의 좁은 셋이다.
-// ThumbnailHosts의 서브셋을 유지해야 하며(테스트로 핀), 아바타 경로에
-// 썸네일 호스트·와일드카드를 부여해 SSRF 표면을 넓히지 않는다.
 var AvatarHosts = NewPolicy([]string{
 	"yt3.ggpht.com",
 	"yt3.googleusercontent.com",

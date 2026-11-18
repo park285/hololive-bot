@@ -10,7 +10,6 @@ import (
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// newSeededTestFormatter는 시드 message_strings와 템플릿을 같은 DB에서 읽는 운영 구성의 formatter를 만든다.
 func newSeededTestFormatter(t *testing.T) *formatter.ResponseFormatter {
 	t.Helper()
 

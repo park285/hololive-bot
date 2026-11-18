@@ -185,8 +185,7 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 		Server: settings.ServerConfig{APIKey: testAPIKey},
 	}
 	infra := &sharedmodules.InfraModule{
-		Postgres: &databasemocks.Client{},
-		// /api/holo rate limit은 cache가 없으면 기동 오류다(fail-closed).
+		Postgres:         &databasemocks.Client{},
 		Cache:            sharedtestutil.NewTestCacheService(t.Context(), t),
 		MemberRepository: &member.Repository{},
 	}

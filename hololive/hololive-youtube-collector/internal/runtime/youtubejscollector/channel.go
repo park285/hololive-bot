@@ -20,12 +20,10 @@ type ChannelClient interface {
 	FetchChannel(ctx context.Context, request youtubejs.ChannelRequest) (youtubejs.ChannelResult, error)
 }
 
-// ChannelRunner는 방송 일정 조회 없이 채널 프로필·사진만 수집합니다.
 type ChannelRunner struct {
 	client ChannelClient
 }
 
-// NewChannelMetadataRunner는 방송 일정 조회 없이 채널 프로필·사진만 수집합니다.
 func NewChannelMetadataRunner(client ChannelClient) *ChannelRunner {
 	return &ChannelRunner{client: client}
 }
@@ -128,7 +126,6 @@ func fetchChannelPage(
 	}
 
 	if len(result.UnavailableLiveSessions) > 0 {
-		// 목록 조회가 끝나도 시각이 가려진 영상은 부재 증거가 아닙니다. 다음 poll은 정상 진행합니다.
 		completeness = contract.CompletenessPartial
 	}
 
@@ -182,7 +179,6 @@ func appendBuiltEnvelope(
 	return nil
 }
 
-// 공유 계약이 payload를 거부하면 원천 응답과 계약의 불일치로 분류합니다.
 func subjectEnvelope(
 	input *collection.RunInput,
 	kind contract.ObservationKind,
@@ -198,7 +194,6 @@ func subjectEnvelope(
 	return generationEnvelope(input, kind, generation, completeness, continuity, payload)
 }
 
-// 세대 오류를 응답 pagination 검증보다 먼저 보고해야 하는 수집기가 사용합니다.
 func generationEnvelope(
 	input *collection.RunInput,
 	kind contract.ObservationKind,

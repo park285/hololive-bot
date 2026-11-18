@@ -54,13 +54,12 @@ func (r *commitHookRepository) ClearByRoom(ctx context.Context, roomID string) (
 }
 
 type commitMutationCase struct {
-	name          string
-	mutate        func(context.Context, *AlarmService) error
-	wantLive      []string
-	wantCommunity []string
-	wantShorts    []string
-	wantNew       []string
-	// noCacheAfterCommit은 commit 전에 cache 무효화를 끝내 commit 뒤 cache 장애가 결과에 드러나지 않는 변경이다.
+	name               string
+	mutate             func(context.Context, *AlarmService) error
+	wantLive           []string
+	wantCommunity      []string
+	wantShorts         []string
+	wantNew            []string
 	noCacheAfterCommit bool
 }
 
@@ -184,7 +183,6 @@ func TestSubscriptionCommitBoundaryPreservesRecipients(t *testing.T) {
 					}
 
 					assertCommittedRecipients(t, service, pool, mutation)
-					// commit 후 오류를 받은 호출자가 재시도해도 이미 반영된 구독이 되돌아가면 안 된다.
 					require.NoError(t, mutation.mutate(t.Context(), service))
 					assertCommittedRecipients(t, service, pool, mutation)
 				})

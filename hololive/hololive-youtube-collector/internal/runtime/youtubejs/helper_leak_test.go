@@ -44,7 +44,6 @@ func TestHLPLeak(t *testing.T) {
 
 	after := measureHelperLeak(t, base)
 	if after != before {
-		// FD·프로세스·I/O 누수는 goroutineleak만으로 판별할 수 없어 기존 검사와 전체 스택도 유지한다.
 		for _, name := range []string{"goroutineleak", "goroutine"} {
 			var profile bytes.Buffer
 
@@ -92,7 +91,6 @@ func measureHelperLeak(t *testing.T, base string) helperLeakSnap {
 	t.Helper()
 	runtime.GC()
 	runtime.GC()
-	time.Sleep(20 * time.Millisecond)
 
 	return helperLeakSnap{
 		fds:        countProcDir(t, "/proc/self/fd"),

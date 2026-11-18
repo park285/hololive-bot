@@ -13,9 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// InsertPosts는 확정본 posterID를 게시한 뒤이고 그 주 범위(JST 날짜) 안에 올린 글만 그 포스터의 멤버 앞으로 넣고, 넣거나 본문을 바꾼 글 수를 돌려준다.
-// 이미 기록한 글은 새 본문이 저장한 본문 뒤에 내용을 더 붙인 것일 때만 본문을 바꾸고 그 글의 변경을 지워 판별부터 다시 하게 한다. 철회한 글은 건너뛴다.
-// 글 하나라도 저장할 수 없으면 아무것도 넣지 않고 오류다.
 func (s *Store) InsertPosts(ctx context.Context, posterID int64, posts []Post) (int64, error) {
 	if err := validatePosts(posts); err != nil {
 		return 0, fmt.Errorf("insert schedule poster posts: %w", err)
@@ -65,8 +62,6 @@ func validatePosts(posts []Post) error {
 	return nil
 }
 
-// PendingPosts는 schedule의 행 묶음이 지금도 게시 중일 때 판별할 글과 그 묶음에 아직 대응하지 않은 글을 게시 순서로 돌려준다.
-// 묶음이 바뀌었으면 빈 목록이고, 재추출을 기다리는 동안(RowsPending)은 판별할 글만 돌려준다.
 func (s *Store) PendingPosts(ctx context.Context, schedule PublishedSchedule, limit int) ([]Post, error) {
 	rows, err := s.pool.Query(ctx, pendingPostsSQL, schedule.PosterID, schedule.ExtractedAt, min(max(limit, 1), maxListLimit))
 	if err != nil {
@@ -94,7 +89,6 @@ func (s *Store) PendingPosts(ctx context.Context, schedule PublishedSchedule, li
 	return posts, nil
 }
 
-// RecordDecision은 멤버 channelID 앞으로 기록한 글이 아직 판별 전일 때만 판별 결과를 기록한다. 이미 판별한 글이면 false다.
 func (s *Store) RecordDecision(ctx context.Context, channelID string, postID int64, decision PostDecision) (bool, error) {
 	switch decision.Status {
 	case PostNotRelevant, PostJudgeFailed, PostRelevant:
@@ -121,11 +115,6 @@ func (s *Store) RecordDecision(ctx context.Context, channelID string, postID int
 	return tag.RowsAffected() == 1, nil
 }
 
-// RecordMatch는 PendingPosts가 읽은 post를 schedule의 행 묶음에 대응한 결과로 기록하고 그 글의 옛 변경을 새 변경으로 바꾼다.
-// 반영 변경(ChangeKind.Applied)이 하나라도 있으면 같은 묶음에 이미 대응한 뒤 글(게시 순서)을 relevant로 돌려 다시 대응하게 한다.
-// 그 사이 묶음이 바뀌었거나, 글의 상태나 대응 도장이 post와 달라졌거나(다른 작업의 기록, 철회), 이 글이 이미 그 묶음에 대응했으면
-// 아무것도 쓰지 않고 false다. 변경이 ValidateChanges를 통과하지 못하면 오류다.
-// 대응 작업은 모든 인스턴스를 통틀어 하나만 돈다는 전제다. 둘이 겹치면 뒤 글이 앞선 글을 반영하지 않은 판정으로 matched에 남을 수 있다.
 func (s *Store) RecordMatch(ctx context.Context, schedule PublishedSchedule, post Post, result MatchResult) (bool, error) {
 	payload, err := encodeChanges(post.ID, result)
 	if err != nil {
@@ -246,7 +235,6 @@ func encodeChanges(postID int64, result MatchResult) (string, error) {
 	return string(payload), nil
 }
 
-// PurgePosts는 before보다 먼저 올린 글을 게시 순서로 limit건까지 지운다. 그 글의 변경도 함께 지워진다.
 func (s *Store) PurgePosts(ctx context.Context, before time.Time, limit int) (int64, error) {
 	tag, err := s.pool.Exec(ctx, purgePostsSQL, before, limit)
 	if err != nil {
@@ -256,9 +244,6 @@ func (s *Store) PurgePosts(ctx context.Context, before time.Time, limit int) (in
 	return tag.RowsAffected(), nil
 }
 
-// RevokePost는 확정본 posterID에 대응할 수 있는 글(같은 멤버, 포스터 게시 뒤, 주 범위 안)을 철회한다. 글은 RestorePost 전까지
-// 다시 판별·대응하지 않고 그 변경은 지운다. 포스터나 글이 없거나 서로 이어지지 않으면 ErrNotFound, 포스터가 확정본이 아니거나 판별 결과가
-// relevant·matched·match_failed가 아니면 ErrInvalidState다.
 func (s *Store) RevokePost(ctx context.Context, posterID, postID int64) error {
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		if err := setPostState(ctx, tx, revokePostSQL, posterID, postID); err != nil {
@@ -278,8 +263,6 @@ func (s *Store) RevokePost(ctx context.Context, posterID, postID int64) error {
 	return nil
 }
 
-// RestorePost는 RevokePost로 철회한 글을 relevant로 돌려 다음 주기에 다시 대응하게 한다. 조건과 오류는 RevokePost와 같고,
-// 글이 철회 상태가 아니면 ErrInvalidState다.
 func (s *Store) RestorePost(ctx context.Context, posterID, postID int64) error {
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		return setPostState(ctx, tx, restorePostSQL, posterID, postID)
@@ -316,20 +299,16 @@ func setPostState(ctx context.Context, tx pgx.Tx, query string, posterID, postID
 	return nil
 }
 
-// PosterPost는 포스터에 대응할 수 있는 글 하나와 그 처리 상태다.
 type PosterPost struct {
 	ID          int64
 	PostedAt    time.Time
 	TextExcerpt string
 	Status      PostStatus
 	Reason      string
-	// Current는 대응 도장이 포스터의 지금 행 묶음과 같다는 뜻이다. Changes는 Current인 글만 채운다.
-	Current bool
-	// Revocable·Restorable은 RevokePost·RestorePost가 받는 포스터와 글의 상태라는 뜻이다.
-	Revocable  bool
-	Restorable bool
-	// Changes는 거절과 같음을 포함한 그 글의 변경을 항목 순서로 담고, Change의 한국어 칸은 TitleKo만 채운다.
-	Changes []Change
+	Current     bool
+	Revocable   bool
+	Restorable  bool
+	Changes     []Change
 }
 
 const (
@@ -337,8 +316,6 @@ const (
 	maxOtherPosterPosts      = 50
 )
 
-// PosterPosts는 posterID에 대응할 수 있는 글을 최근 글부터 돌려준다. 상태가 relevant·matched·match_failed·revoked인 글은
-// 200건까지, 나머지 상태는 50건까지다. 포스터가 없으면 ErrNotFound다. TextExcerpt는 본문 앞 280자다.
 func (s *Store) PosterPosts(ctx context.Context, posterID int64) ([]PosterPost, error) {
 	var posts []PosterPost
 

@@ -371,7 +371,6 @@ func TestPublishBatchTargetDisableDuringFetchRollsBackEverything(t *testing.T) {
 		t.Fatal(commitErr)
 	}
 
-	// 새 CURRENT가 이 job의 target을 이어받지 않았으므로 job별 membership 변경(superseded)으로 거절된다.
 	_, err = NewRepository(pool).PublishBatch(ctx, publishInput(envelope))
 	if !errors.Is(err, collection.ErrTargetDisabled) {
 		t.Fatalf("own target removed mid-fetch error = %v", err)
@@ -603,7 +602,6 @@ func TestStaleHolderCannotCompleteDuplicateOrCollision(t *testing.T) {
 	}
 }
 
-// 파이프라인 문장은 QueryTracer에 보이지 않으므로 BatchTracer로 배치 1회를 왕복 1회, 배치 안 문장을 각각 문장으로 센다.
 type targetQueryCounter struct {
 	queries    atomic.Int32
 	roundTrips atomic.Int32

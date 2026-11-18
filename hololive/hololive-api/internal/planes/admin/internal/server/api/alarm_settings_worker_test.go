@@ -11,7 +11,6 @@ import (
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
-// 실제 worker handler와 alarmhttp client의 왕복은 alarm-worker httpapi·subscriptions 테스트가 검증하고, 여기서는 API의 설정 저장·적용 순서만 본다.
 type alarmSettingsWorker struct {
 	mu      sync.Mutex
 	targets []int

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package matcher
 
 import (
@@ -32,8 +12,6 @@ import (
 
 const orgHololive = "Hololive"
 
-// matchCacheMaxEntries 는 matchCache 의 size-bound. 키가 사용자 query(외부 입력)라
-// burst 시 무한정 성장할 수 있어, TTL 만으로 부족한 상한을 강제한다.
 const matchCacheMaxEntries = 1024
 
 type MatchCacheEntry struct {
@@ -42,7 +20,6 @@ type MatchCacheEntry struct {
 	snapshot  *matcherSnapshot
 }
 
-// matchCandidate의 memberName은 검색 일치 판단에 쓰는 english_name 계열 이름이고, 한국어 이름 두 개는 표시 전용이다.
 type matchCandidate struct {
 	memberID        int
 	photo           string
@@ -74,7 +51,6 @@ type snapshotMatchStrategy struct {
 	find func(*matcherSnapshot, string) *matchCandidate
 }
 
-// 다양한 매칭 전략(정확 일치, 부분 일치, 별명 검색 등)을 순차적으로 시도한다.
 type Matcher struct {
 	membersData           domain.MemberDataProvider
 	logger                *slog.Logger
@@ -101,7 +77,6 @@ func NewMatcher(
 		snapshotTTL:           1 * time.Minute,
 	}
 
-	// 멤버 수 로그를 위해 생성 시 전체 멤버를 적재하던 호출은 뺐다. 멤버는 snapshot이 LoadAllMembers로 적재하고 실패를 돌려준다.
 	logger.Info("Matcher initialized")
 
 	return mm

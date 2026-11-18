@@ -19,7 +19,6 @@ import (
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// 같은 멤버를 영어 이름으로 찾아도 명령마다 정본 표시명(short_korean_name)을 써야 한다.
 const (
 	testChannelSora      = "ch-sora"
 	displayNameQuery     = "Tokino Sora"

@@ -85,18 +85,12 @@ function contentRows(feed) {
   return videos;
 }
 
-// 예산에 선택되지 않은 항목은 정규화하지 않도록 행을 지연 변환합니다.
 function* mapContentPage(feed, channelId, kind) {
   for (const row of contentRows(feed)) {
     yield mapContentRow(row, channelId, kind);
   }
 }
 
-// 목록 행의 공개·예정 시각은 상대·지역화 문자열("3 hours ago")이라 절대 시각 근거가 아니고, shorts 행(ShortsLockupView·
-// ReelItem)에는 시각 필드가 없습니다. 그래서 항목에 시각을 싣지 않으며, collector가 videos 항목만 영상별
-// video_live_check RPC(호출마다 limiter 1회)로 근거를 얻습니다. is_upcoming은 streams 판정과 같은 구조화된 예정 표시일 뿐
-// 시각 근거가 아니며, 저장한 근거가 현재 상태와 맞는지 판단할 때만 씁니다.
-// 이 함수는 upstream 호출을 하지 않으므로 목록 RPC 하나가 숨은 영상별 호출을 만들지 않습니다.
 function mapContentRow(row, channelId, kind) {
   assertVideoRowTitled(row);
   const videoId = videoIDOf(row);

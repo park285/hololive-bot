@@ -46,7 +46,6 @@ func TestCollectAndPublishRecordsPublishDurationAndEncodedBytes(t *testing.T) {
 		t.Fatalf("publish encoded bytes samples = %d, want 1", got)
 	}
 
-	// 인코딩한 배치는 payload 외에 식별자·hash·lease 필드를 싣는다.
 	if got := histogramSum(t, registry, "youtube_observation_publish_encoded_bytes", labels); got <= float64(len(payload)) {
 		t.Fatalf("publish encoded bytes = %v, want more than payload %d", got, len(payload))
 	}

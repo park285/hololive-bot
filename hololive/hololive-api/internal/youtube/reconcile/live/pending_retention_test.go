@@ -9,7 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 읽기 모델은 PendingEnds 존재만으로 현재 미해결 종료를 판정하면 안 된다.
 func TestReduceRetainsSupersededEndEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -36,7 +35,6 @@ func TestReduceRetainsSupersededEndEvidence(t *testing.T) {
 	}
 }
 
-// ENDED 세션은 무시한 부재 이력을 적재하지 않는다.
 func storedEndedSession() SessionState {
 	started := liveA().EffectiveAt
 	ended := endA().EffectiveAt
@@ -125,7 +123,6 @@ func TestReduceKeepsNewestEndForVideoWithoutSession(t *testing.T) {
 		t.Fatalf("pending = %#v, want observation %d", state.PendingEnds, later.ObservationID)
 	}
 
-	// 두 종료 사이에 시작한 LIVE가 늦게 도착하면 최신 종료로 끝난다. 첫 종료만 남았다면 LIVE로 남는다.
 	lateLive := liveEvidence(22, endA().EffectiveAt.Add(time.Hour), contract.CompletenessPartial, contract.ContinuityContiguous,
 		sessionFact(testLiveStatus))
 

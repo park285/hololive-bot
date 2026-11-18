@@ -19,8 +19,6 @@ func (r *Runtime) remember(work sourceobservation.ClaimWork) {
 	r.lifecycleMu.Lock()
 	defer r.lifecycleMu.Unlock()
 
-	// claim loop가 모든 batch를 등록한 뒤 최종 해제가 시작됩니다.
-	// 늦게 처리에 진입한 worker의 중복 등록이 해제한 token을 되살리지 않게 합니다.
 	if r.releaseDone != nil {
 		return
 	}
@@ -161,7 +159,6 @@ func retryableObservationError(err error) bool {
 		return true
 	}
 
-	// 잠금 뒤 행이 바뀐 충돌은 트랜잭션 전체를 되돌렸으므로 40001처럼 최신 행으로 다시 판정한다.
 	if _, ok := errors.AsType[*sourceobservation.LiveSessionConflictError](err); ok {
 		return true
 	}

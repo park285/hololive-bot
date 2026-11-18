@@ -10,13 +10,10 @@ import (
 	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
-// 자동 거절은 관리자가 되돌릴 수 없으므로 is_schedule 하나만 보고 판단한다.
 const (
-	reviewBatch = 20
-	rejectBelow = 0.5
-	confirmFrom = 0.8
-	// 들어온 뒤 handOverAfter가 지나도록 판정하지 못한 후보는 실패 이유와 상관없이 관리자 검토로 넘긴다(collect).
-	// 장애가 길어져도 후보가 알림 없이 만료되지 않게 하는 상한이다.
+	reviewBatch       = 20
+	rejectBelow       = 0.5
+	confirmFrom       = 0.8
 	handOverAfter     = 6 * time.Hour
 	stageDecision     = "decision"
 	stagePeriod       = "period"
@@ -40,7 +37,6 @@ type posterJudge interface {
 	readPeriod(ctx context.Context, src source) (printedPeriod, usage, error)
 }
 
-// autoReview는 한 후보의 실패로 뒤 후보를 막지 않지만, 어느 후보도 판정할 수 없는 실패(errReviewUnavailable)면 배치를 멈춘다.
 func (s *Service) autoReview(ctx context.Context) error {
 	candidates, err := s.reviews.UnreviewedCandidates(ctx, reviewBatch)
 	if err != nil {
@@ -104,8 +100,6 @@ func (s *Service) reviewOne(ctx context.Context, item posterstore.ReviewCandidat
 	return s.confirm(ctx, item, scores, start, end)
 }
 
-// unjudged는 후보 때문에 판정할 수 없는 경우(errUnjudgeable)만 관리자 검토로 넘기고, 그 밖의 실패는 오류로 돌려
-// 다음 수집 주기에 다시 판정하게 둔다. 계속 실패하는 후보는 handOverAfter가 넘긴다.
 func (s *Service) unjudged(
 	ctx context.Context, item posterstore.ReviewCandidate, scores posterScores, reason posterstore.ReviewRequestReason, err error,
 ) error {
@@ -139,7 +133,6 @@ func (s *Service) reject(ctx context.Context, item posterstore.ReviewCandidate, 
 	return s.settle(ctx, item, scores, outcomeRejected, "reject auto reviewed schedule poster", err)
 }
 
-// settle은 그 사이 관리자가 처리했거나 앞 후보의 확정이 닫은 후보(err가 충돌·상태·없음)를 superseded로 기록한다.
 func (s *Service) settle(
 	ctx context.Context, item posterstore.ReviewCandidate, scores posterScores, outcome, action string, err error, attrs ...slog.Attr,
 ) error {

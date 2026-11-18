@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package member
 
 import (
@@ -275,7 +255,6 @@ func (c *Cache) reconcileEpoch(ctx context.Context, reason string) error {
 
 	epoch, err := c.epoch.Current(ctx)
 	if err != nil {
-		// 작업 종료를 위한 취소는 authority 장애로 기록하지 않는다.
 		if !errors.Is(ctx.Err(), context.Canceled) {
 			c.markEpochUncertain(reason, err)
 		}
@@ -288,9 +267,6 @@ func (c *Cache) reconcileEpoch(ctx context.Context, reason string) error {
 	return nil
 }
 
-// applyEpoch는 authority 값이 마지막으로 본 값과 다르면(크든 작든) 로컬 snapshot을 무효화한다. Valkey에는 멤버 데이터가
-// 없으므로 epoch는 순서가 아니라 변경 신호다. Valkey 재시작으로 key가 1로 다시 만들어진 회귀도 변경으로 받아들여
-// snapshot을 새로 적재하고, 재시작 전까지 PostgreSQL 직접 조회로 고정되지 않게 한다.
 func (c *Cache) applyEpoch(epoch uint64, reason string) {
 	c.snapshotMu.Lock()
 
@@ -322,8 +298,6 @@ func (c *Cache) markEpochUncertain(reason string, err error) {
 	}
 }
 
-// Epoch 조정 구성에서 authority가 불확실하면 PostgreSQL을 직접 읽는다. Epoch authority 없이 직접 구성한 Cache에는
-// 조정할 authority가 없으므로 우회하지 않는다.
 func (c *Cache) cacheBypassRequired(operation string) bool {
 	if !c.epochCoordinated() || c.authorityHealthy.Load() {
 		return false

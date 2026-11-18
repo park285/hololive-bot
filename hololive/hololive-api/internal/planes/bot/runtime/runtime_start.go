@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package botruntime
 
 import (
@@ -31,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
-// Shutdown 이후 다시 시작하지 않는다.
 func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r == nil {
 		return
@@ -59,7 +38,6 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 
 	if r.Bot != nil {
 		r.tasksWG.Go(func() {
-			// readiness 자체 만료는 기동 실패다. runtime 취소로 끝난 작업만 정상 종료로 본다.
 			if err := panicguard.RunE(r.Logger, panicscope.BackgroundTask, "bot-runtime", func() error {
 				return r.Bot.Start(runCtx)
 			}); err != nil && !isContextTermination(err, runCtx.Err()) {
@@ -116,8 +94,6 @@ func (r *BotRuntime) recordBackgroundError(ctx context.Context, errCh chan<- err
 	r.logError("bot background task failed", err)
 }
 
-// 모든 말단 원인이 runtime 종료 원인과 같아야 정상 종료다.
-// 종료 직전에 먼저 발생한 자체 timeout과 중첩된 실제 오류는 보존한다.
 func isContextTermination(err, contextErr error) bool {
 	if contextErr == nil {
 		return false

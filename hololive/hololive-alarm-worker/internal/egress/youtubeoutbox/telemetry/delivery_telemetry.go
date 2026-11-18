@@ -6,7 +6,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// YouTubeNotificationDeliveryTelemetry는 커뮤니티/쇼츠 발송 감사 이벤트의 영속 버퍼입니다.
 type YouTubeNotificationDeliveryTelemetry struct {
 	ID                 int64            `db:"id" json:"id"`
 	DeliveryID         int64            `db:"delivery_id" json:"delivery_id"`

@@ -6,7 +6,6 @@ import { currentRequestSignal } from "./request-context.mjs";
 
 /** @typedef {import("./contracts.d.ts").RPCErrorCode} RPCErrorCode */
 
-// RPC 오류의 HTTP 상태·분류 조합을 한 곳에서 소유합니다.
 export const failureTuples = Object.freeze({
   invalid_request: Object.freeze({ class: "PROTOCOL", statuses: Object.freeze([400, 404]) }),
   request_too_large: Object.freeze({ class: "PROTOCOL", statuses: Object.freeze([413]) }),
@@ -26,21 +25,16 @@ export const failureTuples = Object.freeze({
 /** @type {AsyncLocalStorage<{ failure?: unknown }>} */
 const parserFailures = new AsyncLocalStorage();
 
-// 전역 hook은 한 번만 설치하고 현재 호출 경계에만 실패를 남깁니다. 콜백에서
-// 던지지 않아 라이브러리의 memo 정리가 끝난 뒤 결과를 거부합니다.
 Parser.setParserErrorHandler((failure) => {
   const scope = parserFailures.getStore();
   if (scope == null || failure.error_type === "class_not_found" || failure.error_type === "class_changed") {
-    // 소유한 호출 밖에는 상태를 남기지 않으며 성공한 JIT 진단은 실패가 아닙니다.
     return;
   }
   const cause = failure.error_type === "parse" ? failure.error : undefined;
   if (isCriticalFailure(cause)) {
-    // 먼저 발생한 parser drift 뒤에 보고된 명시적 결함도 숨기지 않습니다.
     if (!isCriticalFailure(scope.failure)) scope.failure = cause;
     return;
   }
-  // classdata와 원문 오류를 저장하거나 로그에 노출하지 않습니다.
   scope.failure ??= Object.assign(new Error("upstream parser rejected response data"), {
     code: "parser_drift", failureClass: "DATA_CONTRACT",
   });
@@ -53,17 +47,16 @@ const transientNetworkCodes = new Set([
   "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_SOCKET",
 ]);
 
-/** 헤더 수신 전 재시도에 이미 허용된 네트워크 오류만 판정합니다. 본문 오류를 재시도하지는 않습니다.
- * @param {unknown} error
- */
+/** @param {unknown} error */
 export function isTransientNetworkError(error) {
   if (!isRecord(error)) return false;
   if (typeof error.code === "string" && transientNetworkCodes.has(error.code)) return true;
   return isRecord(error.cause) && typeof error.cause.code === "string" && transientNetworkCodes.has(error.cause.code);
 }
 
-/** HTTP 실패를 기존 RPC 오류 코드로 매핑합니다.
- * @param {number} status @returns {RPCErrorCode}
+/**
+ * @param {number} status
+ * @returns {RPCErrorCode}
  */
 export function upstreamHTTPFailureCode(status) {
   if (status === 401 || status === 403) return "configuration_error";
@@ -71,12 +64,12 @@ export function upstreamHTTPFailureCode(status) {
   return "collection_failed";
 }
 
-/** upstream HTTP 응답 상태를 읽습니다. HTTP 응답에서 생긴 오류가 아니면 undefined입니다.
- * @param {unknown} error @returns {number | undefined}
+/**
+ * @param {unknown} error
+ * @returns {number | undefined}
  */
 export function upstreamHTTPStatus(error) {
   if (error instanceof Utils.InnertubeError) {
-    // youtubei.js 18의 HTTPClient는 status 필드 없이 이 메시지만 제공합니다.
     const match = upstreamStatusMessagePattern.exec(error.message);
     return match == null ? undefined : Number(match[1]);
   }
@@ -86,7 +79,7 @@ export function upstreamHTTPStatus(error) {
   return undefined;
 }
 
-/** 취소·명시적 helper 결함은 보존하고, 일반 upstream 실패는 비치명적 수집 실패로 분류합니다.
+/**
  * @param {unknown} error
  * @param {"helper" | "upstream"} [origin]
  * @returns {RPCErrorCode}
@@ -100,7 +93,6 @@ export function classifyUpstreamError(error, origin = "helper") {
   const status = upstreamHTTPStatus(error);
   if (status !== undefined) return upstreamHTTPFailureCode(status);
   if (error instanceof Utils.InnertubeError) return "collection_failed";
-  // undici는 DNS·TLS·redirect 실패도 TypeError로 전달합니다. 이 분류는 재시도 허용 목록을 넓히지 않습니다.
   if (error instanceof TypeError && error.message === "fetch failed") return "collection_failed";
   if (error instanceof Error && error.name === "AbortError") return "helper_internal_invariant";
   if (origin === "helper" && isProgrammingError(error)) {
@@ -109,12 +101,15 @@ export function classifyUpstreamError(error, origin = "helper") {
   return "collection_failed";
 }
 
-/** @param {unknown} value @returns {value is Record<string, unknown>} */
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** 라이브러리 파서의 native 오류는 외부 응답 때문에 발생할 수 있으므로 호출 경계에서 출처를 보존합니다.
+/**
  * @template T
  * @param {() => Promise<T>} operation
  * @returns {Promise<T>}
@@ -133,7 +128,7 @@ export async function runUpstream(operation) {
   });
 }
 
-/** 라이브러리 getter가 외부 응답을 해석하다 실패한 경우에도 동일한 출처 규칙을 적용합니다.
+/**
  * @template T
  * @param {() => T} read
  * @returns {T}
@@ -152,7 +147,10 @@ export function readUpstream(read) {
   });
 }
 
-/** @param {unknown} error @param {unknown} parserFailure */
+/**
+ * @param {unknown} error
+ * @param {unknown} parserFailure
+ */
 function scopedUpstreamFailure(error, parserFailure) {
   if (isCriticalFailure(error)) return error;
   return parserFailure ?? upstreamFailure(error);

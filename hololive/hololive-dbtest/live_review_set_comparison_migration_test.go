@@ -61,7 +61,6 @@ func TestLiveReviewSetMigrationPreservesDecisions(t *testing.T) {
 	require.Zero(t, missingCount)
 	require.True(t, missingReviewed)
 
-	// 1µs 차이는 기술적 갱신이 아니라 일정 사실 변경이다.
 	_, err := pool.Exec(t.Context(), `UPDATE youtube_live_sessions SET scheduled_start_time=scheduled_start_time+interval '1 microsecond' WHERE video_id='typed-full'`)
 	require.NoError(t, err)
 
@@ -87,7 +86,6 @@ func assertLiveReviewTypedFactsForZone(t *testing.T, pool *pgxpool.Pool, zone st
 		equal    bool
 	)
 
-	// 전체 원본 JSON 경로는 최적화 함수와 독립적인 의미 사실 oracle이다.
 	require.NoError(t, tx.QueryRow(t.Context(), `
 		SELECT count(current.video_id),bool_and(current.facts = youtube_live_review_semantic_facts(
 		    jsonb_build_object('session',to_jsonb(session),'head',to_jsonb(head),

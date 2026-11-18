@@ -775,8 +775,6 @@ func harnessMembers(t *testing.T) []*domain.Member {
 	return members
 }
 
-// testdata/rows는 검증 하니스(research/run.py, refine/extract/ab.py)를 migration 019 뒤의 members와 포스터 4장의
-// 실제 추출·번역 결과에 돌려 만든 기대값이라, 손으로 고치지 않고 하니스로 다시 만든다.
 func TestExtractPendingRowsMatchesTheHarness(t *testing.T) {
 	t.Parallel()
 

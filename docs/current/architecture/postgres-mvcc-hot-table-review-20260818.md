@@ -254,7 +254,7 @@ DROP INDEX CONCURRENTLY IF EXISTS idx_youtube_collection_job_due;
 이 변경은 lease renew의 index write 하나를 제거할 수 있어 실제 write amplification 감소 효과가 큽니다.
 
 2026-10-05 판정에서 남은 사용 9회가 수동 진단과 migrator 사전 점검뿐임을 확인해 이 인덱스를 제거했고
-(`docs/current/plans/2026-10-05-db-hotpath-optimization.md` B2), `001_schema_epoch3_baseline.sql`에는 이 인덱스가 없습니다.
+`001_schema_epoch3_baseline.sql`에는 이 인덱스가 없습니다.
 
 ### 4.4 `source_collection_checkpoints`: HOT 가능성을 측정할 대상
 

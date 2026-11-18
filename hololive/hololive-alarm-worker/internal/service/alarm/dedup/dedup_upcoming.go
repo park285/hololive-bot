@@ -39,9 +39,6 @@ func (s *Service) MarkUpcomingEventNotified(ctx context.Context, roomID, channel
 	return nil
 }
 
-// RecentlyNotifiedUpcomingRooms는 roomIDs 가운데 window 안에 같은 방송의 예정 알림 기록이 있는 방을 GET 묶음 한 번으로 찾는다.
-// 조회에 실패했거나 기록을 해석할 수 없는 방은 failed에 담고 recent에는 넣지 않는다. 기록 시각만 깨진 방은 경고를 남기고
-// 최근 예정 알림이 없는 방으로 본다.
 func (s *Service) RecentlyNotifiedUpcomingRooms(
 	ctx context.Context,
 	roomIDs []string,

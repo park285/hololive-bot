@@ -25,7 +25,6 @@ type contentLoadStep struct {
 	videoIDs     []string
 }
 
-// 관측의 received_at을 slot 시각에 맞춰 도착 순서와 무관하게 grace 판정이 관측 시각을 따르게 한다.
 func publishConsumeContentAt(
 	ctx context.Context,
 	t *testing.T,
@@ -55,7 +54,6 @@ func publishConsumeContentAt(
 	}
 }
 
-// contentConvergenceSnapshot은 reducer 순열 수렴 계약(reduce_helpers_test.go snapshotDecision)과 같은 투영을 DB에서 읽는다.
 func contentConvergenceSnapshot(ctx context.Context, t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 
@@ -172,7 +170,6 @@ func TestContentLoaderReplaysAbsenceSlotsInScheduledOrder(t *testing.T) {
 	rawCoverage, err := contract.MarshalPayloadV1(coverage)
 	require.NoError(t, err)
 
-	// 두 번째 부재를 먼저 저장해 순서 없는 sequential scan은 역순을 반환하게 한다.
 	for _, at := range []time.Time{second, first} {
 		_, err = pool.Exec(ctx, `
 			INSERT INTO youtube_content_absence_slots (
@@ -222,9 +219,6 @@ func TestContentLoaderReplaysAbsenceSlotsInScheduledOrder(t *testing.T) {
 	require.Equal(t, second, clock.WithdrawnAt.UTC())
 }
 
-// FOR UPDATE는 커밋 뒤에도 튜플 xmax에 잠금 트랜잭션을 남기므로 xmax=0이 잠금 부재의 증거다. 방문 행 plan 테스트는 두지 않는다. PK(channel_id, observation_kind,
-// scheduled_for)에 effective_at이 없어 0038은 PK prefix로 채널·종류의 slot 이력을 모두 읽은 뒤 조건으로 거르므로 heap 방문은 여전히 이력에 비례한다. 0038 변경이
-// 줄이는 것은 잠금·적재 범위이므로 그 범위를 xmax로 고정한다.
 func TestContentLoaderLeavesUnusedHistoryUnlocked(t *testing.T) {
 	pool, _, consumer, proof := startContentPersist(t)
 	ctx := t.Context()

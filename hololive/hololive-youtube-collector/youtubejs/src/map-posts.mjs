@@ -101,7 +101,6 @@ export function mapPost(post) {
     contentText: textOf(post.content),
     publishedText: textOf(post.published),
     likeCount: parseShortNumber(textOf(post.vote_count)),
-    // SDK 게시물의 댓글 수는 CommentActionButtons.reply_button 문구에만 있습니다.
     commentCount: parseShortNumber(textOf(post.action_buttons?.reply_button?.text)),
     images: attachment.images,
     videoId: attachment.videoId,

@@ -19,7 +19,6 @@ export function currentRequestSignal() {
   return storage.getStore()?.signal;
 }
 
-/** 현재 collection RPC가 보낸 예정 영상 player 조회를 셉니다. 실패 응답도 collector 호출 예산에 반영되게 합니다. */
 export function recordScheduleLookup() {
   const store = storage.getStore();
   if (store != null) store.scheduleLookups = (store.scheduleLookups ?? 0) + 1;
@@ -30,7 +29,6 @@ export function currentScheduleLookups() {
 }
 
 /**
- * 공유 발급 작업은 특정 collection RPC의 취소·식별자를 상속하지 않습니다.
  * @template T
  * @param {() => T} fn
  * @returns {T}

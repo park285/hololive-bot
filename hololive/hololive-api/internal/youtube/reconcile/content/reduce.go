@@ -21,8 +21,6 @@ type reduceSession struct {
 	applications  []Application
 }
 
-// Reduce는 입력을 변경하지 않고 관측을 조정합니다. Shorts 알림은 저장된 기준 목록이 있을 때만, 일반 영상·Premiere 알림은
-// 기준 이후 처음 본 영상에 신뢰 가능한 player 공개·예정 근거가 있을 때만 생성합니다.
 func Reduce(state State, evidence Evidence, grace time.Duration) (Decision, error) {
 	if evidence.Kind != contract.KindVideoList && evidence.Kind != contract.KindShortsList {
 		return Decision{}, fmt.Errorf("content reducer received kind %q", evidence.Kind)
@@ -39,7 +37,6 @@ func Reduce(state State, evidence Evidence, grace time.Duration) (Decision, erro
 	session.state.Kind = evidence.Kind
 	session.state.ChannelID = channelIDOf(session.state, session.evidence)
 
-	// contentWindowInitialized는 빈 부분 목록으로 기준을 세우지 않는다.
 	applyPositives(&session)
 
 	if scopedNegative(session.evidence) {
@@ -160,7 +157,6 @@ func outboxKind(kind contract.ObservationKind) domain.OutboxKind {
 	return domain.OutboxKindNewVideo
 }
 
-// 정규화할 수 없는 ID는 빈 문자열이다.
 func notificationContentID(kind contract.ObservationKind, videoID string) string {
 	contentID, err := ytcontentid.ForOutboxKind(outboxKind(kind), videoID)
 	if err != nil {

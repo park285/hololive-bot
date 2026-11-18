@@ -17,10 +17,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// BenchmarkPublishSetLargeBatch는 배치 상한 근처(1,024행, 인코딩 약 7.8 MiB)에서 발행 SQL 한 번의 시간과 Go 쪽 할당을 재는 수동 측정 도구다. 절반은 이미 저장된
-// 관측(중복), 절반은 신규다. 측정 대상이 아닌 fence 확인과 lease 종료는 빼고 발행 SQL만 트랜잭션에서 실행한 뒤 매번 되돌린다.
-//
-//	go test -run '^$' -bench BenchmarkPublishSetLargeBatch -benchtime 10x ./internal/runtime/sourceobservation
 func BenchmarkPublishSetLargeBatch(b *testing.B) {
 	ctx := b.Context()
 	pool := dbtest.NewPool(b)
@@ -80,8 +76,6 @@ func BenchmarkPublishSetLargeBatch(b *testing.B) {
 	b.ReportMetric(storageKB, "cte-storage-kB")
 }
 
-// explainPublishSet은 발행 SQL을 되돌리는 트랜잭션에서 한 번 실행해 서버 실행 시간과 materialized CTE가 보관한
-// 최대 저장 크기(PG 18 EXPLAIN의 Maximum Storage) 합을 돌려준다.
 func explainPublishSet(b *testing.B, pool *pgxpool.Pool, encoded []byte) (executionMS, storageKB float64) {
 	b.Helper()
 

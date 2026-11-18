@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	sharedh3 "github.com/park285/shared-go/transport/h3"
@@ -27,71 +28,67 @@ const testLoopbackAddr = "127.0.0.1:0"
 func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 	t.Parallel()
 
-	certFile, keyFile := writeLocalhostCertificate(t)
-	appConfig := &apiconfig.BotPlaneConfig{
-		Server: settings.ServerConfig{
-			H3Addr:     testLoopbackAddr,
-			H3CertFile: certFile,
-			H3KeyFile:  keyFile,
-		},
-	}
-
-	buildCtx, buildCancel := context.WithCancel(t.Context())
-
-	server, startCertReload, err := buildBotHTTP3ServerWithReloaderOptions(
-		buildCtx, appConfig, nil, nil,
-		sharedh3.CertificateReloaderOptions{ReloadInterval: 10 * time.Millisecond},
-		sharedreadiness.NewProbe("bot"),
-	)
-	if err != nil {
-		t.Fatalf("buildBotHTTP3ServerWithReloaderOptions() error = %v", err)
-	}
-
-	buildCancel()
-
-	first, err := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
-	if err != nil {
-		t.Fatalf("first GetCertificate() error = %v", err)
-	}
-
-	firstSerial := certificateSerial(t, first)
-
-	runCtx, runCancel := context.WithCancel(t.Context())
-	defer runCancel()
-
-	reloadDone := make(chan struct{})
-
-	go func() {
-		defer close(reloadDone)
-
-		startCertReload(runCtx)
-	}()
-
-	t.Cleanup(func() {
-		runCancel()
-		<-reloadDone
-	})
-
-	overwriteLocalhostCertificate(t, certFile, keyFile)
-
-	deadline := time.Now().Add(3 * time.Second)
-
-	for {
-		cert, getErr := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
-		if getErr != nil {
-			t.Fatalf("GetCertificate() error = %v", getErr)
+	synctest.Test(t, func(t *testing.T) {
+		certFile, keyFile := writeLocalhostCertificate(t)
+		appConfig := &apiconfig.BotPlaneConfig{
+			Server: settings.ServerConfig{
+				H3Addr:     testLoopbackAddr,
+				H3CertFile: certFile,
+				H3KeyFile:  keyFile,
+			},
 		}
 
-		if certificateSerial(t, cert) != firstSerial {
-			return
+		buildCtx, buildCancel := context.WithCancel(t.Context())
+
+		server, startCertReload, err := buildBotHTTP3ServerWithReloaderOptions(
+			buildCtx, appConfig, nil, nil,
+			sharedh3.CertificateReloaderOptions{ReloadInterval: 10 * time.Millisecond},
+			sharedreadiness.NewProbe("bot"),
+		)
+		if err != nil {
+			t.Fatalf("buildBotHTTP3ServerWithReloaderOptions() error = %v", err)
 		}
 
-		if time.Now().After(deadline) {
+		buildCancel()
+
+		first, err := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
+		if err != nil {
+			t.Fatalf("first GetCertificate() error = %v", err)
+		}
+
+		firstSerial := certificateSerial(t, first)
+
+		runCtx, runCancel := context.WithCancel(t.Context())
+
+		reloadDone := make(chan struct{})
+
+		go func() {
+			defer close(reloadDone)
+
+			startCertReload(runCtx)
+		}()
+
+		defer func() {
+			runCancel()
+			<-reloadDone
+		}()
+
+		synctest.Wait()
+
+		overwriteLocalhostCertificate(t, certFile, keyFile)
+
+		synctest.Sleep(10 * time.Millisecond)
+		synctest.Wait()
+
+		cert, err := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
+		if err != nil {
+			t.Fatalf("GetCertificate() error = %v", err)
+		}
+
+		if certificateSerial(t, cert) == firstSerial {
 			t.Fatal("certificate was not reloaded after build context ended")
 		}
-
-		time.Sleep(10 * time.Millisecond)
-	}
+	})
 }
 
 func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {

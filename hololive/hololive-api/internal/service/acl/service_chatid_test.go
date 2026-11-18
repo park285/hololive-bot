@@ -11,7 +11,6 @@ import (
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
-// 방 이름 등은 IsRoomAllowed(chatID)가 보지 않아 조용히 무효가 되므로(blacklist라면 fail-open) 등록 단계에서 거절한다.
 func TestAddRoomRejectsNonChatIDRegistration(t *testing.T) {
 	t.Parallel()
 

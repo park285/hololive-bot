@@ -29,35 +29,13 @@ export class HelperHTTPError extends Error {
   }
 }
 
-/**
- * @param {{
- *   createTransport?: () => Promise<{
- *     fetch: import("./upstream-feeds.d.ts").InnertubeFetch,
- *     singleAttemptFetch: import("./upstream-feeds.d.ts").InnertubeFetch,
- *   }>,
- *   createFetchers?: (
- *     fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
- *     singleAttemptFetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
- *   ) => import("./contracts.d.ts").FetcherSet,
- * }} [options]
- */
+/** @param {{ createTransport?: () => Promise<{ fetch: import("./upstream-feeds.d.ts").InnertubeFetch, singleAttemptFetch: import("./upstream-feeds.d.ts").InnertubeFetch, }>, createFetchers?: ( fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch, singleAttemptFetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch, ) => import("./contracts.d.ts").FetcherSet, }} [options] */
 export function createHelperRuntime(options = {}) {
   return new HelperRuntime(options);
 }
 
 export class HelperRuntime {
-  /**
-   * @param {{
-   *   createTransport?: () => Promise<{
-   *     fetch: import("./upstream-feeds.d.ts").InnertubeFetch,
-   *     singleAttemptFetch: import("./upstream-feeds.d.ts").InnertubeFetch,
-   *   }>,
-   *   createFetchers?: (
-   *     fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
-   *     singleAttemptFetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
-   *   ) => import("./contracts.d.ts").FetcherSet,
-   * }} [options]
-   */
+  /** @param {{ createTransport?: () => Promise<{ fetch: import("./upstream-feeds.d.ts").InnertubeFetch, singleAttemptFetch: import("./upstream-feeds.d.ts").InnertubeFetch, }>, createFetchers?: ( fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch, singleAttemptFetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch, ) => import("./contracts.d.ts").FetcherSet, }} [options] */
   constructor(options = {}) {
     /** @type {import("./contracts.d.ts").RuntimeState} */
     this.state = RuntimeState.UNCONFIGURED;
@@ -97,9 +75,7 @@ export class HelperRuntime {
     };
   }
 
-  /**
-   * @returns {{ status: number, body: import("./contracts.d.ts").RPCErrorBody } | null}
-   */
+  /** @returns {{ status: number, body: import("./contracts.d.ts").RPCErrorBody } | null} */
   refuseCollection() {
     if (this.state !== RuntimeState.READY) {
       return rpcErrorResult(503, "helper_not_ready", "PROTOCOL", "helper is not ready");
@@ -164,10 +140,7 @@ export class HelperRuntime {
   }
 
   /**
-   * @param {{
-   *   protocol_version: number,
-   *   limits: { request_body_bytes: number, response_body_bytes: number, max_inflight: number },
-   * }} parsed
+   * @param {{ protocol_version: number, limits: { request_body_bytes: number, response_body_bytes: number, max_inflight: number }, }} parsed
    * @param {string} nextFingerprint
    * @returns {Promise<{ status: number, body: unknown }>}
    */
@@ -182,10 +155,8 @@ export class HelperRuntime {
         )
         : null;
       this.fetchers = fetchers;
-      // 공유 upstream 자원은 READY 전에 준비하며, 실패하면 아래 catch에서 자원을 닫고 FAULTED로 끝냅니다.
       await fetchers?.prepare?.();
       this.initializing = false;
-      // 초기화 중 들어온 종료 요청은 늦게 생성된 자원을 닫은 뒤 완료합니다.
       if (this.state === RuntimeState.DRAINING) {
         const failure = await this.settleDrain();
         return failure ?? rpcErrorResult(503, "helper_not_ready", "PROTOCOL", "helper is not ready");
@@ -238,7 +209,6 @@ export class HelperRuntime {
       return;
     }
     if (this.drainPromise === null) {
-      // close에서 재진입해도 정리와 종료 통보를 한 번만 수행하도록 먼저 작업을 공유합니다.
       this.drainPromise = Promise.resolve().then(async () => {
         try {
           await this.closeResources();
@@ -265,10 +235,7 @@ export class HelperRuntime {
 
 /**
  * @param {string} rawBody
- * @returns {{
- *   protocol_version: number,
- *   limits: { request_body_bytes: number, response_body_bytes: number, max_inflight: number },
- * }}
+ * @returns {{ protocol_version: number, limits: { request_body_bytes: number, response_body_bytes: number, max_inflight: number }, }}
  */
 export function parseBootstrapRequest(rawBody) {
   let value;
@@ -298,12 +265,10 @@ export function parseBootstrapRequest(rawBody) {
   };
 }
 
-// bootstrap key는 모두 필수이므로 허용 집합의 삽입 순서가 곧 누락 검사 순서입니다.
 const bootstrapKeys = new Set(["protocol_version", "limits"]);
 const bootstrapLimitKeys = new Set(["request_body_bytes", "response_body_bytes", "max_inflight"]);
 
 /**
- * unknown key를 record 순서대로 먼저 거부한 뒤 필수 key 누락을 거부합니다.
  * @param {Record<string, unknown>} record
  * @param {ReadonlySet<string>} requiredKeys
  */
@@ -320,12 +285,7 @@ function assertExactKeys(record, requiredKeys) {
   }
 }
 
-/**
- * @param {{
- *   protocol_version: number,
- *   limits: { request_body_bytes: number, response_body_bytes: number, max_inflight: number },
- * }} config
- */
+/** @param {{ protocol_version: number, limits: { request_body_bytes: number, response_body_bytes: number, max_inflight: number }, }} config */
 function bootstrapFingerprint(config) {
   return JSON.stringify({
     protocol_version: config.protocol_version,
@@ -355,7 +315,10 @@ function boundedInt(record, field, min, max) {
   return Number(value);
 }
 
-/** @param {unknown} value @returns {value is Record<string, unknown>} */
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

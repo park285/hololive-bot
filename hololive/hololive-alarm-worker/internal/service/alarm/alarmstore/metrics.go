@@ -5,14 +5,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// subscriber DB fallback 결과 label. 모든 값을 기동 때 0으로 만들어 첫 관측 전에도 series가 있게 한다.
 const (
 	subscriberDBFallbackHit   = "hit"
 	subscriberDBFallbackMiss  = "miss"
 	subscriberDBFallbackError = "error"
 )
 
-// 패키지를 불러오는 시점에 기본 registerer에 등록한다.
 var (
 	alarmSubscriberDBFallbackTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "hololive_alarm_subscriber_db_fallback_total",

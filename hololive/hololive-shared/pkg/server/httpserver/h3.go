@@ -57,8 +57,6 @@ func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerCon
 	return servers, nil
 }
 
-// WithRuntimeBodyReadTimeout은 기존 서버 읽기 예산으로 H3 본문 수신만 제한한다.
-// 요청 context와 응답 쓰기는 제한하지 않아 본문 수신 이후의 긴 작업과 SSE를 보존한다.
 func WithRuntimeBodyReadTimeout(handler http.Handler) http.Handler {
 	return runtimehttpserver.WithBodyReadTimeout(handler, serverReadTimeout)
 }
@@ -112,9 +110,6 @@ func (s *RuntimeHTTPServers) Start(logger *slog.Logger, errCh chan<- error) {
 	}
 }
 
-// Shutdown은 H3·Metrics·Pprof를 같은 ctx 안에서 동시에 멈춘다. H3 정지는 idle 연결만 남으면 ctx가 끝날 때까지
-// 기다린 뒤 성공하므로, 그 뒤에 Metrics·Pprof를 멈추면 이미 끝난 ctx를 받는다. 그동안 열려 있던 listener로 들어온
-// scrape 연결이 남아 있으면 net/http Shutdown이 곧바로 ctx 오류를 돌려 정상 정지가 실패가 된다.
 func (s *RuntimeHTTPServers) Shutdown(ctx context.Context) error {
 	if s == nil {
 		return nil

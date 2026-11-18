@@ -110,7 +110,6 @@ func TestDeferredSnapshotReusesPublishedIndex(t *testing.T) {
 	}
 }
 
-// ToLower로 바꾸면 Kelvin 기호·long s·그리스 시그마에서 갈라진다.
 func TestFoldKeyMatchesEqualFold(t *testing.T) {
 	corpus := []string{
 		"", "a", "A", "k", "K", "\u212a", "s", "S", "\u017f", "σ", "Σ", "ς", "ß", "ẞ", "ǅ", "ǆ", "Ǆ",

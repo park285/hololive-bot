@@ -16,7 +16,6 @@ func BenchmarkScheduleReconcileContended(b *testing.B) {
 	benchmarkScheduleContention(b, reconcileScheduleBenchmark)
 }
 
-// 같은 group의 중복 관측을 네 worker가 동시에 처리한다. 한 반복은 네 트랜잭션이다.
 func benchmarkScheduleContention(b *testing.B, operation scheduleBenchmarkOperation) {
 	b.Helper()
 
@@ -24,7 +23,7 @@ func benchmarkScheduleContention(b *testing.B, operation scheduleBenchmarkOperat
 
 	for _, size := range []int{1, 129} {
 		b.Run(fmt.Sprintf("workers=4/items=%d", size), func(b *testing.B) {
-			pool, writes := scheduleBenchmarkPool(b, 0, workers)
+			pool, writes := scheduleBenchmarkPool(b, workers)
 			observation, decision := scheduleBatchFixture(size)
 			evidence := schedule.Evidence{
 				GroupKey: "schedule-batch", Provider: observation.Provider, Items: decision.Items,

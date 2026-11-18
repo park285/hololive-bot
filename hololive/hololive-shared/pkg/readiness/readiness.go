@@ -19,12 +19,10 @@ type Check struct {
 	Probe func(context.Context) error
 }
 
-// Pinger는 PostgresCheck가 데이터베이스 클라이언트에 요구하는 유일한 동작이다.
 type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
-// ConnectionChecker는 ValkeyCheck가 캐시 클라이언트에 요구하는 유일한 동작이다.
 type ConnectionChecker interface {
 	IsConnected(ctx context.Context) bool
 }
@@ -91,10 +89,6 @@ func (p *Probe) Name() string {
 	return p.name
 }
 
-// 동기 순차 실행은 의도적이다: gin RecoveryMiddleware 경계 안에서 돌려 probe
-// panic이 프로세스를 죽이지 않게 하고, per-check fresh timeout으로 한 dependency
-// 의 hang이 다른 dependency 판정을 오염시키지 않게 한다. 결과 map은 check가 없어도 nil이 아니라서
-// 응답 JSON에서 빈 객체로 나간다.
 func (p *Probe) Evaluate(ctx context.Context) (ready bool, dependencies map[string]bool) {
 	dependencies = make(map[string]bool, len(p.checks))
 	ready = true
@@ -139,7 +133,6 @@ func BasePayload(base health.Response, status string) map[string]any {
 	}
 }
 
-// RequestContext는 gin 요청의 context를, 요청이 없으면 fallback을 돌려준다. 요청 context는 net/http가 nil 없이 돌려준다.
 func RequestContext(fallback context.Context, c *gin.Context) context.Context {
 	if c != nil && c.Request != nil {
 		return c.Request.Context()

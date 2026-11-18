@@ -126,7 +126,6 @@ func TestMustReaderPanicsOnEveryFailedCall(t *testing.T) {
 		}
 	}
 
-	// 잘못된 경로는 열기 전에 거부하고, 없는 파일과 빈 자산은 호출마다 다시 연다.
 	if got := assets.opens.Load(); got != 4 {
 		t.Fatalf("assets opened %d times, want 4", got)
 	}

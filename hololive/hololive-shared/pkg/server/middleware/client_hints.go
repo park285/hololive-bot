@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package middleware
 
 import (
@@ -26,27 +6,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// User-Agent 축소 정책에 따라 정확한 기기 정보를 얻으려면 Client Hints를 사용해야 합니다.
-//
-// 예시 (기존 UA vs Client Hints):
-//   - User-Agent: "Mozilla/5.0 (Linux; Android 10; K) ..." (축소됨)
-//   - Client Hints: Platform="Android", PlatformVersion="16.0.0", Model="SM-S928N"
 type ClientHints struct {
-	// Brands: 브라우저 브랜드 및 버전 목록 (Sec-CH-UA)
-	Brands string `json:"brands,omitempty"`
-	// Mobile: 모바일 기기 여부 (Sec-CH-UA-Mobile)
-	Mobile bool `json:"mobile"`
-	// Platform: 플랫폼 (Sec-CH-UA-Platform, 예: "Android", "Windows")
-	Platform string `json:"platform,omitempty"`
-	// PlatformVersion: 정확한 플랫폼 버전 (Sec-CH-UA-Platform-Version, 예: "16.0.0")
+	Brands          string `json:"brands,omitempty"`
+	Mobile          bool   `json:"mobile"`
+	Platform        string `json:"platform,omitempty"`
 	PlatformVersion string `json:"platformVersion,omitempty"`
-	// Model: 기기 모델명 (Sec-CH-UA-Model, 예: "SM-S928N")
-	Model string `json:"model,omitempty"`
-	// Architecture: CPU 아키텍처 (Sec-CH-UA-Arch, 예: "arm")
-	Architecture string `json:"architecture,omitempty"`
-	// Bitness: CPU 비트 수 (Sec-CH-UA-Bitness, 예: "64")
-	Bitness string `json:"bitness,omitempty"`
-	// FullVersionList: 전체 버전 목록 (Sec-CH-UA-Full-Version-List)
+	Model           string `json:"model,omitempty"`
+	Architecture    string `json:"architecture,omitempty"`
+	Bitness         string `json:"bitness,omitempty"`
 	FullVersionList string `json:"fullVersionList,omitempty"`
 }
 
@@ -87,17 +54,14 @@ func (ch *ClientHints) Summary() string {
 
 	var parts []string
 
-	// 플랫폼 + 버전
 	if ch.Platform != "" {
 		parts = append(parts, ch.platformSummary())
 	}
 
-	// 모델명 (모바일) 또는 아키텍처 (데스크톱)
 	if device := ch.deviceSummary(); device != "" {
 		parts = append(parts, device)
 	}
 
-	// 모바일 표시 (모델이 없는 경우)
 	if ch.Mobile && ch.Model == "" {
 		parts = append(parts, "[Mobile]")
 	}
@@ -147,9 +111,9 @@ func translateWindowsVersion(majorVersion string) string {
 	case major >= 1 && major <= 10:
 		return "10"
 	case major == 0:
-		return "8.1 or older" // Windows 8.1 이하
+		return "8.1 or older"
 	default:
-		return majorVersion // 알 수 없는 경우 원본 반환
+		return majorVersion
 	}
 }
 
@@ -172,22 +136,18 @@ func formatArchitecture(arch, bitness string) string {
 		return arch
 	}
 
-	// x86 + 64비트 = x64 (일반적인 표기)
 	if strings.EqualFold(arch, clientHintArchX86) && bitness == "64" {
 		return "x64"
 	}
 
-	// arm + 64비트 = arm64
 	if strings.EqualFold(arch, "arm") && bitness == "64" {
 		return "arm64"
 	}
 
-	// 32비트 x86은 그냥 x86
 	if strings.EqualFold(arch, clientHintArchX86) && bitness == "32" {
 		return clientHintArchX86
 	}
 
-	// 그 외는 조합
 	return arch + bitness
 }
 

@@ -344,12 +344,26 @@ func TestOfficialScheduleAPIClosesAndBoundsResponseBody(t *testing.T) {
 	}
 }
 
+type scheduleWaitContext struct {
+	context.Context //nolint:containedctx // 공유 적재 합류 시점을 관찰하는 Context wrapper이며 원래 취소·값 계약을 그대로 위임한다.
+
+	joined func()
+}
+
+func (c *scheduleWaitContext) Done() <-chan struct{} {
+	c.joined()
+
+	return c.Context.Done()
+}
+
 func TestOfficialScheduleFetchDeduplicatesConcurrentRequestsAndClonesCache(t *testing.T) {
 	var requests atomic.Int32
 
+	release := make(chan struct{})
+
 	service := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
-		time.Sleep(25 * time.Millisecond)
+		<-release
 		writeJSON(t, writer, `{"dateGroupList":[{"videoList":[{
 			"datetime":"2026/12/31 20:00:00",
 			"url":"https://www.youtube.com/watch?v=cached",
@@ -362,35 +376,13 @@ func TestOfficialScheduleFetchDeduplicatesConcurrentRequestsAndClonesCache(t *te
 	service.nowFunc = func() time.Time { return currentTime }
 	service.officialSchedule.PageCacheTTL = time.Minute
 
-	const concurrency = 6
-
-	results := make(chan []*domain.Stream, concurrency)
-
-	var waitGroup sync.WaitGroup
-
-	for range concurrency {
-		waitGroup.Go(func() {
-			streams, err := service.FetchUpcomingStreams(t.Context(), 0)
-			if err != nil {
-				t.Errorf("FetchUpcomingStreams() error = %v", err)
-
-				return
-			}
-
-			results <- streams
-		})
-	}
-
-	waitGroup.Wait()
-	close(results)
+	results := fetchConcurrentSchedules(t, service, release)
 
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("request count = %d, want 1", got)
 	}
 
-	first := <-results
-
-	first[0].Title = "mutated"
+	results[0][0].Title = "mutated"
 
 	cached, err := service.FetchUpcomingStreams(t.Context(), 0)
 	if err != nil {
@@ -410,6 +402,50 @@ func TestOfficialScheduleFetchDeduplicatesConcurrentRequestsAndClonesCache(t *te
 	if got := requests.Load(); got != 2 {
 		t.Fatalf("request count after expiry = %d, want 2", got)
 	}
+}
+
+func fetchConcurrentSchedules(t *testing.T, service *Service, release chan<- struct{}) [][]*domain.Stream {
+	t.Helper()
+
+	const concurrency = 6
+
+	joined := make(chan struct{}, concurrency)
+	results := make([][]*domain.Stream, concurrency)
+
+	var workers sync.WaitGroup
+
+	for i := range results {
+		workers.Go(func() {
+			ctx := &scheduleWaitContext{Context: t.Context(), joined: sync.OnceFunc(func() { joined <- struct{}{} })}
+
+			streams, err := service.FetchUpcomingStreams(ctx, 0)
+			if err != nil {
+				t.Errorf("FetchUpcomingStreams() error = %v", err)
+
+				return
+			}
+
+			results[i] = streams
+		})
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	for range concurrency {
+		select {
+		case <-joined:
+		case <-ctx.Done():
+			close(release)
+			workers.Wait()
+			t.Fatal("not all fetches reached the pending schedule request")
+		}
+	}
+
+	close(release)
+	workers.Wait()
+
+	return results
 }
 
 func TestOfficialScheduleSharedFetchSurvivesLeaderCancellation(t *testing.T) {

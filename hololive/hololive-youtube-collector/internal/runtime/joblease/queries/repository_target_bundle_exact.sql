@@ -1,5 +1,3 @@
--- subject 조건을 독립 문장에 고정해 generic plan에서도 PK 범위를 제한한다.
--- cadence와 membership은 같은 target 스캔에서 각각 집계하며 not_before는 입장에만 적용한다.
 WITH current_projection AS (
     SELECT generation
     FROM youtube_collection_projection_generations

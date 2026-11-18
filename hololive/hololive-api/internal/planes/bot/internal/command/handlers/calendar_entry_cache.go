@@ -37,8 +37,6 @@ type calendarEntriesSnapshot struct {
 	Entries []domain.CalendarEntry `json:"entries"`
 }
 
-// NewCachedCelebrationCalendarFinder는 월별 기념일 항목을 공유 cache에 ttl 동안 둔다. 만료는 key TTL이 맡는다.
-// 주입한 store가 없거나 ttl이 0 이하이면 cache 없이 base를 그대로 쓴다.
 func NewCachedCelebrationCalendarFinder(
 	base handlercore.CelebrationCalendarFinder,
 	store sharedcache.Store,
@@ -75,7 +73,6 @@ func (f *cachedCelebrationCalendarFinder) FindMembersWithCelebrationsInMonth(
 	resultCh := f.flights.DoChan(key, func() (any, error) {
 		var entries []domain.CalendarEntry
 
-		// DoChan의 goroutine panic은 호출자의 복구 경계를 벗어나므로 공유 조회 안에서 오류로 돌려준다.
 		err := panicguard.RunE(slog.Default(), panicscope.BackgroundTask, "calendar-entry-cache", func() error {
 			var loadErr error
 
@@ -122,8 +119,6 @@ func (f *cachedCelebrationCalendarFinder) loadEntriesSnapshot(ctx context.Contex
 		return entries, nil
 	}
 
-	// 공유 조회는 첫 요청의 취소와 분리하되 기존 봇 요청 예산(10초) 안에서 끝낸다.
-	// 모든 호출자가 이탈해도 이 예산 안에서 캐시를 채울 수 있다.
 	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), transport.CommandTimeout)
 	defer cancel()
 
@@ -138,8 +133,6 @@ func (f *cachedCelebrationCalendarFinder) loadEntriesSnapshot(ctx context.Contex
 	return cloned, nil
 }
 
-// readSnapshot의 cache 오류와 손상 값은 miss로 보고 PostgreSQL 조회로 진행한다. 공유 cache는 정본이 아니므로
-// 달력 명령 실패로 올리지 않으며, 저장소 오류만 경고 로그로 드러낸다.
 func (f *cachedCelebrationCalendarFinder) readSnapshot(ctx context.Context, key string) ([]domain.CalendarEntry, bool) {
 	data, ok, err := f.store.Get(ctx, key)
 	if err != nil {
@@ -179,7 +172,6 @@ func (f *cachedCelebrationCalendarFinder) writeSnapshot(ctx context.Context, key
 	}
 }
 
-// 호출자 취소·기한 만료로 끝난 cache 연산은 Valkey 장애가 아니므로 경고로 남기지 않는다.
 func logCalendarEntryCacheFailure(ctx context.Context, operation, key string, err error) {
 	if ctx.Err() != nil {
 		return

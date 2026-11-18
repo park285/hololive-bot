@@ -65,8 +65,6 @@ func (s *Service) writeNotifiedHashFields(ctx context.Context, key, scheduledStr
 	return nil
 }
 
-// RecentlyNotifiedStreamIDs는 notified hash에 발송한 분이 하나라도 기록된 stream을 HGETALL 묶음 한 번으로 찾는다.
-// 한 stream이라도 조회에 실패하면(구형 string 형상의 WRONGTYPE 포함) 결과 없이 오류를 돌려준다.
 func (s *Service) RecentlyNotifiedStreamIDs(ctx context.Context, streamIDs []string) (map[string]struct{}, error) {
 	result := make(map[string]struct{})
 

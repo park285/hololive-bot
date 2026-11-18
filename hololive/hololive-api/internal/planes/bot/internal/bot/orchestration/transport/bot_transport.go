@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package transport
 
 import (
@@ -35,8 +15,6 @@ import (
 
 const CommandTimeout = 10 * time.Second
 
-// CommandTransport는 명령 응답을 durable reply outbox에 기록한다. Iris 발송은 outbox dispatcher가
-// DispatchStoredReply로만 하므로, 조립 실수로 원장 없이 즉시 발송하는 경로가 없다.
 type CommandTransport struct {
 	formatter       *messageformatter.ResponseFormatter
 	markdownReplies bool
@@ -73,8 +51,6 @@ func NewCommandTransport(replyOutbox ReplyOutboxWriter, formatter *messageformat
 	return t
 }
 
-// WithReplyFormat은 요청의 방 유형을 한 번 판정해 ctx에 고정한다. 같은 값으로 formatter가 템플릿 변형을, SendMessage가
-// 경로를 고르므로 일반채팅에 RichText 본문이 나가거나 오픈채팅에 경로와 다른 본문이 나가지 않는다.
 func (t *CommandTransport) WithReplyFormat(ctx context.Context, room string) context.Context {
 	format := domain.TemplateFormatPlain
 
@@ -101,8 +77,6 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	return t.recordTextReply(sendCtx, room, message, issueReplyEmission(sendCtx), useMarkdown)
 }
 
-// replyUsesRichText는 요청에 고정된 판정만 따른다. 판정이 없으면 formatter와 같이 plain으로 보내, 판정을 고정하지 않은
-// 경로가 plain 본문을 RichText 경로로 보내지 않게 한다.
 func replyUsesRichText(ctx context.Context) bool {
 	format, ok := messageformatter.ReplyFormatFromContext(ctx)
 
@@ -129,9 +103,6 @@ func (t *CommandTransport) recordTextReply(
 	return nil
 }
 
-// postReplyWithReissue는 pre-handoff conflict에서만 replyReissueLadder로 세대를 올린다. Conflict는
-// 원문 오류 그대로 돌려줘 호출자가 Iris code로 정산한다. 저장된 clientRequestId는 outbox 기록 검증이
-// 형식을 보장한 값이다.
 func postReplyWithReissue(
 	ctx context.Context,
 	clientRequestID string,
@@ -260,8 +231,6 @@ func (t *CommandTransport) SendImages(ctx context.Context, room string, images [
 	return nil
 }
 
-// SendError는 message_strings error namespace 문구로 응답한다. 응답 formatter가 없으면 코드 대체 문구를 보내지 않고
-// 조립 결함으로 오류를 돌려준다.
 func (t *CommandTransport) SendError(ctx context.Context, room, key string) error {
 	if t == nil || t.formatter == nil {
 		return errors.New("send error message: response formatter is not configured")
@@ -269,7 +238,6 @@ func (t *CommandTransport) SendError(ctx context.Context, room, key string) erro
 
 	message := t.formatter.ResolveError(ctx, key)
 	if message == "" {
-		// 기동 검증을 거친 messaging.Err* key에서는 일어나지 않는다. 빈 문구를 보내지 않고 조립 결함으로 드러낸다.
 		return fmt.Errorf("send error message: message_strings error/%s has no text", key)
 	}
 

@@ -169,7 +169,6 @@ func TestTargetSnapshotValidateRequestedAndClone(t *testing.T) {
 	}
 }
 
-// helper collection RPC는 channel_id를 정규화하지 않고 거부하므로, 실행 subject는 RPC 전에 같은 식별자 규칙으로 걸러집니다.
 func TestExactTargetSnapshotSubjectFollowsHelperIdentifierRule(t *testing.T) {
 	t.Parallel()
 

@@ -11,7 +11,6 @@ const (
 
 type coverageFacts uint8
 
-// snapshot.sql이 집계한 여섯 사실을 비트로 전달해 최대 10,000채널의 JSON 크기를 제한합니다.
 type channelSnapshot struct {
 	Channel
 

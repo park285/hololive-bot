@@ -10,45 +10,35 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendoutcome"
 )
 
-// IrisClient는 alarm-worker가 알림 admission에 사용하는 Iris 계약입니다. 텍스트와 RichText 모두 202 응답의
-// requestId를 받고, handoff 확인은 이 계약이 아니라 각 원장의 handoff reconciler가 맡습니다. Karing template은
-// 보내지 않습니다.
 type IrisClient interface {
 	SendMessageAccepted(ctx context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 	SendRichText(ctx context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 }
 
-// OpenChat은 Markdown lane을 결정하는 확인된 Kakao 오픈채팅 여부를 제공합니다.
 type OpenChat interface {
 	OpenChat(ctx context.Context, roomID string) bool
 }
 
-// IrisMessageSender는 방 유형별 message를 Iris로 전송합니다. 오픈채팅은 BOT_MARKDOWN_REPLIES에 따라 RichText,
-// 그 밖의 방은 일반 텍스트 경로를 씁니다.
 type IrisMessageSender struct {
 	client          IrisClient
 	markdownReplies bool
 	markdownRooms   OpenChat
 }
 
-// IrisMessageSenderOption은 alarm-worker message lane 구성을 적용합니다.
 type IrisMessageSenderOption func(*IrisMessageSender)
 
-// WithMarkdownReplies는 확인된 오픈채팅의 Markdown 전송을 설정합니다.
 func WithMarkdownReplies(enabled bool) IrisMessageSenderOption {
 	return func(sender *IrisMessageSender) {
 		sender.markdownReplies = enabled
 	}
 }
 
-// WithMarkdownRoomChat은 Markdown lane 판정에 사용할 오픈채팅 resolver를 연결합니다.
 func WithMarkdownRoomChat(rooms OpenChat) IrisMessageSenderOption {
 	return func(sender *IrisMessageSender) {
 		sender.markdownRooms = rooms
 	}
 }
 
-// NewIrisMessageSender는 typed Iris client로 alarm-worker 전송기를 만듭니다.
 func NewIrisMessageSender(client IrisClient, opts ...IrisMessageSenderOption) *IrisMessageSender {
 	sender := &IrisMessageSender{client: client}
 
@@ -61,8 +51,6 @@ func NewIrisMessageSender(client IrisClient, opts ...IrisMessageSenderOption) *I
 	return sender
 }
 
-// 운영 중인 bot plane 텍스트 경로(acceptStoredReply)와 같이 응답과 requestId만 요구하고 success·delivery 값은 보지 않는다. Iris 계약은 텍스트 202의
-// delivery 값을 정하지 않는다.
 func (s *IrisMessageSender) sendText(ctx context.Context, roomID, message string, opts ...iris.SendOption) (string, error) {
 	accepted, err := s.client.SendMessageAccepted(ctx, roomID, message, opts...)
 	if err != nil {
@@ -111,7 +99,6 @@ func acceptedReplyRequestID(success bool, delivery, rawRequestID string) (string
 	return admissionRequestID(rawRequestID)
 }
 
-// 비어 있으면 확인할 대상이 없어 결과 불명이다.
 func admissionRequestID(rawRequestID string) (string, error) {
 	requestID := strings.TrimSpace(rawRequestID)
 	if requestID == "" {

@@ -81,7 +81,6 @@ func TestCatalogRefreshCoalescesListingAndPersistenceAcrossRooms(t *testing.T) {
 		synctest.Wait()
 		require.Equal(t, 1, storeCalls)
 
-		// HTTP가 끝난 뒤 들어온 다른 miss도 진행 중인 저장 순회에 합류한다.
 		late := startCatalogLookup(t.Context(), c, "also-missing")
 
 		synctest.Wait()

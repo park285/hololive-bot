@@ -11,7 +11,6 @@ var sqlAssets embed.FS
 
 var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
 
-// 고정 SQL은 패키지 초기화 때 한 번만 읽는다. 없는 자산은 그 경로의 첫 호출이 아니라 기동에서 드러난다.
 var (
 	deleteLoggedBeforeBatchSQL           = mustSQL("delete_logged_before_batch.sql")
 	enqueuePreparedChunkSQL              = mustSQL("enqueue_prepared_chunk.sql")
@@ -24,11 +23,7 @@ var (
 	repositoryFetchLockPendingSQL        = mustSQL("repository_fetch_lock_pending.sql")
 )
 
-// timeline 조회 필터는 두 고정 모양뿐이다(queries/ 아래 SQL asset). 필터별 SQL을 초기화에서 완성해 두므로 목록 길이와
-// 무관하게 SQL 문자열이 같아 plan cache를 재사용한다.
 var (
-	// $2: 대상 outbox id 배열.
-	postDeliveryTimelineByOutboxIDsSQL = postDeliveryTimelineQuery(mustSQL("timelines_filter_outbox_ids.sql"))
-	// $2/$3: 같은 길이의 (kind, content_id) 쌍 배열.
+	postDeliveryTimelineByOutboxIDsSQL          = postDeliveryTimelineQuery(mustSQL("timelines_filter_outbox_ids.sql"))
 	postDeliveryTimelineByTrackingIdentitiesSQL = postDeliveryTimelineQuery(mustSQL("timelines_filter_tracking_identities.sql"))
 )

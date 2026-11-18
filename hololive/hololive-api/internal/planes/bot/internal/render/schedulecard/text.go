@@ -39,7 +39,6 @@ type glyph struct {
 	adv  float64
 }
 
-// maxCachedGlyphs는 모델 출력 글자가 캐시 키가 되므로 글리프 캐시 메모리(글리프당 수 KB)를 묶는다.
 const maxCachedGlyphs = 4096
 
 type glyphKey struct {
@@ -47,7 +46,6 @@ type glyphKey struct {
 	r rune
 }
 
-// fontSet은 sfnt.Buffer와 글리프 캐시를 공유하므로 renderMu를 잡은 동안에만 쓴다.
 type fontSet struct {
 	faces [faceCount]*sfnt.Font
 	jp    *sfnt.Font
@@ -145,7 +143,6 @@ func (f *fontSet) glyph(fc face, r rune) *glyph {
 	return g
 }
 
-// covers는 r을 그릴 글꼴이 하나라도 있는지 본다. 공유 buf를 쓰지 않아 renderMu 없이 불러도 된다.
 func (f *fontSet) covers(buf *sfnt.Buffer, r rune) bool {
 	if gi, err := f.jp.GlyphIndex(buf, r); err == nil && gi != 0 {
 		return true
@@ -363,7 +360,6 @@ func breakPoint(f *fontSet, t txt, runes []rune, maxW float64) (end, brk int) {
 
 		w += f.glyph(t.Face, r).adv * t.Size
 
-		// width와 같은 순서로 더해야 width가 maxW를 넘는 글에서 반드시 끊을 자리를 찾는다.
 		if w+t.Track*float64(i) > maxW {
 			return i, brk
 		}

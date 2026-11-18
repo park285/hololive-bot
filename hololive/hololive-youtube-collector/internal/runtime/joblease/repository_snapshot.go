@@ -14,9 +14,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// Guard를 share 잠금한 뒤 별도 문장으로 소유 증명과 job membership을 판정하므로, API 전환을 기다린 snapshot도 새 CURRENT에서 평가되고 무관한 target 변경으로 거절되지
-// 않는다. Membership이 유효하면 CURRENT의 범위는 획득 시점 범위와 같으므로 snapshot의 generation은 lease 증명의 획득 generation으로 표시한다. Not_before 같은
-// 입장 조건은 적용하지 않는다.
 func (r *Repository) LoadTargetSnapshot(
 	ctx context.Context,
 	proof *contract.LeaseProof,
@@ -80,16 +77,10 @@ func loadTargetSnapshotTx(
 	}
 }
 
-// snapshotBatchSender는 pgx 트랜잭션의 pipeline 전송 능력이다. Snapshot 트랜잭션은 항상 pgxpool에서 시작하므로
-// 이 능력이 없으면 순차 경로로 바꾸지 않고 오류로 드러낸다.
 type snapshotBatchSender interface {
 	SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
 }
 
-// lockGuardAndVerifyMembership은 guard share 잠금과 lease membership 판정을 한 왕복으로 보내고 잠금 이후 CURRENT
-// generation을 반환한다. 서버는 두 문장을 순서대로 따로 실행하므로 membership은 guard 대기 뒤의 새 snapshot에서
-// 평가되고, guard 문장이 실패하면 membership 문장은 실행되지 않는다. CURRENT가 없으면 0을 반환하며 그 판정은
-// membership이 소유 손실 다음 순위로 보고한다.
 func lockGuardAndVerifyMembership(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -112,7 +103,6 @@ func lockGuardAndVerifyMembership(
 		return 0, errors.New("lock guard and verify membership: batch results are nil")
 	}
 
-	// 판정이 앞에서 끝나도 남은 응답을 회수해 연결을 target 조회에 쓸 수 있게 한다.
 	defer func() {
 		if closeErr := results.Close(); closeErr != nil {
 			err = errors.Join(err, fmt.Errorf("close snapshot guard batch: %w", closeErr))
@@ -131,7 +121,6 @@ func lockGuardAndVerifyMembership(
 	return current, nil
 }
 
-// snapshotQuery는 guard 아래에서 읽은 CURRENT generation으로 target을 읽고, 결과는 획득 generation으로 식별한다.
 type snapshotQuery struct {
 	current       int64
 	acquired      int64

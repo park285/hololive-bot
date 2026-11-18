@@ -44,9 +44,6 @@ func (as *AlarmService) ListRoomAlarmsView(ctx context.Context, roomID string) (
 	return buildAlarmListViews(alarms, memberNames), nil
 }
 
-// memberDisplayNames는 채널별 멤버 표시명을 members 정본에서 domain.Member.DisplayName 순서
-// (short_korean_name→korean_name→english_name)로 읽는다. 멤버 정본에 없는 채널은 빈 이름이다. 조회 오류는 다른 이름으로
-// 덮지 않고 돌려준다. 같은 채널은 한 번만 조회한다.
 func (as *AlarmService) memberDisplayNames(ctx context.Context, channelIDs []string) (map[string]string, error) {
 	if as.memberData == nil {
 		return nil, errors.New("member display names: member data provider is nil")

@@ -35,8 +35,6 @@ func DefaultJSONPolicy(maxSuccessBodyBytes int64) ProviderResponsePolicy {
 	}
 }
 
-// ReadProviderJSONDocument는 상태와 본문 계약을 검사하고 호출자가 소유하는 JSON 바이트를 반환합니다.
-// 성공 여부와 관계없이 본문을 닫으며, 취소되지 않은 응답의 나머지는 MaxDrainBytes까지만 버립니다.
 func ReadProviderJSONDocument(
 	ctx context.Context,
 	resp *http.Response,
@@ -196,8 +194,6 @@ func drainBounded(ctx context.Context, body io.Reader, maxBytes int64) error {
 		return nil
 	}
 
-	// 공유 drain의 EOF 확인용 추가 읽기도 기존 상한에 포함한다. 실제 close는 호출부가
-	// 따로 수행해 drain 오류와 close 오류 각각의 분류 및 원인을 보존한다.
 	bounded := io.NopCloser(&ctxReader{ctx: ctx, r: io.LimitReader(body, maxBytes)})
 	if err := sharedhttputil.DrainAndClose(bounded, maxBytes); err != nil {
 		return fmt.Errorf("drain bounded response: %w", err)
@@ -227,10 +223,8 @@ func (r *ctxReader) Read(p []byte) (int, error) {
 
 	n, err := r.r.Read(p)
 	if err == nil {
-		// 바깥 LimitReader가 다음 Read를 생략해도 마지막 읽기 중 발생한 취소를 보존한다.
 		err = r.ctx.Err()
 	}
 
-	// io.ReadAll과 io.Copy가 EOF를 직접 비교하므로 읽기 오류는 감싸지 않는다.
 	return n, err
 }

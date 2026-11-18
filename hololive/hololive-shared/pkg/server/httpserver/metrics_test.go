@@ -31,7 +31,7 @@ func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
 	}
 
 	body := recorder.Body.String()
-	// 중앙 경보가 이 이름으로 공용 로깅 유실·실패를 판정한다.
+
 	for _, name := range []string{
 		"go_goroutines",
 		"iris_stack_logging_stdout_dropped_total",
@@ -45,7 +45,6 @@ func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
 }
 
 func TestNewRuntimeHTTPServersForwardsWorkerRegistryToMetricsServer(t *testing.T) {
-	// hololive-shared는 hololive-api config를 import할 수 없어 같은 identity를 여기 둔다. 값이 어긋나면 fixture 로드가 실패한다.
 	apiIdentity := workercontract.Identity{
 		Service:   "hololive",
 		Role:      "api",
@@ -53,7 +52,6 @@ func TestNewRuntimeHTTPServersForwardsWorkerRegistryToMetricsServer(t *testing.T
 	}
 	loaded := settingstest.LoadProfileFixture(t, apiIdentity, settingstest.SharedTestProfileFixture(t))
 
-	// executor를 끈 memory queue worker는 snapshot source 없이 등록되므로 profile의 worker 전체를 그렇게 등록한다.
 	for workerID, worker := range loaded.Profile.Workers {
 		worker.Executor.Enabled = false
 		loaded.Profile.Workers[workerID] = worker

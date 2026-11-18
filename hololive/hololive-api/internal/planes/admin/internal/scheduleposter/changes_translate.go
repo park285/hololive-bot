@@ -48,7 +48,6 @@ func translationLines(rows []posterstore.Row, prior, changes []posterstore.Chang
 	return lines
 }
 
-// slotLine이 다루는 칸이 added로 만들었거나 되살린 칸이면, 마지막 added 앞의 원문과 배지는 지금 방송의 것이 아니다.
 func slotLine(slot *posterstore.Slot) extractedRow {
 	row := extractedRow{Status: slot.Status, Text: slot.SourceText, Badges: slot.Badges}
 	steps := slot.Steps
@@ -75,7 +74,6 @@ func slotLine(slot *posterstore.Slot) extractedRow {
 	return row
 }
 
-// translateChanges가 돌려주는 오류는 저장소 오류와 서비스 실패(vertexServiceFailure)뿐이다. 그 밖의 번역 실패는 한국어 칸을 비운 변경을 그대로 돌려준다.
 func (s *Service) translateChanges(
 	ctx context.Context, target Target, schedule *posterstore.PublishedSchedule, post *posterstore.Post,
 	prior, changes []posterstore.Change, members []*domain.Member,

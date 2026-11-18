@@ -120,15 +120,9 @@ func TestAdmittedBudgetBoundsBlockedPublishAndPreservesDetachedCleanup(t *testin
 	held := lockLeaseRow(t, pool, spec.JobKey)
 
 	close(publish)
-	held.waitForBlockedWriter(t)
 
-	// 총 시도 기한 후에도 cleanup의 독립 예산 안에서 잠금을 풀어 terminal 정리를 허용한다.
-	remaining := time.Until(job.enqueuedAt.Add(job.budget))
-	if remaining > 0 {
-		time.Sleep(remaining)
-	}
-
-	time.Sleep(50 * time.Millisecond)
+	writer := held.waitForBlockedWriter(t)
+	waitForPublishCancellation(t, held, writer, job.budget)
 	held.release(t)
 
 	select {
@@ -138,6 +132,25 @@ func TestAdmittedBudgetBoundsBlockedPublishAndPreservesDetachedCleanup(t *testin
 	}
 
 	assertDetachedPublishCleanup(t, executor, pool, spec, fatal)
+}
+
+func waitForPublishCancellation(t *testing.T, held *heldLeaseRow, writer int32, budget time.Duration) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(t.Context(), budget+time.Second)
+	defer cancel()
+
+	for {
+		var blocked bool
+
+		if err := held.pool.QueryRow(ctx, `SELECT $1::int = ANY(pg_blocking_pids($2))`, held.pid, writer).Scan(&blocked); err != nil {
+			t.Fatalf("publish did not leave the lock queue within its admitted budget: %v", err)
+		}
+
+		if !blocked {
+			return
+		}
+	}
 }
 
 func blockedPublishDeadlineFixture(t *testing.T, fatal *[]error) (*collectionExecutor, *pgxpool.Pool, <-chan struct{}, chan<- struct{}) {

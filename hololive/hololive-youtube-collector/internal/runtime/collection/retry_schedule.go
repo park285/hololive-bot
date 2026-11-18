@@ -20,8 +20,6 @@ const (
 	retryNotBefore
 )
 
-// RetrySchedule은 UTC 재시도 시각과 일반 backoff/명시적 cooldown 하한을 구분합니다.
-// 두 경로 모두 DB 시계의 최소 대기를 적용하며 일반 backoff에만 최대 대기를 적용합니다.
 type RetrySchedule struct {
 	at   time.Time
 	kind retryScheduleKind
@@ -37,14 +35,10 @@ type deferCollectionState struct {
 	schedule   RetrySchedule
 }
 
-// NewRetryAtSchedule은 DB 시계의 RetryBounds 안으로 보정할 일반 backoff를 만듭니다.
 func NewRetryAtSchedule(at time.Time) (RetrySchedule, error) {
 	return newRetrySchedule(at, retryBounded)
 }
 
-// NewRetryNotBeforeSchedule은 provider가 명시한 cooldown 하한을 보존합니다.
-// DeferCollectionInput은 cooldown/COOLDOWN 진단에만 이 일정을 허용합니다.
-// PostgreSQL 저장 정밀도 아래의 나노초는 조기 재시도를 막도록 마이크로초로 올림합니다.
 func NewRetryNotBeforeSchedule(at time.Time) (RetrySchedule, error) {
 	if rounded := at.Truncate(time.Microsecond); rounded.Before(at) {
 		at = rounded.Add(time.Microsecond)
@@ -85,7 +79,6 @@ func NewDeferCollectionInput(
 
 func (s RetrySchedule) At() time.Time { return s.at }
 
-// IsNotBefore는 명시적 cooldown의 하한을 로컬 최대 대기로 줄이지 않아야 함을 알립니다.
 func (s RetrySchedule) IsNotBefore() bool { return s.kind == retryNotBefore }
 
 func (s RetrySchedule) Validate() error {

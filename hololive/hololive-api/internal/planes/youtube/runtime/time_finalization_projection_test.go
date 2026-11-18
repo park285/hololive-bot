@@ -165,7 +165,6 @@ func TestTimeFinalizationBacklogRotatesOnlyAfterFirstResults(t *testing.T) {
 	seedFinalizationBacklog(t, pool, 4)
 	require.Empty(t, finalizationVideos(t, pool, 0))
 
-	// 첫 시도는 한 영상만 열고, 나머지는 membership만 유지한다.
 	firstVideos := finalizationVideos(t, pool, 2)
 	require.Len(t, firstVideos, 2)
 	require.Equal(t, lastBacklogTurn(t, pool, "backlog-1"), firstVideos["backlog-1"])
@@ -181,7 +180,6 @@ func TestTimeFinalizationBacklogRotatesOnlyAfterFirstResults(t *testing.T) {
 	first, err := refresher.Refresh(t.Context(), builder, time.Now())
 	require.NoError(t, err)
 
-	// 확정으로 세션 출처가 바뀌어도 활성 묶음의 나머지가 첫 결과를 낼 때까지 남고, 차례는 다음 영상으로 넘어간다.
 	_, err = pool.Exec(t.Context(), `
         UPDATE youtube_live_time_finalizations SET outcome='finalized',completed_at=now(),retry_base_at=now(),
             last_attempt_at=now()
@@ -233,7 +231,6 @@ func assertBacklogRetryMembership(t *testing.T, pool *pgxpool.Pool, refresher *t
 	require.NoError(t, err)
 	require.Equal(t, generation, unchanged.Generation)
 
-	// 앞 묶음의 pending 재시도는 시각만 바꾸고, 최종 결과를 받으면 대상에서 빠진다.
 	_, err = pool.Exec(t.Context(), `UPDATE youtube_live_time_finalizations SET attempts=2,
         next_attempt_at=now()+interval '3 hours' WHERE video_id='backlog-2'`)
 	require.NoError(t, err)

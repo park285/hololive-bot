@@ -9,11 +9,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
-// WorkerCollection은 collector profile과 runtime registry가 공유하는 worker ID다.
 const WorkerCollection = "collection"
 
-// WorkerIdentity: hololive-youtube-collector가 소유한 worker profile identity다.
-// 호출자가 WorkerIDs를 바꿔도 다른 로드에 번지지 않도록 매 호출 새 슬라이스를 돌려준다.
 func WorkerIdentity() workercontract.Identity {
 	return workercontract.Identity{
 		Service:   "hololive",
@@ -22,8 +19,6 @@ func WorkerIdentity() workercontract.Identity {
 	}
 }
 
-// CollectionWorkerSettings는 collection worker profile의 service-owned settings 원문이다.
-// DecodeWorkerSettings가 키의 정확한 일치를 요구하므로 JSON 태그가 profile wire 계약이다.
 type CollectionWorkerSettings struct {
 	AcquisitionBatch           int   `json:"acquisition_batch"`
 	AcquisitionCadenceMS       int64 `json:"acquisition_cadence_ms"`
@@ -44,15 +39,11 @@ type CollectionWorkerSettings struct {
 	YouTubeJSMaxInflight       int   `json:"youtubejs_max_inflight"`
 }
 
-// WorkerProfile은 youtube-collector의 검증된 Stack Worker Profile이다.
-// LoadWorkerProfile과 DecodeWorkerProfile의 반환값은 profile 소유 수치 정책까지 통과한 상태다.
 type WorkerProfile struct {
 	Loaded     workercontract.LoadedProfile
 	Collection CollectionWorkerSettings
 }
 
-// LoadWorkerProfile은 STACK_WORKER_PROFILE_FILE의 collector profile을 읽고 profile이 소유한 정책 전체를 검증한다.
-// DB·provider env를 읽지 않으므로 --check-worker-profile preflight가 운영 env 없이 같은 수치 경계를 적용한다.
 func LoadWorkerProfile() (*WorkerProfile, error) {
 	loaded, err := workercontract.LoadProfileFromEnv(WorkerIdentity())
 	if err != nil {
@@ -62,7 +53,6 @@ func LoadWorkerProfile() (*WorkerProfile, error) {
 	return DecodeWorkerProfile(loaded)
 }
 
-// DecodeWorkerProfile은 이미 읽은 불변 profile에 collector 소유 검증을 적용한다.
 func DecodeWorkerProfile(loaded workercontract.LoadedProfile) (*WorkerProfile, error) {
 	profile := &WorkerProfile{Loaded: loaded}
 	if err := workercontract.DecodeWorkerSettingsSet(loaded, map[string]any{WorkerCollection: &profile.Collection}); err != nil {
@@ -82,7 +72,6 @@ func DecodeWorkerProfile(loaded workercontract.LoadedProfile) (*WorkerProfile, e
 	return profile, nil
 }
 
-// 통과한 profile만 applyWorkerProfile이 time.Duration으로 바꾸므로 PositiveValueProblems의 30일 상한이 변환 overflow를 막는다.
 func validateWorkerProfile(profile *WorkerProfile) error {
 	if profile == nil {
 		return errors.New("youtube collector worker profile is nil")
@@ -135,7 +124,6 @@ func capacityProblems(profile *WorkerProfile, worker *workercontract.WorkerProfi
 	return nil
 }
 
-// 인스턴스 ID는 환경 소유다.
 func (profile *WorkerProfile) Config() Config {
 	config := DefaultConfig()
 	config.applyWorkerProfile(profile)
@@ -143,7 +131,6 @@ func (profile *WorkerProfile) Config() Config {
 	return config
 }
 
-// 형태 검증이 bounded capacity와 fixed max_age를 보장하므로 두 포인터는 nil이 아니다.
 func (c *Config) applyWorkerProfile(profile *WorkerProfile) {
 	worker := profile.Loaded.Profile.Workers[WorkerCollection]
 	collection := profile.Collection

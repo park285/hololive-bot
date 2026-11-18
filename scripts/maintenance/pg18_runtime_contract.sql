@@ -1,8 +1,3 @@
--- hololive-bot용 PostgreSQL 18.6+ runtime 계약 검사다.
---
--- 기존 volume에서는 bootstrap administrator 또는 pg_aios를 읽을 수 있는 역할
--- (superuser 또는 pg_read_all_stats)로 실행한다. 이 스크립트는 read-only이며
--- 배포 계약이 어긋나면 observability snapshot을 출력하기 전에 실패한다.
 \set ON_ERROR_STOP on
 \pset pager off
 
@@ -31,7 +26,6 @@ BEGIN
   IF server_num < 180006 OR server_num >= 190000 THEN
     RAISE EXCEPTION 'expected PostgreSQL 18.6 or newer within major 18, got %', current_setting('server_version');
   END IF;
-  -- libc provider는 컨테이너 base image가 glibc↔musl로 바뀌면 정렬 순서가 달라져 기존 인덱스를 조용히 무효화한다.
   IF (SELECT datlocprovider FROM pg_database WHERE datname = current_database()) <> 'b' THEN
     RAISE EXCEPTION 'locale provider must be builtin, got %',
       (SELECT datlocprovider FROM pg_database WHERE datname = current_database());

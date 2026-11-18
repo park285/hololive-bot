@@ -35,8 +35,8 @@ func TestCacheAllMembers_SharedLoadHasOwnedDeadline(t *testing.T) {
 	}
 
 	startedAt := time.Now()
-	// 호출자 deadline이 길어도 공유 적재는 자기 상한을 쓴다.
 	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
+
 	defer cancel()
 
 	if _, err := c.LoadAllMembers(ctx); err != nil {
@@ -321,7 +321,6 @@ func TestCacheAllMembers_ReloadsAfterRetryBoundaryAndClearsBackoff(t *testing.T)
 	}
 }
 
-// singleflight.DoChan은 공유 적재 panic을 새 goroutine에서 다시 던져 프로세스를 끝낸다.
 func TestCacheAllMembers_SharedLoadPanicIsExplicitFailure(t *testing.T) {
 	var (
 		healthy     atomic.Bool
@@ -341,7 +340,6 @@ func TestCacheAllMembers_SharedLoadPanicIsExplicitFailure(t *testing.T) {
 				return []*domain.Member{{ID: 9, Name: testMemberNameNew}}, nil
 			}
 
-			// 첫 적재는 대기자가 합류할 때까지 붙잡고, 이후 적재도 모두 같은 결함으로 panic한다.
 			startedOnce.Do(func() { close(started) })
 			<-release
 			panics.Add(1)
@@ -406,7 +404,6 @@ func TestNewMemberCacheRejectsRepositoryWithoutPool(t *testing.T) {
 	}
 }
 
-// Epoch 조정 없는 캐시는 다른 프로세스의 멤버 변경을 놓치므로 구성 단계에서 거절한다.
 func TestNewMemberCacheRequiresEpochStore(t *testing.T) {
 	cache, err := NewMemberCache(t.Context(), nil, nil, slog.New(slog.DiscardHandler), CacheConfig{})
 	if err == nil || cache != nil {

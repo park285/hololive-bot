@@ -93,7 +93,6 @@ func groupedDeliveryFields(group *deliveryGroup) (roomID, channelID string, kind
 	return group.roomID, group.channelID, group.kind
 }
 
-// 개별 발송으로 내려가지 않으므로 묶음의 모든 행을 같은 사유로 남긴다.
 func (mr *MetricsRecorder) recordGroupedFormatFailure(
 	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,

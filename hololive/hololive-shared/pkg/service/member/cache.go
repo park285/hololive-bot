@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package member
 
 import (
@@ -39,12 +19,6 @@ import (
 
 const allMembersSnapshotKey = "all_members"
 
-// Cache는 PostgreSQL members를 프로세스 안 snapshot과 point overlay로 캐시한다. Valkey에는 멤버 데이터를 두지 않고,
-// durable epoch(coord:member-cache:v2:epoch)와 그 통지 채널만 써서 다른 프로세스의 snapshot 무효화를 조정한다.
-//
-// SnapshotMu가 snapshotGeneration·allMembersSnapshot·pointOverlay를 함께 보호한다. 게시된 snapshot과 색인은 불변이고,
-// point overlay는 snapshot에 없는 PostgreSQL 단건 결과만 조회 시점 generation 태그로 담는다. Generation이 바뀌면
-// overlay는 통째로 무효다.
 type Cache struct {
 	repository *Repository
 	logger     *slog.Logger
@@ -69,10 +43,9 @@ const defaultEpochReconcileInterval = 15 * time.Second
 
 type CacheConfig struct {
 	EpochReconcileInterval time.Duration
-	WarmUp                 bool // 시작 시 전체 멤버를 메모리에 로드
+	WarmUp                 bool
 }
 
-// 진행 중인 적재·point 조회는 이전 generation을 들고 있으므로 결과를 게시하지 못한다. 호출자가 snapshotMu 쓰기 잠금을 쥔다.
 func (c *Cache) resetMemoryLocked() {
 	c.snapshotGeneration.Add(1)
 
@@ -80,9 +53,6 @@ func (c *Cache) resetMemoryLocked() {
 	c.allMembersSnapshot.Store(nil)
 }
 
-// NewMemberCache는 epochStore의 durable epoch로 다른 프로세스와 무효화를 조정하는 캐시를 만들고, 설정에 따라 생성
-// 시점에 snapshot을 미리 적재한다. Epoch 조정 없는 캐시는 다른 프로세스의 변경을 놓치므로 epochStore 없이는 만들지
-// 않는다. PostgreSQL pool 없는 repository는 첫 조회에서 panic하므로 구성 단계에서 거절한다.
 func NewMemberCache(ctx context.Context, repository *Repository, epochStore cache.LowLevelCache, logger *slog.Logger, config CacheConfig) (*Cache, error) {
 	if repository != nil && repository.pool == nil {
 		return nil, errors.New("member repository has no PostgreSQL pool")
@@ -158,7 +128,6 @@ func (c *Cache) startEpochReconciliation(ctx context.Context) {
 	})
 }
 
-// Valkey 자원을 닫기 전에 호출하며, nil 캐시와 반복 호출도 안전하다.
 func (c *Cache) Close() {
 	if c == nil || c.epochRuntimeCancel == nil {
 		return

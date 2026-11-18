@@ -1,4 +1,3 @@
--- 일정표 행 묶음은 호출한 쪽이 같은 트랜잭션에서 delete_rows.sql로 지운다. 이 문장의 snapshot은 커밋 전이던 RecordRows의 행을 보지 못한다.
 WITH target AS (
     SELECT revision FROM schedule_posters WHERE id = $1
 ), updated AS (

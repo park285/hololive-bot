@@ -30,7 +30,7 @@ func newMemberBoundaryHarness(t *testing.T) (*MemberHandler, *pgxpool.Pool, *min
 	logger := slog.New(slog.DiscardHandler)
 	repo := member.NewMemberRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }})
 	mini := miniredis.RunT(t)
-	// Miniredis의 Pub/Sub는 RESP2 제약을 따르므로 valkey-go의 별도 구독 연결을 사용한다.
+
 	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{mini.Addr()}, DisableCache: true, AlwaysRESP2: true})
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func newMemberBoundaryHarness(t *testing.T) (*MemberHandler, *pgxpool.Pool, *min
 	audit := &recordingActivity{}
 
 	service := NewMemberAdminService(repo, cache, audit, logger)
-	// 멤버 경계는 ACL·Iris 의존성 없이 실제 DB와 캐시만으로 구성한다.
+
 	return NewMemberHandler(repo, service, logger), pool, mini, audit
 }
 
@@ -266,7 +266,6 @@ func TestMemberCreateConcurrentIdenticalRequestsHaveOneRowAndActivity(t *testing
 		wg.Go(func() {
 			<-start
 
-			// AddMember와 같은 순서로 요청을 검증·변환한 뒤 저장한다. create가 m.ID를 채우므로 호출마다 새 값을 만든다.
 			m, err := CreateMemberRequest{Name: "Concurrent Member"}.member()
 			if err != nil {
 				errs[i] = err
@@ -307,8 +306,6 @@ func TestMemberCreateConcurrentIdenticalRequestsHaveOneRowAndActivity(t *testing
 		t.Fatalf("rows=%d", count)
 	}
 
-	// 겹친 epoch 갱신은 다른 요청의 warmup을 무효화할 수 있다. 저장 증거는 유지하고,
-	// 경합이 끝난 동일 요청이 새 행 없이 동기화를 복구해야 한다.
 	recovered := createMemberHTTP(t, h, CreateMemberRequest{Name: "Concurrent Member"}, http.StatusCreated)
 	if !recovered.CacheSynced || !recovered.Replayed || recovered.MemberID != results[0].MemberID {
 		t.Fatalf("concurrent create recovery=%+v", recovered)

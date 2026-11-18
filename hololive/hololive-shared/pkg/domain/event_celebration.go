@@ -26,8 +26,6 @@ type CelebrationDispatchPayload struct {
 	Date       string          `json:"date"`
 }
 
-// Identity는 안정적인 MemberID만으로 멤버를 식별한다. 채널을 공유하는 멤버가 충돌하지 않도록 ChannelID는 쓰지 않으며,
-// MemberID가 없는 payload는 alarm-worker dispatch 원장의 ValidateCanonicalDispatch가 발행 전에 거절한다.
 func (p *CelebrationDispatchPayload) Identity() string {
 	return fmt.Sprintf("%s:member-%d:%s", p.Kind, p.MemberID, p.Date)
 }

@@ -36,5 +36,3 @@ func TestLiveReviewSharedSourcesPreservesStoredDecisions(t *testing.T) {
 		})
 	}
 }
-
-// 같은 이름의 다른 타입·일반 열은 기존 영수증을 잘못 닫는 대신 migration을 중단한다.

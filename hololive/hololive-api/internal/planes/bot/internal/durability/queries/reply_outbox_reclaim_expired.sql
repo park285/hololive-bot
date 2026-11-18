@@ -1,4 +1,3 @@
--- Go에서 결정한 전이만 저장한다. 대상은 만료 lease를 가진 submitting뿐이고, 재시도는 잠금 이후에도 남은 지평 안에서만 허용한다.
 WITH input AS (
     SELECT id, target_status, last_error, retry
     FROM unnest($1::bigint[], $2::text[], $3::text[], $4::boolean[])

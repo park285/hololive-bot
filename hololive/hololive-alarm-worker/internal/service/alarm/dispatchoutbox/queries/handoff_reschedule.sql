@@ -1,6 +1,4 @@
--- 전이 없이 다음 확인을 clock + $5 밀리초로 예약하되 admission(멤버 sent_at) + 지평 $6 밀리초를 넘기지 않는다. 지평
--- 시각의 확인이 마지막 확인이다. 멤버 조건이 어긋났으면 확인을 닫는다. applied는 멤버 전원의 조건이 맞았는지다.
-/* handoff_fence */, unit_updated AS (
+/* fragment:handoff_fence */, unit_updated AS (
     UPDATE alarm_dispatch_send_units u
     SET handoff_next_check_at = CASE
             WHEN passed.value THEN LEAST(

@@ -56,7 +56,6 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	writer := repositoryReplyOutboxWriter{repo: newTestReplyOutboxRepository(t, pool)}
-	// 오류 응답 문구는 message_strings(DB 정본)에서만 나온다. formatter 없이 보내는 코드 대체 문구는 없다.
 	messageStrings := messagestrings.NewStore(pool, slog.New(slog.DiscardHandler))
 	require.NoError(t, messageStrings.Load(t.Context()))
 
@@ -83,8 +82,6 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 	require.Contains(t, logs.String(), `reason=database_operation_failed`)
 }
 
-// newTestReplyOutboxRepository는 API worker profile fixture의 bot_reply_outbox 정책(max_attempts 5, 자동 replay 지평
-// iris.ReplyAutomaticReplayHorizon)으로 저장소를 만든다.
 func newTestReplyOutboxRepository(t *testing.T, pool *pgxpool.Pool) *durability.ReplyOutboxRepository {
 	t.Helper()
 

@@ -34,9 +34,8 @@ var (
 		{"schema_migration_checksums", regexp.MustCompile(`(?i)\bschema_migration_checksums\b`)},
 		{"CONCURRENTLY", concurrentlyWordPattern},
 	}
-	migrationNumberPrefixPattern = regexp.MustCompile(`^\d+`)
-	unguardedSetNotNullPattern   = regexp.MustCompile(`SET[^\S\n]+NOT[^\S\n]+NULL`)
-	// 인덱스 규칙은 줄 단위라 DO 본문 안의 CREATE INDEX 줄도 잡는다.
+	migrationNumberPrefixPattern       = regexp.MustCompile(`^\d+`)
+	unguardedSetNotNullPattern         = regexp.MustCompile(`SET[^\S\n]+NOT[^\S\n]+NULL`)
 	createIndexLinePattern             = regexp.MustCompile(`(?im)^[^\S\n]*CREATE[^\S\n]+(?:UNIQUE[^\S\n]+)?INDEX[^\S\n]+`)
 	createIndexConcurrentlyLinePattern = regexp.MustCompile(`(?im)^[^\S\n]*CREATE[^\S\n]+(?:UNIQUE[^\S\n]+)?INDEX[^\S\n]+CONCURRENTLY[^\S\n]+`)
 )
@@ -79,7 +78,6 @@ func checkMigrationConventions(fsys fs.FS) error {
 	return errors.Join(errs...)
 }
 
-// checkManifestOrdinals는 dbmigrate.Manifest가 보지 않는 001부터의 순서 토큰 연속성을 확인한다.
 func checkManifestOrdinals(fsys fs.FS) error {
 	content, err := fs.ReadFile(fsys, dbmigrate.ManifestName)
 	if err != nil {
@@ -187,7 +185,6 @@ func checkMigrationSource(name, content string) error {
 		}
 	}
 
-	// 유효한 CHECK를 먼저 만들어 SET NOT NULL의 전체 스캔을 피한다.
 	if unguardedSetNotNullPattern.MatchString(content) &&
 		(!strings.Contains(content, "NOT VALID") || !strings.Contains(content, "VALIDATE CONSTRAINT")) {
 		return fmt.Errorf("%s uses SET NOT NULL without a preceding NOT VALID CHECK and VALIDATE CONSTRAINT", name)
@@ -199,7 +196,6 @@ func checkMigrationSource(name, content string) error {
 		}
 	}
 
-	// 빈 DB에 적용하는 baseline만 트랜잭션 안에서 인덱스를 만든다.
 	uncommented := sqlsplit.StripComments(content)
 	if name != epoch3Baseline && createIndexLinePattern.MatchString(uncommented) &&
 		!createIndexConcurrentlyLinePattern.MatchString(uncommented) {
@@ -209,7 +205,6 @@ func checkMigrationSource(name, content string) error {
 	return nil
 }
 
-// executableStatementCount는 sqlsplit이 문장으로 돌려주는 주석만 남은 조각을 세지 않는다.
 func executableStatementCount(content string) int {
 	count := 0
 

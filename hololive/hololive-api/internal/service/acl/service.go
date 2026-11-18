@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package acl
 
 import (
@@ -42,7 +22,6 @@ const (
 	ACLModeBlacklist ACLMode = "blacklist"
 )
 
-// ParseACLModeStrict는 invalid 값을 whitelist 기본값으로 바꾸지 않는 검증 경계용 parser다.
 func ParseACLModeStrict(s string) (ACLMode, error) {
 	out, err := parseACLModeStrict(s)
 	if err != nil {
@@ -84,14 +63,10 @@ func parseACLEnabledStrict(s string) (bool, error) {
 	}
 }
 
-// ErrInvalidRoomChatID는 ACL 값이 정규 signed i64 chatID가 아님을 뜻한다. 등록·제거·저장 행 모두 이 규칙을 따른다.
 var ErrInvalidRoomChatID = errors.New("ACL room must be a canonical signed 64-bit chat ID")
 
-// ErrACLModeChanged는 방 변경 요청이 본 ACL 모드와 현재 모드가 달라 PG에 쓰지 않았음을 뜻한다.
 var ErrACLModeChanged = errors.New("ACL mode differs from the mode the room change expected")
 
-// validateRoomChatID는 console roomRegistration(canonicalI64)과 같은 규칙으로 부호·앞자리 0·범위를 본다.
-// 값이 방 이름일 수 있어 오류에는 원문을 넣지 않는다.
 func validateRoomChatID(room string) error {
 	id, err := strconv.ParseInt(room, 10, 64)
 	if err != nil || strconv.FormatInt(id, 10) != room {
@@ -101,8 +76,6 @@ func validateRoomChatID(room string) error {
 	return nil
 }
 
-// validateDefaultRooms는 KAKAO_ROOMS seed 전체를 첫 초기화 여부와 무관하게 검증한다. 잘못된 seed는
-// DB가 비는 순간(새 DB·빈 복원) 죽은 whitelist 행이 되므로 평소 기동에서 먼저 드러낸다.
 func validateDefaultRooms(rooms []string) error {
 	invalid := 0
 
@@ -146,7 +119,6 @@ const (
 	dbKeyEnabled = "enabled"
 	dbKeyMode    = "mode"
 
-	// DB list_type 값.
 	listTypeWhitelist = "whitelist"
 	listTypeBlacklist = "blacklist"
 )
@@ -156,16 +128,12 @@ type Room struct {
 	ListType string `db:"list_type"`
 }
 
-// PostgreSQL을 영구 저장소로 사용하고, 판정은 인메모리 스냅샷으로 한다.
 type Service struct {
 	store  aclStore
 	logger *slog.Logger
 
-	// mutationMu는 mutation의 PG 커밋~메모리 적용을 직렬화한다. 한 프로세스에 Service가 하나뿐이라
-	// admin 변경은 메모리 적용 뒤 같은 인스턴스를 쓰는 bot 판정에 바로 보인다.
 	mutationMu sync.Mutex
 
-	// 메모리 캐시 (빠른 조회용)
 	mu             sync.RWMutex
 	enabled        bool
 	mode           ACLMode
@@ -173,7 +141,6 @@ type Service struct {
 	blacklistRooms map[string]struct{}
 }
 
-// NewACLService ACL 서비스 생성 및 초기화.
 func NewACLService(
 	ctx context.Context,
 	postgres database.Client,
@@ -210,7 +177,6 @@ func NewACLService(
 		blacklistRooms: make(map[string]struct{}),
 	}
 
-	// 시작 시 로드 (PostgreSQL → 메모리)
 	if err := service.loadFromDatabase(ctx, defaultEnabled, normalizedMode, normalizedRooms); err != nil {
 		return nil, fmt.Errorf("load ACL from database: %w", err)
 	}
@@ -238,7 +204,6 @@ func aclStoreFromClient(postgres database.Client) (aclStore, error) {
 	return newPgxACLStore(pool), nil
 }
 
-// activeRoomsMap: 현재 활성 모드의 방 목록 맵을 반환한다 (잠금 없음, 호출자가 관리).
 func (s *Service) activeRoomsMap() map[string]struct{} {
 	if s.mode == ACLModeBlacklist {
 		return s.blacklistRooms
@@ -267,10 +232,8 @@ func (s *Service) IsRoomAllowed(chatID string) bool {
 
 	switch s.mode {
 	case ACLModeBlacklist:
-		// 블랙리스트: 목록에 있으면 차단, 없으면 허용
 		return !isInRoomSet(s.blacklistRooms, chatID)
 	case ACLModeWhitelist:
-		// 화이트리스트: 목록에 있으면 허용, 없으면 차단
 		return isInRoomSet(s.whitelistRooms, chatID)
 	default:
 		return false

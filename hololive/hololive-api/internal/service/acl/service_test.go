@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package acl
 
 import (
@@ -50,7 +30,6 @@ func newTestService(enabled bool, mode ACLMode, whitelistRooms, blacklistRooms [
 func TestIsRoomAllowed_ACLDisabled(t *testing.T) {
 	t.Parallel()
 
-	// ACL 비활성화 시 모든 방이 허용되어야 한다
 	service := newTestService(false, ACLModeWhitelist, []string{"room-A"}, nil)
 
 	tests := []struct {
@@ -192,7 +171,6 @@ func TestIsRoomAllowed_RoomNameEntryDoesNotMatchChatID(t *testing.T) {
 func TestIsRoomAllowed_EmptyWhitelist(t *testing.T) {
 	t.Parallel()
 
-	// ACL 활성화 + 화이트리스트 비어있음 → 모든 방 거부
 	service := newTestService(true, ACLModeWhitelist, []string{}, nil)
 
 	got := service.IsRoomAllowed("any-chat")
@@ -204,7 +182,6 @@ func TestIsRoomAllowed_EmptyWhitelist(t *testing.T) {
 func TestIsRoomAllowed_EmptyBlacklist(t *testing.T) {
 	t.Parallel()
 
-	// ACL 활성화 + 블랙리스트 비어있음 → 모든 방 허용
 	service := newTestService(true, ACLModeBlacklist, nil, []string{})
 
 	got := service.IsRoomAllowed("any-chat")
@@ -218,7 +195,6 @@ func TestIsRoomAllowed_DualLists_Independent(t *testing.T) {
 
 	service := newTestService(true, ACLModeWhitelist, []string{"allowed-only"}, []string{"blocked-only"})
 
-	// 화이트리스트 모드: allowed-only만 허용, blocked-only는 화이트리스트에 없으므로 거부
 	if !service.IsRoomAllowed("allowed-only") {
 		t.Error("화이트리스트 모드에서 화이트리스트에 있는 방은 허용되어야 함")
 	}
@@ -227,13 +203,11 @@ func TestIsRoomAllowed_DualLists_Independent(t *testing.T) {
 		t.Error("화이트리스트 모드에서 화이트리스트에 없는 방은 거부되어야 함")
 	}
 
-	// 블랙리스트 모드로 전환 (메모리만 변경, DB/캐시 없음)
 	service.mu.Lock()
 
 	service.mode = ACLModeBlacklist
 	service.mu.Unlock()
 
-	// 블랙리스트 모드: blocked-only는 차단, allowed-only는 블랙리스트에 없으므로 허용
 	if service.IsRoomAllowed("blocked-only") {
 		t.Error("블랙리스트 모드에서 블랙리스트에 있는 방은 차단되어야 함")
 	}
@@ -342,13 +316,11 @@ func expectedACLRooms(mode ACLMode, whitelistRooms, blacklistRooms []string) []s
 func TestGetACLStatus_ReturnsCopy(t *testing.T) {
 	t.Parallel()
 
-	// GetACLStatus가 내부 맵의 복사본을 반환해야 한다 (외부 수정이 내부 상태에 영향 없어야 함)
 	service := newTestService(true, ACLModeWhitelist, []string{"room-safe"}, nil)
 
 	_, _, rooms := service.GetACLStatus()
 	origLen := len(rooms)
 
-	// 반환된 슬라이스를 수정해도 서비스 내부 상태에 영향 없어야 한다
 	_ = append(rooms, "injected-room")
 
 	_, _, roomsAfter := service.GetACLStatus()
@@ -378,7 +350,6 @@ func TestGetACLStatus_ReturnsSortedRooms(t *testing.T) {
 func TestIsRoomAllowed_ConcurrentRead(t *testing.T) {
 	t.Parallel()
 
-	// 동시 읽기 시 race condition 없어야 한다
 	service := newTestService(true, ACLModeWhitelist, []string{"room-concurrent"}, nil)
 
 	const goroutines = 50
@@ -397,7 +368,6 @@ func TestIsRoomAllowed_ConcurrentRead(t *testing.T) {
 func TestGetACLStatus_ConcurrentRead(t *testing.T) {
 	t.Parallel()
 
-	// 동시 읽기 시 race condition 없어야 한다
 	service := newTestService(true, ACLModeBlacklist, nil, []string{testRoomA, testRoomB})
 
 	const goroutines = 50

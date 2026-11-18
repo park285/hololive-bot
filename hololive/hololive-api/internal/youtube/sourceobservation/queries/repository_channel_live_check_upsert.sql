@@ -15,8 +15,6 @@ ON CONFLICT (channel_id) DO UPDATE SET
     observed_at = EXCLUDED.observed_at,
     received_at = EXCLUDED.received_at,
     updated_at = NOW()
--- (effective_at, observation_id)가 더 새로운 관측만 반영한다. retention으로 원시 evidence가 지워져
--- observation_id가 NULL이 된 최신값은 같은 시각의 순서를 증명할 수 없으므로 더 늦은 시각만 대체한다.
 WHERE EXCLUDED.effective_at > latest.effective_at
    OR (
        EXCLUDED.effective_at = latest.effective_at

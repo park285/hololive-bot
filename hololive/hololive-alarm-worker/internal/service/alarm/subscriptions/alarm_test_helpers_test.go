@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package subscriptions
 
 import (
@@ -38,9 +18,6 @@ import (
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
-// operation/result/warm/status는 프로덕션이 실제로 내보내는 메트릭 라벨과 캐시 필드 이름이다.
-// 프로덕션 상수를 참조하면 그 값이 바뀔 때 기대값도 함께 움직여 테스트가 깨지지 않고 조용히
-// 통과하므로, 테스트가 고정하려는 값은 여기에 따로 적어 둔다.
 const (
 	testRoomID         = "room-1"
 	testAltRoomID      = "room1"
@@ -87,7 +64,6 @@ func (m *mockMemberDataProvider) LoadAllMembers(context.Context) ([]*domain.Memb
 	return m.members, nil
 }
 
-// newTestAlarmService는 격리된 PG(dbtest)와 miniredis를 쓰는 서비스를 만든다. PG가 구독·방 이름의 원천이다.
 func newTestAlarmService(t *testing.T) *AlarmService {
 	t.Helper()
 
@@ -106,7 +82,6 @@ func newTestAlarmService(t *testing.T) *AlarmService {
 	}
 }
 
-// roomChannelIDs는 방이 구독한 채널 ID를 PG 정본에서 중복 없이 읽는다. UNIT B 멤버 구독 행은 채널 하나로 합친다.
 func roomChannelIDs(ctx context.Context, as *AlarmService, roomID string) ([]string, error) {
 	alarms, err := as.GetRoomAlarmsWithTypes(ctx, roomID)
 	if err != nil {
@@ -116,7 +91,6 @@ func roomChannelIDs(ctx context.Context, as *AlarmService, roomID string) ([]str
 	return uniqueAlarmChannelIDs(alarms), nil
 }
 
-// channelSubscriberRooms는 채널·알림 종류를 구독한 방 ID를 PG 정본에서 정렬·중복 제거해 읽는다.
 func channelSubscriberRooms(ctx context.Context, as *AlarmService, channelID string, alarmType domain.AlarmType) ([]string, error) {
 	alarms, err := as.alarmRepository.FindByChannelAndType(ctx, channelID, alarmType)
 	if err != nil {

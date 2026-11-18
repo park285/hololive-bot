@@ -26,7 +26,6 @@ func applyUpcomingPositive(session *reduceSession, fact *SessionFact) {
 	}
 
 	if existing.Status == domain.LiveStatusLive && existing.Clock.LastLivePositiveAt == nil {
-		// UPCOMING 사실만으로 근거 없는 기존 LIVE에 LIVE head를 만들어 면제하지 않는다.
 		recordApplication(session, fact.VideoID, "LIVE_WITHOUT_POSITIVE_RETAINED")
 
 		return
@@ -135,7 +134,6 @@ func mergeLiveSession(existing *SessionState, fact *SessionFact, evidence *Evide
 }
 
 func newSession(fact *SessionFact, status domain.LiveStatus, evidence *Evidence) SessionState {
-	// 새 세션에는 무시한 부재가 없으므로 미적재가 아니라 적재된 빈 이력으로 시작한다.
 	created := SessionState{
 		VideoID:            fact.VideoID,
 		ChannelID:          fact.ChannelID,
@@ -164,9 +162,6 @@ func newSession(fact *SessionFact, status domain.LiveStatus, evidence *Evidence)
 	return created
 }
 
-// applyLateSchedule은 상태 관측으로는 늦게 도착한 앞 슬롯의 UPCOMING 사실에서 일정만 비교해 반영한다.
-// 재사용 일정은 더 늦은 슬롯에 실려 상태 시계를 먼저 올리지만 원래 확인 시각은 이르므로, 상태 시계 순서만으로
-// 버리면 그 사이에 다른 AP·provider가 확인한 새 일정이 사라진다. 상태·제목·시계는 더 늦은 관측의 값을 유지한다.
 func applyLateSchedule(session *reduceSession, existing *SessionState, fact *SessionFact) {
 	observed, newer := newerScheduleObservation(existing, fact, session.evidence)
 	if !newer {
@@ -191,8 +186,6 @@ func newerScheduleObservation(existing *SessionState, fact *SessionFact, evidenc
 		(existing.ScheduleObservedAt == nil || observed.After(*existing.ScheduleObservedAt))
 }
 
-// scheduleObservedAt은 예정 시각을 실제로 확인한 시각이다. 재사용 행은 원래 확인 슬롯 시각을 싣고,
-// 그 밖의 행은 이 관측의 effective time에 확인한 값이다. 둘은 같은 lease 슬롯 시계라 그대로 비교한다.
 func scheduleObservedAt(fact *SessionFact, evidence *Evidence) time.Time {
 	if fact.ScheduleObservedAt != nil && fact.ScheduleObservedAt.Before(evidence.EffectiveAt) {
 		return *fact.ScheduleObservedAt
@@ -204,7 +197,6 @@ func scheduleObservedAt(fact *SessionFact, evidence *Evidence) time.Time {
 func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Evidence) SessionState {
 	merged := *existing
 
-	// 저장된 세션의 채널은 바꾸지 않는다. head만 있던 영상은 첫 positive의 채널로 세션을 만든다.
 	if fact.ChannelID != "" && merged.ChannelID == "" {
 		merged.ChannelID = fact.ChannelID
 	}
@@ -222,13 +214,11 @@ func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Ev
 		merged.ThumbnailURL = fact.ThumbnailURL
 	}
 
-	// 재사용 일정은 원래 확인 시각으로 비교해, 그 뒤에 다른 AP·provider가 관측한 새 일정을 되돌리지 않는다.
 	if observed, newer := newerScheduleObservation(existing, fact, evidence); newer {
 		merged.ScheduledStartTime = copyOptionalTime(fact.ScheduledAt)
 		merged.ScheduleObservedAt = copyTime(observed)
 	}
 
-	// 유지된 LIVE/ENDED나 시작 미확정 metadata를 새 상태 관측으로 해석하지 않는다.
 	if fact.Status == string(merged.Status) && (merged.Status != domain.LiveStatusLive || fact.LiveStartConfirmed) {
 		merged.StatusObservedAt = copyTime(evidence.EffectiveAt)
 	}

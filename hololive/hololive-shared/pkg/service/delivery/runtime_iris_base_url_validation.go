@@ -24,7 +24,6 @@ const (
 	runtimeIrisBaseURLFileWorldWritablePerm = 0o002
 )
 
-// Transport와 scheme의 일치(h3는 https, http1은 loopback)는 client 생성 시 iris.NewClient가 검사한다.
 func validateRuntimeIrisBaseURLFileOverride(raw string, allowedHosts map[string]struct{}) (string, error) {
 	baseURL, parsed, err := parseRuntimeIrisBaseURL(raw)
 	if err != nil {

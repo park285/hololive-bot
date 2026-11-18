@@ -1,9 +1,8 @@
 # YouTube logical delivery ledger 계약
 
 - 작성일: 2026-08-31 KST
-- 적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`
 - 상위 계약: [`youtube-egress-lifecycle-contract-20260831.md`](youtube-egress-lifecycle-contract-20260831.md)
-- 현재 상태(2026-09-28): 아래 fixed-high-water backfill은 운영에서 완료됐습니다. backfill 명령(`youtube-delivery-ledger-backfill`)과 alarm-worker `TransitionStore`의 completion marker gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. migration 227은 적용 시점의 완료 전제를, migration 229는 잠금 아래 현재 singleton 완료 상태를 다시 확인하고 일회성 `youtube_notification_delivery_ledger_state`를 폐기합니다. 아래 backfill·completion gate 절은 설계 근거로만 읽습니다.
+- 현재 상태(2026-09-28): 아래 fixed-high-water backfill은 운영에서 완료됐습니다. backfill 명령(`youtube-delivery-ledger-backfill`)과 alarm-worker `TransitionStore`의 completion marker gate는 지웠습니다. migration 227은 적용 시점의 완료 전제를, migration 229는 잠금 아래 현재 singleton 완료 상태를 다시 확인하고 일회성 `youtube_notification_delivery_ledger_state`를 폐기합니다. 아래 backfill·completion gate 절은 설계 근거로만 읽습니다.
 
 ## 목적
 

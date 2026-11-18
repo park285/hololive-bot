@@ -63,7 +63,6 @@ func TestExtendTargetsCurrentRangeBufferBound(t *testing.T) {
 			require.NoError(t, tx.QueryRow(t.Context(), `SELECT count(*) FROM youtube_collection_targets WHERE projection_generation=$1 AND not_before=$2`, first.Generation, targets[0].NotBefore).Scan(&changed))
 			require.Equal(t, 1, changed)
 
-			// 같은 입력의 다음 heartbeat도 쓰기 없이 동일한 범위 예산을 지킨다.
 			require.NoError(t, tx.QueryRow(t.Context(), "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) "+execute).Scan(&raw))
 			requireExtendTargetBufferBound(t, raw)
 			require.Equal(t, after, targetPlanTuples(t, tx, first.Generation))
@@ -75,7 +74,6 @@ func TestExtendTargetsCurrentRangeBufferBound(t *testing.T) {
 		})
 	}
 
-	// EXPLAIN 실행도 rollback되어 CURRENT membership·header와 RETIRED 이력은 보존된다.
 	requireEligibilityVersion(t, pool, first.Generation, 1)
 	requireRetiredTargetEligibility(t, pool)
 }
@@ -99,7 +97,6 @@ func assertPreparedExtendPlanCounts(t *testing.T, tx pgx.Tx, mode string) {
 func seedRetiredTargetPlanPopulation(t *testing.T, pool *pgxpool.Pool, generation int64) {
 	t.Helper()
 
-	// 과거 세대가 충분히 있어야 전체 테이블 스캔과 CURRENT 범위 스캔의 차이가 드러난다.
 	_, err := pool.Exec(t.Context(), `
 		WITH retired AS (
 			INSERT INTO youtube_collection_projection_generations(status,row_count,projection_sha256,valid_until,activated_at)
@@ -123,7 +120,6 @@ func extendTargetsPlanExecution(generation int64, targets []TargetSpec) string {
 	timestamps := make([]string, len(targets))
 
 	for i, target := range targets {
-		// 합성 fixture 값만 SQL literal로 사용한다. 운영 입력은 항상 bind parameter다.
 		subjects[i] = "'" + target.SubjectKey + "'"
 		kinds[i] = "'" + string(target.ObservationKind) + "'"
 		timestamps[i] = "NULL"

@@ -110,7 +110,6 @@ func TestNotifierPartialCommitRecoversOnlyMissingRoomAndSentReplay(t *testing.T)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM alarm_dispatch_deliveries`).Scan(&count))
 	require.Equal(t, 2, count)
 
-	// cache 전체가 사라져도 SENT ledger가 새 delivery 및 재발송을 막는다.
 	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET status='sent', sent_at=NOW() WHERE room_id='room-first'`)
 	require.NoError(t, err)
 

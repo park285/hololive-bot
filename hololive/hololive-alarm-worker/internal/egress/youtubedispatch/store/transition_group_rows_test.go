@@ -23,7 +23,6 @@ func TestTransitionLogicalGroupRowsExcludeCrossCombinationsBeforeLimit(t *testin
 
 			transition.config.LogicalGroupLimit = 1
 
-			// 이전 독립 ANY 조건에서는 더 오래된 교차 조합 6개가 조회 한도를 모두 차지했습니다.
 			require.Len(t, crossed, len(requested)*(transition.config.LogicalGroupLimit+1)+len(requested))
 
 			tx, err := pool.Begin(t.Context())

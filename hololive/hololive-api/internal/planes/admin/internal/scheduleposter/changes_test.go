@@ -1383,7 +1383,6 @@ func (h *recordingHandler) attr(message, key string) slog.Value {
 	return slog.Value{}
 }
 
-// 지표가 패키지 전역이라 병렬로 돌리면 다른 시험의 증가가 섞인다.
 func TestDetectChangesCountsPostsAndCycles(t *testing.T) {
 	counts := func() []float64 {
 		return []float64{

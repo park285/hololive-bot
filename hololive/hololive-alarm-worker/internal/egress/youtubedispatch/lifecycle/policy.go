@@ -49,7 +49,6 @@ func NewRevivePolicy(enabled bool, freshnessWindow time.Duration, batchLimit int
 func (p RevivePolicy) Enabled() bool                  { return p.enabled }
 func (p RevivePolicy) FreshnessWindow() time.Duration { return p.freshnessWindow }
 
-// RowSnapshot은 DB 스냅샷에서 복사한 불변 정책 입력이다.
 type RowSnapshot struct {
 	DeliveryID    int64
 	Status        DeliveryStatus
@@ -84,9 +83,6 @@ func (r RowSnapshot) Validate() error {
 	return nil
 }
 
-// RowMutation은 한 행의 확정된 다음 상태다. 저장소가 재시도·후속 처리 정책을 재계산하면 안 되며, 전이 전 상태 fence는
-// 저장소가 잠가 다시 읽은 행으로 건다. 다음 시도 시각은 DB 시계 기준 DueSpec이고, 모든 결정은 claim(locked_at·
-// locked_by)을 해제한다.
 type RowMutation struct {
 	deliveryID  int64
 	nextStatus  DeliveryStatus
@@ -122,8 +118,6 @@ type (
 	ReviveLogicalGroupDecision struct{ decisionBase }
 )
 
-// EvaluateFailure는 결정된 소유자의 시도 한도만 소비한다. 재시도는 owner와 follower 모두 DB 시계에서
-// max(backoff, retryAfter) 뒤로 미루고, 종결 실패는 각 행의 next_attempt_at을 유지한다.
 func EvaluateFailure(
 	policy RetryPolicy,
 	owner RowSnapshot,
@@ -228,8 +222,6 @@ type ReviveInput struct {
 	HasActiveLock    bool
 }
 
-// EvaluateRevive는 checkedAt(후보 SQL이 돌려준 DB 시계)으로 원본 신선도를 확인하고, 되살린 행을 전이 시점의
-// DB 시계에 바로 재시도하도록 만든다.
 func EvaluateRevive(policy RevivePolicy, input ReviveInput, checkedAt time.Time) (ReviveLogicalGroupDecision, error) {
 	rows, err := validateRevive(policy, input, checkedAt)
 	if err != nil {

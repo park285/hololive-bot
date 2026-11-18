@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// LifecycleOrigin은 일정 메타데이터와 실제 수명 관측의 출처를 구분한다.
 type LifecycleOrigin string
 
 const (
@@ -34,8 +33,6 @@ const (
 	EndReasonUnresolvableVideo   EndReason = "UNRESOLVABLE_VIDEO"
 )
 
-// StatusUnresolvable은 익명 영상 확인이 identity를 확인할 수 없게 된 LIVE 영상의 사실이다.
-// 비공개·삭제 전환 영상은 identity_missing만 남겨 명시적 종료도 부재 종료도 받을 수 없다.
 const StatusUnresolvable = "UNRESOLVABLE"
 
 type LiveEvidenceClock struct {
@@ -50,9 +47,7 @@ type LiveEvidenceClock struct {
 	EndCandidateObservationID  *int64
 	NextEndCheckAt             *time.Time
 	EndedAt                    *time.Time
-	// UnresolvableSince는 마지막 LIVE positive 이후 영상 확인이 identity_missing으로만 이어진 첫 관측 시각이다.
-	// positive가 지우며 UNRESOLVABLE_VIDEO 종료의 ended_at 하한이다.
-	UnresolvableSince *time.Time
+	UnresolvableSince          *time.Time
 }
 
 type EndEvidence struct {
@@ -66,14 +61,13 @@ type EndEvidence struct {
 }
 
 type SessionFact struct {
-	VideoID      string
-	ChannelID    string
-	Status       string
-	Title        string
-	TopicID      string
-	ThumbnailURL string
-	ScheduledAt  *time.Time
-	// ScheduleObservedAt은 ScheduledAt을 앞선 lease 슬롯에서 확인해 재사용한 행에만 있는 그 슬롯 시각이다.
+	VideoID            string
+	ChannelID          string
+	Status             string
+	Title              string
+	TopicID            string
+	ThumbnailURL       string
+	ScheduledAt        *time.Time
 	ScheduleObservedAt *time.Time
 	StartedAt          *time.Time
 	EndedAt            *time.Time
@@ -109,27 +103,19 @@ type SessionState struct {
 	HeadPresent               bool
 }
 
-// IgnoredAbsenceHistory는 첫 LIVE positive 전에 무시한 부재 slot 예정 시각 목록이다.
-// 0값은 "적재하지 않음"이다. 적재하지 않은 이력은 reducer가 읽거나 늘리지 않고 Reduce 오류로
-// 드러내며, 저장 경로는 활성 세션의 이력을 SQL NULL로 보내 기존 DB 값을 유지한다.
-// ENDED 이력은 저장 때 비운다. 적재된 빈 이력은 LoadedIgnoredAbsences(nil)로만 만든다.
 type IgnoredAbsenceHistory struct {
 	slots  []time.Time
 	loaded bool
 }
 
-// LoadedIgnoredAbsences는 적재했거나 새로 만든 세션의 이력이다. 인자 nil은 빈 이력이며
-// 이 함수가 slots의 소유권을 넘겨받는다.
 func LoadedIgnoredAbsences(slots []time.Time) IgnoredAbsenceHistory {
 	return IgnoredAbsenceHistory{slots: slots, loaded: true}
 }
 
-// 적재하지 않은 이력(false)을 빈 이력으로 해석하지 않는다. 반환 slice는 읽기 전용이다.
 func (h *IgnoredAbsenceHistory) Slots() ([]time.Time, bool) {
 	return slices.Clip(h.slots), h.loaded
 }
 
-// add는 reducer만 호출하며 호출 전에 적재 여부를 확인한다.
 func (h *IgnoredAbsenceHistory) add(at time.Time) {
 	h.slots = append(h.slots, at)
 }

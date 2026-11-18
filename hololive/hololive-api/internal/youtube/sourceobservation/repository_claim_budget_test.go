@@ -15,7 +15,6 @@ import (
 
 const claimBudgetTransactionTimeout = 10 * time.Second
 
-// claimBudgetQueueRow는 queue 행의 물리 버전(ctid)과 claim 필드를 문자열로 담아 "쓰기 없음"을 값 비교로 확인한다.
 type claimBudgetQueueRow struct {
 	ctid           string
 	status         string
@@ -40,7 +39,6 @@ func readClaimBudgetQueueRow(ctx context.Context, t *testing.T, pool *pgxpool.Po
 	return row
 }
 
-// 예산 경계 판정이 DB NOW()를 쓰기 때문이다.
 func setClaimLeaseRemaining(ctx context.Context, t *testing.T, pool *pgxpool.Pool, observationID int64, remaining time.Duration) {
 	t.Helper()
 
@@ -94,7 +92,6 @@ func TestEnsureClaimBudgetSkipsWriteWhileLeaseCoversBudget(t *testing.T) {
 			t.Fatalf("ensure budget with %s remaining: %v", remaining, err)
 		}
 
-		// 연장이 필요 없으면 새 튜플 버전(ctid 변경)도 lease·updated_at 변경도 없어야 한다.
 		if after := readClaimBudgetQueueRow(ctx, t, pool, claim.ObservationID); after != before {
 			t.Fatalf("lease with %s remaining was rewritten: before=%+v after=%+v", remaining, before, after)
 		}

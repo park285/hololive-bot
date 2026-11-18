@@ -1,4 +1,3 @@
--- 발송 전 claim을 같은 attempt로 반환한다. 소유자가 만료 전에 스스로 돌려주는 전이라 lease 만료는 보지 않는다.
 WITH input AS MATERIALIZED (
     SELECT input.id, input.attempt_count
     FROM jsonb_to_recordset($1::jsonb) AS input(id BIGINT, attempt_count INT)

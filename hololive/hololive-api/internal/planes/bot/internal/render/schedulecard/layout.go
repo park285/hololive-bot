@@ -377,7 +377,6 @@ func fitTable(f *fontSet, days []day, st rowStyle, sp tableSpec) (tableFit, bool
 				base = b.lines
 			}
 
-			// 글자를 키우느라 줄이 더 접히면 키우지 않는다.
 			if total <= sp.avail && !cut && t.lines <= base {
 				return spread(t, total)
 			}
@@ -412,7 +411,6 @@ func layoutOff(f *fontSet, s slot, mainT, subT txt, maxW float64) offLine {
 		return l
 	}
 
-	// 몇 글자만 남은 부연은 말줄임표만 보여 그리지 않는다.
 	if sub := f.clamp(subT, s.sub, rest); sub == s.sub || utf8.RuneCountInString(sub) > 4 {
 		l.sub = sub
 	}

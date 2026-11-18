@@ -224,26 +224,22 @@ func insertHandoffReply(t *testing.T, r *durableRuntime, messageID string) strin
 	return clientRequestID
 }
 
-func dispatchNext(t *testing.T, r *durableRuntime) {
+func dispatchNext(t *testing.T, r *durableRuntime, pool *pgxpool.Pool, clientRequestID string) {
 	t.Helper()
 
-	deadline := time.Now().Add(5 * time.Second)
-
-	for !r.processNextOutbox(t.Context(), func() {}) {
-		require.True(t, time.Now().Before(deadline), "no reply became claimable")
-		time.Sleep(5 * time.Millisecond)
-	}
+	_, err := pool.Exec(t.Context(), `UPDATE bot_reply_outbox SET available_at = available_at - interval '1 millisecond' WHERE client_request_id = $1`, clientRequestID)
+	require.NoError(t, err)
+	require.True(t, r.processNextOutbox(t.Context(), func() {}), "no reply became claimable")
 }
 
-func reconcileDue(t *testing.T, r *durableRuntime) {
+func reconcileDue(t *testing.T, r *durableRuntime, pool *pgxpool.Pool, clientRequestID string) {
 	t.Helper()
 
-	deadline := time.Now().Add(5 * time.Second)
-
-	for !r.reconcileReplyHandoffBatch(t.Context(), func() {}) {
-		require.True(t, time.Now().Before(deadline), "no accepted reply became due for a handoff check")
-		time.Sleep(10 * time.Millisecond)
-	}
+	_, err := pool.Exec(t.Context(), `UPDATE bot_reply_outbox
+		SET accepted_at = statement_timestamp() - (handoff_next_check_at - accepted_at), handoff_next_check_at = statement_timestamp()
+		WHERE client_request_id = $1 AND handoff_next_check_at IS NOT NULL`, clientRequestID)
+	require.NoError(t, err)
+	require.True(t, r.reconcileReplyHandoffBatch(t.Context(), func() {}), "no accepted reply became due for a handoff check")
 }
 
 type handoffRow struct {
@@ -273,7 +269,7 @@ func TestReplyHandoffFailedReissuesWithinTheGenerationCap(t *testing.T) {
 	generations := []string{base, base + ":r1", base + ":r2"}
 
 	for generation, id := range generations {
-		dispatchNext(t, r)
+		dispatchNext(t, r, pool, base)
 
 		row := readHandoffRow(t, pool, base)
 		require.Equal(t, durability.ReplyOutboxAccepted, row.status, "generation %d", generation)
@@ -281,7 +277,7 @@ func TestReplyHandoffFailedReissuesWithinTheGenerationCap(t *testing.T) {
 		require.True(t, row.checkPending)
 
 		client.failRequest(id)
-		reconcileDue(t, r)
+		reconcileDue(t, r, pool, base)
 
 		row = readHandoffRow(t, pool, base)
 		require.Equal(t, durability.ReplyOutboxRetryablePreDispatch, row.status, "generation %d", generation)
@@ -290,7 +286,7 @@ func TestReplyHandoffFailedReissuesWithinTheGenerationCap(t *testing.T) {
 		require.False(t, row.checkPending)
 	}
 
-	dispatchNext(t, r)
+	dispatchNext(t, r, pool, base)
 
 	row := readHandoffRow(t, pool, base)
 	assert.Equal(t, durability.ReplyOutboxPermanentConflict, row.status)
@@ -313,9 +309,9 @@ func TestReplyHandoffFailedWithoutAttemptBudgetIsDead(t *testing.T) {
 	r := newHandoffRuntime(t, pool, client, 10*time.Second, 1)
 	base := insertHandoffReply(t, r, "message:handoff-dead")
 
-	dispatchNext(t, r)
+	dispatchNext(t, r, pool, base)
 	client.failRequest(base)
-	reconcileDue(t, r)
+	reconcileDue(t, r, pool, base)
 
 	row := readHandoffRow(t, pool, base)
 	assert.Equal(t, durability.ReplyOutboxDead, row.status)
@@ -345,12 +341,12 @@ func TestReplyHandoffObservationOutcomes(t *testing.T) {
 			r := newHandoffRuntime(t, pool, client, 10*time.Second, testDurableProfile(t).BotReplyOutbox.MaxAttempts)
 			base := insertHandoffReply(t, r, "message:handoff-"+strings.ReplaceAll(tc.name, " ", "-"))
 
-			dispatchNext(t, r)
+			dispatchNext(t, r, pool, base)
 			client.setState(irisRequestIDFor(base), tc.state)
 
 			client.statusErr = tc.statusErr
 
-			reconcileDue(t, r)
+			reconcileDue(t, r, pool, base)
 
 			row := readHandoffRow(t, pool, base)
 
@@ -367,13 +363,13 @@ func TestReplyHandoffUnconfirmedAtTheHorizonNeedsReview(t *testing.T) {
 	r := newHandoffRuntime(t, pool, client, 600*time.Millisecond, testDurableProfile(t).BotReplyOutbox.MaxAttempts)
 	base := insertHandoffReply(t, r, "message:handoff-horizon")
 
-	dispatchNext(t, r)
+	dispatchNext(t, r, pool, base)
 
 	checks := 0
 
 	for readHandoffRow(t, pool, base).status == durability.ReplyOutboxAccepted {
 		require.Less(t, checks, 10, "the horizon must end rechecks")
-		reconcileDue(t, r)
+		reconcileDue(t, r, pool, base)
 
 		checks++
 	}
@@ -398,13 +394,15 @@ func TestAcceptedSettlementLossResendsTheSameRequest(t *testing.T) {
 
 	requestID, err := transport.DispatchStoredReply(t.Context(), client, claim.RoomID, claim.Payload, claim.ClientRequestID)
 	require.NoError(t, err)
-	time.Sleep(20 * time.Millisecond)
+
+	_, err = pool.Exec(t.Context(), `UPDATE bot_reply_outbox SET lease_until = lease_until - interval '1 millisecond' WHERE id = $1`, claim.ID)
+	require.NoError(t, err)
 
 	reclaim, err := r.outbox.ReclaimExpired(t.Context(), 10)
 	require.NoError(t, err)
 	require.Equal(t, durability.ReplyOutboxReclaim{Requeued: 1}, reclaim)
 
-	dispatchNext(t, r)
+	dispatchNext(t, r, pool, base)
 
 	row := readHandoffRow(t, pool, base)
 	assert.Equal(t, durability.ReplyOutboxAccepted, row.status)

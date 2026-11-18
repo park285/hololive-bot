@@ -18,16 +18,12 @@ const (
 	MinValidity          = 5 * time.Second
 	MaxValidity          = 24 * time.Hour
 
-	// MaxInputLiveCheckVideoCount는 한 projection이 받는 영상 확인 구조 membership 상한입니다.
-	// 초과는 임의 절단 없이 입력 이상으로 거부하고 last-good generation을 유지합니다.
 	MaxInputLiveCheckVideoCount = 1_000
 
-	// LIVE positive 신선도 예산은 min(5분, 2×live_snapshot poll interval+30초)이며 LiveQuery와 같은 경계입니다.
 	maxLiveFreshnessBudget   = 5 * time.Minute
 	liveFreshnessBudgetSlack = 30 * time.Second
 
-	liveCheckVideoReasonKind = "live_session_check"
-	// 종료 시각 확정 확인은 LIVE(20)·UPCOMING(19) 영상 확인보다 뒤에 둔다.
+	liveCheckVideoReasonKind   = "live_session_check"
 	timeFinalizationReasonKind = "archive_time_finalization"
 	timeFinalizationPriority   = 18
 )
@@ -37,8 +33,6 @@ var (
 	ErrInputRead         = errors.New("youtube target projection input read failed")
 )
 
-// TargetSpec의 scheduling 필드(priority, poll interval, enabled)는 projection identity입니다.
-// NotBefore는 identity·hash에 포함하지 않는 다음 신규 확인 가능 시각이며, zero 값은 NULL(즉시 가능)입니다.
 type TargetSpec struct {
 	SubjectKey      string
 	ObservationKind contract.ObservationKind
@@ -72,27 +66,20 @@ type PolicyInputs struct {
 	TimeFinalizationVideos []TimeFinalizationVideo
 }
 
-// LiveCheckVideo는 운영 roster의 LIVE 또는 지난 일정·출처 미상 UPCOMING 영상의 구조 membership입니다.
-// 신선도는 membership을 바꾸지 않고 NotBefore로만 표현합니다. NotBefore가 zero면 받아들인 신선도 근거가 없다는 뜻입니다.
 type LiveCheckVideo struct {
-	VideoID    string
-	ChannelID  string
-	IsUpcoming bool
-	NotBefore  time.Time
-	// UnresolvableFor는 identity를 확인할 수 없는 확인(identity_missing·identity_mismatch)이 이어진 기간이다.
-	// 0이면 추적이 없다. UPCOMING 영상 확인의 재확인 주기를 늦추는 근거이며 membership·NotBefore는 바꾸지 않는다.
+	VideoID         string
+	ChannelID       string
+	IsUpcoming      bool
+	NotBefore       time.Time
 	UnresolvableFor time.Duration
 }
 
-// TimeFinalizationVideo는 운영 roster와 무관한 종료 방송의 시각 확정 대상입니다.
 type TimeFinalizationVideo struct {
 	VideoID   string
 	ChannelID string
 	NotBefore time.Time
 }
 
-// LiveCheckVideoQuery는 같은 projection transaction에서 읽은 운영 roster와 신선도 예산을 전달합니다.
-// 판정 시각은 조회 statement의 DB 시각이며, 그보다 미래인 근거 시각은 신선도로 받아들이지 않습니다.
 type LiveCheckVideoQuery struct {
 	OperationalChannelIDs []string
 	FreshnessBudget       time.Duration
@@ -110,7 +97,6 @@ type PolicyBuilder struct {
 	Schedules map[contract.ObservationKind]Schedule
 }
 
-// Build는 영상 확인 신선도를 조회 시점 DB 시각에 맡기므로 refresh 시각을 입력으로 쓰지 않습니다.
 func (b PolicyBuilder) Build(ctx context.Context, tx dbx.Tx, _ time.Time) ([]TargetSpec, []TargetReason, error) {
 	if b.Reader == nil {
 		return nil, nil, fmt.Errorf("%w: input reader is not configured", ErrInputRead)
@@ -157,7 +143,6 @@ func (b PolicyBuilder) Build(ctx context.Context, tx dbx.Tx, _ time.Time) ([]Tar
 	return out1, out2, nil
 }
 
-// LiveFreshnessBudget는 live_snapshot poll interval에서 LIVE positive 신선도 예산을 계산합니다.
 func LiveFreshnessBudget(livePollInterval time.Duration) time.Duration {
 	return min(maxLiveFreshnessBudget, 2*livePollInterval+liveFreshnessBudgetSlack)
 }
@@ -256,8 +241,6 @@ func (b *policyTargetBuilder) appendSubjectKinds(subject string, kinds []contrac
 	return nil
 }
 
-// 근거 key는 영상이 속한 canonical 채널이며, roster 밖 채널의 영상은 입력 오류로 거부합니다. 신선도 근거는 NotBefore로만 전달해 확인 직후의 출입이 projection identity를
-// 바꾸지 않게 합니다.
 func (b *policyTargetBuilder) appendLiveCheckVideos(videos []LiveCheckVideo, operationalChannelIDs []string) error {
 	if len(videos) == 0 {
 		return nil
@@ -289,8 +272,6 @@ func (b *policyTargetBuilder) appendLiveCheckVideos(videos []LiveCheckVideo, ope
 		target.NotBefore = video.NotBefore
 
 		if video.IsUpcoming {
-			// 같은 영상 확인 budget에서 LIVE가 먼저 실행되도록 UPCOMING 대상만 낮춘다.
-			// LIVE↔UPCOMING 전환은 실제 상태 변경이므로 이 target의 membership을 새로 시작한다.
 			target.Priority = max(target.Priority-1, 0)
 			target.PollInterval = unresolvablePollInterval(target.PollInterval, video.UnresolvableFor)
 		}
@@ -299,8 +280,6 @@ func (b *policyTargetBuilder) appendLiveCheckVideos(videos []LiveCheckVideo, ope
 	return nil
 }
 
-// LIVE·UPCOMING 조회 뒤 종료가 커밋되어 두 입력에 나타나도 기존 수명 확인을 우선합니다.
-// 확정 대상은 운영 roster와 영상 확인 입력 상한을 공유하지 않고 전체 target 상한만 따릅니다.
 func (b *policyTargetBuilder) appendTimeFinalizationVideos(videos []TimeFinalizationVideo, liveVideos []LiveCheckVideo) error {
 	if len(videos) == 0 {
 		return nil

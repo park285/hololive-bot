@@ -20,8 +20,6 @@ const (
 	privacyOutageWait = 2 * time.Second
 )
 
-// 이 경로의 회귀는 Valkey 장애 중에만 드러난다. 따라서 miniredis를 세운 뒤 끊어야 Service가 실제 실패 로그를
-// 찍는 상태에 들어간다.
 func outageService(t *testing.T) (*Service, *bytes.Buffer) {
 	t.Helper()
 

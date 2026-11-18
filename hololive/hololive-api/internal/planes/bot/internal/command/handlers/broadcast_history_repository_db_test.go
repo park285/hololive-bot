@@ -20,7 +20,6 @@ const (
 	historyOtherChannel  = "history-other-channel"
 )
 
-// 두 우선순위 (ended → started → scheduled → last_seen)와 같은 시각의 video_id 역순이 어긋나면 페이지 경계에서 행이 겹치거나 빠진다.
 func TestPgBroadcastHistoryRepositoryPagesAcrossSortTimeFallbacks(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	base := time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC)
@@ -57,7 +56,6 @@ func TestPgBroadcastHistoryRepositoryPagesAcrossSortTimeFallbacks(t *testing.T) 
 				cursorVideoID string
 			)
 
-			// 페이지 크기 2는 같은 시각 세 행(at(4))을 페이지 경계로 나눈다.
 			for range len(tc.want) + 1 {
 				page, err := repo.listEndedBroadcastPage(t.Context(), query, &since, cursorAt, cursorVideoID, 2)
 				require.NoError(t, err)
@@ -77,13 +75,11 @@ func TestPgBroadcastHistoryRepositoryPagesAcrossSortTimeFallbacks(t *testing.T) 
 			}
 
 			require.Equal(t, tc.want, got)
-			// 4번째 행은 같은 시각(at(4))의 v-started라 표시 건수+1행 경계가 동률 안에 놓인다.
 			requireHistoryListHead(t, repo, tc.channelID, since, tc.want[:3])
 		})
 	}
 }
 
-// requireHistoryListHead는 필터 없는 목록이 표시 건수+1행만 읽고도 커서 페이지와 같은 첫 행들을 돌려주는지 확인한다.
 func requireHistoryListHead(t *testing.T, repo *pgBroadcastHistoryRepository, channelID string, since time.Time, want []string) {
 	t.Helper()
 
@@ -109,8 +105,6 @@ type historyPlanNode struct {
 	Plans         []historyPlanNode `json:"Plans"`
 }
 
-// 종료 세션은 보존 삭제가 없어 계속 늘어난다. 운영 풀은 prepared statement를 쓰므로 같은 연결에서 반복되면 generic plan으로 바뀔 수 있다. 커서·since·채널 조건이 매개변수 값과
-// 무관하게 인덱스 범위가 되어야 다음 페이지가 커서보다 새 행이나 다른 채널 행을 건너뛰며 읽지 않는다.
 func TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
@@ -153,7 +147,6 @@ func TestBroadcastHistoryPageReadsSortIndexInsteadOfEndedHistory(t *testing.T) {
 	}
 }
 
-// 매개변수를 EXPLAIN에 바로 넘기면 값을 아는 상태로 계획해 plan_cache_mode가 generic plan을 강제하지 못한다.
 func explainHistoryPage(t *testing.T, pool *pgxpool.Pool, mode, channelID string, since time.Time, cursorAt *time.Time) historyPlanStats {
 	t.Helper()
 
@@ -234,8 +227,7 @@ type historySession struct {
 	status                    domain.LiveStatus
 	scheduled, started, ended *time.Time
 	lastSeen                  time.Time
-	// lifecycle_origin은 열 기본값이 없어 모든 시험 세션이 출처를 명시한다.
-	origin string
+	origin                    string
 }
 
 func seedHistorySessions(t *testing.T, pool *pgxpool.Pool, sessions []historySession) {

@@ -1,6 +1,7 @@
 package migrationrunner
 
 import (
+	"context"
 	"slices"
 	"testing"
 	"testing/fstest"
@@ -235,9 +236,6 @@ func TestInvalidIndexesExcludesInProgressConcurrentBuild(t *testing.T) {
 	}
 }
 
-// REPEATABLE READ 스냅샷을 쥔 tx가 살아있는 동안 CREATE INDEX CONCURRENTLY는
-// 'waiting for old snapshots' 단계에서 결정적으로 멈춘다 — 이 사이 pg_index에는
-// indisvalid=false 행이 존재하고 pg_stat_progress_create_index에 진행 행이 잡힌다.
 func startBlockedConcurrentIndexBuild(t *testing.T, pool *pgxpool.Pool) (pgx.Tx, <-chan error) {
 	t.Helper()
 
@@ -256,7 +254,6 @@ func startBlockedConcurrentIndexBuild(t *testing.T, pool *pgxpool.Pool) (pgx.Tx,
 		t.Fatalf("begin snapshot tx: %v", err)
 	}
 
-	// t.Context()는 Cleanup 직전에 취소되므로, rollback ctx는 취소에서 분리해야 한다.
 	t.Cleanup(func() {
 		rollbackErr := pgxdb.Rollback(ctx, snapshotTx)
 		if rollbackErr != nil {
@@ -369,10 +366,10 @@ CREATE INDEX CONCURRENTLY idx_real ON actual(id);
 func waitForCreateIndexProgress(t *testing.T, pool *pgxpool.Pool, indexName string) {
 	t.Helper()
 
-	ctx := t.Context()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
 
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
+	for {
 		var present bool
 
 		err := pool.QueryRow(ctx, `
@@ -388,11 +385,7 @@ func waitForCreateIndexProgress(t *testing.T, pool *pgxpool.Pool, indexName stri
 		if present {
 			return
 		}
-
-		time.Sleep(50 * time.Millisecond)
 	}
-
-	t.Fatal("timed out waiting for pg_stat_progress_create_index row")
 }
 
 func indexExists(t *testing.T, pool *pgxpool.Pool, name string) bool {

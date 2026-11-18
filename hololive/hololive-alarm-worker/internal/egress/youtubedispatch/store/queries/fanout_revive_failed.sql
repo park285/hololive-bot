@@ -1,5 +1,3 @@
--- 신선도·lease 만료 판정과 되살린 next_attempt_at은 문장 첫머리에서 한 번 채취한 DB 시계(clock)로 정한다.
--- $1 FAILED, $2 신선도 ms, $3 lease ms, $4 한도, $5 PENDING.
 WITH clock AS MATERIALIZED (
     SELECT sampled.at,
            sampled.at - $3::bigint * INTERVAL '1 millisecond' AS lock_cutoff,

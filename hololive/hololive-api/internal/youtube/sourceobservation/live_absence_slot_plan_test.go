@@ -25,7 +25,6 @@ func TestLiveAbsenceCurrentSlotLookupIsBoundedBySlotNotChannelHistory(t *testing
 	pool := dbtest.NewPool(t)
 	current := time.Date(2026, time.September, 26, 0, 0, 0, 0, time.UTC)
 
-	// 운영처럼 slot마다 채널 하나만 담기므로 채널 GIN 조건은 해당 채널의 전체 이력과 일치합니다.
 	_, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_absence_slots
 		SELECT g, $1::timestamptz - g * INTERVAL '1 minute', decode(repeat('a', 64), 'hex'),
@@ -50,7 +49,6 @@ func TestLiveAbsenceCurrentSlotLookupIsBoundedBySlotNotChannelHistory(t *testing
 
 			var raw []byte
 
-			// 새 positive 채널이 없는 scoped negative는 현재 slot의 coverage만 다시 읽습니다.
 			err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+repositoryLiveAbsenceCurrentSlotSQL,
 				current, []string{testChannelID}).Scan(&raw)
 			require.NoError(t, err)

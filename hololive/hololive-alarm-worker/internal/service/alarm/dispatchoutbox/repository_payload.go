@@ -126,8 +126,6 @@ func marshalEventPayload(envelope *AlarmQueueEnvelope) ([]byte, error) {
 	return raw, nil
 }
 
-// event payload는 방과 무관하게 공유하는 내용 식별자이고 hash가 다르면 나중에 합류한 방의 delivery를 거절한다.
-// 시청자 수는 관측할 때마다 바뀌고 알림 본문에 쓰지 않으므로 identity에서 뺀다.
 func canonicalEventStream(stream *domain.Stream) *domain.Stream {
 	if stream == nil || stream.ViewerCount == nil {
 		return stream

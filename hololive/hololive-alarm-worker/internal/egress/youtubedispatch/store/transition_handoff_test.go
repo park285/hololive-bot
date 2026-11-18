@@ -21,8 +21,6 @@ import (
 
 const testHandoffHorizon = time.Minute
 
-// handoffTestUnit은 202로 보낸 고정 요청 하나다. 소유 행은 고정 멤버이며 follower는 같은 논리 키의 고정 멤버 밖 중복
-// 물리행이다. CompleteSent가 함께 SENT로 미러링했고, 두 행의 부모 outbox 집계도 SENT다.
 type handoffTestUnit struct {
 	contentID  string
 	roomID     string
@@ -62,7 +60,6 @@ func sendHandoffTestUnit(
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, completed.Outcome)
 
-	// dispatcher가 발송 정산 뒤 하듯 부모 outbox 집계를 SENT로 맞춘다. 실패 정산은 이 SENT 부모를 되돌려야 한다.
 	require.NoError(t, NewDeliveryRepository(pool, nil).UpdateOutboxAggregateStatuses(t.Context(), completed.TouchedOutboxIDs))
 	requireHandoffOutboxStatuses(t, pool, completed.TouchedOutboxIDs, domain.OutboxStatusSent)
 
@@ -379,8 +376,6 @@ func TestHandoffExhaustFailsLogicalUnitWithoutLedger(t *testing.T) {
 	status, _ := loadHandoffTestLedger(t, pool, unit)
 	require.Empty(t, status)
 
-	// 부모 집계는 같은 트랜잭션에서 FAILED가 되고, 부모 sent_at은 canonical 집계가 지우지 않으므로 앞선 SENT 시각이
-	// 그대로 남는다.
 	requireHandoffOutboxStatuses(t, pool, result.TouchedOutboxIDs, domain.OutboxStatusFailed)
 
 	var keptSentAt int

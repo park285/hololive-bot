@@ -127,8 +127,6 @@ func (s *TransitionStore) prepareResolution(
 	return nil
 }
 
-// prepareActiveResolution은 claim batch의 active follower를 owner 뒤로 미루며, 보류 시각은 DB 시계 + RetryBackoff이고
-// owner의 next_attempt_at보다 이르지 않다.
 func (s *TransitionStore) prepareActiveResolution(
 	prepared *preparedClaims,
 	resolution preparation.Resolution,
@@ -199,8 +197,6 @@ func prepareUnresolvedResolution(
 	return nil
 }
 
-// prepareDeferredResolution은 in-flight·다른 batch owner 그룹의 claim 행을 DB 시계 + RetryBackoff 뒤로 미루며,
-// resolver가 준 DB 유래 하한(owner due 또는 in-flight lease 만료)보다 이르지 않게 한다.
 func (s *TransitionStore) prepareDeferredResolution(
 	prepared *preparedClaims,
 	resolution preparation.Resolution,
@@ -392,7 +388,6 @@ func failedFollowerTransition(row transitionRow) rowTransition {
 	return rowTransition{before: row, after: after}
 }
 
-// DeferCommand는 claim한 follower 한 행을 DB 시계에서 Delay 뒤로 미룬다.
 type DeferCommand struct {
 	Delivery domain.YouTubeNotificationDelivery
 	Delay    time.Duration
