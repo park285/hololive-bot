@@ -88,7 +88,7 @@ func TestPooledDatabaseCheckRejectsLibpqOverrideWithoutDisclosure(t *testing.T) 
 		t.Fatal("libpq override was not rejected before configuration or connection")
 	}
 
-	if strings.Contains(err.Error(), marker) {
+	if err != nil && strings.Contains(err.Error(), marker) {
 		t.Fatal("database check disclosed a service setting")
 	}
 }
