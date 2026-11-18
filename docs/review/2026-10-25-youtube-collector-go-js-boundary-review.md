@@ -1,6 +1,6 @@
 # YouTube collector Go·JS 경계 구조 리뷰
 
-> 2026-10-25에 수행한 읽기 전용 구조 리뷰 기록입니다. 제품 코드 수정, 커밋, 배포를 수행하지 않았으며 아래 권장 사항은 승인된 작업이 아닙니다. 런타임 소유권은 [PROJECT_MAP](../../current/PROJECT_MAP.md), collector 계약은 [youtube-collector 서비스 문서](../../current/services/youtube-collector.md), PO issuer 절차는 [youtube-collector runbook](../../current/runbooks/youtube-collector.md)을 따릅니다.
+> 2026-10-25에 수행한 읽기 전용 구조 리뷰 기록입니다. 제품 코드 수정, 커밋, 배포를 수행하지 않았으며 아래 권장 사항은 승인된 작업이 아닙니다. 런타임 소유권은 [PROJECT_MAP](../current/PROJECT_MAP.md), collector 계약은 [youtube-collector 서비스 문서](../current/services/youtube-collector.md), PO issuer 절차는 [youtube-collector runbook](../current/runbooks/youtube-collector.md)을 따릅니다.
 
 ## 결론과 범위
 
@@ -49,7 +49,7 @@ collector Go ──spawn · UDS(0700 dir) · HTTP JSON RPC──▶ helper Node 
 
 ### 1. channel_live RPC의 숨은 upstream fan-out
 
-**근거:** [fetch-channel.mjs](../../../hololive/hololive-youtube-collector/youtubejs/src/fetch-channel.mjs) 10행의 `maxScheduleMetadataLookups = 32`와 109행 이후 `enrichUpcomingSchedules`는 시각이 없는 예정 행마다 [live-metadata.mjs](../../../hololive/hololive-youtube-collector/youtubejs/src/live-metadata.mjs) 13행의 `/player`를 순차 호출합니다. Go [RateLimiter](../../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/ratelimiter.go)는 RPC 시작 간격만 벌리고, [scheduler_build.go](../../../hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_build.go) 165행의 `jobMaxUpstreamCalls`는 이 job을 1회로 셉니다. 반면 [fetch-content.mjs](../../../hololive/hololive-youtube-collector/youtubejs/src/fetch-content.mjs) 110행은 "목록 RPC 하나가 숨은 영상별 호출을 만들지 않는다"는 원칙을 밝히고 player 확인을 Go 소유 RPC로 옮겼습니다.
+**근거:** [fetch-channel.mjs](../../hololive/hololive-youtube-collector/youtubejs/src/fetch-channel.mjs) 10행의 `maxScheduleMetadataLookups = 32`와 109행 이후 `enrichUpcomingSchedules`는 시각이 없는 예정 행마다 [live-metadata.mjs](../../hololive/hololive-youtube-collector/youtubejs/src/live-metadata.mjs) 13행의 `/player`를 순차 호출합니다. Go [RateLimiter](../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/ratelimiter.go)는 RPC 시작 간격만 벌리고, [scheduler_build.go](../../hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_build.go) 165행의 `jobMaxUpstreamCalls`는 이 job을 1회로 셉니다. 반면 [fetch-content.mjs](../../hololive/hololive-youtube-collector/youtubejs/src/fetch-content.mjs) 110행은 "목록 RPC 하나가 숨은 영상별 호출을 만들지 않는다"는 원칙을 밝히고 player 확인을 Go 소유 RPC로 옮겼습니다.
 
 **영향:** 예정 영상이 많은 채널에서는 RPC 하나가 `getChannel` 1회와 player 최대 32회를 2초 간격 제한 없이 보냅니다. 보조 검토에 따르면 각 player 호출은 재시도 transport를 타므로 물리 요청은 더 늘 수 있습니다. 같은 RPC 실행 시한(기본 30초) 안에 순차 호출을 모두 끝내야 하고, 32건을 넘으면 리소스 한도가 아니라 `parser_drift`로 분류됩니다.
 
@@ -57,7 +57,7 @@ collector Go ──spawn · UDS(0700 dir) · HTTP JSON RPC──▶ helper Node 
 
 ### 2. `CANCELLED` 상태의 계약 불일치
 
-**근거:** [fetch-channel.mjs](../../../hololive/hololive-youtube-collector/youtubejs/src/fetch-channel.mjs) 292행은 행의 `status`가 `CANCELLED`면 그대로 내보내고, helper 응답 검증도 이를 허용합니다. 같은 파일 58·79행의 `live_query.statuses`는 `ENDED`, `LIVE`, `UPCOMING` 세 값으로 고정됩니다. shared [payloads_normalize.go](../../../hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_normalize.go) 251행은 coverage 밖의 상태를 거부합니다.
+**근거:** [fetch-channel.mjs](../../hololive/hololive-youtube-collector/youtubejs/src/fetch-channel.mjs) 292행은 행의 `status`가 `CANCELLED`면 그대로 내보내고, helper 응답 검증도 이를 허용합니다. 같은 파일 58·79행의 `live_query.statuses`는 `ENDED`, `LIVE`, `UPCOMING` 세 값으로 고정됩니다. shared [payloads_normalize.go](../../hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_normalize.go) 251행은 coverage 밖의 상태를 거부합니다.
 
 **영향:** 이 상태의 행이 한 번 들어오면 helper는 200으로 응답하지만 Go envelope 생성에서 거부되어, 그 채널의 live snapshot job 전체가 매 poll마다 `parser_drift/DATA_CONTRACT`로 실패합니다. fail-closed이지만 영향 범위가 채널 전체입니다. 실제 YouTube.js 행에 이 상태가 오는지는 확인하지 않았습니다.
 
@@ -65,7 +65,7 @@ collector Go ──spawn · UDS(0700 dir) · HTTP JSON RPC──▶ helper Node 
 
 ### 3. 영어 badge 문구 기반 상태 판정
 
-**근거:** [fetch-channel.mjs](../../../hololive/hololive-youtube-collector/youtubejs/src/fetch-channel.mjs) 295-300행은 `LockupView` badge 문구가 `live` 또는 `upcoming`이 아니면 `ENDED`를 반환합니다. 세션 언어는 SDK 기본값인 영어입니다.
+**근거:** [fetch-channel.mjs](../../hololive/hololive-youtube-collector/youtubejs/src/fetch-channel.mjs) 295-300행은 `LockupView` badge 문구가 `live` 또는 `upcoming`이 아니면 `ENDED`를 반환합니다. 세션 언어는 SDK 기본값인 영어입니다.
 
 **영향:** YouTube가 badge 문구나 구조를 바꾸면 진행 중인 방송이 오류 없이 `ENDED`로 발행됩니다. API 쪽 부재 판정에 주는 영향은 추론이며 확인하지 않았습니다.
 
@@ -73,7 +73,7 @@ collector Go ──spawn · UDS(0700 dir) · HTTP JSON RPC──▶ helper Node 
 
 ### 4. 예정 최초공개 판정의 대기 상태 미확인
 
-**근거:** [content_publication.go](../../../hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/content_publication.go) 288행 `classifyPublication`의 주석은 "대기 상태가 확인되지 않은 예정 영상은 UNRESOLVED"라고 하지만, 300행 부근의 코드는 `IsUpcoming`, `IsLiveContent`, `ScheduledAt`만 확인하고 `WaitingStateConfirmed`는 보지 않습니다. 현재는 JS가 대기 상태일 때만 `scheduled_at`을 내보내서 결과가 맞습니다.
+**근거:** [content_publication.go](../../hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/content_publication.go) 288행 `classifyPublication`의 주석은 "대기 상태가 확인되지 않은 예정 영상은 UNRESOLVED"라고 하지만, 300행 부근의 코드는 `IsUpcoming`, `IsLiveContent`, `ScheduledAt`만 확인하고 `WaitingStateConfirmed`는 보지 않습니다. 현재는 JS가 대기 상태일 때만 `scheduled_at`을 내보내서 결과가 맞습니다.
 
 **영향:** JS 쪽 규칙이 바뀌면 Go가 대기 상태가 확인되지 않은 영상을 `UPCOMING_PREMIERE`로 저장합니다. 거부되지 않고 조용히 잘못된 데이터가 됩니다.
 
@@ -81,7 +81,7 @@ collector Go ──spawn · UDS(0700 dir) · HTTP JSON RPC──▶ helper Node 
 
 ### 5. PO 발급 저하의 비가시성
 
-**근거:** [protocol.go](../../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/protocol.go) 44행의 `HealthResponse.Proof`는 [health.go](../../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/health.go) `Healthy`에서 decode와 검증만 하고 버려집니다. 저장소에 다른 소비자가 없습니다. runbook은 발급 실패 시 무토큰 player로 진행하는 것을 계약으로 두고, 상태 확인은 helper `/health` 직접 조회로만 안내합니다.
+**근거:** [protocol.go](../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/protocol.go) 44행의 `HealthResponse.Proof`는 [health.go](../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/health.go) `Healthy`에서 decode와 검증만 하고 버려집니다. 저장소에 다른 소비자가 없습니다. runbook은 발급 실패 시 무토큰 player로 진행하는 것을 계약으로 두고, 상태 확인은 helper `/health` 직접 조회로만 안내합니다.
 
 **영향:** challenge 구조 변경이나 native issuer의 연속 기동 실패로 발급이 계속 실패해도 collector `/ready`는 정상이고 Go 로그와 메트릭에도 나타나지 않습니다. 무토큰 저하가 무기한 지속될 수 있습니다. systemd start-limit 도달 시 socket까지 멈추는지는 운영에서 확인하지 않았습니다.
 
@@ -89,7 +89,7 @@ collector Go ──spawn · UDS(0700 dir) · HTTP JSON RPC──▶ helper Node 
 
 ### 6. continuation 예외의 부분 성공 전환
 
-**근거:** [upstream-errors.mjs](../../../hololive/hololive-youtube-collector/youtubejs/src/upstream-errors.mjs) 94-97행은 helper 기원이 아닌 예외를 모두 `collection_failed`로 분류합니다. [pagination.mjs](../../../hololive/hololive-youtube-collector/youtubejs/src/pagination.mjs) 267행의 `isContinuationTransient`는 이 코드를 일시 실패로 보고, 228-238행은 앞 페이지까지만 담은 성공(`continuation_transient`)으로 바꿉니다.
+**근거:** [upstream-errors.mjs](../../hololive/hololive-youtube-collector/youtubejs/src/upstream-errors.mjs) 94-97행은 helper 기원이 아닌 예외를 모두 `collection_failed`로 분류합니다. [pagination.mjs](../../hololive/hololive-youtube-collector/youtubejs/src/pagination.mjs) 267행의 `isContinuationTransient`는 이 코드를 일시 실패로 보고, 228-238행은 앞 페이지까지만 담은 성공(`continuation_transient`)으로 바꿉니다.
 
 **영향:** continuation 응답 형상이 바뀌어 SDK가 TypeError를 던져도 매 실행이 "일시적 간극" 성공으로 보고됩니다. Go는 일시 장애와 영구 drift를 구분하지 못하고, 서비스 문서의 "parser drift는 DATA_CONTRACT" 원칙과도 어긋납니다.
 
@@ -97,7 +97,7 @@ collector Go ──spawn · UDS(0700 dir) · HTTP JSON RPC──▶ helper Node 
 
 ### 7. 공유 Innertube의 요청 컨텍스트 내 초기화
 
-**근거:** [real-fetchers.mjs](../../../hololive/hololive-youtube-collector/youtubejs/src/real-fetchers.mjs) 33행 `innertubeClient`는 첫 목록 RPC에서 공유 인스턴스를 지연 생성합니다. [fetch-community.mjs](../../../hololive/hololive-youtube-collector/youtubejs/src/fetch-community.mjs) 102행 `createInnertube`는 `retrieve_innertube_config`를 지정하지 않아 생성 중 config 요청이 그 RPC의 signal을 탑니다. 보조 검토에 따르면 SDK는 이 요청의 실패를 로그만 남기고 넘어가며, 생성이 성공한 promise는 다시 만들지 않습니다. 테스트는 config 조회를 끈 상태로만 만듭니다. proof warm-up은 요청 컨텍스트에서 분리되어 있지만 이 초기화는 분리되어 있지 않습니다.
+**근거:** [real-fetchers.mjs](../../hololive/hololive-youtube-collector/youtubejs/src/real-fetchers.mjs) 33행 `innertubeClient`는 첫 목록 RPC에서 공유 인스턴스를 지연 생성합니다. [fetch-community.mjs](../../hololive/hololive-youtube-collector/youtubejs/src/fetch-community.mjs) 102행 `createInnertube`는 `retrieve_innertube_config`를 지정하지 않아 생성 중 config 요청이 그 RPC의 signal을 탑니다. 보조 검토에 따르면 SDK는 이 요청의 실패를 로그만 남기고 넘어가며, 생성이 성공한 promise는 다시 만들지 않습니다. 테스트는 config 조회를 끈 상태로만 만듭니다. proof warm-up은 요청 컨텍스트에서 분리되어 있지만 이 초기화는 분리되어 있지 않습니다.
 
 **영향:** 기동 직후 첫 RPC가 취소되거나 config 요청이 429를 받으면 이후 모든 수집이 config 없는 세션으로 돌 수 있고, cooldown 신호도 사라집니다. config가 없을 때 YouTube 응답이 실제로 달라지는지는 확인하지 않았습니다.
 
@@ -105,7 +105,7 @@ collector Go ──spawn · UDS(0700 dir) · HTTP JSON RPC──▶ helper Node 
 
 ### 8. mint 중 취소와 PO 세대 수명
 
-**근거:** 보조 검토에 따르면 [broker.go](../../../hololive/hololive-youtube-collector/internal/runtime/pobroker/broker.go) 664-672행 부근의 mint 처리와 [retirement.go](../../../hololive/hololive-youtube-collector/internal/runtime/pobroker/retirement.go)는 worker IO 중 취소를 요청 중단으로 보고 세대를 퇴역시킵니다. [proof-controller.mjs](../../../hololive/hololive-youtube-collector/youtubejs/src/proof-controller.mjs) 97행은 "개별 RPC 취소만으로 공유 세대를 버리지 않는다"고 가정하며, JS 테스트의 fake broker도 세대를 유지합니다.
+**근거:** 보조 검토에 따르면 [broker.go](../../hololive/hololive-youtube-collector/internal/runtime/pobroker/broker.go) 664-672행 부근의 mint 처리와 [retirement.go](../../hololive/hololive-youtube-collector/internal/runtime/pobroker/retirement.go)는 worker IO 중 취소를 요청 중단으로 보고 세대를 퇴역시킵니다. [proof-controller.mjs](../../hololive/hololive-youtube-collector/youtubejs/src/proof-controller.mjs) 97행은 "개별 RPC 취소만으로 공유 세대를 버리지 않는다"고 가정하며, JS 테스트의 fake broker도 세대를 유지합니다.
 
 **영향:** collector RPC deadline이나 종료가 mint 구간과 겹치면 세대가 퇴역하지만 controller는 갱신 시각 전까지 죽은 세대를 계속 씁니다. 다음 호출은 무토큰으로 나가고, 그다음 호출에서 재발급 요청이 생깁니다.
 
@@ -113,7 +113,7 @@ collector Go ──spawn · UDS(0700 dir) · HTTP JSON RPC──▶ helper Node 
 
 ### 9. wire 계약의 복제와 검증 공백
 
-**근거:** wire 계약은 Go DTO([protocol.go](../../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/protocol.go)), JS 검증기(`rpc-collection-validation.mjs`, `rpc-live-check-validation.mjs`), `contracts.d.ts`, shared `sourceobservation` 계약 네 곳에서 손으로 유지됩니다. 두 언어가 함께 읽는 fixture는 `youtubejs/testdata/pagination-tuples.json` 하나이며, JS의 wire 검증기는 이 fixture로 검증되지 않습니다. 실제 `server.mjs`와 Go 클라이언트를 왕복시키는 오프라인 테스트는 없습니다. 이미 어긋난 값도 있습니다. [rpc.go](../../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/rpc.go) 238행의 `/v1/channel` 최소 성공 응답 크기는 171이지만 보조 검토가 계산한 JS 값은 160입니다. 실패 tuple 표(`upstream-errors.mjs` 10-24행, `rpc_failure.go` 40-58행)는 현재 일치하지만 양쪽에 복제되어 있습니다.
+**근거:** wire 계약은 Go DTO([protocol.go](../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/protocol.go)), JS 검증기(`rpc-collection-validation.mjs`, `rpc-live-check-validation.mjs`), `contracts.d.ts`, shared `sourceobservation` 계약 네 곳에서 손으로 유지됩니다. 두 언어가 함께 읽는 fixture는 `youtubejs/testdata/pagination-tuples.json` 하나이며, JS의 wire 검증기는 이 fixture로 검증되지 않습니다. 실제 `server.mjs`와 Go 클라이언트를 왕복시키는 오프라인 테스트는 없습니다. 이미 어긋난 값도 있습니다. [rpc.go](../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/rpc.go) 238행의 `/v1/channel` 최소 성공 응답 크기는 171이지만 보조 검토가 계산한 JS 값은 160입니다. 실패 tuple 표(`upstream-errors.mjs` 10-24행, `rpc_failure.go` 40-58행)는 현재 일치하지만 양쪽에 복제되어 있습니다.
 
 **영향:** 양쪽 모두 unknown field를 엄격하게 거부하므로 drift는 운영에서 fail-closed로 드러납니다. 테스트 시점에는 잡히지 않고, 실패 tuple이 어긋나면 cooldown이 protocol mismatch로 바뀌어 not-before 재시도 정책을 잃습니다.
 
@@ -121,7 +121,7 @@ collector Go ──spawn · UDS(0700 dir) · HTTP JSON RPC──▶ helper Node 
 
 ### 10. 공유 메모리 상한과 Node heap
 
-**근거:** Compose collector는 768m 상한 안에서 Go와 Node가 함께 돌며 [docker-compose.collector.yml](../../../deploy/compose/docker-compose.collector.yml) 179행의 `GOMEMLIMIT`는 Go에만 적용됩니다. [helper.go](../../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/helper.go) 152행 `spawn`은 Node에 heap 상한 인자를 주지 않습니다. 예산은 "Node 관측 최대 176MiB"라는 주석에 기대고 있습니다. native AP도 `MemoryMax=768M` 안에서 같은 구조입니다.
+**근거:** Compose collector는 768m 상한 안에서 Go와 Node가 함께 돌며 [docker-compose.collector.yml](https://github.com/park285/hololive-bot/blob/4b4eb6485d89bc0102b6d4d3aaa3dceb619f1740/deploy/compose/docker-compose.collector.yml) 179행의 `GOMEMLIMIT`는 Go에만 적용됩니다. [helper.go](../../hololive/hololive-youtube-collector/internal/runtime/youtubejs/helper.go) 152행 `spawn`은 Node에 heap 상한 인자를 주지 않습니다. 예산은 "Node 관측 최대 176MiB"라는 주석에 기대고 있습니다. native AP도 `MemoryMax=768M` 안에서 같은 구조입니다.
 
 **영향:** 대형 응답 파싱 등으로 Node가 커지면 cgroup OOM이 Go 또는 Node 중 하나를 죽이고, 어느 쪽이든 collector 재시작으로 이어집니다. 어느 프로세스가 죽을지와 Node 몫이 코드에 드러나지 않습니다. V8 기본 heap 계산이 실제로 어느 값이 되는지는 확인하지 않았습니다.
 
@@ -129,7 +129,7 @@ collector Go ──spawn · UDS(0700 dir) · HTTP JSON RPC──▶ helper Node 
 
 ### 11. 낮은 심각도 항목
 
-- **종료 flush:** [server.mjs](../../../hololive/hololive-youtube-collector/youtubejs/src/server.mjs) 68행의 `process.exit(0)`은 drain 완료 직후 실행되어 마지막 응답이 다 쓰이기 전일 수 있습니다. 다만 Go [runtime.go](../../../hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go) 342행 `shutdown`이 scheduler를 먼저 멈춘 뒤 helper를 닫으므로 정상 종료에서의 영향은 작습니다.
+- **종료 flush:** [server.mjs](../../hololive/hololive-youtube-collector/youtubejs/src/server.mjs) 68행의 `process.exit(0)`은 drain 완료 직후 실행되어 마지막 응답이 다 쓰이기 전일 수 있습니다. 다만 Go [runtime.go](../../hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go) 342행 `shutdown`이 scheduler를 먼저 멈춘 뒤 helper를 닫으므로 정상 종료에서의 영향은 작습니다.
 - **native Node 고정:** native AP는 host `/usr/bin/node`를 배포 시점에 `^26.12.1` 범위로만 검사합니다. 이미지처럼 digest로 고정되어 있지 않아 host 패키지 갱신 뒤 버전이 달라질 수 있습니다.
 - **시각 파싱 분산:** shorts는 형식 검사 없이 `Date.parse`를 쓰고(JS), community 상대 시각 추정은 Go RPC 계층(`rpc.go`의 `normalizeCommunityPosts`)에서 서로 다른 규칙으로 합니다.
 - **watch 보강 경로:** `live-check.mjs`의 watch 페이지 보강은 429, 401/403, 네트워크 실패를 삼키고 본문을 상한 없이 읽습니다. 서비스 문서의 401/403 → CONFIGURATION 분류와 다릅니다.
