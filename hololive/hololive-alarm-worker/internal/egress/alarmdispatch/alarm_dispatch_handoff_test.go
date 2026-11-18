@@ -13,6 +13,7 @@ import (
 	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffloop"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
@@ -105,7 +106,7 @@ func handoffStatus(state string) func(string) (*iris.ReplyStatusSnapshot, error)
 	}
 }
 
-func newHandoffTestReconciler(t *testing.T, consumer *handoffTestConsumer, client *handoffTestStatusClient) *HandoffReconciler {
+func newHandoffTestReconciler(t *testing.T, consumer *handoffTestConsumer, client *handoffTestStatusClient) *handoffloop.Reconciler[dispatchoutbox.HandoffClaim] {
 	t.Helper()
 
 	reconciler, err := NewHandoffReconciler(consumer, client, HandoffReconcilerConfig{Horizon: testHandoffHorizon, PollInterval: time.Second}, nil)

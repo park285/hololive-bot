@@ -328,6 +328,21 @@ func (c *RuntimeIrisClient) SendImage(ctx context.Context, room string, imageDat
 	return out, nil
 }
 
+func (c *RuntimeIrisClient) SendFile(ctx context.Context, room string, file iris.ReplyFile, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	binding, err := c.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer c.release(binding)
+
+	out, err := binding.client.SendFile(ctx, room, file, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("send file: %w", err)
+	}
+
+	return out, nil
+}
+
 func (c *RuntimeIrisClient) SendMultipleImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	binding, err := c.acquire(ctx)
 	if err != nil {

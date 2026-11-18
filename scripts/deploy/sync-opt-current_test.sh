@@ -77,7 +77,7 @@ commit_repo() {
 # 호스트 경로 대역과 이전 설치 상태(옛 unit, worker profile drop-in, 옛 x-spaces drop-in, 이전 current)를 만든다.
 make_host() {
   local host="$1" x_spaces="$2" installed="${1}/etc-containers-systemd/hololive-bot"
-  mkdir -p "${host}"/{etc-containers-systemd,usr-local-libexec,etc-stack-secrets/hololive-bot,etc-systemd-system,etc-nftables.d}
+  mkdir -p "${host}"/{etc-containers-systemd,usr-local-libexec,etc-stack-secrets/hololive-bot,etc-systemd-system,etc-nftables.d,run-lock}
   mkdir -p "${installed}/hololive-api.container.d" "${installed}/hololive-alarm-worker.container.d"
   printf '[Container]\nContainerName=stale\nImage=localhost/stale:old\n' >"${installed}/stale.container"
   printf '[Container]\nLabel=io.hololive.test.worker-profile=1\n' \
@@ -110,6 +110,7 @@ run_sync() {
     mount --bind "${host}/etc-stack-secrets" /etc/stack-secrets
     mount --bind "${host}/etc-systemd-system" /etc/systemd/system
     mount --bind "${host}/etc-nftables.d" /etc/nftables.d
+    mount --bind "${host}/run-lock" /run/lock
     exec "$@"
   ' _ "${host}" env PATH="${fakebin}:${PATH}" SYNC_TEST_EVENTS="${host}/events" \
     REPO_ROOT="${repo}" OPT_ROOT="${host}/opt" \
@@ -171,6 +172,15 @@ for config in pg_hba.conf stats-users.txt; do
   cmp -s "${base_repo}/deploy/pgbouncer/${config}" "${host}/opt/current/deploy/pgbouncer/${config}" ||
     fail "pooler configuration not installed: ${config}"
 done
+installed_validator="${host}/usr-local-libexec/hololive-bot/lib/compose-env.sh"
+bash -c '. "$1"; compose_env_validate_file_format "$2"' _ \
+  "$installed_validator" "${host}/etc-stack-secrets/hololive-bot/compose.env" ||
+  fail "installed validator rejects valid env"
+printf 'KEY=value \n' >"${tmp}/invalid-installed.env"
+if bash -c '. "$1"; compose_env_validate_file_format "$2"' _ \
+  "$installed_validator" "${tmp}/invalid-installed.env" >/dev/null 2>&1; then
+  fail "installed validator accepts surrounding value whitespace"
+fi
 [[ -f "${host}/etc-systemd-system/admin-dashboard-ingress-firewall.service" ]] || fail "firewall unit not installed"
 [[ ! -e "${host}/opt/current/marker" && -f "${host}/opt/current/deploy/postgres/pg_hba.conf" ]] ||
   fail "current tree was not replaced by the staged tree"
@@ -274,5 +284,35 @@ done
   "$(<"${source_recovery}/.source-revision")" == "$(git -C "${base_repo}" rev-parse HEAD)" ]] ||
   fail "repeated sync did not retain the previously deployed source"
 pass "repeated sync retains every earlier recovery point"
+
+for invalid_line in 'SPACE= value' 'SPACE=value ' $'COMMAND=$(id)' $'COMMAND=`id`' $'CONTROL=a\x01b'; do
+  host="${tmp}/host-invalid-env"
+  mkdir -p "$host"
+  make_host "$host" 1
+  printf '%s\n' "$invalid_line" >>"${host}/etc-stack-secrets/hololive-bot/compose.env"
+  assert_rejected_without_change "$host" "$base_repo" "invalid compose env" "[ERROR]"
+  rm -rf "$host"
+done
+pass "unsafe compose values are rejected before changing the installed tree"
+
+host="${tmp}/host-writer-lock"
+make_host "$host" 0
+exec 8>"${host}/run-lock/hololive-quadlet-redeploy.lock"
+flock 8
+assert_rejected_without_change "$host" "$base_repo" "central writer lock" "another central Quadlet writer is running"
+# shellcheck disable=SC2016 # namespace 안의 bash가 확장한다.
+if unshare --user --map-root-user --mount bash -c '
+  set -euo pipefail
+  mount --bind "$1/run-lock" /run/lock
+  exec bash "$2/scripts/deploy/lib/po-central-remote.sh" c deploy \
+    /opt/hololive-bot/compose/po-staging-20261118T000000Z \
+    /opt/hololive-bot/compose/backups/po-c-20261118T000000Z \
+    0123456789abcdef0123456789abcdef01234567 1.0.0
+' _ "$host" "$ROOT_DIR" >"${host}/collector-out" 2>&1; then
+  fail "collector c ran while another central writer held the lock"
+fi
+grep -q 'another Quadlet writer is running' "${host}/collector-out" || fail "collector c did not reject the central writer lock"
+exec 8>&-
+pass "source sync and collector c reject a concurrently held central writer lock"
 
 echo "all sync-opt-current checks passed"

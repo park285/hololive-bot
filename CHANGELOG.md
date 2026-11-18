@@ -16,6 +16,17 @@
 - kapu d의 전환 영수증을 수집기 쓰기 경로와 분리했습니다. 정지할 때만 root 전용 디렉터리를 만들고, 재개 시 영수증이 없거나 권한이 다르면 기존 데이터의 소유권을 바꾸지 않고 중단합니다.
 - c·b의 정지 증명은 Bash의 epoch 마이크로초를 systemd journal에 그대로 전달합니다. 소수 초의 선행 0이 사라져 정상 정지를 놓치던 경우를 고쳤으며, 확인 실패 시 해당 unit·invocation·조회 하한과 journal 종료 코드를 남깁니다.
 - 풀러 설치 전의 direct 복구는 기존 writer의 실제 연결 예산을 검사하되 아직 없는 풀러 unit을 요구하지 않습니다. pooled 경로는 설치된 풀러의 원천과 실행 설정을 계속 검증합니다.
+- `!스케쥴`의 카드 양식(기존·궤도)을 Iris Console 멤버 관리에서 개별 설정합니다. 채팅 명령은 그대로이며 궤도 카드는 실제 편성 기간만 표시하며 밀집 편성을 한 앨범으로 보냅니다. 이미지 예산을 벗어나면 일부 PNG 대신 전체 편성 파일 하나를 보냅니다. 공유 채널도 이름으로 고른 멤버의 양식·사진을 사용합니다. migration 032가 소피아의 초기 양식을 궤도로 지정하며, 다른 멤버는 기존 양식을 유지합니다.
+
+## v19.0.0 - 2026-11-18
+
+- **공개 의존성:** SDK `v5.2.1`, shared-go root `v2.25.0`·postgres `v1.0.2`·transport `v1.0.1`의 게시 tag·module provenance를 확인해 고정했습니다. 변경 없는 core는 `v1.0.0`을 유지합니다.
+
+- **Holodex profile 퇴역 (migration 031):** `holodex/channel_profile` 신규 발행과 API 병합을 거절하고 미처리 관측·replay를 `unsupported_contract` DEAD_LETTER로 종결합니다. 과거 원본·payload·FK registry·처리 완료 기록·현재 profile projection은 보존합니다. YouTube.js profile과 Holodex photo는 유지합니다. 작업창에는 collector와 API YouTube writer를 정지하고 진행 중 트랜잭션 종료를 확인한 뒤 031과 새 runtime을 순서대로 적용합니다. 이미 커밋된 projection을 되돌리지 않습니다.
+- **Iris handoff 판정:** SDK의 상태 조회 identity 불일치를 알림 원장의 격리와 답장 원장의 수동 검토로 연결합니다. 요청 ID의 공백도 다른 identity로 처리하며 일시적 오류·권한 오류의 기존 재조회 정책은 유지합니다.
+- **종료와 취소:** 동시 listener 실패는 최초 종료 오류 하나를 lifecycle에 전달하고 개별 오류는 기록합니다. Worker profile 검사·queue sampler는 scheduler group에서 취소 후 join합니다. X Spaces fetch가 입력 Request의 취소 signal을 상속하고 명시한 signal의 우선순위를 보존합니다.
+- **소유권과 중복:** Schedule-poster key reader를 기존 Gemini 정본 reader로 이행하고 빈 경로의 자동 검토 비활성화는 유지합니다. Handoff와 시험용 type alias를 정본 직접 참조로 바꾸며 중복 설명 주석을 정리했습니다.
+- **배포 도구:** 중앙 source sync·rollback·collector·API/worker pair를 같은 writer 잠금으로 직렬화하고 env 검증을 공통 reader로 통합했습니다. Manager job의 종료를 확인하지 못하면 조기 복원하지 않으며 candidate·backup을 보존합니다. Fallback delta: 없음.
 
 ## v18.8.3 - 2026-11-18
 

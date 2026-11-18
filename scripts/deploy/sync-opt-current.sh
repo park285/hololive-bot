@@ -20,6 +20,10 @@ esac
 
 [[ "$(id -u)" -eq 0 ]] || die "must run as root (sudo)"
 
+install -d -m 0755 /run/lock
+exec 9>/run/lock/hololive-quadlet-redeploy.lock
+flock -n 9 || die "another central Quadlet writer is running"
+
 # 알림 dispatcher는 중앙 하나뿐이다. build-control host kapu에 중앙 unit을 설치하면 부팅 때
 # 두 번째 alarm-worker가 뜨므로 승인된 rollback 표시 없이는 거부한다.
 if [[ "$(hostname -s)" == kapu && "${HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED:-}" != 1 ]]; then

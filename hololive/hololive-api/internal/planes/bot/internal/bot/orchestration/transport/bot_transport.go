@@ -211,6 +211,29 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 	return nil
 }
 
+func (t *CommandTransport) SendTextFile(ctx context.Context, room, fileName, text string) error {
+	if t == nil {
+		return errors.New("send text file: transport is not configured")
+	}
+
+	if text == "" || len(text) > 30<<20 {
+		return errors.New("send text file: invalid payload size")
+	}
+
+	sendCtx, cancel := context.WithTimeout(ctx, CommandTimeout)
+
+	defer cancel()
+
+	threadID, _ := ThreadIDFromContext(sendCtx)
+	reply := &StoredReply{Kind: StoredReplyKindTextFile, FileName: fileName, Message: text, ThreadID: threadID}
+
+	if err := t.recordReply(sendCtx, room, issueReplyEmission(sendCtx), reply); err != nil {
+		return fmt.Errorf("record text file: %w", err)
+	}
+
+	return nil
+}
+
 func (t *CommandTransport) SendImages(ctx context.Context, room string, images [][]byte) error {
 	if len(images) == 1 {
 		if err := t.SendImage(ctx, room, images[0]); err != nil {

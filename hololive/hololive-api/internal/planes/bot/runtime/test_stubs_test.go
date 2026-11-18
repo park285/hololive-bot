@@ -8,7 +8,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-type stubIrisClient struct{}
+type stubIrisClient struct {
+	iris.FileSender
+}
 
 func (s *stubIrisClient) SendMessage(context.Context, string, string, ...iris.SendOption) error {
 	return nil

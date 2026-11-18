@@ -91,14 +91,24 @@ func (s *RuntimeHTTPServers) Start(logger *slog.Logger, errCh chan<- error) {
 		return
 	}
 
-	startH3Server(s.H3, logger, errCh)
+	var firstError sync.Once
+
+	report := func(err error) {
+		if errCh != nil {
+			firstError.Do(func() { errCh <- err })
+		}
+	}
+
+	if s.H3 != nil {
+		startRuntimeServer(s.H3, "HTTP/3 server error", logger, report)
+	}
 
 	if s.Metrics != nil {
-		runtimehttpserver.StartServerWithPrefix(s.Metrics, "metrics server error", logger, errCh)
+		startRuntimeServer(s.Metrics, "metrics server error", logger, report)
 	}
 
 	if s.Pprof != nil {
-		runtimehttpserver.StartServerWithPrefix(s.Pprof, "pprof server error", logger, errCh)
+		startRuntimeServer(s.Pprof, "pprof server error", logger, report)
 	}
 }
 
@@ -129,12 +139,28 @@ func (s *RuntimeHTTPServers) Shutdown(ctx context.Context) error {
 	return errors.Join(h3Err, metricsErr, pprofErr)
 }
 
-func startH3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error) {
-	if server == nil {
-		return
+type runtimeErrorServer struct {
+	runtimehttpserver.Server
+
+	errorText string
+	report    func(error)
+}
+
+func (s runtimeErrorServer) ListenAndServe() error {
+	err := s.Server.ListenAndServe()
+	if err == nil {
+		return nil
 	}
 
-	runtimehttpserver.StartServerWithPrefix(server, "HTTP/3 server error", logger, errCh)
+	if !errors.Is(err, http.ErrServerClosed) {
+		s.report(fmt.Errorf("httpserver: listen: %s: %w", s.errorText, err))
+	}
+
+	return fmt.Errorf("serve runtime listener: %w", err)
+}
+
+func startRuntimeServer(server runtimehttpserver.Server, errorText string, logger *slog.Logger, report func(error)) {
+	runtimehttpserver.StartServerWithPrefix(runtimeErrorServer{Server: server, errorText: errorText, report: report}, errorText, logger, nil)
 }
 
 func runtimeH3Addr(serverConfig *settings.ServerConfig) string {

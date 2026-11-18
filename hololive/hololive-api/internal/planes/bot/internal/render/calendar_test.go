@@ -675,5 +675,10 @@ func newTestCalendarImageCacheWithMini(t *testing.T) (sharedcache.Store, *minire
 
 	client, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
 
-	return sharedcache.NewValkeyStore(client), mini
+	store := sharedcache.NewValkeyStore(client)
+	if store == nil {
+		t.Fatal("test Valkey store is nil")
+	}
+
+	return store, mini
 }

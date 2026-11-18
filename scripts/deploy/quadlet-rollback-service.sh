@@ -29,6 +29,11 @@ if [[ -z "$prefix" && "$ROOT_DIR" != "$deploy_root" ]]; then
   die "run the deployed copy: $deploy_root/scripts/deploy/quadlet-rollback-service.sh"
 fi
 pair_tool="$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py"
+lock_dir="$prefix/run/lock"
+install -d -m 0755 "$lock_dir"
+exec 9>"$lock_dir/hololive-quadlet-redeploy.lock"
+flock -n 9 || die "another central Quadlet writer is running"
+
 . "$ROOT_DIR/scripts/deploy/lib/compose-env.sh"
 . "$ROOT_DIR/scripts/deploy/lib/postgres-endpoint.sh"
 . "$ROOT_DIR/scripts/deploy/lib/postgres-capacity.sh"
@@ -45,9 +50,6 @@ unit="$service.service"
 previous="$release/previous"
 installed_unit="$prefix/etc/containers/systemd/hololive-bot/$service.container"
 if [[ "$mode" == --apply ]]; then
-  install -d -m 0755 "$prefix/run/lock"
-  exec 9>"$prefix/run/lock/hololive-quadlet-redeploy.lock"
-  flock -n 9 || die "a central writer transition is in progress"
   [[ ! -L "$prefix/etc/systemd/system/$unit" ]] || die "refusing to change a held writer"
 fi
 

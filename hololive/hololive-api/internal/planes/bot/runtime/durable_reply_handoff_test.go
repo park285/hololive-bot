@@ -71,6 +71,7 @@ func TestDecideReplyHandoff(t *testing.T) {
 		{name: "in flight at the horizon is unconfirmed", claim: atHorizon, snapshot: snapshot("queued"), wantState: durability.ReplyOutboxManualReview, wantCode: contractsalarm.HandoffCodeUnconfirmed},
 		{name: "lookup error before the horizon is rechecked without a transition", claim: inFlight, err: unavailable},
 		{name: "lookup timeout before the horizon is rechecked without a transition", claim: inFlight, err: context.DeadlineExceeded},
+		{name: "oversized response before the horizon is rechecked without a transition", claim: inFlight, err: &iris.TransportError{Err: iris.ErrResponseTooLarge}},
 		{name: "lookup error at the horizon is unconfirmed", claim: atHorizon, err: unavailable, wantState: durability.ReplyOutboxManualReview, wantCode: contractsalarm.HandoffCodeUnconfirmed},
 	}
 

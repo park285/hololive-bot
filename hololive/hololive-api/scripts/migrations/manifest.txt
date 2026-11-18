@@ -28,3 +28,5 @@
 028 028_collector_database_identity_fence.sql
 029 029_alarm_worker_database_role.sql
 030 030_collector_identity_owner_token.sql
+031 031_retire_holodex_channel_profile.sql
+032 032_schedule_poster_template.sql

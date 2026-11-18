@@ -14,6 +14,10 @@ import (
 const entityKindChannelProfile = "youtube_channel_profile"
 
 func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
+	if evidence.Provider != contract.ProviderYouTubeJS {
+		return Decision{}, errors.New("channel profile reducer received unsupported provider")
+	}
+
 	if evidence.Sample.ChannelID == "" {
 		return Decision{}, errors.New("channel profile reducer received empty channel id")
 	}

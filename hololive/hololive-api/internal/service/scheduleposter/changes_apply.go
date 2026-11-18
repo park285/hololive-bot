@@ -166,7 +166,6 @@ type Step struct {
 	PrevStart string
 }
 
-// PostURL은 출처 글의 주소다.
 func PostURL(postID int64) string {
 	return "https://x.com/i/status/" + strconv.FormatInt(postID, 10)
 }

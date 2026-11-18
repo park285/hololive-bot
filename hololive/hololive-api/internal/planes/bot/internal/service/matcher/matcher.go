@@ -44,6 +44,9 @@ type MatchCacheEntry struct {
 
 // matchCandidate의 memberName은 검색 일치 판단에 쓰는 english_name 계열 이름이고, 한국어 이름 두 개는 표시 전용이다.
 type matchCandidate struct {
+	memberID        int
+	photo           string
+	graduated       bool
 	channelID       string
 	memberName      string
 	koreanName      string

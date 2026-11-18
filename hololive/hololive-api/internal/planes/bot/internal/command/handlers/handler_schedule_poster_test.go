@@ -3,26 +3,37 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/park285/iris-client-go/v5/webhook"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/schedulecard"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-api/internal/service/scheduleposter"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type schedulePosterStub struct {
-	schedule  scheduleposter.PublishedSchedule
-	found     bool
-	err       error
-	channelID string
-	day       time.Time
+	selected    cardtemplate.ID
+	templateErr error
+	memberID    int
+	schedule    scheduleposter.PublishedSchedule
+	found       bool
+	err         error
+	channelID   string
+	day         time.Time
 }
 
 func (s *schedulePosterStub) PublishedRows(_ context.Context, channelID string, day time.Time) (scheduleposter.PublishedSchedule, bool, error) {
@@ -31,18 +42,25 @@ func (s *schedulePosterStub) PublishedRows(_ context.Context, channelID string, 
 	return s.schedule, s.found, s.err
 }
 
+func (s *schedulePosterStub) MemberCardTemplate(_ context.Context, id int) (cardtemplate.ID, error) {
+	s.memberID = id
+
+	return s.selected, s.templateErr
+}
+
 type scheduleCardStub struct {
-	data     []byte
+	data     [][]byte
+	template cardtemplate.ID
 	err      error
 	member   *domain.Member
 	schedule scheduleposter.PublishedSchedule
 	calls    int
 }
 
-func (s *scheduleCardStub) RenderScheduleCard(_ context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule) ([]byte, error) {
+func (s *scheduleCardStub) RenderScheduleCards(_ context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID) ([][]byte, error) {
 	s.calls++
 
-	s.member, s.schedule = member, schedule
+	s.member, s.schedule, s.template = member, schedule, template
 
 	return s.data, s.err
 }
@@ -52,12 +70,14 @@ type posterReplies struct {
 	errors       []string
 	images       [][]byte
 	contentTypes []string
+	batchSizes   []int
+	files        []string
 }
 
 func schedulePosterDeps(t *testing.T, posters handlercore.SchedulePosterReader, cards handlercore.ScheduleCardRenderer, replies *posterReplies, imageErr error) *handlercore.Dependencies {
 	t.Helper()
 
-	memberProvider := newContextAwareMemberProvider([]*domain.Member{{ChannelID: testChannelMiko, Name: "Miko", NameKo: "사쿠라 미코", ShortKoreanName: "미코"}})
+	memberProvider := newContextAwareMemberProvider([]*domain.Member{{ID: 37, ChannelID: testChannelMiko, Name: "Miko", NameKo: "사쿠라 미코", ShortKoreanName: "미코"}})
 
 	return &handlercore.Dependencies{
 		Matcher:         matcher.NewMatcher(memberProvider, slog.New(slog.DiscardHandler)),
@@ -69,10 +89,20 @@ func schedulePosterDeps(t *testing.T, posters handlercore.SchedulePosterReader, 
 
 			return nil
 		},
-		SendImage: func(ctx context.Context, _ string, image []byte) error {
+		SendTextFile: func(_ context.Context, _, name, text string) error {
+			if name != "schedule.txt" {
+				t.Fatalf("file name: %s", name)
+			}
+
+			replies.files = append(replies.files, text)
+
+			return imageErr
+		},
+		SendImages: func(ctx context.Context, _ string, images [][]byte) error {
 			contentType, _ := transport.ImageContentTypeFromContext(ctx)
 
-			replies.images = append(replies.images, image)
+			replies.images = append(replies.images, images...)
+			replies.batchSizes = append(replies.batchSizes, len(images))
 			replies.contentTypes = append(replies.contentTypes, contentType)
 
 			return imageErr
@@ -104,7 +134,7 @@ func publishedMikoSchedule() scheduleposter.PublishedSchedule {
 
 func TestSchedulePosterCommandSendsRenderedCardAsPNG(t *testing.T) {
 	posters := &schedulePosterStub{schedule: publishedMikoSchedule(), found: true}
-	cards := &scheduleCardStub{data: []byte("card")}
+	cards := &scheduleCardStub{data: [][]byte{[]byte("card")}}
 	replies := &posterReplies{}
 
 	cmd := NewSchedulePosterCommand(schedulePosterDeps(t, posters, cards, replies, nil))
@@ -141,7 +171,7 @@ func TestSchedulePosterCommandReportsInputAndLookupErrorsWithSeededText(t *testi
 		{name: "lookup failed", params: map[string]any{paramMember: "미코"}, posters: &schedulePosterStub{err: errors.New("db down")}, want: "❌ 일정 포스터 조회 중 오류가 발생했습니다."},
 	} {
 		replies := &posterReplies{}
-		cards := &scheduleCardStub{data: []byte("card")}
+		cards := &scheduleCardStub{}
 		deps := schedulePosterDeps(t, tc.posters, cards, replies, nil)
 
 		deps.SendError = func(ctx context.Context, _, key string) error {
@@ -171,7 +201,7 @@ func TestSchedulePosterCommandRejectsEmptyNotFoundText(t *testing.T) {
 
 func TestSchedulePosterCommandExplainsMissingRowsFromSeededString(t *testing.T) {
 	replies := &posterReplies{}
-	cards := &scheduleCardStub{data: []byte("card")}
+	cards := &scheduleCardStub{}
 	deps := schedulePosterDeps(t, &schedulePosterStub{}, cards, replies, nil)
 
 	deps.Formatter = newSeededTestFormatter(t)
@@ -204,29 +234,146 @@ func TestSchedulePosterCommandReturnsRenderFailureWithoutAnyReply(t *testing.T) 
 func TestSchedulePosterCommandReturnsSendFailures(t *testing.T) {
 	posters := &schedulePosterStub{schedule: publishedMikoSchedule(), found: true}
 
-	err := executeSchedulePoster(t, schedulePosterDeps(t, posters, &scheduleCardStub{data: []byte("card")}, &posterReplies{}, transport.ErrReplyOutcomeUnknown), map[string]any{paramMember: "미코"})
+	err := executeSchedulePoster(t, schedulePosterDeps(t, posters, &scheduleCardStub{data: [][]byte{[]byte("card")}}, &posterReplies{}, transport.ErrReplyOutcomeUnknown), map[string]any{paramMember: "미코"})
 	if !transport.IsReplyOutcomeUnknown(err) {
 		t.Fatalf("Execute error = %v, want reply outcome unknown", err)
 	}
 }
 
-func TestSchedulePosterCommandReturnsMemberLoadFailureWithoutAnyReply(t *testing.T) {
-	replies := &posterReplies{}
-	cards := &scheduleCardStub{data: []byte("card")}
-	posters := &schedulePosterStub{schedule: publishedMikoSchedule(), found: true}
-	deps := schedulePosterDeps(t, posters, cards, replies, nil)
-	provider := newContextAwareMemberProvider([]*domain.Member{{ChannelID: testChannelMiko, Name: "Miko", NameKo: "사쿠라 미코", ShortKoreanName: "미코"}})
+func TestSchedulePosterUsesNamedMemberOnSharedChannel(t *testing.T) {
+	first := &domain.Member{ID: 19, ChannelID: testChannelMiko, Name: "Group", IsGraduated: true}
+	second := &domain.Member{ID: 22, ChannelID: testChannelMiko, Name: "Other", NameKo: "유키", Photo: "yuki.png"}
+	provider := newContextAwareMemberProvider([]*domain.Member{first, second})
 
-	clear(provider.byChannel)
+	provider.byChannel[testChannelMiko] = first
+
+	cards := &scheduleCardStub{data: [][]byte{[]byte("image")}}
+	posters := &schedulePosterStub{schedule: publishedMikoSchedule(), found: true, selected: cardtemplate.Orbit}
+	replies := &posterReplies{}
+	deps := schedulePosterDeps(t, posters, cards, replies, nil)
 
 	deps.Matcher = matcher.NewMatcher(provider, slog.New(slog.DiscardHandler))
 
-	err := executeSchedulePoster(t, deps, map[string]any{paramMember: "미코"})
-	if !errors.Is(err, domain.ErrMemberNotFound) || posters.channelID != testChannelMiko {
-		t.Fatalf("Execute error = %v, rows lookup = %q; want member load failure after the rows lookup", err, posters.channelID)
+	if err := executeSchedulePoster(t, deps, map[string]any{paramMember: "유키"}); err != nil {
+		t.Fatal(err)
 	}
 
-	if cards.calls != 0 || len(replies.images) != 0 || len(replies.messages) != 0 || len(replies.errors) != 0 {
-		t.Fatalf("replies = %+v, render calls = %d; want no render and no reply from the handler", replies, cards.calls)
+	if posters.memberID != second.ID || cards.member == nil || cards.member.Photo != second.Photo || cards.template != cardtemplate.Orbit || len(replies.images) != 1 {
+		t.Fatalf("lookup ID=%d, rendered=%+v, replies=%+v", posters.memberID, cards.member, replies)
+	}
+
+	if err := executeSchedulePoster(t, deps, map[string]any{paramMember: "Group"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if cards.calls != 1 || !slices.Equal(replies.errors, []string{messaging.ErrGraduatedMemberBlocked}) {
+		t.Fatalf("graduated member was not blocked: %+v", replies)
+	}
+}
+
+func TestSchedulePosterCommandSwitchesMemberTemplateAndSendsPagesInOrder(t *testing.T) {
+	for _, tc := range []struct {
+		label    string
+		template cardtemplate.ID
+		pages    int
+		batches  []int
+		mime     []string
+	}{
+		{"기존", cardtemplate.Classic, 1, []int{1}, []string{"image/png"}},
+		{"궤도", cardtemplate.Orbit, 8, []int{8}, []string{""}},
+	} {
+		cards := &scheduleCardStub{}
+
+		for n := range tc.pages {
+			cards.data = append(cards.data, []byte{byte(n)})
+		}
+
+		replies := &posterReplies{}
+		deps := schedulePosterDeps(t, &schedulePosterStub{schedule: publishedMikoSchedule(), found: true, selected: tc.template}, cards, replies, nil)
+		command := messaging.NewMessageAdapter("!").ParseMessage(&webhook.Message{Msg: "!스케쥴 사쿠라 미코"})
+
+		if command == nil || command.Type != botcommand.CommandSchedulePoster {
+			t.Fatalf("%s: not a schedule poster command", tc.label)
+		}
+
+		err := executeSchedulePoster(t, deps, command.Params)
+
+		if err != nil || cards.member == nil || cards.member.ChannelID != testChannelMiko || cards.template != tc.template {
+			t.Fatalf("%s: member = %+v, template = %q, err = %v", tc.label, cards.member, cards.template, err)
+		}
+
+		if !slices.Equal(replies.batchSizes, tc.batches) || !slices.Equal(replies.contentTypes, tc.mime) {
+			t.Fatalf("%s: batches = %v, content types = %v", tc.label, replies.batchSizes, replies.contentTypes)
+		}
+
+		for i, page := range replies.images {
+			if !slices.Equal(page, cards.data[i]) {
+				t.Fatalf("%s: page %d = %v, want %v", tc.label, i+1, page, cards.data[i])
+			}
+		}
+	}
+}
+
+func TestSchedulePosterCommandDoesNotRenderWhenMemberTemplateReadFails(t *testing.T) {
+	readErr := errors.New("template read failed")
+	posters := &schedulePosterStub{schedule: publishedMikoSchedule(), found: true, templateErr: readErr}
+	cards := &scheduleCardStub{}
+	deps := schedulePosterDeps(t, posters, cards, &posterReplies{}, nil)
+	err := executeSchedulePoster(t, deps, map[string]any{paramMember: "미코"})
+
+	if !errors.Is(err, readErr) || cards.calls != 0 || posters.memberID != 37 {
+		t.Fatalf("error = %v, render calls = %d, template member = %d", err, cards.calls, posters.memberID)
+	}
+}
+
+func TestSchedulePosterSendsDenseScheduleAsOneCompleteFile(t *testing.T) {
+	schedule := publishedMikoSchedule()
+	row := schedule.Rows[0]
+
+	schedule.Rows = nil
+
+	for i := range scheduleposter.MaxRows {
+		row.Ordinal = i + 1
+		row.TitleKo = fmt.Sprintf("%03d", i) + strings.Repeat("일", 997)
+		row.NoteKo = strings.Repeat("비", 997) + fmt.Sprintf("%03d", i)
+		row.PlaceKo = "장소"
+		row.WithKo = []string{"고객"}
+		row.TagsKo = []string{"실황"}
+		schedule.Rows = append(schedule.Rows, row)
+	}
+
+	replies := &posterReplies{}
+	deps := schedulePosterDeps(t, &schedulePosterStub{found: true, selected: cardtemplate.Orbit, schedule: schedule}, render.NewScheduleCardRenderer(nil), replies, nil)
+
+	if err := executeSchedulePoster(t, deps, map[string]any{paramMember: "미코"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(replies.files) != 1 || len(replies.images) != 0 || len(replies.messages) != 0 {
+		t.Fatalf("files=%d, images=%d, messages=%d", len(replies.files), len(replies.images), len(replies.messages))
+	}
+
+	text := replies.files[0]
+
+	for _, row := range schedule.Rows {
+		if !strings.Contains(text, row.TitleKo) || !strings.Contains(text, row.NoteKo) {
+			t.Fatalf("incomplete row %d", row.Ordinal)
+		}
+	}
+
+	for _, value := range []string{"장소: 장소", "함께: 고객", "태그: 실황"} {
+		if strings.Count(text, value) != scheduleposter.MaxRows {
+			t.Fatalf("missing %s", value)
+		}
+	}
+}
+
+func TestSchedulePosterFileFailureDoesNotSendAnImage(t *testing.T) {
+	replies := &posterReplies{}
+	deps := schedulePosterDeps(t, &schedulePosterStub{found: true, schedule: publishedMikoSchedule()}, &scheduleCardStub{err: schedulecard.ErrRenderBudget}, replies, transport.ErrReplyOutcomeUnknown)
+	err := executeSchedulePoster(t, deps, map[string]any{paramMember: "미코"})
+
+	if !transport.IsReplyOutcomeUnknown(err) || len(replies.files) != 1 || len(replies.images) != 0 {
+		t.Fatalf("err=%v, replies=%+v", err, replies)
 	}
 }

@@ -97,6 +97,11 @@ statement that moves every member to `sent`, and schedules the first check (`han
 after admission on that statement's database clock, so even a horizon shorter than 5s is never passed by the first
 check. When `MarkSent` does not apply to every member, the unit records no check.
 
+The status receipt's request ID must exactly match the admitted ID, including whitespace. A contradictory
+receipt quarantines worker delivery or moves a bot reply to `manual_review` with `handoff_outcome_unknown`,
+including when the SDK rejects it as a permanent transport error. HTTP lookup failures keep their existing
+recheck policy; a 404 keeps `handoff_status_missing`.
+
 `alarm-dispatch-handoff-reconciler` claims due units with `FOR UPDATE SKIP LOCKED` and moves `handoff_next_check_at`
 15s ahead as a soft-claim token. It queries `/reply-status` outside any transaction, then applies the observation in
 one statement that locks the unit before its members and rechecks the token, `client_request_id`,

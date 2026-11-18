@@ -63,7 +63,9 @@ func TestBuildBotDependenciesPreservesRuntimeInputs(t *testing.T) {
 	require.True(t, deps.MarkdownReplies)
 }
 
-type stubBotIrisClient struct{}
+type stubBotIrisClient struct {
+	iris.FileSender
+}
 
 func (s *stubBotIrisClient) SendMessage(context.Context, string, string, ...iris.SendOption) error {
 	return nil

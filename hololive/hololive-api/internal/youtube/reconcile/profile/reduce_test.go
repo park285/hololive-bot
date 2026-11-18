@@ -102,7 +102,7 @@ func TestReduceProfilePermutationsYieldSameProjection(t *testing.T) {
 		},
 	}
 	b := Evidence{
-		ObservationID: 2, Provider: contract.ProviderHolodex,
+		ObservationID: 2, Provider: contract.ProviderYouTubeJS,
 		Sample: Sample{
 			ChannelID: testChannelID, Country: Field{Present: true, Value: "jp"},
 			Complete: true, ScheduledFor: t2(), EffectiveAt: t2(), ReceivedAt: t2(),
@@ -149,4 +149,16 @@ func mustReduceAll(t *testing.T, evidence []Evidence, policy Policy) Decision {
 	}
 
 	return decision
+}
+
+func TestReduceRejectsHolodexProfile(t *testing.T) {
+	t.Parallel()
+
+	evidence := profileAt(1, t1(), Field{Present: true, Value: "retired"}, Field{})
+
+	evidence.Provider = contract.ProviderHolodex
+
+	if _, err := Reduce(State{}, evidence, Policy{}); err == nil {
+		t.Fatal("Holodex profile was accepted")
+	}
 }
