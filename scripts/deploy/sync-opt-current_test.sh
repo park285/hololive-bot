@@ -52,11 +52,9 @@ make_repo() {
     scripts/deploy/lib/compose-env.sh scripts/deploy/quadlet-prestart.sh \
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     scripts/deploy/lib/admin-bind.sh scripts/deploy/lib/public-bind-mounts.sh \
-    scripts/deploy/lib/postgres-endpoint.sh \
+    scripts/deploy/lib/postgres-endpoint.sh scripts/deploy/lib/source-revision.sh \
     scripts/systemd/admin-dashboard-ingress-firewall.service scripts/systemd/admin-dashboard-ingress.nft \
-    deploy/postgres/pg_hba.conf deploy/nginx/admin-dashboard-ingress.conf.template \
-    deploy/pgbouncer/pg_hba.conf deploy/pgbouncer/stats-users.txt \
-    deploy/quadlet/hololive-bot deploy/quadlet/optional; do
+    hololive/hololive-api/scripts/init-db deploy; do
     mkdir -p "${repo}/$(dirname "${path}")"
     cp -R "${ROOT_DIR}/${path}" "${repo}/${path}"
   done
@@ -78,6 +76,9 @@ commit_repo() {
 make_host() {
   local host="$1" x_spaces="$2" installed="${1}/etc-containers-systemd/hololive-bot"
   mkdir -p "${host}"/{etc-containers-systemd,usr-local-libexec,etc-stack-secrets/hololive-bot,etc-systemd-system,etc-nftables.d,run-lock}
+  mkdir -p "${host}/run/hololive-bot/pgbouncer" "${host}/run/lock"
+  mkdir -m 0700 "${host}/run/mount"
+  printf 'accepted pool configuration\n' >"${host}/run/hololive-bot/pgbouncer/pgbouncer.ini"
   mkdir -p "${installed}/hololive-api.container.d" "${installed}/hololive-alarm-worker.container.d"
   printf '[Container]\nContainerName=stale\nImage=localhost/stale:old\n' >"${installed}/stale.container"
   printf '[Container]\nLabel=io.hololive.test.worker-profile=1\n' \
@@ -91,9 +92,10 @@ make_host() {
 }
 
 host_snapshot() {
-  local host="$1"
-  (cd "${host}" && find etc-containers-systemd usr-local-libexec etc-systemd-system etc-nftables.d opt/current \
-    -printf '%p %m\n' -type f -exec sha256sum {} + | LC_ALL=C sort)
+  local host="$1" opt=opt/current
+  [[ "${2:-}" != --application-only ]] || opt=opt
+  (cd "${host}" && find etc-containers-systemd usr-local-libexec etc-systemd-system etc-nftables.d etc-stack-secrets run "$opt" \
+    -printf '%p %m %U:%G %i\n' -type f -printf '%p %T@ %C@\n' -exec sha256sum {} + | LC_ALL=C sort)
 }
 
 run_sync() {
@@ -110,6 +112,7 @@ run_sync() {
     mount --bind "${host}/etc-stack-secrets" /etc/stack-secrets
     mount --bind "${host}/etc-systemd-system" /etc/systemd/system
     mount --bind "${host}/etc-nftables.d" /etc/nftables.d
+    mount --bind "${host}/run" /run
     mount --bind "${host}/run-lock" /run/lock
     exec "$@"
   ' _ "${host}" env PATH="${fakebin}:${PATH}" SYNC_TEST_EVENTS="${host}/events" \
@@ -118,13 +121,17 @@ run_sync() {
 }
 
 assert_rejected_without_change() {
-  local host="$1" repo="$2" label="$3" expected="${4:-staged Quadlet units do not generate; nothing was installed}" before
-  before="$(host_snapshot "${host}")"
-  if run_sync "${host}" "${repo}"; then
+  local host="$1" repo="$2" label="$3" expected="${4:-staged Quadlet units do not generate; nothing was installed}" before after
+  before="$(host_snapshot "${host}" "${5:-}")"
+  if run_sync "${host}" "${repo}" "${@:5}"; then
     cat "${host}/out" >&2
-    fail "${label}: installer accepted units that do not generate"
+    fail "${label}: installer accepted the invalid deployment"
   fi
-  [[ "$(host_snapshot "${host}")" == "${before}" ]] || fail "${label}: host state changed after a rejected dry-run"
+  after="$(host_snapshot "${host}" "${5:-}")"
+  if [[ "$after" != "$before" ]]; then
+    diff -u <(printf '%s\n' "$before") <(printf '%s\n' "$after") >&2 || :
+    fail "${label}: host state changed after a rejected dry-run"
+  fi
   ! grep -q 'daemon-reload' "${host}/events" || fail "${label}: daemon-reload ran after a rejected dry-run"
   grep -Fq "${expected}" "${host}/out" ||
     { cat "${host}/out" >&2; fail "${label}: rejection did not come from the expected check"; }
@@ -251,6 +258,79 @@ for backup in "${host}/opt/"current.bak-*; do
 done
 pass "artifact-only sync preserves runtime bytes and metadata without copying runtime configuration"
 
+# W1의 프로세스와 단일 파일 bind는 W2 소스 게시 중 다시 열지 않는다. 같은 bytes라도
+# mtime이 다른 archive를 보내서 일반 rsync가 inode를 교체하는 경우까지 구별한다.
+migrator_path=deploy/quadlet/hololive-bot/hololive-db-migrate.container
+w1_repo="${tmp}/repo-pool"
+cp -a "${base_repo}" "${w1_repo}"
+sed -e 's/^Exec=--schema-only$/Exec=--pool-only=auth/' \
+  -e 's/ hololive-db-migrate schema$/ hololive-db-migrate pool-auth/' \
+  "${base_repo}/${migrator_path}" >"${w1_repo}/${migrator_path}"
+commit_repo "${w1_repo}" pool-window
+w1_host="${tmp}/host-pool"
+make_host "${w1_host}" 1
+run_sync "${w1_host}" "${w1_repo}" || { cat "${w1_host}/out" >&2; fail "pool-window installation failed"; }
+for path in data logs backups runtime-config artifacts/worker-profile; do
+  mkdir -p "${w1_host}/opt/current/${path}"
+  printf 'accepted runtime\n' >"${w1_host}/opt/current/${path}/accepted"
+done
+pool_dropin="${w1_host}/etc-containers-systemd/hololive-bot/holo-pgbouncer.container.d"
+mkdir -p "$pool_dropin"
+printf '[Container]\nImage=sha256:%064d\n' 1 >"$pool_dropin/50-pooler-image.conf"
+touch -d @1 "${w1_host}/opt/current/deploy/postgres/pg_hba.conf" \
+  "${w1_host}/opt/current/deploy/pgbouncer/"* "${w1_host}/opt/current/hololive/hololive-api/scripts/init-db/"*
+
+protected_snapshot() (
+  cd "$1"
+  find etc-containers-systemd usr-local-libexec etc-systemd-system etc-nftables.d etc-stack-secrets run/hololive-bot \
+    opt/current/{deploy/{pgbouncer,postgres,nginx,topology},hololive/hololive-api/scripts/init-db,data,logs,backups,runtime-config,artifacts/worker-profile} \
+    -type f ! -name hololive-db-migrate.container -printf '%p %i %m %U:%G %T@ %C@\n' -exec sha256sum {} + | LC_ALL=C sort
+)
+w2_repo="${tmp}/repo-card"
+cp -a "${base_repo}" "$w2_repo"
+printf 'card release\n' >"$w2_repo/hololive/hololive-api/VERSION"
+commit_repo "$w2_repo" card-window
+host="${tmp}/host-card"
+cp -a "$w1_host" "$host"
+before="$(protected_snapshot "$host")"
+run_sync "$host" "$w2_repo" --application-only || { cat "$host/out" >&2; fail "card-window publication failed"; }
+[[ "$(protected_snapshot "$host")" == "$before" ]] || fail "card window changed a protected inode, mode or content"
+! grep -q '^systemctl ' "$host/events" || fail "source publication changed daemon state"
+cmp "$w2_repo/$migrator_path" "$host/etc-containers-systemd/hololive-bot/${migrator_path##*/}"
+cmp "$w2_repo/$migrator_path" "$host/opt/current/$migrator_path"
+cmp "$w2_repo/hololive/hololive-api/VERSION" "$host/opt/current/hololive/hololive-api/VERSION"
+[[ "$(<"$host/opt/current/.source-revision")" == "$(git -C "$w2_repo" rev-parse HEAD)" ]] ||
+  fail "card deployment revision was not published"
+backups=("$host/opt/current.bak-$(git -C "$w2_repo" rev-parse --short HEAD)-"*)
+[[ "${#backups[@]}" == 1 && ! -e "${backups[0]}/runtime-config" && ! -e "${backups[0]}/data" ]] ||
+  fail "card rollback copy included runtime data"
+cmp "$w1_repo/$migrator_path" "${backups[0]}/$migrator_path"
+pass "application-only publishes the card tree and schema migrator without touching accepted pool/runtime inodes"
+
+for path in opt/current/deploy/postgres/pg_hba.conf opt/current/deploy/pgbouncer/stats-users.txt \
+    opt/current/hololive/hololive-api/scripts/init-db/00-assert-pg18-runtime.sql \
+    etc-containers-systemd/hololive-bot/{hololive-api,holo-pgbouncer,hololive-alarm-worker}.container \
+    etc-containers-systemd/hololive-bot/hololive-api.container.d/40-x-spaces.conf \
+    usr-local-libexec/hololive-bot/quadlet-prestart etc-nftables.d/admin-dashboard-ingress.nft; do
+  host="$(mktemp -d "${tmp}/host-drift.XXXXXX")"
+  cp -a "$w1_host/." "$host/"
+  printf '\n# drift\n' >>"$host/$path"
+  assert_rejected_without_change "$host" "$w2_repo" "$path" "application-only" --application-only
+done
+host="${tmp}/host-override"
+cp -a "$w1_host" "$host"
+dropin="$host/etc-containers-systemd/hololive-bot/hololive-db-migrate.container.d"
+mkdir -p "$dropin"
+printf '[Container]\nExec=--pool-only=auth\n' >"$dropin/60-command.conf"
+assert_rejected_without_change "$host" "$w2_repo" "migrator override" "requires the schema-only migrator" --application-only
+assert_rejected_without_change "$w1_host" "$w1_repo" "pool candidate" "requires the schema-only migrator" --application-only
+drift_repo="${tmp}/repo-infra-change"
+cp -a "$w2_repo" "$drift_repo"
+printf 'drift\n' >"$drift_repo/deploy/pgbouncer/unreviewed.conf"
+commit_repo "$drift_repo" changed-infrastructure
+assert_rejected_without_change "$w1_host" "$drift_repo" "candidate infrastructure" "application-only tree drift" --application-only
+pass "application-only rejects candidate, installed, drop-in and privileged bind drift before backup or publication"
+
 # 6. 같은 revision을 다시 반영해도 기존 backup을 덮거나 보존 개수만으로 지우지 않는다.
 host="${tmp}/host-retained-backups"
 make_host "${host}" 0
@@ -300,6 +380,7 @@ make_host "$host" 0
 exec 8>"${host}/run-lock/hololive-quadlet-redeploy.lock"
 flock 8
 assert_rejected_without_change "$host" "$base_repo" "central writer lock" "another central Quadlet writer is running"
+assert_rejected_without_change "$host" "$base_repo" "card writer lock" "another central Quadlet writer is running" --application-only
 # shellcheck disable=SC2016 # namespace 안의 bash가 확장한다.
 if unshare --user --map-root-user --mount bash -c '
   set -euo pipefail
