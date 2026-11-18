@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-api/internal/service/scheduleposter"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -55,12 +56,13 @@ type HelpImageProvider interface {
 
 // SchedulePosterReader의 day는 JST 날짜다.
 type SchedulePosterReader interface {
+	MemberCardTemplate(ctx context.Context, memberID int) (cardtemplate.ID, error)
 	PublishedRows(ctx context.Context, channelID string, day time.Time) (scheduleposter.PublishedSchedule, bool, error)
 }
 
-// ScheduleCardRenderer는 확정본 행 묶음을 member의 주간 일정 카드 PNG로 그린다.
+// ScheduleCardRenderer는 확정본 행을 전송 순서대로 PNG 페이지에 담는다.
 type ScheduleCardRenderer interface {
-	RenderScheduleCard(ctx context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule) ([]byte, error)
+	RenderScheduleCards(ctx context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID) ([][]byte, error)
 }
 
 type BroadcastHistoryQuery struct {
@@ -147,6 +149,7 @@ type Dependencies struct {
 	ScheduleCards       ScheduleCardRenderer
 	SendMessage         func(ctx context.Context, room, message string) error
 	SendImage           func(ctx context.Context, room string, imageData []byte) error
+	SendTextFile        func(ctx context.Context, room, fileName, text string) error
 	SendImages          func(ctx context.Context, room string, images [][]byte) error
 	SendError           func(ctx context.Context, room, message string) error
 	Logger              *slog.Logger

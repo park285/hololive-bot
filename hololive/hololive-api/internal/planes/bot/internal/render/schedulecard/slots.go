@@ -2,6 +2,7 @@ package schedulecard
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"image"
 	"slices"
@@ -12,17 +13,20 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/text/unicode/norm"
+
+	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 )
 
 const (
 	daysPerWeek = 7
 
-	maxNameRunes  = 40
-	maxTitleRunes = 120
-	maxWithRunes  = 30
-	maxPlaceRunes = 60
-	maxNoteRunes  = 80
-	maxTagRunes   = 20
+	maxNameRunes       = 40
+	maxTitleRunes      = 120
+	maxOrbitTitleRunes = 1000
+	maxWithRunes       = 30
+	maxPlaceRunes      = 60
+	maxNoteRunes       = 80
+	maxTagRunes        = 20
 
 	maxWithShown = 6
 	maxTagsShown = 3
@@ -60,20 +64,31 @@ type slot struct {
 }
 
 func prepare(card Card, drawable func(rune) bool) (view, error) {
+	v, err := prepareWeek(card, drawable, cardtemplate.Classic)
+	if err != nil {
+		return view{}, err
+	}
+
+	for i := range v.days {
+		v.days[i].slots = capSlots(v.days[i].slots, maxSlotsPerDay)
+	}
+
+	return v, nil
+}
+
+func prepareWeek(card Card, drawable func(rune) bool, template cardtemplate.ID) (view, error) {
 	start, end := civil(card.WeekStart), civil(card.WeekEnd)
-	if card.WeekStart.IsZero() || card.WeekEnd.IsZero() || end.Before(start) || end.After(start.AddDate(0, 0, daysPerWeek-1)) {
-		return view{}, fmt.Errorf("%w: week %s..%s", ErrInvalidCard, start.Format(time.DateOnly), end.Format(time.DateOnly))
+	if err := validateWeek(&card, start, end); err != nil {
+		return view{}, err
 	}
 
-	if card.ExtractedAt.IsZero() {
-		return view{}, fmt.Errorf("%w: missing extracted time", ErrInvalidCard)
+	dayCount := daysPerWeek
+
+	if template == cardtemplate.Orbit {
+		dayCount = int(end.Sub(start)/(24*time.Hour)) + 1
 	}
 
-	if len(card.Items) > MaxItems {
-		return view{}, fmt.Errorf("%w: %d items exceed %d", ErrInvalidCard, len(card.Items), MaxItems)
-	}
-
-	days := make([]day, daysPerWeek)
+	days := make([]day, dayCount)
 	for i := range days {
 		days[i].date = start.AddDate(0, 0, i)
 	}
@@ -88,7 +103,11 @@ func prepare(card Card, drawable func(rune) bool) (view, error) {
 			continue
 		}
 
-		s, err := toSlot(it, drawable)
+		s, err := toSlot(it, drawable, template)
+		if errors.Is(err, ErrRenderBudget) {
+			return view{}, err
+		}
+
 		if err != nil {
 			return view{}, fmt.Errorf("%w: item %d: %w", ErrInvalidCard, i+1, err)
 		}
@@ -106,7 +125,7 @@ func prepare(card Card, drawable func(rune) bool) (view, error) {
 	}
 
 	for i := range days {
-		days[i].slots = capSlots(mergeOff(sortSlots(days[i].slots), fromPost[i]), maxSlotsPerDay)
+		days[i].slots = mergeOff(sortSlots(days[i].slots), fromPost[i])
 	}
 
 	return view{
@@ -116,6 +135,22 @@ func prepare(card Card, drawable func(rune) bool) (view, error) {
 		days:    days,
 		photo:   usablePhoto(card.Photo),
 	}, nil
+}
+
+func validateWeek(card *Card, start, end time.Time) error {
+	if card.WeekStart.IsZero() || card.WeekEnd.IsZero() || end.Before(start) || end.After(start.AddDate(0, 0, daysPerWeek-1)) {
+		return fmt.Errorf("%w: week %s..%s", ErrInvalidCard, start.Format(time.DateOnly), end.Format(time.DateOnly))
+	}
+
+	if card.ExtractedAt.IsZero() {
+		return fmt.Errorf("%w: missing extracted time", ErrInvalidCard)
+	}
+
+	if len(card.Items) > MaxItems {
+		return fmt.Errorf("%w: %d items exceed %d", ErrInvalidCard, len(card.Items), MaxItems)
+	}
+
+	return nil
 }
 
 // cardDay는 주 범위 밖의 변환 항목을 가까운 끝 날 칸에 둔다. 요일을 붙일 시각이 없는 항목은 다른 날 칸에서 그날 일정으로 읽히므로 버린다.
@@ -155,7 +190,7 @@ func usablePhoto(img image.Image) image.Image {
 	return img
 }
 
-func toSlot(it *Item, drawable func(rune) bool) (slot, error) {
+func toSlot(it *Item, drawable func(rune) bool, template cardtemplate.ID) (slot, error) {
 	switch it.Status {
 	case StatusPlanned, StatusTentative, StatusCancelled, StatusOff:
 	default:
@@ -176,7 +211,13 @@ func toSlot(it *Item, drawable func(rune) bool) (slot, error) {
 		return slot{}, fmt.Errorf("previous start: %w", err)
 	}
 
-	s := slot{start: start, minutes: minutes, status: it.Status, main: cleanText(it.Title, maxTitleRunes, drawable)}
+	titleLimit := maxTitleRunes
+
+	if template == cardtemplate.Orbit {
+		titleLimit = maxOrbitTitleRunes
+	}
+
+	s := slot{start: start, minutes: minutes, status: it.Status, main: cleanText(it.Title, titleLimit, drawable)}
 
 	switch {
 	case prev != "" && prev != start:
@@ -193,7 +234,19 @@ func toSlot(it *Item, drawable func(rune) bool) (slot, error) {
 		}
 	}
 
-	s.sub = subtitle(it, drawable)
+	placeLimit, noteLimit := maxPlaceRunes, maxNoteRunes
+
+	if template == cardtemplate.Orbit {
+		placeLimit, noteLimit = maxOrbitTitleRunes, maxOrbitTitleRunes
+
+		if len(it.With) > maxWithShown || len(it.Tags) > maxTagsShown ||
+			slices.ContainsFunc(it.With, func(s string) bool { return utf8.RuneCountInString(s) > maxWithRunes }) ||
+			slices.ContainsFunc(it.Tags, func(s string) bool { return utf8.RuneCountInString(s) > maxTagRunes }) {
+			return slot{}, ErrRenderBudget
+		}
+	}
+
+	s.sub = subtitle(it, drawable, placeLimit, noteLimit)
 	s.tags = shownTags(it.Tags, s.main+" "+s.sub, drawable)
 
 	return s, nil
@@ -237,18 +290,18 @@ func isDigits(s string) bool {
 	return true
 }
 
-func subtitle(it *Item, drawable func(rune) bool) string {
+func subtitle(it *Item, drawable func(rune) bool, placeLimit, noteLimit int) string {
 	var parts []string
 
 	if w := withPhrase(it.With, drawable); w != "" {
 		parts = append(parts, w)
 	}
 
-	if p := cleanText(it.Place, maxPlaceRunes, drawable); p != "" {
+	if p := cleanText(it.Place, placeLimit, drawable); p != "" {
 		parts = append(parts, p+"에서")
 	}
 
-	if n := cleanText(it.Note, maxNoteRunes, drawable); n != "" {
+	if n := cleanText(it.Note, noteLimit, drawable); n != "" {
 		parts = append(parts, n)
 	}
 

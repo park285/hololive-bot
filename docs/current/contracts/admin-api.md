@@ -64,3 +64,7 @@ console은 다음 생성에서 그 revision을 고정합니다.
 새 필드를 요구하는 gateway는 옛 hololive-api 응답을 502로 거절합니다.
 반대로 응답 schema에서 `required` 필드를 뺀 revision은 gateway와 Android 앱을 먼저 배포한 뒤 hololive-api를 배포합니다.
 옛 gateway는 그 필드가 빠진 새 hololive-api 응답을 502로 거절하고, 새 gateway는 옛 응답의 남는 필드를 지우고 통과시킵니다.
+
+## 멤버별 일정 카드 양식
+
+`GET /api/holo/members/{id}/schedule-card-template`는 `{"template":"classic"}` 또는 `{"template":"orbit"}`를 반환합니다. 같은 경로의 `PATCH`는 `expectedTemplate`과 `template`을 필수로 받아 현재값과 일치할 때만 저장합니다. 값이 잘못됐으면 400, 멤버가 없으면 404, 읽은 뒤 다른 관리자가 바꿨으면 409입니다. 카드 응답은 매번 해당 멤버의 저장값을 읽으며 조회 명령으로 수정할 수 없습니다.

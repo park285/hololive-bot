@@ -2,13 +2,16 @@
 package schedulecard
 
 import (
-	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"image"
 	"image/png"
-	"sync"
 	"time"
+
+	"golang.org/x/sync/semaphore"
+
+	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 )
 
 // Status는 일정 항목의 상태다.
@@ -32,6 +35,15 @@ const (
 
 // MaxItems는 카드 하나가 받는 일정 항목 수 상한이다(저장소 행 상한과 같다).
 const MaxItems = 100
+
+// Iris가 원자적으로 받는 한 앨범의 multipart 한도다.
+const (
+	MaxPages      = 8
+	MaxPageBytes  = 20 << 20
+	MaxAlbumBytes = 30 << 20
+)
+
+var ErrRenderBudget = errors.New("schedule exceeds image budget")
 
 // ErrInvalidCard는 카드 입력의 구조(판형, 주 범위, 항목 수, 상태, 시각과 원래 시각의 형식)가 계약을 어겼다는 뜻이다.
 var ErrInvalidCard = errors.New("invalid schedule card")
@@ -75,7 +87,7 @@ const supersample = 2
 var (
 	jst = time.FixedZone("JST", 9*60*60)
 
-	renderMu sync.Mutex
+	renderMu = semaphore.NewWeighted(1)
 )
 
 func (f Format) size() (w, h int, ok bool) {
@@ -93,6 +105,17 @@ func (f Format) size() (w, h int, ok bool) {
 
 // Render는 card를 format 판형으로 그려 PNG 바이트를 돌려준다. 동시에 불러도 안전하지만 렌더는 한 번에 하나씩 돈다.
 func Render(card Card, format Format) ([]byte, error) {
+	ctx := context.Background()
+	if err := renderMu.Acquire(ctx, 1); err != nil {
+		return nil, fmt.Errorf("acquire render lock: %w", err)
+	}
+
+	defer renderMu.Release(1)
+
+	return renderClassic(ctx, card, format)
+}
+
+func renderClassic(ctx context.Context, card Card, format Format) ([]byte, error) {
 	w, h, ok := format.size()
 	if !ok {
 		return nil, fmt.Errorf("%w: unknown format %q", ErrInvalidCard, format)
@@ -110,19 +133,66 @@ func Render(card Card, format Format) ([]byte, error) {
 
 	img := paint(fs, themeFor(card.ChannelID), v, w, h)
 
-	var buf bytes.Buffer
+	return encodeCard(ctx, img, MaxPageBytes)
+}
+
+// RenderPages는 고른 양식의 모든 페이지를 표시 순서대로 돌려준다.
+func RenderPages(ctx context.Context, card Card, format Format, template cardtemplate.ID) ([][]byte, error) {
+	if err := renderMu.Acquire(ctx, 1); err != nil {
+		return nil, fmt.Errorf("wait for drawing: %w", context.Cause(ctx))
+	}
+
+	defer renderMu.Release(1)
+
+	switch template {
+	case cardtemplate.Classic:
+		page, renderErr := renderClassic(ctx, card, format)
+		if renderErr != nil {
+			return nil, renderErr
+		}
+
+		return [][]byte{page}, nil
+	case cardtemplate.Orbit:
+		return renderOrbitPages(ctx, card, format)
+	default:
+		return nil, fmt.Errorf("%w: unknown template %q", ErrInvalidCard, template)
+	}
+}
+
+type pngBuffer struct {
+	buf   []byte
+	limit int
+}
+
+func (b *pngBuffer) Write(data []byte) (int, error) {
+	if len(data) > b.limit-len(b.buf) {
+		return 0, ErrRenderBudget
+	}
+
+	b.buf = append(b.buf, data...)
+
+	return len(data), nil
+}
+
+func encodeCard(ctx context.Context, img *image.RGBA, limit int) ([]byte, error) {
+	if err := context.Cause(ctx); err != nil {
+		return nil, err
+	}
+
+	buf := pngBuffer{limit: limit}
 
 	if err := png.Encode(&buf, img); err != nil {
 		return nil, fmt.Errorf("encode schedule card png: %w", err)
 	}
 
-	return buf.Bytes(), nil
+	if err := context.Cause(ctx); err != nil {
+		return nil, err
+	}
+
+	return buf.buf, nil
 }
 
 func paint(fs *fontSet, th theme, v view, w, h int) *image.RGBA {
-	renderMu.Lock()
-	defer renderMu.Unlock()
-
 	c := newCanvas(w, h, supersample, fs)
 	th(c, v)
 

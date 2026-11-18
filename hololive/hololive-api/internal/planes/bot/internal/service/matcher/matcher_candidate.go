@@ -41,6 +41,7 @@ func (mm *Matcher) candidateFromMember(member *domain.Member, source string) *ma
 	}
 
 	return &matchCandidate{
+		memberID: member.ID, photo: member.Photo, graduated: member.IsGraduated,
 		channelID:       member.ChannelID,
 		memberName:      name,
 		koreanName:      member.NameKo,
@@ -52,7 +53,12 @@ func (mm *Matcher) candidateFromMember(member *domain.Member, source string) *ma
 
 // Name은 검색 키라서 동명이인 안내의 복사 예시가 다시 같은 후보로 해석된다.
 func (c *matchCandidate) member() *domain.Member {
+	if c == nil {
+		return nil
+	}
+
 	return &domain.Member{
+		ID: c.memberID, Photo: c.photo, IsGraduated: c.graduated,
 		Name:            c.memberName,
 		NameKo:          c.koreanName,
 		ShortKoreanName: c.shortKoreanName,

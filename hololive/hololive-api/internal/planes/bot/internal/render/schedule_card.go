@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
@@ -18,6 +17,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/schedulecard"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/sharedcache"
 	"github.com/kapu/hololive-api/internal/service/scheduleposter"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
@@ -25,7 +25,7 @@ import (
 const (
 	scheduleCardFormat       = schedulecard.Format3x4
 	scheduleCardCacheLimit   = 16
-	scheduleCardCacheVersion = "v1"
+	scheduleCardCacheVersion = "v3"
 	scheduleCardCacheTTL     = 7 * 24 * time.Hour
 )
 
@@ -36,24 +36,23 @@ type scheduleCardKey struct {
 	editedAtNS    int64
 	changes       int
 	format        schedulecard.Format
+	template      cardtemplate.ID
 	memberName    string
 	photo         string
 }
 
 func (k scheduleCardKey) String() string {
-	return fmt.Sprintf("%d:%d:%d:%d:%d:%s:%q:%q", k.posterID, k.extractedAtNS, k.changedAtNS, k.editedAtNS, k.changes, k.format, k.memberName, k.photo)
+	return fmt.Sprintf("%d:%d:%d:%d:%d:%s:%s:%q:%q", k.posterID, k.extractedAtNS, k.changedAtNS, k.editedAtNS, k.changes, k.format, k.template, k.memberName, k.photo)
 }
 
-func (k scheduleCardKey) shared() (key, hash string) {
-	sum := sha256.Sum256([]byte(k.String()))
-
-	return fmt.Sprintf("bot:schedule:card:%s:%d:%s", scheduleCardCacheVersion, k.posterID, k.format), hex.EncodeToString(sum[:])
+func (k scheduleCardKey) shared() (string, [sha256.Size]byte) {
+	return fmt.Sprintf("bot:schedule:card:%s:%d:%s:%s", scheduleCardCacheVersion, k.posterID, k.format, k.template), sha256.Sum256([]byte(k.String()))
 }
 
-func newScheduleCardKey(member *domain.Member, schedule *scheduleposter.PublishedSchedule, format schedulecard.Format) scheduleCardKey {
+func newScheduleCardKey(member *domain.Member, schedule *scheduleposter.PublishedSchedule, format schedulecard.Format, template cardtemplate.ID) scheduleCardKey {
 	key := scheduleCardKey{
 		posterID: schedule.PosterID, extractedAtNS: schedule.ExtractedAt.UnixNano(), changes: len(schedule.Changes), format: format,
-		memberName: member.DisplayName(), photo: member.Photo,
+		template: template, memberName: member.DisplayName(), photo: member.Photo,
 	}
 
 	for i := range schedule.Rows {
@@ -73,54 +72,68 @@ func newScheduleCardKey(member *domain.Member, schedule *scheduleposter.Publishe
 	return key
 }
 
-// ScheduleCardRenderer는 !스케쥴 카드를 그리고 (포스터, 행 추출 시각, 게시되는 변경의 마지막 기록 시각과 개수, 마지막 윤문 시각, 판형,
-// 멤버 표시 이름과 사진)마다 한 번만 그린다. 그린 카드는 프로세스 메모리와 공유 cache에 함께 둔다.
+// ScheduleCardRenderer는 같은 포스터 개정판·판형·템플릿·멤버 표시 정보의 페이지를 한 묶음으로 캐시한다.
 type ScheduleCardRenderer struct {
 	format  schedulecard.Format
 	cache   *imageCache[scheduleCardKey]
-	shared  sharedPNGCache
+	shared  sharedRenderCache
 	flights singleflight.Group
-	draw    func(schedulecard.Card, schedulecard.Format) ([]byte, error)
+	draw    func(context.Context, schedulecard.Card, schedulecard.Format, cardtemplate.ID) ([][]byte, error)
 }
 
 // NewScheduleCardRenderer의 store가 nil이면 카드를 프로세스 메모리에만 둔다.
 func NewScheduleCardRenderer(store sharedcache.Store) *ScheduleCardRenderer {
-	r := newScheduleCardRenderer(scheduleCardFormat, scheduleCardCacheLimit, schedulecard.Render)
+	r := newScheduleCardRenderer(scheduleCardFormat, scheduleCardCacheLimit, schedulecard.RenderPages)
 
 	r.shared = newScheduleCardSharedCache(store)
 
 	return r
 }
 
-func newScheduleCardSharedCache(store sharedcache.Store) sharedPNGCache {
-	return sharedPNGCache{store: store, ttl: scheduleCardCacheTTL, event: "schedule_card_cache_failed"}
+func newScheduleCardSharedCache(store sharedcache.Store) sharedRenderCache {
+	return sharedRenderCache{store: store, ttl: scheduleCardCacheTTL, event: "schedule_card_cache_failed"}
 }
 
-func newScheduleCardRenderer(format schedulecard.Format, cacheLimit int, draw func(schedulecard.Card, schedulecard.Format) ([]byte, error)) *ScheduleCardRenderer {
+func newScheduleCardRenderer(format schedulecard.Format, cacheLimit int, draw func(context.Context, schedulecard.Card, schedulecard.Format, cardtemplate.ID) ([][]byte, error)) *ScheduleCardRenderer {
 	return &ScheduleCardRenderer{format: format, cache: newImageCache[scheduleCardKey](cacheLimit), draw: draw}
 }
 
-func (r *ScheduleCardRenderer) RenderScheduleCard(ctx context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule) ([]byte, error) {
+func (r *ScheduleCardRenderer) RenderScheduleCards(ctx context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID) ([][]byte, error) {
 	if member == nil {
 		return nil, errors.New("render schedule card: member is nil")
 	}
 
-	key := newScheduleCardKey(member, &schedule, r.format)
-	if data, ok := r.cache.get(key); ok {
-		return data, nil
+	if !template.Valid() {
+		return nil, fmt.Errorf("%w: unknown template %q", schedulecard.ErrInvalidCard, template)
 	}
 
-	// 공유 렌더는 첫 요청의 취소와 분리한다. 네트워크는 사진 예산(photoFetchBudget)이 끝을 정한다.
-	workCtx := context.WithoutCancel(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	key := newScheduleCardKey(member, &schedule, r.format, template)
+	if pages, ok := r.cachedPages(key); ok {
+		return pages, nil
+	}
+
+	// 같은 입력을 기다리는 다른 명령이 있으므로 공유 작업에는 독립된 마감 시각을 둔다.
+	parent := context.WithoutCancel(ctx)
 
 	resultCh := r.flights.DoChan(key.String(), func() (any, error) {
-		var data []byte
+		workCtx, cancel := scheduleWorkContext(parent, template)
+		defer cancel()
+
+		var pages [][]byte
 
 		// DoChan의 goroutine panic은 호출자의 복구 경계를 벗어나므로 공유 렌더 안에서 오류로 돌려준다.
 		err := panicguard.RunE(slog.Default(), panicscope.BackgroundTask, "schedule-card-render", func() error {
 			var renderErr error
 
-			data, renderErr = r.renderAndStore(workCtx, key, member, schedule)
+			pages, renderErr = r.renderAndStore(workCtx, key, member, schedule)
+
+			if renderErr != nil && errors.Is(renderErr, context.DeadlineExceeded) && workCtx.Err() != nil {
+				return context.Cause(workCtx)
+			}
 
 			return renderErr
 		})
@@ -128,39 +141,74 @@ func (r *ScheduleCardRenderer) RenderScheduleCard(ctx context.Context, member *d
 			return nil, fmt.Errorf("run shared schedule card render: %w", err)
 		}
 
-		return data, nil
+		return pages, nil
 	})
+
+	return waitSchedulePages(ctx, template, resultCh)
+}
+
+func waitSchedulePages(ctx context.Context, template cardtemplate.ID, resultCh <-chan singleflight.Result) ([][]byte, error) {
+	waitCtx := ctx
+	if deadline, ok := ctx.Deadline(); ok && template == cardtemplate.Orbit {
+		// 파일을 기록할 시간은 호출자에게 남기되 다른 대기자의 공유 작업은 취소하지 않는다.
+		var cancel context.CancelFunc
+
+		waitCtx, cancel = context.WithTimeoutCause(ctx, time.Until(deadline)*3/4, schedulecard.ErrRenderBudget)
+
+		defer cancel()
+	}
 
 	var result singleflight.Result
 
 	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf("wait for schedule card: %w", ctx.Err())
+	case <-waitCtx.Done():
+		return nil, fmt.Errorf("wait for schedule card: %w", context.Cause(waitCtx))
 	case result = <-resultCh:
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	if result.Err != nil {
 		return nil, fmt.Errorf("render schedule card: %w", result.Err)
 	}
 
-	data, ok := result.Val.([]byte)
-	if !ok || len(data) == 0 {
-		return nil, errors.New("render schedule card: missing image data")
+	pages, ok := result.Val.([][]byte)
+	if !ok || len(pages) == 0 {
+		return nil, errors.New("render schedule card: missing pages")
 	}
 
-	return bytes.Clone(data), nil
+	if result.Shared {
+		return cloneSchedulePages(pages), nil
+	}
+
+	return pages, nil
 }
 
-func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleCardKey, member *domain.Member, schedule scheduleposter.PublishedSchedule) ([]byte, error) {
-	if data, ok := r.cache.get(key); ok {
-		return data, nil
+func scheduleWorkContext(parent context.Context, template cardtemplate.ID) (context.Context, context.CancelFunc) {
+	const budget = 12 * time.Second
+
+	if template == cardtemplate.Orbit {
+		return context.WithTimeoutCause(parent, budget, schedulecard.ErrRenderBudget)
+	}
+
+	return context.WithTimeout(parent, photoFetchBudget+budget)
+}
+
+func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleCardKey, member *domain.Member, schedule scheduleposter.PublishedSchedule) ([][]byte, error) {
+	if pages, ok := r.cachedPages(key); ok {
+		return pages, nil
 	}
 
 	sharedKey, hash := key.shared()
-	if data, ok := r.shared.get(ctx, sharedKey, hash); ok {
-		r.cache.put(key, data)
+	if record, ok := r.shared.read(ctx, sharedKey); ok && len(record) > len(hash) && bytes.Equal(record[:len(hash)], hash[:]) {
+		body := record[len(hash):]
+		if pages, valid := decodeSchedulePages(body); valid {
+			r.cache.putImmutable(key, body)
 
-		return data, nil
+			return cloneSchedulePages(pages), nil
+		}
 	}
 
 	var photoURLs []string
@@ -176,18 +224,51 @@ func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleC
 
 	photo := photos.photos[member.Photo]
 
-	data, err := r.draw(newScheduleCard(member, schedule, photo), r.format)
+	card := newScheduleCard(member, schedule, photo)
+	if key.template == cardtemplate.Orbit && len(card.Items) > schedulecard.MaxItems {
+		return nil, schedulecard.ErrRenderBudget
+	}
+
+	pages, err := r.draw(ctx, card, r.format, key.template)
 	if err != nil {
 		return nil, fmt.Errorf("draw schedule card: %w", err)
 	}
 
-	// 사진이 카드의 유일한 키비주얼이고 키가 한 주 내내 같으므로, 사진을 받지 못한 카드는 캐시하지 않고 다음 요청에서 다시 받는다.
-	if photos.cachePolicy.memoryCacheable && (member.Photo == "" || photo != nil) {
-		r.cache.put(key, data)
-		r.shared.put(ctx, sharedKey, hash, data)
+	if err := validateScheduleAlbum(pages); err != nil {
+		return nil, err
 	}
 
-	return data, nil
+	// 사진이 카드의 유일한 키비주얼이고 키가 한 주 내내 같으므로, 사진을 받지 못한 카드는 캐시하지 않고 다음 요청에서 다시 받는다.
+	if photos.cachePolicy.memoryCacheable && (member.Photo == "" || photo != nil) {
+		if record := encodeSchedulePages(hash, pages); record != nil {
+			r.cache.putImmutable(key, record[len(hash):])
+			r.shared.write(ctx, sharedKey, record)
+		}
+	}
+
+	return pages, nil
+}
+
+func validateScheduleAlbum(pages [][]byte) error {
+	if len(pages) == 0 || slices.ContainsFunc(pages, func(page []byte) bool { return !isPNGData(page) }) {
+		return errors.New("draw schedule card: missing PNG page")
+	}
+
+	if len(pages) > schedulecard.MaxPages {
+		return schedulecard.ErrRenderBudget
+	}
+
+	remaining := schedulecard.MaxAlbumBytes
+
+	for _, page := range pages {
+		if len(page) > min(remaining, schedulecard.MaxPageBytes) {
+			return schedulecard.ErrRenderBudget
+		}
+
+		remaining -= len(page)
+	}
+
+	return nil
 }
 
 func newScheduleCard(member *domain.Member, schedule scheduleposter.PublishedSchedule, photo image.Image) schedulecard.Card {

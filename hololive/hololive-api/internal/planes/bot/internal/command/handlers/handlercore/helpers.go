@@ -61,11 +61,37 @@ func BlockGraduatedMember(ctx context.Context, deps *Dependencies, room, channel
 
 // 동명이인 또는 미발견인 경우 사용자-facing 응답을 보내고 ErrMemberLookupHandled를 반환한다.
 func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, room, memberName, commandExample string) (*domain.Channel, error) {
+	member, err := lookupMemberProfile(ctx, deps, room, memberName, commandExample)
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.Channel{ID: member.ChannelID, Name: member.DisplayName(), Org: &member.Org}, nil
+}
+
+func FindActiveMemberProfile(ctx context.Context, deps *Dependencies, room, memberName, commandExample string) (*domain.Member, error) {
+	member, err := lookupMemberProfile(ctx, deps, room, memberName, commandExample)
+	if err != nil {
+		return nil, err
+	}
+
+	if member.IsGraduated {
+		if err := sendGraduatedMemberBlocked(ctx, deps, room); err != nil {
+			return nil, err
+		}
+
+		return nil, ErrMemberLookupHandled
+	}
+
+	return member, nil
+}
+
+func lookupMemberProfile(ctx context.Context, deps *Dependencies, room, memberName, commandExample string) (*domain.Member, error) {
 	if err := ValidateMemberLookupDependencies(deps); err != nil {
 		return nil, fmt.Errorf("member lookup dependencies not configured: %w", err)
 	}
 
-	channel, found, err := deps.Matcher.FindBestMatchWithCandidates(ctx, memberName)
+	member, found, err := deps.Matcher.FindMemberProfile(ctx, memberName)
 	if err != nil {
 		if replyErr := replyMemberLookupFailure(ctx, deps, room, commandExample, err); replyErr != nil {
 			return nil, fmt.Errorf("reply member lookup failure: %w", replyErr)
@@ -83,11 +109,11 @@ func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, ro
 	}
 
 	// 응답을 보내지 않았으므로 handled로 보고하지 않고 matcher 불변식 위반을 오류로 드러낸다.
-	if channel == nil {
-		return nil, errors.New("member matcher returned found without channel")
+	if member == nil {
+		return nil, errors.New("member matcher returned found without member")
 	}
 
-	return channel, nil
+	return member, nil
 }
 
 func replyMemberLookupFailure(ctx context.Context, deps *Dependencies, room, commandExample string, lookupErr error) error {

@@ -13,6 +13,9 @@ var sqlAssets embed.FS
 var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
 
 var (
+	getMemberTemplateSQL         = mustSQL("get_member_template.sql")
+	lockTemplateMemberSQL        = mustSQL("lock_template_member.sql")
+	saveMemberTemplateSQL        = mustSQL("save_member_template.sql")
 	confirmSQL                   = mustSQL("confirm.sql")
 	deleteChangesSQL             = mustSQL("delete_changes.sql")
 	deleteRowsSQL                = mustSQL("delete_rows.sql")
