@@ -108,8 +108,9 @@ active_invocation() {
 
 container_generation() {
   local generation
-  generation="$(podman inspect -f '{{.Id}} {{.Image}} {{.State.StartedAt.UnixNano}} {{.State.Pid}}' "$1")" || return 1
-  [[ "$generation" =~ ^[0-9a-f]{64}\ [0-9a-f]{64}\ [1-9][0-9]*\ [1-9][0-9]*$ ]] || return 1
+  generation="$(podman inspect -f '{{.Id}} {{.Image}} {{.State.StartedAt.UnixNano}} {{.State.Pid}} {{.State.ConmonPid}}' "$1")" || return 1
+  [[ "$generation" =~ ^[0-9a-f]{64}\ [0-9a-f]{64}\ [1-9][0-9]*\ [1-9][0-9]*\ [1-9][0-9]{0,9}$ &&
+    "$(systemctl show -p MainPID --value "$1.service")" == "${generation##* }" ]] || return 1
   printf '%s\n' "$generation"
 }
 
@@ -383,10 +384,11 @@ request_slot_start() {
 }
 
 started_slot_generation() {
-  local unit="$1" since="$2" job="$3" wait_for_job="${4:-false}" current limit record invocation generation
+  local unit="$1" since="$2" job="$3" wait_for_job="${4:-false}" current budget limit record invocation generation
   if [[ "$wait_for_job" == true ]]; then
     # 기동을 다시 요청하지 않는다. 이미 기동 차단된 같은 notify job만 한 번의 기동 예산 안에서 기다린다.
-    limit=$((SECONDS + 245))
+    budget="$(stop_guard start-budget "$unit")" && [[ "$budget" =~ ^[1-9][0-9]*$ ]] || return 1
+    limit=$((SECONDS + budget + 1))
     while :; do
       current="$(systemctl show -p Job --value "$unit")" || return 1
       [[ -n "$current" ]] || break

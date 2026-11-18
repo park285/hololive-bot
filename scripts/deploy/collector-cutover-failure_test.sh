@@ -302,6 +302,18 @@ fixture_exit_status() {
   done < "$fixture_root/$unit.died"
   [[ -n "$found" ]] && printf '%s\n' "$found"
 }
+sleep() {
+  if [[ "$fixture_case" != *late_notify_client || "$1" != 0.25 || ! -e "$fixture_root/notify.pending" ]]; then
+    command sleep "$@"; return $?
+  fi
+  if [[ ! -e "$fixture_root/notify.246s" ]]; then
+    SECONDS=$((SECONDS + 246))
+    : > "$fixture_root/notify.246s"
+  else
+    rm -- "$fixture_root/notify.pending"
+    printf true > "$fixture_root/collector.running"
+  fi
+}
 guard_cli() {
   local op="$1" unit="$2" anchor="$3" inode="$4" mask="$system_unit_dir/$2" guard="$system_unit_dir/$2.guard"
   printf 'guard %s %s\n' "$op" "$unit" >> "$fixture_root/calls"
@@ -323,6 +335,9 @@ guard_cli() {
     undo-unmask)
       [[ "$(systemctl show -p LoadState --value "$unit")" == masked && ! -e "$guard" ]] || return 8
       ln -PT -- "$anchor" "$mask" && systemctl daemon-reload || return 8 ;;
+    start-budget)
+      [[ -f "$guard" && "$(<"$guard")" == "$anchor" ]] || return 8
+      if [[ "$unit" == "$collector_unit" ]]; then printf '300\n'; else printf '120\n'; fi ;;
     check|seal)
       [[ -f "$guard" && "$(<"$guard")" == "$anchor" ]] || return 8
       [[ "$unit" != "$collector_unit" || "$fixture_case" != *guard_check_failure ]] || return 8
@@ -500,9 +515,10 @@ podman() {
         *State.Health*)
           if [[ -e "$fixture_root/$kind.unhealthy" ]]; then printf 'unhealthy\n'; else printf 'healthy\n'; fi ;;
         *State.StartedAt.UnixNano*)
-          local cid=3; [[ "$kind" != issuer ]] || cid=4
+          local cid=3 conmon=42; [[ "$kind" != issuer ]] || cid=4
           if [[ -f "$fixture_root/$kind.cid" ]]; then cid="$(<"$fixture_root/$kind.cid")"; fi
-          printf '%064d %s %s 42\n' "$cid" "$(hex_of "$value")" "$(<"$fixture_root/$kind.started")"
+          if [[ -f "$fixture_root/$kind.foreign-conmon" ]]; then conmon=99; fi
+          printf '%064d %s %s 43 %d\n' "$cid" "$(hex_of "$value")" "$(<"$fixture_root/$kind.started")" "$conmon"
           if [[ "$fixture_case" == *capture_cid_changed && "$kind" == issuer ]]; then printf 9 > "$fixture_root/$kind.cid"; fi ;;
         *image.revision*) revision_of "$value" ;;
         '{{.Image}}') hex_of "$value" ;;
@@ -594,12 +610,15 @@ systemctl() {
         return 0
       fi
       case "$3" in
-        Job) [[ ! -e "$fixture_root/$kind.probe-failed" ]] || return 8; printf '\n' ;;
+        Job)
+          [[ ! -e "$fixture_root/$kind.probe-failed" ]] || return 8
+          if [[ "$kind" == collector && -e "$fixture_root/notify.pending" ]]; then printf '18\n'; else printf '\n'; fi ;;
         NRestarts)
           if [[ "$fixture_case" == *capture_restarted && "$kind" == issuer ]]; then printf '1\n'; else printf '0\n'; fi ;;
         LoadState)
           if [[ -L "$system_unit_dir/${*: -1}" || -e "$fixture_root/$kind.masked-cache" ]]; then printf 'masked\n'; else printf 'loaded\n'; fi ;;
         ActiveState)
+          if [[ "$kind" == collector && -e "$fixture_root/notify.pending" ]]; then printf 'activating\n'; return 0; fi
           if [[ "$(cat "$fixture_root/$kind.running")" == true ]]; then printf 'active\n'
           elif [[ -f "$fixture_root/$kind.exit" ]]; then printf 'failed\n'; else printf 'inactive\n'; fi ;;
         InvocationID)
@@ -673,10 +692,14 @@ systemctl() {
       if [[ "$fixture_case" == *rollback_issuer_failure && "$kind" == issuer ]]; then touch "$fixture_root/issuer.socket-failed"; fi
       if [[ "$1" == start ]]; then
         printf '%s %s\n' "$job" "$(<"$fixture_root/$kind.invocation")" > "$fixture_root/$2.start-job"
+        if [[ "$kind" == collector && "$fixture_case" == *late_notify_client ]]; then
+          : > "$fixture_root/notify.pending"; printf false > "$fixture_root/collector.running"; return 9
+        fi
         if [[ "$kind" == issuer ]]; then
           case "$fixture_case" in
             *capture_inv_changed) printf '%032x\n' 3 > "$fixture_root/$kind.invocation" ;;
             *client_unknown) return 9 ;;
+            *foreign_named_cid) printf 9 > "$fixture_root/$kind.cid"; : > "$fixture_root/$kind.foreign-conmon"; return 9 ;;
             maintenance_resume_signal_group_TERM) kill -s TERM -- "-$maintenance_owner_pid" ;;
             maintenance_resume_signal_*) kill -s "${fixture_case##*_}" "$maintenance_owner_pid" ;;
           esac
@@ -771,7 +794,7 @@ runs = [('c', case) for case in central_cases] + [('b', case) for case in (
     'transition_error_log', 'transition_wrong_endpoint', 'rollback_cross', 'rollback_masked_endpoint', 'rollback_missing_endpoint')]
 recovery_cases = (
     'receipt_signal', 'receipt_signal_changed', 'unmask_reload', 'unmask_reload_old_cid',
-    'client_unknown', 'capture_inv_changed', 'capture_cid_changed', 'capture_restarted',
+    'client_unknown', 'foreign_named_cid', 'late_notify_client', 'capture_inv_changed', 'capture_cid_changed', 'capture_restarted',
     'error_log_replaced', 'peer_probe_failure', 'error_log_guard_failure', 'error_log_evidence_failure',
     'signal_INT', 'signal_HUP', 'signal_group_TERM',
 )
@@ -1194,16 +1217,19 @@ for slot, case in runs:
                                     receipt.read_text() == 'guarded-stop-v1\n', f'{label}: cancel stops only the one launched job', result)
                             assert_held(result)
                         else:
-                            both_started = scenario.startswith('error_log_')
+                            both_started = scenario.startswith('error_log_') or scenario == 'late_notify_client'
                             issuer_stopped = both_started or scenario in ('peer_probe_failure', 'client_unknown')
                             expected_stops = ([issuer_unit] if issuer_stopped else []) + (
-                                [collector_unit] if scenario == 'error_log_evidence_failure' else [])
+                                [collector_unit] if scenario in ('error_log_evidence_failure', 'late_notify_client') else [])
                             require(starts == [held_start + u for u in ([issuer_unit, collector_unit] if both_started else [issuer_unit])] and
                                     stops == [f'systemctl stop {u}' for u in expected_stops] and
                                     (state / 'issuer.running').read_text() == ('false' if issuer_stopped else 'true') and
                                     (state / 'collector.running').read_text() == ('true' if both_started and collector_unit not in expected_stops else 'false') and
                                     not receipt.exists() and '[OUTCOME] unconfirmed:' in result.stderr,
                                     f'{label}: only independently proven first generations stopped; no receipt', result)
+                            if scenario == 'late_notify_client':
+                                require((state / 'notify.246s').is_file() and not (state / 'notify.pending').exists(),
+                                        f'{label}: tracked collector job completed after 245s within its own limit', result)
                         assert_new_manager_blocks()
                         continue
                     if scenario == 'substitution_failure':

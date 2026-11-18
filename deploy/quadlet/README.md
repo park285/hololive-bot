@@ -117,6 +117,7 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 - 프로세스 자체 종료: systemd의 자동 재시작은 위 조건을 다시 검사하지 않으므로 `Restart=no`, 빈 `RestartForceExitStatus=`가 실제 manager에 적용돼야 합니다.
 
 어느 설정도 이미 실행 중인 프로세스를 정지시키지는 않습니다. 원래 정지 명령과 정책이 그대로인 상태에서 manager가 원 invocation을 정지했는지, 같은 시간 범위에 원래 Podman CID의 종료 이벤트가 단 한 건인지 확인합니다. 기동 차단 파일이나 컨테이너 부재만으로 정상 종료를 인정하지 않습니다. 부분 실패 시 guard·anchor·복구점·journal을 보존하고 임의 삭제, `reset-failed`, DB 변경, 다음 writer 기동을 하지 않습니다.
+재개할 때 중앙과 b/c는 manager의 원래 start job·invocation 및 Podman `State.ConmonPid`와 unit `MainPID`의 일치를 확인합니다. 기동 클라이언트가 실패해도 요청을 반복하지 않습니다. 같은 job이 남았다면 가드 아래에서 해당 unit의 `TimeoutStartUSec` 범위로만 관찰합니다. 확인된 원래 writer는 정지하고, 교체된 컨테이너를 대신 정지하거나 후속 writer를 열지 않습니다.
 
 `b/c quiesce`는 자기 mask의 inode와 두 컨테이너의 부재를 함께 확인합니다. `po-broker`는 의도적으로 SIGTERM을 다시 보내므로 Podman이 143, systemd가 `failed`를 기록할 수 있습니다. 성공한 `stop` 직전에 실행 중이던 바로 그 issuer invocation이고 두 PID가 0인 경우에만 이 상태를 차단으로 인정합니다. 실패 이력을 지우거나 collector의 오류를 정상 종료로 취급하지 않습니다. 종료 영수증이 없는 기존 hold에 영수증을 소급 작성하지 않습니다. `[OUTCOME] unconfirmed`이면 DB 변경·추가 기동을 중단하고 mask·원래 journal·복구점을 보존합니다.
 정지 journal 조회가 실패하면 `[hold] stop journal unconfirmed`의 `unit`, `invocation`, `since`(epoch 마이크로초), `journal_status`를 보존합니다. 상태 0인데도 이 진단이 나오면 해당 범위에 일치한 이벤트가 없었다는 뜻입니다. 나중에 같은 이벤트를 찾더라도 원래 종료 결과나 영수증을 바꾸지 않습니다.
