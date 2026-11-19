@@ -35,12 +35,11 @@ jobs:
           path: hololive-bot
           persist-credentials: false
 
-      # postgres v1.0.1을 포함한 공개 모듈과 같은 코드의 검증된 소스를 고정한다.
-      - name: Checkout shared-go
+      - name: Checkout shared-go at postgres/v1.0.3
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: 9d61ad2dd28dacbb44ae93ed7550aa4c917e4f71 # transport/v1.0.1
+          ref: e47dac354d493c2a633f52048188c0f5911b8810
           path: shared-go
           persist-credentials: false
 
@@ -53,7 +52,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
         with:
           go-version-file: hololive-bot/go.work
           cache-dependency-path: |

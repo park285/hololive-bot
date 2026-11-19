@@ -7,6 +7,7 @@ dockerfiles=(
   "hololive/hololive-api/Dockerfile"
   "hololive/hololive-alarm-worker/Dockerfile"
   "hololive/hololive-youtube-collector/Dockerfile"
+  "hololive/hololive-youtube-collector/Dockerfile.po-sandbox"
 )
 
 module_dirs=(
