@@ -41,11 +41,11 @@ fi
 version="$(cat "$root/hololive/hololive-api/VERSION")"
 [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
 source_payload_files() {
-  local receipts digest name
+  local receipts name
   cat "$root/scripts/deploy/po-central-files.txt" || return 1
   . "$root/scripts/deploy/lib/migration-receipts.sh"
   receipts="$(migration_receipts "$root")" || return 1
-  while read -r digest name; do
+  while read -r _ name; do
     if [[ "$name" != 001_schema_epoch4_baseline.sql ]]; then
       printf 'hololive/hololive-api/scripts/migrations/%s\n' "$name" "contracts/$name"
     fi

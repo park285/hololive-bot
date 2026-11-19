@@ -25,7 +25,7 @@ migration_target_contract() {
 }
 
 migration_collector_proof() {
-  local root="$1" position="$2" receipts head name digest contract query conditions='' comma=''
+  local root="$1" position="$2" receipts head name contract query conditions='' comma=''
   case "$position" in
     applied) conditions='epoch IN (3,4)' ;;
     target) conditions='epoch IN (3,4) AND pending = 0' ;;
@@ -35,7 +35,7 @@ migration_collector_proof() {
   head="$(<"$root/hololive/hololive-api/internal/migrationrunner/queries/lineage_head.sql")" || return 1
   printf '%s\n' 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;' 'SET LOCAL search_path = pg_catalog,public,pg_temp;' 'SET LOCAL standard_conforming_strings = on;'
   printf 'PREPARE collector_head(text) AS SELECT CASE WHEN %s THEN (ARRAY[' "$conditions"
-  while read -r digest name; do
+  while read -r _ name; do
     contract="$(<"$root/hololive/hololive-api/scripts/migrations/contracts/$name")" || return 1
     query="SELECT current_setting('transaction_read_only'), coalesce((${contract%;}), false)"
     printf "%s'%s'" "$comma" "${query//\'/\'\'}"
