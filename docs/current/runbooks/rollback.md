@@ -23,11 +23,17 @@ image tag만 바꾸거나 stack-secrets master에 삭제된 settings를 다시 �
 배포 중 활성화 뒤 실패(`[OUTCOME] failed_after_activation`)도, 수용한 뒤의 rollback도 helper가 자동으로 되돌리지 않습니다.
 배포 트리의 rollback helper로 먼저 검사하고, 스키마·admission 호환성을 포함한 별도 운영 rollback 승인 뒤에만 적용합니다.
 
+보호 소스 게시 뒤에는 현재 승인된 코드 세대의 `rollback=/opt/hololive-bot/compose/app-sources/${reviewed_sha}/scripts/deploy/quadlet-rollback-service.sh`를 사용합니다. `release`는 **그 서비스에 실제 설치된 candidate**의 기존 `current/artifacts/worker-profile/releases/` 아래 배포 기록입니다. 소스만 새로 게시했거나 API만 교체한 경우에도 구 worker의 현재 pair가 image·revision·설치 unit·인증된 loaded profile과 일치하면 같은 새 도구로 구 release를 검사할 수 있습니다. 옛 소스나 실행 중이지 않은 임의 release로 내려가지 않습니다. `sudo -n "$rollback" "$release" --check` 뒤 별도 승인 시에만 `sudo -n "$rollback" "$release" --apply`를 실행합니다. 이전 image·APP_VERSION·profile·prestart를 복구하며 소스 레코드, DB, migrator drop-in은 되돌리지 않습니다. 출처나 실행 상태가 불명확하면 우회하지 않습니다.
+
+새 pair 게시 도중 중단됐지만 캡처한 구 writer가 그대로라면, 실패한 새 release의 `activation.intent`로 두 파일의 설치 상태를 대조합니다. writer 기동 요청도 진행 중 systemd job도 없음을 증명한 경우에만 별도 승인으로 이전 설정을 복구하며, 실행 중인 구 writer는 재시작하지 않습니다. `[CHECK_ONLY]`는 pair만 확인됐고 job의 결과는 불명이라는 뜻입니다. 이때 `--apply`나 재시도는 허용되지 않습니다. 실행 세대가 사라진 것만으로 그 실패를 배포 작업의 결과로 간주하지 않습니다.
+
 `--check-worker-profile`은 profile만이 아니라 같은 runtime 환경과 로컬 CA·DB 옵션도 검사합니다. Pair 검사 helper는 보존 unit의 환경 파일·사용자·읽기 전용 mount를 전달하고 네트워크를 차단합니다. Native 검사는 기존 runtime envfile과 로컬 파일을 사용합니다. 필수 파일·환경을 읽을 수 없으면 검사를 거부하며 임시 기본값이나 직접 DB 연결로 대체하지 않습니다.
 
 중앙 API·worker·collector c의 파생 env는 `quadlet-prestart.sh --render-env`가 현재 `[Service]` 환경과 정상 prestart의 매핑·검증으로 다시 만듭니다. 검사별 새 0700 디렉터리에 0600 파일을 만들고 검사 종료 시 제거하므로 `/run/hololive-bot/quadlet-env`의 누락·stale 파일을 읽거나 덮어쓰지 않습니다. API retained pair의 `APP_VERSION`은 보존한 값을 사용합니다. 다른 `EnvironmentFile`의 순서와 명시적 `Environment` 우선순위는 유지하며, 선택 변수 생략은 빈 값으로 확장하되 필수값 거부는 그대로 적용합니다.
 
 Quadlet `.volume`은 설치된 선언의 `VolumeName`과 Podman native inspect로 기존 저장 경로를 확인해 읽기 전용 bind로 전달합니다. 볼륨 생성·copy-up을 하지 않으며 idmap·UserNS를 보존합니다. 이 검사는 서비스를 시작하거나 tailnet·firewall 상태를 변경하지 않으며 원격 DB 인증·TLS 검증을 대신하지 않습니다.
+
+보호 소스 게시 전의 일반 설치에서는 아래 기존 경로를 사용합니다.
 
 ```bash
 rollback=/opt/hololive-bot/compose/current/scripts/deploy/quadlet-rollback-service.sh
@@ -43,7 +49,7 @@ sudo "$rollback" "$release" --apply
 게시하고 `daemon-reload` 뒤 unit을 재시작합니다. 그 뒤 실행 중 profile(`verify-live`)과 `NRestarts=0`을 확인합니다.
 primary fence 표식이 있으면 적용하지 않습니다. 정지해 있던 writer를 정지 상태로 되돌려야 하면 이 helper 대신
 `worker-profile-pair.py`의 `verify`·`check`·`activate`와 `daemon-reload`만 실행하고 unit을 시작하지 않습니다.
-런타임 peer는 `Wants=`라 멈춰 있는 peer를 함께 시작하므로(`hololive-api` 시작은 `hololive-alarm-worker`도 시작) 정지 상태를
+일반 설치의 런타임 peer는 `Wants=`라 멈춰 있는 peer를 함께 시작하므로(`hololive-api` 시작은 `hololive-alarm-worker`도 시작) 정지 상태를
 유지해야 하는 writer가 있으면 순서를 먼저 확인합니다. unit 정의 자체가 바뀐 revision이면 이전 revision의
 clean checkout에서 `sudo ./scripts/deploy/sync-opt-current.sh`로 배포 트리와 unit을 다시 설치한 뒤(이 도구는
 checkout의 HEAD만 배포합니다) 위 순서를 따릅니다. DB migration, schema/data rollback, secret mirror/master 복원과
