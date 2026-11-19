@@ -88,6 +88,8 @@ kapu의 `bash scripts/deploy/sync-opt-current_test.sh`는 격리 fixture에서 �
 
 후속 게시는 양쪽 실제 API·alarm-worker의 healthy 이미지, root 소유 release 영수증과 `schema-check` 종료 증거, 승인된 `50-migrator-image.conf`의 `--check`와 봉인 prestart를 요구합니다. 각 서비스의 보관 pair·설치 unit/drop-in·OCI의 실제 읽기 전용 mount와 인증된 진단의 **로드된 프로필 해시**를 검증합니다. 파일 이름이나 healthy 상태만으로 수용을 추정하지 않습니다. 설치되지 않은 인프라를 보정하거나 프로필 내용을 출력하지 않습니다.
 
+`not_activated stage=migration`은 앱이 교체되지 않았다는 뜻이지 설치 파일이 모두 원래 상태라는 뜻은 아닙니다. schema job을 요청하기 전에도 `50-migrator-image.conf`를 교체하고 `daemon-reload`할 수 있습니다. 원 요청의 release, 양쪽 job 영수증과 manager 기록, 현재 migrator의 실제 image·`--check`, 두 앱의 실행 세대와 프로필을 따로 대조합니다. 앱과 게시 세대가 다르고 `schema-check`가 없다면 정상 후속 게시의 전제는 충족되지 않습니다.
+
 `app-sources/transition-OLD-NEW/`의 `previous.actual`은 검증한 이전 소스 바이트이며 `previous.metadata`는 그 원본의 신원·권한·시각입니다. 원본 inode는 그대로 남습니다. 같은 디렉터리에 두 보호 인프라 스냅샷과 Git 변경 목록을 보존합니다. `active`가 없거나 `incomplete OLD -> NEW`이면 후보를 활성화하지 않고 원래 시도의 영수증과 양쪽 세대를 보존합니다. 자동 재시도·stamp 수리·되돌리기는 없습니다. 정상 복구도 이전 소스·이미지/프로필·원장 호환성 및 실제 서비스 상태를 대조한 별도 승인 절차로만 합니다.
 
 `active`가 유일한 게시 판정점입니다. 최초 store는 incomplete 레코드와 복구 영수증을 포함한 디렉터리 하나로 생기며, 후속 게시는 먼저 기존 `active`를 incomplete로 교체·동기화한 뒤 영수증을 공개합니다. 모든 검증과 영수증 동기화 뒤 새 SHA로 원자 rename합니다. 그 rename이 보였더라도 응답·최종 동기화 확인을 잃으면 종료 상태 `75`와 `[OUTCOME] outcome_unknown`입니다. 이때 원래 lock·active·두 봉인 세대·해당 전환 영수증/출력의 `recovery` 경로를 대조하며, 같은 설치를 다시 실행하지 않습니다.
