@@ -122,6 +122,9 @@ func acquireBaseDSN(tb testing.TB) string {
 
 	sharedBase.once.Do(func() {
 		sharedBase.dsn, sharedBase.err = provisionBaseDSN()
+		if sharedBase.err == nil {
+			sharedBase.err = provisionFixtureRoles(tb.Context(), sharedBase.dsn)
+		}
 	})
 
 	if sharedBase.err != nil {
@@ -129,6 +132,36 @@ func acquireBaseDSN(tb testing.TB) string {
 	}
 
 	return sharedBase.dsn
+}
+
+func provisionFixtureRoles(ctx context.Context, baseDSN string) error {
+	pool, err := poolForDatabase(ctx, baseDSN, "postgres")
+	if err != nil {
+		return fmt.Errorf("connect for fixture roles: %w", err)
+	}
+	defer pool.Close()
+
+	if _, err := pool.Exec(ctx, `
+		DO $fixture$
+		DECLARE name text;
+		BEGIN
+			PERFORM pg_advisory_xact_lock(hashtext('hololive-dbtest:fixture-roles'));
+			FOREACH name IN ARRAY ARRAY['hololive_runtime', 'hololive_alarm_worker', 'hololive_scraper',
+				'hololive_collector_c', 'hololive_collector_d', 'hololive_collector_unbound'] LOOP
+				IF to_regrole(name) IS NULL THEN
+					EXECUTE format('CREATE ROLE %I NOLOGIN', name);
+				END IF;
+			END LOOP;
+			IF NOT EXISTS (SELECT FROM pg_auth_members WHERE roleid = 'hololive_scraper'::regrole
+				AND member = 'hololive_collector_unbound'::regrole AND NOT inherit_option) THEN
+				GRANT hololive_scraper TO hololive_collector_unbound WITH INHERIT FALSE;
+			END IF;
+		END
+		$fixture$`); err != nil {
+		return fmt.Errorf("provision cluster fixture roles: %w", err)
+	}
+
+	return nil
 }
 
 func provisionBaseDSN() (_ string, err error) {

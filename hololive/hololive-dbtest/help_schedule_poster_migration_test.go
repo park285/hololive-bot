@@ -1,20 +1,15 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	helpSchedulePosterMigration = "011_help_schedule_poster.sql"
-	helpSchedulePosterLine      = "{{mdescape .Prefix}}스케쥴 [멤버명] - 이번 주 일정 포스터\n"
-)
+const helpSchedulePosterLine = "{{mdescape .Prefix}}스케쥴 [멤버명] - 이번 주 일정 포스터\n"
 
-func TestHelpSchedulePosterMigrationUpdatesStandardDefaultsOnly(t *testing.T) {
+func TestHelpSchedulePosterSeedDoesNotOverwriteCustomizations(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
@@ -51,17 +46,11 @@ func TestHelpSchedulePosterMigrationUpdatesStandardDefaultsOnly(t *testing.T) {
 		VALUES ('CMD_HELP', 'help-schedule-poster-override', $1, 'richtext')`, standard)
 	require.NoError(t, err)
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	migration, err := fs.ReadFile(os.DirFS(dir), helpSchedulePosterMigration)
-	require.NoError(t, err)
-
 	for range 2 {
-		require.NoError(t, applyMigrationContent(ctx, pool, helpSchedulePosterMigration, string(migration)))
+		require.NoError(t, ApplyMigrations(ctx, pool))
 	}
 
-	require.Equal(t, migrated["richtext"], load("richtext", ""))
+	require.Equal(t, standard, load("richtext", ""))
 	require.Equal(t, "사용자 지정 도움말", load("plain", ""))
 	require.Equal(t, standard, load("richtext", "help-schedule-poster-override"))
 }

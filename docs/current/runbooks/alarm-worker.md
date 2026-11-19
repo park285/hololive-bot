@@ -67,7 +67,7 @@ db-migrate가 역할을 맞추는 순간 API 비밀번호가 바뀌므로, 기�
 
 방송·선행공개·영상·쇼츠·커뮤니티·축하·X 스페이스 알림은 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 렌더 정책에만 쓰이지만, worker도 공통 설정 로딩에서 값 형식을 검증합니다. worker는 사용자 template/채널 override에 직접 들어 있는 패딩과 저장된 예약 `PreRenderedMessage`, 재전송 요청의 본문·route·ID를 보존합니다. 로컬 검증은 실제 DB template→fake Iris 최종 payload의 항목·URL·직접 패딩 보존을 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
 
-기본 본문은 방 유형별 `plain`·`richtext` 두 변형이며 epoch-3 baseline(`001_schema_epoch3_baseline.sql`)에 들어 있습니다. 표준 전역 기본값은 `plain`에 평문 본문, `richtext`에 RichText 본문을 둡니다. 사용자 지정 기본값과 채널 override는 두 변형에 같은 본문을 두어 표시를 유지하고, 이미 저장된 요청은 변경하지 않습니다. 렌더러가 변형을 골라 조회하므로 API·워커는 같은 창에서 교체합니다. API만 먼저 바뀌면 구 워커가 `rich_text_message`를 무시해 오픈채팅 예약 알림이 `plain` 본문으로 나갑니다. 설정 마스터 변경·좁은 동기화는 `stack-platform-ops`, 이미지·프로필 쌍과 no-build 재생성은 `hololive-bot-ops` 절차를 사용합니다.
+기본 본문은 방 유형별 `plain`·`richtext` 두 변형이며 epoch-4 baseline(`001_schema_epoch4_baseline.sql`)에 들어 있습니다. 표준 전역 기본값은 `plain`에 평문 본문, `richtext`에 RichText 본문을 둡니다. 사용자 지정 기본값과 채널 override는 두 변형에 같은 본문을 두어 표시를 유지하고, 이미 저장된 요청은 변경하지 않습니다. 렌더러가 변형을 골라 조회하므로 API·워커는 같은 창에서 교체합니다. API만 먼저 바뀌면 구 워커가 `rich_text_message`를 무시해 오픈채팅 예약 알림이 `plain` 본문으로 나갑니다. 설정 마스터 변경·좁은 동기화는 `stack-platform-ops`, 이미지·프로필 쌍과 no-build 재생성은 `hololive-bot-ops` 절차를 사용합니다.
 
 이전 Karing 전송의 `outcome_unknown`이나 `SENDING` 기록은 텍스트 전환을 이유로 재발송하지 않습니다. 기존 quarantine 및 stale sweeper 계약을 유지합니다. T18(2026-09-26)에서 v1·v3 원장의 Karing 비종단 행이 0건임을 확인했습니다.
 

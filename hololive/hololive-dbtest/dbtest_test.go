@@ -1,6 +1,7 @@
 package dbtest
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -40,6 +41,43 @@ func TestApplyMigrations_IsIdempotent(t *testing.T) {
 	if err := ApplyMigrations(ctx, pool); err != nil {
 		t.Fatalf("reapply migrations: %v", err)
 	}
+}
+
+func TestTemplateReplayAfterCollectorSessionSetup(t *testing.T) {
+	t.Parallel()
+
+	replay := NewPool(t)
+
+	var rolesReady bool
+
+	if err := replay.QueryRow(t.Context(), `SELECT to_regrole('hololive_runtime') IS NOT NULL
+		AND to_regrole('hololive_alarm_worker') IS NOT NULL AND to_regrole('hololive_scraper') IS NOT NULL`).Scan(&rolesReady); err != nil {
+		t.Fatal(err)
+	}
+
+	if !rolesReady {
+		t.Fatal("template clone is missing epoch 4 application roles before collector session setup")
+	}
+
+	collector := NewPool(t)
+	NewCollectorSessionPool(t, collector, "hololive_scraper")
+
+	if err := ApplyMigrations(t.Context(), replay); err != nil {
+		t.Fatalf("replay sibling of collector database: %v", err)
+	}
+
+	err := ApplyMigrations(t.Context(), collector)
+	if err == nil || !strings.Contains(err.Error(), "physical contract for "+epoch4BaselineMigration+" is not satisfied") {
+		t.Fatalf("replay clone with broad scraper grants = %v, want physical contract rejection", err)
+	}
+}
+
+func TestBaselineWithoutApplicationRoles(t *testing.T) {
+	t.Parallel()
+
+	pool := NewBlankPool(t)
+	applyRoleMigrations(t, pool, observationGrantRoles{}, "")
+	applyRoleMigrations(t, pool, observationGrantRoles{}, "")
 }
 
 func TestNewPool_RestoresBaseSchema(t *testing.T) {

@@ -104,6 +104,8 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 
 261은 target의 `valid_until` 열을 제거하므로 기존 API/collector binary와 혼합 운용할 수 없습니다. 실제 적용은 별도 승인된 drain → 호환 API/collector와 migration 261의 조정된 전환 → 재개 순서가 필요합니다. 과거 259/260을 수정하거나 구 binary만 재기동하는 rollback은 하지 않습니다.
 
+트래픽 비교의 구 함수는 `v19.2.1`(`efafcf400`)의 `001_schema_epoch3_baseline.sql`에서 가져옵니다. 테스트가 Git 객체를 읽어 비교 전용 빈 DB에 설치하므로 해당 커밋을 포함한 checkout이 필요합니다. 현행 epoch 4 설치본을 양쪽에 사용하거나 과거 SQL을 제품 이미지에 포함하지 않습니다.
+
 성능 검증은 격리 PG의 `joblease.TestProjectionCandidateTraffic`으로 epoch-3 baseline의 힌트 도입 전 함수와 현재 함수에 같은 620/1,240/10,000 target을 넣어 비교합니다. 양쪽 모두 독립 pool 4개의 동시 120-cycle·동일 예열·header 조회를 사용합니다. 신규·not-due·동일 due·혼합·서로 다른 due 시각·매 cycle eligibility 변경에서 `Jobs`/`Truncated` 일치를 검사하고 실제 수신·송신 byte를 기록합니다. 대상 수와 무관하게 이 fixture의 AP당 cycle 전송은 header·최대 11개 sentinel 포함 후보의 8 KiB 예산 안에 있어야 합니다. 다음 due 열을 추가했으므로 이전 함수 대비 byte 비증가는 계약이 아닙니다. PREPARE/EXECUTE의 custom/generic 카운터와 EXPLAIN 실행시간·buffer I/O도 기록합니다. `paired_elapsed`는 양쪽 실행을 합친 시간이며 개별 AP/버전 지연 비교값이 아닙니다. 이 합성 결과는 운영 CPU/RSS/TLS 지연이나 보존 기간 전체의 관측을 대신하지 않습니다.
 
 `collection.queue.max_age`의 fixed 상한을 넘긴 로컬 항목은 dequeue 시 lease 취득 전에 폐기합니다. stale discard·경고를 기록하고 queue 표식을 해제한 뒤 다음 항목을 계속 처리하며, DB terminal이나 즉시 재시도는 만들지 않습니다. Collector `internal/config`는 CLI 사전 점검과 runtime에 같은 profile 수치 정책·환경 관계·무접속 DB 옵션 검증을 적용합니다.

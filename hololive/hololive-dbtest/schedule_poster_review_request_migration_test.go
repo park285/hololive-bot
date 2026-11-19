@@ -1,17 +1,13 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-const schedulePosterReviewRequestMigration = "017_schedule_poster_review_request.sql"
-
-func TestSchedulePosterReviewRequestMigrationBackfillsCreatedAt(t *testing.T) {
+func TestSchedulePosterReviewRequestBaselineDoesNotChangeReviewTimes(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
@@ -30,21 +26,15 @@ func TestSchedulePosterReviewRequestMigrationBackfillsCreatedAt(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT review_requested_at FROM schedule_posters WHERE id = 1`).Scan(&requested))
 	require.WithinDuration(t, time.Now(), requested, time.Minute, "기본값이라 자동 검토를 모르는 삽입은 바로 관리자에게 넘긴 행이 된다")
 
-	_, err = pool.Exec(ctx, `ALTER TABLE schedule_posters ALTER COLUMN review_requested_at DROP DEFAULT`)
-	require.NoError(t, err)
-
 	_, err = pool.Exec(ctx, `UPDATE schedule_posters SET review_requested_at = NULL WHERE id = 1`)
 	require.NoError(t, err)
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
+	require.NoError(t, ApplyMigrations(ctx, pool))
 
-	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterReviewRequestMigration)
-	require.NoError(t, err)
-	require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterReviewRequestMigration, string(migration)))
+	var unset bool
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT review_requested_at FROM schedule_posters WHERE id = 1`).Scan(&requested))
-	require.True(t, requested.Equal(created), "기존 행은 생성 시각으로 채워 Console 최신 후보가 배포로 바뀌지 않는다")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT review_requested_at IS NULL FROM schedule_posters WHERE id = 1`).Scan(&unset))
+	require.True(t, unset)
 
 	_, err = pool.Exec(ctx, insert, 2, created)
 	require.NoError(t, err)

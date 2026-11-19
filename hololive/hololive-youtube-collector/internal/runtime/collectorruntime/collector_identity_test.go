@@ -224,10 +224,6 @@ func TestUnboundScraperSessionsCannotWrite(t *testing.T) {
 	legacy := dbtest.NewCollectorSessionPool(t, pool, "hololive_scraper")
 	unbound := dbtest.NewCollectorSessionPool(t, pool, "hololive_collector_unbound")
 
-	if _, err := pool.Exec(ctx, `GRANT hololive_scraper TO hololive_collector_unbound WITH INHERIT FALSE`); err != nil {
-		t.Fatal(err)
-	}
-
 	spec := metadataSpec()
 
 	for name, session := range map[string]*pgxpool.Pool{"legacy scraper": legacy, "unbound group member": unbound} {

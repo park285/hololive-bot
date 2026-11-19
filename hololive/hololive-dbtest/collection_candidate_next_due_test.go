@@ -2,8 +2,6 @@ package dbtest
 
 import (
 	"database/sql"
-	"io/fs"
-	"os"
 	"testing"
 	"time"
 
@@ -11,10 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	candidateNextDueMigration = "005_youtube_collection_candidate_next_due.sql"
-	candidateHintJobKey       = "collector:youtubejs:youtubejs_content:channel:a"
-)
+const candidateHintJobKey = "collector:youtubejs:youtubejs_content:channel:a"
 
 const subjectHintQuery = `SELECT is_current,subject_key,min_interval_ms,max_interval_ms,next_due_at FROM public.youtube_collection_job_candidates(
 	101, ARRAY['video_list','shorts_list'], 'youtubejs', 'youtubejs_content', $1::text[], 1)`
@@ -186,14 +181,7 @@ func TestCollectionCandidateNextDueAcrossBundles(t *testing.T) {
 func TestCollectionCandidateNextDueMigrationPreservesPreparedReaders(t *testing.T) {
 	t.Parallel()
 
-	pool := NewBlankPool(t)
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-	require.NoError(t, ensureDBTestMigrationLedger(t.Context(), pool))
-	require.NoError(t, applyManifestMigration(t.Context(), pool, dir, epoch3BaselineMigration))
-
-	migration, err := fs.ReadFile(os.DirFS(dir), candidateNextDueMigration)
-	require.NoError(t, err)
+	pool := NewPool(t)
 
 	seedCollectionBundleHeaders(t, pool)
 	seedCollectionBundleTargets(t, pool)
@@ -226,7 +214,7 @@ func TestCollectionCandidateNextDueMigrationPreservesPreparedReaders(t *testing.
 	}
 
 	for range 2 {
-		require.NoError(t, applyMigrationContent(t.Context(), pool, candidateNextDueMigration, string(migration)))
+		require.NoError(t, ApplyMigrations(t.Context(), pool))
 
 		for i, name := range []string{"old_subject", "old_global"} {
 			rows, queryErr := conn.Query(t.Context(), name)

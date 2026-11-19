@@ -77,6 +77,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
+          fetch-depth: ${{ matrix.module == 'hololive/hololive-youtube-collector' && '0' || '1' }}
           persist-credentials: false
 
       - name: Setup Go

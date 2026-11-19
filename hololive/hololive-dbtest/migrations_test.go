@@ -1,164 +1,37 @@
 package dbtest
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/v2/pkg/dbmigrate"
+	"github.com/stretchr/testify/require"
 )
 
-func TestApplyMigrationsRollsBackBeginWrappedFileOnFailure(t *testing.T) {
-	dir := t.TempDir()
-	writeMigrationFixture(t, dir, dbmigrate.ManifestName, "001 001_tx.sql\n")
-	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE tx_atomic_probe(id integer);\nSELECT 1/0;\nCOMMIT;\n")
-	t.Setenv(migrationsDirEnv, dir)
-
-	pool := NewBlankPool(t)
-	ctx := t.Context()
-
-	if err := ApplyMigrations(ctx, pool); err == nil {
-		t.Fatal("ApplyMigrations() error = nil, want failure from statement inside BEGIN block")
-	}
-
-	var exists bool
-
-	if err := pool.QueryRow(ctx, "SELECT to_regclass('tx_atomic_probe') IS NOT NULL").Scan(&exists); err != nil {
-		t.Fatalf("check tx_atomic_probe: %v", err)
-	}
-
-	if exists {
-		t.Fatal("tx_atomic_probe present: BEGIN-wrapped migration failure must roll back the whole block")
-	}
-}
-
-func TestApplyMigrationsAppliesBeginWrappedFileWithTrailingAutocommit(t *testing.T) {
-	dir := t.TempDir()
-	writeMigrationFixture(t, dir, dbmigrate.ManifestName, "001 001_tx.sql\n")
-	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE tx_inside_ran(id integer);\nCOMMIT;\nCREATE TABLE tx_after_ran(id integer);\n")
-	t.Setenv(migrationsDirEnv, dir)
-
-	pool := NewBlankPool(t)
-	ctx := t.Context()
-
-	if err := ApplyMigrations(ctx, pool); err != nil {
-		t.Fatalf("ApplyMigrations() error = %v", err)
-	}
-
-	for _, table := range []string{"tx_inside_ran", "tx_after_ran"} {
-		var exists bool
-
-		if err := pool.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists); err != nil {
-			t.Fatalf("check %s: %v", table, err)
-		}
-
-		if !exists {
-			t.Fatalf("table %s not present after BEGIN-wrapped migration", table)
-		}
-	}
-}
-
-func TestApplyMigrationsCanRerunAfterTrailingAutocommitFailure(t *testing.T) {
-	dir := t.TempDir()
-	writeMigrationFixture(t, dir, dbmigrate.ManifestName, "001 001_tx.sql\n")
-	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE dbtest_committed_probe(id integer);\nCOMMIT;\nSELECT 1 FROM dbtest_missing_probe;\n")
-	t.Setenv(migrationsDirEnv, dir)
-
-	pool := NewBlankPool(t)
-	ctx := t.Context()
-
-	if err := ApplyMigrations(ctx, pool); err == nil {
-		t.Fatal("ApplyMigrations() error = nil, want trailing autocommit failure")
-	}
-
-	assertMigrationTablePresent(ctx, t, pool, "dbtest_committed_probe")
-	assertMigrationTableAbsent(ctx, t, pool, "dbtest_tail_ran")
-
-	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE IF NOT EXISTS dbtest_committed_probe(id integer);\nCOMMIT;\nCREATE TABLE dbtest_tail_ran(id integer);\n")
-
-	if err := ApplyMigrations(ctx, pool); err != nil {
-		t.Fatalf("ApplyMigrations() rerun error = %v", err)
-	}
-
-	assertMigrationTablePresent(ctx, t, pool, "dbtest_committed_probe")
-	assertMigrationTablePresent(ctx, t, pool, "dbtest_tail_ran")
-}
-
-func TestMigrationFingerprintRejectsManifestTheRunnerRejects(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		manifest string
-	}{
-		{name: "필드 초과", manifest: "001 extra 001_a.sql\n"},
-		{name: "순서 중복", manifest: "001 001_a.sql\n001 002_b.sql\n"},
-		{name: "순서 역전", manifest: "002 001_a.sql\n001 002_b.sql\n"},
-		{name: "파일명 중복", manifest: "001 001_a.sql\n002 001_a.sql\n"},
+func TestBaselineRejectsUncommittedOrSplitFiles(t *testing.T) {
+	for name, sql := range map[string]string{
+		"late failure":             "BEGIN; CREATE TABLE probe(id int); SELECT 1/0; COMMIT;",
+		"trailing autocommit":      "BEGIN; CREATE TABLE probe(id int); COMMIT; SELECT 1;",
+		"concurrent index":         "BEGIN; CREATE TABLE probe(id int); CREATE INDEX CONCURRENTLY probe_idx ON probe(id); COMMIT;",
+		"global constraint timing": "BEGIN; CREATE TABLE probe(id int); SET CONSTRAINTS ALL DEFERRED; COMMIT;",
+		"transaction detachment":   "BEGIN; CREATE TABLE probe(id int); PREPARE TRANSACTION 'fixture_migration'; COMMIT;",
+		"missing commit":           "BEGIN; CREATE TABLE probe(id int);",
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			writeMigrationFixture(t, dir, dbmigrate.ManifestName, tc.manifest)
-			writeMigrationFixture(t, dir, "001_a.sql", "SELECT 1;\n")
-			writeMigrationFixture(t, dir, "002_b.sql", "SELECT 1;\n")
 			t.Setenv(migrationsDirEnv, dir)
+			require.NoError(t, os.Mkdir(filepath.Join(dir, "contracts"), 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "contracts", epoch4BaselineMigration), []byte("SELECT to_regclass('public.probe') IS NOT NULL"), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.txt"), []byte("001 "+epoch4BaselineMigration+"\n"), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, epoch4BaselineMigration), []byte(sql), 0o600))
 
-			if fingerprint, err := migrationFingerprint(); err == nil {
-				t.Fatalf("migrationFingerprint() = %q, want manifest parse error", fingerprint)
-			}
+			pool := NewBlankPool(t)
+			require.Error(t, ApplyMigrations(t.Context(), pool))
+
+			var clean bool
+
+			require.NoError(t, pool.QueryRow(t.Context(), `SELECT to_regclass('probe') IS NULL AND to_regnamespace('hololive_dbtest_internal') IS NULL`).Scan(&clean))
+			require.True(t, clean)
 		})
-	}
-}
-
-func TestMigrationFingerprintAcceptsRunnerManifest(t *testing.T) {
-	dir := t.TempDir()
-	writeMigrationFixture(t, dir, dbmigrate.ManifestName, "# comment\n001 001_a.sql\n\n002 002_b.sql\n")
-	writeMigrationFixture(t, dir, "001_a.sql", "SELECT 1;\n")
-	writeMigrationFixture(t, dir, "002_b.sql", "SELECT 2;\n")
-	t.Setenv(migrationsDirEnv, dir)
-
-	fingerprint, err := migrationFingerprint()
-	if err != nil {
-		t.Fatalf("migrationFingerprint() error = %v", err)
-	}
-
-	if len(fingerprint) != 64 {
-		t.Fatalf("migrationFingerprint() = %q, want sha256 hex", fingerprint)
-	}
-}
-
-func assertMigrationTablePresent(ctx context.Context, t *testing.T, pool *pgxpool.Pool, name string) {
-	t.Helper()
-
-	if !migrationTableExists(ctx, t, pool, name) {
-		t.Fatalf("table %s missing", name)
-	}
-}
-
-func assertMigrationTableAbsent(ctx context.Context, t *testing.T, pool *pgxpool.Pool, name string) {
-	t.Helper()
-
-	if migrationTableExists(ctx, t, pool, name) {
-		t.Fatalf("table %s present", name)
-	}
-}
-
-func migrationTableExists(ctx context.Context, t *testing.T, pool *pgxpool.Pool, name string) bool {
-	t.Helper()
-
-	var exists bool
-
-	if err := pool.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", name).Scan(&exists); err != nil {
-		t.Fatalf("check table %s: %v", name, err)
-	}
-
-	return exists
-}
-
-func writeMigrationFixture(t *testing.T, dir, name, content string) {
-	t.Helper()
-
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
-		t.Fatalf("write fixture %s: %v", name, err)
 	}
 }

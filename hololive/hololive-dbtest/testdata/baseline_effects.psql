@@ -1,0 +1,13 @@
+SELECT format('SELECT %L || ''|'' || row_json FROM (SELECT (SELECT jsonb_object_agg(e.key, CASE WHEN e.key IN (''created_at'',''updated_at'') AND jsonb_typeof(e.value) = ''string'' THEN CASE WHEN (e.value #>> ''{}'')::timestamptz BETWEEN %L::timestamptz AND clock_timestamp() THEN to_jsonb(''<installation time>''::text) ELSE e.value END ELSE e.value END) FROM jsonb_each(to_jsonb(t)) e)::text AS row_json FROM %I.%I t) rows ORDER BY row_json COLLATE "C"',
+              c.relname, :'started', n.nspname, c.relname)
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname NOT IN ('schema_migrations','schema_migration_checksums')
+ORDER BY c.relname COLLATE "C" \gexec
+SELECT format('SELECT %L, last_value, is_called FROM %I.%I', c.relname, n.nspname, c.relname)
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'S'
+ORDER BY c.relname COLLATE "C" \gexec
+SELECT coalesce(r.rolname,''), setting FROM pg_db_role_setting s LEFT JOIN pg_roles r ON r.oid=s.setrole
+CROSS JOIN LATERAL unnest(s.setconfig) setting WHERE s.setdatabase = (SELECT oid FROM pg_database WHERE datname=current_database())
+ORDER BY 1,2;
+SELECT datdba::regrole,datacl FROM pg_database WHERE datname=current_database();
+SELECT extname,extversion,extowner::regrole FROM pg_extension ORDER BY 1;

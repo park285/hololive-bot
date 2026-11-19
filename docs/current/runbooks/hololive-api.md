@@ -70,7 +70,7 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 | `YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS` | `youtube_live_absence_slots` 보존 기간; 소스 기본 14일, production에서는 양수 | production YouTube plane |
 | `YOUTUBE_PLANE_RETENTION_CONTENT_ABSENCE_SLOTS_DAYS` | `youtube_content_absence_slots` 보존 기간; 소스 기본 14일, production에서는 양수 | production YouTube plane |
 
-RichText 활성화는 코드·DB 배포와 별도입니다. 기본 템플릿은 방 유형별 `plain`·`richtext` 변형으로 나뉘어 있고(epoch-3 baseline 포함), bot plane은 요청마다 방 유형을 한 번 판정해 같은 값으로 변형과 발송 경로를 고릅니다. 변형별 본문은 표준 기본 템플릿만 다르고, 사용자 지정 기본값·채널 override는 같은 본문을 두 변형에 두며 저장된 답변은 그대로입니다. API와 알람 워커는 같은 창에서 함께 교체합니다. API와 워커를 검증된 이미지·프로필 쌍으로 재생성한 뒤 양쪽 플래그, 신규 `richtext` 요청과 handoff를 확인합니다. `mdsafe`는 표시용 동적 필드를 한 번 보호하며 전체보기 패딩과 frozen 요청에는 재적용하지 않습니다.
+RichText 활성화는 코드·DB 배포와 별도입니다. 기본 템플릿은 방 유형별 `plain`·`richtext` 변형으로 나뉘어 있고(epoch-4 baseline 포함), bot plane은 요청마다 방 유형을 한 번 판정해 같은 값으로 변형과 발송 경로를 고릅니다. 변형별 본문은 표준 기본 템플릿만 다르고, 사용자 지정 기본값·채널 override는 같은 본문을 두 변형에 두며 저장된 답변은 그대로입니다. API와 알람 워커는 같은 창에서 함께 교체합니다. API와 워커를 검증된 이미지·프로필 쌍으로 재생성한 뒤 양쪽 플래그, 신규 `richtext` 요청과 handoff를 확인합니다. `mdsafe`는 표시용 동적 필드를 한 번 보호하며 전체보기 패딩과 frozen 요청에는 재적용하지 않습니다.
 
 ## YouTube 관측 보존
 
@@ -197,8 +197,8 @@ curl -s --config <(printf 'header "X-API-Key: %s"\n' "$(sudo podman exec hololiv
 - 슬롯을 잡는 claim·consume·retry·dead letter·live end·projection refresh·retention은 슬롯 대기와 실행을 합쳐 `TransactionTimeout`(기본 10초) 안에 끝나야 합니다. 넘으면 슬롯을 돌려주고 `context deadline exceeded` 오류를 남기며, 각 loop는 기존 분류대로 오류 로그를 남기고 다음 주기를 계속합니다. 기동 중 첫 projection refresh가 이 시한을 넘으면 YouTube plane 생성이 실패합니다. startup claim probe와 queue·collection 관측 조회는 이 시한을 쓰지 않습니다.
 - `hololive_youtube_plane_consume_total{result}`, `hololive_youtube_plane_retention_errors_total{table}`, `hololive_youtube_plane_retention_deleted_total{table}`는 알려진 라벨 값을 기동 때 0으로 노출하므로, 재시작 뒤 첫 retry·dead letter·retention 실패도 `increase()`에 잡힙니다.
 - YouTube plane health component `youtube`의 `degraded`는 두 원인의 OR입니다. 하나는 target projection refresh 실패이고, 다음 refresh 성공이 이 원인만 풀어 줍니다. 다른 하나는 `source_observation_queue`의 `DEAD_LETTER` 행 존재입니다. dead letter가 기록되면 바로 켜지고, 5초 주기 queue 관측이 `DEAD_LETTER` 행이 없다고 볼 때만 풀립니다(replay 또는 DEAD_LETTER 보존 14일 뒤 retention 삭제). 관측 조회가 실패하면 직전 판정을 유지합니다. 재시작 뒤에도 남은 `DEAD_LETTER` 행은 첫 관측에서 다시 `degraded`로 드러납니다. `degraded`는 process readiness를 실패시키지 않습니다.
-- `youtube_live_runtime_state`는 writer가 같은 트랜잭션 끝에서 명시적으로 갱신합니다(epoch-3 baseline 포함). 정합성 점검은 `scripts/maintenance/queries/live_runtime_state_drift.sql`(누락·잉여·값 변경 행 수)이며 정상값은 모두 0입니다. 0이 아니면 해당 영상 key를 빠뜨린 writer 경로가 있다는 뜻이므로 exclusive 전역 잠금 아래 변경 key로 `refresh_youtube_live_runtime_state`를 호출해 맞추고 경로를 고칩니다.
-  - 원본 트리거 제거와 writer의 명시 갱신은 epoch-3 baseline(`001_schema_epoch3_baseline.sql`)에 포함되어 있어 별도 선행 migration이 없습니다. 명시 갱신을 모르는 이전 API 이미지로만 되돌리는 롤백은 지원하지 않으며(트리거가 없어 수명 모델이 갱신되지 않음) 복구는 수정 이미지로 전진합니다.
+- `youtube_live_runtime_state`는 writer가 같은 트랜잭션 끝에서 명시적으로 갱신합니다(epoch-4 baseline 포함). 정합성 점검은 `scripts/maintenance/queries/live_runtime_state_drift.sql`(누락·잉여·값 변경 행 수)이며 정상값은 모두 0입니다. 0이 아니면 해당 영상 key를 빠뜨린 writer 경로가 있다는 뜻이므로 exclusive 전역 잠금 아래 변경 key로 `refresh_youtube_live_runtime_state`를 호출해 맞추고 경로를 고칩니다.
+  - 원본 트리거 제거와 writer의 명시 갱신은 epoch-4 baseline(`001_schema_epoch4_baseline.sql`)에 포함되어 있어 별도 선행 migration이 없습니다. 명시 갱신을 모르는 이전 API 이미지로만 되돌리는 롤백은 지원하지 않으며(트리거가 없어 수명 모델이 갱신되지 않음) 복구는 수정 이미지로 전진합니다.
   - 수동 검토 영수증(`record_youtube_live_review`)은 READ COMMITTED 트랜잭션에서 실행합니다. SERIALIZABLE·REPEATABLE READ에서는 `live review requires read committed transaction`으로 거절됩니다.
 
 ### 외부 HTTP 호출 지표
@@ -317,12 +317,10 @@ sudo -n env MIGRATIONS_DIR=/opt/hololive-bot/compose/current/hololive/hololive-a
 
 `discarded`는 재발송 권한을 만들지 않고 terminal retention을 따릅니다. 실행 전에는 반드시 같은 `iris_request_id`의 최신 `/reply-status`를 조회하고, `queued`/`preparing`/`prepared`/`sending`이면 진행 중인 handoff가 끝날 때까지 보류합니다. `failed`에서 재발송이 필요하다고 판단한 경우에는 discard가 아니라 위 replay artifact와 144시간 cutoff를 사용합니다.
 
-Durable bot admission 스키마(`bot_webhook_inbox`·`bot_reply_outbox`)는 epoch-3 baseline에 포함되어 있어 별도 선행 migration이 없습니다. 실행 순서의 SSOT는 filename 정렬이 아니라 `hololive/hololive-api/scripts/migrations/manifest.txt`입니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. epoch-3 baseline은 현행 terminal payload CHECK를 유지하며 구 status-only writer를 위한 scrub trigger는 제공하지 않습니다.
+Durable bot admission 스키마(`bot_webhook_inbox`·`bot_reply_outbox`)는 epoch-4 baseline에 포함되어 있어 별도 선행 migration이 없습니다. 신규 설치에는 내장된 기준선 SQL 하나만 실행합니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. epoch-4 baseline은 현행 terminal payload CHECK를 유지하며 구 status-only writer를 위한 scrub trigger는 제공하지 않습니다.
 현행 네 writer가 종결 payload를 직접 비워야 합니다. 스키마 변경은 새 forward migration으로만 진행합니다.
 
-기존 DB 전환에는 epoch-2 372 head의 233개 파일명·sha256 원장이 정확히 필요합니다. 신규 이미지의 `db-migrate`가
-원장을 epoch-3로 원자 전환한 뒤 `002_drop_x_space_login_attempts.sql`을 적용합니다. 부분 원장이나 알 수 없는
-checksum은 먼저 이전 릴리스로 복구해야 합니다. [migration 규약](../../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md)을 따릅니다.
+기존 DB는 032 완료 원본 32쌍이나 신규 실적용 1쌍만 수용합니다. 부분 DB를 추정하거나 원장을 교체하지 않습니다. [migration 규약](../../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md)을 따릅니다.
 
 DB maintenance 명령은 libpq service와 password file로 실행하며 운영 쓰기에는 별도 승인이 필요합니다.
 `PGPASSWORD`나 connection URI 대신 file-only 접속을 사용하고 `psql -w`로 대화형 입력을 막습니다.

@@ -81,8 +81,7 @@ SDK의 기존 `SendMarkdown`·`Sender`·`BotClient` 계약은 변경하지 않�
 - bot outbox와 alarm/notification/YouTube 원장은 새 요청에 `richtext`를 저장합니다. 저장된 `text`·`richtext` 요청은
   저장된 본문·타입·thread·clientRequestId로만 재생합니다. `markdown` 읽기 경로는 운영 원장 0행을 확인한 뒤 #763에서
   제거했으며, 남은 `markdown` 요청은 Iris를 호출하지 않고 지원하지 않는 형식으로 거절됩니다.
-- writer 배포 전에 migration `001_schema_epoch3_baseline.sql`을
-  적용합니다. 기존 행은 갱신하지 않습니다. 새 RichText 요청 저장 후에는 해당 kind/route를 모르는 구형 writer로
+- writer 배포 전 032까지 완료된 epoch-3 또는 epoch-4 기준선의 원장과 실제 스키마를 확인합니다. 기존 행은 갱신하지 않습니다. 새 RichText 요청 저장 후에는 해당 kind/route를 모르는 구형 writer로
   롤백하지 않고 forward-fix합니다. 로컬 검증 완료와 운영 적용 여부는 별개입니다.
 
 ## Tests

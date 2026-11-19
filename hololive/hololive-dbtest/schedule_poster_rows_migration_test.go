@@ -1,16 +1,12 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
-
-const schedulePosterRowsMigration = "019_schedule_poster_rows.sql"
 
 func newSchedulePosterRowsPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -24,12 +20,7 @@ func newSchedulePosterRowsPool(t *testing.T) *pgxpool.Pool {
 		       (2, 'UCROQtXcp2loQEmvpe5rhJzQ', '1', 'https://x.com/i/status/2', 'https://pbs.twimg.com/media/b.jpg', now(), '', 'pending_review', NULL, NULL)`)
 	require.NoError(t, err)
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterRowsMigration)
-	require.NoError(t, err)
-	require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterRowsMigration, string(migration)), "다시 적용해도 실패하지 않는다")
+	require.NoError(t, ApplyMigrations(ctx, pool), "다시 적용해도 실패하지 않는다")
 
 	return pool
 }
@@ -74,7 +65,7 @@ func TestSchedulePosterRowsMigrationAddsTheAliasOnceAndPendsConfirmedPosters(t *
 	require.NoError(t, err, "행 열을 모르는 이전 image도 행을 저장한 확정본을 거절할 수 있다")
 }
 
-func TestSchedulePosterRowsMigrationAddsPosterNicknamesAsJapaneseAliasesOnce(t *testing.T) {
+func TestSchedulePosterRowsBaselinePreservesOperatorNicknames(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
@@ -85,14 +76,8 @@ func TestSchedulePosterRowsMigrationAddsPosterNicknamesAsJapaneseAliasesOnce(t *
 		       (9201, 'nerissa-ravencroft', 'Nerissa Ravencroft', '네리사', '{"ja": ["Nerissa Ravencroft hololive-EN", "Rissa"], "ko": ["네리사"]}', 'Hololive', 'holodex')`)
 	require.NoError(t, err)
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterRowsMigration)
-	require.NoError(t, err)
-
 	for range 2 {
-		require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterRowsMigration, string(migration)))
+		require.NoError(t, ApplyMigrations(ctx, pool))
 	}
 
 	jaAliases := func(slug string) []string {
@@ -104,13 +89,13 @@ func TestSchedulePosterRowsMigrationAddsPosterNicknamesAsJapaneseAliasesOnce(t *
 		return aliases
 	}
 
-	require.Equal(t, []string{"biboo", "Beebs"}, jaAliases("koseki-bijou"))
+	require.Equal(t, []string{}, jaAliases("koseki-bijou"))
 	require.Equal(t, []string{"Nerissa Ravencroft hololive-EN", "Rissa"}, jaAliases("nerissa-ravencroft"), "이미 있는 별칭은 다시 넣지 않는다")
 	require.Equal(t, []string{"鈴鳴つづり", "つづり", "すずなつづり", "つーちゃん"}, jaAliases("suzuna-tsuzuri"))
 	require.Contains(t, jaAliases("asobi-mawaritai"), "アソビ隊")
 }
 
-func TestSchedulePosterRowsMigrationFillsOnlyAnEmptyKoreanNameOfIRyS(t *testing.T) {
+func TestSchedulePosterRowsBaselinePreservesMissingKoreanNames(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
@@ -120,12 +105,6 @@ func TestSchedulePosterRowsMigrationFillsOnlyAnEmptyKoreanNameOfIRyS(t *testing.
 		aliases, org, sync_source)
 		VALUES (9001, 'irys', 'UC8rcEBzJSleTkf_-agPM20g', 'IRyS', 'IRyS', NULL, '아이리스', '{"ja": [], "ko": ["아이리스"]}', 'Hololive', 'holodex'),
 		       (9002, 'gigi-murin', 'UCDHABijvPBnJm7F-KlNME3w', 'Gigi Murin', 'ジジ・ムリン', '', '지지', '{"ja": [], "ko": []}', 'Hololive', 'holodex')`)
-	require.NoError(t, err)
-
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterRowsMigration)
 	require.NoError(t, err)
 
 	koreanNames := func() map[string]*string {
@@ -150,17 +129,16 @@ func TestSchedulePosterRowsMigrationFillsOnlyAnEmptyKoreanNameOfIRyS(t *testing.
 		return names
 	}
 
-	require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterRowsMigration, string(migration)))
-	require.Equal(t, map[string]*string{"irys": new("아이리스"), "gigi-murin": new("")}, koreanNames(),
-		"IRyS만 채우고 다른 멤버의 빈 값은 건드리지 않는다")
+	require.NoError(t, ApplyMigrations(ctx, pool))
+	require.Equal(t, map[string]*string{"irys": nil, "gigi-murin": new("")}, koreanNames())
 
 	_, err = pool.Exec(ctx, `UPDATE members SET korean_name = '아이리스 운영값' WHERE id = 9001`)
 	require.NoError(t, err)
-	require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterRowsMigration, string(migration)))
+	require.NoError(t, ApplyMigrations(ctx, pool))
 	require.Equal(t, "아이리스 운영값", *koreanNames()["irys"], "이미 채운 값은 덮지 않는다")
 }
 
-func TestSchedulePosterRowsMigrationCorrectsOnlyTheOldShortKoreanNames(t *testing.T) {
+func TestSchedulePosterRowsBaselinePreservesShortKoreanNames(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
@@ -192,14 +170,8 @@ func TestSchedulePosterRowsMigrationCorrectsOnlyTheOldShortKoreanNames(t *testin
 			VALUES ($1, $2, $2, $3, '{"ja": [], "ko": []}', 'Hololive', 'holodex')`, 9110+i, fix[0], fix[1])
 		require.NoError(t, err)
 
-		want[fix[0]] = fix[2]
+		want[fix[0]] = fix[1]
 	}
-
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterRowsMigration)
-	require.NoError(t, err)
 
 	shortNames := func() map[string]string {
 		rows, queryErr := pool.Query(ctx, `SELECT slug, short_korean_name FROM members WHERE id >= 9100`)
@@ -220,15 +192,15 @@ func TestSchedulePosterRowsMigrationCorrectsOnlyTheOldShortKoreanNames(t *testin
 		return names
 	}
 
-	require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterRowsMigration, string(migration)))
-	require.Equal(t, want, shortNames(), "옛 값인 12명만 고치고 목록에 없는 멤버는 같은 값이어도 그대로 둔다")
+	require.NoError(t, ApplyMigrations(ctx, pool))
+	require.Equal(t, want, shortNames())
 
 	_, err = pool.Exec(ctx, `UPDATE members SET short_korean_name = '코보쨩' WHERE slug = 'kobo-kanaeru'`)
 	require.NoError(t, err)
 
 	want["kobo-kanaeru"] = "코보쨩"
 
-	require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterRowsMigration, string(migration)))
+	require.NoError(t, ApplyMigrations(ctx, pool))
 	require.Equal(t, want, shortNames(), "다시 적용해도 운영자가 바꾼 값을 덮지 않는다")
 
 	var aliases int

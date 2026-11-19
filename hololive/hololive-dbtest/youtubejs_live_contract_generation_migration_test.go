@@ -1,14 +1,10 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
-
-const youtubejsLiveContractGenerationMigration = "008_youtubejs_live_contract_generation.sql"
 
 func TestYoutubejsLiveContractGenerationMigration(t *testing.T) {
 	t.Parallel()
@@ -55,16 +51,10 @@ func TestYoutubejsLiveContractGenerationMigration(t *testing.T) {
 	}
 	require.Equal(t, want, load())
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	migration, err := fs.ReadFile(os.DirFS(dir), youtubejsLiveContractGenerationMigration)
-	require.NoError(t, err)
-
-	_, err = pool.Exec(ctx, `UPDATE observation_contract_generations SET updated_by = 'operator-cutover'
+	_, err := pool.Exec(ctx, `UPDATE observation_contract_generations SET updated_by = 'operator-cutover'
 		WHERE provider = 'youtubejs' AND observation_kind IN ('live_snapshot', 'video_live_check')`)
 	require.NoError(t, err)
-	require.NoError(t, applyMigrationContent(ctx, pool, youtubejsLiveContractGenerationMigration, string(migration)))
+	require.NoError(t, ApplyMigrations(ctx, pool))
 
 	for i := range want {
 		want[i].updatedBy = "operator-cutover"
