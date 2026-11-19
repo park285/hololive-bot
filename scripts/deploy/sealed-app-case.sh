@@ -315,5 +315,5 @@ unshare --user --map-root-user --mount bash -eu -c '
     if [[ -d "$h$s" ]]; then mkdir -p "$d"; else touch "$d"; fi
     mount --bind "$h$s" "$d"; mount -o remount,bind,ro "$d"
   done
-  exec chroot "$h" /usr/bin/bash /drive
+  exec chroot "$h" /usr/bin/env TMPDIR=/tmp /usr/bin/bash /drive
 ' _ "$host"

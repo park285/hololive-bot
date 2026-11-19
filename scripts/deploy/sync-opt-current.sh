@@ -162,8 +162,9 @@ if [[ -n "$generation" ]]; then
     trusted_blob="$(git -C "$tool_root" rev-parse --verify "$tool_revision:$path")"
     [[ "$trusted_blob" =~ ^[0-9a-f]{40}$ && "$(git hash-object --no-filters "$tool_root/$path")" == "$trusted_blob" ]] ||
       die "protected-source library does not match the reviewed tool: $lib"
-    . "$tool_root/$path"
   done
+  . "$tool_root/scripts/deploy/lib/protected-binds.sh"
+  . "$tool_root/scripts/deploy/lib/sealed-app.sh"
 fi
 
 assert_clean "$REPO_ROOT" "repo"
@@ -547,7 +548,7 @@ PY
 }
 
 accepted_migrator() {
-  local dropin="$QUADLET_DIR/$migrator.d/50-migrator-image.conf" image actual service pointer pair release app field
+  local dropin="$QUADLET_DIR/$migrator.d/50-migrator-image.conf" image actual service pointer pair release app
   local installed check_cid check_image tool="$tool_root/scripts/deploy/lib/worker-profile-pair.py" records="$1"
   : >"$records"
   [[ -f "$dropin" && "$(stat -c '%u:%g:%a:%h' "$dropin")" == 0:0:644:1 ]] || die "missing accepted migrator drop-in"
