@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/iris-client-go/v5/valkeydedup"
+	"github.com/park285/iris-client-go/adapters/valkeydedup"
 	"github.com/park285/iris-client-go/v5/webhook"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"

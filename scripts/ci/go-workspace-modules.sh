@@ -6,7 +6,7 @@ load_go_workspace_modules() {
     local root_dir="${1:-${GO_WORKSPACE_ROOT}}"
     local workspace_json modules
 
-    if ! workspace_json="$(cd "${root_dir}" && go work edit -json)"; then
+    if ! workspace_json="$(cd "${root_dir}" && GOWORK="${PWD}/go.work" go work edit -print=false -json)"; then
         echo "failed to read ${root_dir}/go.work" >&2
         return 1
     fi
