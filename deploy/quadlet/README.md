@@ -78,7 +78,7 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
   `environment` > `env_file` 우선순위를 유지합니다.
 - PostgreSQL 로그인 비밀번호는 API `HOLOLIVE_DB_PASSWORD`, alarm-worker `HOLOLIVE_ALARM_WORKER_PASSWORD`,
   collector slot별 `HOLOLIVE_COLLECTOR_A_PASSWORD`~`D_PASSWORD`로 나누고 서로·`DB_PASSWORD`와 다르게 둡니다.
-  이 창의 one-shot은 여섯 업무 역할의 로그인 비밀번호와 연결 한도를 변경하지 않습니다. 배포 이미지의 `db-migrate`는 창 전용 인자가 빠지면 DB 접속 전에 거부합니다. 일반 초기화용 개발 빌드를 운영 이미지로 대체하지 않습니다.
+  이 창의 one-shot은 여섯 업무 역할의 로그인 비밀번호와 연결 한도를 변경하지 않습니다. 배포 이미지의 `db-migrate`는 창 전용 인자가 빠지면 DB 접속 전에 거부합니다. 신규 DB의 별도 초기화에서만 같은 이미지의 `--initialize`를 명시하며, 운영 one-shot은 `--schema-only`입니다.
   같은 비밀번호이면 기존 SCRAM verifier를 유지합니다. 실제 비밀번호를 바꿀 때는 해당 역할의 모든 앱 frontend를 먼저 drain·종료해야 하며, 비밀번호 변경 자체가 기존 세션을 폐기하지는 않습니다.
 - compose에서 `:?`였던 필수 값(`VALKEY_SENTINEL_ADDRS`, `LIVE_LOGS_PATH`,
   `POSTGRES_PORT_BIND_IP`, `VALKEY_BIND_IP`, `HOLOLIVE_API_PORT_BIND_IP`, `HOLOLIVE_ADMIN_API_PORT_BIND_IP`,
@@ -99,7 +99,13 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 - `scripts/deploy/lib/postgres-capacity.sh`가 compose.env·설치 unit·drop-in의 effective 값으로 비밀 없는 `pgbouncer.ini`를 생성합니다. 역할별 backend 상한은 해당 앱 풀 최대값의 합이고 reserve pool은 0입니다. 기본값은 앱46+auth1, 정비 포함52/일반58로 여유6입니다. admin pool max3이면 앱45+auth1, 전체51로 여유7입니다. 앱 활성화·재기동·복구에서는 실행 pooler가 mount한 설정과 대조합니다. 풀 크기만 바꾸고 앱만 재배포하면 사전에 거부되므로, 용량 변경은 writer를 보존·정지한 뒤 pooler 설정 재생성과 재기동까지 같은 창에서 처리합니다.
 - 예약 control 진행 보장은 정상 단일 배포와 선언된 풀 상한 안에서의 계약입니다. 중복 writer나 임의 추가 frontend까지 무기아를 보장하지 않습니다.
 
-### 최초 운영 전환
+### Epoch 4 배포 경계
+
+후속 변경이 없는 20.0.0 one-shot은 기존 032 head나 새 기준선 1개를 **읽기만** 한다. 정상 032 DB에서는 DDL·업무 DML·원장·로그인·pooler 변경이 없다. 원래 PostgreSQL/PgBouncer 세대·보호 inode·서비스와 writer endpoint를 그대로 보존한다. 19.2.1 source-only 창은 migration/보호 경로 변경을 거부하는 것이 정상이다. 20.0.0 전체 소스 staging, peer CAS, worker/collector별 이미지·프로필·실제 pooled SQL 수용은 별도 릴리스 창에서 증명한다. 새 DB 초기화/구 DB 복구는 [규약](../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md)을 따른다.
+
+### 과거 030 카드 전환 (19.2 릴리스 전용)
+
+다음 절차는 19.2의 **해당 checkout·도구**로만 수행한다. 20.0.0으로 부분 030/031을 재개하거나 미확인 hold를 해제하지 않는다.
 
 이 카드 릴리스로 direct→pooled 전환을 시작하지 않습니다. 먼저 `release/hololive-pool-only-030`의 절차로 여섯 역할의 pooled SQL과 변경되지 않은 원장 030을 수용합니다. 그 작업의 hold를 재사용하지 않습니다. 아래는 **이미 풀링이 운영 중인 별도 카드 창**입니다.
 

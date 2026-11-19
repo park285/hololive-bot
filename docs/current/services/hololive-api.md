@@ -284,7 +284,7 @@ bot plane은 `BROADCAST_TYPE_GEMINI_API_KEY_FILE`(Gemini Developer API 키 파�
 - 구조 identity(subject/kind/priority/cadence/enabled)가 같으면 generation/hash와 연속 `member_since_generation`·`created_at`을 유지합니다. 실제 `not_before` 변경 row만 UPDATE하고 같은 transaction에서 header의 양수 `eligibility_version`을 한 번 올립니다(새 generation 기본값 1). 변경 없는 heartbeat는 header만 쓰며 target/reason 행을 갱신하지 않습니다. 이유만 바뀌면 기존처럼 이유를 교체하되 eligibility version은 바꾸지 않습니다.
 - collector는 현재 header·target·lease를 같은 후보 statement에서 확인하는 관계형 조회를 유지합니다. 전체 target/lease를 캐시해 AP에서 정렬하는 안은 전송량 회귀로 채택하지 않았으며 target별 eligibility version도 추가하지 않습니다. 기존 상한 10,000 targets/50,000 reasons/1,000 live 입력, membership·lease/fence·DB slot·원자적 Publish와 기존 bounded retention의 CURRENT/STAGING·lease 보호, collector의 reasons/canonical 접근 금지는 유지합니다.
 - IDLE 대상의 관측 due는 scheduler와 같은 `LEAST(next_due_at, scheduled_for + 현재 bundle cadence)`이며 `eligible_at`보다 앞당기지 않습니다. cadence 연장 때 이미 도래한 slot을 늦추지 않고 ACTIVE 만료·DEFERRED 재시도·projection 만료의 의미는 유지합니다.
-- header validity 구조는 epoch-3 baseline(`001_schema_epoch3_baseline.sql`)에 포함되어 있으며 별도 선행 migration이 없습니다. 이 구조를 모르는 이전 API·collector binary와 혼합 운용하지 않고, 롤백 경계는 [migration 규약](../../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md)의 epoch-3 적용과 복구 하한을 따릅니다.
+- header validity 구조는 epoch-4 baseline(`001_schema_epoch4_baseline.sql`)에 포함되어 있으며 별도 선행 migration이 없습니다. 이 구조를 모르는 이전 API·collector binary와 혼합 운용하지 않고, 롤백 경계는 [migration 규약](../../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md)의 epoch-4 적용 경계을 따릅니다.
 
 ## Live canonical 저장과 잠금 순서
 
@@ -311,7 +311,7 @@ bot plane은 `BROADCAST_TYPE_GEMINI_API_KEY_FILE`(Gemini Developer API 키 파�
 | claim (`ClaimBatch`) | 단독 | 없음 | due queue 행 `FOR UPDATE SKIP LOCKED`(replay epoch 이전·시도 소진 후보와 선점 후보) → 같은 트랜잭션에서 종료 후보 DEAD_LETTER 집합 갱신 |
 
 - migration 328은 기존 guard를 잡은 뒤 316·325의 원본 문장 트리거, `refresh_youtube_live_runtime_state_statement()`, `guard_youtube_live_runtime_state()`, `youtube_live_runtime_state_guard` 표를 제거하고, 잠금 함수 본문을 advisory로 바꾸며 기록 함수를 READ COMMITTED 요구로 다시 정의합니다. runtime 역할은 수명 모델 표 SELECT만 유지하고 refresh·shared 잠금 EXECUTE를 받습니다. 기록 함수 실행 권한이 있는 역할은 refresh EXECUTE를 받고 scraper는 shared 잠금 권한이 없습니다. 마지막에 기존 모델·세션·head의 전체 key로 재계산해 drift 0에서 시작합니다. 328 이후 신설하는 기록 역할에는 기존 의존 권한에 더해 `refresh_youtube_live_runtime_state(text[])` 실행 권한도 부여합니다.
-- writer가 명시적으로 갱신하는 이 구조는 epoch-3 baseline(`001_schema_epoch3_baseline.sql`)에 포함되어 있으며 별도 선행 migration이 없습니다. 원본 트리거가 없으므로 명시적 갱신을 모르는 이전 API 이미지로 되돌리면 수명 모델이 갱신되지 않습니다. 이미지만 되돌리는 rollback은 지원하지 않으며 복구는 forward-only입니다. 정합성은 [API runbook](../runbooks/hololive-api.md#db-poolyoutube-plane-db-슬롯-지표)의 `live_runtime_state_drift.sql` 점검으로 확인합니다.
+- writer가 명시적으로 갱신하는 이 구조는 epoch-4 baseline(`001_schema_epoch4_baseline.sql`)에 포함되어 있으며 별도 선행 migration이 없습니다. 원본 트리거가 없으므로 명시적 갱신을 모르는 이전 API 이미지로 되돌리면 수명 모델이 갱신되지 않습니다. 이미지만 되돌리는 rollback은 지원하지 않으며 복구는 forward-only입니다. 정합성은 [API runbook](../runbooks/hololive-api.md#db-poolyoutube-plane-db-슬롯-지표)의 `live_runtime_state_drift.sql` 점검으로 확인합니다.
 - 수동 검토 영수증은 READ COMMITTED 트랜잭션(psql 기본)에서 기록합니다. 기존 `BEGIN ISOLATION LEVEL SERIALIZABLE` 절차는 `live review requires read committed transaction`으로 거절됩니다.
 
 ## Observation storage and retention
@@ -326,7 +326,7 @@ bot plane은 `BROADCAST_TYPE_GEMINI_API_KEY_FILE`(Gemini Developer API 키 파�
 - migration 315의 원본 정리는 보호 판정 전에 최대 1,000개 ID를 materialize합니다. kind별 인덱스 후보 반환은 최대 1,000개(정책 최대 16개), 최초 보호 검사는 합계 최대 1,000개이며 삭제·최종 보호 재검사는 `BatchSize`(최대 1,000) 이내입니다. 이 상한은 물리 I/O·보호 함수 내부의 자식 조회량·FK 쓰기량·실행 시간의 상한이 아닙니다.
 - `(received_at,id)` 진행 커서와 고정된 순회 상한을 DB singleton에 보존합니다. 새 유입이 계속되어도 순회 끝에서 앞쪽을 재방문하고, 잠긴 후보는 건너뛴 뒤 다음 순회에서 다시 봅니다. 모든 kind가 같은 시간/ID 순서를 공유하며 보호 해제·늦게 삽입된 앞쪽 원본도 재방문합니다. 커서와 원본/application 삭제는 같은 transaction으로 확정·롤백하므로 재시작 때 처음부터 훑지 않습니다.
 - DB 함수가 exclusive live 전역 잠금 → 커서 → 원본 잠금을 소유합니다. 전부 보호된 창도 성공한 tick이며 payload·absence·checkpoint 정리는 계속 실행됩니다. 앞 단계의 별도 commit 수량과 `BacklogKnown=false`의 미확정 의미는 유지합니다. runtime·scraper는 커서 표에 직접 접근하지 않습니다.
-- publish·claim·application SQL이 요구하는 provenance·어휘 사전과 bytea 키는 epoch-3 baseline(`001_schema_epoch3_baseline.sql`)에 포함되어 있으며 별도 선행 migration이 없습니다. 이 구조를 모르는 구 binary나 이전 migration runner를 같은 DB에 섞어 실행하지 않습니다. 감사 표의 물리 공간 회수(`VACUUM FULL`)에는 별도 점검 창·백업·용량 확인이 필요하며 로컬 검증은 운영 DDL·배포 승인이 아닙니다.
+- publish·claim·application SQL이 요구하는 provenance·어휘 사전과 bytea 키는 epoch-4 baseline(`001_schema_epoch4_baseline.sql`)에 포함되어 있으며 별도 선행 migration이 없습니다. 이 구조를 모르는 구 binary나 이전 migration runner를 같은 DB에 섞어 실행하지 않습니다. 감사 표의 물리 공간 회수(`VACUUM FULL`)에는 별도 점검 창·백업·용량 확인이 필요하며 로컬 검증은 운영 DDL·배포 승인이 아닙니다.
 - RETIRED projection 기본 보존은 2일이며 reasons+targets 합계를 batch 상한 이하로 제한하고 CURRENT/STAGING, lease 참조 generation을 보호합니다. 호출 timeout은 8초입니다.
 - 운영 cutover와 복구 경계는 [API runbook](../runbooks/hololive-api.md#youtube-관측-저장-구조-전환)을 따릅니다. 소스 기본값 변경은 운영 TTL 적용 완료를 뜻하지 않습니다.
 
