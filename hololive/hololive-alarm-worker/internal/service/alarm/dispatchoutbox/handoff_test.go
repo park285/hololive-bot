@@ -483,29 +483,56 @@ func TestHandoffClosesCheckWhenAllMembersAreGone(t *testing.T) {
 	require.Empty(t, again, "a closed check must not be claimed again")
 }
 
+func FixedNowPool(t *testing.T, pool *pgxpool.Pool, at time.Time) *pgxpool.Pool {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(), `
+		CREATE SCHEMA fixed_clock;
+		CREATE TABLE fixed_clock.instant (at TIMESTAMPTZ NOT NULL);
+		CREATE FUNCTION fixed_clock.now() RETURNS TIMESTAMPTZ LANGUAGE sql STABLE AS 'SELECT at FROM fixed_clock.instant';
+		CREATE FUNCTION fixed_clock.clock_timestamp() RETURNS TIMESTAMPTZ LANGUAGE sql VOLATILE AS 'SELECT at FROM fixed_clock.instant'`)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(t.Context(), `INSERT INTO fixed_clock.instant (at) VALUES ($1)`, at)
+	require.NoError(t, err)
+
+	config := pool.Config()
+
+	config.ConnConfig.RuntimeParams["search_path"] = "fixed_clock, public, pg_catalog"
+
+	clocked, err := pgxpool.NewWithConfig(t.Context(), config)
+	require.NoError(t, err)
+	t.Cleanup(clocked.Close)
+
+	return clocked
+}
+
 func TestHandoffRescheduleStopsAtHorizonThenQuarantines(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)
 	unit := seedSentHandoffUnits(t, pool, repo, "handoff-horizon")[0]
 	horizon := 10 * time.Minute
 
+	var admitted time.Time
+
+	require.NoError(t, pool.QueryRow(t.Context(), `SELECT min(sent_at) FROM alarm_dispatch_deliveries WHERE send_unit_id = $1`, unit.id).Scan(&admitted))
+
+	repo = newTestRepository(t, FixedNowPool(t, pool, admitted.Add(horizon-handoffTestSoftClaim)))
+
 	claim := claimOneHandoff(t, repo)
+	require.Equal(t, admitted.Add(horizon), claim.CheckToken)
 	require.NoError(t, repo.RescheduleHandoff(t.Context(), &claim, time.Hour, horizon))
 
-	var untilCheckMS int64
+	state := loadHandoffUnit(t, pool, unit.id)
+	require.Equal(t, &claim.CheckToken, state.nextCheck)
+	require.False(t, state.checked)
+	require.Zero(t, requireFenceMiss(t, repo.CompleteHandoff(t.Context(), &claim), sendfence.ReasonVersionChanged).Applied)
 
-	require.NoError(t, pool.QueryRow(t.Context(), `SELECT (EXTRACT(EPOCH FROM (u.handoff_next_check_at - min(d.sent_at))) * 1000)::BIGINT
-		FROM alarm_dispatch_send_units u JOIN alarm_dispatch_deliveries d ON d.send_unit_id = u.id
-		WHERE u.id = $1 GROUP BY u.id`, unit.id).Scan(&untilCheckMS))
-	require.Equal(t, horizon.Milliseconds(), untilCheckMS)
-	require.False(t, loadHandoffUnit(t, pool, unit.id).checked)
-
-	_, err := pool.Exec(t.Context(), `UPDATE alarm_dispatch_deliveries SET sent_at = sent_at - interval '20 minutes' WHERE send_unit_id = $1`, unit.id)
+	_, err := pool.Exec(t.Context(), `UPDATE fixed_clock.instant SET at = $1`, admitted.Add(horizon))
 	require.NoError(t, err)
-	makeHandoffDue(t, pool, unit.id)
 
 	claim = claimOneHandoff(t, repo)
-	require.GreaterOrEqual(t, claim.Elapsed, 20*time.Minute)
+	require.Equal(t, horizon, claim.Elapsed)
 	require.Equal(t, handoffcheck.ActionQuarantine, handoffcheck.Decide(handoffcheck.Input{
 		RequestID: claim.IrisRequestID, Snapshot: &iris.ReplyStatusSnapshot{RequestID: claim.IrisRequestID, State: "queued"},
 		Elapsed: claim.Elapsed, Horizon: horizon,

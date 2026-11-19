@@ -19,6 +19,8 @@ var errWorker = errors.New("worker failed")
 
 var errBeforeDispatch = errors.New("request canceled before worker dispatch")
 
+var errDeadlineBeforeDispatch = errors.Join(errBeforeDispatch, context.DeadlineExceeded)
+
 type worker struct {
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
@@ -34,12 +36,22 @@ func (b *Broker) initializeWorker(ctx context.Context) error {
 		return err
 	}
 
+	return b.loadWorker(ctx, worker)
+}
+
+func (b *Broker) loadWorker(ctx context.Context, worker *worker) error {
 	b.mu.Lock()
 
-	if b.retiring || ctx.Err() != nil {
+	if err := ctx.Err(); b.retiring || err != nil {
 		b.mu.Unlock()
 
-		return errors.Join(errWorker, worker.stop())
+		stopErr := worker.stop()
+
+		if errors.Is(err, context.DeadlineExceeded) {
+			return errors.Join(errWorker, errDeadlineBeforeDispatch, stopErr)
+		}
+
+		return errors.Join(errWorker, stopErr)
 	}
 
 	b.worker = worker
@@ -69,8 +81,8 @@ func (b *Broker) initializeWorker(ctx context.Context) error {
 }
 
 func startWorker(ctx context.Context, node, script string) (*worker, error) {
-	if ctx.Err() != nil {
-		return nil, errBeforeDispatch
+	if err := beforeDispatch(ctx); err != nil {
+		return nil, err
 	}
 
 	//nolint:contextcheck // generation 전용 수명
@@ -111,9 +123,21 @@ func startWorker(ctx context.Context, node, script string) (*worker, error) {
 	return w, nil
 }
 
-func (w *worker) exchange(ctx context.Context, input, output any) error {
-	if ctx.Err() != nil {
+func beforeDispatch(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return errDeadlineBeforeDispatch
+		}
+
 		return errBeforeDispatch
+	}
+
+	return nil
+}
+
+func (w *worker) exchange(ctx context.Context, input, output any) error {
+	if err := beforeDispatch(ctx); err != nil {
+		return err
 	}
 
 	var data []byte
@@ -129,8 +153,8 @@ func (w *worker) exchange(ctx context.Context, input, output any) error {
 		data = append(data, '\n')
 	}
 
-	if ctx.Err() != nil {
-		return errBeforeDispatch
+	if err := beforeDispatch(ctx); err != nil {
+		return err
 	}
 
 	result := make(chan error, 1)

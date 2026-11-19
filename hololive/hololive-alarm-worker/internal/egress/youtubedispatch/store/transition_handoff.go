@@ -103,13 +103,14 @@ type handoffRequestState struct {
 	Generation    int
 	NextCheckAt   *time.Time
 	CheckedAt     *time.Time
+	claimXID      uint32
 }
 
 func loadHandoffRequestState(ctx context.Context, db dbx.Querier, baseID string) (handoffRequestState, bool, error) {
 	var state handoffRequestState
 
 	err := db.QueryRow(ctx, handoffRequestStateSQL, baseID).
-		Scan(&state.IrisRequestID, &state.Generation, &state.NextCheckAt, &state.CheckedAt)
+		Scan(&state.IrisRequestID, &state.Generation, &state.NextCheckAt, &state.CheckedAt, &state.claimXID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return handoffRequestState{}, false, nil
 	}
@@ -131,7 +132,7 @@ func (s handoffRequestState) admitted(admission HandoffAdmission) bool {
 }
 
 func (s handoffRequestState) heldBy(claim *HandoffClaim) bool {
-	return s.requestIs(claim.IrisRequestID) && s.Generation == claim.Generation &&
+	return s.claimXID == claim.claimXID && s.requestIs(claim.IrisRequestID) && s.Generation == claim.Generation &&
 		s.NextCheckAt != nil && s.NextCheckAt.Equal(claim.CheckToken) && s.CheckedAt == nil
 }
 
@@ -154,6 +155,7 @@ type HandoffClaim struct {
 	CheckToken    time.Time
 	Elapsed       time.Duration
 	AttemptCount  int
+	claimXID      uint32
 }
 
 func (c *HandoffClaim) validate() error {
@@ -170,7 +172,7 @@ func (c *HandoffClaim) validate() error {
 }
 
 func (c *HandoffClaim) fenceArgs() []any {
-	return []any{c.RequestBaseID, c.CheckToken, c.IrisRequestID, c.Generation, c.MessageHash, c.MemberIDs}
+	return []any{c.RequestBaseID, c.CheckToken, c.IrisRequestID, c.Generation, c.MessageHash, c.MemberIDs, c.claimXID}
 }
 
 func (c *HandoffClaim) sentMemberVectors() ([]int64, []int64) {
@@ -214,7 +216,7 @@ func scanHandoffClaim(row pgx.CollectableRow) (HandoffClaim, error) {
 	)
 
 	if err := row.Scan(&claim.RequestBaseID, &claim.IrisRequestID, &claim.Generation, &claim.MessageHash,
-		&claim.MemberIDs, &claim.CheckToken, &elapsedMS, &claim.AttemptCount, &sentIDs, &versions); err != nil {
+		&claim.MemberIDs, &claim.CheckToken, &claim.claimXID, &elapsedMS, &claim.AttemptCount, &sentIDs, &versions); err != nil {
 		return HandoffClaim{}, fmt.Errorf("scan youtube handoff claim: %w", err)
 	}
 

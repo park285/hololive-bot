@@ -120,6 +120,62 @@ func TestInvalidStartupFrameClosesListenerAndReapsWorker(t *testing.T) {
 	}
 }
 
+func TestWorkerStartupDeadlineBeforeDispatch(t *testing.T) {
+	broker := New("revision", "unused", "unused")
+
+	var config net.ListenConfig
+
+	listener, err := config.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	err = broker.Serve(listener, 0)
+	require.ErrorIs(t, err, errBeforeDispatch)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Equal(t, ExitStartupFailed, broker.ExitReason())
+	require.ErrorIs(t, listener.Close(), net.ErrClosed)
+}
+
+func TestSilentLoadedFrameExpiresAtStartupDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		broker := New("revision", "unused", "unused")
+		reader, writer := io.Pipe()
+		done := make(chan struct{})
+
+		var loadErr error
+
+		defer func() { <-done }()
+		defer func() { require.NoError(t, writer.Close()) }()
+
+		process := &worker{out: bufio.NewReader(reader), done: make(chan struct{})}
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+
+		defer cancel()
+
+		go func() {
+			defer close(done)
+
+			loadErr = broker.loadWorker(ctx, process)
+		}()
+
+		synctest.Sleep(time.Second - time.Nanosecond)
+
+		select {
+		case <-done:
+			t.Fatalf("worker loading returned before the deadline: %v", loadErr)
+		default:
+		}
+
+		synctest.Sleep(time.Nanosecond)
+
+		select {
+		case <-done:
+			require.ErrorIs(t, loadErr, context.DeadlineExceeded)
+		default:
+			t.Fatal("worker loading did not return at the deadline")
+		}
+	})
+}
+
 func TestServeStartupDeadlineClosesListenerAndReapsWorker(t *testing.T) {
 	broker := New("revision", fakeNode(t, "silent-startup-node", "#!/bin/sh\nIFS= read -r stop\n"), "unused")
 
@@ -128,40 +184,89 @@ func TestServeStartupDeadlineClosesListenerAndReapsWorker(t *testing.T) {
 	listener, err := config.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
-	done := make(chan error, 1)
+	done := make(chan struct{})
+
+	var serveErr error
 
 	go func() {
-		done <- broker.Serve(listener, time.Second)
+		defer close(done)
 
-		close(done)
+		serveErr = broker.Serve(listener, time.Second)
 	}()
 
 	t.Cleanup(func() {
 		broker.retire(ExitSignal)
 
 		select {
-		case serveErr := <-done:
-			if serveErr != nil && !errors.Is(serveErr, context.DeadlineExceeded) {
-				t.Errorf("Serve() after silent startup error = %v, want startup deadline", serveErr)
-			}
+		case <-done:
 		case <-time.After(5 * time.Second):
 			t.Error("silent startup did not retire")
 		}
 	})
 
 	select {
-	case err := <-done:
-		require.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-done:
+		require.ErrorIs(t, serveErr, context.DeadlineExceeded)
 	case <-time.After(5 * time.Second):
 		t.Fatal("silent worker exceeded the startup bound")
 	}
 
+	require.Equal(t, ExitStartupFailed, broker.ExitReason())
 	require.ErrorIs(t, listener.Close(), net.ErrClosed)
 
+	require.NotNil(t, broker.worker)
+	requireWorkerReaped(t, broker.worker)
+}
+
+func TestDeadlineAfterWorkerStartBeforeRegistration(t *testing.T) {
+	broker, process := unregisteredWorker(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 0)
+
+	defer cancel()
+
+	err := broker.loadWorker(ctx, process)
+	require.ErrorIs(t, err, errWorker)
+	require.ErrorIs(t, err, errBeforeDispatch)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	requireWorkerReaped(t, process)
+}
+
+func TestCancellationAfterWorkerStartBeforeRegistration(t *testing.T) {
+	broker, process := unregisteredWorker(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := broker.loadWorker(ctx, process)
+	require.ErrorIs(t, err, errWorker)
+	require.NotErrorIs(t, err, errBeforeDispatch)
+	require.NotErrorIs(t, err, context.Canceled)
+	requireWorkerReaped(t, process)
+}
+
+func unregisteredWorker(t *testing.T) (*Broker, *worker) {
+	t.Helper()
+
+	broker := New("revision", fakeNode(t, "silent-node", "#!/bin/sh\nIFS= read -r stop\n"), "unused")
+	process, err := startWorker(t.Context(), broker.node, broker.script)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		select {
+		case <-process.done:
+		default:
+			require.NoError(t, process.stop())
+		}
+	})
+
+	return broker, process
+}
+
+func requireWorkerReaped(t *testing.T, process *worker) {
+	t.Helper()
+
 	select {
-	case <-broker.worker.done:
+	case <-process.done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("timed-out startup left the worker running")
+		t.Fatal("startup worker was not reaped")
 	}
 }
 

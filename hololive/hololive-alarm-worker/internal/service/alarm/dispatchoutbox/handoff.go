@@ -33,6 +33,7 @@ type HandoffClaim struct {
 	Elapsed             time.Duration
 	AttemptCount        int
 	ClaimKeys           []string
+	claimXID            uint32
 }
 
 type HandoffRepository interface {
@@ -89,7 +90,7 @@ func scanHandoffClaim(row pgx.CollectableRow) (HandoffClaim, error) {
 	)
 
 	if err := row.Scan(&claim.UnitID, &claim.IrisRequestID, &claim.ClientRequestID, &baseID, &claim.Generation,
-		&claim.DeliveryIDs, &claim.CheckToken, &elapsedMS, &claim.AttemptCount, &claim.ClaimKeys); err != nil {
+		&claim.DeliveryIDs, &claim.CheckToken, &claim.claimXID, &elapsedMS, &claim.AttemptCount, &claim.ClaimKeys); err != nil {
 		return HandoffClaim{}, fmt.Errorf("scan handoff claim: %w", err)
 	}
 
@@ -153,7 +154,7 @@ func (r *PgxRepository) applyHandoff(ctx context.Context, action, query string, 
 		return fmt.Errorf("%s: claim has no pinned deliveries", action)
 	}
 
-	args := append([]any{claim.UnitID, claim.CheckToken, claim.ClientRequestID, claim.IrisRequestID}, extra...)
+	args := append([]any{claim.UnitID, claim.CheckToken, claim.ClientRequestID, claim.IrisRequestID, claim.claimXID}, extra...)
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {

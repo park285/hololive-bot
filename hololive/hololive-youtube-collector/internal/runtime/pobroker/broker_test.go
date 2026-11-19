@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 const silentNode = "#!/bin/sh\nsleep 30\n"
@@ -143,7 +145,8 @@ func phaseBroker(t *testing.T) (*Broker, string, string, string) {
 	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\n" +
 		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"prepared\",\"prepared\":true}'\n" +
 		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"snapshot\",\"snapshot\":\"snapshot-value\"}'\n" +
-		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"ready\",\"ready\":true}'\nsleep 30\n"
+		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"ready\",\"ready\":true}'\n" +
+		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"minted\",\"video_id\":\"video\",\"po_token\":\"token\"}'\nIFS= read -r stop\n"
 
 	b := New("revision", fakeNode(t, "phase-node", script), "unused")
 	initializeTestWorker(t, b)
@@ -269,6 +272,43 @@ func TestCanceledChallengeBeforeDispatchPreservesPreparedWorker(t *testing.T) {
 	status, result = call(t, b, http.MethodPost, "/v1/challenge", challenge)
 	if status != http.StatusOK || result["snapshot"] != "snapshot-value" {
 		t.Fatalf("cancellation consumed challenge: %d %v", status, result)
+	}
+}
+
+func TestExpiredRequestBeforeDispatchPreservesWorker(t *testing.T) {
+	for _, state := range []State{AwaitingChallenge, Ready} {
+		t.Run(string(state), func(t *testing.T) {
+			b, prepare, challenge, activation := phaseBroker(t)
+			status, _ := call(t, b, http.MethodPost, "/v1/session", prepare)
+			require.Equal(t, http.StatusOK, status)
+
+			var request any = &challengeRequest{Program: "program", GlobalName: "name", Interpreter: "code"}
+
+			if state == Ready {
+				status, _ = call(t, b, http.MethodPost, "/v1/challenge", challenge)
+				require.Equal(t, http.StatusOK, status)
+
+				status, _ = call(t, b, http.MethodPost, "/v1/activate", activation)
+				require.Equal(t, http.StatusOK, status)
+
+				request = &mintRequest{VideoID: "video"}
+			}
+
+			ctx, cancel := context.WithTimeout(t.Context(), 0)
+			defer cancel()
+
+			w := httptest.NewRecorder()
+			b.dispatch(ctx, w, request, time.Now())
+			require.Equal(t, http.StatusGatewayTimeout, w.Code)
+
+			status, health := call(t, b, http.MethodGet, "/health", "")
+			require.Equal(t, http.StatusOK, status)
+			require.Equal(t, string(state), health["state"])
+
+			next := httptest.NewRecorder()
+			b.dispatch(t.Context(), next, request, time.Now())
+			require.Equal(t, http.StatusOK, next.Code)
+		})
 	}
 }
 

@@ -128,7 +128,9 @@ func TestReplyHandoffTransitionsAreFencedByClaimTokenAndRequestID(t *testing.T) 
 
 	current := claimOneHandoffDue(ctx, t, repo)
 
-	mismatched := ReplyHandoffClaim{ID: current.ID, IrisRequestID: "iris-other", CheckToken: current.CheckToken}
+	mismatched := current
+
+	mismatched.IrisRequestID = "iris-other"
 
 	applied, err = repo.SettleHandoff(ctx, ReplyHandoffSettlement{Claim: mismatched, Status: ReplyOutboxHandoffCompleted})
 	require.NoError(t, err)

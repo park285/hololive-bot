@@ -8,6 +8,10 @@
 
 ## 미출시
 
+- **전달 확인의 정산 권한:** 응답과 알림의 전달 확인을 재예약한 뒤에는 이전 선점의 정산·재예약이 상태를 바꾸지 못합니다. 다음 확인 시각이 이전 선점의 토큰과 마이크로초까지 같아져도 마찬가지입니다. API 응답 outbox, 일반 알람, YouTube 알림의 세 경로에서 선점이 행 버전(`xmin`)을 함께 받아 요청 ID·확인 시각과 같이 대조합니다. 스키마와 확인 간격은 바뀌지 않습니다. Fallback delta: none.
+- 응답 수락 정산이 한 문장에서 시각을 한 번만 읽습니다. 첫 전달 확인은 수락 시각에서 정확히 설정한 지연만큼 떨어진 시각에 예약됩니다.
+- **PO 브로커 기동 기한:** worker에 첫 요청을 보내기 전에 기동 기한이 지나면 미분류가 아니라 `startup_failure=deadline`으로 기록합니다. 일반 취소의 분류와 준비된 challenge·mint 세션의 유지(만료된 요청은 504, 다음 요청은 정상 처리)는 그대로입니다. Fallback delta: none.
+- **테스트:** 알람 잠금 대기 테스트는 goroutine 프로파일이 얕은 환경(`GODEBUG=profstackdepth` 8 미만)에서 시간 초과까지 멈추지 않고 원인을 밝히며 즉시 실패하고, 관측 위치를 시계 해상도와 무관하게 판정합니다. `scripts/deploy/kapu-d-cutover_test.py`는 fixture의 소유자 불일치를 고쳐 일반 사용자로도 통과하며, 배포 스크립트나 collector·issuer Quadlet이 바뀌면 pre-push gate가 실행합니다.
 - 카드 창은 이미 풀링된 여섯 역할에서만 진행합니다. 030 상태의 단일 writer 배포를 거부하고 업무 migrator만으로 031/032를 적용합니다. PostgreSQL과 PgBouncer를 교체하거나 풀러 인증과 앱 자격을 다시 생성하지 않습니다.
 - **수집기 전환 검사:** Osaka는 관찰 중 PID 1이 승인한 정확한 job으로만 정상 issuer 퇴역을 인계하며, 새 issuer의 준비 한도와 기존 lease를 함께 적용합니다. 영속 시작 조건은 systemd 자동 재시작에서도 검사합니다.
 - **kapu d의 프로필 검사:** 동일 후보의 runtime 환경과 공개 PostgreSQL CA를 네트워크 없는 검사에 전달합니다. 잘못된 프로필·DB 설정을 기동 전에 거부하며, 별도의 실제 pooled SQL을 통과하기 전에는 두 unit의 mask를 풀지 않습니다.

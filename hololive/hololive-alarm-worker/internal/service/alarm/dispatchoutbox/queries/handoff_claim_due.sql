@@ -23,4 +23,4 @@ CROSS JOIN LATERAL (
 ) AS members
 WHERE u.id = due.id
 RETURNING u.id, u.handoff_request_id, u.client_request_id, u.base_client_request_id, u.request_generation,
-          u.request_delivery_ids, u.handoff_next_check_at, members.elapsed_ms, members.attempt_count, members.claim_keys
+          u.request_delivery_ids, u.handoff_next_check_at, u.xmin, members.elapsed_ms, members.attempt_count, members.claim_keys

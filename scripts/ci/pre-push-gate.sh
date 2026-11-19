@@ -176,6 +176,7 @@ run_content_gates() {
   run_if_changed scripts/deploy/lib/youtubejs-node-version_test.sh scripts/deploy/lib/youtubejs-node-version.sh
   run_if_changed scripts/deploy/source-revision-provenance_test.sh scripts/deploy/lib/source-revision.sh
   run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py
+  run_if_changed scripts/deploy/kapu-d-cutover_test.py scripts/deploy/kapu-d-cutover.py deploy/podman/kapu/hololive-youtube-collector-d.container deploy/podman/kapu/hololive-youtube-po-d.container
   run_if_changed scripts/build/po-sandbox-manifest_test.py \
     scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
   run_if_changed scripts/logs/daily-rollup-logs_test.sh scripts/logs/daily-rollup-logs.sh

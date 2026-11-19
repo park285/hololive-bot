@@ -23,6 +23,7 @@ type ReplyHandoffClaim struct {
 	Elapsed              time.Duration
 	Attempts             int32
 	OperatorReplayGrants int32
+	claimXID             uint32
 	ReplayHorizonExpired bool
 }
 
@@ -91,7 +92,7 @@ func (r *ReplyOutboxRepository) ClaimHandoffDue(ctx context.Context, batchSize i
 			elapsedMS int64
 		)
 
-		scanErr := row.Scan(&claim.ID, &claim.IrisRequestID, &claim.CheckToken, &elapsedMS,
+		scanErr := row.Scan(&claim.ID, &claim.IrisRequestID, &claim.CheckToken, &claim.claimXID, &elapsedMS,
 			&claim.Attempts, &claim.OperatorReplayGrants, &claim.ReplayHorizonExpired)
 
 		claim.Elapsed = time.Duration(elapsedMS) * time.Millisecond
@@ -117,7 +118,7 @@ func (r *ReplyOutboxRepository) SettleHandoff(ctx context.Context, settlement Re
 
 	claim := settlement.Claim
 	args := []any{
-		claim.ID, claim.CheckToken, claim.IrisRequestID, settlement.Status,
+		claim.ID, claim.CheckToken, claim.IrisRequestID, claim.claimXID, settlement.Status,
 		clampColumnText(settlement.LastError, lastErrorByteLimit),
 	}
 
@@ -156,7 +157,7 @@ func (r *ReplyOutboxRepository) RescheduleHandoff(ctx context.Context, claim Rep
 	var delayMS int64
 
 	err = r.pool.QueryRow(ctx, replyOutboxHandoffRescheduleSQL,
-		claim.ID, claim.CheckToken, claim.IrisRequestID, stepMS, horizonMS).Scan(&delayMS)
+		claim.ID, claim.CheckToken, claim.IrisRequestID, claim.claimXID, stepMS, horizonMS).Scan(&delayMS)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, false, nil
 	}

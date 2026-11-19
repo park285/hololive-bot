@@ -15,6 +15,7 @@ WHERE outbox.id = due.id
 RETURNING outbox.id,
           outbox.iris_request_id,
           outbox.handoff_next_check_at,
+          outbox.xmin,
           floor(EXTRACT(EPOCH FROM (clock_timestamp() - outbox.accepted_at)) * 1000)::bigint,
           outbox.attempts,
           outbox.operator_replay_grants,

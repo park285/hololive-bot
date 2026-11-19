@@ -2,8 +2,8 @@
     UPDATE alarm_dispatch_send_units u
     SET handoff_next_check_at = CASE
             WHEN passed.value THEN LEAST(
-                clock.now + ($5::BIGINT * INTERVAL '1 millisecond'),
-                admitted.at + ($6::BIGINT * INTERVAL '1 millisecond'))
+                clock.now + ($6::BIGINT * INTERVAL '1 millisecond'),
+                admitted.at + ($7::BIGINT * INTERVAL '1 millisecond'))
         END,
         handoff_checked_at = CASE WHEN passed.value THEN NULL ELSE clock.now END
     FROM clock

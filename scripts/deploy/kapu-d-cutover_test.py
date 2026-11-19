@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import stat
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -237,11 +238,21 @@ class Cutover(unittest.TestCase):
         (self.release / '.source-revision').write_text(target['revision'] + '\n')
         (self.release / 'd-card-candidate.json').write_text(json.dumps(target))
 
-    def cli(self, action, target, *, pooled=True):
+    def cli(self, action, target, *, pooled=True, anchor_uid=0):
         args = ['kapu-d-cutover.py',action,*(['--already-pooled'] if pooled else []),str(self.h),
                 target['revision'],*(target[k][n] for k in ('images','units') for n in d.NAMES)]
+        anchors = {d.mask_anchor(self.h,n) for n in d.NAMES}
+        lstat = Path.lstat
+        def fixture_lstat(path):
+            st = lstat(path)
+            if path not in anchors:
+                return st
+            fields = list(st)
+            fields[stat.ST_UID] = anchor_uid
+            return os.stat_result(fields)
         with (patch.object(d.sys,'argv',args), patch.object(d,'STORE',self.root),
               patch.object(d.os,'geteuid',return_value=0), patch.object(d.os,'umask'),
+              patch.object(Path,'lstat',fixture_lstat),
               patch.object(d.os,'uname',return_value=SimpleNamespace(machine='x86_64')),
               patch.object(d.socket,'gethostname',return_value='kapu'), patch.object(d.signal,'signal')):
             d.main()
@@ -483,6 +494,21 @@ class Cutover(unittest.TestCase):
                 self.cli('resume',candidate)
         self.assertFalse(self.calls)
         self.assertFalse((h/'resume-attempt.json').exists())
+        for n in d.NAMES:
+            self.assertEqual(d.number(d.mask(n)),d.number(d.mask_anchor(h,n)))
+
+    def test_card_cli_refuses_foreign_mask_anchor_before_resume(self):
+        candidates = dict(self.executions)
+        h = self.running_pair('6433')
+        target = self.target()
+        self.seal(target)
+        self.cli('quiesce',target)
+        self.executions = candidates
+        self.calls.clear()
+        with self.assertRaisesRegex(d.Refused,'소유 mask anchor 변경'):
+            self.cli('resume',target,anchor_uid=65534)
+        self.assertFalse((h/'resume-attempt.json').exists())
+        self.assertFalse(self.calls)
         for n in d.NAMES:
             self.assertEqual(d.number(d.mask(n)),d.number(d.mask_anchor(h,n)))
 

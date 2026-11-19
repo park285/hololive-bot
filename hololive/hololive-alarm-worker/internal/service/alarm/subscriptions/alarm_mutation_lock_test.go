@@ -1,6 +1,7 @@
 package subscriptions
 
 import (
+	"errors"
 	"reflect"
 	"runtime"
 	"testing"
@@ -17,23 +18,20 @@ func TestLockCacheMutationRecordsContendedWait(t *testing.T) {
 	t.Cleanup(func() { alarmMetrics().mutationLockWait.DeleteLabelValues(operation) })
 
 	service := &AlarmService{}
-	started := make(chan time.Time)
+	started := make(chan time.Time, 1)
+	acquire := func() { started <- service.lockCacheMutation(operation) }
 
 	service.cacheMutationMu.Lock()
 
-	go func() {
-		started <- service.lockCacheMutation(operation)
-	}()
+	go acquire()
 
-	if !waitForMutationLockContention(started) {
+	if err := waitForMutationLockContention(started, acquire); err != nil {
 		service.cacheMutationMu.Unlock()
-		t.Fatal("lockCacheMutation returned while the test still held cacheMutationMu")
+		<-started
+		t.Fatal(err)
 	}
 
-	for observedAt := time.Now(); time.Since(observedAt) == 0; {
-		runtime.Gosched()
-	}
-
+	whileLocked := mutationLockWaitSample(t, operation)
 	releasedAt := time.Now()
 	service.cacheMutationMu.Unlock()
 
@@ -42,22 +40,18 @@ func TestLockCacheMutationRecordsContendedWait(t *testing.T) {
 
 	after := mutationLockWaitSample(t, operation)
 
-	require.True(t, startedAt.Before(releasedAt), "start time must precede lock release")
+	require.Zero(t, whileLocked.GetSampleCount(), "wait recorded before acquiring cacheMutationMu")
+	require.False(t, startedAt.After(releasedAt), "start time must not follow lock release")
 	require.Equal(t, uint64(1), after.GetSampleCount())
 	require.GreaterOrEqual(t, after.GetSampleSum(), releasedAt.Sub(startedAt).Seconds())
 }
 
-func waitForMutationLockContention(started <-chan time.Time) bool {
+func waitForMutationLockContention(started <-chan time.Time, acquire func()) error {
+	worker := runtime.FuncForPC(reflect.ValueOf(acquire).Pointer()).Name()
 	lockMutation := runtime.FuncForPC(reflect.ValueOf((*AlarmService).lockCacheMutation).Pointer()).Name()
 	records := make([]runtime.StackRecord, runtime.NumGoroutine())
 
 	for {
-		select {
-		case <-started:
-			return false
-		default:
-		}
-
 		n, ok := runtime.GoroutineProfile(records)
 		if !ok {
 			records = make([]runtime.StackRecord, n)
@@ -65,30 +59,49 @@ func waitForMutationLockContention(started <-chan time.Time) bool {
 			continue
 		}
 
+		visible := false
+
 		for i := range records[:n] {
-			if mutationLockInStack(records[i].Stack(), lockMutation) {
-				return true
+			waiting, found := mutationLockInStack(records[i].Stack(), lockMutation, worker)
+			if waiting {
+				return nil
 			}
+
+			visible = visible || found
+		}
+
+		if !visible {
+			if len(started) != 0 {
+				return errors.New("lockCacheMutation returned while the test still held cacheMutationMu")
+			}
+
+			return errors.New("goroutine profile truncated before the lockCacheMutation worker; increase GODEBUG=profstackdepth")
 		}
 
 		runtime.Gosched()
 	}
 }
 
-func mutationLockInStack(stack []uintptr, lockMutation string) bool {
+func mutationLockInStack(stack []uintptr, lockMutation, worker string) (waiting, visible bool) {
 	frames := runtime.CallersFrames(stack)
+
+	var previous string
 
 	for {
 		frame, more := frames.Next()
-		if frame.Function == "sync.(*Mutex).Lock" {
-			caller, _ := frames.Next()
+		if frame.Function == lockMutation && previous == "sync.(*Mutex).Lock" {
+			return true, true
+		}
 
-			return caller.Function == lockMutation
+		if frame.Function == worker {
+			return false, true
 		}
 
 		if !more {
-			return false
+			return false, false
 		}
+
+		previous = frame.Function
 	}
 }
 

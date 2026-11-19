@@ -2,8 +2,8 @@
     UPDATE alarm_dispatch_deliveries d
     SET status = 'quarantined',
         quarantined_at = clock.now,
-        last_error = $5,
-        last_error_code = $6,
+        last_error = $6,
+        last_error_code = $7,
         updated_at = clock.now
     FROM checked CROSS JOIN clock CROSS JOIN passed
     WHERE d.id = checked.id AND passed.value

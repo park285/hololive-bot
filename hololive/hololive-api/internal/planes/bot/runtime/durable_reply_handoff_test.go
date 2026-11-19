@@ -393,6 +393,48 @@ func TestReplyHandoffObservationOutcomes(t *testing.T) {
 	}
 }
 
+func TestReplyHandoffRescheduleRevokesClaimAtSameDeadline(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	r := newHandoffRuntime(t, pool, newHandoffIrisClient(t), testDurableProfile(t).BotReplyOutbox.MaxAttempts)
+	base := insertHandoffReply(t, r, "message:handoff-same-deadline")
+	freezeHandoffClock(t, pool)
+	dispatchNext(t, r)
+
+	accepted, due := advanceToStoredHandoffCheck(t, pool, base)
+	horizon := due.Sub(accepted) + replyHandoffSoftClaim
+	claims, err := r.outbox.ClaimHandoffDue(ctx, 1, replyHandoffSoftClaim)
+	require.NoError(t, err)
+	require.Len(t, claims, 1)
+	require.Equal(t, accepted.Add(horizon), claims[0].CheckToken)
+
+	delay, applied, err := r.outbox.RescheduleHandoff(ctx, claims[0], time.Hour, horizon)
+	require.NoError(t, err)
+	require.True(t, applied)
+	require.Equal(t, replyHandoffSoftClaim, delay)
+
+	for _, status := range []string{durability.ReplyOutboxHandoffCompleted, durability.ReplyOutboxManualReview, durability.ReplyOutboxRetryablePreDispatch} {
+		applied, err = r.outbox.SettleHandoff(ctx, durability.ReplyHandoffSettlement{Claim: claims[0], Status: status, RetryAfter: time.Millisecond})
+		require.NoError(t, err)
+		require.False(t, applied, "재예약 뒤 이전 확인으로 %s 전이를 적용하지 않는다", status)
+	}
+
+	_, applied, err = r.outbox.RescheduleHandoff(ctx, claims[0], time.Millisecond, horizon)
+	require.NoError(t, err)
+	require.False(t, applied, "이전 확인으로 다시 재예약하지 않는다")
+
+	_, next := advanceToStoredHandoffCheck(t, pool, base)
+	require.Equal(t, accepted.Add(horizon), next)
+
+	claims, err = r.outbox.ClaimHandoffDue(ctx, 1, replyHandoffSoftClaim)
+	require.NoError(t, err)
+	require.Len(t, claims, 1)
+
+	applied, err = r.outbox.SettleHandoff(ctx, durability.ReplyHandoffSettlement{Claim: claims[0], Status: durability.ReplyOutboxHandoffCompleted})
+	require.NoError(t, err)
+	require.True(t, applied)
+}
+
 func TestReplyHandoffUnconfirmedAtTheHorizonNeedsReview(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	client := newHandoffIrisClient(t)

@@ -23,5 +23,5 @@ CROSS JOIN LATERAL (
       AND d.status = 'SENT'
 ) AS members
 WHERE r.base_id = due.base_id
-RETURNING r.base_id, r.handoff_request_id, r.generation, r.message_hash, r.member_ids, r.handoff_next_check_at,
+RETURNING r.base_id, r.handoff_request_id, r.generation, r.message_hash, r.member_ids, r.handoff_next_check_at, r.xmin,
           members.elapsed_ms, members.attempt_count, members.sent_member_ids, members.sent_member_versions

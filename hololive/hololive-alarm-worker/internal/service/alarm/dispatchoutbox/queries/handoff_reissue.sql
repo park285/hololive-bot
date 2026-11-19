@@ -2,17 +2,17 @@
     UPDATE alarm_dispatch_deliveries d
     SET status = 'retry',
         attempt_count = d.attempt_count + 1,
-        next_attempt_at = clock.now + ($5::BIGINT * INTERVAL '1 millisecond'),
+        next_attempt_at = clock.now + ($6::BIGINT * INTERVAL '1 millisecond'),
         sent_at = NULL,
-        last_error = $6,
-        last_error_code = $7,
+        last_error = $7,
+        last_error_code = $8,
         updated_at = clock.now
     FROM checked CROSS JOIN clock CROSS JOIN passed
     WHERE d.id = checked.id AND passed.value
     RETURNING d.id
 ), unit_updated AS (
     UPDATE alarm_dispatch_send_units u
-    SET client_request_id = CASE WHEN passed.value THEN $8 ELSE u.client_request_id END,
+    SET client_request_id = CASE WHEN passed.value THEN $9 ELSE u.client_request_id END,
         request_generation = CASE WHEN passed.value THEN u.request_generation + 1 ELSE u.request_generation END,
         handoff_request_id = CASE WHEN passed.value THEN NULL ELSE u.handoff_request_id END,
         handoff_next_check_at = NULL,

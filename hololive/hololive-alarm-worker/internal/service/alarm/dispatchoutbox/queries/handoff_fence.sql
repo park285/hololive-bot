@@ -1,6 +1,6 @@
 WITH unit AS MATERIALIZED (
     SELECT u.id, u.client_request_id, u.request_delivery_ids,
-           u.handoff_request_id, u.handoff_next_check_at, u.handoff_checked_at
+           u.handoff_request_id, u.handoff_next_check_at, u.handoff_checked_at, u.xmin AS claim_xid
     FROM alarm_dispatch_send_units u
     WHERE u.id = $1
     FOR UPDATE
@@ -14,7 +14,8 @@ WITH unit AS MATERIALIZED (
     SELECT clock_timestamp() AS now
     FROM (SELECT count(locked.id) AS locked_count FROM locked) AS acquired
 ), unit_checked AS MATERIALIZED (
-    SELECT COALESCE(unit.handoff_next_check_at = $2::TIMESTAMPTZ AND unit.handoff_checked_at IS NULL, FALSE) AS token_matches,
+    SELECT COALESCE(unit.handoff_next_check_at = $2::TIMESTAMPTZ
+                    AND unit.handoff_checked_at IS NULL AND unit.claim_xid = $5::xid, FALSE) AS token_matches,
            COALESCE(unit.client_request_id = $3 AND unit.handoff_request_id = $4, FALSE) AS request_matches,
            COALESCE(unit.request_delivery_ids @> members.ids, FALSE) AS membership_matches,
            COALESCE(unit.request_delivery_ids <@ members.ids, FALSE)
