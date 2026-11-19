@@ -45,6 +45,29 @@ sudo ./scripts/deploy/sync-opt-current.sh
 그 효과까지 승인된 설치에만 사용합니다. 두 모드 모두 새 고유 exec-tree 복구점을 만들며 기존 backup을
 덮거나 보존 개수만으로 삭제하지 않습니다. 과거 복구점 정리는 별도 승인 절차입니다.
 
+### 보호 인프라를 유지하는 중앙 앱 소스 게시
+
+이미 `--schema-only`인 중앙에 앱 소스만 교체할 때는 `--protected-source`를 사용합니다. `--application-only`는 최초 풀링 후 카드 전환용이며, `--source-only OLD`는 기존 일반 파일의 제한된 수정만 허용합니다. 두 옵션이나 전체 동기화를 실패 시 대안으로 실행하지 않습니다.
+
+kapu에서 검토한 후보와 도구의 **각각의 전체 커밋**을 고정하고, 구 커밋을 포함한 검증된 bundle을 전달합니다. 중앙에서는 `/opt/hololive-bot/release-sources/<고유 이름>`을 root:root `0700`으로 새로 만들고 그 아래 `source`에 독립된 clean clone을 준비합니다. 공유 object·하드링크·추가 파일·ACL을 쓰지 않습니다. 정식 통합본에 도구가 포함되면 후보 clone을 도구 clone으로도 사용할 수 있습니다. 중앙에서는 빌드하지 않습니다.
+
+```bash
+sudo -n "$TOOL/source/scripts/deploy/sync-opt-current.sh" \
+  --protected-source "$INSTALLED_SHA" "$CANDIDATE_SHA" "$TOOL_SHA" "$CANDIDATE/source"
+```
+
+이 모드는 기존 중앙 배포 lock을 잡고 **별도의 앱 코드 세대**를 만듭니다. `/opt/hololive-bot/compose/app-sources`가 처음부터 없을 때만 `current/.source-revision`과 구 커밋의 실행 소스를 대조합니다. 구 `current` 안의 root:root 그룹 쓰기 가능 파일은 실행 권한의 근거가 아닙니다. 소스 바이트·실행 비트·실측 메타데이터를 읽어 대조하고 보관할 뿐, 거기서 코드를 실행하거나 파일을 쓰거나 지우지 않습니다. 이후에는 `app-sources/active`가 가리키는 봉인 세대가 유일한 출발점입니다. 후보의 파일 추가·변경·제거는 새 archive에만 반영되며 `current`의 세대·데이터·프로필·설정은 그대로입니다.
+
+설치된 Quadlet·prestart·방화벽, idle schema migrator, 건강한 PostgreSQL·풀러와 실제 읽기 전용 mount를 게시 전후에 확인합니다. PG HBA와 풀러 HBA·stats-users는 실행 중인 파일과 다음 기동의 호스트 파일이 다른 inode일 수 있습니다. 이 경우에만 양쪽 바이트·mode·소유권·SELinux 등 xattr가 같아야 하며, 양쪽 device/inode를 따로 고정합니다. 불일치·ACL·예상 밖 mode는 중단 사유입니다. 권한 보정, host unit 재설치·reload, 서비스 제어, SQL 실행은 하지 않습니다.
+
+성공하면 `app-sources/active`(root:root `0600`)에 전체 SHA 한 줄이 남습니다. 서비스 전환은 **명시한 후보 SHA**, `active`, `app-sources/<SHA>/.source-revision`(`0400`), 이미지 revision을 일치시켜야 합니다. 세대 루트는 `0500`, 하위 디렉터리와 실행 파일은 `0555`, 일반 파일은 `0444`입니다. 코드·manifest·lineage SQL은 이 세대에서, 실행 데이터·프로필·인프라 bind는 기존 `current`에서 읽습니다. 둘을 잇는 심링크나 `current/.source-revision` 덮어쓰기는 없습니다. 소스 게시 성공은 DB 검증이나 앱 기동 성공을 뜻하지 않습니다.
+
+다음 세대로 넘어가려면 이전 세대의 실제 API·alarm-worker가 healthy이고 각 활성 프로필의 `candidate.revision`, `candidate.image`, `migrator.image`가 실행 이미지 및 OCI revision과 맞아야 합니다. 설치된 `50-migrator-image.conf`도 그 세대용 `--check`와 봉인 prestart를 정확히 생성해야 합니다. 최초 `--schema-only` 정의만 남았거나 영수증이 없는 상태를 수용 완료로 간주하지 않습니다. 이 검사는 읽기 전용이며 drop-in을 새로 설치하지 않습니다.
+
+`app-sources/transition-OLD-NEW/`의 `previous.actual`은 검증한 이전 소스 바이트이며 `previous.metadata`는 그 원본의 신원·권한·시각입니다. 원본 inode는 그대로 남습니다. 같은 디렉터리에 두 보호 인프라 스냅샷과 Git 변경 목록을 보존합니다. `active`가 없거나 `incomplete OLD -> NEW`이면 후보를 활성화하지 않고 원래 시도의 영수증과 양쪽 세대를 보존합니다. 자동 재시도·stamp 수리·되돌리기는 없습니다. 정상 복구도 이전 소스·이미지/프로필·원장 호환성 및 실제 서비스 상태를 대조한 별도 승인 절차로만 합니다.
+
+### 전체 설치 검사
+
 설치 도구는 다음을 확인한 뒤에만 unit을 설치합니다.
 
 - hostname이 `kapu`이면 `HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1` 없이 거부합니다(두 번째 dispatcher 방지).
