@@ -178,7 +178,7 @@ func TestExtractPendingRowsRetriesRejectedResponses(t *testing.T) {
 		store := &fakeRowStore{pending: []posterstore.PendingRows{week}}
 		model := &fakeRowModel{
 			extracted:  [][]extractedRow{{bad}, {plannedRow}},
-			translated: [][]translatedRow{{{Index: 2, TitleKo: "잡담"}}, {{Index: 1, TitleKo: "잡담", WithKo: []string{" "}}}, {chatRowKo}},
+			translated: [][]translatedRow{{{Index: 2, TitleKo: "잡담"}}, {{Index: 1, TitleKo: " "}}, {chatRowKo}},
 		}
 
 		require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()), name)
@@ -190,6 +190,34 @@ func TestExtractPendingRowsRetriesRejectedResponses(t *testing.T) {
 		require.Equal(t, "21:00", store.recorded[0][0].Start, name)
 		require.Empty(t, store.recorded[0][0].End, name)
 		require.Equal(t, []time.Time{utcDate("2026-11-11")}, store.today, "JST 오늘 날짜로 대상을 고른다")
+	}
+}
+
+func TestExtractPendingRowsDropsOnlyBlankTranslationItems(t *testing.T) {
+	t.Parallel()
+
+	rows, err := decodeRows[translatedRow](`{"rows":[{"index":1,"title_ko":"손가락 씨름 최강 결정전","with_ko":["", "오카유 선배 (주최)", "　", " 미오 ", ""],"tags_ko":[" ", "JP", ""]}]}`)
+	require.NoError(t, err)
+
+	store := &fakeRowStore{pending: []posterstore.PendingRows{week}}
+	model := &fakeRowModel{extracted: [][]extractedRow{{plannedRow}}, translated: [][]translatedRow{rows}}
+	require.NoError(t, rowsService(store, model, sophia).extractPendingRows(t.Context()))
+	require.Len(t, model.prompts, 1)
+	require.Len(t, store.recorded, 1)
+	require.Len(t, store.recorded[0], 1)
+	require.Equal(t, []string{"오카유 선배 (주최)", " 미오 "}, store.recorded[0][0].WithKo)
+	require.Equal(t, []string{"JP"}, store.recorded[0][0].TagsKo)
+}
+
+func TestTranslatedItemsDoNotDiscardInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	for _, item := range []string{`null`, `7`, `"\n"`} {
+		rows, err := decodeRows[translatedRow](`{"rows":[{"index":1,"title_ko":"잡담","tags_ko":["JP",` + item + `]}]}`)
+		if err == nil {
+			err = validateTranslated(1, rows)
+		}
+		require.Error(t, err, item)
 	}
 }
 
