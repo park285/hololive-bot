@@ -55,7 +55,7 @@ if [[ -n "$source_base" ]]; then
     die "source-only requires a descendant of the installed revision"
   reserved="$(git -C "$REPO_ROOT" ls-tree "$source_base" -- .source-revision)$(git -C "$REPO_ROOT" ls-tree "$HEAD_REVISION" -- .source-revision)"
   [[ -z "$reserved" ]] || die "reserved source-revision path in Git tree"
-  [[ "$(git -C "$REPO_ROOT" hash-object --no-filters "${BASH_SOURCE[0]}")" == "$(git -C "$REPO_ROOT" rev-parse "$HEAD_REVISION:scripts/deploy/sync-opt-current.sh")" ]] ||
+  [[ "$(git -C "$REPO_ROOT" hash-object --stdin <"${BASH_SOURCE[0]}")" == "$(git -C "$REPO_ROOT" rev-parse "$HEAD_REVISION:scripts/deploy/sync-opt-current.sh")" ]] ||
     die "source-only bootstrap must be the reviewed coordinator"
 fi
 
@@ -120,6 +120,10 @@ programs = [
         "public-bind-mounts.sh", "postgres-capacity.sh", "compose-env.sh", "postgres-endpoint.sh")),
 ]
 files = {root / path for path in programs}
+installed = Path("/usr/local/libexec/hololive-bot")
+files.add(installed / "quadlet-prestart")
+files.update(installed / "lib" / name for name in (
+    "admin-bind.sh", "public-bind-mounts.sh", "postgres-capacity.sh", "compose-env.sh", "postgres-endpoint.sh"))
 directories = {parent for path in files for parent in path.parents}
 for path in sorted(directories | files):
     info = path.lstat()

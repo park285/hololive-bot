@@ -107,8 +107,8 @@ run_sync() {
   # shellcheck disable=SC2016 # namespace 안의 bash가 확장한다.
   unshare --user --map-root-user --mount bash -c '
     set -euo pipefail
-    host="$1"
-    shift
+    host="$1"; repo="$2"; stubs="$3"; bootstrap="$4"
+    shift 4
     mount --bind "${host}/etc-containers-systemd" /etc/containers/systemd
     mount --bind "${host}/usr-local-libexec" /usr/local/libexec
     mount --bind "${host}/etc-stack-secrets" /etc/stack-secrets
@@ -118,18 +118,30 @@ run_sync() {
     mount --bind "${host}/run-lock" /run/lock
     if [[ " $* " == *" --source-only "* ]]; then
       jail="$host/jail"
-      mkdir -p "$jail"/{usr,dev,etc,proc,run,sys,tmp,home,var,opt}
-      chmod 0755 "$jail"
-      for directory in usr dev etc proc run sys; do mount --rbind "/$directory" "$jail/$directory"; done
-      for directory in tmp home var; do mount --bind "/$directory" "$jail/$directory"; done
+      mkdir -p "$jail"
+      mount -t tmpfs -o mode=0755 tmpfs "$jail"
+      mkdir -p "$jail"/{usr,dev,etc,proc,run,sys,tmp,var,opt,repo,stubs}
+      for directory in dev etc proc run sys; do mount --rbind "/$directory" "$jail/$directory"; done
+      for directory in bin sbin lib lib64 share libexec local/libexec; do
+        mkdir -p "$jail/usr/$directory"
+        mount --rbind "/usr/$directory" "$jail/usr/$directory"
+      done
+      chmod 0755 "$jail/usr" "$jail/usr/local"
+      mount --bind "$repo" "$jail/repo"
+      mount --bind "$stubs" "$jail/stubs"
+      touch "$jail/bootstrap" "$jail/events"
+      mount --bind "$bootstrap" "$jail/bootstrap"
+      mount --bind "$host/events" "$jail/events"
+      if [[ -f "$host/canary" ]]; then touch "$jail/canary"; mount --bind "$host/canary" "$jail/canary"; fi
+      if [[ -e "$host/events.fail-before" ]]; then cp "$host/events.fail-before" "$jail/events.fail-before"; fi
       for directory in bin sbin lib lib64; do
         [[ -e "$jail/$directory" ]] || ln -s "usr/$directory" "$jail/$directory"
       done
       mount --bind "$host/opt" "$jail/opt"
-      exec chroot "$jail" "$@"
+      exec chroot "$jail" env PATH=/stubs:/usr/bin:/usr/sbin HOME=/tmp TMPDIR=/tmp SYNC_TEST_EVENTS=/events REPO_ROOT=/repo OPT_ROOT=/opt bash ./bootstrap "${@: -2}"
     fi
     exec "$@"
-  ' _ "${host}" env PATH="${fakebin}:${PATH}" SYNC_TEST_EVENTS="${host}/events" \
+  ' _ "${host}" "$repo" "$fakebin" "$ROOT_DIR/scripts/deploy/sync-opt-current.sh" env PATH="${fakebin}:${PATH}" SYNC_TEST_EVENTS="${host}/events" \
     REPO_ROOT="${repo}" OPT_ROOT="$opt" \
     bash "${ROOT_DIR}/scripts/deploy/sync-opt-current.sh" "$@" >"${host}/out" 2>&1
 }
@@ -321,6 +333,7 @@ cp -a "$w2_repo" "$source_repo"
 installed_revision="$(git -C "$source_repo" rev-parse HEAD)"
 chmod -R go-w "$source_host/opt/current/scripts"
 chmod go-w "$source_host/opt" "$source_host/opt/current"
+chmod go-w "$source_host/usr-local-libexec"
 cp "$ROOT_DIR/scripts/deploy/sync-opt-current.sh" "$source_repo/scripts/deploy/sync-opt-current.sh"
 printf 'new release\n' >"$source_repo/hololive/hololive-api/VERSION"
 commit_repo "$source_repo" new-release
@@ -340,17 +353,17 @@ commit_repo "$bad_repo" remove-source
 assert_rejected_without_change "$source_host" "$bad_repo" "removed source" "regular-file modifications" --source-only "$installed_revision"
 bad_repo="$tmp/repo-source-reserved"
 cp -a "$source_repo" "$bad_repo"
-printf 'retained\n' >"$tmp/stamp-canary"
-ln -s "$tmp/stamp-canary" "$bad_repo/.source-revision"
+printf 'retained\n' >"$source_host/canary"
+ln -s /canary "$bad_repo/.source-revision"
 commit_repo "$bad_repo" reserved-stamp
 assert_rejected_without_change "$source_host" "$bad_repo" "reserved stamp" "reserved source-revision" --source-only "$installed_revision"
-[[ "$(<"$tmp/stamp-canary")" == retained ]] || fail "reserved path changed an external file"
+[[ "$(<"$source_host/canary")" == retained ]] || fail "reserved path changed an external file"
 bad_repo="$tmp/repo-source-protected"
 cp -a "$source_repo" "$bad_repo"
-printf 'touch "%s"\n' "$tmp/forbidden-verifier-ran" >>"$bad_repo/scripts/deploy/verify-exec-tree-ownership.sh"
+printf '%s\n' 'echo ran >/canary' >>"$bad_repo/scripts/deploy/verify-exec-tree-ownership.sh"
 commit_repo "$bad_repo" protected-change
 assert_rejected_without_change "$source_host" "$bad_repo" "changed install helper" "unapproved source-only path" --source-only "$installed_revision"
-[[ ! -e "$tmp/forbidden-verifier-ran" ]] || fail "unapproved helper ran before its rejection"
+[[ "$(<"$source_host/canary")" == retained ]] || fail "unapproved helper ran before its rejection"
 for attack in writable-parent nonroot-owner file-link acl; do
   bad_host="$tmp/host-source-unsafe-$attack"
   cp -a "$source_host" "$bad_host"
@@ -359,7 +372,7 @@ for attack in writable-parent nonroot-owner file-link acl; do
     writable-parent) chmod g+w "${entry%/*}" ;;
     nonroot-owner) podman unshare /usr/bin/chown 1 "$entry" ;;
     file-link) ln "$entry" "$bad_host/alias" ;;
-    acl) python3 - "$entry" <<'PY'
+    acl) python3 - "$bad_host/usr-local-libexec/hololive-bot" <<'PY'
 import os
 import struct
 import sys
