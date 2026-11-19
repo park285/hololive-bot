@@ -13,6 +13,12 @@ pass() {
   echo "[PASS] $*"
 }
 
+case "$#:${1:-}" in
+  0:) released=false ;;
+  1:--released-predecessor) released=true ;;
+  *) fail "usage: $0 [--released-predecessor]" ;;
+esac
+
 [[ -x "${QUADLET_BIN}" ]] || fail "quadlet generator missing: ${QUADLET_BIN}"
 unshare --user --map-root-user --mount true 2>/dev/null || fail "unprivileged user+mount namespace unavailable"
 
@@ -51,6 +57,13 @@ cat >"${fakebin}/sync" <<'EOF'
 active=/opt/hololive-bot/compose/app-sources/active
 if [[ -f "$SYNC_TEST_EVENTS.fail-incomplete" && -f "$active" && "$(<"$active")" == "incomplete "* ]]; then exit 94; fi
 exec /usr/bin/sync "$@"
+EOF
+cat >"${fakebin}/find" <<'EOF'
+#!/usr/bin/env bash
+if [[ -f /tamper-staged-helper && "$1" == /opt/hololive-bot/compose/.staging-current.* && "$2" == -type && "$3" == f && "$#" == 3 ]]; then
+  printf '\n' >>"$1/scripts/deploy/lib/postgres-endpoint.sh" || exit 1
+fi
+exec /usr/bin/find "$@"
 EOF
 cat >"${fakebin}/protected-bootstrap" <<'EOF'
 #!/usr/bin/env bash
@@ -114,6 +127,7 @@ make_repo() {
     cp -R "${ROOT_DIR}/${path}" "${repo}/${path}"
   done
   local migrator="$repo/deploy/quadlet/hololive-bot/hololive-db-migrate.container"
+  printf '\n' >>"$repo/scripts/deploy/lib/postgres-endpoint.sh"
   awk '
     /^Volume=.*:\/migrations:ro$/ || /^Environment=MIGRATION_(BASELINE_THROUGH|ALLOW_BLOCKING_INDEX_DROP)=/ {next}
     {print}
@@ -219,6 +233,7 @@ run_sync() {
       if [[ -e "$host/events.fail-before" ]]; then cp "$host/events.fail-before" "$jail/events.fail-before"; fi
       if [[ -e "$host/events.fail-after" ]]; then cp "$host/events.fail-after" "$jail/events.fail-after"; fi
       if [[ -e "$host/events.fail-incomplete" ]]; then touch "$jail/events.fail-incomplete"; fi
+      if [[ -e "$host/tamper-staged-helper" ]]; then touch "$jail/tamper-staged-helper"; fi
       for directory in bin sbin lib lib64; do
         [[ -e "$jail/$directory" ]] || ln -s "usr/$directory" "$jail/$directory"
       done
@@ -574,6 +589,8 @@ awk '!/^Volume=.*:\/migrations:ro$/ && !/^Environment=MIGRATION_(BASELINE_THROUG
   "$source_repo/$migrator_path" >"$generation_repo/$migrator_path"
 printf '\n' >>"$generation_repo/deploy/quadlet/README.md"
 printf '\n' >>"$generation_repo/scripts/deploy/quadlet-prestart.sh"
+endpoint_path=scripts/deploy/lib/postgres-endpoint.sh
+cp -- "$ROOT_DIR/$endpoint_path" "$generation_repo/$endpoint_path"
 for path in verification/tla/{AlarmDispatchClaim,CollectionJobLease}/COVERAGE.md; do printf '\n' >>"$generation_repo/$path"; done
 commit_repo "$generation_repo" protected-generation
 candidate_revision="$(git -C "$generation_repo" rev-parse HEAD)"
@@ -639,6 +656,15 @@ if run_sync "$partial" "$generation_repo" "${generation_args[@]}"; then fail "pa
   "$(<"$partial/opt/current/.source-revision")" == "$source_revision" ]] ||
   fail "partial protected publication retained an actionable stamp"
 assert_rejected_without_change "$partial" "$generation_repo" "partial replay" "installed revision mismatch" "${generation_args[@]}"
+bad_host="$tmp/host-tampered-sealed-helper"
+cp -a "$generation_host" "$bad_host"
+touch "$bad_host/tamper-staged-helper"
+assert_rejected_without_change "$bad_host" "$generation_repo" "sealed endpoint changed after archive validation" "staged libexec differs from its candidate source" "${generation_args[@]}"
+bad_host="$tmp/host-matching-tampered-endpoint"
+cp -a "$generation_host" "$bad_host"
+printf 'not the accepted helper\n' >>"$bad_host/opt/current/$endpoint_path"
+cp "$bad_host/opt/current/$endpoint_path" "$bad_host/usr-local-libexec/hololive-bot/lib/postgres-endpoint.sh"
+assert_rejected_without_change "$bad_host" "$generation_repo" "matching unreviewed libexec copies" "installed libexec differs from its protected source" "${generation_args[@]}"
 confirmed_unknown="$tmp/host-generation-after-rename"
 cp -a "$generation_host" "$confirmed_unknown"
 printf '/opt/hololive-bot/compose/app-sources/active\n' >"$confirmed_unknown/events.fail-after"
@@ -659,6 +685,8 @@ run_sync "$generation_host" "$generation_repo" "${generation_args[@]}" ||
 cmp "$unit" "$source_repo/$migrator_path"
 store="$generation_host/opt/app-sources"
 cmp "$generation_repo/$migrator_path" "$store/$candidate_revision/$migrator_path"
+cmp "$source_repo/$endpoint_path" "$generation_host/usr-local-libexec/hololive-bot/lib/postgres-endpoint.sh"
+cmp "$generation_repo/$endpoint_path" "$store/$candidate_revision/$endpoint_path"
 if grep -Ev '^(verify [0-9]+|podman (container|image) inspect .*|systemctl show --all hololive-db-migrate.service -p LoadState -p ActiveState -p SubState -p Job)$' "$generation_host/events"; then fail "unexpected host effect"; fi
 [[ "$(<"$store/active")" == "$candidate_revision" && "$(<"$store/$candidate_revision/.source-revision")" == "$candidate_revision" &&
   "$(<"$generation_host/opt/current/.source-revision")" == "$source_revision" && ! -e "$store/$candidate_revision/$old_file" ]] ||
@@ -758,6 +786,93 @@ run_sync "$generation_host" "$generation_repo" --protected-source "$candidate_re
 [[ "$(<"$store/active")" == "$next_revision" && "$(<"$generation_host/opt/current/.source-revision")" == "$source_revision" ]] ||
   fail "follow-on publication changed the runtime root"
 pass "protected generations pin A/M/D archives without replacing runtime or bound inodes and retain verified predecessors"
+
+qualify_released_predecessor() (
+  local old=efafcf4005878f53ff239f8e8a1b6255e3b59b75 new=77481e8dfb7924e4bca87e0bfcfedb94e2f1cced
+  local fixture="$tmp/released-predecessor" endpoint=scripts/deploy/lib/postgres-endpoint.sh prestart=scripts/deploy/quadlet-prestart.sh
+  local old_blob new_blob accepted image_root installed_lib sealed receipt path protected_before legacy_before
+  local repo="$fixture/repo" host="$fixture/host" tool="$fixture/tool" installed="$fixture/host/usr-local-libexec/hololive-bot"
+  local -a args
+  mkdir -p "$fixture"
+  git init --quiet --template= "$repo"
+  git -C "$repo" fetch -q --no-tags "$ROOT_DIR" "$new"
+  git -C "$repo" merge-base --is-ancestor "$old" "$new" || fail "local release history must contain the complete accepted precursor"
+  git -C "$repo" -c advice.detachedHead=false checkout -q --detach "$old"
+  old_blob="$(git -C "$repo" rev-parse "$old:$endpoint")"
+  new_blob="$(git -C "$repo" rev-parse "$new:$endpoint")"
+  [[ "$old_blob" != "$new_blob" ]] || fail "released endpoint helper split not exercised"
+
+  make_host "$host" 1
+  rm -- "$host/opt/current/marker" "$host/etc-containers-systemd/hololive-bot/stale.container"
+  git -C "$repo" -c tar.umask=0022 archive "$old" | tar -xp -C "$host/opt/current"
+  printf '%s\n' "$old" >"$host/opt/current/.source-revision"
+  mkdir -p "$host/opt/current/"{data,backups,artifacts/worker-profile} "$host/run/hololive-bot/postgres" "$installed/lib"
+  touch "$host/run-lock/hololive-quadlet-redeploy.lock"
+  install -m755 "$repo/$prestart" "$installed/quadlet-prestart"
+  for path in admin-bind public-bind-mounts postgres-capacity compose-env postgres-endpoint; do
+    install -m644 "$repo/scripts/deploy/lib/$path.sh" "$installed/lib/$path.sh"
+  done
+  install -m644 "$repo/scripts/systemd/admin-dashboard-ingress-firewall.service" "$host/etc-systemd-system/"
+  install -m644 "$repo/scripts/systemd/admin-dashboard-ingress.nft" "$host/etc-nftables.d/"
+  install -m644 "$repo"/deploy/quadlet/hololive-bot/* "$host/etc-containers-systemd/hololive-bot/"
+  for path in hololive-api hololive-alarm-worker; do
+    install -m644 "$repo/deploy/quadlet/optional/x-spaces/$path.container.d/40-x-spaces.conf" \
+      "$host/etc-containers-systemd/hololive-bot/$path.container.d/"
+  done
+  chmod 0700 "$host/opt/current"
+  chmod g+w "$host/opt/current/$migrations" "$host/opt/current/$migrations/"*.sql \
+    "$host/opt/current/deploy/postgres/pg_hba.conf" "$host/opt/current/deploy/pgbouncer/"{pg_hba.conf,stats-users.txt}
+  installed_lib="$installed/lib/postgres-endpoint.sh"
+  [[ "$(stat -c '%a:%h' "$installed_lib")" == 644:1 && "$(stat -c '%a:%h' "$installed/quadlet-prestart")" == 755:1 &&
+    "$(git hash-object --no-filters "$installed_lib")" == "$old_blob" &&
+    "$(git hash-object --no-filters "$installed/quadlet-prestart")" == "$(git -C "$repo" rev-parse "$old:$prestart")" ]] ||
+    fail "fixture did not install the actual predecessor libexec"
+  cp --preserve=all "$host/opt/current/deploy/postgres/pg_hba.conf" "$host/stale-bind"
+  git -C "$repo" -c advice.detachedHead=false checkout -q --detach "$new"
+  git init --quiet --template= "$tool"
+  git -C "$tool" fetch -q --no-tags "$repo" HEAD
+  git -C "$tool" -c advice.detachedHead=false checkout -q --detach FETCH_HEAD
+  cp -- "$ROOT_DIR/scripts/deploy/sync-opt-current.sh" "$tool/scripts/deploy/sync-opt-current.sh"
+  commit_repo "$tool" reviewed-predecessor-publisher
+  export SYNC_TEST_TOOL="$tool"
+  accepted="$(git -C "$tool" rev-parse HEAD)"
+  printf '%s\n' "$new" >"$host/candidate-revision"
+  args=(--protected-source "$old" "$new" "$accepted" /opt/hololive-bot/release-sources/candidate/source)
+
+  cp --preserve=all "$installed_lib" "$fixture/original-endpoint"
+  printf '\n' >>"$installed_lib"
+  cp -- "$installed_lib" "$host/opt/current/$endpoint"
+  assert_rejected_without_change "$host" "$repo" "tampered installed predecessor helper" "installed libexec differs from its protected source" "${args[@]}"
+  cp --preserve=all "$fixture/original-endpoint" "$installed_lib"
+  git -C "$repo" show "$old:$endpoint" >"$host/opt/current/$endpoint"
+  printf '\n' >>"$repo/$endpoint"
+  assert_rejected_without_change "$host" "$repo" "dirty release helper" "clean checkout" "${args[@]}"
+  git -C "$repo" show "$new:$endpoint" >"$repo/$endpoint"
+
+  protected_before="$(source_protected "$host")"
+  legacy_before="$(stat -c '%d:%i %a %u:%g %y %z' "$host/opt/current" "$host/opt/current/.source-revision" "$host/opt/current/$endpoint")"
+  run_sync "$host" "$repo" "${args[@]}" || { cat "$host/out" >&2; fail "full released predecessor transition failed"; }
+  image_root="$host/opt/app-sources"
+  sealed="$image_root/$new"
+  receipt="$image_root/transition-$old-$new"
+  [[ "$(<"$image_root/active")" == "$new" && "$(<"$sealed/.source-revision")" == "$new" &&
+    "$(<"$host/opt/current/.source-revision")" == "$old" && "$(<"$image_root/$old/.source-revision")" == "$old" &&
+    "$(<"$receipt/previous.actual/.source-revision")" == "$old" ]] || fail "released source stamp mismatch"
+  [[ "$(source_protected "$host")" == "$protected_before" &&
+    "$(stat -c '%d:%i %a %u:%g %y %z' "$host/opt/current" "$host/opt/current/.source-revision" "$host/opt/current/$endpoint")" == "$legacy_before" &&
+    "$(git hash-object --no-filters "$installed_lib")" == "$old_blob" &&
+    "$(git hash-object --no-filters "$sealed/$endpoint")" == "$new_blob" ]] || fail "sealed helper publication replaced the live predecessor"
+  for path in "$prestart" "$endpoint" "$migrations/manifest.txt"; do
+    cmp "$receipt/previous.actual/$path" "$host/opt/current/$path"
+    cmp "$image_root/$old/$path" "$host/opt/current/$path"
+    cmp "$sealed/$path" "$repo/$path"
+  done
+  cmp "$receipt/changes.raw" <(git -C "$repo" diff --no-renames --no-ext-diff --raw --no-abbrev -z "$old" "$new")
+  cmp "$receipt/previous.metadata" "$receipt/previous.after"
+  cmp "$receipt/protected.before" "$receipt/protected.after"
+  pass "complete released Git trees publish across a real versioned libexec change without touching the installed helper"
+)
+if [[ "$released" == true ]]; then qualify_released_predecessor; fi
 
 for path in opt/current/deploy/postgres/pg_hba.conf opt/current/deploy/pgbouncer/stats-users.txt \
     opt/current/hololive/hololive-api/scripts/init-db/00-assert-pg18-runtime.sql \

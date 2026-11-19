@@ -682,14 +682,23 @@ if [[ "$application_only" == true ]]; then
   assert_same_file "$STAGING/scripts/ci/postgres-capacity-policy.tsv" "$OPT_CURRENT/scripts/ci/postgres-capacity-policy.tsv"
 
   verify_paths=("$OPT_CURRENT/.source-revision" "$OPT_CURRENT/$init_db"/*)
+  if [[ -n "$generation" ]]; then
+    legacy="$(<"$OPT_CURRENT/.source-revision")"
+    [[ "$legacy" =~ ^[0-9a-f]{40}$ ]] || die "invalid protected host revision"
+    git -C "$REPO_ROOT" merge-base --is-ancestor "$legacy" "$source_base" ||
+      die "protected host libexec source is not an installed predecessor"
+  fi
   for asset in "${host_assets[@]}"; do
     IFS='|' read -r path dest mode <<<"$asset"
-    if [[ -n "$generation" && "$path" == scripts/deploy/quadlet-prestart.sh ]]; then
-      legacy="$(<"$OPT_CURRENT/.source-revision")"
-      [[ "$legacy" =~ ^[0-9a-f]{40}$ ]] && git -C "$REPO_ROOT" merge-base --is-ancestor "$legacy" "$source_base" &&
-        [[ "$(git hash-object --no-filters "$dest")" == "$(git -C "$REPO_ROOT" rev-parse "$legacy:$path")" ]] ||
-        die "legacy libexec prestart no longer matches its source"
+    if [[ -n "$generation" && "$dest" == "$LIBEXEC_DIR/"* ]]; then
       assert_same_file "$OPT_CURRENT/$path" "$dest"
+      legacy_blob="$(git -C "$REPO_ROOT" rev-parse --verify "$legacy:$path")" &&
+        [[ "$legacy_blob" =~ ^[0-9a-f]{40}$ && "$(git hash-object --no-filters "$dest")" == "$legacy_blob" ]] ||
+        die "installed libexec differs from its protected source: $path"
+      candidate_blob="$(git -C "$REPO_ROOT" rev-parse --verify "$HEAD_REVISION:$path")" &&
+        [[ "$candidate_blob" =~ ^[0-9a-f]{40}$ && -f "$STAGING/$path" && ! -L "$STAGING/$path" &&
+          "$(git hash-object --no-filters "$STAGING/$path")" == "$candidate_blob" ]] ||
+        die "staged libexec differs from its candidate source: $path"
     else
       assert_same_file "$STAGING/$path" "$OPT_CURRENT/$path"
       assert_same_file "$STAGING/$path" "$dest"
