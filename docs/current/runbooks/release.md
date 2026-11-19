@@ -32,6 +32,13 @@ image label로 합니다.
 `PATCH`는 하위 호환 수정과 보안·운영 안정화에 사용합니다. 버전 관리 도입 전 이력은
 `CHANGELOG.md`의 실제 날짜·commit SHA 기준점을 유지하며 추정 버전을 소급하지 않습니다.
 
+### 19.2.1 의존성 수용 기준
+
+- 다섯 모듈을 각각 `GOWORK=off`로 검사합니다. API의 `adapters/valkeydedup/v1.0.0`은 새 모듈 캐시에서 공개 프록시와 `sum.golang.org`로 ZIP·`go.mod`가 모두 기존 `go.sum`과 일치해야 합니다. 형제 checkout이나 오프라인 동기화 결과만으로 릴리스를 수용하지 않습니다.
+- Hololive는 `shared-go/postgres`의 `pgxdb`를 쓰지만 `pgstore.Store`는 쓰지 않습니다. API는 `bot_webhook_inbox`와 `bot_webhook_heads`를 소유합니다. 격리 PostgreSQL에서 `internal/planes/bot/internal/durability`의 `TestInboxTransitionsMoveTheOrderingHeadOnlyWhenTerminal`로 재시도 중 head 유지와 종단 뒤 다음 행 처리를 확인합니다. nonce 중복·오류 처리, Gemini 일정표 처리, collector/PO issuer와 worker 회귀도 확인합니다.
+- 공용 `pgstore`를 실제로 쓰는 소비자만 [postgres/v1.0.3 전환·롤백 조건](https://github.com/park285/shared-go/blob/postgres/v1.0.3/README.md#inbox-수락-순서)을 따릅니다. `(scope, ordering_key)`별 수락 ID FIFO, 시퀀스 증가폭 1·`CACHE 1`·`NO CYCLE`, 기존 인덱스 보존과 `idx_iris_webhook_inbox_head_by_id` 추가가 전제입니다. 수락·claim·만료 복구를 멈추고 진행 중 트랜잭션이 끝난 뒤 미종단 `pending`·`processing`의 기존/신규 head 불일치 또는 비선두 processing이 0행이어야 합니다. 두 claim 구현을 섞지 않습니다. 이 조건을 Hololive 테이블에 적용하거나 운영 변경 승인으로 해석하지 않습니다.
+- 빌드 호스트에서 같은 clean revision과 `19.2.1`로 API·alarm-worker·collector/PO 산출물을 식별합니다. 중앙 API·alarm-worker는 아래 절차로 교체하고, AP는 슬롯별 런북과 승인 범위에 따라 collector·issuer를 한 쌍으로 수용합니다. 소스 게시와 운영 수용은 별도 증거로 남기며 새 DB migration, DB·pooler 재시작이나 승인 없는 rollback은 수행하지 않습니다.
+
 ### 11.0.0 worker/DB cutover
 
 먼저 구 API/alarm settings·mode를 받는 **10.2.1 호환 baseline을 실제 운영에서 수용**합니다.

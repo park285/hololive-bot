@@ -56,7 +56,7 @@ bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 �
 
 `hololive/*`의 다섯 `go.mod`가 쓰는 `github.com/kapu/*` 모듈 경로는 go.work 전용 계약이다. 이 경로는 루트 `go.work`와 각 `go.mod`의 `replace ../…` 지시문으로만 해석되며 `go get`으로 받을 수 없다. 다섯 업무 모듈 분리는 루트 `go.work`의 `use` 목록이 소유하며, 이 목록에서 빠진 모듈은 아래 `go build`/`go test` 명령에서 바로 해석 실패한다. 외부 소비자가 없으므로 원격 경로와 맞추지 않는다. 이 계약은 2026-12-01 이후 재검토하며, 계기는 `hololive-shared`가 contracts·domain·다중 소비자 패키지만 남아 모듈 수 축소가 가능해지거나 외부 소비자가 hololive 모듈을 `go get`으로 가져와야 하는 경우다.
 
-shared-go 최초 분리 버전인 root `v2.24.0` 및 core/postgres/transport `v1.0.0`의 게시·공식 checksum·다섯 업무 모듈의 실제 공개 pin 검증을 완료했습니다. 로컬 소스 통합은 게시 버전·checksum·CI 출처 검증을 대신하지 않습니다. 기존 업무 모듈 sibling replace는 유지하되 신규 shared-go `replace`는 개발용 go.work/임시 modfile에만 둡니다.
+다섯 업무 모듈은 shared-go의 `/v2 v2.25.0`과 `/postgres v1.0.3`을 고정합니다. `hololive-dbtest`를 제외한 네 모듈은 `/core v1.0.0`과 `/transport v1.0.1`도 사용합니다. 개발용 `go.work`에서 형제 소스를 읽더라도 운영 이미지와 격리 CI는 각 모듈의 정식 tag와 `go.sum`으로 빌드합니다. [릴리스 수용 기준](docs/current/runbooks/release.md#1921-의존성-수용-기준)은 Hololive inbox와 공용 pgstore의 전환 조건을 구분합니다.
 
 세 runtime의 `--check-worker-profile`은 같은 runtime 환경과 로컬 CA를 받아 profile 관계·DB 옵션·제어 예약을 무접속으로 검증합니다. 출력은 기존 식별 형식을 유지하며 성공이 원격 TLS·권한·pooler 호환성의 증거는 아닙니다. 로그는 임의 map/slice 대신 승인된 최소 필드와 count를 같은 키 아래 typed group으로 투영합니다.
 
