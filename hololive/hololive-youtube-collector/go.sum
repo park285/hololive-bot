@@ -151,8 +151,8 @@ github.com/park285/iris-client-go/v5 v5.2.1 h1:q2CN/qvCzQ/KSLbnf+35SdKmacxHW8uhy
 github.com/park285/iris-client-go/v5 v5.2.1/go.mod h1:Vzx5navxO3IXXiYrfUmtX4eOaRdMBYLjcR7XNF6rOv4=
 github.com/park285/shared-go/core v1.0.0 h1:njjHcpmuefz77MdkT7u4/GUbDIdtUXpHmn1XRZn1VEQ=
 github.com/park285/shared-go/core v1.0.0/go.mod h1:IpLckMRu7X4bg/79bgJFufCyVjTC/RCs233qKFwMIeU=
-github.com/park285/shared-go/postgres v1.0.2 h1:0t9nwyJ9H7Dlq1CsQvVankjyMJoUCIVa7OHX0eDG2ps=
-github.com/park285/shared-go/postgres v1.0.2/go.mod h1:vWVQmLo5Q3+YSHqi51B+ichSmpkf7Oi5mcwJeHAOQ3o=
+github.com/park285/shared-go/postgres v1.0.3 h1:BoXldzDTCg6ZVjgDAUsszyFKdOW5LWvrDdueCY1PW94=
+github.com/park285/shared-go/postgres v1.0.3/go.mod h1:vWVQmLo5Q3+YSHqi51B+ichSmpkf7Oi5mcwJeHAOQ3o=
 github.com/park285/shared-go/transport v1.0.1 h1:KORquAb07pBOGQk7vYvdPyIQ32LGkti7Ue80xfK/yRY=
 github.com/park285/shared-go/transport v1.0.1/go.mod h1:1ISrFk/Zi1izwr1DQgKE6mMVUAiqmWdnVM2L/i1vNBk=
 github.com/park285/shared-go/v2 v2.25.0 h1:iPb0DRfZs/sCk1IgA+jFo1oW3JkgfL4tXzWspIt170Q=

@@ -14,17 +14,17 @@ require (
 	github.com/park285/iris-client-go/adapters/valkeydedup v1.0.0
 	github.com/park285/iris-client-go/v5 v5.2.1
 	github.com/park285/shared-go/core v1.0.0
-	github.com/park285/shared-go/postgres v1.0.2
+	github.com/park285/shared-go/postgres v1.0.3
 	github.com/park285/shared-go/transport v1.0.1
 	github.com/park285/shared-go/v2 v2.25.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/quic-go/quic-go v0.65.0
 	github.com/stretchr/testify v1.12.1
-	github.com/valkey-io/valkey-go v1.0.79
+	github.com/valkey-io/valkey-go v1.0.80
 	golang.org/x/image v0.48.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/text v0.44.0
-	google.golang.org/genai v1.77.0
+	google.golang.org/genai v1.79.1
 )
 
 require (

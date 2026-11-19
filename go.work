@@ -16,10 +16,10 @@ use (
 
 replace github.com/park285/iris-client-go/adapters/valkeydedup v1.0.0 => ../iris-client-go/adapters/valkeydedup
 
-replace github.com/park285/shared-go/v2 v2.24.0 => ../shared-go
+replace github.com/park285/shared-go/v2 v2.25.0 => ../shared-go
 
 replace github.com/park285/shared-go/core v1.0.0 => ../shared-go/core
 
-replace github.com/park285/shared-go/postgres v1.0.1 => ../shared-go/postgres
+replace github.com/park285/shared-go/postgres v1.0.3 => ../shared-go/postgres
 
-replace github.com/park285/shared-go/transport v1.0.0 => ../shared-go/transport
+replace github.com/park285/shared-go/transport v1.0.1 => ../shared-go/transport

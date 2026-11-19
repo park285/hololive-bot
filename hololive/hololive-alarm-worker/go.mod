@@ -11,13 +11,13 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/iris-client-go/v5 v5.2.1
 	github.com/park285/shared-go/core v1.0.0
-	github.com/park285/shared-go/postgres v1.0.2
+	github.com/park285/shared-go/postgres v1.0.3
 	github.com/park285/shared-go/transport v1.0.1
 	github.com/park285/shared-go/v2 v2.25.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/stretchr/testify v1.12.1
-	github.com/valkey-io/valkey-go v1.0.79
+	github.com/valkey-io/valkey-go v1.0.80
 	golang.org/x/sync v0.25.0
 )
 

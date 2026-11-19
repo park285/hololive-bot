@@ -87,8 +87,8 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
-github.com/park285/shared-go/postgres v1.0.2 h1:0t9nwyJ9H7Dlq1CsQvVankjyMJoUCIVa7OHX0eDG2ps=
-github.com/park285/shared-go/postgres v1.0.2/go.mod h1:vWVQmLo5Q3+YSHqi51B+ichSmpkf7Oi5mcwJeHAOQ3o=
+github.com/park285/shared-go/postgres v1.0.3 h1:BoXldzDTCg6ZVjgDAUsszyFKdOW5LWvrDdueCY1PW94=
+github.com/park285/shared-go/postgres v1.0.3/go.mod h1:vWVQmLo5Q3+YSHqi51B+ichSmpkf7Oi5mcwJeHAOQ3o=
 github.com/park285/shared-go/v2 v2.25.0 h1:iPb0DRfZs/sCk1IgA+jFo1oW3JkgfL4tXzWspIt170Q=
 github.com/park285/shared-go/v2 v2.25.0/go.mod h1:nP1O/PEzHzPxazCEIN2ufa2zgn5kUNqExGhJnvDLmkA=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
