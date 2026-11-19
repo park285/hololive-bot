@@ -1,14 +1,10 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
-
-const schedulePosterPolishMemoMigration = "026_schedule_poster_polish_memo.sql"
 
 func TestSchedulePosterPolishMemoMigrationKeepsOneMemoRow(t *testing.T) {
 	t.Parallel()
@@ -19,12 +15,7 @@ func TestSchedulePosterPolishMemoMigrationKeepsOneMemoRow(t *testing.T) {
 	_, err := pool.Exec(ctx, `UPDATE schedule_poster_translation_memo SET body = '朝活은 아침 방송', revision = 2, updated_at = now()`)
 	require.NoError(t, err)
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterPolishMemoMigration)
-	require.NoError(t, err)
-	require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterPolishMemoMigration, string(migration)), "다시 적용해도 실패하지 않는다")
+	require.NoError(t, ApplyMigrations(ctx, pool), "다시 적용해도 실패하지 않는다")
 
 	var (
 		rows     int

@@ -1,16 +1,12 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-const schedulePosterReviewReasonMigration = "018_schedule_poster_review_request_reason.sql"
-
-func TestSchedulePosterReviewReasonMigrationBackfillsTheReviewer(t *testing.T) {
+func TestSchedulePosterReviewReasonBaselinePreservesReviewer(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
@@ -24,12 +20,7 @@ func TestSchedulePosterReviewReasonMigrationBackfillsTheReviewer(t *testing.T) {
 		       (4, 'UCROQtXcp2loQEmvpe5rhJzQ', '1', 'https://x.com/i/status/4', 'https://pbs.twimg.com/media/d.jpg', now(), '', 'rejected', NULL, NULL, now(), 'auto')`)
 	require.NoError(t, err)
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterReviewReasonMigration)
-	require.NoError(t, err)
-	require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterReviewReasonMigration, string(migration)))
+	require.NoError(t, ApplyMigrations(ctx, pool))
 
 	rows, err := pool.Query(ctx, `SELECT COALESCE(reviewed_by, '') FROM schedule_posters ORDER BY id`)
 	require.NoError(t, err)
@@ -45,7 +36,7 @@ func TestSchedulePosterReviewReasonMigrationBackfillsTheReviewer(t *testing.T) {
 	}
 
 	require.NoError(t, rows.Err())
-	require.Equal(t, []string{"admin", "auto", "", "auto"}, reviewers, "관리자에게 넘긴 적이 있는 판정은 admin, 없으면 auto이고 이미 채운 값은 둔다")
+	require.Equal(t, []string{"", "", "", "auto"}, reviewers)
 
 	for name, update := range map[string]string{
 		"넘기지 않은 행의 이유": `UPDATE schedule_posters SET review_request_reason = 'uncertain' WHERE id = 3`,

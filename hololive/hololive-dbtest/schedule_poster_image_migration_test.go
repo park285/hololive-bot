@@ -1,17 +1,12 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	schedulePosterImageMigration = "024_schedule_poster_image.sql"
-	mimeJPEG                     = "image/jpeg"
-)
+const mimeJPEG = "image/jpeg"
 
 func TestSchedulePosterImageMigrationKeepsBytesAndMIMETogether(t *testing.T) {
 	t.Parallel()
@@ -29,14 +24,8 @@ func TestSchedulePosterImageMigrationKeepsBytesAndMIMETogether(t *testing.T) {
 		        'https://i.ytimg.com/vi/4uuYjSf0rpU/maxresdefault.jpg', encode(sha256('\x01'::bytea), 'hex'), '\x01'::bytea, 'image/jpeg', now(), '')`)
 	require.NoError(t, err)
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterImageMigration)
-	require.NoError(t, err)
-
 	for range 2 {
-		require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterImageMigration, string(migration)), "다시 적용해도 실패하지 않는다")
+		require.NoError(t, ApplyMigrations(ctx, pool), "다시 적용해도 실패하지 않는다")
 	}
 
 	var unstored, stored int

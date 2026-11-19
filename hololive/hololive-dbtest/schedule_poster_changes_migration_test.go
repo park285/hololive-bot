@@ -1,8 +1,6 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"strings"
 	"testing"
 
@@ -11,10 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	schedulePosterChangesMigration = "020_schedule_poster_changes.sql"
-	schedulePostChannel            = "UCROQtXcp2loQEmvpe5rhJzQ"
-)
+const schedulePostChannel = "UCROQtXcp2loQEmvpe5rhJzQ"
 
 func newSchedulePosterChangesPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -22,14 +17,9 @@ func newSchedulePosterChangesPool(t *testing.T) *pgxpool.Pool {
 	pool := NewPool(t)
 	ctx := t.Context()
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
+	require.NoError(t, ApplyMigrations(ctx, pool), "다시 적용해도 실패하지 않는다")
 
-	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterChangesMigration)
-	require.NoError(t, err)
-	require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterChangesMigration, string(migration)), "다시 적용해도 실패하지 않는다")
-
-	_, err = pool.Exec(ctx, `INSERT INTO schedule_poster_posts (post_id, channel_id, posted_at, body) VALUES (1, $1, now(), '告知')`, schedulePostChannel)
+	_, err := pool.Exec(ctx, `INSERT INTO schedule_poster_posts (post_id, channel_id, posted_at, body) VALUES (1, $1, now(), '告知')`, schedulePostChannel)
 	require.NoError(t, err)
 
 	return pool

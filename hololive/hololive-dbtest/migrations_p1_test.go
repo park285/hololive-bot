@@ -2,9 +2,10 @@ package dbtest
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -71,18 +72,27 @@ func TestSourceObservationGrantsAreLeastPrivilege(t *testing.T) {
 func applyBaselineForRoles(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
 	t.Helper()
 
-	dir, err := resolveMigrationsDir()
+	applyRoleMigrations(t, pool, strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper))
+}
+
+func applyRoleMigrations(t *testing.T, pool *pgxpool.Pool, replacer *strings.Replacer) {
+	t.Helper()
+
+	files, err := readMigrations()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	raw, err := fs.ReadFile(os.DirFS(dir), epoch3BaselineMigration)
-	if err != nil {
-		t.Fatal(err)
+	for i := range files {
+		files[i].SQL = []byte(replacer.Replace(string(files[i].SQL)))
+		files[i].Contract = replacer.Replace(files[i].Contract)
+
+		digest := sha256.Sum256(files[i].SQL)
+
+		files[i].Checksum = hex.EncodeToString(digest[:])
 	}
 
-	content := strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper).Replace(string(raw))
-	if err := applyMigrationContent(t.Context(), pool, epoch3BaselineMigration, content); err != nil {
+	if err := installTestMigrations(t.Context(), pool, files); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -286,7 +296,6 @@ var sourceObservationSequences = []string{
 	"source_observation_payloads_id_seq",
 	"source_observation_collisions_id_seq",
 	"youtube_collection_projection_generations_generation_seq",
-	"source_observation_applications_id_seq",
 	"source_reconciliation_conflicts_id_seq",
 }
 
@@ -345,7 +354,6 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 		},
 		roles.runtime: {
 			"youtube_collection_projection_generations_generation_seq": observationPrivileges("USAGE", "SELECT"),
-			"source_observation_applications_id_seq":                   observationPrivileges("USAGE", "SELECT"),
 			"source_reconciliation_conflicts_id_seq":                   observationPrivileges("USAGE", "SELECT"),
 		},
 	}

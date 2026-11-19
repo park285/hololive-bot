@@ -1,16 +1,12 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-const schedulePosterNotFoundMigration = "023_schedule_poster_not_found_text.sql"
-
-func TestSchedulePosterNotFoundMigrationRewritesSeededTextOnly(t *testing.T) {
+func TestSchedulePosterNotFoundBaselinePreservesPostInstallText(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
@@ -39,21 +35,15 @@ func TestSchedulePosterNotFoundMigrationRewritesSeededTextOnly(t *testing.T) {
 
 	require.Equal(t, current, load())
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterNotFoundMigration)
-	require.NoError(t, err)
-
 	apply := func() {
 		for range 2 {
-			require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterNotFoundMigration, string(migration)))
+			require.NoError(t, ApplyMigrations(ctx, pool))
 		}
 	}
 
 	set(seeded)
 	apply()
-	require.Equal(t, current, load())
+	require.Equal(t, seeded, load())
 
 	set(custom)
 	apply()

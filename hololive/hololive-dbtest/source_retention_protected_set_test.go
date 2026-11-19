@@ -2,9 +2,6 @@ package dbtest
 
 import (
 	"context"
-	"io/fs"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -159,25 +156,11 @@ func TestSourceRetentionProtectedSetSkipsLocksAndAdvancesCursor(t *testing.T) {
 func TestSourceRetentionProtectedSetRuntimePrivileges(t *testing.T) {
 	t.Parallel()
 
-	pool := NewPool(t)
+	pool := NewBlankPool(t)
 	roles := createObservationGrantRoles(t, pool)
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
+	applyBaselineForRoles(t, pool, roles)
 
-	files, err := fs.Glob(os.DirFS(dir), "*_source_retention_protected_set.sql")
-	require.NoError(t, err)
-	require.Len(t, files, 1)
-
-	raw, err := fs.ReadFile(os.DirFS(dir), files[0])
-	require.NoError(t, err)
-
-	migration := strings.ReplaceAll(string(raw), "hololive_runtime", roles.runtime)
-
-	for range 2 {
-		require.NoError(t, applyMigrationContent(t.Context(), pool, files[0], migration))
-	}
-
-	_, err = pool.Exec(t.Context(), `GRANT SELECT ON source_observations,source_observation_queue,
+	_, err := pool.Exec(t.Context(), `GRANT SELECT ON source_observations,source_observation_queue,
 		youtube_live_reconciliation_heads,youtube_collection_projection_generations,youtube_collection_job_leases,
 		source_observation_provenances,source_observation_applications,source_observation_entity_kinds,
 		youtube_live_sessions,youtube_live_pending_ends TO `+pgx.Identifier{roles.runtime}.Sanitize())

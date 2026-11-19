@@ -1,14 +1,10 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
-
-const schedulePosterKeepTranslationMigration = "012_schedule_poster_keep_translation.sql"
 
 func TestSchedulePosterKeepTranslationMigrationConstraints(t *testing.T) {
 	t.Parallel()
@@ -16,12 +12,7 @@ func TestSchedulePosterKeepTranslationMigrationConstraints(t *testing.T) {
 	pool := NewPool(t)
 	ctx := t.Context()
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	migration, err := fs.ReadFile(os.DirFS(dir), schedulePosterKeepTranslationMigration)
-	require.NoError(t, err)
-	require.NoError(t, applyMigrationContent(ctx, pool, schedulePosterKeepTranslationMigration, string(migration)))
+	require.NoError(t, ApplyMigrations(ctx, pool))
 
 	const insert = `INSERT INTO schedule_posters (id, channel_id, x_user_id, post_url, image_url, posted_at, text_excerpt,
 		review_status, week_start, week_end, translation_status, translated_image, translated_mime, translated_at)

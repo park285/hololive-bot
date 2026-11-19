@@ -88,10 +88,6 @@ func querySchema(ctx context.Context, pool *pgxpool.Pool) (schemaSnapshot, error
 func (schema *schemaSnapshot) serialize() string {
 	var b strings.Builder
 
-	b.WriteString("-- hololive schema snapshot (deterministic pg_catalog serialization)\n")
-	b.WriteString("-- objects: enum types, tables, columns, constraints, indexes, reloptions, triggers, sequences, functions\n")
-	b.WriteString("-- regenerate: " + schemaRegenCmd + "\n")
-
 	for _, e := range schema.enums {
 		b.WriteString("\nENUM " + e.name + "\n")
 

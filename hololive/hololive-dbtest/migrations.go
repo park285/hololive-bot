@@ -2,285 +2,144 @@ package dbtest
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/postgres/pgxdb"
-	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
-	"github.com/kapu/hololive-shared/pkg/sqlsplit"
+	"github.com/kapu/hololive-shared/pkg/migrationsource"
 )
 
-func migrationFingerprint() (string, error) {
-	dir, err := resolveMigrationsDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve migrations dir: %w", err)
-	}
-
-	migrationFiles := os.DirFS(dir)
-
-	entries, err := dbmigrate.Manifest(migrationFiles)
-	if err != nil {
-		return "", fmt.Errorf("read manifest: %w", err)
-	}
-
-	hash := sha256.New()
-
-	manifest, err := fs.ReadFile(migrationFiles, dbmigrate.ManifestName)
-	if err != nil {
-		return "", fmt.Errorf("read migration manifest fingerprint: %w", err)
-	}
-
-	_, _ = hash.Write(manifest)
-
-	for _, filename := range entries {
-		content, err := fs.ReadFile(migrationFiles, filename)
-		if err != nil {
-			return "", fmt.Errorf("read migration fingerprint %s: %w", filename, err)
-		}
-
-		_, _ = hash.Write([]byte{0})
-		_, _ = hash.Write([]byte(filename))
-		_, _ = hash.Write([]byte{0})
-		_, _ = hash.Write(content)
-	}
-
-	return hex.EncodeToString(hash.Sum(nil)), nil
-}
-
 const (
-	repoRootMarker = "build-all.sh"
-
-	migrationsRelDir = "hololive/hololive-api/scripts/migrations"
-
-	migrationsDirEnv = "HOLOLIVE_MIGRATIONS_DIR"
-
-	epoch3BaselineMigration = "001_schema_epoch3_baseline.sql"
+	repoRootMarker          = "build-all.sh"
+	migrationsRelDir        = "hololive/hololive-api/scripts/migrations"
+	migrationsDirEnv        = "HOLOLIVE_MIGRATIONS_DIR"
+	epoch4BaselineMigration = migrationsource.Baseline
 	dbtestLedgerSchema      = "hololive_dbtest_internal"
 )
 
-func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+func readMigrations() ([]migrationsource.File, error) {
 	dir, err := resolveMigrationsDir()
 	if err != nil {
-		return fmt.Errorf("apply migrations: resolve dir: %w", err)
+		return nil, fmt.Errorf("resolve migrations: %w", err)
 	}
 
-	entries, err := dbmigrate.Manifest(os.DirFS(dir))
+	files, err := migrationsource.Load(os.DirFS(dir))
 	if err != nil {
-		return fmt.Errorf("apply migrations: read manifest: %w", err)
+		return nil, fmt.Errorf("read dbtest migrations: %w", err)
 	}
 
-	if err := ensureDBTestMigrationLedger(ctx, pool); err != nil {
-		return fmt.Errorf("ensure DB test migration ledger: %w", err)
+	return files, nil
+}
+
+func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+	files, err := readMigrations()
+	if err != nil {
+		return err
 	}
 
-	for _, filename := range entries {
-		if err := applyManifestMigration(ctx, pool, dir, filename); err != nil {
-			return fmt.Errorf("apply manifest migration: %w", err)
+	return installTestMigrations(ctx, pool, files)
+}
+
+func installTestMigrations(ctx context.Context, pool *pgxpool.Pool, files []migrationsource.File) error {
+	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		var installed bool
+
+		if err := tx.QueryRow(ctx, `SELECT to_regnamespace('hololive_dbtest_internal') IS NOT NULL`).Scan(&installed); err != nil {
+			return fmt.Errorf("inspect dbtest schema: %w", err)
+		}
+
+		if installed {
+			return advanceTestMigrations(ctx, tx, files)
+		}
+
+		var occupied bool
+
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT FROM pg_depend WHERE refclassid='pg_namespace'::regclass
+			AND refobjid='public'::regnamespace AND classid <> 'pg_default_acl'::regclass) OR EXISTS (
+			SELECT FROM pg_namespace WHERE nspname NOT IN ('public','information_schema') AND nspname !~ '^pg_')`).Scan(&occupied); err != nil {
+			return fmt.Errorf("inspect dbtest baseline target: %w", err)
+		}
+
+		if occupied {
+			return errors.New("dbtest baseline requires an empty database")
+		}
+
+		if _, err := tx.Exec(ctx, `CREATE SCHEMA `+dbtestLedgerSchema+`; CREATE TABLE `+dbtestLedgerSchema+`.schema_migrations (
+			filename text PRIMARY KEY, checksum_sha256 text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+			return fmt.Errorf("create dbtest ledger: %w", err)
+		}
+
+		return applyPending(ctx, tx, files)
+	})
+	if err != nil {
+		return fmt.Errorf("install dbtest baseline: %w", err)
+	}
+
+	return nil
+}
+
+func advanceTestMigrations(ctx context.Context, tx pgx.Tx, files []migrationsource.File) error {
+	rows, err := tx.Query(ctx, `SELECT filename,checksum_sha256 FROM `+dbtestLedgerSchema+`.schema_migrations ORDER BY filename COLLATE "C"`)
+	if err != nil {
+		return fmt.Errorf("read dbtest receipts: %w", err)
+	}
+
+	var i int
+
+	for rows.Next() {
+		var name, checksum string
+
+		if err := rows.Scan(&name, &checksum); err != nil {
+			rows.Close()
+
+			return fmt.Errorf("decode dbtest receipt: %w", err)
+		}
+
+		if i == len(files) || name != files[i].Name || checksum != files[i].Checksum {
+			rows.Close()
+
+			return fmt.Errorf("unexpected dbtest receipt %s", name)
+		}
+
+		i++
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read dbtest receipts: %w", err)
+	}
+
+	if i == 0 {
+		return errors.New("empty dbtest ledger")
+	}
+
+	if err := files[i-1].Verify(ctx, tx); err != nil {
+		return fmt.Errorf("verify dbtest applied schema: %w", err)
+	}
+
+	return applyPending(ctx, tx, files[i:])
+}
+
+func applyPending(ctx context.Context, tx pgx.Tx, files []migrationsource.File) error {
+	for _, file := range files {
+		if err := file.Apply(ctx, tx); err != nil {
+			return fmt.Errorf("apply dbtest migration: %w", err)
+		}
+
+		if err := file.Verify(ctx, tx); err != nil {
+			return fmt.Errorf("verify dbtest migration: %w", err)
+		}
+
+		if _, err := tx.Exec(ctx, `INSERT INTO `+dbtestLedgerSchema+`.schema_migrations(filename,checksum_sha256) VALUES ($1,$2)`, file.Name, file.Checksum); err != nil {
+			return fmt.Errorf("record dbtest migration %s: %w", file.Name, err)
 		}
 	}
 
 	return nil
-}
-
-func ensureDBTestMigrationLedger(ctx context.Context, pool *pgxpool.Pool) error {
-	if _, err := pool.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS "+dbtestLedgerSchema); err != nil {
-		return fmt.Errorf("apply migrations: create dbtest ledger schema: %w", err)
-	}
-
-	if _, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS `+dbtestLedgerSchema+`.schema_migrations (
-		filename text PRIMARY KEY,
-		checksum_sha256 char(64) NOT NULL CHECK (checksum_sha256 ~ '^[0-9a-f]{64}$'),
-		applied_at timestamptz NOT NULL DEFAULT now()
-	)`); err != nil {
-		return fmt.Errorf("apply migrations: create dbtest ledger: %w", err)
-	}
-
-	return nil
-}
-
-func applyManifestMigration(ctx context.Context, pool *pgxpool.Pool, dir, filename string) error {
-	raw, err := fs.ReadFile(os.DirFS(dir), filename)
-	if err != nil {
-		return fmt.Errorf("apply migrations: read %s: %w", filename, err)
-	}
-
-	digest := sha256.Sum256(raw)
-	checksum := hex.EncodeToString(digest[:])
-
-	stored, applied, err := dbtestMigrationChecksum(ctx, pool, filename)
-	if err != nil {
-		return fmt.Errorf("dbtest migration checksum: %w", err)
-	}
-
-	if applied {
-		if stored != checksum {
-			return fmt.Errorf("apply migrations: %s checksum mismatch: ledger=%s source=%s", filename, stored, checksum)
-		}
-
-		return nil
-	}
-
-	if err := applyUnrecordedMigration(ctx, pool, filename, string(raw), checksum); err != nil {
-		return fmt.Errorf("apply unrecorded migration: %w", err)
-	}
-
-	return nil
-}
-
-func applyUnrecordedMigration(ctx context.Context, pool *pgxpool.Pool, filename, content, checksum string) error {
-	if filename == epoch3BaselineMigration {
-		if err := applyAtomicBaseline(ctx, pool, filename, content, checksum); err != nil {
-			return fmt.Errorf("apply atomic baseline: %w", err)
-		}
-
-		return nil
-	}
-
-	if err := applyMigrationContent(ctx, pool, filename, content); err != nil {
-		return fmt.Errorf("apply migration content: %w", err)
-	}
-
-	if _, err := pool.Exec(ctx, `INSERT INTO `+dbtestLedgerSchema+`.schema_migrations (filename, checksum_sha256) VALUES ($1, $2)`, filename, checksum); err != nil {
-		return fmt.Errorf("apply migrations: record %s: %w", filename, err)
-	}
-
-	return nil
-}
-
-func dbtestMigrationChecksum(ctx context.Context, pool *pgxpool.Pool, filename string) (checksum string, applied bool, resultErr error) {
-	queryErr := pool.QueryRow(ctx, `SELECT checksum_sha256::text FROM `+dbtestLedgerSchema+`.schema_migrations WHERE filename = $1`, filename).Scan(&checksum)
-	if errors.Is(queryErr, pgx.ErrNoRows) {
-		return "", false, nil
-	}
-
-	if queryErr != nil {
-		return "", false, fmt.Errorf("apply migrations: query dbtest ledger %s: %w", filename, queryErr)
-	}
-
-	return checksum, true, nil
-}
-
-func applyAtomicBaseline(ctx context.Context, pool *pgxpool.Pool, filename, content, checksum string) error {
-	segments, err := sqlsplit.Segments(content)
-	if err != nil {
-		return fmt.Errorf("apply migrations: split %s: %w", filename, err)
-	}
-
-	if len(segments) != 1 || !segments[0].Transactional {
-		return fmt.Errorf("apply migrations: %s must be one top-level transaction", filename)
-	}
-
-	conn, err := pool.Acquire(ctx)
-	if err != nil {
-		return fmt.Errorf("apply migrations: acquire tx connection for %s: %w", filename, err)
-	}
-	defer conn.Release()
-
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("apply migrations: begin %s: %w", filename, err)
-	}
-
-	if err := applyTxStatements(ctx, tx, filename, segments[0].Statements); err != nil {
-		return fmt.Errorf("rollback migration tx on error: %w", rollbackMigrationTxOnError(ctx, tx, err))
-	}
-
-	if _, err := tx.Exec(ctx, `INSERT INTO `+dbtestLedgerSchema+`.schema_migrations (filename, checksum_sha256) VALUES ($1, $2)`, filename, checksum); err != nil {
-		return fmt.Errorf("rollback migration tx on error: %w", rollbackMigrationTxOnError(ctx, tx, fmt.Errorf("apply migrations: record %s: %w", filename, err)))
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("apply migrations: commit %s: %w", filename, err)
-	}
-
-	return nil
-}
-
-func applyMigrationContent(ctx context.Context, pool *pgxpool.Pool, filename, content string) error {
-	segments, splitErr := sqlsplit.Segments(content)
-	if splitErr != nil {
-		return fmt.Errorf("apply migrations: split %s: %w", filename, splitErr)
-	}
-
-	for _, segment := range segments {
-		if err := applyMigrationSegment(ctx, pool, filename, segment); err != nil {
-			return fmt.Errorf("apply migration segment: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func applyMigrationSegment(ctx context.Context, pool *pgxpool.Pool, filename string, segment sqlsplit.Segment) error {
-	if segment.Transactional {
-		if err := applyMigrationTxSegment(ctx, pool, filename, segment.Statements); err != nil {
-			return fmt.Errorf("apply migration tx segment: %w", err)
-		}
-
-		return nil
-	}
-
-	for _, stmt := range segment.Statements {
-		if _, execErr := pool.Exec(ctx, stmt); execErr != nil {
-			return fmt.Errorf("apply migrations: exec %s: %w", filename, execErr)
-		}
-	}
-
-	return nil
-}
-
-func applyMigrationTxSegment(ctx context.Context, pool *pgxpool.Pool, filename string, statements []string) error {
-	conn, err := pool.Acquire(ctx)
-	if err != nil {
-		return fmt.Errorf("apply migrations: acquire tx connection for %s: %w", filename, err)
-	}
-	defer conn.Release()
-
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("apply migrations: begin %s: %w", filename, err)
-	}
-
-	if err := applyTxStatements(ctx, tx, filename, statements); err != nil {
-		if rollbackErr := rollbackMigrationTxOnError(ctx, tx, err); rollbackErr != nil {
-			return fmt.Errorf("rollback migration tx on error: %w", rollbackErr)
-		}
-
-		return nil
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("apply migrations: commit %s: %w", filename, err)
-	}
-
-	return nil
-}
-
-func applyTxStatements(ctx context.Context, tx pgx.Tx, filename string, statements []string) error {
-	for _, stmt := range statements {
-		if _, execErr := tx.Exec(ctx, stmt); execErr != nil {
-			return fmt.Errorf("apply migrations: exec %s: %w", filename, execErr)
-		}
-	}
-
-	return nil
-}
-
-func rollbackMigrationTxOnError(ctx context.Context, tx pgx.Tx, err error) error {
-	if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
-		return errors.Join(err, fmt.Errorf("rollback migration tx: %w", rollbackErr))
-	}
-
-	return err
 }
 
 func resolveMigrationsDir() (string, error) {

@@ -1,8 +1,6 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"testing"
 	"time"
 
@@ -21,15 +19,6 @@ func TestRetiredProfileTriggersWithObservationRoles(t *testing.T) {
 	photo := insertRetentionObservation(t, pool, "channel_photo", time.Now(), "healthy-role-photo")
 	_, err := pool.Exec(ctx, `UPDATE source_observations SET provider='holodex' WHERE id IN ($1,$2)`, profile, photo)
 	require.NoError(t, err)
-
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
-
-	const name = "031_retire_holodex_channel_profile.sql"
-
-	raw, err := fs.ReadFile(os.DirFS(dir), name)
-	require.NoError(t, err)
-	require.NoError(t, applyMigrationContent(ctx, pool, name, string(raw)))
 
 	for _, role := range []string{roles.scraper, roles.runtime} {
 		tx := payloadRoleTransaction(t, pool, role)

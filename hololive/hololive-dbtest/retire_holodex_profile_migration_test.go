@@ -1,8 +1,6 @@
 package dbtest
 
 import (
-	"io/fs"
-	"os"
 	"testing"
 	"time"
 
@@ -17,22 +15,12 @@ func TestRetireHolodexProfileMigrationPreservesObservations(t *testing.T) {
 	ctx := t.Context()
 	fixture := seedRetiredHolodexProfileMigration(t, pool)
 
-	dir, err := resolveMigrationsDir()
-	require.NoError(t, err)
+	require.NoError(t, ApplyMigrations(ctx, pool))
 
-	const name = "031_retire_holodex_channel_profile.sql"
+	var pending int
 
-	raw, err := fs.ReadFile(os.DirFS(dir), name)
-	require.NoError(t, err)
-
-	for range 2 {
-		require.NoError(t, applyMigrationContent(ctx, pool, name, string(raw)))
-	}
-
-	var terminal int
-
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM source_observation_queue WHERE observation_id IN ($1,$2) AND status='DEAD_LETTER'`, fixture.profile, fixture.pending).Scan(&terminal))
-	require.Equal(t, 2, terminal)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM source_observation_queue WHERE observation_id IN ($1,$2) AND status IN ('PROCESSING','PENDING')`, fixture.profile, fixture.pending).Scan(&pending))
+	require.Equal(t, 2, pending)
 
 	var processedStatus string
 
@@ -52,7 +40,7 @@ func TestRetireHolodexProfileMigrationPreservesObservations(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT row_to_json(head)::text FROM youtube_channel_profile_heads head WHERE channel_id='preserved'`).Scan(&headAfter))
 	require.Equal(t, fixture.headBefore, headAfter)
 
-	_, err = pool.Exec(ctx, `UPDATE source_observation_queue SET status='PENDING',dead_lettered_at=NULL WHERE observation_id=$1`, fixture.profile)
+	_, err := pool.Exec(ctx, `UPDATE source_observation_queue SET status='PENDING',dead_lettered_at=NULL WHERE observation_id=$1`, fixture.profile)
 	require.NoError(t, err)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT status,last_error_code,lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL
 		FROM source_observation_queue WHERE observation_id=$1`, fixture.profile).Scan(&status, &code, &leasesCleared))

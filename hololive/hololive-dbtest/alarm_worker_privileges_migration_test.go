@@ -2,8 +2,6 @@ package dbtest
 
 import (
 	"context"
-	"io/fs"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,10 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const (
-	alarmWorkerRoleMigration = "029_alarm_worker_database_role.sql"
-	readWriteDeleteACL       = "arwd"
-)
+const readWriteDeleteACL = "arwd"
 
 var alarmWorkerTableACL = map[string]string{
 	"public.alarm_dispatch_closeout_receipts":        "r",
@@ -55,7 +50,7 @@ var alarmWorkerSequenceACL = map[string]string{
 }
 
 func TestAlarmWorkerRoleGrantsAreLeastPrivilege(t *testing.T) {
-	pool := NewPool(t)
+	pool := NewBlankPool(t)
 	role := createAlarmWorkerGrantRole(t, pool)
 	applyAlarmWorkerRoleMigration(t, pool, role)
 
@@ -114,20 +109,7 @@ func createAlarmWorkerGrantRole(t *testing.T, pool *pgxpool.Pool) string {
 func applyAlarmWorkerRoleMigration(t *testing.T, pool *pgxpool.Pool, role string) {
 	t.Helper()
 
-	dir, err := resolveMigrationsDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	raw, err := fs.ReadFile(os.DirFS(dir), alarmWorkerRoleMigration)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	migration := strings.ReplaceAll(string(raw), "hololive_alarm_worker", role)
-	if err := applyMigrationContent(t.Context(), pool, alarmWorkerRoleMigration, migration); err != nil {
-		t.Fatal(err)
-	}
+	applyRoleMigrations(t, pool, strings.NewReplacer("hololive_alarm_worker", role))
 }
 
 func assertAlarmWorkerSchemaPrivileges(t *testing.T, pool *pgxpool.Pool, role string) {

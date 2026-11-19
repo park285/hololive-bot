@@ -2,8 +2,11 @@ package dbtest
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -35,11 +38,22 @@ func NewPool(tb testing.TB) *pgxpool.Pool {
 func acquireMigrationTemplate(tb testing.TB, baseDSN string) string {
 	tb.Helper()
 
-	fingerprint, err := migrationFingerprint()
+	files, err := readMigrations()
 	if err != nil {
 		tb.Fatalf("dbtest: fingerprint migrations: %v", err)
 	}
 
+	digest := sha256.New()
+
+	for _, file := range files {
+		for _, part := range [...]string{file.Checksum, file.Name, "\x00", file.Contract, "\x00"} {
+			if _, err := io.WriteString(digest, part); err != nil {
+				tb.Fatalf("dbtest: fingerprint %s: %v", file.Name, err)
+			}
+		}
+	}
+
+	fingerprint := hex.EncodeToString(digest.Sum(nil))
 	key := baseDSN + "\x00" + fingerprint
 
 	sharedTemplates.mu.Lock()
