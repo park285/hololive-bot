@@ -275,7 +275,7 @@ sudo() {
 }
 native_existing_host_check 7500000 2048
 '''
-(host_case/'verify.py').write_text('''
+(host_case/'verify.py').write_text(r'''
 import os, stat, sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -301,7 +301,7 @@ def metadata(path):
     if path == '/etc/fstab' and fault == 'fstab-link':
         kind = stat.S_IFLNK
     return SimpleNamespace(st_mode=kind|mode, st_gid=gid, st_uid=uid, st_size=(2048 - int(fault == 'swap-size'))*1048576)
-fstab = b'/swapfile none swap sw 0 0\\\\n'
+fstab = b'/swapfile none swap sw 0 0\n'
 if fault == 'fstab-duplicate': fstab *= 2
 if fault == 'fstab-options': fstab = fstab.replace(b'sw ', b'noauto ')
 user = SimpleNamespace(pw_uid=99, pw_gid=78 if fault=='user' else 77, pw_dir='/nonexistent', pw_shell='/usr/sbin/nologin')

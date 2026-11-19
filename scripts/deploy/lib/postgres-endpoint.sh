@@ -54,7 +54,7 @@ postgres_endpoint_container() {
 postgres_quadlet_environment() {
   local unit_file="$1" compose_file="$2" installed_unit="$3" values key value source
   shift 3
-  local -A container=() service=()
+  local -A container=() service_env=()
   local use_compose=false
   values="$(python3 - "$unit_file" "$installed_unit" "$@" <<'PY'
 import os
@@ -256,16 +256,16 @@ PY
   while IFS='=' read -r key value; do
     case "$key" in
       CONTAINER_*) container["${key#CONTAINER_}"]="$value" ;;
-      SERVICE_*) service["${key#SERVICE_}"]="$value" ;;
+      SERVICE_*) service_env["${key#SERVICE_}"]="$value" ;;
       COMPOSE_ENV_USED) use_compose="$value" ;;
     esac
   done <<< "$values"
   if [[ "$use_compose" == true ]]; then
     [[ "$compose_file" != - ]] || { echo '[postgres-endpoint] missing compose environment source' >&2; return 1; }
     compose_env_validate_file_format "$compose_file" || return
-    for key in "${!service[@]}"; do
+    for key in "${!service_env[@]}"; do
       if compose_env_key_exists_in_file "$compose_file" "$key"; then
-        service["$key"]="$(compose_env_read_value_from_file "$compose_file" "$key")" || return
+        service_env["$key"]="$(compose_env_read_value_from_file "$compose_file" "$key")" || return
       fi
     done
   fi
@@ -273,7 +273,7 @@ PY
     value="${container[$key]}"
     if [[ "$value" =~ ^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$ ]]; then
       source="${BASH_REMATCH[1]}"
-      value="${service[$source]}"
+      value="${service_env[$source]}"
     fi
     if [[ "$value" == *'$'* || "$value" == *'%'* || "$value" == *$'\n'* ]]; then
       echo '[postgres-endpoint] unresolved Quadlet endpoint expression' >&2
