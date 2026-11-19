@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 root = Path(sys.argv[1])
@@ -239,7 +240,7 @@ central_functions = '\n'.join(
 )
 central_config = central[central.index('manifest="../'):central.index('[[ "$(stat')]
 central_main = central[central.index('{\nclaim_slot\n'):]
-central_source_gate = central[central.index('if [[ "$mode" == resume || "$mode" == rollback || "$mode" == check ]]'):central.index('compose_env=')]
+central_source_gate = central[central.index('cd "$current"\n'):central.index('compose_env=')]
 old_revision, new_revision = 'a' * 40, 'b' * 40
 old_id, new_id = 'sha256:' + 'a' * 64, 'sha256:' + 'b' * 64
 change = '20261003T000000Z'
@@ -276,10 +277,17 @@ case "$fixture_case" in
   maintenance_rollback*) mode=rollback ;;
 esac
 transport=-
-if [[ "$mode" == quiesce && -f "$fixture_root/trusted-seal" ]]; then
+if [[ -f "$fixture_root/staged-pair" ]]; then
+  if [[ "$mode" != deploy ]]; then backup="$fixture_root/staged-po-b-20261003T000000Z"; fi
+  if [[ "$mode" != deploy ]]; then transport="$(<"$fixture_root/trusted-seal")"; fi
+elif [[ "$mode" == quiesce && -f "$fixture_root/trusted-seal" ]]; then
   mode=quiesce-verified transport="$(<"$fixture_root/trusted-seal")"
 fi
 set -- "$slot" "$mode" "$staging" "$backup" "$revision" "$version" "$transport"
+if [[ "$backup" == "$fixture_root/staged-po-b-"* ]]; then
+  read -r -a origin_fields < "$fixture_root/approved-origin"
+  set -- "$@" "${origin_fields[@]}"
+fi
 ref_file() { printf '%s/images/%s\n' "$fixture_root" "${1//[\/:]/_}"; }
 hex_of() { if [[ "$1" == old ]]; then printf '%064d\n' 0 | tr 0 a; else printf '%064d\n' 0 | tr 0 b; fi; }
 revision_of() { if [[ "$1" == old ]]; then printf '%040d\n' 0 | tr 0 a; else printf '%040d\n' 0 | tr 0 b; fi; }
@@ -397,6 +405,15 @@ python3() {
     command python3 "$@"
   fi
 }
+busctl() {
+  local bus=org.freedesktop.systemd1 base=/org/freedesktop/systemd1/unit/hololive_2dyoutube_2d
+  [[ "$*" == "--system --timeout=45s --json=short get-property $bus $6 $bus.Service TimeoutStartUSec" ]] || return 2
+  case "$6" in
+    "${base}collector_2db_2eservice") printf '{"type":"t","data":300000000}\n' ;;
+    "${base}po_2db_2eservice") printf '{"type":"t","data":120000000}\n' ;;
+    *) return 2 ;;
+  esac
+}
 sudo() { [[ "$1" != -n ]] || shift; "$@"; }
 install() {
   local args=()
@@ -414,6 +431,10 @@ rm() {
 }
 sync() {
   if [[ "$fixture_case" == *error_log_evidence_failure && "$2" == "$backup/guarded-stop.log" ]]; then return 8; fi
+  if [[ "$fixture_case" == maintenance_resume_expired_late_notify_client &&
+        "$2" == "$backup/resume-$collector_unit.start-request" && -f "$fixture_root/notify.pending" ]]; then
+    unset EPOCHSECONDS; EPOCHSECONDS=$expires
+  fi
   command sync "$@"
 }
 ln() {
@@ -430,6 +451,18 @@ stat() {
     *:"$fixture_root/socket") printf '65532:1000 770\n' ;;
     *) printf '0:0 %s\n' "$(command stat -c '%a' "${*: -1}")" ;;
   esac
+}
+find() {
+  local arg
+  local -a args=()
+  while (( $# )); do
+    arg="$1"; shift; args+=("$arg")
+    case "$arg" in
+      -uid) [[ "$1" == 0 ]] || return 2; args+=("$EUID"); shift ;;
+      -gid) [[ "$1" == 0 ]] || return 2; args+=("$(id -g)"); shift ;;
+    esac
+  done
+  command find "${args[@]}"
 }
 date() {
   if [[ "$*" == '-u +%Y-%m-%dT%H:%M:%SZ' ]]; then printf '2026-10-03T00:01:00Z\n'; else command date "$@"; fi
@@ -460,6 +493,17 @@ podman() {
       ;;
     'container exists')
       [[ ! -f "$fixture_root/inventory-unavailable" ]] || return 125
+      if [[ -f "$fixture_root/staged-pair" ]]; then
+        local cid
+        for kind in collector issuer; do
+          cid=3; [[ "$kind" != issuer ]] || cid=4
+          if [[ -f "$fixture_root/$kind.cid" ]]; then cid="$(<"$fixture_root/$kind.cid")"; fi
+          if [[ "$3" == "hololive-youtube-${kind/issuer/po}-$slot" || "$3" == "$(printf '%064d' "$cid")" ]]; then
+            [[ "$(<"$fixture_root/$kind.running")" == true ]]; return
+          fi
+        done
+        return 1
+      fi
       if [[ "$fixture_case" == *stop_leftover_id && "$3" == "$(printf '%064d' 3)" ]]; then return 0; fi
       if [[ "$3" == "$(printf '%064d' 4)" && -e "$fixture_root/issuer.old-cid" ]]; then return 0; fi
       kind=collector
@@ -530,7 +574,8 @@ podman() {
       printf '%s  /etc/pgbouncer/pgbouncer.ini\n' "${value%% *}" ;;
     'exec '*)
       if [[ "$2" == "$issuer_container" ]]; then
-        [[ ! -e "$fixture_root/issuer.socket-failed" ]]
+        [[ ! -e "$fixture_root/issuer.socket-failed" ]] || return 1
+        if [[ "$fixture_case" == maintenance_resume_expire_after_issuer ]]; then unset EPOCHSECONDS; EPOCHSECONDS=$expires; fi
       else
         [[ "$2" == "$collector_container" && "$4" == --body ]] || return 2
         local instance="youtube-collector-$slot" handoff=PROCESSED processed=true
@@ -634,6 +679,7 @@ systemctl() {
         touch "$fixture_root/$kind.probe-failed"; return 8
       fi
       rm "$system_unit_dir/$2" || return 8
+      if [[ "$fixture_case" == maintenance_resume_expire_after_unmask && "$kind" == issuer ]]; then unset EPOCHSECONDS; EPOCHSECONDS=$expires; fi
       if [[ "$fixture_case" == *unmask_reload* && "$kind" == issuer ]]; then
         touch "$fixture_root/$kind.masked-cache"
         if [[ "$fixture_case" == *unmask_reload_old_cid ]]; then touch "$fixture_root/issuer.old-cid"; fi
@@ -650,6 +696,14 @@ systemctl() {
       admitted "$2" || return 8
       rm -f "$fixture_root/$kind.exit"
       printf '%032x\n' 2 > "$fixture_root/$kind.invocation"
+      if [[ -f "$fixture_root/staged-pair" ]]; then
+        local cid=5 invocation=2
+        if [[ "$mode" == rollback ]]; then cid=7 invocation=3; fi
+        [[ "$kind" != issuer ]] || cid=$((cid+1))
+        if [[ "$fixture_case" == *old_start_cid && "$kind" == collector ]]; then cid=3; fi
+        printf '%d' "$cid" > "$fixture_root/$kind.cid"
+        printf '%032x\n' "$invocation" > "$fixture_root/$kind.invocation"
+      fi
       if [[ "$fixture_case" == maintenance_* ]]; then
         [[ ! -e "$fixture_root/db.stopped" ]] || return 9
         test -f "$profile_release/candidate/profile.json" || [[ "$mode" == rollback ]] || return 9
@@ -687,6 +741,7 @@ systemctl() {
       printf true > "$fixture_root/$kind.running"
       if [[ "$fixture_case" == *rollback_issuer_failure && "$kind" == issuer ]]; then touch "$fixture_root/issuer.socket-failed"; fi
       if [[ "$1" == start ]]; then
+        if [[ "$fixture_case" == *missing_start_record && "$kind" == collector ]]; then return 0; fi
         printf '%s %s\n' "$job" "$(<"$fixture_root/$kind.invocation")" > "$fixture_root/$2.start-job"
         if [[ "$kind" == collector && "$fixture_case" == *late_notify_client ]]; then
           : > "$fixture_root/notify.pending"; printf false > "$fixture_root/collector.running"; return 9
@@ -726,6 +781,7 @@ systemctl() {
       if [[ "$kind" == issuer && "$mode" == quiesce ]]; then printf '143\n' > "$fixture_root/issuer.exit"; fi
       if [[ "$fixture_case" == *collector_143 && "$kind" == collector ]]; then printf '143\n' > "$fixture_root/collector.exit"; fi
       if [[ "$kind" == issuer ]]; then cid=4; fi
+      if [[ -f "$fixture_root/staged-pair" && -f "$fixture_root/$kind.cid" ]]; then cid="$(<"$fixture_root/$kind.cid")"; fi
       if [[ -f "$fixture_root/$kind.exit" ]]; then code="$(<"$fixture_root/$kind.exit")"; fi
       if [[ "$kind" == collector ]]; then
         case "$fixture_case" in
@@ -741,7 +797,8 @@ systemctl() {
       elif [[ ! -f "$fixture_root/$kind.exit" ]]; then
         : > "$fixture_root/$kind.invocation"
       fi
-      printf absent > "$fixture_root/$kind.runtime"; printf false > "$fixture_root/$kind.running" ;;
+      printf absent > "$fixture_root/$kind.runtime"; printf false > "$fixture_root/$kind.running"
+      if [[ "$kind" == issuer && "$fixture_case" == maintenance_quiesce_expire_after_stop ]]; then unset EPOCHSECONDS; EPOCHSECONDS=$expires; fi ;;
     *) return 2 ;;
   esac
 }
@@ -755,6 +812,175 @@ for slot, tree in (('c', 'compose'), ('b', 'collector-b')):
                 new_revision, '6.0.1', '-']
         result = run('set -- ' + shlex.join(args) + '\n' + central[:central.index('install -d -m 0755 /run/lock')], root, 'paths')
         require((result.returncode == 0) == accepted, f'{slot}: W2 resume requires its card backup and staging', result)
+
+with tempfile.TemporaryDirectory(prefix='b-staged-cli-') as raw:
+    state = Path(raw)
+    tool = state / 'coordinator'
+    candidate = state / 'candidate'
+    for name in ('scripts/deploy/po-central-cutover.sh', 'scripts/deploy/lib/source-revision.sh', 'scripts/deploy/lib/po-central-remote.sh'):
+        (tool / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(root / name, tool / name)
+    version_file = candidate / 'hololive/hololive-api/VERSION'
+    version_file.parent.mkdir(parents=True)
+    version_file.write_text('19.2.1\n')
+    source_name = 'hololive/hololive-api/VERSION'
+    (candidate / 'scripts/deploy').mkdir(parents=True)
+    (candidate / 'scripts/deploy/po-central-files.txt').write_text(source_name + '\n')
+    shutil.copytree(tool, state / 'objects/coordinator')
+    shutil.copytree(candidate, state / 'objects/candidate')
+    archive = state / 'arm64'
+    archive.mkdir()
+    def sums(directory, names):
+        return ''.join(f'{hashlib.sha256((directory / n).read_bytes()).hexdigest()}  {n}\n' for n in names)
+    (archive / 'source-files.sha256').write_text(sums(candidate, [source_name]))
+    for prefix, meta in (('', 'rootfs-manifest.json'), ('collector-', 'collector-manifest.json')):
+        name = prefix + 'image.tar'
+        (archive / name).write_bytes(name.encode())
+        (archive / (name + '.sha256')).write_text(sums(archive, [name]))
+        (archive / (prefix + 'image-id')).write_text(new_id + '\n')
+        (archive / meta).write_text(json.dumps({'source_revision': new_revision, 'architecture': 'arm64', 'go': {'goarch': 'arm64'}}))
+    names = ('source-files.sha256', 'rootfs-manifest.json', 'collector-manifest.json', 'image-id', 'collector-image-id',
+             'image.tar.sha256', 'collector-image.tar.sha256')
+    (archive / 'transport-files.sha256').write_text(sums(archive, names))
+    seal = hashlib.sha256((archive / 'transport-files.sha256').read_bytes()).hexdigest()
+    tool_revision = '1'.zfill(40)
+    expiry = int(time.time()) + 3600
+    window, origin_digest = '1' * 32, '2' * 64
+    w2 = state / 'w2'
+    w2.mkdir()
+    w2_issuer = 'sha256:' + '9' * 64
+    (w2 / 'collector-image-id').write_text(old_id + '\n')
+    (w2 / 'image-id').write_text(w2_issuer + '\n')
+    (w2 / 'collector-manifest.json').write_text(json.dumps({'source_revision': old_revision, 'go': {'goarch': 'arm64'}}))
+    (w2 / 'rootfs-manifest.json').write_text(json.dumps({'source_revision': old_revision, 'architecture': 'arm64'}))
+    def grant(mode, grant_window=window, issuer=w2_issuer, tool_id=tool_revision, stage=change, expires=expiry):
+        tmp = state / 'grant.tmp'
+        tmp.write_text(f'PO_B_PAIR_V1 iris-seoul {grant_window} {mode} {stage} {tool_id} {new_revision} {seal} '
+                       f'{old_revision} {old_id} {issuer} {origin_digest} {expires}\n')
+        tmp.chmod(0o600)
+        tmp.replace(state / 'b.current-grant')
+    (state / 'b.window-clear').write_text(f'IRIS_WINDOW_CLEAR {new_revision}\n')
+    (state / 'c.accepted').write_text(f'{new_revision} {seal}\n')
+    (state / 'c.accepted').chmod(0o600)
+    entry = r'''
+set -eu
+state="$1"
+hostname() { printf 'kapu\n'; }
+git() {
+  local repo="$PWD"
+  if [[ "$1" == -C ]]; then repo="$2"; shift 2; fi
+  case "$repo" in "$state/coordinator"*) repo=coordinator ;; "$state/candidate"*) repo=candidate ;; *) return 2 ;; esac
+  local rev
+  if [[ "$repo" == coordinator ]]; then rev="$(printf '%040d' 1)"; else rev="$(printf '%040d' 0 | tr 0 b)"; fi
+  case "$1" in
+    status) [[ ! -f "$state/dirty" ]] || printf ' M caller\n' ;;
+    rev-parse)
+      if [[ "$2" == --show-toplevel ]]; then printf '%s/%s\n' "$state" "$repo"; else printf '%s\n' "$rev"; fi ;;
+    cat-file)
+      [[ "$2" == blob && "$3" == "$rev:"* ]] || return 2
+      cat -- "$state/objects/$repo/${3#*:}" ;;
+    *) return 2 ;;
+  esac
+}
+ssh() {
+  printf '%s\n' "$*" >> "$state/calls"
+  cmp -s - "$state/objects/coordinator/scripts/deploy/lib/po-central-remote.sh" || return 2
+  [[ ! -f "$state/lost-reply" ]] || return 255
+}
+rsync() { printf 'unexpected rsync\n' >> "$state/calls"; return 7; }
+podman() { printf 'unexpected build\n' >> "$state/calls"; return 7; }
+export -f hostname git ssh rsync podman
+export state PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY="${deploy_approval:-true}" APPROVE_PO_B_ROLLBACK="${rollback_approval:-false}"
+bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "$2" "${product_root:-$state/candidate}" "$state" "${stage_id:-20261003T000000Z}" \
+  "${window_id:-11111111111111111111111111111111}" "$state/w2"
+'''
+    stage_receipt = state / f'b.stage.{change}.finished'
+    stage_receipt.write_text(f'{new_revision} {seal} {change}\n')
+    stage_receipt.chmod(0o600)
+    for reason in ('legacy-clear', 'old-window', 'expired', 'wrong-phase', 'wrong-tool', 'wrong-W2-payload'):
+        if reason == 'old-window':
+            grant('quiesce', '3' * 32)
+        elif reason == 'expired':
+            grant('quiesce', expires=1)
+        elif reason == 'wrong-phase':
+            grant('resume')
+        elif reason == 'wrong-tool':
+            grant('quiesce', tool_id='e' * 40)
+        elif reason == 'wrong-W2-payload':
+            grant('quiesce', issuer=old_id)
+        refused = run(entry, state, 'quiesce')
+        require(refused.returncode != 0 and not (state / 'calls').exists(),
+                f'b: {reason} has no SSH authority', refused)
+    grant('quiesce')
+    for label, path, variable in (('tool', tool, 'tool_root'), ('product', candidate, 'product_root')):
+        nested = path / 'tmp/ignored'
+        shutil.copytree(state / 'objects' / path.name, nested)
+        refused = run(f'{variable}={shlex.quote(str(nested))}\n' + entry, state, 'quiesce')
+        require(refused.returncode != 0 and not (state / 'calls').exists(), f'b: ignored nested {label} is not the checkout', refused)
+    for path in (tool / 'scripts/deploy/po-central-cutover.sh', tool / 'scripts/deploy/lib/source-revision.sh', version_file,
+                 candidate / 'scripts/deploy/po-central-files.txt'):
+        original = path.read_bytes()
+        path.write_bytes(original + b'\n')
+        refused = run(entry, state, 'quiesce')
+        require(refused.returncode != 0 and not (state / 'calls').exists(), f'b: diverging Git blob rejected: {path.name}', refused)
+        path.write_bytes(original)
+    stage_receipt.write_text(f'{new_revision} {"d" * 64} {change}\n')
+    refused = run(entry, state, 'quiesce')
+    require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: foreign archive seal refused locally', refused)
+    stage_receipt.write_text(f'{new_revision} {seal} {change}\n')
+    (archive / 'image.tar').write_bytes(b'unaccepted archive')
+    refused = run(entry, state, 'quiesce')
+    require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: locally drifted archive refused before SSH', refused)
+    (archive / 'image.tar').write_bytes(b'image.tar')
+    lost_window, lost_change = 'f' * 32, '20261002T000000Z'
+    lost_entry = f'window_id={lost_window}\nstage_id={lost_change}\n' + entry
+    lost_stage = state / f'b.stage.{lost_change}.finished'
+    lost_stage.write_text(f'{new_revision} {seal} {lost_change}\n')
+    lost_stage.chmod(0o600)
+    (state / 'lost-reply').touch()
+    grant('quiesce', lost_window, stage=lost_change)
+    unknown = run(lost_entry, state, 'quiesce')
+    require(unknown.returncode == 255 and (state / 'calls').exists() and
+            not (state / f'b.{lost_window}.quiesce.finished').exists(), 'b: no completed phase on lost transport', unknown)
+    (state / 'calls').unlink()
+    (state / 'lost-reply').unlink()
+    for mode in ('quiesce', 'resume'):
+        grant(mode, lost_window, stage=lost_change)
+        refused = run(lost_entry, state, mode)
+        require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: unknown outcome permits neither replay nor resume', refused)
+    grant('quiesce', stage=lost_change)
+    refused = run(f'stage_id={lost_change}\n' + entry, state, 'quiesce')
+    require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: a different window cannot retry unknown stage effects', refused)
+    for mode in ('quiesce', 'resume'):
+        grant(mode)
+        result = run(entry, state, mode)
+        expected = (f'iris-seoul sudo -n bash -s -- b {mode} /opt/hololive-bot/collector-b/po-staging-{change} '
+                    f'/opt/hololive-bot/collector-b/backups/staged-po-b-{change} {new_revision} 19.2.1 {seal} '
+                    f'{window} {old_revision} {old_id} {w2_issuer} {origin_digest} {expiry} {tool_revision}')
+        require(result.returncode == 0 and (state / 'calls').read_text().splitlines() == [expected],
+                'b: coordinator revision stays distinct; only already-staged accepted candidate addresses the writer', result)
+        (state / 'calls').unlink()
+        require(not (state / 'b.current-grant').exists(), 'b: grant slot vacated for independent no-replace issuance', result)
+        grant(mode)
+        replay = run(entry, state, mode)
+        require(replay.returncode != 0 and not (state / 'calls').exists(), 'b: consumed phase grant cannot be replayed', replay)
+    checked = run('deploy_approval=false\n' + entry, state, 'check')
+    require(checked.returncode == 0 and (state / 'calls').read_text().splitlines() ==
+            [expected.replace(' b resume ', ' b check ')], 'b: pinned completion takes no writer grant', checked)
+    (state / 'calls').unlink()
+    grant('rollback')
+    refused = run(entry, state, 'rollback')
+    require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: rollback requires its own approval', refused)
+    for op in ('check', 'rollback'):
+        path = tool / 'scripts/deploy/lib/po-central-remote.sh'
+        original = path.read_bytes()
+        path.write_bytes(original + b'\n')
+        refused = run('rollback_approval=true\n' + entry, state, op)
+        require(refused.returncode != 0 and not (state / 'calls').exists(), f'b: {op} refuses changed remote tool', refused)
+        path.write_bytes(original)
+    authorized = run('rollback_approval=true\ndeploy_approval=false\n' + entry, state, 'rollback')
+    require(authorized.returncode == 0 and (state / 'calls').read_text().splitlines() ==
+            [expected.replace(' b resume ', ' b rollback ')], 'b: original tool executes separately granted rollback', authorized)
 
 
 def manifest(revision, identity):
@@ -824,6 +1050,11 @@ maintenance_cases = (
 )
 runs += [(slot, 'maintenance_' + case) for slot in slots for case in maintenance_cases
          if (slot == 'c' or not case.startswith('capacity_')) and (slot == 'b' or case != 'installed_unit_changed')]
+runs += [('b', 'staged_' + scenario) for scenario in (
+    'success', 'already_loaded', 'error_log', 'missing_start_record', 'archive_drift', 'partial_transport', 'origin_stale', 'unsafe_stage',
+    'changed_seal', 'absent_hold', 'foreign_hold', 'missing_seal', 'other_owner', 'other_invocation', 'other_cid', 'old_start_cid',
+    'candidate_check_failure', 'pooled_query_failure', 'profile_drift', 'wrong_window', 'wrong_boot', 'wrong_tool',
+    'expire_after_stop', 'expire_after_unmask', 'expire_after_issuer', 'expired_late_notify_client')]
 for slot, case in runs:
     expected_status, restored = central_cases.get(case, (0, False))
     service, port, host_label = slots[slot]
@@ -833,6 +1064,10 @@ for slot, case in runs:
     with tempfile.TemporaryDirectory(prefix='central-cutover-test-') as raw:
         state = Path(raw)
         current, staging, backup = state / 'current', state / 'staging', state / f'card-po-{slot}-{change}'
+        staged_pair = case.startswith('staged_')
+        if staged_pair:
+            backup = state / f'staged-po-b-{change}'
+            (state / 'staged-pair').touch()
         for directory in (current, staging, state / 'images', state / 'units', state / f'po-current-{slot}'):
             directory.mkdir()
         host, db_port = ('holo-pgbouncer', 6432) if slot == 'c' else ('100.100.1.8', 6433)
@@ -866,13 +1101,14 @@ for slot, case in runs:
         elif case == 'capacity_query_failed':
             (state / 'pooler-query-failed').touch()
         is_check, is_rollback = case.startswith('check_'), case.startswith('rollback')
-        issuer_absent = 'absent' in case
+        issuer_absent = case in ('absent_success', 'absent_candidate_check_failure')
         initial = 'new' if is_check or is_rollback else 'old'
         image_file(state, collector_prod).write_text(initial)
         image_file(state, old_id).write_text('old')
         if not issuer_absent:
             image_file(state, issuer_prod).write_text(initial)
-        (state / 'collector.generation').write_text('{"container_id":"' + '1'.zfill(64) + '","pid":42}\n')
+        captured_cid = '3' if staged_pair else '1'
+        (state / 'collector.generation').write_text('{"container_id":"' + captured_cid.zfill(64) + '","pid":42}\n')
         (state / 'issuer.started').write_text('1')
         (state / 'collector.started').write_text('1')
         (state / 'loaded.profile').write_text('retained profile\n')
@@ -894,7 +1130,14 @@ for slot, case in runs:
         prior_backup.mkdir()
         info = prior_backup.stat()
         origin_pair = f'{prior_backup} {info.st_dev}:{info.st_ino} {old_revision} {old_id} {old_id}\n'
-        if case.startswith('maintenance_') and not case.startswith('maintenance_rollback_'):
+        if staged_pair:
+            active.write_text(origin_pair)
+            (prior_backup / 'card-candidate').write_text(origin_pair)
+            generation = ''.join(f'{kind} {"1".zfill(32)} {str(cid).zfill(64)} {"a" * 64} 1 43 42\n'
+                                 for kind, cid in (('collector', 3), ('issuer', 4)))
+            digest = hashlib.sha256((origin_pair + generation).encode()).hexdigest()
+            (state / 'approved-origin').write_text(f'{"1" * 32} {old_revision} {old_id} {old_id} {digest} {int(time.time()) + 3600} {"1".zfill(40)}\n')
+        if staged_pair or case.startswith('maintenance_') and not case.startswith('maintenance_rollback_'):
             if case == 'maintenance_previous_candidate':
                 (staging / 'collector-image-id').write_text(old_id)
             names = ('source-files.sha256', 'rootfs-manifest.json', 'collector-manifest.json', 'image-id',
@@ -947,6 +1190,183 @@ for slot, case in runs:
         manager = slot_vars + central_setup + central_config + '\nsystem_unit_dir="$fixture_root/system-units"\n'
         body = manager + central_functions + '\n' + central_source_gate + '\n' + central_main
         (state / 'system-units').mkdir()
+        if staged_pair:
+            subprocess.run(['chmod', '-R', 'go-w', str(staging)], check=True)
+            scenario = case.removeprefix('staged_')
+            kernel_boot = state / 'boot-id'
+            kernel_boot.write_text('c9b38886-755a-444a-9cb8-74cfb379012f\n')
+            kernel_boot.chmod(0o444)
+            body = body.replace('/proc/sys/kernel/random/boot_id', '"$fixture_root/boot-id"')
+            hold = state / 'po-b.hold'
+            masks = [state / 'system-units' / u for u in (issuer_unit, collector_unit)]
+            expected_active = origin_pair
+            def invoke(op, failure=''):
+                return run(body, state, 'maintenance_' + op + ('_' + failure if failure else ''))
+            def calls_now():
+                return (state / 'calls').read_text().splitlines() if (state / 'calls').exists() else []
+            generic = run(body, state, 'generic_deploy')
+            require(generic.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()),
+                    'b: generic automatic restoration path cannot consume sealed staging', generic)
+            if scenario == 'already_loaded':
+                for image in (collector_prod, issuer_prod):
+                    image_file(state, image.replace(':prod', ':candidate')).write_text('new')
+            if scenario == 'partial_transport':
+                transport.write_text(transport.read_text().splitlines(keepends=True)[0])
+                (state / 'trusted-seal').write_text(hashlib.sha256(transport.read_bytes()).hexdigest())
+            if scenario == 'archive_drift':
+                (staging / 'image.tar').write_text('substituted archive with same manifest')
+            elif scenario == 'origin_stale':
+                (prior_backup / 'card-candidate').write_text(origin_pair.replace(old_revision, new_revision))
+            elif scenario == 'other_owner':
+                other = backup.with_name('card-po-b-20261001T000000Z')
+                other.mkdir()
+                st = other.stat()
+                expected_active = f'{other} {st.st_dev}:{st.st_ino} {old_revision} {old_id} {old_id}\n'
+                (other / 'card-candidate').write_text(expected_active)
+                active.write_text(expected_active)
+            elif scenario == 'other_invocation':
+                (state / 'collector.invocation').write_text('7'.zfill(32) + '\n')
+            elif scenario == 'other_cid':
+                (state / 'collector.cid').write_text('7')
+            elif scenario == 'unsafe_stage':
+                (staging / 'foreign').symlink_to(prior_backup)
+            preflight_failure = scenario in ('candidate_check_failure', 'pooled_query_failure')
+            result = invoke('quiesce', scenario if preflight_failure or scenario == 'expire_after_stop' else '')
+            if scenario == 'expire_after_stop':
+                calls = calls_now()
+                require(result.returncode != 0 and '[OUTCOME] unconfirmed:' in result.stderr and
+                        [c for c in calls if c.startswith('systemctl stop ')] == ['systemctl stop ' + issuer_unit] and
+                        (hold / f'{issuer_unit}.stop-cid').is_file() and not (hold / 'quiesced').exists() and
+                        not any(c.startswith('guard seal ') for c in calls) and active.read_text() == origin_pair,
+                        'b: settle the submitted issuer stop; no second stop or seal after expiry', result)
+                continue
+            if preflight_failure:
+                calls = calls_now()
+                expected_check = 'pair check-pooled' if scenario == 'pooled_query_failure' else 'pair check'
+                reached = any(c.startswith(expected_check + ' ') and c.endswith('/candidate') for c in calls)
+                require(reached and result.returncode != 0 and not hold.exists() and active.read_text() == origin_pair and
+                        all((state / f'{k}.running').read_text() == 'true' and
+                            (state / f'{k}.invocation').read_text().strip() == '1'.zfill(32) and
+                            (state / f'{k}.runtime').read_text() == 'old' for k in ('collector', 'issuer')) and
+                        not any(c.startswith(('guard arm ', 'systemctl stop ', held_start, 'pair activate ')) for c in calls),
+                        f'{label}: incompatible profile or pooled preflight cannot stop the healthy W2 pair', result)
+                continue
+            if scenario in ('archive_drift', 'partial_transport', 'origin_stale', 'other_owner', 'other_invocation', 'other_cid', 'unsafe_stage'):
+                require(result.returncode != 0 and not hold.exists() and not backup.exists() and
+                        not any(c.startswith(mutations) for c in calls_now()) and active.read_text() == expected_active,
+                        f'{label}: staged bytes and admitted W2 owner proven before effects', result)
+                continue
+            require(result.returncode == 0 and (hold / 'quiesced').read_text() == 'guarded-stop-v1\n' and
+                    (backup / 'card-origin').read_text() == origin_pair and
+                    (backup / 'transport.sha256').read_text().strip() == (state / 'trusted-seal').read_text(),
+                    f'{label}: transport proof and prior admitted publisher retained independently', result)
+            if scenario == 'already_loaded':
+                require(not any(c.startswith('podman load ') for c in calls_now()), 'b: matching candidate images never reloaded', result)
+            if scenario == 'absent_hold':
+                hold.rename(state / 'unowned-hold')
+            elif scenario == 'foreign_hold':
+                (hold / 'backup').write_text(str(prior_backup))
+            elif scenario == 'missing_seal':
+                (backup / 'transport.sha256').unlink()
+            elif scenario == 'changed_seal':
+                (state / 'trusted-seal').write_text('e' * 64)
+            elif scenario == 'wrong_window':
+                path = state / 'approved-origin'
+                path.write_text('9' * 32 + path.read_text()[32:])
+            elif scenario == 'wrong_boot':
+                next_boot = state / 'next-boot-id'
+                next_boot.write_text('28ceceb9-e349-4d7c-b6a7-1f77ee31b4f0\n')
+                next_boot.chmod(0o444)
+                next_boot.replace(kernel_boot)
+            elif scenario == 'wrong_tool':
+                path = state / 'approved-origin'
+                path.write_text(path.read_text().replace('1'.zfill(40) + '\n', 'f' * 40 + '\n'))
+            elif scenario == 'profile_drift':
+                profile = current / 'artifacts/worker-profile/releases' / backup.name / service / 'candidate/profile.json'
+                profile.write_text('substituted valid profile')
+                (state / 'source.profile').write_text(profile.read_text())
+            before = len(calls_now())
+            failures = ('error_log', 'missing_start_record', 'old_start_cid', 'expire_after_issuer', 'expire_after_unmask', 'expired_late_notify_client')
+            result = invoke('resume', scenario if scenario in failures else '')
+            after = calls_now()[before:]
+            if scenario == 'expired_late_notify_client':
+                submitted = (backup / f'resume-{collector_unit}.start-request').read_text().split()
+                observed = (backup / f'resume-{collector_unit}.start').read_text().split()
+                start = held_start + collector_unit
+                require(result.returncode == 9 and '[OUTCOME] unconfirmed:' in result.stderr and
+                        re.fullmatch(r'@[0-9]+\.[0-9]{6}', submitted[0]) and submitted[1:] == ['18', '9'] and
+                        observed[:2] == submitted[:2] and observed[2:5] == ['2'.zfill(32), '5'.zfill(64), 'b' * 64] and
+                        (state / 'notify.246s').is_file() and not (state / 'notify.pending').exists() and
+                        (state / 'collector.running').read_text() == 'true' and not (hold / 'quiesced').exists() and
+                        after.count(start) == 1 and not any(c.startswith(mutations) for c in after[after.index(start) + 1:]) and
+                        active.read_text() == origin_pair, 'b: expired client failure retains the submitted and settled job without another writer action', result)
+                print(f'[PASS] {label}')
+                continue
+            if scenario == 'expire_after_unmask':
+                require(result.returncode != 0 and '[OUTCOME] unconfirmed:' in result.stderr and masks[1].is_symlink() and
+                        [c for c in after if c.startswith('systemctl unmask ')] == ['systemctl unmask ' + issuer_unit] and
+                        not any(c.startswith((held_start, 'systemctl stop ', 'guard arm ')) for c in after),
+                        'b: an admitted unmask does not authorize a start or rehold after expiry', result)
+                continue
+            if scenario == 'expire_after_issuer':
+                require(result.returncode != 0 and '[OUTCOME] unconfirmed:' in result.stderr and
+                        [c for c in after if c.startswith(held_start)] == [held_start + issuer_unit] and
+                        (backup / f'resume-{issuer_unit}.start').is_file() and masks[1].is_symlink() and
+                        f'systemctl unmask {collector_unit}' not in after and not any(c.startswith('systemctl stop ') for c in after),
+                        'b: settle issuer start; collector remains masked and no expired rehold is submitted', result)
+                continue
+            if scenario in ('absent_hold', 'foreign_hold', 'missing_seal', 'changed_seal', 'wrong_window', 'wrong_boot', 'wrong_tool', 'profile_drift'):
+                require(result.returncode != 0 and not any(c.startswith(mutations) for c in after) and
+                        all(m.is_symlink() for m in masks) and active.read_text() == origin_pair,
+                        f'{label}: never release masks without seal and owned current hold', result)
+                if scenario == 'wrong_tool':
+                    refused = invoke('rollback')
+                    require(refused.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
+                            'b: rollback cannot substitute the staged tool receipt', refused)
+                continue
+            require([c for c in after if c.startswith((held_start, 'systemctl restart '))] ==
+                    [held_start + u for u in (issuer_unit, collector_unit)] and not any(
+                        c.startswith('pair activate ') and c.endswith('/previous') for c in after),
+                    f'{label}: only guarded original start requests, no automatic restoration', result)
+            if scenario in ('success', 'already_loaded'):
+                require(result.returncode == 0 and not hold.exists() and active.read_text() == (backup / 'card-candidate').read_text() and
+                        all((state / f'{k}.runtime').read_text() == 'new' for k in ('issuer', 'collector')),
+                        'b: activates exactly the staged pair', result)
+                for unit, job in ((issuer_unit, 17), (collector_unit, 18)):
+                    fields = (backup / f'resume-{unit}.start').read_text().split()
+                    require(fields[1:3] == [str(job), '2'.zfill(32)] and fields[4] == 'b' * 64,
+                            f'b: retains original {unit} job, invocation and generation', result)
+                checked = invoke('check')
+                require(checked.returncode == 0, 'b: completion checks both original launched generations', checked)
+                (state / 'collector.cid').write_text('9')
+                before = len(calls_now())
+                for op in ('check', 'resume', 'rollback'):
+                    refused = invoke(op)
+                    require(refused.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
+                            f'b: {op} cannot adopt a replaced generation or reuse a released hold', refused)
+            elif scenario in ('missing_start_record', 'old_start_cid'):
+                require(result.returncode != 0 and '[OUTCOME] unconfirmed:' in result.stderr and not (hold / 'quiesced').exists() and
+                        not (backup / f'resume-{collector_unit}.start').exists() and (state / 'collector.running').read_text() == 'true' and
+                        f'systemctl stop {collector_unit}' not in after and active.read_text() == origin_pair,
+                        'b: running collector without original manager record is never stopped or certified', result)
+                before = len(calls_now())
+                refused = invoke('rollback')
+                require(refused.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
+                        'b: no rollback from unconfirmed collector start', refused)
+            else:
+                require(result.returncode != 0 and '[OUTCOME] held:' in result.stderr and all(m.is_symlink() for m in masks) and
+                        (hold / 'quiesced').read_text() == 'guarded-stop-v1\n' and active.read_text() == origin_pair,
+                        'b: log failure stops only the admitted start generations; no publisher restored', result)
+                before = len(calls_now())
+                refused = invoke('resume')
+                require(refused.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
+                        'b: repeated post-card activation refused', refused)
+                restored_pair = invoke('rollback')
+                require(restored_pair.returncode == 0 and not hold.exists() and active.read_text() == origin_pair and
+                        all((state / f'{k}.runtime').read_text() == 'old' for k in ('issuer', 'collector')),
+                        'b: separately authorized confirmed hold may restore admitted W2, not pre-card publisher', restored_pair)
+            print(f'[PASS] {label}')
+            continue
         if case.startswith('maintenance_'):
             scenario = case.removeprefix('maintenance_')
             hold = state / f'po-{slot}.hold'
