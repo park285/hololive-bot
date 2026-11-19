@@ -44,6 +44,7 @@ make_repo() {
   mkdir -p "${repo}"
   for path in \
     scripts/deploy/lib/compose-env.sh scripts/deploy/quadlet-prestart.sh \
+    scripts/deploy/sync-opt-current.sh \
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     scripts/deploy/lib/admin-bind.sh scripts/deploy/lib/public-bind-mounts.sh \
     scripts/deploy/lib/postgres-endpoint.sh scripts/deploy/lib/source-revision.sh \
@@ -52,6 +53,7 @@ make_repo() {
     mkdir -p "${repo}/$(dirname "${path}")"
     cp -R "${ROOT_DIR}/${path}" "${repo}/${path}"
   done
+  printf '\n' >>"$repo/scripts/deploy/sync-opt-current.sh"
   cat >"${repo}/scripts/deploy/verify-exec-tree-ownership.sh" <<'EOF'
 #!/usr/bin/env bash
 printf 'verify %s\n' "$#" >>"${SYNC_TEST_EVENTS:?}"
@@ -85,7 +87,7 @@ make_host() {
 
 host_snapshot() {
   local host="$1" opt=opt/current
-  [[ "${2:-}" != --application-only ]] || opt=opt
+  case "${2:-}" in --application-only|--source-only) opt=opt ;; esac
   (cd "${host}" && find etc-containers-systemd usr-local-libexec etc-systemd-system etc-nftables.d etc-stack-secrets run "$opt" \
     -printf '%p %m %U:%G %i\n' -type f -printf '%p %T@ %C@\n' -exec sha256sum {} + | LC_ALL=C sort)
 }
@@ -291,6 +293,45 @@ backups=("$host/opt/current.bak-$(git -C "$w2_repo" rev-parse --short HEAD)-"*)
   fail "card rollback copy included runtime data"
 cmp "$w1_repo/$migrator_path" "${backups[0]}/$migrator_path"
 pass "application-only publishes the card tree and schema migrator without touching accepted pool/runtime inodes"
+
+source_host="$tmp/host-source"
+source_repo="$tmp/repo-source"
+cp -a "$host" "$source_host"
+cp -a "$w2_repo" "$source_repo"
+installed_revision="$(git -C "$source_repo" rev-parse HEAD)"
+cp "$ROOT_DIR/scripts/deploy/sync-opt-current.sh" "$source_repo/scripts/deploy/sync-opt-current.sh"
+printf 'new release\n' >"$source_repo/hololive/hololive-api/VERSION"
+commit_repo "$source_repo" new-release
+source_revision="$(git -C "$source_repo" rev-parse HEAD)"
+assert_rejected_without_change "$source_host" "$source_repo" "stale precursor" "installed revision mismatch" --source-only "$source_revision"
+printf 'foreign\n' >"$source_repo/untracked"
+assert_rejected_without_change "$source_host" "$source_repo" "unreviewed source" "clean checkout" --source-only "$installed_revision"
+rm "$source_repo/untracked"
+bad_host="$tmp/host-source-drift"
+cp -a "$source_host" "$bad_host"
+printf 'foreign\n' >>"$bad_host/opt/current/hololive/hololive-api/VERSION"
+assert_rejected_without_change "$bad_host" "$source_repo" "unreviewed precursor bytes" "tree drift" --source-only "$installed_revision"
+bad_repo="$tmp/repo-source-deleted"
+cp -a "$source_repo" "$bad_repo"
+rm "$bad_repo/hololive/hololive-api/VERSION"
+commit_repo "$bad_repo" remove-source
+assert_rejected_without_change "$source_host" "$bad_repo" "removed source" "regular-file modifications" --source-only "$installed_revision"
+source_protected() {
+  protected_snapshot "$1"
+  stat -c '%i %u:%g %a %y %z' "$1/etc-containers-systemd/hololive-bot/${migrator_path##*/}" "$1/opt/current/$migrator_path"
+}
+before="$(source_protected "$source_host")"
+run_sync "$source_host" "$source_repo" --source-only "$installed_revision" || { cat "$source_host/out" >&2; fail "source-only failed"; }
+[[ "$(source_protected "$source_host")" == "$before" ]] || fail "source-only replaced protected metadata or bytes"
+! grep -q '^systemctl ' "$source_host/events" || fail "source-only invoked systemctl"
+[[ "$(<"$source_host/opt/current/.source-revision")" == "$source_revision" ]] || fail "source revision not published"
+backups=("$source_host/opt/current.bak-$(git -C "$source_repo" rev-parse --short HEAD)-"*)
+[[ "${#backups[@]}" == 1 && "$(<"${backups[0]}/.source-revision")" == "$installed_revision" ]] || fail "missing source recovery point"
+for path in scripts/deploy/sync-opt-current.sh hololive/hololive-api/VERSION; do
+  cmp "$source_repo/$path" "$source_host/opt/current/$path"
+  cmp "$w2_repo/$path" "${backups[0]}/$path"
+done
+pass "source-only publishes existing app files from the proven precursor without replacing installed definitions or bind inodes"
 
 for path in opt/current/deploy/postgres/pg_hba.conf opt/current/deploy/pgbouncer/stats-users.txt \
     opt/current/hololive/hololive-api/scripts/init-db/00-assert-pg18-runtime.sql \
