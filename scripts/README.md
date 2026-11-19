@@ -26,8 +26,8 @@ PR/릴리스 전 제품 결함 게이트와 운영 검증 기록 렌더링 도�
 
 - `sudo ./scripts/deploy/sync-opt-current.sh` - 중앙 배포 트리·Quadlet unit·prestart 설치(`deploy/quadlet/README.md`)
 - `scripts/deploy/quadlet-prestart.sh` - 중앙 unit의 ExecStartPre/ExecCondition helper
-- `sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh <hololive-api|hololive-alarm-worker> <image> [<api-image>]` - 중앙 API·worker image 교체(이전 pair 보존, 활성화 전 migration, 실패 시 이전 pair 복원)
-- `sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-rollback-service.sh <release> [--check|--apply]` - 보존한 이전 pair로 API·worker rollback
+- `sudo -n /opt/hololive-bot/compose/app-sources/<승인 SHA>/scripts/deploy/quadlet-redeploy-service.sh <hololive-api|hololive-alarm-worker> <image-id> [<api-image-id>]` - 봉인된 소스와 같은 후보의 읽기 전용 스키마 검사 후 해당 writer만 교체합니다. 이전 pair를 보존하며 자동 복구하지 않습니다.
+- 같은 세대의 `quadlet-rollback-service.sh <release> --check`로 캡처한 pair를 검사합니다. `--apply`에는 별도 승인이 필요합니다. 보호 세대 게시 전 일반 설치의 명령은 [릴리스 런북](../docs/current/runbooks/release.md)을 참조합니다.
 - 원격 AP(`youtube-collector` fleet) 호스트 운영: `scripts/deploy/ap-hosts/<host>.conf` 기반
   - Osaka native: `./scripts/deploy/ap-host-native-deploy.sh osaka [--dry-run|--apply]`
   - `./scripts/deploy/ap-completion-check.sh <host>`

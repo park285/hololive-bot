@@ -3,6 +3,7 @@ hololive/hololive-api/scripts/migrations/manifest.txt
 hololive/hololive-api/scripts/migrations/001_schema_epoch4_baseline.sql
 hololive/hololive-api/scripts/migrations/contracts/001_schema_epoch4_baseline.sql
 scripts/deploy/lib/migration-receipts.sh
+scripts/deploy/lib/app-source-authority.py
 hololive/hololive-api/internal/migrationrunner/queries/lineage_head.sql
 scripts/deploy/lib/worker-profile-pair.py
 scripts/deploy/lib/systemd-stop-guard.py
