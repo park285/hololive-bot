@@ -119,7 +119,9 @@ unit을 갱신합니다. 이 도구는 배포 트리에 그 commit을 `.source-r
 새 고유 exec-tree backup만 만들며 과거 backup을 덮거나 자동 정리하지 않습니다.
 이미 `--schema-only` migrator를 수용했고 host 정의가 바뀌지 않는 앱 갱신에는 `--source-only <현재 설치된 40자리 SHA>`를 사용합니다. 빌드 호스트에서 검증한 annotated tag의 commit과 중앙의 고유 root 소유 staging checkout이 일치하는지 확인한 뒤 **그 checkout의** `scripts/deploy/sync-opt-current.sh`를 실행합니다. 설치된 구 helper를 수정하거나 새 helper만 따로 복사해서 실행하지 않습니다. `--application-only`는 구 `--pool-only=auth`에서 카드 migrator로 전환하는 창 전용입니다.
 
-`--source-only`는 writer lock 아래 설치 stamp·구 소스 전체와 후보 계보·깨끗한 checkout을 대조하고, 기존 일반 파일의 내용 변경만 허용합니다. 설치된 Quadlet·방화벽·pooler·runtime 경로를 쓰지 않으며 daemon-reload도 하지 않습니다. 새 `current.bak-*`를 보존한 뒤 검토된 차이(이번에는 helper 자신과 CHANGELOG 포함)를 파일별로 교체하고, 후보 트리와 대조한 뒤 stamp를 마지막에 교체합니다. 누락·삭제·기존 내용 불일치 또는 도중 실패 시 서비스를 교체하지 않습니다. stamp만 보고 자동으로 재실행하거나 backup을 복원하지 말고 실제 파일·backup·기존 pair를 대조합니다. 이후 각 앱 교체는 아래 설치된 coordinator가 수행합니다.
+`--source-only`는 writer lock 아래 설치 stamp·구 소스 전체와 후보 계보·깨끗한 checkout을 대조합니다. 아카이브를 풀기 전에 Git 객체의 경로·모드와 예약된 stamp 경로를 검사하며 기존 일반 파일의 내용 변경만 허용합니다. 설치 coordinator와 실행 의존성은 루트까지 경로 전체가 root 소유이고 그룹·기타 쓰기, 추가 POSIX ACL, 심볼릭 링크나 일반 파일의 하드 링크가 없어야 합니다. 이 모드는 호스트 권한을 조정하거나 Quadlet·방화벽·pooler·runtime 경로를 재설치하거나 daemon-reload하지 않습니다.
+
+구 `current.bak-*`를 검증·보존하고 stamp를 먼저 `incomplete`로 내구성 있게 바꿉니다. 검토된 파일(이번에는 helper 자신과 CHANGELOG 포함)을 교체한 뒤 전체 후보와 대조하고 온전한 SHA를 마지막에 게시합니다. 중간 실패 시 혼합 트리에 구 이미지나 새 이미지를 활성화할 수 없습니다. 자동 재실행·복원하지 말고 실제 파일·backup·기존 pair를 대조합니다. 이후 각 앱 교체는 아래 설치된 coordinator가 수행합니다.
 
 API·worker는 배포 트리의 배포 helper로 교체합니다. helper가 이전 pair 보존, candidate 검사, 활성화 전
 `hololive-db-migrate`(같은 revision의 API image로 고정), drop-in 활성화와 restart, `verify-live`·`NRestarts` 확인을 한

@@ -37,6 +37,11 @@ cat >"${fakebin}/chown" <<'EOF'
 #!/usr/bin/env bash
 printf 'chown %s\n' "$*" >>"${SYNC_TEST_EVENTS:?}"
 EOF
+cat >"${fakebin}/mv" <<'EOF'
+#!/usr/bin/env bash
+if [[ -f "$SYNC_TEST_EVENTS.fail-before" && "${!#}" == "$(<"$SYNC_TEST_EVENTS.fail-before")" ]]; then exit 92; fi
+exec /usr/bin/mv "$@"
+EOF
 chmod +x "${fakebin}"/*
 
 make_repo() {
@@ -45,6 +50,8 @@ make_repo() {
   for path in \
     scripts/deploy/lib/compose-env.sh scripts/deploy/quadlet-prestart.sh \
     scripts/deploy/sync-opt-current.sh \
+    scripts/deploy/quadlet-{redeploy,rollback}-service.sh \
+    scripts/deploy/lib/{card-migration-guard,worker-profile-pair,systemd-stop-guard}.py \
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     scripts/deploy/lib/admin-bind.sh scripts/deploy/lib/public-bind-mounts.sh \
     scripts/deploy/lib/postgres-endpoint.sh scripts/deploy/lib/source-revision.sh \
@@ -93,8 +100,9 @@ host_snapshot() {
 }
 
 run_sync() {
-  local host="$1" repo="$2"
+  local host="$1" repo="$2" opt="$1/opt"
   shift 2
+  [[ ${1:-} != --source-only ]] || opt=/opt
   : >"${host}/events"
   # shellcheck disable=SC2016 # namespace 안의 bash가 확장한다.
   unshare --user --map-root-user --mount bash -c '
@@ -108,9 +116,21 @@ run_sync() {
     mount --bind "${host}/etc-nftables.d" /etc/nftables.d
     mount --bind "${host}/run" /run
     mount --bind "${host}/run-lock" /run/lock
+    if [[ " $* " == *" --source-only "* ]]; then
+      jail="$host/jail"
+      mkdir -p "$jail"/{usr,dev,etc,proc,run,sys,tmp,home,var,opt}
+      chmod 0755 "$jail"
+      for directory in usr dev etc proc run sys; do mount --rbind "/$directory" "$jail/$directory"; done
+      for directory in tmp home var; do mount --bind "/$directory" "$jail/$directory"; done
+      for directory in bin sbin lib lib64; do
+        [[ -e "$jail/$directory" ]] || ln -s "usr/$directory" "$jail/$directory"
+      done
+      mount --bind "$host/opt" "$jail/opt"
+      exec chroot "$jail" "$@"
+    fi
     exec "$@"
   ' _ "${host}" env PATH="${fakebin}:${PATH}" SYNC_TEST_EVENTS="${host}/events" \
-    REPO_ROOT="${repo}" OPT_ROOT="${host}/opt" \
+    REPO_ROOT="${repo}" OPT_ROOT="$opt" \
     bash "${ROOT_DIR}/scripts/deploy/sync-opt-current.sh" "$@" >"${host}/out" 2>&1
 }
 
@@ -299,6 +319,8 @@ source_repo="$tmp/repo-source"
 cp -a "$host" "$source_host"
 cp -a "$w2_repo" "$source_repo"
 installed_revision="$(git -C "$source_repo" rev-parse HEAD)"
+chmod -R go-w "$source_host/opt/current/scripts"
+chmod go-w "$source_host/opt" "$source_host/opt/current"
 cp "$ROOT_DIR/scripts/deploy/sync-opt-current.sh" "$source_repo/scripts/deploy/sync-opt-current.sh"
 printf 'new release\n' >"$source_repo/hololive/hololive-api/VERSION"
 commit_repo "$source_repo" new-release
@@ -310,12 +332,55 @@ rm "$source_repo/untracked"
 bad_host="$tmp/host-source-drift"
 cp -a "$source_host" "$bad_host"
 printf 'foreign\n' >>"$bad_host/opt/current/hololive/hololive-api/VERSION"
-assert_rejected_without_change "$bad_host" "$source_repo" "unreviewed precursor bytes" "tree drift" --source-only "$installed_revision"
+assert_rejected_without_change "$bad_host" "$source_repo" "unreviewed precursor bytes" "content or path mismatch" --source-only "$installed_revision"
 bad_repo="$tmp/repo-source-deleted"
 cp -a "$source_repo" "$bad_repo"
 rm "$bad_repo/hololive/hololive-api/VERSION"
 commit_repo "$bad_repo" remove-source
 assert_rejected_without_change "$source_host" "$bad_repo" "removed source" "regular-file modifications" --source-only "$installed_revision"
+bad_repo="$tmp/repo-source-reserved"
+cp -a "$source_repo" "$bad_repo"
+printf 'retained\n' >"$tmp/stamp-canary"
+ln -s "$tmp/stamp-canary" "$bad_repo/.source-revision"
+commit_repo "$bad_repo" reserved-stamp
+assert_rejected_without_change "$source_host" "$bad_repo" "reserved stamp" "reserved source-revision" --source-only "$installed_revision"
+[[ "$(<"$tmp/stamp-canary")" == retained ]] || fail "reserved path changed an external file"
+bad_repo="$tmp/repo-source-protected"
+cp -a "$source_repo" "$bad_repo"
+printf 'touch "%s"\n' "$tmp/forbidden-verifier-ran" >>"$bad_repo/scripts/deploy/verify-exec-tree-ownership.sh"
+commit_repo "$bad_repo" protected-change
+assert_rejected_without_change "$source_host" "$bad_repo" "changed install helper" "unapproved source-only path" --source-only "$installed_revision"
+[[ ! -e "$tmp/forbidden-verifier-ran" ]] || fail "unapproved helper ran before its rejection"
+for attack in writable-parent nonroot-owner file-link acl; do
+  bad_host="$tmp/host-source-unsafe-$attack"
+  cp -a "$source_host" "$bad_host"
+  entry="$bad_host/opt/current/scripts/deploy/quadlet-redeploy-service.sh"
+  case "$attack" in
+    writable-parent) chmod g+w "${entry%/*}" ;;
+    nonroot-owner) podman unshare /usr/bin/chown 1 "$entry" ;;
+    file-link) ln "$entry" "$bad_host/alias" ;;
+    acl) python3 - "$entry" <<'PY'
+import os
+import struct
+import sys
+
+entries = ((1, 7, -1), (2, 6, os.getuid()), (4, 5, -1), (16, 5, -1), (32, 5, -1))
+os.setxattr(sys.argv[1], "system.posix_acl_access", struct.pack("<I", 2) + b"".join(struct.pack("<HHi", *entry) for entry in entries))
+PY
+    ;;
+  esac
+  assert_rejected_without_change "$bad_host" "$source_repo" "$attack" "unsafe installed coordinator authority" --source-only "$installed_revision"
+done
+failed_host="$tmp/host-source-partial"
+cp -a "$source_host" "$failed_host"
+printf '%s\n' /opt/current/scripts/deploy/sync-opt-current.sh >"$failed_host/events.fail-before"
+if run_sync "$failed_host" "$source_repo" --source-only "$installed_revision"; then fail "partial publication reported success"; fi
+cmp "$source_repo/hololive/hololive-api/VERSION" "$failed_host/opt/current/hololive/hololive-api/VERSION"
+cmp "$w2_repo/scripts/deploy/sync-opt-current.sh" "$failed_host/opt/current/scripts/deploy/sync-opt-current.sh"
+[[ "$(<"$failed_host/opt/current/.source-revision")" == "incomplete $installed_revision -> $source_revision" ]] || fail "partial publication retained an actionable stamp"
+backups=("$failed_host/opt/current.bak-$(git -C "$source_repo" rev-parse --short HEAD)-"*)
+cmp "$w2_repo/hololive/hololive-api/VERSION" "${backups[0]}/hololive/hololive-api/VERSION"
+assert_rejected_without_change "$failed_host" "$source_repo" "partial publication replay" "installed revision mismatch" --source-only "$installed_revision"
 source_protected() {
   protected_snapshot "$1"
   stat -c '%i %u:%g %a %y %z' "$1/etc-containers-systemd/hololive-bot/${migrator_path##*/}" "$1/opt/current/$migrator_path"
