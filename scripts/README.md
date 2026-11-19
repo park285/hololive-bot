@@ -11,6 +11,8 @@ GitHub Release 게시·본문 수정: `bash scripts/publish-release.sh <tag> <pr
 
 기본 gate는 architecture gates, manifest가 선택한 Go toolchain, `go work sync` drift, `go mod tidy -diff`, 모듈별 `GOWORK=off go vet`, stage-3 `golangci-lint`(staticcheck·formatter·modernize 포함), NilAway, `go build`, PGO-off production policy와 race 테스트를 포함합니다. `GOTOOLCHAIN` 기본값은 `auto`이며 명시한 환경값을 유지하고 `go.mod`·`go.work`를 스크립트의 고정 버전으로 수정하지 않습니다. `go-test-nonrace.sh`는 Go가 선택한 테스트 파일을 비교해 race 빌드에서 빠지는 테스트가 있는 패키지만 일반 테스트로 보완합니다. NilAway는 `go vet -vettool`의 unitchecker로 의존성 분석을 재사용하며 기본 분석 병렬도는 1입니다.
 
+`go work sync` drift는 임시로 복사한 `go.work`·`go.mod`·체크섬의 변화를 검사합니다. 오프라인(`GOPROXY=off`)에서는 직접 VCS 조회를 하지 않습니다. Go는 동기화 중 각 모듈을 개별적으로 다시 열기 때문에 workspace의 `replace`만으로는 캐시에 없는 버전의 매니페스트를 찾지 못합니다. 이 경우에만 API의 Valkey 어댑터 핀과 workspace의 `use`·버전별 `replace`가 일치하는지, 형제 어댑터 `go.mod`의 Go 체크섬이 API `go.sum`의 단일 핀과 일치하는지 확인해 API 임시 복사본에 같은 버전의 `replace`를 둡니다. 온라인은 설정된 프록시 정책을 그대로 따릅니다. 이 검사는 모듈 ZIP이나 게시 상태를 검증하지 않습니다. `GOWORK=off` tidy·vet·운영 빌드는 별도이며 정식 의존성이 필요합니다.
+
 `pre-push-gate.sh`가 배포·운영 스크립트 테스트와 `govulncheck`를 추가로 실행합니다. `RUN_INTEGRATION_TESTS=true`이면 일회용 PostgreSQL·Valkey를 생성해 integration 테스트를 실행하고 회수합니다. `TEST_DATABASE_URL`을 지정한 경우 해당 DB의 소유권 검증을 거쳐 dispatch outbox integration 테스트를 실행합니다.
 
 ## 2. architecture/
