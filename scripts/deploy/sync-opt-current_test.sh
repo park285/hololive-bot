@@ -18,7 +18,7 @@ unshare --user --map-root-user --mount true 2>/dev/null || fail "unprivileged us
 
 umask 022
 tmp="$(mktemp -d)"
-trap 'find "$tmp" -type d -path "*/app-sources/*" -exec chmod u+w {} +; rm -rf "$tmp"' EXIT
+trap 'find "$tmp" -type d -user "$(id -u)" ! -perm -u+w -exec chmod u+w {} +; rm -rf "$tmp"' EXIT
 
 fakebin="${tmp}/fakebin"
 mkdir -p "${fakebin}"
@@ -43,7 +43,19 @@ EOF
 cat >"${fakebin}/mv" <<'EOF'
 #!/usr/bin/env bash
 if [[ -f "$SYNC_TEST_EVENTS.fail-before" && "${!#}" == "$(<"$SYNC_TEST_EVENTS.fail-before")" ]]; then exit 92; fi
+if [[ -f "$SYNC_TEST_EVENTS.fail-after" && "${!#}" == "$(<"$SYNC_TEST_EVENTS.fail-after")" ]]; then /usr/bin/mv "$@"; exit 93; fi
 exec /usr/bin/mv "$@"
+EOF
+cat >"${fakebin}/sync" <<'EOF'
+#!/usr/bin/env bash
+active=/opt/hololive-bot/compose/app-sources/active
+if [[ -f "$SYNC_TEST_EVENTS.fail-incomplete" && -f "$active" && "$(<"$active")" == "incomplete "* ]]; then exit 94; fi
+exec /usr/bin/sync "$@"
+EOF
+cat >"${fakebin}/protected-bootstrap" <<'EOF'
+#!/usr/bin/env bash
+export SYNC_TEST_CONTAINER_PID=$$
+exec bash /opt/hololive-bot/release-sources/tool/source/scripts/deploy/sync-opt-current.sh "$@"
 EOF
 cat >"${fakebin}/podman" <<'EOF'
 #!/usr/bin/env bash
@@ -51,9 +63,33 @@ printf 'podman %s\n' "$*" >>"${SYNC_TEST_EVENTS:?}"
 case "$1:$2:${!#}" in
   container:inspect:holo-postgres|container:inspect:holo-pgbouncer)
     printf '%064d %s true healthy\n' 1 "${SYNC_TEST_CONTAINER_PID:?}" ;;
-  image:inspect:sha256:*) printf '%064d %s hololive-api\n' 2 "$(< /opt/hololive-bot/compose/app-sources/active)" ;;
+  image:inspect:*)
+    id="${!#}"; id="${id#sha256:}"
+    if [[ "$3" == --format && "$4" == *'{{.Os}}'* ]]; then
+      case "$id" in
+        "$(printf '%064d' 3)") name=hololive-api ;;
+        "$(printf '%064d' 4)") name=hololive-alarm-worker ;;
+        *) exit 1 ;;
+      esac
+      printf '%s linux/arm64 %s %s\n' "$id" "$name" "$(< /tmp/candidate-revision)"
+    elif [[ "$3" == --format ]]; then
+      printf '%s %s hololive-api\n' "$id" "$(< /tmp/accepted-revision)"
+    else
+      printf '[{"Id":"%s","Os":"linux","Architecture":"arm64","Config":{"Labels":{"org.opencontainers.image.revision":"%s"}}}]\n' "$id" "$(< /tmp/accepted-revision)"
+    fi ;;
   container:inspect:hololive-api|container:inspect:hololive-alarm-worker)
-    printf '%064d %s healthy\n' 2 "$(< /opt/hololive-bot/compose/app-sources/active)" ;;
+    service="${!#}"; image="$(printf '%064d' 2)"; cid="$(printf '%064d' 8)"
+    if [[ "$service" == hololive-alarm-worker ]]; then image="$(printf '%064d' 5)"; cid="$(printf '%064d' 9)"; fi
+    if [[ "$3" == --format ]]; then
+      printf '%s %s healthy\n' "$image" "$(< /tmp/accepted-revision)"
+    else
+      pair="/opt/hololive-bot/compose/current/artifacts/worker-profile/releases/$service-v2-reviewed/candidate"
+      printf '[{"Id":"%s","Image":"%s","State":{"Running":true,"Pid":%s,"StartedAt":"fixture"},"Config":{"Env":["HOLOLIVE_METRICS_ADDR=:30003","APP_VERSION=1.2.3"],"Labels":{"io.hololive.worker-profile-pair":"%s"}},"OCIConfigPath":"/tmp/%s.oci"}]\n' \
+        "$cid" "$image" "$(<"/tmp/$service.pid")" "$pair" "$service"
+    fi ;;
+  exec:*:http://127.0.0.1:30003/diagnostics/workers)
+    [[ "$3 $4 $5" == "/app/bin/healthcheck --body-api-key-env API_SECRET_KEY" ]] || exit 1
+    printf '{"contractVersion":1,"profile":{"hash":"%s"}}\n' "$(<"/tmp/$2.loaded")" ;;
   *) exit 1 ;;
 esac
 EOF
@@ -67,11 +103,12 @@ make_repo() {
     scripts/deploy/lib/protected-binds.sh scripts/deploy/lib/sealed-app.sh \
     scripts/deploy/sync-opt-current.sh \
     scripts/deploy/quadlet-{redeploy,rollback}-service.sh \
-    scripts/deploy/lib/{card-migration-guard,worker-profile-pair,systemd-stop-guard}.py \
+    scripts/deploy/lib/{app-source-authority,card-migration-guard,worker-profile-pair,systemd-stop-guard}.py \
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     scripts/deploy/lib/admin-bind.sh scripts/deploy/lib/public-bind-mounts.sh \
     scripts/deploy/lib/postgres-endpoint.sh scripts/deploy/lib/source-revision.sh \
     scripts/systemd/admin-dashboard-ingress-firewall.service scripts/systemd/admin-dashboard-ingress.nft \
+    verification/tla/{AlarmDispatchClaim,CollectionJobLease}/COVERAGE.md \
     hololive/hololive-api/scripts/init-db deploy; do
     mkdir -p "${repo}/$(dirname "${path}")"
     cp -R "${ROOT_DIR}/${path}" "${repo}/${path}"
@@ -180,6 +217,8 @@ run_sync() {
       mount --bind "$host/events" "$jail/events"
       if [[ -f "$host/canary" ]]; then touch "$jail/canary"; mount --bind "$host/canary" "$jail/canary"; fi
       if [[ -e "$host/events.fail-before" ]]; then cp "$host/events.fail-before" "$jail/events.fail-before"; fi
+      if [[ -e "$host/events.fail-after" ]]; then cp "$host/events.fail-after" "$jail/events.fail-after"; fi
+      if [[ -e "$host/events.fail-incomplete" ]]; then touch "$jail/events.fail-incomplete"; fi
       for directory in bin sbin lib lib64; do
         [[ -e "$jail/$directory" ]] || ln -s "usr/$directory" "$jail/$directory"
       done
@@ -190,6 +229,9 @@ run_sync() {
         mount --bind "$host/opt" "$root/compose"
         mount --bind "$repo" "$root/release-sources/candidate/source"
         mount --bind "${SYNC_TEST_TOOL:?}" "$root/release-sources/tool/source"
+        printf "sha256:%064d\n" 3 >"$root/release-sources/candidate/hololive-api.candidate-image"
+        printf "sha256:%064d\n" 4 >"$root/release-sources/candidate/hololive-alarm-worker.candidate-image"
+        cp "$host/candidate-revision" "$jail/tmp/"
         mkdir -p "$jail/docker-entrypoint-initdb.d" "$jail/etc/pgbouncer"
         mount --bind "$host/opt/current/hololive/hololive-api/scripts/init-db" "$jail/docker-entrypoint-initdb.d"
         mount -o remount,bind,ro "$jail/docker-entrypoint-initdb.d"
@@ -205,8 +247,29 @@ run_sync() {
           touch "$jail/etc/pgbouncer/$file"; mount --bind "$src" "$jail/etc/pgbouncer/$file"
           mount -o remount,bind,ro "$jail/etc/pgbouncer/$file"
         done
-        exec chroot "$jail" env PATH=/stubs:/usr/bin:/usr/sbin HOME=/tmp TMPDIR=/tmp SYNC_TEST_EVENTS=/events \
-          SYNC_TEST_CONTAINER_PID=$$ bash /opt/hololive-bot/release-sources/tool/source/scripts/deploy/sync-opt-current.sh "${@: -5}"
+        writers=()
+        stop_writers() { for pid in "${writers[@]}"; do kill "$pid" 2>/dev/null || :; wait "$pid" 2>/dev/null || :; done; }
+        trap stop_writers EXIT
+        if [[ -d "$host/profile-fixture" ]]; then
+          cp "$host/profile-fixture/"* "$jail/tmp/"
+          for service in hololive-api hololive-alarm-worker; do
+            worker="$jail/tmp/$service-root"
+            base="$worker/run/hololive-bot"
+            pair="$host/opt/current/artifacts/worker-profile/releases/$service-v2-reviewed/candidate"
+            mkdir -p "$base"/{worker-profiles,worker-profile-release}
+            mount --bind "$host/etc-stack-secrets/hololive-bot/worker-profiles" "$base/worker-profiles"
+            mount --bind "$pair" "$base/worker-profile-release"
+            for dir in "$base"/*; do mount -o remount,bind,ro "$dir"; done
+            python3 -ISB -c "import ctypes,os,signal,sys,time; ctypes.CDLL(None).prctl(1,signal.SIGKILL,0,0,0); assert os.getppid()==int(sys.argv[3]); ready=open(sys.argv[2],\"x\"); os.chroot(sys.argv[1]); os.chdir(\"/\"); ready.write(str(os.getpid())); ready.close(); time.sleep(120)" \
+              "$worker" "$jail/tmp/$service.pid" "$$" &
+            writers+=("$!")
+            for _ in {1..100}; do [[ ! -s "$jail/tmp/$service.pid" ]] || break; sleep 0.02; done
+            [[ -s "$jail/tmp/$service.pid" ]]
+          done
+        fi
+        chroot "$jail" env -i PATH=/stubs:/usr/bin:/usr/sbin HOME=/tmp TMPDIR=/tmp SYNC_TEST_EVENTS=/events \
+          /stubs/protected-bootstrap "${@: -5}"
+        exit
       fi
       mount --bind "$host/opt" "$jail/opt"
       exec chroot "$jail" env PATH=/stubs:/usr/bin:/usr/sbin HOME=/tmp TMPDIR=/tmp SYNC_TEST_EVENTS=/events REPO_ROOT=/repo OPT_ROOT=/opt bash ./bootstrap "${@: -2}"
@@ -232,9 +295,11 @@ assert_rejected_without_change() {
   ! grep -q 'daemon-reload' "${host}/events" || fail "${label}: daemon-reload ran after a rejected dry-run"
   grep -Fq "${expected}" "${host}/out" ||
     { cat "${host}/out" >&2; fail "${label}: rejection did not come from the expected check"; }
-  if compgen -G "${host}/opt/.staging-current.*" >/dev/null || compgen -G "${host}/opt/.quadlet-check.*" >/dev/null; then
-    fail "${label}: temporary staging directories were left behind"
-  fi
+  [[ "${5:-}" == --protected-source ]] || {
+    if compgen -G "${host}/opt/.staging-current.*" >/dev/null || compgen -G "${host}/opt/.quadlet-check.*" >/dev/null; then
+      fail "${label}: temporary staging directories were left behind"
+    fi
+  }
 }
 
 base_repo="${tmp}/repo-base"
@@ -493,6 +558,9 @@ cp -a "$source_host" "$generation_host"
 mkdir "$generation_host/run/hololive-bot/postgres"
 cp -a "$source_repo" "$generation_repo"
 cp -a "$source_repo" "$SYNC_TEST_TOOL"
+printf '\n' >>"$SYNC_TEST_TOOL/scripts/deploy/quadlet-prestart.sh"
+commit_repo "$SYNC_TEST_TOOL" reviewed-prestart
+tool_revision="$(git -C "$SYNC_TEST_TOOL" rev-parse HEAD)"
 migrations=hololive/hololive-api/scripts/migrations
 chmod 0700 "$generation_host/opt/current"
 chmod g+w "$generation_host/opt/current/$migrations" "$generation_host/opt/current/$migrations/"* \
@@ -506,13 +574,39 @@ awk '!/^Volume=.*:\/migrations:ro$/ && !/^Environment=MIGRATION_(BASELINE_THROUG
   "$source_repo/$migrator_path" >"$generation_repo/$migrator_path"
 printf '\n' >>"$generation_repo/deploy/quadlet/README.md"
 printf '\n' >>"$generation_repo/scripts/deploy/quadlet-prestart.sh"
+for path in verification/tla/{AlarmDispatchClaim,CollectionJobLease}/COVERAGE.md; do printf '\n' >>"$generation_repo/$path"; done
 commit_repo "$generation_repo" protected-generation
 candidate_revision="$(git -C "$generation_repo" rev-parse HEAD)"
-generation_args=(--protected-source "$source_revision" "$candidate_revision" "$source_revision" /opt/hololive-bot/release-sources/candidate/source)
+printf '%s\n' "$candidate_revision" >"$generation_host/candidate-revision"
+generation_args=(--protected-source "$source_revision" "$candidate_revision" "$tool_revision" /opt/hololive-bot/release-sources/candidate/source)
 assert_rejected_without_change "$generation_host" "$generation_repo" "wrong candidate" "candidate revision mismatch" \
-  --protected-source "$source_revision" "$source_revision" "$source_revision" "${generation_args[4]}"
+  --protected-source "$source_revision" "$source_revision" "$tool_revision" "${generation_args[4]}"
 assert_rejected_without_change "$generation_host" "$generation_repo" "wrong tool" "not the reviewed tool" \
   --protected-source "$source_revision" "$candidate_revision" "$candidate_revision" "${generation_args[4]}"
+bad_repo="$tmp/repo-withdrawn-coverage"
+cp -a "$generation_repo" "$bad_repo"
+rm "$bad_repo/verification/tla/CollectionJobLease/COVERAGE.md"
+commit_repo "$bad_repo" withdrawn-coverage
+assert_rejected_without_change "$generation_host" "$bad_repo" "coverage removal" "requires an existing non-executable document" \
+  --protected-source "$source_revision" "$(git -C "$bad_repo" rev-parse HEAD)" "$tool_revision" "${generation_args[4]}"
+bad_repo="$tmp/repo-legacy-consumer"
+cp -a "$generation_repo" "$bad_repo"
+printf '#!/usr/bin/env bash\nexec /opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh "$@"\n' >"$bad_repo/scripts/deploy/quadlet-redeploy-service.sh"
+commit_repo "$bad_repo" legacy-consumer
+assert_rejected_without_change "$generation_host" "$bad_repo" "legacy-only coordinator" "cannot consume the reviewed sealed source" \
+  --protected-source "$source_revision" "$(git -C "$bad_repo" rev-parse HEAD)" "$tool_revision" "${generation_args[4]}"
+bad_repo="$tmp/repo-delegating-git"
+cp -a "$generation_repo" "$bad_repo"
+git -C "$bad_repo" config core.fsmonitor /unreviewed
+assert_rejected_without_change "$generation_host" "$bad_repo" "Git configuration delegates to foreign code" "unsupported release clone configuration" "${generation_args[@]}"
+bad_host="$tmp/host-replaced-lock"
+cp -a "$generation_host" "$bad_host"
+ln "$bad_host/run-lock/hololive-quadlet-redeploy.lock" "$bad_host/lock-alias"
+assert_rejected_without_change "$bad_host" "$generation_repo" "aliased writer lock" "unsafe protected-source authority" "${generation_args[@]}"
+bad_host="$tmp/host-wrong-candidate-image"
+cp -a "$generation_host" "$bad_host"
+printf '%s\n' "$source_revision" >"$bad_host/candidate-revision"
+assert_rejected_without_change "$bad_host" "$generation_repo" "stale staged image" "does not match the candidate generation" "${generation_args[@]}"
 cp --preserve=all "$generation_host/opt/current/deploy/postgres/pg_hba.conf" "$generation_host/stale-bind"
 printf 'different mounted bytes\n' >>"$generation_host/stale-bind"
 assert_rejected_without_change "$generation_host" "$generation_repo" "stale PostgreSQL bind" "running protected bind content differs" "${generation_args[@]}"
@@ -545,6 +639,14 @@ if run_sync "$partial" "$generation_repo" "${generation_args[@]}"; then fail "pa
   "$(<"$partial/opt/current/.source-revision")" == "$source_revision" ]] ||
   fail "partial protected publication retained an actionable stamp"
 assert_rejected_without_change "$partial" "$generation_repo" "partial replay" "installed revision mismatch" "${generation_args[@]}"
+confirmed_unknown="$tmp/host-generation-after-rename"
+cp -a "$generation_host" "$confirmed_unknown"
+printf '/opt/hololive-bot/compose/app-sources/active\n' >"$confirmed_unknown/events.fail-after"
+status=0
+run_sync "$confirmed_unknown" "$generation_repo" "${generation_args[@]}" || status=$?
+[[ "$status" == 75 && "$(<"$confirmed_unknown/opt/app-sources/active")" == "$candidate_revision" ]] &&
+  grep -Fq '[OUTCOME] outcome_unknown' "$confirmed_unknown/out" || fail "post-commit acknowledgement loss was misclassified"
+[[ -f "$confirmed_unknown/opt/app-sources/transition-$source_revision-$candidate_revision/protected.after" ]] || fail "lost post-commit evidence"
 before="$(protected_snapshot "$generation_host")"
 unit="$generation_host/etc-containers-systemd/hololive-bot/${migrator_path##*/}"
 installed_before="$(stat -c '%d:%i %a %u:%g %y %z' "$unit")"
@@ -557,7 +659,7 @@ run_sync "$generation_host" "$generation_repo" "${generation_args[@]}" ||
 cmp "$unit" "$source_repo/$migrator_path"
 store="$generation_host/opt/app-sources"
 cmp "$generation_repo/$migrator_path" "$store/$candidate_revision/$migrator_path"
-if grep -Ev '^(verify [0-9]+|podman container inspect .*|systemctl show --all hololive-db-migrate.service -p LoadState -p ActiveState -p SubState -p Job)$' "$generation_host/events"; then fail "unexpected host effect"; fi
+if grep -Ev '^(verify [0-9]+|podman (container|image) inspect .*|systemctl show --all hololive-db-migrate.service -p LoadState -p ActiveState -p SubState -p Job)$' "$generation_host/events"; then fail "unexpected host effect"; fi
 [[ "$(<"$store/active")" == "$candidate_revision" && "$(<"$store/$candidate_revision/.source-revision")" == "$candidate_revision" &&
   "$(<"$generation_host/opt/current/.source-revision")" == "$source_revision" && ! -e "$store/$candidate_revision/$old_file" ]] ||
   fail "candidate generation was not fully published"
@@ -578,8 +680,9 @@ cmp "$source_repo/$migrations/manifest.txt" "$backup/$migrations/manifest.txt"
 printf 'follow-on\n' >>"$generation_repo/deploy/quadlet/README.md"
 commit_repo "$generation_repo" next-generation
 next_revision="$(git -C "$generation_repo" rev-parse HEAD)"
+printf '%s\n' "$next_revision" >"$generation_host/candidate-revision"
 assert_rejected_without_change "$generation_host" "$generation_repo" "unaccepted previous generation" "missing accepted migrator drop-in" \
-  --protected-source "$candidate_revision" "$next_revision" "$source_revision" "${generation_args[4]}"
+  --protected-source "$candidate_revision" "$next_revision" "$tool_revision" "${generation_args[4]}"
 image="$(printf 'sha256:%064d' 2)"
 dropin="$generation_host/etc-containers-systemd/hololive-bot/hololive-db-migrate.container.d"
 mkdir -p "$dropin"
@@ -587,16 +690,70 @@ bash -c '. "$1"; sealed_migrator_dropin "$2" "$3"' _ "$SYNC_TEST_TOOL/scripts/de
   "/opt/hololive-bot/compose/app-sources/$candidate_revision" "$image" >"$dropin/50-migrator-image.conf"
 profiles="$generation_host/opt/current/artifacts/worker-profile"
 mkdir -p "$profiles/active"
+mkdir -p "$generation_host/profile-fixture" "$generation_host/etc-stack-secrets/hololive-bot/worker-profiles"
+printf '%s\n' "$candidate_revision" >"$generation_host/profile-fixture/accepted-revision"
 for service in hololive-api hololive-alarm-worker; do
   release="$profiles/releases/$service-v2-reviewed"
   mkdir -p "$release/candidate"
   printf '/opt/hololive-bot/compose/current/artifacts/worker-profile/releases/%s-v2-reviewed/candidate\n' "$service" >"$profiles/active/$service.pair"
   printf '%s\n' "$service" >"$release/service"
   printf '%s\n' "$candidate_revision" >"$release/candidate.revision"
-  printf '%s\n' "$image" >"$release/candidate.image"
+  app_image="$image"
+  [[ "$service" != hololive-alarm-worker ]] || app_image="$(printf 'sha256:%064d' 5)"
+  printf '%s\n' "$app_image" >"$release/candidate.image"
   printf '%s\n' "$image" >"$release/migrator.image"
+  printf '%064d %s\n' 12 "$image" >"$release/schema-check"
+  python3 -ISB - "$SYNC_TEST_TOOL" "$generation_host" "$service" "$app_image" "$candidate_revision" <<'PY'
+import json
+from pathlib import Path
+import runpy
+import sys
+
+tool, host, service, image, revision = sys.argv[1:]
+host = Path(host)
+helpers = runpy.run_path(str(Path(tool) / "scripts/deploy/lib/worker-profile-pair.py"))
+pair = Path("/opt/hololive-bot/compose/current/artifacts/worker-profile/releases") / (service + "-v2-reviewed/candidate")
+local = host / "opt" / pair.relative_to("/opt/hololive-bot/compose")
+unit = host / "etc-containers-systemd/hololive-bot" / (service + ".container")
+(local / "unit.container").write_bytes(unit.read_bytes())
+(local / "profile.json").write_text(json.dumps({"fixture": service}))
+identity = {"image": image, "revision": revision, "source_generation": revision, "architecture": "arm64", "os": "linux"}
+if service == "hololive-api":
+    identity["app_version"] = "1.2.3"
+identity = helpers["save_pair"](local, service, identity)
+body = helpers["dropin_contents"](pair, service, identity, identity.get("app_version"))
+(local / helpers["DROPIN"]).write_bytes(body)
+installed = unit.with_name(unit.name + ".d") / helpers["DROPIN"]
+installed.parent.mkdir(exist_ok=True)
+installed.write_bytes(body)
+slot = helpers["TARGET"] + "/" + helpers["PROFILES"][service]
+release_target = helpers["RELEASE_TARGET"]
+desired = helpers["SOURCE"]
+(host / "etc-stack-secrets/hololive-bot/worker-profiles" / helpers["PROFILES"][service]).write_bytes((local / "profile.json").read_bytes())
+oci = {"process": {"env": ["STACK_WORKER_PROFILE_FILE=" + release_target + "/profile.json", "STACK_WORKER_PROFILE_SOURCE_FILE=" + slot]},
+       "mounts": [{"type": "bind", "source": desired, "destination": helpers["TARGET"]},
+                  {"type": "bind", "source": str(pair), "destination": release_target}]}
+fixture = host / "profile-fixture"
+(fixture / (service + ".oci")).write_text(json.dumps(oci))
+cid = 8 if service == "hololive-api" else 9
+(fixture / ("%064d.loaded" % cid)).write_text(identity["profile_hash"])
+PY
 done
-run_sync "$generation_host" "$generation_repo" --protected-source "$candidate_revision" "$next_revision" "$source_revision" "${generation_args[4]}" ||
+bad_host="$tmp/host-wrong-loaded-profile"
+cp -a "$generation_host" "$bad_host"
+printf '%064d\n' 0 >"$bad_host/profile-fixture/$(printf '%064d.loaded' 8)"
+assert_rejected_without_change "$bad_host" "$generation_repo" "unaccepted live profile" "live profile verification failed" \
+  --protected-source "$candidate_revision" "$next_revision" "$tool_revision" "${generation_args[4]}"
+interrupted="$tmp/host-generation-between-records"
+cp -a "$generation_host" "$interrupted"
+touch "$interrupted/events.fail-incomplete"
+status=0
+run_sync "$interrupted" "$generation_repo" --protected-source "$candidate_revision" "$next_revision" "$tool_revision" "${generation_args[4]}" || status=$?
+[[ "$status" == 75 && "$(<"$interrupted/opt/app-sources/active")" == "incomplete $candidate_revision -> $next_revision" &&
+  ! -e "$interrupted/opt/app-sources/transition-$candidate_revision-$next_revision" ]] || fail "old authority survived follow-on invalidation"
+saved=("$interrupted"/opt/.quadlet-check.*/transition/previous.actual/.source-revision)
+[[ "${#saved[@]}" == 1 && "$(<"${saved[0]}")" == "$candidate_revision" ]] || fail "unpublished transition lost its recovery artifact"
+run_sync "$generation_host" "$generation_repo" --protected-source "$candidate_revision" "$next_revision" "$tool_revision" "${generation_args[4]}" ||
   { cat "$generation_host/out" >&2; fail "sealed predecessor was not admitted"; }
 [[ "$(<"$store/active")" == "$next_revision" && "$(<"$generation_host/opt/current/.source-revision")" == "$source_revision" ]] ||
   fail "follow-on publication changed the runtime root"

@@ -32,20 +32,6 @@ esac
 
 [[ "$(id -u)" -eq 0 ]] || die "must run as root (sudo)"
 
-if [[ -n "$generation" ]]; then
-  [[ "$(hostname -s)" == hololive-seoul && -d /run/lock ]] || die "protected-source requires the existing central host"
-  [[ -f /run/lock/hololive-quadlet-redeploy.lock && ! -L /run/lock/hololive-quadlet-redeploy.lock ]] ||
-    die "protected-source requires the existing deployment lock"
-  exec 9</run/lock/hololive-quadlet-redeploy.lock
-else
-  install -d -m 0755 /run/lock
-  exec 9>/run/lock/hololive-quadlet-redeploy.lock
-fi
-flock -n 9 || die "another central Quadlet writer is running"
-
-if [[ "$(hostname -s)" == kapu && "${HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED:-}" != 1 ]]; then
-  die "refusing to install central Quadlet units on build-control host kapu; set HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1 only for an approved rollback"
-fi
 
 assert_clean() {
   local dir="$1" name="$2"
@@ -100,10 +86,33 @@ for name in names:
     check(path, kind != "directory")
 PY
 }
+if [[ -n "$generation" ]]; then
+  [[ "$(hostname -s)" == hololive-seoul && -d /run/lock ]] || die "protected-source requires the existing central host"
+  [[ -f /run/lock/hololive-quadlet-redeploy.lock && ! -L /run/lock/hololive-quadlet-redeploy.lock ]] ||
+    die "protected-source requires the existing deployment lock"
+  lock=/run/lock/hololive-quadlet-redeploy.lock
+  source_authority clone "$lock"
+  exec 8</run/lock
+  exec 9<"/proc/self/fd/8/${lock##*/}"
+else
+  install -d -m 0755 /run/lock
+  exec 9>/run/lock/hololive-quadlet-redeploy.lock
+fi
+flock -n 9 || die "another central Quadlet writer is running"
+if [[ -n "$generation" ]]; then
+  [[ /run/lock -ef /proc/self/fd/8 && "$lock" -ef /proc/self/fd/9 ]] || die "deployment lock identity changed"
+fi
+
+if [[ "$(hostname -s)" == kapu && "${HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED:-}" != 1 ]]; then
+  die "refusing to install central Quadlet units on build-control host kapu; set HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1 only for an approved rollback"
+fi
 
 if [[ -n "$generation" ]]; then
   [[ "$OPT_ROOT" == /opt/hololive-bot/compose ]] || die "protected-source requires the installed central tree"
+  if compgen -A variable GIT_ >/dev/null; then die "protected-source requires an isolated Git environment"; fi
   export GIT_NO_REPLACE_OBJECTS=1
+  export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_OPTIONAL_LOCKS=0
+  export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null
   umask 077
   source_authority directory "$OPT_CURRENT"
   [[ "$(stat -c %a "$OPT_CURRENT")" == 700 ]] || die "protected-source requires the private legacy root"
@@ -130,6 +139,16 @@ if [[ -n "$generation" ]]; then
       ! -e "$clone/.git/objects/info/alternates" && ! -e "$clone/.git/commondir" ]] ||
       die "protected-source requires independent staged release clones"
     source_authority clone "$clone"
+    for path in .git/info/{grafts,attributes} .git/config.worktree .git/shallow; do
+      [[ ! -e "$clone/$path" ]] || die "unsupported release clone override"
+    done
+    config="$(git config --file "$clone/.git/config" --no-includes --list)" || die "cannot read release clone configuration"
+    while IFS= read -r entry; do
+      case "$entry" in
+        core.repositoryformatversion=0|core.filemode=true|core.bare=false|core.logallrefupdates=true|tar.umask=0022) ;;
+        *) die "unsupported release clone configuration" ;;
+      esac
+    done <<<"$config"
     [[ "$(git -C "$clone" rev-parse --show-toplevel)" == "$clone" ]] || die "unexpected release worktree"
     clean="$(git -C "$clone" status --porcelain --untracked-files=all --ignored)"
     [[ -z "$clean" ]] || die "protected-source requires a clean checkout"
@@ -152,6 +171,17 @@ HEAD_REVISION="$(git -C "$REPO_ROOT" rev-parse --verify 'HEAD^{commit}')"
 HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse --short "$HEAD_REVISION")"
 log "repo=$REPO_ROOT HEAD=$HEAD_SHA -> $OPT_CURRENT"
 [[ -z "$generation" || "$generation" == "$HEAD_REVISION" ]] || die "protected-source candidate revision mismatch"
+if [[ -n "$generation" ]]; then
+  for path in scripts/deploy/{quadlet-redeploy-service.sh,quadlet-rollback-service.sh,quadlet-prestart.sh} \
+      scripts/deploy/lib/{app-source-authority.py,sealed-app.sh,protected-binds.sh,worker-profile-pair.py}; do
+    capability="$(git -C "$tool_root" ls-tree "$tool_revision" -- "$path")"
+    read -r mode type blob _ <<<"$capability"
+    [[ "$mode" =~ ^100(644|755)$ && "$type" == blob && "$blob" =~ ^[0-9a-f]{40}$ &&
+      "$(git hash-object --no-filters "$tool_root/$path")" == "$blob" &&
+      "$(git -C "$REPO_ROOT" ls-tree "$generation" -- "$path")" == "$capability" ]] ||
+      die "candidate cannot consume the reviewed sealed source: $path"
+  done
+fi
 if [[ -n "$source_base" ]]; then
   [[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=all)" ]] || die "source-only requires a clean checkout"
   stamp="$OPT_CURRENT/.source-revision"
@@ -191,7 +221,22 @@ mkdir -p "$OPT_ROOT"
 
 STAGING="$(mktemp -d "${OPT_ROOT}/.staging-current.XXXXXX")"
 QUADLET_CHECK="$(mktemp -d "${OPT_ROOT}/.quadlet-check.XXXXXX")"
-cleanup() { rm -rf "$STAGING" "$QUADLET_CHECK"; }
+publication=preparing
+cleanup() {
+  local status=$?
+  if [[ -n "$generation" && "$publication" != preparing && "$publication" != complete ]]; then
+    printf '[OUTCOME] outcome_unknown phase=%s old=%s candidate=%s recovery=%s\n' "$publication" "$source_base" "$generation" "$QUADLET_CHECK" >&2
+    exit 75
+  fi
+  if ! rm -rf "$STAGING" "$QUADLET_CHECK"; then
+    if [[ "$publication" == complete ]]; then
+      printf '[OUTCOME] published candidate=%s cleanup_failed=%s\n' "$generation" "$QUADLET_CHECK" >&2
+    else
+      return 1
+    fi
+  fi
+  return "$status"
+}
 trap cleanup EXIT
 if [[ -n "$source_base" ]]; then
   changes="$QUADLET_CHECK/changes"
@@ -206,6 +251,8 @@ if [[ -n "$source_base" ]]; then
       esac
       case "$path" in
         hololive/hololive-api/scripts/init-db/*|scripts/ci/postgres-capacity-policy.tsv|scripts/deploy/verify-exec-tree-ownership.sh|scripts/deploy/lib/source-revision.sh) die "protected source path: $path" ;;
+        verification/tla/AlarmDispatchClaim/COVERAGE.md|verification/tla/CollectionJobLease/COVERAGE.md)
+          [[ "$status:$old_mode:$new_mode" == M:100644:100644 ]] || die "protected-source coverage requires an existing non-executable document" ;;
         README.md|CHANGELOG.md|VERSION|go.work|go.work.sum|.github/workflows/*.yml|docs/*|hololive/*|scripts/README.md|scripts/ci/*|scripts/deploy/*|scripts/logs/*|deploy/quadlet/README.md|deploy/compose/README.md|deploy/podman/iris-seoul/README.md|deploy/podman/kapu/README.md|deploy/quadlet/hololive-bot/hololive-db-migrate.container) ;;
         *) die "unapproved protected-source path: $path" ;;
       esac
@@ -226,7 +273,7 @@ if [[ -n "$source_base" ]]; then
   [[ -s "$changes" ]] || die "source-only has no replacements"
   if [[ -n "$generation" ]]; then
     for revision in "$source_base" "$HEAD_REVISION"; do
-      git -C "$REPO_ROOT" ls-tree -rz "$revision" >"$QUADLET_CHECK/$revision.tree"
+      git -C "$REPO_ROOT" ls-tree -rlz "$revision" >"$QUADLET_CHECK/$revision.tree"
       while IFS= read -r -d '' entry; do
         [[ "$entry" == '100644 blob '* || "$entry" == '100755 blob '* ]] || die "non-regular file in protected-source revision"
       done <"$QUADLET_CHECK/$revision.tree"
@@ -261,6 +308,18 @@ for path in sorted(directories | files):
 PY
   fi
 fi
+candidate_images() {
+  local service record image actual
+  for service in hololive-api hololive-alarm-worker; do
+    record="${REPO_ROOT%/source}/$service.candidate-image"
+    source_authority clone "$record" || return 1
+    image="$(<"$record")"
+    [[ "$image" =~ ^sha256:[0-9a-f]{64}$ ]] && cmp -s "$record" <(printf '%s\n' "$image") || die "invalid staged $service image identity"
+    actual="$(podman image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}} {{index .Config.Labels "org.opencontainers.image.title"}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")" || return 1
+    [[ "$actual" == "${image#sha256:} linux/arm64 $service $generation" ]] || die "staged $service image does not match the candidate generation"
+    printf '%s %s\n' "$service" "$image"
+  done
+}
 verify_snapshot() {
   python3 -I -S - "$QUADLET_CHECK/$1.tree" "$1" "$2" "$3" "${4:-}" "${5:-}" <<'PY'
 import hashlib
@@ -274,10 +333,10 @@ tree, revision, source, kind, backup, record = sys.argv[1:]
 expected = {}
 for entry in Path(tree).read_bytes().split(b"\0")[:-1]:
     header, name = entry.split(b"\t", 1)
-    mode, _, digest = header.decode().split()
-    expected[Path(os.fsdecode(name))] = (mode == "100755", digest)
+    mode, _, digest, size = header.decode().split()
+    expected[Path(os.fsdecode(name))] = (mode == "100755", digest, int(size))
 stamp = (revision + "\n").encode()
-expected[Path(".source-revision")] = (False, hashlib.sha1(b"blob 41\0" + stamp).hexdigest())
+expected[Path(".source-revision")] = (False, hashlib.sha1(b"blob 41\0" + stamp).hexdigest(), len(stamp))
 excluded = {Path(p) for p in ("data", "logs", "backups", "runtime-config", "artifacts/worker-profile")} if kind == "legacy" else set()
 expected = {p: value for p, value in expected.items() if not any(p == e or e in p.parents for e in excluded)}
 dirs = {parent for p in expected for parent in p.parents}
@@ -325,9 +384,13 @@ for base, subdirs, files, dfd in os.fwalk(root, follow_symlinks=False, onerror=o
             fail(p)
         with os.fdopen(os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dfd), "rb") as f:
             info = inspect(f.fileno(), p, False)
-            data = f.read()
-            if (bool(info.st_mode & 0o111) != expected[p][0] or
-                    hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest() != expected[p][1] or
+            executable, blob, size = expected[p]
+            if info.st_size != size or bool(info.st_mode & 0o111) != executable:
+                fail(p)
+            data = f.read(size + 1)
+            digest = hashlib.sha1(b"blob %d\0" % size)
+            digest.update(data)
+            if (len(data) != size or digest.hexdigest() != blob or
                     os.fstat(f.fileno()).st_ctime_ns != info.st_ctime_ns):
                 fail(p)
         seen.add(p)
@@ -352,25 +415,35 @@ publish_generation() {
   local kind=sealed receipt="$store/transition-$source_base-$generation" stage="$QUADLET_CHECK/transition"
   [[ "$predecessor" != "$OPT_CURRENT" ]] || kind=legacy
   mkdir -m0700 -- "$stage" "$stage/previous.actual"
+  candidate_images >"$stage/images"
   verify_snapshot "$source_base" "$predecessor" "$kind" "$stage/previous.actual" >"$stage/previous.metadata"
   if [[ "$kind" == legacy ]]; then
     seal_source "$previous" "$source_base"
+  else
+    cp -- "$QUADLET_CHECK/pairs.before" "$stage/pairs.before"
   fi
   cp -- "$changes" "$stage/changes.raw"
   cp -- "$QUADLET_CHECK/protected.before" "$stage/protected.before"
   printf 'installed=%s\ncandidate=%s\ntool=%s\n' "$source_base" "$generation" "$tool_revision" >"$stage/revisions"
   printf 'incomplete %s -> %s\n' "$source_base" "$generation" >"$QUADLET_CHECK/incomplete"
   printf '%s\n' "$generation" >"$QUADLET_CHECK/active"
-  if [[ "$kind" == legacy ]]; then mkdir -m0700 -- "$store"; fi
-  rename_absent "$stage" "$receipt"
+  if [[ "$kind" == legacy ]]; then
+    mkdir -m0700 "$QUADLET_CHECK/new-store"
+    rename_absent "$QUADLET_CHECK/incomplete" "$QUADLET_CHECK/new-store/active"
+    rename_absent "$stage" "$QUADLET_CHECK/new-store/${receipt##*/}"
+  fi
   sync -f "$OPT_ROOT"
   if [[ "$kind" == legacy ]]; then
-    rename_absent "$QUADLET_CHECK/incomplete" "$store/active"
+    publication=invalidating
+    rename_absent "$QUADLET_CHECK/new-store" "$store"
   else
     cmp -s "$store/active" <(printf '%s\n' "$source_base") || die "source generation changed"
+    publication=invalidating
     mv -T --no-copy "$QUADLET_CHECK/incomplete" "$store/active"
   fi
   sync -f "$OPT_ROOT"
+  publication=incomplete
+  if [[ "$kind" != legacy ]]; then rename_absent "$stage" "$receipt"; fi
   if [[ "$kind" == legacy ]]; then rename_absent "$previous" "$store/$source_base"; fi
   rename_absent "$STAGING" "$store/$generation"
   verify_snapshot "$generation" "$store/$generation" sealed
@@ -378,11 +451,20 @@ publish_generation() {
   cmp -s "$receipt/previous.metadata" "$receipt/previous.after" || die "predecessor metadata changed"
   protected_inventory "$store/$generation" >"$receipt/protected.after"
   cmp -s "$receipt/protected.before" "$receipt/protected.after" || die "protected inventory changed"
+  candidate_images >"$receipt/images.after"
+  cmp -s "$receipt/images" "$receipt/images.after" || die "candidate image custody changed"
+  if [[ "$kind" == sealed ]]; then
+    [[ "$(accepted_migrator "$receipt/pairs.after")" == "$accepted_image" ]] &&
+      cmp -s "$receipt/pairs.before" "$receipt/pairs.after" || die "accepted writer pair changed during publication"
+  fi
   sync -f "$OPT_ROOT"
+  publication=committing
   mv -T --no-copy "$QUADLET_CHECK/active" "$store/active"
+  publication=confirming
   sync -f "$OPT_ROOT"
   cmp -s "$store/active" <(printf '%s\n' "$generation") || die "final source generation mismatch"
   log "published $store/$generation; previous source and evidence: $receipt; runtime unchanged"
+  publication=complete
 }
 
 archive_config=()
@@ -466,6 +548,8 @@ PY
 
 accepted_migrator() {
   local dropin="$QUADLET_DIR/$migrator.d/50-migrator-image.conf" image actual service pointer pair release app field
+  local installed check_cid check_image tool="$tool_root/scripts/deploy/lib/worker-profile-pair.py" records="$1"
+  : >"$records"
   [[ -f "$dropin" && "$(stat -c '%u:%g:%a:%h' "$dropin")" == 0:0:644:1 ]] || die "missing accepted migrator drop-in"
   image="$(awk -F= '/^\[/{s=$0} s=="[Container]" && $1=="Image"{print $2}' "$dropin")"
   [[ "$image" =~ ^sha256:[0-9a-f]{64}$ ]] || die "invalid accepted migration image"
@@ -476,16 +560,18 @@ accepted_migrator() {
   for service in hololive-api hololive-alarm-worker; do
     pointer="$OPT_CURRENT/artifacts/worker-profile/active/$service.pair"
     [[ -f "$pointer" && "$(realpath -e "$pointer")" == "$pointer" ]] || die "missing active $service pair"
+    source_authority clone "$pointer" || return 1
     pair="$(<"$pointer")"
     cmp -s "$pointer" <(printf '%s\n' "$pair") && [[ "$(stat -c '%u:%g:%h' "$pointer")" == 0:0:1 ]] ||
       die "invalid active $service pointer"
     release="${pair%/candidate}"
     [[ "$pair" == "$release/candidate" && "${release%/*}" == "$OPT_CURRENT/artifacts/worker-profile/releases" &&
       "${release##*/}" == "$service-v2-"* && "$(realpath -e "$pair")" == "$pair" ]] || die "invalid active $service release"
-    for field in candidate.image candidate.revision migrator.image service; do
-      [[ -f "$release/$field" && ! -L "$release/$field" ]] || die "incomplete active $service receipt"
-      [[ "$(stat -c '%u:%g:%h' "$release/$field")" == 0:0:1 ]] || die "unsafe active $service receipt"
-    done
+    installed="$QUADLET_DIR/$service.container.d/50-worker-profile.conf"
+    source_authority clone "$pair" "$installed" "$release"/{candidate.image,candidate.revision,migrator.image,service,schema-check} || return 1
+    read -r check_cid check_image <"$release/schema-check" &&
+      [[ "$check_cid" =~ ^[0-9a-f]{64}$ && "$check_image" == "$image" ]] &&
+      cmp -s "$release/schema-check" <(printf '%s %s\n' "$check_cid" "$image") || die "invalid accepted $service schema-check receipt"
     cmp -s "$release/candidate.revision" <(printf '%s\n' "$source_base") &&
       cmp -s "$release/migrator.image" <(printf '%s\n' "$image") &&
       cmp -s "$release/service" <(printf '%s\n' "$service") || die "active $service receipt mismatch"
@@ -493,6 +579,26 @@ accepted_migrator() {
     cmp -s "$release/candidate.image" <(printf '%s\n' "$app") || die "invalid active $service image record"
     actual="$(podman container inspect --format '{{.Image}} {{index .Config.Labels "org.opencontainers.image.revision"}} {{.State.Health.Status}}' "$service")" || return 1
     [[ "$app" =~ ^sha256:[0-9a-f]{64}$ && "$actual" == "${app#sha256:} $source_base healthy" ]] || die "active $service image mismatch"
+    cmp -s "$pair/unit.container" "$QUADLET_DIR/$service.container" && cmp -s "$pair/50-worker-profile.conf" "$installed" ||
+      die "installed $service pair definition differs"
+    python3 -ISB - "$pair" "$app" "$source_base" <<'PY' || return 1
+import json
+import re
+import sys
+from pathlib import Path
+
+pair = Path(sys.argv[1])
+metadata = json.loads((pair / "pair.json").read_bytes())
+if (metadata.get("image"), metadata.get("revision"), metadata.get("source_generation")) != (sys.argv[2], sys.argv[3], sys.argv[3]):
+    sys.exit("active pair is not bound to its sealed image and revision")
+manifest = (pair / "SHA256SUMS").read_text().splitlines()
+if len(manifest) != 3 or {line[66:] for line in manifest if re.fullmatch(r"[0-9a-f]{64}  [a-z.]+", line)} != {"profile.json", "pair.json", "unit.container"}:
+    sys.exit("invalid sealed pair checksum set")
+PY
+    python3 -ISB "$tool" verify-dropin "$service" "$pair" "$installed" &&
+      python3 -ISB "$tool" verify-live "$service" "$pair" "$service" || die "accepted $service live profile verification failed"
+    printf '%s %s\n' "$service" "$pair" >>"$records"
+    sha256sum -- "$pair/pair.json" "$installed" >>"$records" || return 1
   done
   printf '%s\n' "$image"
 }
@@ -668,7 +774,7 @@ if [[ "$application_only" == true ]]; then
       cp -- "$QUADLET_DIR/$migrator" "$quadlet_check_dir/$migrator"
       protected_inventory "$STAGING" >"$QUADLET_CHECK/protected.before"
       if [[ "$predecessor" != "$OPT_CURRENT" ]]; then
-        accepted_image="$(accepted_migrator)"
+        accepted_image="$(accepted_migrator "$QUADLET_CHECK/pairs.before")"
       fi
     fi
   fi

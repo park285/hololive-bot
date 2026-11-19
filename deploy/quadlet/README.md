@@ -49,11 +49,31 @@ sudo ./scripts/deploy/sync-opt-current.sh
 
 이미 `--schema-only`인 중앙에 앱 소스만 교체할 때는 `--protected-source`를 사용합니다. `--application-only`는 최초 풀링 후 카드 전환용이며, `--source-only OLD`는 기존 일반 파일의 제한된 수정만 허용합니다. 두 옵션이나 전체 동기화를 실패 시 대안으로 실행하지 않습니다.
 
-kapu에서 검토한 후보와 도구의 **각각의 전체 커밋**을 고정하고, 구 커밋을 포함한 검증된 bundle을 전달합니다. 중앙에서는 `/opt/hololive-bot/release-sources/<고유 이름>`을 root:root `0700`으로 새로 만들고 그 아래 `source`에 독립된 clean clone을 준비합니다. 공유 object·하드링크·추가 파일·ACL을 쓰지 않습니다. 정식 통합본에 도구가 포함되면 후보 clone을 도구 clone으로도 사용할 수 있습니다. 중앙에서는 빌드하지 않습니다.
+kapu에서 도구와 후보의 전체 SHA, bundle SHA-256, **실행할 게시 스크립트 자체의 SHA-256**, API·worker의 검증된 linux/arm64 이미지 ID를 승인 목록에 고정합니다. 중앙 root가 `/opt/hololive-bot/release-sources/<고유 이름>`을 `0700`으로 새로 만들고 승인 목록과 전송 바이트를 대조합니다. 빈 `source`를 `git init --template=`로 초기화한 뒤 검증한 bundle을 로컬 경로로 fetch하여 정확한 커밋을 detached checkout합니다. 외부 Git 설정(include, hook, fsmonitor, filter, alternate object 등)이나 다른 사용자가 준비한 `.git`을 가져오지 않습니다. 통합본이면 도구와 후보에 같은 clone을 쓸 수 있습니다. `$CANDIDATE/{hololive-api,hololive-alarm-worker}.candidate-image`는 승인된 해당 `sha256:<64자리 ID>` 한 줄씩입니다. 중앙에서는 빌드하지 않습니다.
+
+신뢰의 시작점은 checkout 안의 자체 검사나 디렉터리 이름이 아니라 **운영 root가 준비한 비공개 경로와 외부 승인 목록**입니다. 다음 진입부는 checkout을 실행하기 전에 경로 소유권·권한·ACL·단일 링크와 kapu에서 승인된 스크립트 해시를 확인합니다. 이어 게시자가 도구·후보의 배포/복구 coordinator, prestart, 봉인 권한·프로필 도구 7개 blob과 실행 비트를 비교하고 실제 로드된 양쪽 이미지의 플랫폼·제품·전체 revision을 대조합니다. 봉인 세대를 실행하지 못하는 v20.0.0은 중간 단계가 아닙니다.
 
 ```bash
-sudo -n "$TOOL/source/scripts/deploy/sync-opt-current.sh" \
-  --protected-source "$INSTALLED_SHA" "$CANDIDATE_SHA" "$TOOL_SHA" "$CANDIDATE/source"
+sudo -n /usr/bin/env -i PATH=/usr/sbin:/usr/bin HOME=/root LC_ALL=C \
+  /usr/bin/python3 -ISB - "$TOOL" "$BOOTSTRAP_SHA256" "$INSTALLED_SHA" "$CANDIDATE_SHA" "$TOOL_SHA" "$CANDIDATE/source" <<'PY'
+import hashlib, os, stat, sys
+from pathlib import Path
+
+stage = Path(sys.argv[1])
+source = stage / "source/scripts/deploy/sync-opt-current.sh"
+if stage.parent != Path("/opt/hololive-bot/release-sources") or stage.stat().st_mode & 0o7777 != 0o700:
+    sys.exit("untrusted tool stage")
+for p in [*reversed(source.parents), source]:
+    s = p.lstat()
+    kind = (stat.S_ISREG(s.st_mode) and s.st_nlink == 1) if p == source else stat.S_ISDIR(s.st_mode)
+    if not kind or s.st_uid or s.st_gid or s.st_mode & 0o7022 or any(
+            k.startswith("system.posix_acl_") or k == "security.capability" for k in os.listxattr(p, follow_symlinks=False)):
+        sys.exit("untrusted bootstrap path")
+with source.open("rb") as f:
+    if hashlib.file_digest(f, "sha256").hexdigest() != sys.argv[2]:
+        sys.exit("unapproved bootstrap bytes")
+os.execv("/usr/bin/bash", ["bash", str(source), "--protected-source", *sys.argv[3:]])
+PY
 ```
 
 이 모드는 기존 중앙 배포 lock을 잡고 **별도의 앱 코드 세대**를 만듭니다. `/opt/hololive-bot/compose/app-sources`가 처음부터 없을 때만 `current/.source-revision`과 구 커밋의 실행 소스를 대조합니다. 구 `current` 안의 root:root 그룹 쓰기 가능 파일은 실행 권한의 근거가 아닙니다. 소스 바이트·실행 비트·실측 메타데이터를 읽어 대조하고 보관할 뿐, 거기서 코드를 실행하거나 파일을 쓰거나 지우지 않습니다. 이후에는 `app-sources/active`가 가리키는 봉인 세대가 유일한 출발점입니다. 후보의 파일 추가·변경·제거는 새 archive에만 반영되며 `current`의 세대·데이터·프로필·설정은 그대로입니다.
@@ -62,9 +82,11 @@ sudo -n "$TOOL/source/scripts/deploy/sync-opt-current.sh" \
 
 성공하면 `app-sources/active`(root:root `0600`)에 전체 SHA 한 줄이 남습니다. 서비스 전환은 **명시한 후보 SHA**, `active`, `app-sources/<SHA>/.source-revision`(`0400`), 이미지 revision을 일치시켜야 합니다. 세대 루트는 `0500`, 하위 디렉터리와 실행 파일은 `0555`, 일반 파일은 `0444`입니다. 코드·manifest·lineage SQL은 이 세대에서, 실행 데이터·프로필·인프라 bind는 기존 `current`에서 읽습니다. 둘을 잇는 심링크나 `current/.source-revision` 덮어쓰기는 없습니다. 소스 게시 성공은 DB 검증이나 앱 기동 성공을 뜻하지 않습니다.
 
-다음 세대로 넘어가려면 이전 세대의 실제 API·alarm-worker가 healthy이고 각 활성 프로필의 `candidate.revision`, `candidate.image`, `migrator.image`가 실행 이미지 및 OCI revision과 맞아야 합니다. 설치된 `50-migrator-image.conf`도 그 세대용 `--check`와 봉인 prestart를 정확히 생성해야 합니다. 최초 `--schema-only` 정의만 남았거나 영수증이 없는 상태를 수용 완료로 간주하지 않습니다. 이 검사는 읽기 전용이며 drop-in을 새로 설치하지 않습니다.
+후속 게시는 양쪽 실제 API·alarm-worker의 healthy 이미지, root 소유 release 영수증과 `schema-check` 종료 증거, 승인된 `50-migrator-image.conf`의 `--check`와 봉인 prestart를 요구합니다. 각 서비스의 보관 pair·설치 unit/drop-in·OCI의 실제 읽기 전용 mount와 인증된 진단의 **로드된 프로필 해시**를 검증합니다. 파일 이름이나 healthy 상태만으로 수용을 추정하지 않습니다. 설치되지 않은 인프라를 보정하거나 프로필 내용을 출력하지 않습니다.
 
 `app-sources/transition-OLD-NEW/`의 `previous.actual`은 검증한 이전 소스 바이트이며 `previous.metadata`는 그 원본의 신원·권한·시각입니다. 원본 inode는 그대로 남습니다. 같은 디렉터리에 두 보호 인프라 스냅샷과 Git 변경 목록을 보존합니다. `active`가 없거나 `incomplete OLD -> NEW`이면 후보를 활성화하지 않고 원래 시도의 영수증과 양쪽 세대를 보존합니다. 자동 재시도·stamp 수리·되돌리기는 없습니다. 정상 복구도 이전 소스·이미지/프로필·원장 호환성 및 실제 서비스 상태를 대조한 별도 승인 절차로만 합니다.
+
+`active`가 유일한 게시 판정점입니다. 최초 store는 incomplete 레코드와 복구 영수증을 포함한 디렉터리 하나로 생기며, 후속 게시는 먼저 기존 `active`를 incomplete로 교체·동기화한 뒤 영수증을 공개합니다. 모든 검증과 영수증 동기화 뒤 새 SHA로 원자 rename합니다. 그 rename이 보였더라도 응답·최종 동기화 확인을 잃으면 종료 상태 `75`와 `[OUTCOME] outcome_unknown`입니다. 이때 원래 lock·active·두 봉인 세대·해당 전환 영수증/출력의 `recovery` 경로를 대조하며, 같은 설치를 다시 실행하지 않습니다.
 
 ### 전체 설치 검사
 
