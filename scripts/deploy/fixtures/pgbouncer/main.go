@@ -164,7 +164,7 @@ func bootstrapEnv(f fixture, runtimePassword string) []string {
 }
 
 func bootstrap(ctx context.Context, f fixture, runtimePassword string) error {
-	command := exec.CommandContext(ctx, "/fixture/db-migrate")
+	command := exec.CommandContext(ctx, "/fixture/db-migrate", "--configure-login-roles")
 	command.Env = bootstrapEnv(f, runtimePassword)
 	if err := command.Run(); err != nil {
 		return fmt.Errorf("fixture bootstrap command: %w", err)

@@ -522,19 +522,23 @@ assert_writer_endpoint() {
     die "$1: pooled TCP endpoint and verify-full are required"
 }
 require_card_ledger() {
-  local result
+  local result receipts head_query contract
+  . "$ROOT_DIR/scripts/deploy/lib/migration-receipts.sh"
+  receipts="$(migration_receipts "$ROOT_DIR")" || return 1
+  contract="$(migration_target_contract "$ROOT_DIR" "$receipts")" || return 1
+  head_query="$(<"$ROOT_DIR/hololive/hololive-api/internal/migrationrunner/queries/lineage_head.sql")" || return 1
   result="$(podman exec -i holo-postgres env 'PGOPTIONS=-c default_transaction_read_only=on -c lock_timeout=3s -c statement_timeout=30s' \
-    psql -XqAtw -v ON_ERROR_STOP=1 -h /var/run/postgresql -U postgres_admin -d hololive <<'SQL'
+    psql -XqAtw -v ON_ERROR_STOP=1 -h /var/run/postgresql -U postgres_admin -d hololive <<SQL
 BEGIN READ ONLY;
+PREPARE admitted_head(text) AS
 SELECT current_database() = 'hololive' AND current_user = 'postgres_admin' AND inet_server_addr() IS NULL
   AND current_setting('transaction_read_only') = 'on' AND current_setting('default_transaction_read_only') = 'on'
   AND current_setting('lock_timeout') = '3s' AND current_setting('statement_timeout') = '30s'
-  AND (SELECT count(*) = 2 FROM public.schema_migrations JOIN public.schema_migration_checksums USING (filename)
-       WHERE filename IN ('031_retire_holodex_channel_profile.sql','032_schedule_poster_template.sql'))
-  AND to_regclass('public.member_schedule_card_templates') IS NOT NULL;
+  AND epoch IN (3,4) AND pending = 0 AND (${contract%;}) FROM (${head_query%;}) AS head;
+EXECUTE admitted_head('$receipts');
 ROLLBACK;
 SQL
-  )" && [[ "$result" == t ]] || die "031/032 not confirmed; no single-writer migration or new writer activation"
+  )" && [[ "$result" == t ]] || die "migration lineage not confirmed; no single-writer migration or new writer activation"
 }
 
 if [[ "$mode" != quiesce ]]; then

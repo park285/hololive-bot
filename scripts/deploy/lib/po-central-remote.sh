@@ -795,16 +795,17 @@ require_collector_pooler_endpoint() {
   [[ "$actual" == "$expected" ]] || { echo 'activated collector must use the reviewed pooler endpoint' >&2; return 1; }
 }
 require_collector_lease_migration() {
-  local migration=001_schema_epoch3_baseline.sql expected observed endpoint
+  local position="$1" observed endpoint proof
   local migrator_user postgres_image owner leftover status=0
-  expected="$(sha256sum "$staging/hololive/hololive-api/scripts/migrations/$migration")"
-  expected="${expected%% *}"
-  [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || return 1
-  endpoint="$(collector_database_endpoint "$collector_container")" || return 1
-  if [[ "$endpoint" != 'holo-pgbouncer|6432' && "$endpoint" != 'holo-postgres|5432' ]]; then
-    echo 'collector migration proof requires the local primary route' >&2
-    return 1
+  . "$staging/scripts/deploy/lib/migration-receipts.sh"
+  if [[ "$position" == applied ]]; then
+    endpoint="$(collector_database_endpoint "$collector_container")" || return 1
+    if [[ "$endpoint" != 'holo-pgbouncer|6432' && "$endpoint" != 'holo-postgres|5432' ]]; then
+      echo 'collector migration proof requires the local primary route' >&2
+      return 1
+    fi
   fi
+  proof="$(migration_collector_proof "$staging" "$position")" || return 1
   migrator_user="$(awk -F= '$1 == "HOLOLIVE_MIGRATOR_USER" { v = substr($0, length($1) + 2); gsub(/^["\047]|["\047]$/, "", v); print v }' \
     /etc/stack-secrets/hololive-bot/compose.env)"
   migrator_user="${migrator_user:-hololive_migrator}"
@@ -812,22 +813,20 @@ require_collector_lease_migration() {
   postgres_image="$(podman inspect -f '{{.Image}}' holo-postgres)" || return 1
   [[ "$postgres_image" =~ ^[0-9a-f]{64}$ ]] || { echo 'collector migration proof client identity is invalid' >&2; return 1; }
   owner="hololive.collector-migration-proof=$(cat /proc/sys/kernel/random/uuid)"
-  observed="$(timeout 20 podman run --rm --label "$owner" --pull=never --read-only --cap-drop=all \
+  observed="$(timeout 20 podman run -i --rm --label "$owner" --pull=never --read-only --cap-drop=all \
     --security-opt=no-new-privileges --network none \
     --env PGHOST=/var/run/postgresql --env PGPORT=5432 --env PGDATABASE=hololive --env "PGUSER=$migrator_user" \
     --env PGSSLMODE=disable --env PGCONNECT_TIMEOUT=5 --env PGAPPNAME=hololive-collector-migration-proof \
     --env 'PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=30s -c lock_timeout=3s' \
     --volume hololive-bot_holo-pg-admin-socket:/var/run/postgresql:ro \
-    --entrypoint psql "$postgres_image" --no-psqlrc --quiet -v ON_ERROR_STOP=1 -At -c 'BEGIN READ ONLY' \
-    -c "SELECT current_setting('transaction_read_only'), COALESCE((SELECT checksum_sha256::text FROM schema_migration_checksums WHERE filename = '$migration'), '')" \
-    -c 'COMMIT')" \
+    --entrypoint psql "$postgres_image" --no-psqlrc --quiet -v ON_ERROR_STOP=1 -At -f - <<<"$proof")" \
     || status="$?"
   leftover="$(podman ps --all --quiet --filter "label=$owner")" || return 1
   # shellcheck disable=SC2086 # container ID 목록을 인자로 나눈다.
   [[ -z "$leftover" ]] || podman rm --force $leftover >/dev/null
   [[ "$status" -eq 0 ]] || { echo 'collector migration proof query failed' >&2; return 1; }
-  if [[ "$observed" != "on|$expected" ]]; then
-    echo "collector requires the reviewed $migration; apply central db-migrate before paired cutover" >&2
+  if [[ "$observed" != "on|t" ]]; then
+    echo "collector requires a verified completed migration lineage; hold the paired cutover" >&2
     return 1
   fi
 }
@@ -877,7 +876,7 @@ systemctl is-active --quiet "$collector_unit" || {
   exit 1
 }
 if [[ "$slot" == c ]]; then
-  require_collector_lease_migration
+  require_collector_lease_migration applied
 fi
 [[ -r "$staging/image.tar" && -r "$staging/image.tar.sha256" && -r "$staging/image-id" &&
    -r "$staging/collector-image.tar" && -r "$staging/collector-image.tar.sha256" && -r "$staging/collector-image-id" &&
@@ -1023,6 +1022,7 @@ if [[ "$mode" == resume ]]; then
 fi
 prepare_candidate_pair
 python3 "$pair_tool" check-pooled "$service" "$profile_release/candidate"
+if [[ "$slot" == c ]]; then require_collector_lease_migration target; fi
 cutover_started=true
 python3 "$pair_tool" activate "$service" "$profile_release/candidate" "$current"
 podman tag "$issuer_candidate" "$issuer"

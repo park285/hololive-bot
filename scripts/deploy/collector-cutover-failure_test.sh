@@ -64,9 +64,9 @@ podman() {
       printf '%s\n' "$@" > "$fixture_root/query-args"
       case "$fixture_case" in
         query_failure) return 7 ;;
-        writable_proof) printf 'off|%s\n' "$(<"$fixture_root/checksum")" ;;
+        writable_proof) printf 'off|t\n' ;;
         wrong_checksum) printf 'on|wrong\n' ;;
-        *) printf 'on|%s\n' "$(<"$fixture_root/checksum")" ;;
+        *) printf 'on|t\n' ;;
       esac ;;
     ps) return 0 ;;
     *) return 2 ;;
@@ -75,9 +75,6 @@ podman() {
 '''
 proof_setup += '\n' + function(central, 'collector_database_endpoint') + '\n'
 proof_function = function(central, 'require_collector_lease_migration')
-proof_checksum = hashlib.sha256(
-    (root / 'hololive/hololive-api/scripts/migrations/001_schema_epoch3_baseline.sql').read_bytes()
-).hexdigest()
 for case, endpoint, success, queries in (
     ('pooler', ('holo-pgbouncer', '6432', 'hololive'), True, True),
     ('direct', ('holo-postgres', '5432', 'hololive'), True, True),
@@ -99,8 +96,7 @@ for case, endpoint, success, queries in (
         if case in ('socket_override', 'ambiguous_host'):
             with (state / 'collector.env').open('a') as env_file:
                 env_file.write('POSTGRES_SOCKET_PATH=/other\n' if case == 'socket_override' else 'POSTGRES_HOST=other\n')
-        (state / 'checksum').write_text(proof_checksum)
-        result = run(proof_setup + proof_function + '\nrequire_collector_lease_migration\n', state, case)
+        result = run(proof_setup + proof_function + '\nrequire_collector_lease_migration applied\n', state, case)
         require((result.returncode == 0) == success, f'{case}: primary route proof outcome', result)
         query_args = state / 'query-args'
         require(query_args.exists() == queries, f'{case}: query only after route validation', result)
@@ -113,14 +109,10 @@ for case, endpoint, success, queries in (
                 ('--env', 'PGPORT=5432'),
                 ('--env', 'PGUSER=hololive_migrator'),
                 ('--env', 'PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=30s -c lock_timeout=3s'),
-                ('-v', 'ON_ERROR_STOP=1'), ('-c', 'BEGIN READ ONLY'), ('-c', 'COMMIT'),
+                ('-v', 'ON_ERROR_STOP=1'), ('-f', '-'),
             ):
                 require(any(args[i:i + 2] == [flag, value] for i in range(len(args) - 1)),
                         f'{case}: private read-only ledger transport {value}', result)
-            statements = [args[i + 1] for i, flag in enumerate(args[:-1]) if flag == '-c']
-            require(len(statements) == 3 and statements[0] == 'BEGIN READ ONLY' and
-                    statements[1].startswith('SELECT ') and statements[2] == 'COMMIT',
-                    f'{case}: ledger query in the same read-only transaction', result)
         print(f'[PASS] collector migration proof: {case}')
 
 for slot, host, port, accepted in (
@@ -442,7 +434,10 @@ stat() {
 date() {
   if [[ "$*" == '-u +%Y-%m-%dT%H:%M:%SZ' ]]; then printf '2026-10-03T00:01:00Z\n'; else command date "$@"; fi
 }
-require_collector_lease_migration() { printf 'lease-proof\n' >>"$fixture_root/calls"; }
+require_collector_lease_migration() {
+  printf 'lease-proof %s\n' "$1" >>"$fixture_root/calls"
+  [[ "$1" != target || ! -e "$fixture_root/pending-suffix" ]]
+}
 podman() {
   local object kind value format file
   printf 'podman %s\n' "$*" >>"$fixture_root/calls"
@@ -999,6 +994,8 @@ for slot, case in runs:
                 continue
             if scenario == 'foreign_guard':
                 guards[1].write_text('operator guard\n')
+            if slot == 'c' and scenario == 'success':
+                (state / 'pending-suffix').touch()
             fail_quiesce = scenario.startswith('load_') or scenario in (
                 'mask_failure', 'stop_failure', 'stop_other_invocation', 'stop_missing_job', 'stop_stale_job',
                 'stop_peer_restarted', 'mask_race', 'guard_failure', 'guard_check_failure', 'foreign_guard', 'arm_collector_profile',
@@ -1148,7 +1145,7 @@ for slot, case in runs:
                 helper = staging / 'scripts/deploy/lib/compose-env.sh'
                 helper.write_text(helper.read_text() + f'\ntouch "{state}/unreviewed-helper-ran"\n')
             elif scenario == 'migration_changed':
-                (staging / 'hololive/hololive-api/scripts/migrations/001_schema_epoch3_baseline.sql').write_text('-- changed\n')
+                (staging / 'hololive/hololive-api/scripts/migrations/001_schema_epoch4_baseline.sql').write_text('-- changed\n')
             elif scenario == 'source_manifest_changed':
                 (staging / 'source-files.sha256').write_text(
                     f'{hashlib.sha256(unit_path.read_bytes()).hexdigest()}  deploy/podman/iris-seoul/hololive-youtube-collector-b.container\n')
@@ -1214,6 +1211,17 @@ for slot, case in runs:
                         (release / 'previous/unit.container').read_text() == installed_definition,
                         f'{slot}: coordinated rollback retains the exact previous unit', result)
             else:
+                if slot == 'c' and scenario == 'success':
+                    require('lease-proof applied' in calls_now() and 'lease-proof target' not in calls_now(),
+                            'c: a pending target does not prevent quiescing the applied head', result)
+                    before = len(calls_now())
+                    blocked = invoke('resume')
+                    actions = calls_now()[before:]
+                    require(blocked.returncode != 0 and 'lease-proof target' in actions and
+                            not any(c.startswith((held_start, 'systemctl restart ', 'systemctl unmask ', 'pair activate ')) for c in actions),
+                            'c: pending target cannot activate candidate or release either writer', blocked)
+                    assert_held(blocked)
+                    (state / 'pending-suffix').unlink()
                 failure = scenario if scenario in ('activation_failure', 'candidate_check_failure', 'pooled_query_failure',
                                                    'substitution_failure', 'error_log', 'unmask_failure', 'signal_TERM', 'error_log_seal_failure', *recovery_cases) else ''
                 result = invoke('resume', failure)
@@ -1395,7 +1403,7 @@ for slot, case in runs:
             require(image_file(state, 'localhost/hololive-youtube-collector:candidate').read_text() == 'new', f'{label}: candidate retained for inspection', result)
         if case in ('success', 'absent_success', 'transition_success'):
             require(restarts == [f'systemctl restart {unit}' for unit in (issuer_unit, collector_unit)], f'{label}: issuer-first restart order', result)
-            require(('lease-proof' in calls) == (slot == 'c'), f'{label}: lease proof only on central', result)
+            require(('lease-proof target' in calls) == (slot == 'c'), f'{label}: lease proof only on central', result)
             require((state / 'dropin').read_text().strip() == 'candidate', f'{label}: candidate drop-in active', result)
             require(json.loads((live_po / 'rootfs-manifest.json').read_text())['source_revision'] == new_revision, f'{label}: issuer receipt promoted', result)
             require(calls.index('systemctl daemon-reload') < calls.index(f'systemctl restart {issuer_unit}'), f'{label}: drop-in reloaded before restart', result)

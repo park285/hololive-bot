@@ -40,6 +40,17 @@ else
 fi
 version="$(cat "$root/hololive/hololive-api/VERSION")"
 [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
+source_payload_files() {
+  local receipts digest name
+  cat "$root/scripts/deploy/po-central-files.txt" || return 1
+  . "$root/scripts/deploy/lib/migration-receipts.sh"
+  receipts="$(migration_receipts "$root")" || return 1
+  while read -r digest name; do
+    if [[ "$name" != 001_schema_epoch4_baseline.sql ]]; then
+      printf 'hololive/hololive-api/scripts/migrations/%s\n' "$name" "contracts/$name"
+    fi
+  done <<<"$receipts"
+}
 build_local_pair() {
   local_stage="$(mktemp -d)"
   trap 'rm -rf "$local_stage"' EXIT
@@ -66,11 +77,12 @@ PY
   python3 "$root/scripts/build/po-sandbox-manifest.py" image-ids "$local_stage/collector-image.tar" \
     "sha256:$(podman image inspect -f '{{.Id}}' "$collector_image")" > "$local_stage/collector-image-id"
   (cd "$root"
-    while IFS= read -r file; do sha256sum "$file"; done < scripts/deploy/po-central-files.txt
+    while IFS= read -r file; do sha256sum "$file"; done <<<"$payload_files"
   ) > "$local_stage/source-files.sha256"
 }
 
 if [[ "$mode" == deploy || "$mode" == quiesce ]]; then
+  payload_files="$(source_payload_files)"
   revision="$(deploy_source_revision "$root")"
   change_id="$(date -u +%Y%m%dT%H%M%SZ)"
   backup="$remote_root/backups/card-po-$slot-$change_id"
@@ -87,7 +99,7 @@ if [[ "$mode" == deploy || "$mode" == quiesce ]]; then
       jq -e --arg r "$revision" '.source_revision==$r and .go.goarch=="arm64"' collector-manifest.json >/dev/null || exit 1
       jq -e --arg r "$revision" '.source_revision==$r and .architecture=="arm64"' rootfs-manifest.json >/dev/null
     ) || { echo 'verified pair transport or revision mismatch; nothing transferred' >&2; exit 1; }
-    expected_sources="$(cd "$root"; while IFS= read -r file; do sha256sum "$file" || exit 1; done <scripts/deploy/po-central-files.txt)"
+    expected_sources="$(cd "$root"; while IFS= read -r file; do sha256sum "$file" || exit 1; done <<<"$payload_files")"
     cmp -- "$local_stage/source-files.sha256" <(printf '%s\n' "$expected_sources")
   else
     build_local_pair
@@ -95,7 +107,7 @@ if [[ "$mode" == deploy || "$mode" == quiesce ]]; then
   fi
   ssh "$ssh_target" "sudo -n mkdir -m 0700 -- '$staging'"
   rsync -a --rsync-path='sudo -n rsync' \
-    --files-from="$root/scripts/deploy/po-central-files.txt" "$root/" "$ssh_target:$staging/"
+    --files-from=<(printf '%s\n' "$payload_files") "$root/" "$ssh_target:$staging/"
   rsync -a --rsync-path='sudo -n rsync' \
     "$issuer_dir/image.tar" "$issuer_dir/image.tar.sha256" \
     "$issuer_dir/image-id" "$issuer_dir/rootfs-manifest.json" "$local_stage/collector-image.tar" \
