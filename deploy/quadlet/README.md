@@ -80,6 +80,10 @@ PY
 
 설치된 Quadlet·prestart·방화벽, idle schema migrator, 건강한 PostgreSQL·풀러와 실제 읽기 전용 mount를 게시 전후에 확인합니다. PG HBA와 풀러 HBA·stats-users는 실행 중인 파일과 다음 기동의 호스트 파일이 다른 inode일 수 있습니다. 이 경우에만 양쪽 바이트·mode·소유권·SELinux 등 xattr가 같아야 하며, 양쪽 device/inode를 따로 고정합니다. 불일치·ACL·예상 밖 mode는 중단 사유입니다. 권한 보정, host unit 재설치·reload, 서비스 제어, SQL 실행은 하지 않습니다.
 
+기존 `/usr/local/libexec/hololive-bot/quadlet-prestart`와 `lib/*.sh`의 정본은 **설치 당시 `current/.source-revision`의 Git 객체**입니다. 실제 설치 파일과 기존 `current` 사본이 서로 같아도 둘 다 그 객체와 다르면 거부합니다. 반대로 봉인할 앱의 prestart와 라이브러리는 **후보 커밋의 Git 객체**와 대조합니다. 후보의 endpoint 판정 코드가 바뀌어도 설치 libexec를 교체하거나 그 권한을 바꾸지 않습니다. 이 구분은 보호 소스 게시 전용이며, 방화벽·Quadlet·기존 배포 모드의 일치 조건은 그대로입니다.
+
+kapu의 `bash scripts/deploy/sync-opt-current_test.sh`는 격리 fixture에서 서로 다른 선행·후보 helper를 게시하고, 두 선행 파일이 똑같이 변조된 경우와 검증 뒤 staging 바이트가 바뀐 경우를 거부하는지 검사합니다. 전체 #837→#840 복원 검증은 두 커밋의 이력이 있는 로컬 checkout에서 `bash scripts/deploy/sync-opt-current_test.sh --released-predecessor`로 실행합니다. 이 명시적 검사는 정식 구 archive·설치 자산과 전체 후보 Git 트리를 쓰며 운영 호스트·원격 Git·DB를 조회하지 않습니다.
+
 성공하면 `app-sources/active`(root:root `0600`)에 전체 SHA 한 줄이 남습니다. 서비스 전환은 **명시한 후보 SHA**, `active`, `app-sources/<SHA>/.source-revision`(`0400`), 이미지 revision을 일치시켜야 합니다. 세대 루트는 `0500`, 하위 디렉터리와 실행 파일은 `0555`, 일반 파일은 `0444`입니다. 코드·manifest·lineage SQL은 이 세대에서, 실행 데이터·프로필·인프라 bind는 기존 `current`에서 읽습니다. 둘을 잇는 심링크나 `current/.source-revision` 덮어쓰기는 없습니다. 소스 게시 성공은 DB 검증이나 앱 기동 성공을 뜻하지 않습니다.
 
 후속 게시는 양쪽 실제 API·alarm-worker의 healthy 이미지, root 소유 release 영수증과 `schema-check` 종료 증거, 승인된 `50-migrator-image.conf`의 `--check`와 봉인 prestart를 요구합니다. 각 서비스의 보관 pair·설치 unit/drop-in·OCI의 실제 읽기 전용 mount와 인증된 진단의 **로드된 프로필 해시**를 검증합니다. 파일 이름이나 healthy 상태만으로 수용을 추정하지 않습니다. 설치되지 않은 인프라를 보정하거나 프로필 내용을 출력하지 않습니다.
