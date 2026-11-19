@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+tool_script="$(realpath -e -- "${BASH_SOURCE[0]}")"
+tool_root="$(cd "${tool_script%/*}/../.." && pwd -P)"
+REPO_ROOT="${REPO_ROOT:-$tool_root}"
 CHANGE_STARTED_AT="${CHANGE_STARTED_AT:-}"
 PO_EXPECTED_PRESENCE="${PO_EXPECTED_PRESENCE:-present}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
-NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
-READINESS_LIB="$REPO_ROOT/scripts/deploy/lib/ap-collector-readiness.sh"
-PO_NATIVE_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
+NODE_VERSION_LIB="$tool_root/scripts/deploy/lib/youtubejs-node-version.sh"
+READINESS_LIB="$tool_root/scripts/deploy/lib/ap-collector-readiness.sh"
+PO_NATIVE_LIB="$tool_root/scripts/deploy/lib/ap-host-native-po.sh"
 
-. "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
+. "$tool_root/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
 if [[ -n "$CHANGE_STARTED_AT" && ! "$CHANGE_STARTED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
@@ -38,7 +40,7 @@ run_native_completion_check() {
   local service="${AP_SERVICES[0]}"
   local port="${AP_PORTS[0]}"
 
-  ap_remote_bash "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_NAME" < "$REPO_ROOT/scripts/deploy/lib/require-quic-udp-buffer.sh"
+  ap_remote_bash "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_NAME" < "$tool_root/scripts/deploy/lib/require-quic-udp-buffer.sh"
   {
     cat "$NODE_VERSION_LIB"
     cat "$READINESS_LIB"
@@ -135,7 +137,7 @@ echo 'collector AP completion check passed'
 REMOTE
   } | ap_remote_bash "$service" "$port" "$CHANGE_STARTED_AT" "$PO_EXPECTED_PRESENCE"
   "${AP_SSH[@]}" "sudo -n python3 - verify-native '$service' /opt/hololive-bot/youtube-collector/current 'hololive-youtube-collector@$service.service'" \
-    < "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py"
+    < "$tool_root/scripts/deploy/lib/worker-profile-pair.py"
 }
 
 run_native_completion_check
