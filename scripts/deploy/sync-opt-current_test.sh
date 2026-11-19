@@ -14,9 +14,10 @@ pass() {
 }
 
 case "$#:${1:-}" in
-  0:) released=false ;;
+  0:) released=false; bash "$0" --unstarted-source ;;
   1:--released-predecessor) released=true ;;
-  *) fail "usage: $0 [--released-predecessor]" ;;
+  1:--unstarted-source) released=false ;;
+  *) fail "usage: $0 [--released-predecessor|--unstarted-source]" ;;
 esac
 
 [[ -x "${QUADLET_BIN}" ]] || fail "quadlet generator missing: ${QUADLET_BIN}"
@@ -25,6 +26,8 @@ unshare --user --map-root-user --mount true 2>/dev/null || fail "unprivileged us
 umask 022
 tmp="$(mktemp -d)"
 trap 'find "$tmp" -type d -user "$(id -u)" ! -perm -u+w -exec chmod u+w {} +; rm -rf "$tmp"' EXIT
+export SYNC_TEST_SYSTEMD_ETC="$tmp/etc-systemd"
+mkdir -p "$SYNC_TEST_SYSTEMD_ETC/system"
 
 fakebin="${tmp}/fakebin"
 mkdir -p "${fakebin}"
@@ -48,6 +51,16 @@ printf 'chown %s\n' "$*" >>"${SYNC_TEST_EVENTS:?}"
 EOF
 cat >"${fakebin}/mv" <<'EOF'
 #!/usr/bin/env bash
+if [[ $* == *--exchange* && ${*: -2:1} == */incomplete && -f "$SYNC_TEST_EVENTS.first-exchange" ]]; then
+  active=${!#}
+  cp "$active" "$active.restored"
+  /usr/bin/mv -T "$active.restored" "$active"
+fi
+if [[ $* == *--exchange* && ${*: -2:1} == */active && -f "$SYNC_TEST_EVENTS.exchange-race" ]]; then
+  active=${!#}
+  cp "$SYNC_TEST_EVENTS.exchange-race" "$active.restored"
+  /usr/bin/mv -T "$active.restored" "$active"
+fi
 if [[ -f "$SYNC_TEST_EVENTS.fail-before" && "${!#}" == "$(<"$SYNC_TEST_EVENTS.fail-before")" ]]; then exit 92; fi
 if [[ -f "$SYNC_TEST_EVENTS.fail-after" && "${!#}" == "$(<"$SYNC_TEST_EVENTS.fail-after")" ]]; then /usr/bin/mv "$@"; exit 93; fi
 exec /usr/bin/mv "$@"
@@ -55,8 +68,43 @@ EOF
 cat >"${fakebin}/sync" <<'EOF'
 #!/usr/bin/env bash
 active=/opt/hololive-bot/compose/app-sources/active
+if [[ -f "$SYNC_TEST_EVENTS.final-writer" && -f "$active" ]]; then
+  read -r state base arrow revision <"$active"
+  if [[ $state == incomplete && $arrow == '->' && -s ${active%/*}/transition-$base-$revision/pairs.after ]]; then
+    touch "$SYNC_TEST_EVENTS.writer-unhealthy"
+    echo 'injected final writer health change' >>"$SYNC_TEST_EVENTS"
+  fi
+fi
+if [[ -f "$SYNC_TEST_EVENTS.interrupt" && -f "$active" && "$(<"$active")" == "incomplete "* ]]; then
+  signal=$(<"$SYNC_TEST_EVENTS.interrupt")
+  if [[ $signal != cleanup-* ]]; then
+    case "$signal" in
+      full-pipe)
+        python3 -ISB -c 'import os
+fd=os.open("/tmp/cleanup-pipe", os.O_WRONLY|os.O_NONBLOCK)
+for size in (4096,1):
+    try:
+        while True: os.write(fd,b"x"*size)
+    except BlockingIOError: pass' ;;
+      file-limit) truncate -s 33554432 /tmp/limit-stderr ;;
+      sync-error) ;;
+      *) kill -s "$signal" "$PPID" ;;
+    esac
+    exit 1
+  fi
+fi
 if [[ -f "$SYNC_TEST_EVENTS.fail-incomplete" && -f "$active" && "$(<"$active")" == "incomplete "* ]]; then exit 94; fi
 exec /usr/bin/sync "$@"
+EOF
+cat >"${fakebin}/rm" <<'EOF'
+#!/usr/bin/env bash
+if [[ -f /events.interrupt && $1 == -rf && ${2:-} == /opt/hololive-bot/compose/.staging-current.* ]]; then
+  case "$(< /events.interrupt)" in
+    cleanup-term) kill -TERM "$PPID"; exit 1 ;;
+    cleanup-error) exit 1 ;;
+  esac
+fi
+exec /usr/bin/rm "$@"
 EOF
 cat >"${fakebin}/find" <<'EOF'
 #!/usr/bin/env bash
@@ -68,6 +116,26 @@ EOF
 cat >"${fakebin}/protected-bootstrap" <<'EOF'
 #!/usr/bin/env bash
 export SYNC_TEST_CONTAINER_PID=$$
+if [[ -f /events.interrupt ]]; then
+  case "$(</events.interrupt)" in
+    full-pipe|file-limit)
+      exec python3 -ISB -c 'import fcntl, os, resource, subprocess, sys
+from pathlib import Path
+if Path("/events.interrupt").read_text().strip() == "full-pipe":
+    os.mkfifo("/tmp/cleanup-pipe")
+    writer = os.open("/tmp/cleanup-pipe",os.O_RDWR)
+else:
+    limit = 32*1024*1024
+    writer = os.open("/tmp/limit-stderr", os.O_CREAT|os.O_WRONLY|os.O_APPEND, 0o600)
+    resource.setrlimit(resource.RLIMIT_FSIZE,(limit,limit))
+p=subprocess.run(["bash","/opt/hololive-bot/release-sources/tool/source/scripts/deploy/sync-opt-current.sh",*sys.argv[1:]],stderr=writer,timeout=90)
+for name in ("/opt","/run/lock/hololive-quadlet-redeploy.lock"):
+    fd=os.open(name,os.O_RDONLY)
+    fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+sys.exit(p.returncode)' "$@" ;;
+    *) exec 2>&- ;;
+  esac
+fi
 exec bash /opt/hololive-bot/release-sources/tool/source/scripts/deploy/sync-opt-current.sh "$@"
 EOF
 cat >"${fakebin}/podman" <<'EOF'
@@ -94,7 +162,9 @@ case "$1:$2:${!#}" in
     service="${!#}"; image="$(printf '%064d' 2)"; cid="$(printf '%064d' 8)"
     if [[ "$service" == hololive-alarm-worker ]]; then image="$(printf '%064d' 5)"; cid="$(printf '%064d' 9)"; fi
     if [[ "$3" == --format ]]; then
-      printf '%s %s healthy\n' "$image" "$(< /tmp/accepted-revision)"
+      health=healthy
+      [[ ! -e $SYNC_TEST_EVENTS.writer-unhealthy || $service != hololive-alarm-worker ]] || health=unhealthy
+      printf '%s %s %s\n' "$image" "$(< /tmp/accepted-revision)" "$health"
     else
       pair="/opt/hololive-bot/compose/current/artifacts/worker-profile/releases/$service-v2-reviewed/candidate"
       printf '[{"Id":"%s","Image":"%s","State":{"Running":true,"Pid":%s,"StartedAt":"fixture"},"Config":{"Env":["HOLOLIVE_METRICS_ADDR=:30003","APP_VERSION=1.2.3"],"Labels":{"io.hololive.worker-profile-pair":"%s"}},"OCIConfigPath":"/tmp/%s.oci"}]\n' \
@@ -148,7 +218,7 @@ make_repo() {
   printf '\n' >>"$repo/scripts/deploy/sync-opt-current.sh"
   cat >"${repo}/scripts/deploy/verify-exec-tree-ownership.sh" <<'EOF'
 #!/usr/bin/env bash
-printf 'verify %s\n' "$#" >>"${SYNC_TEST_EVENTS:?}"
+printf 'verify %s\n' "$#" >>"${SYNC_TEST_EVENTS:-/events}"
 EOF
   git -C "${repo}" init -q
   git -C "${repo}" config tar.umask 0022
@@ -190,8 +260,10 @@ run_sync() {
   shift 2
   [[ ${1:-} != --source-only ]] || opt=/opt
   : >"${host}/events"
+  local -a namespaces=(--user --map-root-user --mount)
+  [[ ${1:-} != --unstarted-source ]] || namespaces+=(--uts)
   # shellcheck disable=SC2016 # namespace 안의 bash가 확장한다.
-  unshare --user --map-root-user --mount bash -c '
+  unshare "${namespaces[@]}" bash -c '
     set -euo pipefail
     host="$1"; repo="$2"; stubs="$3"; bootstrap="$4"
     shift 4
@@ -202,13 +274,15 @@ run_sync() {
     mount --bind "${host}/etc-nftables.d" /etc/nftables.d
     mount --bind "${host}/run" /run
     mount --bind "${host}/run-lock" /run/lock
-    if [[ " $* " == *" --source-only "* || " $* " == *" --protected-source "* ]]; then
+    if [[ " $* " == *" --source-only "* || " $* " == *" --protected-source "* || "${!#}" == --unstarted-source ]]; then
       jail="$host/jail"
       mkdir -p "$jail"
       mount -t tmpfs -o mode=0755 tmpfs "$jail"
       mkdir -p "$jail"/{usr,dev,etc,proc,run,sys,tmp,var,opt,repo,stubs}
       for directory in dev proc run sys; do mount --rbind "/$directory" "$jail/$directory"; done
-      if [[ " $* " == *" --protected-source "* ]]; then
+      if [[ " $* " == *" --protected-source "* || "${!#}" == --unstarted-source ]]; then
+        mkdir "$jail/etc/systemd"
+        mount --bind "${SYNC_TEST_SYSTEMD_ETC:?}" "$jail/etc/systemd"
         for directory in containers/systemd nftables.d stack-secrets systemd/system; do
           mkdir -p "$jail/etc/$directory"
           mount --rbind "/etc/$directory" "$jail/etc/$directory"
@@ -219,7 +293,7 @@ run_sync() {
       else
         mount --rbind /etc "$jail/etc"
       fi
-      for directory in bin sbin lib lib64 share libexec local/libexec; do
+      for directory in bin sbin lib lib64 share libexec local/lib local/libexec; do
         mkdir -p "$jail/usr/$directory"
         mount --rbind "/usr/$directory" "$jail/usr/$directory"
       done
@@ -230,14 +304,18 @@ run_sync() {
       mount --bind "$bootstrap" "$jail/bootstrap"
       mount --bind "$host/events" "$jail/events"
       if [[ -f "$host/canary" ]]; then touch "$jail/canary"; mount --bind "$host/canary" "$jail/canary"; fi
+      if [[ -e "$host/events.final-writer" ]]; then touch "$jail/events.final-writer"; fi
+      if [[ -e "$host/events.first-exchange" ]]; then touch "$jail/events.first-exchange"; fi
+      if [[ -e "$host/events.exchange-race" ]]; then cp "$host/events.exchange-race" "$jail/events.exchange-race"; fi
       if [[ -e "$host/events.fail-before" ]]; then cp "$host/events.fail-before" "$jail/events.fail-before"; fi
       if [[ -e "$host/events.fail-after" ]]; then cp "$host/events.fail-after" "$jail/events.fail-after"; fi
+      if [[ -e "$host/events.interrupt" ]]; then cp "$host/events.interrupt" "$jail/events.interrupt"; fi
       if [[ -e "$host/events.fail-incomplete" ]]; then touch "$jail/events.fail-incomplete"; fi
       if [[ -e "$host/tamper-staged-helper" ]]; then touch "$jail/tamper-staged-helper"; fi
       for directory in bin sbin lib lib64; do
         [[ -e "$jail/$directory" ]] || ln -s "usr/$directory" "$jail/$directory"
       done
-      if [[ " $* " == *" --protected-source "* ]]; then
+      if [[ " $* " == *" --protected-source "* || "${!#}" == --unstarted-source ]]; then
         root="$jail/opt/hololive-bot"
         mkdir -p "$root"/{compose,release-sources/{tool,candidate}/source}
         chmod 0700 "$root"/release-sources/{tool,candidate}
@@ -270,23 +348,81 @@ run_sync() {
           for service in hololive-api hololive-alarm-worker; do
             worker="$jail/tmp/$service-root"
             base="$worker/run/hololive-bot"
-            pair="$host/opt/current/artifacts/worker-profile/releases/$service-v2-reviewed/candidate"
+            pointer="$(<"$host/opt/current/artifacts/worker-profile/active/$service.pair")"
+            pair="$host/opt/${pointer#/opt/hololive-bot/compose/}"
             mkdir -p "$base"/{worker-profiles,worker-profile-release}
             mount --bind "$host/etc-stack-secrets/hololive-bot/worker-profiles" "$base/worker-profiles"
             mount --bind "$pair" "$base/worker-profile-release"
             for dir in "$base"/*; do mount -o remount,bind,ro "$dir"; done
-            python3 -ISB -c "import ctypes,os,signal,sys,time; ctypes.CDLL(None).prctl(1,signal.SIGKILL,0,0,0); assert os.getppid()==int(sys.argv[3]); ready=open(sys.argv[2],\"x\"); os.chroot(sys.argv[1]); os.chdir(\"/\"); ready.write(str(os.getpid())); ready.close(); time.sleep(120)" \
+            python3 -ISB -c "import ctypes,os,signal,sys; ctypes.CDLL(None).prctl(1,signal.SIGKILL,0,0,0); assert os.getppid()==int(sys.argv[3]); ready=open(sys.argv[2],\"x\"); os.chroot(sys.argv[1]); os.chdir(\"/\"); ready.write(str(os.getpid())); ready.close(); signal.pause()" \
               "$worker" "$jail/tmp/$service.pid" "$$" &
             writers+=("$!")
             for _ in {1..100}; do [[ ! -s "$jail/tmp/$service.pid" ]] || break; sleep 0.02; done
             [[ -s "$jail/tmp/$service.pid" ]]
           done
         fi
+        if [[ "${!#}" == --unstarted-source ]]; then
+          /usr/bin/hostname hololive-seoul
+          candidate="$(<"$host/candidate-revision")"
+          for which in tool holo-api holo-worker; do
+            dst="$root/release-sources/dv-$which-$candidate"
+            mkdir -m0700 "$dst"
+            mkdir "$dst/source"
+            case "$which" in
+              tool) clone=$SYNC_TEST_TOOL ;;
+              holo-api) clone=$repo ;;
+              holo-worker) clone=$host/worker-source ;;
+            esac
+            mount --bind "$clone" "$dst/source"
+            cp "$host/staged.bundle" "$dst/source.bundle"
+          done
+          source="$(<"$host/profile-fixture/source-revision")"
+          prior="$root/release-sources/dv-holo-api-$source"
+          mkdir -m0700 "$prior"
+          mkdir "$prior/source"
+          mount --bind "$host/prior-source" "$prior/source"
+          prior_tool="$root/release-sources/dv-tool-$source"
+          mkdir -m0700 "$prior_tool"
+          mkdir "$prior_tool/source"
+          mount --bind "$host/prior-tool" "$prior_tool/source"
+          mkdir "$jail/case"
+          follow="$root/release-sources/follow"
+          mkdir -m0700 "$follow"
+          mkdir "$follow/source"
+          mount --bind "$host/follow-source" "$follow/source"
+          mkdir -m0700 "$root/release-sources/follow-tool"
+          mkdir "$root/release-sources/follow-tool/source"
+          mount --bind "$host/follow-tool" "$root/release-sources/follow-tool/source"
+          cp "$(dirname "$bootstrap")"/unstarted-source-case* "$jail/case/"
+          cp "$host/../transport-command" "$host/../bootstrap-command" "$jail/case/"
+          cp "$(command -v uv)" "$jail/case/uv"
+          sha256sum "$(dirname "$bootstrap")/supersession-window.py" | cut -d" " -f1 >"$jail/case/approved-supervisor"
+          chmod 0755 "$jail/case/unstarted-source-case-host.py"
+          cp "$(dirname "$bootstrap")/testdata/ingress-firewall.json" "$jail/case/"
+          if [[ -n "${HOLOLIVE_TEST_841_OBSERVER:-}" ]]; then
+            cp "$HOLOLIVE_TEST_841_OBSERVER" "$jail/case/activate-holo.py"
+            (cd "$jail/case" && echo "276262a772edcd8296386df2b9524afe875f8789282293106b12602bf1a383d1  activate-holo.py" | sha256sum -c --status)
+            mkdir -p "$jail/usr/local/bin"
+            for cmd in nft tailscale ip; do ln -s /case/unstarted-source-case-host.py "$jail/usr/local/bin/$cmd"; done
+          fi
+          cp /usr/bin/sync "$jail/case/kernel-sync"
+          for cmd in systemctl podman journalctl busctl systemd-run sync; do
+            mount --bind "$jail/case/unstarted-source-case-host.py" "$jail/usr/bin/$cmd"
+          done
+          chroot "$jail" env -i PATH=/usr/bin:/usr/sbin:/stubs HOME=/tmp TMPDIR=/tmp SYNC_TEST_EVENTS=/events \
+            bash /case/unstarted-source-case.sh
+          exit
+        fi
         chroot "$jail" env -i PATH=/stubs:/usr/bin:/usr/sbin HOME=/tmp TMPDIR=/tmp SYNC_TEST_EVENTS=/events \
           /stubs/protected-bootstrap "${@: -5}"
         exit
       fi
       mount --bind "$host/opt" "$jail/opt"
+      if [[ -f "$host/foreign-owner-fixture" ]]; then
+        entry="$jail/opt/current/scripts/deploy/quadlet-redeploy-service.sh"
+        mount --bind /usr/bin/true "$entry"
+        [[ $(stat -c %u "$entry") != 0 ]]
+      fi
       exec chroot "$jail" env PATH=/stubs:/usr/bin:/usr/sbin HOME=/tmp TMPDIR=/tmp SYNC_TEST_EVENTS=/events REPO_ROOT=/repo OPT_ROOT=/opt bash ./bootstrap "${@: -2}"
     fi
     exec "$@"
@@ -317,9 +453,413 @@ assert_rejected_without_change() {
   }
 }
 
+if [[ ${1:-} == --unstarted-source ]]; then
+  delta_base=d92cf34bcc24715e60edfc4de5c2fabe5175b7db
+  changed=(CHANGELOG.md VERSION deploy/quadlet/README.md hololive/{hololive-api,hololive-alarm-worker}/VERSION
+    scripts/deploy/{lib/sealed-app.sh,lib/unstarted-source.py,quadlet-redeploy-service.sh,supersession-window.py,sync-opt-current.sh,sync-opt-current_test.sh}
+    scripts/deploy/unstarted-source-case{.sh,-evidence.py,-host.py,-pairs.py})
+  prepare_recovery_checkout() {
+    local repo=$1 dest=$2 head recovery path
+    head=$(git -C "$repo" rev-parse HEAD)
+    recovery=$(git -C "$repo" rev-list --first-parent --reverse "$delta_base..$head" | sed -n '1p')
+    [[ -n $recovery && $(git -C "$repo" show -s --format=%P "$recovery") == "$delta_base" ]] || fail "missing original recovery child"
+    bash -eu -o pipefail -c '. "$1"; sealed_supersession_delta "$2" "$3"' _ "$ROOT_DIR/scripts/deploy/lib/sealed-app.sh" "$repo" "$recovery" ||
+      fail "original recovery child is not the approved supersession delta"
+    git clone -q --shared --no-checkout --no-tags "$repo" "$dest"
+    git -C "$dest" checkout -q --detach "$recovery"
+    if [[ $head == "$recovery" ]]; then
+      for path in "${changed[@]}"; do cp -p "$repo/$path" "$dest/$path"; done
+    fi
+  }
+  invoking_checkout=$ROOT_DIR
+  prepare_recovery_checkout "$ROOT_DIR" "$tmp/recovery-checkout"
+  git clone -q --shared "$tmp/recovery-checkout" "$tmp/later"
+  printf 'unrelated later edit\n' >>"$tmp/later/docs/current/PROJECT_MAP.md"
+  prepare_recovery_checkout "$tmp/later" "$tmp/unrelated"
+  git -C "$tmp/unrelated" diff --exit-code HEAD -- docs/current/PROJECT_MAP.md
+  commit_repo "$tmp/later" unrelated
+  printf 'later approved-path edit\n' >>"$tmp/later/deploy/quadlet/README.md"
+  commit_repo "$tmp/later" later
+  prepare_recovery_checkout "$tmp/later" "$tmp/pinned"
+  [[ $(git -C "$tmp/pinned" rev-parse HEAD) == "$(git -C "$tmp/recovery-checkout" rev-parse HEAD)" ]]
+  git -C "$tmp/pinned" diff --exit-code HEAD
+  git clone -q --shared "$tmp/recovery-checkout" "$tmp/misordered"
+  git -C "$tmp/misordered" checkout -q --detach "$delta_base"
+  printf 'unrelated first child\n' >>"$tmp/misordered/docs/current/PROJECT_MAP.md"
+  commit_repo "$tmp/misordered" unrelated-first
+  if (prepare_recovery_checkout "$tmp/misordered" "$tmp/misordered-out") >"$tmp/misordered.log" 2>&1; then
+    fail 'unrelated first child of the recovery base was accepted'
+  fi
+  grep -Fq 'original recovery child is not the approved supersession delta' "$tmp/misordered.log" || fail 'unrelated recovery child refused for another reason'
+  ROOT_DIR="$tmp/recovery-checkout"
+fi
 base_repo="${tmp}/repo-base"
 make_repo "${base_repo}"
 
+if [[ "${1:-}" == --unstarted-source ]]; then
+  UV_CACHE_DIR="$tmp/uv" uv run --no-project python -ISB - "$ROOT_DIR" <<'PYTHON'
+import os
+from pathlib import Path
+import runpy
+import subprocess
+import sys
+import time
+
+deploy = Path(sys.argv[1]) / 'scripts/deploy'
+proof = runpy.run_path(str(deploy / 'lib/unstarted-source.py'))
+production_case = ('6d7e8749983723867fa52d5a0e9cd648198d2e61', 'hololive-api-v2-20261119T121019Z-lVIJBA')
+original_files = [
+    ['activation.config-before', '827c115adbde3114e0460ae39100ce47df96627f9841279b7f12a40d24af800b', 92875647, 1795090207646973883, 1795090207646973883],
+    ['activation.requested', '015038b6cafb5bf1c4f21758ddac40296fa781fe47ceb449de5d5fbbf1a58453', 92881408, 1795090210830331463, 1795090210830331463],
+    ['coordinator.diagnostics', '1c684a3bfe89f1607f97cd425e088fe90d2ff9f77a9b055b8f99d0fd221f6b87', 92881409, 1795090226981817260, 1795090226981817260],
+    ['coordinator.exit', '9cfb3710b6a4d46a99930bed1514f3a1a0df882d28aa9265135fa424f2b5264d', 92881410, 1795090226985217801, 1795090226985217801],
+    ['activation.not-accepted', '955a9a7fd1fd2549d284a61ae56bb12033ad06091f6b7bfbc3ef60d63ff8cb13', 92881411, 1795090227020290738, 1795090227020290738],
+]
+proof['original_receipt_pin'](*production_case, original_files)
+for column in (2,3,4):
+    changed = [row.copy() for row in original_files]
+    changed[2][column] += 1
+    try:
+        proof['original_receipt_pin'](*production_case, changed)
+    except proof['Refusal']:
+        pass
+    else:
+        sys.exit('restored production receipt admitted')
+expired = time.time_ns() // 1000 - 30_000_001
+try:
+    proof['fresh_confirmation']({'cursor':f'b=boot;s=seq;i=1;t={expired:x}'})
+except proof['Refusal']:
+    pass
+else:
+    sys.exit('expired confirmation cursor admitted')
+timestamps = [1795090207646973882,1795090207646973883,1795090210830331463,1795090226981817260,1795090226985217801,1795090227020290738]
+start = 1795090210829668459
+proof['original_window'](start,timestamps)
+tick = round(time.clock_getres(5)*10**9)
+timestamps[2] = start - tick
+proof['original_window'](start,timestamps)
+timestamps[2] -= 1
+try:
+    proof['original_window'](start,timestamps)
+except proof['Refusal']:
+    pass
+else:
+    sys.exit('original request outside inode clock resolution admitted')
+os.dup2(os.open('/dev/null', os.O_RDONLY), 19)
+invoke = runpy.run_path(str(deploy / 'supersession-window.py'))['invoke']
+messages = []
+def dispatch(action, witness, remaining, alive, send):
+    alive()
+    assert action == 'schema' and witness == {'cursor': 'fixture'} and remaining > 0
+    return 'received'
+assert invoke(['/usr/bin/python3','-ISB',str(deploy / 'lib/unstarted-source.py'),'--relay','schema','{"cursor":"fixture"}'],
+              messages.append, timeout=5, dispatch=dispatch) == 0 and messages == ['received']
+for script in ('printf partial; sleep 8', 'exec 1>&- 2>&-; sleep 8'):
+    try:
+        invoke(['/usr/bin/bash','-c',script], lambda line: None, timeout=.2)
+    except (TimeoutError, subprocess.TimeoutExpired):
+        continue
+    sys.exit('hung coordinator admitted')
+
+import signal
+import select
+import tempfile
+from unittest.mock import patch
+supervisor = runpy.run_path(str(deploy / 'supersession-window.py'))
+with tempfile.TemporaryDirectory() as tmp:
+    control = Path(tmp)
+    sender = """import os,sys,time
+from pathlib import Path
+p=Path(sys.argv[1])
+(p/'verified').write_text(str(os.getpid()))
+while not (p/'release').exists():
+    time.sleep(.005)
+(p/'enqueued').touch()
+"""
+    owner = os.fork()
+    if not owner:
+        supervisor['manager_send']('/usr/bin/python3','-ISB','-c',sender,str(control))
+        os._exit(0)
+    deadline = time.monotonic() + 10
+    while not (control/'verified').is_file() or not (control/'verified').stat().st_size:
+        if time.monotonic() >= deadline:
+            sys.exit('manager sender did not reach dispatch barrier')
+        time.sleep(.005)
+    sender_fd = os.pidfd_open(int((control/'verified').read_text()))
+    os.kill(owner, signal.SIGKILL)
+    os.waitpid(owner,0)
+    (control/'release').touch()
+    assert select.select([sender_fd],[],[],5)[0] and not (control/'enqueued').exists(), 'orphan manager request'
+    os.close(sender_fd)
+
+queued = []
+real_select = select.select
+def exit_before_packet(readers, writers, errors, timeout):
+    pidfds = [fd for fd in readers if isinstance(fd,int)]
+    if pidfds:
+        assert real_select(pidfds, [], [], 5)[0], 'coordinator did not exit with packet outstanding'
+    return real_select(readers, writers, errors, timeout)
+with patch.object(select,'select',exit_before_packet):
+    try:
+        invoke(['/usr/bin/python3','-ISB','-c',
+                'import os,signal; os.write(int(os.environ["HOLOLIVE_MANAGER_FD"]),__import__("json").dumps(["schema",{}]).encode()); os.kill(os.getpid(),signal.SIGKILL)'],
+               lambda _:None, timeout=10, dispatch=lambda *args:queued.append(args))
+    except ValueError:
+        pass
+assert not queued, 'dispatched packet after coordinator death'
+
+clock = [100_000_000]
+tips = iter(('first','tail'))
+segments = []
+def scan(begin, end, *args, **kwargs):
+    segments.append((begin,end))
+    clock[0] += 45_000_000_000
+with patch.dict(proof['journal'].__globals__, dict(manager_rate_limit=lambda *_: (0,0), journald_generation=lambda: ('a'*32, 1), run=lambda *a: 'journald' if a[0]=='podman' else '',
+        journal_rows=lambda _: [dict(__REALTIME_TIMESTAMP='1',__CURSOR='anchor')], journal_tip=lambda:next(tips),
+        cursor_fields=lambda _: ('','',0,100), journal_segment=scan)), patch.object(time,'time_ns',lambda:clock[0]):
+    proof['journal'](2_000,90_000)
+assert segments == [('anchor','first'),('first','tail')], 'historical scan did not bridge to a fresh cursor'
+PYTHON
+  UV_CACHE_DIR="$tmp/uv" uv run --no-project python -ISB - "$ROOT_DIR/deploy/quadlet/README.md" "$tmp/transport-command" "$tmp/bootstrap-command" <<'PYTHON'
+from pathlib import Path
+import re
+import sys
+
+blocks = re.findall(r"^```bash\n(.*?)^```", Path(sys.argv[1]).read_text(), re.M | re.S)
+for path, marker in zip(sys.argv[2:], ('"${ssh_window[@]}"', 'ssh_window=(ssh -T'), strict=True):
+    example, = [block for block in blocks if marker in block]
+    Path(path).write_text(example)
+PYTHON
+  (
+    export UV_CACHE_DIR="$tmp/uv"
+    export OLD NEW RUNNING FAILED_API_RELEASE API_MANIFEST WORKER_MANIFEST
+    printf -v OLD '%040d' 1; printf -v NEW '%040d' 2; printf -v RUNNING '%040d' 3
+    FAILED_API_RELEASE=hololive-api-v2-20261119T121019Z-lVIJBA
+    printf -v API_MANIFEST '%064d' 4; printf -v WORKER_MANIFEST '%064d' 5
+    response=$(uv run --no-project python -c 'import json,os; e=os.environ
+print(json.dumps(dict(phase="source",identity=dict(old=e["OLD"],new=e["NEW"],running=e["RUNNING"],failed=e["FAILED_API_RELEASE"],manifests=[e["API_MANIFEST"],e["WORKER_MANIFEST"]],boot="af2e24c9-9efd-4ee5-bb99-66394247d9f4"),window_sha256="2"*64,accepted_sha256="3"*64,snapshot_sha256="4"*64,window_nonce="5"*32,output_nonce="6"*32),sort_keys=True,separators=(",",":")))') || exit 1
+    documented_window() {
+      input=/dev/null phase=source evidence="$evidence" bash -c 'cmd=$1; shift; ssh_window=("$@"); . "$cmd"' _ "$tmp/transport-command" "$@"
+    }
+    evidence=$tmp/operator
+    mkdir "$evidence" || exit 1
+    documented_window printf '%s\n' "$response" || exit 1
+    [[ -s $evidence/source/transport && $(<"$evidence/source/process_exit") == 0 ]] || exit 1
+    mkdir "$tmp/unverified-receipt" || exit 1
+    printf 'worker transport\n' >"$tmp/worker-original" || exit 1
+    worker_hash=$(sha256sum "$tmp/worker-original") || exit 1
+    receipt_response=$(printf '{"confirmed":"worker","output_nonce":"%032d","worker_transport_sha256":"%s"}' 1 "${worker_hash%% *}") || exit 1
+    rc=0
+    input="$tmp/worker-original" phase=receipt evidence="$tmp/unverified-receipt" bash -c '
+      ssh_window=(printf "%s\n" "$2")
+      remote_command() { return 1; }
+      ssh() { exit 99; }
+      . "$1"
+    ' _ "$tmp/transport-command" "$receipt_response" || rc=$?
+    [[ $rc == 75 && ! -e "$tmp/unverified-receipt/receipt/success" ]] || exit 1
+    for bad in interrupted whitespace extra-newline missing wrong-new partial; do
+      evidence=$tmp/operator-$bad
+      mkdir "$evidence" || exit 1
+      rc=0
+      case $bad in
+        interrupted) documented_window bash -c 'printf "%s\n" "$1"; exit 255' _ "$response" || rc=$? ;;
+        whitespace) documented_window printf ' %s\n' "$response" || rc=$? ;;
+        extra-newline) documented_window printf '%s\n\n' "$response" || rc=$? ;;
+        missing) documented_window printf '{"phase":"source"}\n' || rc=$? ;;
+        wrong-new) documented_window printf '%s\n' "${response/$NEW/$RUNNING}" || rc=$? ;;
+        partial)
+          mkdir "$evidence/source" || exit 1
+          printf '0\n' >"$evidence/source/process_exit" || exit 1
+          documented_window touch "$evidence/ssh-ran" || rc=$?
+          [[ ! -e $evidence/ssh-ran && ! -e $evidence/source/stdout ]] || exit 1 ;;
+      esac
+      [[ $rc == 75 && ! -e $evidence/source/transport ]] || exit 1
+      if [[ $bad == interrupted ]]; then
+        [[ $(<"$evidence/source/process_exit") == 255 ]] && cmp "$evidence/source/stdout" "$tmp/operator/source/stdout" || exit 1
+      fi
+    done
+  ) || fail "operator transport did not preserve the original SSH result"
+  host="$tmp/host-unstarted"
+  printf '1.2.3\n' >"$base_repo/hololive/hololive-api/VERSION"
+  mkdir -p "$base_repo/hololive/hololive-alarm-worker"
+  cp "$base_repo/hololive/hololive-api/VERSION" "$base_repo/hololive/hololive-alarm-worker/VERSION"
+  cp "$base_repo/hololive/hololive-api/VERSION" "$base_repo/VERSION"
+  migrator_path=deploy/quadlet/hololive-bot/hololive-db-migrate.container
+  git -C "$ROOT_DIR" show "efafcf4005878f53ff239f8e8a1b6255e3b59b75:$migrator_path" >"$base_repo/$migrator_path"
+  cp "$ROOT_DIR/scripts/deploy/lib/migration-receipts.sh" "$base_repo/scripts/deploy/lib/"
+  commit_repo "$base_repo" legacy-version
+  make_host "$host" 0
+  run_sync "$host" "$base_repo" || { cat "$host/out" >&2; fail "legacy installation failed"; }
+  mkdir -p "$host/opt/current/"{data,logs,backups,runtime-config,artifacts/worker-profile} "$host/run/hololive-bot/postgres" "$host/profile-fixture"
+  chmod 0700 "$host/opt/current"
+  cp -a "$base_repo" "$host/prior-source"
+  prior="$host/prior-source"
+  first_sealed=6d7e8749983723867fa52d5a0e9cd648198d2e61
+  delta_base=d92cf34bcc24715e60edfc4de5c2fabe5175b7db
+
+  migrator_path=deploy/quadlet/hololive-bot/hololive-db-migrate.container
+  api_path=hololive/hololive-api
+  git -C "$ROOT_DIR" archive "$first_sealed" CHANGELOG.md VERSION deploy/quadlet/README.md hololive/{hololive-api,hololive-alarm-worker}/VERSION \
+    scripts/deploy/{lib/sealed-app.sh,quadlet-redeploy-service.sh,sealed-app-case.sh,sync-opt-current.sh,sync-opt-current_test.sh} \
+    "$api_path/internal/migrationrunner/queries" "$api_path/scripts/migrations" | tar -x -C "$prior"
+  rm "$prior/$api_path/scripts/migrations/001_legacy.sql"
+  cp "$ROOT_DIR/$migrator_path" "$prior/$migrator_path"
+  commit_repo "$prior" first-sealed-source
+  source_revision="$(git -C "$prior" rev-parse HEAD)"
+  writer_revision="$(git -C "$base_repo" rev-parse HEAD)"
+  cp -a "$prior" "$host/prior-tool"
+  successor="$tmp/successor"
+  cp -a "$prior" "$successor"
+  mapfile -t inherited < <(git -C "$ROOT_DIR" diff --name-only "$first_sealed" "$delta_base")
+  git -C "$ROOT_DIR" archive "$delta_base" "${inherited[@]}" | tar -x -C "$successor"
+  commit_repo "$successor" released-parent
+  parent_revision="$(git -C "$successor" rev-parse HEAD)"
+  for path in "${changed[@]}"; do cp -p "$ROOT_DIR/$path" "$successor/$path"; done
+  commit_repo "$successor" successor-source
+  git -C "$ROOT_DIR" diff --no-renames --raw "$delta_base" | awk '{print $1,$2,$5,$6}' >"$tmp/expected-delta"
+  git -C "$successor" diff --no-renames --raw "$parent_revision" HEAD | awk '{print $1,$2,$5,$6}' >"$tmp/candidate-delta"
+  [[ $(wc -l <"$tmp/expected-delta") == 15 ]]
+  cmp "$tmp/expected-delta" "$tmp/candidate-delta"
+  (
+    export GIT_INDEX_FILE="$tmp/review-index"
+    rejected() {
+      local reason=$1 tree modified
+      tree=$(git -C "$successor" write-tree) || exit 1
+      modified=$(git -C "$successor" -c user.name=fixture -c user.email=fixture@example.invalid commit-tree "$tree" -p "$parent_revision" -m rejected-delta) || exit 1
+      if bash -eu -o pipefail -c '. "$1"; sealed_supersession_delta "$2" "$3"' _ \
+          "$ROOT_DIR/scripts/deploy/lib/sealed-app.sh" "$successor" "$modified" 2>"$tmp/delta-error"; then exit 1; fi
+      grep -Fxq "$reason" "$tmp/delta-error" || exit 1
+      git -C "$successor" read-tree HEAD || exit 1
+    }
+    git -C "$successor" read-tree HEAD || exit 1
+    blob=$(printf 'unauthorized edit\n' | git -C "$successor" hash-object -w --stdin) || exit 1
+    git -C "$successor" update-index --cacheinfo "100755,$blob,scripts/deploy/sealed-app-case.sh" || exit 1
+    rejected 'changed inherited sealed test'
+    git -C "$successor" update-index --chmod=-x scripts/deploy/lib/unstarted-source.py || exit 1
+    rejected 'unapproved supersession paths or modes'
+    git -C "$successor" update-index --add --cacheinfo "100644,$blob,README.md" || exit 1
+    rejected 'unapproved supersession paths or modes'
+    git -C "$successor" update-index --force-remove scripts/deploy/unstarted-source-case-evidence.py || exit 1
+    rejected 'unapproved supersession paths or modes'
+  ) || fail 'unapproved supersession delta accepted'
+  supersession_path() {
+    bash -eu -c '. "$1"; sealed_supersession_path "$2" "$3" "$4"' _ "$ROOT_DIR/scripts/deploy/lib/sealed-app.sh" "$@"
+  }
+  path_refused() {
+    local reason
+    if reason=$(supersession_path "$1" "$2" "$3"); then fail "supersession path accepted: $3"; fi
+    [[ $reason == "$4" ]] || fail "unexpected supersession path refusal: $reason"
+  }
+  path_refused M 100644 hololive/hololive-api/go.mod 'unapproved supersession delta: hololive/hololive-api/go.mod'
+  path_refused A 100644 scripts/deploy/lib/unstarted-source.py 'unexpected new supersession executable: scripts/deploy/lib/unstarted-source.py'
+  path_refused M 100644 scripts/deploy/supersession-window.py 'unexpected new supersession helper mode: scripts/deploy/supersession-window.py'
+  path_refused A 100644 VERSION 'supersession requires an existing reviewed path: VERSION'
+  while IFS= read -r -d '' header && IFS= read -r -d '' path; do
+    read -r _ new_mode _ _ status <<<"${header#:}"
+    supersession_path "$status" "$new_mode" "$path" >/dev/null || fail "reviewed supersession path refused: $path"
+  done < <(git -C "$ROOT_DIR" diff --no-renames --no-ext-diff --raw --no-abbrev -z "$first_sealed" HEAD)
+  stage_recovery_fixture() {
+    local fixture_dir=$1 tag clone
+    tag="v$(<"$successor/VERSION")"
+    git -C "$successor" -c user.name=fixture -c user.email=fixture@example.invalid tag -a "$tag" -m successor
+    git -C "$successor" bundle create "$host/staged.bundle" "refs/tags/$tag"
+    cp -a "$successor" "$host/follow-source"
+    local follow_tool="$host/follow-tool" path
+    git init -q --template= "$follow_tool"
+    git -C "$invoking_checkout" ls-files -z scripts/deploy | tar -C "$invoking_checkout" -cf - --null -T - | tar -xf - -C "$follow_tool"
+    commit_repo "$follow_tool" invoking-publisher
+    for path in scripts/deploy/{quadlet-redeploy-service.sh,quadlet-rollback-service.sh,quadlet-prestart.sh,lib/{app-source-authority.py,sealed-app.sh,protected-binds.sh,worker-profile-pair.py}}; do
+      cp -p "$follow_tool/$path" "$host/follow-source/$path"
+    done
+    printf '\nfollow-up fixture\n' >>"$host/follow-source/CHANGELOG.md"
+    commit_repo "$host/follow-source" follow-on
+    successor="$fixture_dir/staged-api"
+    export SYNC_TEST_TOOL="$fixture_dir/repo-reviewed-tool"
+    for clone in "$successor" "$SYNC_TEST_TOOL" "$host/worker-source"; do
+      git init -q --template= "$clone"
+      git -C "$clone" fetch -q --no-tags "$host/staged.bundle" "refs/tags/$tag:refs/tags/$tag"
+      git -C "$clone" -c advice.detachedHead=false checkout -q --detach "$tag"
+    done
+    git -C "$successor" rev-parse HEAD >"$host/candidate-revision"
+    printf '%s\n' "$source_revision" >"$host/profile-fixture/source-revision"
+    python3 -ISB "$ROOT_DIR/scripts/deploy/unstarted-source-case-pairs.py" "$SYNC_TEST_TOOL" "$host" "$writer_revision" legacy
+    cp --preserve=all "$host/opt/current/deploy/postgres/pg_hba.conf" "$host/stale-bind"
+  }
+  stage_recovery_fixture "$tmp"
+  run_fault_case() {
+    local fault=$1 scenario="$tmp/$1"
+    cp -a "$host" "$scenario"
+    printf '%s\n' "$fault" >"$scenario/profile-fixture/scenario"
+    run_sync "$scenario" "$successor" --unstarted-source || { tail -20 "$scenario/out" >&2; fail "$fault"; }
+    tail -1 "$scenario/out"
+  }
+  run_fault_group() {
+    local -a cases=()
+    local fault pid status=0
+    for fault in "$@"; do
+      run_fault_case "$fault" &
+      cases+=("$!")
+    done
+    for pid in "${cases[@]}"; do wait "$pid" || status=1; done
+    (( status == 0 )) || fail "$*"
+  }
+  run_fault_group late-writer pending-worker
+  run_fault_group pre-reload-job late-pending
+  run_fault_group pre-overlay-job pre-activate-job
+  run_fault_group merged-schema merged-writer
+  run_fault_group unaccounted-install pending-nop writer-native-dropin dependency-job
+  run_fault_group health-at-sync external-reload missing-optional
+  run_fault_group lost-response pending-during-peer
+  run_fault_group run-before-config merge-extra-run late-restore
+  run_sync "$host" "$successor" --unstarted-source || { cat "$host/out" >&2; fail "unstarted source qualification failed"; }
+  cat "$host/out"
+  qualify_full_history() {
+    local fixture_dir="$tmp/full" host writer_revision source_revision installed legacy prior successor tree candidate path SYNC_TEST_TOOL
+    mkdir "$fixture_dir"
+    cp "$tmp/"{transport-command,bootstrap-command} "$fixture_dir/"
+    host="$fixture_dir/host"
+    make_host "$host" 0
+    writer_revision=efafcf4005878f53ff239f8e8a1b6255e3b59b75
+    source_revision=$first_sealed
+    installed="$host/usr-local-libexec/hololive-bot"
+    mkdir -p "$installed/lib" "$host/profile-fixture" "$host/run/hololive-bot/postgres"
+    rm "$host/opt/current/marker" "$host/etc-containers-systemd/hololive-bot/"{stale.container,hololive-alarm-worker.container.d/40-x-spaces.conf}
+    git -C "$ROOT_DIR" -c tar.umask=0022 archive "$writer_revision" | tar -xp -C "$host/opt/current"
+    legacy="$host/opt/current"
+    printf '%s\n' "$writer_revision" >"$legacy/.source-revision"
+    chmod 0700 "$legacy"
+    mkdir -p "$legacy"/{data,logs,backups,runtime-config,artifacts/worker-profile}
+    touch "$host/run-lock/hololive-quadlet-redeploy.lock" "$host/profile-fixture/full-history"
+    install -m755 "$legacy/scripts/deploy/quadlet-prestart.sh" "$installed/quadlet-prestart"
+    for path in admin-bind public-bind-mounts postgres-capacity compose-env postgres-endpoint; do
+      install -m644 "$legacy/scripts/deploy/lib/$path.sh" "$installed/lib/"
+    done
+    install -m644 "$legacy/scripts/systemd/admin-dashboard-ingress-firewall.service" "$host/etc-systemd-system/"
+    install -m644 "$legacy/scripts/systemd/admin-dashboard-ingress.nft" "$host/etc-nftables.d/"
+    install -m644 "$legacy"/deploy/quadlet/hololive-bot/* "$host/etc-containers-systemd/hololive-bot/"
+    prior="$host/prior-source"
+    git init -q --template= "$prior"
+    git -C "$prior" fetch -q --no-tags "$ROOT_DIR" HEAD
+    git -C "$prior" -c advice.detachedHead=false checkout -q --detach "$first_sealed"
+    cp -a "$prior" "$host/prior-tool"
+    successor="$fixture_dir/successor"
+    cp -a "$prior" "$successor"
+    git -C "$successor" checkout -q --detach "$delta_base"
+    git -C "$ROOT_DIR" diff --binary "$delta_base" | git -C "$successor" apply --index --binary
+    tree=$(git -C "$successor" write-tree)
+    candidate=$(git -C "$ROOT_DIR" rev-parse HEAD)
+    if [[ $tree != "$(git -C "$ROOT_DIR" rev-parse 'HEAD^{tree}')" ]]; then
+      candidate=$(git -C "$successor" -c user.name=fixture -c user.email=fixture@example.invalid commit-tree "$tree" -p "$delta_base" -m reviewed-worktree)
+    fi
+    git -C "$successor" checkout -q --detach "$candidate"
+    stage_recovery_fixture "$fixture_dir"
+    run_sync "$host" "$successor" --unstarted-source || { tail -30 "$host/out" >&2; fail "full release trees"; }
+    tail -1 "$host/out"
+  }
+  qualify_full_history
+  pass "unstarted legacy predecessor rejection and forward publication"
+  exit
+fi
 host="${tmp}/host-ok"
 make_host "${host}" 1
 run_sync "${host}" "${base_repo}" || { cat "${host}/out" >&2; fail "valid units were rejected"; }
@@ -533,7 +1073,8 @@ for attack in writable-parent nonroot-owner file-link acl; do
   entry="$bad_host/opt/current/scripts/deploy/quadlet-redeploy-service.sh"
   case "$attack" in
     writable-parent) chmod g+w "${entry%/*}" ;;
-    nonroot-owner) podman unshare /usr/bin/chown 1 "$entry" ;;
+    nonroot-owner)
+      if (( EUID == 0 )); then chown 1 "$entry"; else touch "$bad_host/foreign-owner-fixture"; fi ;;
     file-link) ln "$entry" "$bad_host/alias" ;;
     acl) fixture_acl "$bad_host/usr-local-libexec/hololive-bot" ;;
   esac
@@ -665,6 +1206,14 @@ cp -a "$generation_host" "$bad_host"
 printf 'not the accepted helper\n' >>"$bad_host/opt/current/$endpoint_path"
 cp "$bad_host/opt/current/$endpoint_path" "$bad_host/usr-local-libexec/hololive-bot/lib/postgres-endpoint.sh"
 assert_rejected_without_change "$bad_host" "$generation_repo" "matching unreviewed libexec copies" "installed libexec differs from its protected source" "${generation_args[@]}"
+exchanged="$tmp/host-generation-exchange-race"
+cp -a "$generation_host" "$exchanged"
+printf '%s\n' "$source_revision" >"$exchanged/events.exchange-race"
+status=0
+run_sync "$exchanged" "$generation_repo" "${generation_args[@]}" || status=$?
+[[ $status == 75 && $(<"$exchanged/opt/app-sources/active") == "$candidate_revision" ]] || fail "displaced marker restore was accepted"
+displaced=("$exchanged"/opt/.quadlet-check.*/active)
+[[ ${#displaced[@]} == 1 && $(<"${displaced[0]}") == "$source_revision" ]] || fail "displaced marker lost"
 confirmed_unknown="$tmp/host-generation-after-rename"
 cp -a "$generation_host" "$confirmed_unknown"
 printf '/opt/hololive-bot/compose/app-sources/active\n' >"$confirmed_unknown/events.fail-after"
@@ -716,62 +1265,29 @@ dropin="$generation_host/etc-containers-systemd/hololive-bot/hololive-db-migrate
 mkdir -p "$dropin"
 bash -c '. "$1"; sealed_migrator_dropin "$2" "$3"' _ "$SYNC_TEST_TOOL/scripts/deploy/lib/sealed-app.sh" \
   "/opt/hololive-bot/compose/app-sources/$candidate_revision" "$image" >"$dropin/50-migrator-image.conf"
-profiles="$generation_host/opt/current/artifacts/worker-profile"
-mkdir -p "$profiles/active"
-mkdir -p "$generation_host/profile-fixture" "$generation_host/etc-stack-secrets/hololive-bot/worker-profiles"
-printf '%s\n' "$candidate_revision" >"$generation_host/profile-fixture/accepted-revision"
-for service in hololive-api hololive-alarm-worker; do
-  release="$profiles/releases/$service-v2-reviewed"
-  mkdir -p "$release/candidate"
-  printf '/opt/hololive-bot/compose/current/artifacts/worker-profile/releases/%s-v2-reviewed/candidate\n' "$service" >"$profiles/active/$service.pair"
-  printf '%s\n' "$service" >"$release/service"
-  printf '%s\n' "$candidate_revision" >"$release/candidate.revision"
-  app_image="$image"
-  [[ "$service" != hololive-alarm-worker ]] || app_image="$(printf 'sha256:%064d' 5)"
-  printf '%s\n' "$app_image" >"$release/candidate.image"
-  printf '%s\n' "$image" >"$release/migrator.image"
-  printf '%064d %s\n' 12 "$image" >"$release/schema-check"
-  python3 -ISB - "$SYNC_TEST_TOOL" "$generation_host" "$service" "$app_image" "$candidate_revision" <<'PY'
-import json
-from pathlib import Path
-import runpy
-import sys
-
-tool, host, service, image, revision = sys.argv[1:]
-host = Path(host)
-helpers = runpy.run_path(str(Path(tool) / "scripts/deploy/lib/worker-profile-pair.py"))
-pair = Path("/opt/hololive-bot/compose/current/artifacts/worker-profile/releases") / (service + "-v2-reviewed/candidate")
-local = host / "opt" / pair.relative_to("/opt/hololive-bot/compose")
-unit = host / "etc-containers-systemd/hololive-bot" / (service + ".container")
-(local / "unit.container").write_bytes(unit.read_bytes())
-(local / "profile.json").write_text(json.dumps({"fixture": service}))
-identity = {"image": image, "revision": revision, "source_generation": revision, "architecture": "arm64", "os": "linux"}
-if service == "hololive-api":
-    identity["app_version"] = "1.2.3"
-identity = helpers["save_pair"](local, service, identity)
-body = helpers["dropin_contents"](pair, service, identity, identity.get("app_version"))
-(local / helpers["DROPIN"]).write_bytes(body)
-installed = unit.with_name(unit.name + ".d") / helpers["DROPIN"]
-installed.parent.mkdir(exist_ok=True)
-installed.write_bytes(body)
-slot = helpers["TARGET"] + "/" + helpers["PROFILES"][service]
-release_target = helpers["RELEASE_TARGET"]
-desired = helpers["SOURCE"]
-(host / "etc-stack-secrets/hololive-bot/worker-profiles" / helpers["PROFILES"][service]).write_bytes((local / "profile.json").read_bytes())
-oci = {"process": {"env": ["STACK_WORKER_PROFILE_FILE=" + release_target + "/profile.json", "STACK_WORKER_PROFILE_SOURCE_FILE=" + slot]},
-       "mounts": [{"type": "bind", "source": desired, "destination": helpers["TARGET"]},
-                  {"type": "bind", "source": str(pair), "destination": release_target}]}
-fixture = host / "profile-fixture"
-(fixture / (service + ".oci")).write_text(json.dumps(oci))
-cid = 8 if service == "hololive-api" else 9
-(fixture / ("%064d.loaded" % cid)).write_text(identity["profile_hash"])
-PY
-done
+python3 -ISB "$ROOT_DIR/scripts/deploy/unstarted-source-case-pairs.py" "$SYNC_TEST_TOOL" "$generation_host" "$candidate_revision" sealed
 bad_host="$tmp/host-wrong-loaded-profile"
 cp -a "$generation_host" "$bad_host"
 printf '%064d\n' 0 >"$bad_host/profile-fixture/$(printf '%064d.loaded' 8)"
 assert_rejected_without_change "$bad_host" "$generation_repo" "unaccepted live profile" "live profile verification failed" \
   --protected-source "$candidate_revision" "$next_revision" "$tool_revision" "${generation_args[4]}"
+final_health="$tmp/host-final-writer-health"
+cp -a "$generation_host" "$final_health"
+touch "$final_health/events.final-writer"
+status=0
+run_sync "$final_health" "$generation_repo" --protected-source "$candidate_revision" "$next_revision" "$tool_revision" "${generation_args[4]}" || status=$?
+[[ $status == 75 && $(<"$final_health/opt/app-sources/active") == "incomplete $candidate_revision -> $next_revision" ]] &&
+  grep -Fxq 'injected final writer health change' "$final_health/events" || fail "unhealthy writer published at exchange"
+first_race="$tmp/host-first-exchange"
+cp -a "$generation_host" "$first_race"
+touch "$first_race/events.first-exchange"
+old_inode=$(stat -c %i "$first_race/opt/app-sources/active")
+status=0
+run_sync "$first_race" "$generation_repo" --protected-source "$candidate_revision" "$next_revision" "$tool_revision" "${generation_args[4]}" || status=$?
+displaced=("$first_race"/opt/.quadlet-check.*/incomplete)
+[[ $status == 75 && $(<"$first_race/opt/app-sources/active") == "incomplete $candidate_revision -> $next_revision" &&
+   ${#displaced[@]} == 1 && $(<"${displaced[0]}") == "$candidate_revision" && $(stat -c %i "${displaced[0]}") != "$old_inode" ]] ||
+  fail "first exchange accepted a restored predecessor pointer"
 interrupted="$tmp/host-generation-between-records"
 cp -a "$generation_host" "$interrupted"
 touch "$interrupted/events.fail-incomplete"
@@ -779,6 +1295,26 @@ status=0
 run_sync "$interrupted" "$generation_repo" --protected-source "$candidate_revision" "$next_revision" "$tool_revision" "${generation_args[4]}" || status=$?
 [[ "$status" == 75 && "$(<"$interrupted/opt/app-sources/active")" == "incomplete $candidate_revision -> $next_revision" &&
   ! -e "$interrupted/opt/app-sources/transition-$candidate_revision-$next_revision" ]] || fail "old authority survived follow-on invalidation"
+for signal in TERM HUP INT QUIT ALRM XCPU USR1 USR2 VTALRM PROF IO PWR sync-error full-pipe file-limit; do
+  signaled="$tmp/host-generation-$signal"
+  cp -a "$generation_host" "$signaled"
+  printf '%s\n' "$signal" >"$signaled/events.interrupt"
+  status=0
+  run_sync "$signaled" "$generation_repo" --protected-source "$candidate_revision" "$next_revision" "$tool_revision" "${generation_args[4]}" || status=$?
+  [[ $status == 75 && "$(<"$signaled/opt/app-sources/active")" == "incomplete $candidate_revision -> $next_revision" ]] ||
+    { cat "$signaled/out" >&2; fail "$signal with closed stderr lost the unknown outcome (exit=$status active=$(<"$signaled/opt/app-sources/active"))"; }
+  git -C "$SYNC_TEST_TOOL" diff --exit-code -- scripts/deploy/sync-opt-current.sh
+done
+for signal in cleanup-term cleanup-error; do
+  signaled="$tmp/host-generation-$signal"
+  cp -a "$generation_host" "$signaled"
+  printf '%s\n' "$signal" >"$signaled/events.interrupt"
+  status=0
+  run_sync "$signaled" "$generation_repo" --protected-source "$candidate_revision" "$next_revision" "$tool_revision" "${generation_args[4]}" || status=$?
+  expected=0
+  [[ $signal != cleanup-term ]] || expected=75
+  [[ $status == "$expected" && $(<"$signaled/opt/app-sources/active") == "$next_revision" ]] || fail "$signal after durable publication"
+done
 saved=("$interrupted"/opt/.quadlet-check.*/transition/previous.actual/.source-revision)
 [[ "${#saved[@]}" == 1 && "$(<"${saved[0]}")" == "$candidate_revision" ]] || fail "unpublished transition lost its recovery artifact"
 run_sync "$generation_host" "$generation_repo" --protected-source "$candidate_revision" "$next_revision" "$tool_revision" "${generation_args[4]}" ||

@@ -9,12 +9,21 @@ LIBEXEC_DIR=/usr/local/libexec/hololive-bot
 COMPOSE_ENV=/etc/stack-secrets/hololive-bot/compose.env
 
 log() { printf '[sync-opt-current] %s\n' "$*"; }
-die() { printf '[sync-opt-current] ERROR: %s\n' "$*" >&2; exit 1; }
+die() {
+  if [[ -n "${diagnostic_fd:-}" ]]; then
+    publication_diagnostic "[sync-opt-current] ERROR: $*"
+  else
+    printf '[sync-opt-current] ERROR: %s\n' "$*" >&2
+  fi
+  exit 1
+}
 
 preserve_runtime=false
 application_only=false
 source_base=
 generation=
+writer_revision=
+recovered_from=
 case "$#:${1:-}" in
   0:) ;;
   1:--preserve-runtime) preserve_runtime=true ;;
@@ -22,12 +31,17 @@ case "$#:${1:-}" in
   2:--source-only)
     [[ "$2" =~ ^[0-9a-f]{40}$ ]] || die "source-only requires the full installed commit"
     source_base="$2"; application_only=true; preserve_runtime=true ;;
-  5:--protected-source)
+  5:--protected-source|7:--supersede-unstarted)
     [[ "$2" =~ ^[0-9a-f]{40}$ && "$3" =~ ^[0-9a-f]{40}$ && "$4" =~ ^[0-9a-f]{40}$ ]] ||
       die "protected-source requires full installed, candidate and tool commits"
     source_base="$2"; generation="$3"; tool_revision="$4"; REPO_ROOT="$5"
+    if [[ "$1" == --supersede-unstarted ]]; then
+      [[ "$6" =~ ^[0-9a-f]{40}$ && "$6" != "$source_base" &&
+        "$7" =~ ^hololive-api-v2-[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9]+$ ]] || die "invalid unstarted writer revision or API release"
+      writer_revision="$6"; failed_release="$7"
+    fi
     application_only=true; preserve_runtime=true ;;
-  *) die "usage: $0 [--preserve-runtime | --application-only | --source-only <installed-commit> | --protected-source <installed-commit> <candidate-commit> <tool-commit> <candidate-clone>]" ;;
+  *) die "usage: $0 [--preserve-runtime | --application-only | --source-only <installed-commit> | --protected-source <installed-commit> <candidate-commit> <tool-commit> <candidate-clone> | --supersede-unstarted <source-commit> <candidate-commit> <tool-commit> <candidate-clone> <writer-commit> <failed-release-basename>]" ;;
 esac
 
 [[ "$(id -u)" -eq 0 ]] || die "must run as root (sudo)"
@@ -83,6 +97,8 @@ for name in names:
         sys.exit(f"invalid protected-source path: {path}")
     for parent in reversed(path.parents):
         check(parent)
+    if kind == "files" and not stat.S_ISREG(path.lstat().st_mode):
+        sys.exit(f"not a protected-source regular file: {path}")
     check(path, kind != "directory")
 PY
 }
@@ -98,10 +114,24 @@ else
   install -d -m 0755 /run/lock
   exec 9>/run/lock/hololive-quadlet-redeploy.lock
 fi
-flock -n 9 || die "another central Quadlet writer is running"
-if [[ -n "$generation" ]]; then
-  [[ /run/lock -ef /proc/self/fd/8 && "$lock" -ef /proc/self/fd/9 ]] || die "deployment lock identity changed"
+acquire_deployment_lock() {
+  flock -n 9 || die "another central Quadlet writer is running"
+  if [[ -n "$generation" ]]; then
+    [[ /run/lock -ef /proc/self/fd/8 && "$lock" -ef /proc/self/fd/9 ]] || die "deployment lock identity changed"
+  fi
+}
+if [[ -z "$writer_revision" ]]; then
+  if [[ -n "$generation" ]]; then
+    exec 19</opt
+    flock -n 19 && [[ /opt -ef /proc/self/fd/19 ]] || die "recovery supervisor lock unavailable"
+  fi
+  acquire_deployment_lock
 fi
+
+require_publication_window() {
+  /usr/bin/python3 -ISB "$tool_root/scripts/deploy/lib/unstarted-source.py" --window publish \
+    "$source_base" "$generation" "$writer_revision" "$failed_release" || die "no live supervisor for this source publication"
+}
 
 if [[ "$(hostname -s)" == kapu && "${HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED:-}" != 1 ]]; then
   die "refusing to install central Quadlet units on build-control host kapu; set HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1 only for an approved rollback"
@@ -122,11 +152,17 @@ if [[ -n "$generation" ]]; then
     source_authority directory "$store"
     [[ "$(stat -c %a "$store")" == 700 && -f "$store/active" ]] || die "incomplete protected-source store"
     source_authority clone "$store/active"
-    [[ "$(stat -c %a "$store/active")" == 600 ]] || die "protected-source active mode mismatch"
-    cmp -s "$store/active" <(printf '%s\n' "$source_base") || die "protected-source installed revision mismatch"
+    exec {predecessor_fd}<"$store/active"
+    [[ "$store/active" -ef /proc/self/fd/$predecessor_fd && "$(stat -c %a "$store/active")" == 600 ]] || die "protected-source active mode mismatch"
+    cmp -s "/proc/self/fd/$predecessor_fd" <(printf '%s\n' "$source_base") || die "protected-source installed revision mismatch"
     predecessor="$store/$source_base"
-    source_authority clone "$predecessor"
+    if [[ -n "$writer_revision" ]]; then
+      source_authority directory "$predecessor"
+    else
+      source_authority clone "$predecessor"
+    fi
   fi
+  if [[ -n "$writer_revision" && "$predecessor" == "$OPT_CURRENT" ]]; then die "no first sealed source to supersede"; fi
   [[ ! -e "$store/$generation" && ! -L "$store/$generation" ]] || die "candidate generation already exists"
   [[ ! -e "$store/transition-$source_base-$generation" ]] || die "source transition already recorded"
   for hold in "$OPT_CURRENT/artifacts/worker-profile/releases/.central-writer-hold" /var/lib/hololive-postgres-fence/{fenced,fence.intent}; do
@@ -173,8 +209,12 @@ HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse --short "$HEAD_REVISION")"
 log "repo=$REPO_ROOT HEAD=$HEAD_SHA -> $OPT_CURRENT"
 [[ -z "$generation" || "$generation" == "$HEAD_REVISION" ]] || die "protected-source candidate revision mismatch"
 if [[ -n "$generation" ]]; then
-  for path in scripts/deploy/{quadlet-redeploy-service.sh,quadlet-rollback-service.sh,quadlet-prestart.sh} \
-      scripts/deploy/lib/{app-source-authority.py,sealed-app.sh,protected-binds.sh,worker-profile-pair.py}; do
+  capabilities=(scripts/deploy/{quadlet-redeploy-service.sh,quadlet-rollback-service.sh,quadlet-prestart.sh}
+    scripts/deploy/lib/{app-source-authority.py,sealed-app.sh,protected-binds.sh,worker-profile-pair.py})
+  if [[ -n "$writer_revision" ]]; then
+    capabilities+=(scripts/deploy/{sync-opt-current.sh,supersession-window.py} scripts/deploy/lib/{unstarted-source.py,postgres-endpoint.sh})
+  fi
+  for path in "${capabilities[@]}"; do
     capability="$(git -C "$tool_root" ls-tree "$tool_revision" -- "$path")"
     read -r mode type blob _ <<<"$capability"
     [[ "$mode" =~ ^100(644|755)$ && "$type" == blob && "$blob" =~ ^[0-9a-f]{40}$ &&
@@ -182,6 +222,10 @@ if [[ -n "$generation" ]]; then
       "$(git -C "$REPO_ROOT" ls-tree "$generation" -- "$path")" == "$capability" ]] ||
       die "candidate cannot consume the reviewed sealed source: $path"
   done
+  if [[ -n "$writer_revision" ]]; then
+    require_publication_window
+    acquire_deployment_lock
+  fi
 fi
 if [[ -n "$source_base" ]]; then
   [[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=all)" ]] || die "source-only requires a clean checkout"
@@ -223,26 +267,58 @@ mkdir -p "$OPT_ROOT"
 STAGING="$(mktemp -d "${OPT_ROOT}/.staging-current.XXXXXX")"
 QUADLET_CHECK="$(mktemp -d "${OPT_ROOT}/.quadlet-check.XXXXXX")"
 publication=preparing
+publication_diagnostic() {
+  python3 -ISB -c 'import fcntl, os, sys
+try:
+    fd = int(sys.argv[1])
+    flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+    if flags & os.O_ACCMODE != os.O_RDONLY:
+        fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        try:
+            os.write(fd, (sys.argv[2] + "\n").encode())
+        finally:
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags)
+except OSError:
+    pass' "${diagnostic_fd:-2}" "$1" 2>/dev/null || :
+}
+trap '' XFSZ
 cleanup() {
   local status=$?
+  trap '' PIPE XFSZ
   if [[ -n "$generation" && "$publication" != preparing && "$publication" != complete ]]; then
-    printf '[OUTCOME] outcome_unknown phase=%s old=%s candidate=%s recovery=%s\n' "$publication" "$source_base" "$generation" "$QUADLET_CHECK" >&2
+    trap '' "${publication_signals[@]}"
+    publication_diagnostic "[OUTCOME] outcome_unknown phase=$publication old=$source_base candidate=$generation recovery=$QUADLET_CHECK"
     exit 75
   fi
   if ! rm -rf "$STAGING" "$QUADLET_CHECK"; then
     if [[ "$publication" == complete ]]; then
-      printf '[OUTCOME] published candidate=%s cleanup_failed=%s\n' "$generation" "$QUADLET_CHECK" >&2
+      publication_diagnostic "[WARN] cleanup_failed after publication candidate=$generation path=$QUADLET_CHECK"
     else
       return 1
     fi
   fi
   return "$status"
 }
+publication_signals=(HUP INT QUIT TRAP ABRT BUS USR1 USR2 PIPE ALRM TERM STKFLT XCPU XFSZ VTALRM PROF IO PWR SYS)
+for signal_number in $(seq "$(kill -l RTMIN)" "$(kill -l RTMAX)"); do publication_signals+=("$(kill -l "$signal_number")"); done
 trap cleanup EXIT
+publication_signal_exit() {
+  [[ $publication == preparing ]] && exit $((128 + $(kill -l "$1")))
+  exit 75
+}
+if [[ -n "$generation" ]]; then
+  for signal in "${publication_signals[@]}"; do
+    # shellcheck disable=SC2064
+    trap "publication_signal_exit $signal" "$signal"
+  done
+fi
 if [[ -n "$source_base" ]]; then
   changes="$QUADLET_CHECK/changes"
   git -C "$REPO_ROOT" diff --no-renames --no-ext-diff --raw --no-abbrev -z "$source_base" "$HEAD_REVISION" >"$changes"
   replacements=()
+  if [[ -n "$writer_revision" ]]; then
+    sealed_supersession_delta "$REPO_ROOT" "$HEAD_REVISION" || die "unapproved supersession delta from approved parent"
+  fi
   while IFS= read -r -d '' header && IFS= read -r -d '' path; do
     read -r old_mode new_mode old_blob new_blob status <<<"${header#:}"
     if [[ -n "$generation" ]]; then
@@ -250,6 +326,9 @@ if [[ -n "$source_base" ]]; then
         M:100644:100644|M:100755:100755|A:000000:100644|A:000000:100755|D:100644:000000|D:100755:000000) ;;
         *) die "protected-source requires reviewed regular files without mode changes" ;;
       esac
+      if [[ -n "$writer_revision" ]]; then
+        refusal=$(sealed_supersession_path "$status" "$new_mode" "$path") || die "$refusal"
+      fi
       case "$path" in
         hololive/hololive-api/scripts/init-db/*|scripts/ci/postgres-capacity-policy.tsv|scripts/deploy/verify-exec-tree-ownership.sh|scripts/deploy/lib/source-revision.sh) die "protected source path: $path" ;;
         verification/tla/AlarmDispatchClaim/COVERAGE.md|verification/tla/CollectionJobLease/COVERAGE.md)
@@ -273,7 +352,9 @@ if [[ -n "$source_base" ]]; then
   done <"$changes"
   [[ -s "$changes" ]] || die "source-only has no replacements"
   if [[ -n "$generation" ]]; then
-    for revision in "$source_base" "$HEAD_REVISION"; do
+    revisions=("$source_base" "$HEAD_REVISION")
+    if [[ -n "$writer_revision" ]]; then revisions+=("$writer_revision"); fi
+    for revision in "${revisions[@]}"; do
       git -C "$REPO_ROOT" ls-tree -rlz "$revision" >"$QUADLET_CHECK/$revision.tree"
       while IFS= read -r -d '' entry; do
         [[ "$entry" == '100644 blob '* || "$entry" == '100755 blob '* ]] || die "non-regular file in protected-source revision"
@@ -322,7 +403,7 @@ candidate_images() {
   done
 }
 verify_snapshot() {
-  python3 -I -S - "$QUADLET_CHECK/$1.tree" "$1" "$2" "$3" "${4:-}" "${5:-}" <<'PY'
+  python3 -I -S - "$QUADLET_CHECK/$1.tree" "$1" "$2" "$3" "${4:-}" "${5:-}" "${@:6}" <<'PY'
 import hashlib
 import json
 import os
@@ -330,7 +411,9 @@ import stat
 import sys
 from pathlib import Path
 
-tree, revision, source, kind, backup, record = sys.argv[1:]
+tree, revision, source, kind, backup, record, *originals = sys.argv[1:]
+originals = [Path(p) for p in originals]
+copied = kind in ("backup", "sealed-backup")
 expected = {}
 for entry in Path(tree).read_bytes().split(b"\0")[:-1]:
     header, name = entry.split(b"\t", 1)
@@ -338,7 +421,7 @@ for entry in Path(tree).read_bytes().split(b"\0")[:-1]:
     expected[Path(os.fsdecode(name))] = (mode == "100755", digest, int(size))
 stamp = (revision + "\n").encode()
 expected[Path(".source-revision")] = (False, hashlib.sha1(b"blob 41\0" + stamp).hexdigest(), len(stamp))
-excluded = {Path(p) for p in ("data", "logs", "backups", "runtime-config", "artifacts/worker-profile")} if kind == "legacy" else set()
+excluded = {Path(p) for p in ("data", "logs", "backups", "runtime-config", "artifacts/worker-profile")} if kind in ("legacy", "backup") else set()
 expected = {p: value for p, value in expected.items() if not any(p == e or e in p.parents for e in excluded)}
 dirs = {parent for p in expected for parent in p.parents}
 if kind == "legacy":
@@ -361,6 +444,9 @@ def inspect(fd, rel, directory):
             0o400 if rel == Path(".source-revision") else 0o555 if expected[rel][0] else 0o444)
         if mode != required:
             fail(rel)
+    if copied and (mode != (0o700 if directory else 0o600) or
+                   any(os.path.samestat(info, (p / rel).lstat()) for p in originals)):
+        fail(rel)
     if backup or record:
         labels = {k: hashlib.sha256(os.getxattr(fd, k)).hexdigest() for k in sorted(attrs)}
         print(json.dumps([str(rel), info.st_dev, info.st_ino, mode, info.st_uid, info.st_gid,
@@ -375,7 +461,7 @@ for base, subdirs, files, dfd in os.fwalk(root, follow_symlinks=False, onerror=o
     if rel not in dirs:
         fail(rel)
     inspect(dfd, rel, True)
-    subdirs[:] = sorted(d for d in subdirs if rel / d not in excluded)
+    subdirs[:] = sorted(d for d in subdirs if kind != "legacy" or rel / d not in excluded)
     for child in subdirs:
         if rel / child not in dirs or not stat.S_ISDIR(os.stat(child, dir_fd=dfd, follow_symlinks=False).st_mode):
             fail(rel / child)
@@ -386,7 +472,7 @@ for base, subdirs, files, dfd in os.fwalk(root, follow_symlinks=False, onerror=o
         with os.fdopen(os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dfd), "rb") as f:
             info = inspect(f.fileno(), p, False)
             executable, blob, size = expected[p]
-            if info.st_size != size or bool(info.st_mode & 0o111) != executable:
+            if info.st_size != size or (not copied and bool(info.st_mode & 0o111) != executable):
                 fail(p)
             data = f.read(size + 1)
             digest = hashlib.sha1(b"blob %d\0" % size)
@@ -412,8 +498,48 @@ seal_source() {
   verify_snapshot "$2" "$1" sealed
 }
 
+classify_predecessor() {
+  local -a receipts=("$store"/transition-*-"$source_base") fields
+  local dir rev old tool
+  [[ ${#receipts[@]} == 1 ]] || die "ambiguous predecessor transition"
+  dir="${receipts[0]}"; rev="$dir/revisions"; old="${dir##*/transition-}"; old="${old%-"$source_base"}"
+  [[ "$old" =~ ^[0-9a-f]{40}$ && "$old" != "$source_base" ]] || die "missing predecessor transition"
+  source_authority files "$rev"
+  mapfile -t fields <"$rev"
+  [[ ${fields[2]:-} =~ ^tool=([0-9a-f]{40})$ ]] || die "invalid predecessor tool receipt"
+  tool="${BASH_REMATCH[1]}"
+  if cmp -s "$rev" <(printf 'installed=%s\ncandidate=%s\ntool=%s\n' "$old" "$source_base" "$tool"); then
+    sealed_ordinary_transition "$dir" "/opt/hololive-bot/release-sources/dv-tool-$source_base/source.window" ||
+      die "ordinary predecessor has recovery evidence"
+    return 0
+  fi
+  [[ ${fields[3]:-} =~ ^running=([0-9a-f]{40})$ && "$tool" == "$source_base" ]] &&
+    cmp -s "$rev" <(printf 'installed=%s\ncandidate=%s\ntool=%s\nrunning=%s\n' "$old" "$source_base" "$tool" "${BASH_REMATCH[1]}") ||
+    die "invalid recovered predecessor transition"
+  source_authority files "$dir/predecessor.writers"
+  recovered_from="$old"
+}
+
+require_completed_recovery() {
+  /usr/bin/python3 -ISB "$predecessor/scripts/deploy/lib/unstarted-source.py" --completed \
+    "$recovered_from" "$source_base" "$@" || die "original recovery windows have no verified terminal acceptance"
+}
+
+exchange_pointer() {
+  local replacement=$1 original_fd=$2 expected=$3 identity=$4
+  cmp -s "$identity" <(stat -Lc '%d %i' "/proc/self/fd/$original_fd" && printf '%s\n' "$expected") || return 75
+  [[ ! -L "$store/active" && "$store/active" -ef "/proc/self/fd/$original_fd" ]] &&
+    cmp -s "$store/active" <(printf '%s\n' "$expected") || return 75
+  mv -T --exchange --no-copy "$replacement" "$store/active" || return 75
+  if [[ -L "$replacement" || ! "$replacement" -ef "/proc/self/fd/$original_fd" ]] ||
+      ! cmp -s "$replacement" <(printf '%s\n' "$expected"); then
+    sync -f "$OPT_ROOT" || :
+    return 75
+  fi
+}
+
 publish_generation() {
-  local kind=sealed receipt="$store/transition-$source_base-$generation" stage="$QUADLET_CHECK/transition"
+  local marker_fd kind=sealed receipt="$store/transition-$source_base-$generation" stage="$QUADLET_CHECK/transition"
   [[ "$predecessor" != "$OPT_CURRENT" ]] || kind=legacy
   mkdir -m0700 -- "$stage" "$stage/previous.actual"
   candidate_images >"$stage/images"
@@ -426,7 +552,18 @@ publish_generation() {
   cp -- "$changes" "$stage/changes.raw"
   cp -- "$QUADLET_CHECK/protected.before" "$stage/protected.before"
   printf 'installed=%s\ncandidate=%s\ntool=%s\n' "$source_base" "$generation" "$tool_revision" >"$stage/revisions"
+  if [[ -n "$writer_revision" ]]; then
+    printf 'running=%s\n' "$writer_revision" >>"$stage/revisions"
+    cp -- "$QUADLET_CHECK/predecessor.writers" "$stage/predecessor.writers"
+  fi
   printf 'incomplete %s -> %s\n' "$source_base" "$generation" >"$QUADLET_CHECK/incomplete"
+  exec {marker_fd}<"$QUADLET_CHECK/incomplete"
+  { stat -Lc '%d %i' "/proc/self/fd/$marker_fd" && cat "$QUADLET_CHECK/incomplete"; } >"$stage/incomplete.identity"
+  if [[ $kind == sealed ]]; then
+    { stat -Lc '%d %i' "/proc/self/fd/$predecessor_fd" && printf '%s\n' "$source_base"; } >"$stage/predecessor.identity"
+  fi
+  mv --help >"$QUADLET_CHECK/mv.options"
+  grep -Fq -- --exchange "$QUADLET_CHECK/mv.options" || die 'atomic exchange is unavailable'
   printf '%s\n' "$generation" >"$QUADLET_CHECK/active"
   if [[ "$kind" == legacy ]]; then
     mkdir -m0700 "$QUADLET_CHECK/new-store"
@@ -434,13 +571,15 @@ publish_generation() {
     rename_absent "$stage" "$QUADLET_CHECK/new-store/${receipt##*/}"
   fi
   sync -f "$OPT_ROOT"
+  if [[ -e /proc/self/fd/2 ]]; then exec {diagnostic_fd}>&2; fi
+  exec 2>/dev/null
   if [[ "$kind" == legacy ]]; then
     publication=invalidating
     rename_absent "$QUADLET_CHECK/new-store" "$store"
   else
-    cmp -s "$store/active" <(printf '%s\n' "$source_base") || die "source generation changed"
+    if [[ -n "$writer_revision" ]]; then require_publication_window; fi
     publication=invalidating
-    mv -T --no-copy "$QUADLET_CHECK/incomplete" "$store/active"
+    exchange_pointer "$QUADLET_CHECK/incomplete" "$predecessor_fd" "$source_base" "$stage/predecessor.identity"
   fi
   sync -f "$OPT_ROOT"
   publication=incomplete
@@ -454,16 +593,40 @@ publish_generation() {
   cmp -s "$receipt/protected.before" "$receipt/protected.after" || die "protected inventory changed"
   candidate_images >"$receipt/images.after"
   cmp -s "$receipt/images" "$receipt/images.after" || die "candidate image custody changed"
-  if [[ "$kind" == sealed ]]; then
+  if [[ -n "$writer_revision" ]]; then
+    verify_snapshot "$source_base" "$receipt/previous.actual" sealed-backup "" "" "$predecessor"
+    check_unstarted_source committing "$receipt/protected.after" "$QUADLET_CHECK/writers.after" "$receipt/pairs.after"
+    cmp -s "$receipt/pairs.before" "$receipt/pairs.after" && cmp -s "$receipt/predecessor.writers" "$QUADLET_CHECK/writers.after" ||
+      die "original writer evidence changed during publication"
+  elif [[ "$kind" == sealed ]]; then
     [[ "$(accepted_migrator "$receipt/pairs.after")" == "$accepted_image" ]] &&
       cmp -s "$receipt/pairs.before" "$receipt/pairs.after" || die "accepted writer pair changed during publication"
   fi
   sync -f "$OPT_ROOT"
+  if [[ -n "$recovered_from" ]]; then
+    require_completed_recovery "$generation"
+  fi
+  if [[ "$kind" == sealed && -z "$writer_revision" ]]; then
+    [[ "$(accepted_migrator "$QUADLET_CHECK/final.pairs")" == "$accepted_image" ]] &&
+      cmp -s "$receipt/pairs.after" "$QUADLET_CHECK/final.pairs" || die "accepted writers changed at active exchange"
+  fi
+  if [[ -n "$writer_revision" ]]; then
+    require_publication_window
+    . "$tool_root/scripts/deploy/lib/postgres-endpoint.sh"
+    mapfile -t final_writers <"$receipt/predecessor.writers"
+    [[ ${#final_writers[@]} == 2 ]] || die "writer changed before active publication"
+    sealed_check_writer_states "${final_writers[@]}"
+  fi
+  local candidate_fd
+  exec {candidate_fd}<"$QUADLET_CHECK/active"
   publication=committing
-  mv -T --no-copy "$QUADLET_CHECK/active" "$store/active"
+  exchange_pointer "$QUADLET_CHECK/active" "$marker_fd" "incomplete $source_base -> $generation" "$receipt/incomplete.identity"
   publication=confirming
   sync -f "$OPT_ROOT"
-  cmp -s "$store/active" <(printf '%s\n' "$generation") || die "final source generation mismatch"
+  [[ ! -L "$store/active" && "$store/active" -ef "/proc/self/fd/$candidate_fd" &&
+    "$(stat -c '%F %h %u %g %a' -- "$store/active")" == "regular file 1 0 0 600" ]] &&
+    cmp -s "$store/active" <(printf '%s\n' "$generation") || die "final source generation mismatch"
+  exec {candidate_fd}<&-
   log "published $store/$generation; previous source and evidence: $receipt; runtime unchanged"
   publication=complete
 }
@@ -548,9 +711,7 @@ PY
 }
 
 accepted_migrator() {
-  local dropin="$QUADLET_DIR/$migrator.d/50-migrator-image.conf" image actual service pointer pair release app
-  local installed check_cid check_image tool="$tool_root/scripts/deploy/lib/worker-profile-pair.py" records="$1"
-  : >"$records"
+  local dropin="$QUADLET_DIR/$migrator.d/50-migrator-image.conf" image actual
   [[ -f "$dropin" && "$(stat -c '%u:%g:%a:%h' "$dropin")" == 0:0:644:1 ]] || die "missing accepted migrator drop-in"
   image="$(awk -F= '/^\[/{s=$0} s=="[Container]" && $1=="Image"{print $2}' "$dropin")"
   [[ "$image" =~ ^sha256:[0-9a-f]{64}$ ]] || die "invalid accepted migration image"
@@ -558,6 +719,14 @@ accepted_migrator() {
   cmp -s "$dropin" "$QUADLET_CHECK/accepted-migrator.conf" || die "installed migration definition differs from the active generation"
   actual="$(podman image inspect --format '{{.Id}} {{index .Config.Labels "org.opencontainers.image.revision"}} {{index .Config.Labels "org.opencontainers.image.title"}}' "$image")" || return 1
   [[ "$actual" == "${image#sha256:} $source_base hololive-api" ]] || die "accepted migration image identity differs"
+  record_writer_pairs sealed "$source_base" "$image" "$1" || return 1
+  printf '%s\n' "$image"
+}
+
+record_writer_pairs() {
+  local kind="$1" revision="$2" image="$3" records="$4" service pointer pair release app installed check_cid check_image actual path
+  local tool="$tool_root/scripts/deploy/lib/worker-profile-pair.py"
+  : >"$records" || return 1
   for service in hololive-api hololive-alarm-worker; do
     pointer="$OPT_CURRENT/artifacts/worker-profile/active/$service.pair"
     [[ -f "$pointer" && "$(realpath -e "$pointer")" == "$pointer" ]] || die "missing active $service pair"
@@ -569,20 +738,42 @@ accepted_migrator() {
     [[ "$pair" == "$release/candidate" && "${release%/*}" == "$OPT_CURRENT/artifacts/worker-profile/releases" &&
       "${release##*/}" == "$service-v2-"* && "$(realpath -e "$pair")" == "$pair" ]] || die "invalid active $service release"
     installed="$QUADLET_DIR/$service.container.d/50-worker-profile.conf"
-    source_authority clone "$pair" "$installed" "$release"/{candidate.image,candidate.revision,migrator.image,service,schema-check} || return 1
-    read -r check_cid check_image <"$release/schema-check" &&
-      [[ "$check_cid" =~ ^[0-9a-f]{64}$ && "$check_image" == "$image" ]] &&
-      cmp -s "$release/schema-check" <(printf '%s %s\n' "$check_cid" "$image") || die "invalid accepted $service schema-check receipt"
-    cmp -s "$release/candidate.revision" <(printf '%s\n' "$source_base") &&
+    if [[ "$kind" == legacy ]]; then
+      [[ "${release##*/}" =~ ^"$service"-v2-[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9]+$ ]] || die "invalid original $service release"
+      python3 -ISB "$tool_root/scripts/deploy/lib/unstarted-source.py" --legacy-release "$pair" || return 1
+    else
+      source_authority clone "$pair" || return 1
+    fi
+    source_authority files "$installed" "$release"/{candidate.image,candidate.revision,migrator.image,service} || return 1
+    if [[ "$kind" == sealed ]]; then
+      source_authority clone "$release/schema-check" || return 1
+      read -r check_cid check_image <"$release/schema-check" &&
+        [[ "$check_cid" =~ ^[0-9a-f]{64}$ && "$check_image" == "$image" ]] &&
+        cmp -s "$release/schema-check" <(printf '%s %s\n' "$check_cid" "$image") || die "invalid accepted $service schema-check receipt"
+    else
+      for path in schema-job writer-job schema-check accepted-writer activation.intent; do
+        [[ ! -e "$release/$path" && ! -L "$release/$path" ]] || die "active $service is not an unstarted legacy predecessor"
+      done
+    fi
+    cmp -s "$release/candidate.revision" <(printf '%s\n' "$revision") &&
       cmp -s "$release/migrator.image" <(printf '%s\n' "$image") &&
       cmp -s "$release/service" <(printf '%s\n' "$service") || die "active $service receipt mismatch"
     app="$(<"$release/candidate.image")"
     cmp -s "$release/candidate.image" <(printf '%s\n' "$app") || die "invalid active $service image record"
     actual="$(podman container inspect --format '{{.Image}} {{index .Config.Labels "org.opencontainers.image.revision"}} {{.State.Health.Status}}' "$service")" || return 1
-    [[ "$app" =~ ^sha256:[0-9a-f]{64}$ && "$actual" == "${app#sha256:} $source_base healthy" ]] || die "active $service image mismatch"
-    cmp -s "$pair/unit.container" "$QUADLET_DIR/$service.container" && cmp -s "$pair/50-worker-profile.conf" "$installed" ||
+    [[ "$app" =~ ^sha256:[0-9a-f]{64}$ && "$actual" == "${app#sha256:} $revision healthy" ]] || die "active $service image mismatch"
+    if [[ "$kind" == legacy ]]; then
+      if [[ "$service" == hololive-api ]]; then
+        [[ "$image" == "$app" ]] || die "legacy migrator is not the original API image"
+      else
+        [[ "$5" == "$app" ]] || die "legacy pair differs from the original worker image"
+      fi
+      actual="$(podman image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}} {{index .Config.Labels "org.opencontainers.image.title"}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "$app")" || return 1
+      [[ "$actual" == "${app#sha256:} linux/arm64 $service $revision" ]] || die "legacy $service image identity differs"
+    fi
+    sealed_installed_pair "$service" "$pair" "$QUADLET_DIR" ||
       die "installed $service pair definition differs"
-    python3 -ISB - "$pair" "$app" "$source_base" <<'PY' || return 1
+    python3 -ISB - "$pair" "$app" "$revision" "$kind" <<'PY' || return 1
 import json
 import re
 import sys
@@ -590,8 +781,9 @@ from pathlib import Path
 
 pair = Path(sys.argv[1])
 metadata = json.loads((pair / "pair.json").read_bytes())
-if (metadata.get("image"), metadata.get("revision"), metadata.get("source_generation")) != (sys.argv[2], sys.argv[3], sys.argv[3]):
-    sys.exit("active pair is not bound to its sealed image and revision")
+if ((metadata.get("image"), metadata.get("revision")) != (sys.argv[2], sys.argv[3]) or
+        (metadata.get("source_generation") != sys.argv[3] if sys.argv[4] == "sealed" else "source_generation" in metadata)):
+    sys.exit("active pair is not bound to its expected image, revision and source")
 manifest = (pair / "SHA256SUMS").read_text().splitlines()
 if len(manifest) != 3 or {line[66:] for line in manifest if re.fullmatch(r"[0-9a-f]{64}  [a-z.]+", line)} != {"profile.json", "pair.json", "unit.container"}:
     sys.exit("invalid sealed pair checksum set")
@@ -601,7 +793,112 @@ PY
     printf '%s %s\n' "$service" "$pair" >>"$records"
     sha256sum -- "$pair/pair.json" "$installed" >>"$records" || return 1
   done
-  printf '%s\n' "$image"
+}
+
+unstarted_migrator() {
+  local image="$1" unit=hololive-db-migrate.service fragment
+  fragment="$(systemctl show "$unit" --property=FragmentPath --value)"
+  [[ "$fragment" == "/run/systemd/generator/$unit" && -f "$fragment" ]] || die "unrecognized generated migrator"
+  source_authority files "$fragment"
+  /usr/bin/python3 -ISB "$tool_root/scripts/deploy/lib/unstarted-source.py" --migrator \
+    "$generated/$unit" "$predecessor" "$image" || die "unstarted migrator differs from the reviewed inactive check"
+}
+
+check_unstarted_source() {
+  local phase="$1" inventory="$2" writers_file="$3" pairs="$4"
+  local prior="$store/transition-$writer_revision-$source_base" old_api old_worker image service name record other
+  local -a rows
+  source_authority directory "$store" "$prior" "$prior/previous.actual" "$store/$writer_revision"
+  [[ -f "$store/active" && "$(stat -c %a "$store/active")" == 600 && "$(stat -c %a "$store")" == 700 ]] || die "unsafe active source pointer"
+  source_authority clone "$store/active"
+  for name in "$OPT_CURRENT/artifacts/worker-profile/releases/.central-writer-hold" /var/lib/hololive-postgres-fence/{fenced,fence.intent}; do
+    [[ ! -e "$name" && ! -L "$name" ]] || die "unstarted supersession refused during writer hold or fence"
+  done
+  [[ "$(stat -c %a "$prior")" == 700 ]] || die "unsafe first source transition"
+  python3 -ISB - "$store" "$writer_revision" "$source_base" "$generation" "$phase" <<'PY'
+from pathlib import Path
+import sys
+
+store, writer, source, candidate, phase = sys.argv[1:]
+store = Path(store)
+prior = "transition-" + writer + "-" + source
+entries = {"active", writer, source, prior}
+active = source
+if phase == "committing":
+    entries.update([candidate, "transition-" + source + "-" + candidate])
+    active = "incomplete " + source + " -> " + candidate
+if {p.name for p in store.iterdir()} != entries or (store / "active").read_bytes() != (active + "\n").encode():
+    sys.exit("not a direct supersession of the first sealed generation")
+if {p.name for p in (store / prior).iterdir()} != {
+        "revisions", "previous.actual", "previous.metadata", "previous.after",
+        "changes.raw", "protected.before", "protected.after", "images", "images.after"}:
+    sys.exit("unexpected first transition records")
+PY
+  for name in revisions previous.metadata previous.after changes.raw protected.before protected.after images images.after; do
+    record="$prior/$name"
+    [[ -f "$record" && ! -L "$record" ]] || die "missing first transition record: $name"
+    source_authority clone "$record"
+  done
+  cmp -s "$prior/revisions" <(printf 'installed=%s\ncandidate=%s\ntool=%s\n' "$writer_revision" "$source_base" "$source_base") ||
+    die "first publication does not bind the legacy writers to this sealed source"
+  git -C "$REPO_ROOT" diff --no-renames --no-ext-diff --raw --no-abbrev -z "$writer_revision" "$source_base" >"$QUADLET_CHECK/first.changes"
+  cmp -s "$prior/changes.raw" "$QUADLET_CHECK/first.changes" && cmp -s "$prior/previous.metadata" "$prior/previous.after" &&
+    cmp -s "$prior/images" "$prior/images.after" && cmp -s "$prior/protected.before" "$prior/protected.after" ||
+    die "first source publication evidence changed"
+  verify_snapshot "$writer_revision" "$store/$writer_revision" sealed
+  verify_snapshot "$writer_revision" "$prior/previous.actual" backup "" "" "$OPT_CURRENT" "$store/$writer_revision"
+  verify_snapshot "$writer_revision" "$OPT_CURRENT" legacy "" record >"$QUADLET_CHECK/legacy.now"
+  cmp -s "$prior/previous.metadata" "$QUADLET_CHECK/legacy.now" || die "legacy source or rollback metadata changed"
+  python3 -ISB - "$prior/protected.before" "$inventory" "$QUADLET_DIR/$migrator.d" <<'PY'
+from pathlib import Path
+import sys
+
+before, now, directory = sys.argv[1:]
+overlay = directory + "/50-migrator-image.conf"
+def stable(path):
+    found = set()
+    for line in Path(path).read_text().splitlines():
+        key = line.split(" ", 1)[0]
+        if key not in (overlay, directory):
+            yield line
+            continue
+        if key in found:
+            sys.exit("ambiguous first migrator inventory")
+        found.add(key)
+        fields = line.split()
+        if key == directory and len(fields) == 6:
+            yield tuple(fields[:4])
+        elif key == overlay and len(fields) == 7:
+            yield (key, fields[1], fields[3])
+        else:
+            sys.exit("invalid first migrator inventory")
+    if found != {directory, overlay}:
+        sys.exit("missing first migrator inventory")
+if list(stable(before)) != list(stable(now)):
+    sys.exit("original protected bind, host asset or infrastructure generation changed")
+PY
+  mapfile -t rows <"$prior/images"
+  [[ ${#rows[@]} == 2 && ${rows[0]} =~ ^hololive-api\ (sha256:[0-9a-f]{64})$ ]] || die "invalid first API image receipt"
+  image="${BASH_REMATCH[1]}"
+  [[ ${rows[1]} =~ ^hololive-alarm-worker\ (sha256:[0-9a-f]{64})$ ]] || die "invalid first worker image receipt"
+  other="${BASH_REMATCH[1]}"
+  [[ "$image" != "$other" ]] && cmp -s "$prior/images" <(printf '%s\n' "${rows[@]}") || die "invalid first source image set"
+  for record in "${rows[@]}"; do
+    read -r service name <<<"$record"
+    record="$(podman image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}} {{index .Config.Labels "org.opencontainers.image.title"}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "$name")"
+    [[ "$record" == "${name#sha256:} linux/arm64 $service $source_base" ]] || die "first source image drift: $service"
+  done
+  unstarted_migrator "$image"
+  python3 -ISB "$tool_root/scripts/deploy/lib/unstarted-source.py" "$source_base" "$writer_revision" "$failed_release" >"$writers_file"
+  mapfile -t rows <"$writers_file"
+  [[ ${#rows[@]} == 2 ]] && cmp -s "$writers_file" <(printf '%s\n' "${rows[@]}") || die "invalid original writer evidence"
+  local pattern='^([a-z-]+) [0-9a-f]{32} [0-9a-f]{64} ([0-9a-f]{64}) holo-pgbouncer\|6432$'
+  for service in hololive-api hololive-alarm-worker; do
+    [[ "${rows[0]}" =~ $pattern && "${BASH_REMATCH[1]}" == "$service" ]] || die "invalid original $service generation"
+    if [[ "$service" == hololive-api ]]; then old_api="sha256:${BASH_REMATCH[2]}"; else old_worker="sha256:${BASH_REMATCH[2]}"; fi
+    rows=("${rows[@]:1}")
+  done
+  record_writer_pairs legacy "$writer_revision" "$old_api" "$pairs" "$old_worker"
 }
 
 protected_inventory() {
@@ -783,7 +1080,12 @@ if [[ "$application_only" == true ]]; then
     if [[ -n "$generation" ]]; then
       cp -- "$QUADLET_DIR/$migrator" "$quadlet_check_dir/$migrator"
       protected_inventory "$STAGING" >"$QUADLET_CHECK/protected.before"
-      if [[ "$predecessor" != "$OPT_CURRENT" ]]; then
+      if [[ -z "$writer_revision" && "$predecessor" != "$OPT_CURRENT" ]]; then
+        classify_predecessor
+        if [[ -n "$recovered_from" ]]; then
+          verify_snapshot "$source_base" "$predecessor" sealed
+          require_completed_recovery
+        fi
         accepted_image="$(accepted_migrator "$QUADLET_CHECK/pairs.before")"
       fi
     fi
@@ -794,7 +1096,10 @@ if [[ "$application_only" == true ]]; then
   mkdir "$generated"
   QUADLET_UNIT_DIRS="$quadlet_check_dir" /usr/libexec/podman/quadlet "$generated" ||
     die "staged Quadlet units do not generate; nothing was installed"
-  if [[ -n "$generation" && "$predecessor" != "$OPT_CURRENT" ]]; then
+  if [[ -n "$writer_revision" ]]; then
+    verify_snapshot "$source_base" "$predecessor" sealed
+    check_unstarted_source preparing "$QUADLET_CHECK/protected.before" "$QUADLET_CHECK/predecessor.writers" "$QUADLET_CHECK/pairs.before"
+  elif [[ -n "$generation" && "$predecessor" != "$OPT_CURRENT" ]]; then
     awk -v image="$accepted_image" -v hook="/usr/bin/bash $predecessor/scripts/deploy/quadlet-prestart.sh hololive-db-migrate schema" '
       /^ExecStart=/ { starts++; if ($(NF-1) != image || $NF != "--check") bad=1 }
       /^ExecStartPre=$/ { pre=0; badpre=0; next }
@@ -815,9 +1120,11 @@ fi
 log "staged Quadlet units generate ($feature_summary)"
 
 if [[ -n "$source_base" ]]; then
-  previous="$QUADLET_CHECK/previous"
-  mkdir "$previous"
-  git -C "$REPO_ROOT" "${archive_config[@]}" archive "$source_base" | tar -x -C "$previous"
+  if [[ -z "$generation" || "$predecessor" == "$OPT_CURRENT" ]]; then
+    previous="$QUADLET_CHECK/previous"
+    mkdir "$previous"
+    git -C "$REPO_ROOT" "${archive_config[@]}" archive "$source_base" | tar -x -C "$previous"
+  fi
   tree_filters=(--exclude=/.source-revision --exclude=/data --exclude=/logs --exclude=/backups --exclude=/runtime-config --exclude=/artifacts/worker-profile)
   if [[ -n "$generation" ]]; then
     publish_generation
