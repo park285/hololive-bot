@@ -32,8 +32,8 @@ elif (
   export port="30005"
   export release_id="profile-pair-fixture"
   export REPO_ROOT="${ROOT_DIR}"
-  unset AP_POSTGRES_PORT
-  eval "$(awk '/^AP_POSTGRES_HOST=""/,/^AP_POSTGRES_PORT=/' "${DEPLOY}")"
+  export AP_POSTGRES_PORT=6433
+  eval "$(awk '/^AP_POSTGRES_HOST=""/,/^\[\[ "\$AP_POSTGRES_POOL_MAX_CONNS"/' "${DEPLOY}")"
   export AP_SSH_HOST="100.100.1.6"
   eval "${write_host_env_fn}"
   write_host_env "${generated_env}"
@@ -64,6 +64,102 @@ elif [[ "$direct_error" == 'AP_POSTGRES_PORT must be the collector pooler port (
 else
   record_fail "ap-host-native deploy did not reject the direct database port at entry"
 fi
+
+(
+  set -euo pipefail
+  fixture="$(mktemp -d)"
+  trap 'rm -rf "$fixture"' EXIT
+  tool="$fixture/tool" product="$fixture/product"
+  mkdir -p "$tool/scripts/deploy/lib" "$product"/{deploy/topology,scripts/ci,scripts/deploy/{ap-hosts,lib}}
+  cp "$DEPLOY" "$ROOT_DIR/scripts/deploy/verify-exec-tree-ownership.sh" "$tool/scripts/deploy/"
+  cp "$ROOT_DIR"/scripts/deploy/lib/{ap-host.sh,ap-host-native-*.sh,source-revision.sh,compose-env.sh,postgres-endpoint.sh,youtubejs-node-version.sh,ap-collector-readiness.sh} "$tool/scripts/deploy/lib/"
+  printf '\n: fixture-tool-window\n' >>"$tool/scripts/deploy/lib/ap-host-native-window.sh"
+  grep '^native_release_window=' "$tool/scripts/deploy/lib/ap-host-native-window.sh" >"$product/scripts/deploy/lib/ap-host-native-window.sh"
+  printf ': fixture-product-window\n' >>"$product/scripts/deploy/lib/ap-host-native-window.sh"
+  cp "$ROOT_DIR/deploy/topology/hosts.conf" "$product/deploy/topology/"
+  printf '%s\n' "$write_host_env_fn" >"$product/scripts/deploy/ap-host-native-deploy.sh"
+  cp "$ROOT_DIR"/scripts/deploy/lib/hololive-youtube-{collector.service,po.service,po.socket} "$product/scripts/deploy/lib/"
+  cp "$ROOT_DIR/scripts/ci/postgres-capacity-policy.tsv" "$product/scripts/ci/"
+  sed -e 's/^AP_GOAMD64=.*/AP_GOAMD64=v1/' -e 's/^AP_SSH_HOST=.*/AP_SSH_HOST=fixture-ap/' \
+    "$ROOT_DIR/scripts/deploy/ap-hosts/osaka.conf" >"$product/scripts/deploy/ap-hosts/osaka.conf"
+  for checkout in "$tool" "$product"; do
+    git -C "$checkout" init -q
+    git -C "$checkout" add .
+    git -C "$checkout" -c user.name=fixture -c user.email=fixture@example.invalid commit -qm fixture
+  done
+  ln -s "$tool/scripts/deploy/ap-host-native-deploy.sh" "$fixture/deploy"
+  SSH_KEY="$fixture/fixture.key"
+  touch "$SSH_KEY"
+  AP_NATIVE_TOOL_REVISION="$(git -C "$tool" rev-parse HEAD)"
+  AP_NATIVE_PRODUCT_REVISION="$(git -C "$product" rev-parse HEAD)"
+  export SSH_KEY AP_NATIVE_TOOL_REVISION AP_NATIVE_PRODUCT_REVISION fixture
+  export REPO_ROOT="$product" I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true
+  unset RELEASE_ID
+  hostname() { echo kapu; }
+  ssh() {
+    printf '%s\n' "$@" >"$fixture/request"
+    cat >"$fixture/bundle"
+    return 77
+  }
+  export -f hostname ssh
+  rc=0
+  "$fixture/deploy" osaka --apply 2>"$fixture/result" || rc=$?
+  [[ "$rc" == 77 ]]
+  grep -Fxq "native deploy source: tool=$AP_NATIVE_TOOL_REVISION product=$AP_NATIVE_PRODUCT_REVISION" "$fixture/result"
+  grep -Fxq 'ubuntu@fixture-ap' "$fixture/request"
+  grep -Fq -- "-${AP_NATIVE_PRODUCT_REVISION:0:12}-osaka" "$fixture/request"
+  request="$(tail -n1 "$fixture/request")"
+  read -r _ _ _ _ requested_id _ <<<"$request"
+  env_hash="$(sed -e "s/profile-pair-fixture/$requested_id/g" -e 's/100\.100\.1\.6:30096/fixture-ap:30096/' "$generated_env" | sha256sum)"
+  collector_hash="$(sha256sum "$product/scripts/deploy/lib/hololive-youtube-collector.service")"
+  issuer_hash="$(sed "s/@RELEASE_ID@/$requested_id/g" "$product/scripts/deploy/lib/hololive-youtube-po.service" | sha256sum)"
+  socket_hash="$(sha256sum "$product/scripts/deploy/lib/hololive-youtube-po.socket")"
+  [[ "$request" == *" $AP_NATIVE_PRODUCT_REVISION apply-origin ${env_hash%% *} ${collector_hash%% *} ${issuer_hash%% *} ${socket_hash%% *}" ]]
+  grep -Fxq ': fixture-tool-window' "$fixture/bundle"
+  if grep -Fxq ': fixture-product-window' "$fixture/bundle"; then exit 1; fi
+  rm "$fixture/request" "$fixture/bundle"
+  for pin in AP_NATIVE_TOOL_REVISION AP_NATIVE_PRODUCT_REVISION; do
+    if env "$pin=0000000000000000000000000000000000000000" "$fixture/deploy" osaka --apply 2>"$fixture/result"; then exit 1; fi
+    grep -Fq 'two approved full revisions' "$fixture/result"
+    [[ ! -e "$fixture/request" ]]
+  done
+  for checkout in "$tool" "$product"; do
+    touch "$checkout/unreviewed"
+    if "$fixture/deploy" osaka --apply 2>"$fixture/result"; then exit 1; fi
+    grep -Fq 'worktree is not clean' "$fixture/result"
+    [[ ! -e "$fixture/request" ]]
+    rm "$checkout/unreviewed"
+  done
+  for checkout in "$tool" "$product"; do
+    printf '/artifacts/\n' >>"$checkout/.git/info/exclude"
+    nested="$checkout/artifacts/pseudo"
+    mkdir -p "$nested"
+    cp -R "$checkout/scripts" "$nested/"
+    if [[ "$checkout" == "$product" ]]; then
+      cp -R "$checkout/deploy" "$nested/"
+      entry="$fixture/deploy" src="$nested"
+    else
+      entry="$nested/scripts/deploy/ap-host-native-deploy.sh" src="$product"
+    fi
+    if REPO_ROOT="$src" "$entry" osaka --apply 2>"$fixture/result"; then exit 1; fi
+    grep -Fq 'checkout top-level' "$fixture/result"
+    [[ ! -e "$fixture/request" ]]
+  done
+  sed -i 's/APP_ENV=production/APP_ENV=fixture/' "$product/scripts/deploy/ap-host-native-deploy.sh"
+  git -C "$product" -c user.name=fixture -c user.email=fixture@example.invalid commit -qam 'different env generator'
+  AP_NATIVE_PRODUCT_REVISION="$(git -C "$product" rev-parse HEAD)"
+  if "$fixture/deploy" osaka --apply 2>"$fixture/result"; then exit 1; fi
+  grep -Fq 'template differs from the approved product' "$fixture/result"
+  [[ ! -e "$fixture/request" ]]
+  printf '%s\n' "$write_host_env_fn" >"$product/scripts/deploy/ap-host-native-deploy.sh"
+  printf 'native_release_window=W1\n' >"$product/scripts/deploy/lib/ap-host-native-window.sh"
+  git -C "$product" -c user.name=fixture -c user.email=fixture@example.invalid commit -qam 'different family'
+  AP_NATIVE_PRODUCT_REVISION="$(git -C "$product" rev-parse HEAD)"
+  if "$fixture/deploy" osaka --apply 2>"$fixture/result"; then exit 1; fi
+  grep -Fq 'native tool/product release window mismatch' "$fixture/result"
+  [[ ! -e "$fixture/request" ]]
+)
+pass "native tool and product revisions are independent and checked before transport"
 rm -rf "${cfg008_dir}"
 
 permission_fn="$(awk '/^normalize_runtime_payload_permissions\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
@@ -348,12 +444,12 @@ if (
   mkdir -p "$NATIVE_TEST_BASE/releases"
   chmod 0700 "$NATIVE_TEST_BASE/releases"
   hostname() { echo kapu; }
-  git() { case "$3" in status) return 0 ;; rev-parse) printf '%040d\n' 1 ;; *) return 90 ;; esac; }
+  git() { if [[ "$3" == status ]]; then return 0; fi; command git "$@"; }
   ssh() {
     cat >/dev/null
     case "${!#}" in
       *' -- v3') return 0 ;;
-      *' apply-origin')
+      *' apply-origin '*)
         hostname() { echo osaka1; }
         sudo() { shift; "$@"; }
         . "$NATIVE_TEST_ROOT/scripts/deploy/lib/ap-host-native-cutover.sh"
@@ -389,7 +485,7 @@ for mode in --quiesce --resume; do
   error="$(PATH="$tmp/bin:$PATH" RELEASE_ID=new HOLO_BOT_VERSION=123 ARTIFACT_DIR="$tmp/payload" \
     SSH_KEY="$tmp/KR.key" I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true HOLO_NATIVE_PAYLOAD_SHA256="$qualified_digest" \
     "$DEPLOY" "${args[@]}" 2>&1)" || status=$?
-  [[ "$status" == 1 && "$error" == '검증 당시 native payload digest와 다릅니다.' ]] || record_fail "$mode: 검증 후 교체된 helper 허용"
+  [[ "$status" == 1 && "$error" == *'검증 당시 native payload digest와 다릅니다.' ]] || record_fail "$mode: 검증 후 교체된 helper 허용"
   status=0
   HOLO_NATIVE_PAYLOAD_SHA256='' RELEASE_ID=new HOLO_BOT_VERSION=123 "$DEPLOY" "${args[@]}" >/dev/null 2>&1 || status=$?
   [[ "$status" == 2 ]] || record_fail "$mode: 독립 digest 누락 처리 오류"

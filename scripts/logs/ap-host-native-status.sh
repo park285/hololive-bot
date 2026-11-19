@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+tool_script="$(realpath -e -- "${BASH_SOURCE[0]}")"
+tool_root="$(cd "${tool_script%/*}/../.." && pwd -P)"
+REPO_ROOT="${REPO_ROOT:-$tool_root}"
 LOG_SINCE="${LOG_SINCE:-10m}"
 
-. "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
+. "$tool_root/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
 if [[ ${#AP_SERVICES[@]} -ne 1 || ${#AP_PORTS[@]} -ne 1 ]]; then

@@ -226,6 +226,28 @@ Quadlet b·c의 새 배포와 실패 복원은 issuer·collector의 systemd `Job
 
 native a 산출물(collector binary와 issuer rootfs의 `po-broker --version`·`po-sandbox/version`)의 version은 `HOLO_BOT_VERSION`입니다. 값이 없으면 `ap-host-native-deploy.sh`가 12자리 short SHA를 씁니다. 릴리스 배포는 `HOLO_BOT_VERSION="$(xargs <hololive/hololive-api/VERSION)" scripts/deploy/ap-host-native-deploy.sh <ap-host> --apply`처럼 Quadlet image와 같은 version을 명시합니다.
 
+**기존 Osaka a에서 제품은 유지하고 배포 도구만 교체할 때:** kapu에서 검증한 도구의 승인 기록과 공식 제품의 승인 기록을 별도로 사용합니다. `TOOL_CHECKOUT`과 `PRODUCT_CHECKOUT`은 각각 깨끗한 전용 Git checkout의 실제 최상위 절대 경로여야 합니다. 추출한 하위 트리(`artifacts/` 등 Git 제외 경로 포함)는 checkout이 아닙니다. 아래는 공식 v19.2.1 제품으로 같은 창의 기존 설치를 교체하는 호출입니다. `APPROVED_TOOL_SHA`에는 검토·게시·검증된 도구의 승인된 40자리 **commit SHA**를 넣습니다. helper 파일의 해시나 실행 시 읽은 HEAD로 대체하지 않습니다.
+
+```bash
+set -euo pipefail
+umask 022
+product_sha=efafcf4005878f53ff239f8e8a1b6255e3b59b75
+release_id="${FRESH_OSAKA_RELEASE_ID:?새 시도에 배정한 미사용 release ID가 필요합니다}"
+artifact_dir="$(mktemp -d)/$release_id"
+REPO_ROOT="${PRODUCT_CHECKOUT:?}" AP_NATIVE_PRODUCT_REVISION="$product_sha" \
+  AP_NATIVE_TOOL_REVISION="${APPROVED_TOOL_SHA:?}" RELEASE_ID="$release_id" ARTIFACT_DIR="$artifact_dir" \
+  HOLO_BOT_VERSION=19.2.1 I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true \
+  "${TOOL_CHECKOUT:?}/scripts/deploy/ap-host-native-deploy.sh" osaka --apply
+```
+
+호출자는 제품과 도구의 full SHA 및 release window를 대조합니다. 원격 cutover 본문은 도구 commit의 blob이며, 제품 checkout에서 collector·issuer를 빌드하고 unit·wrapper·보존 helper를 가져옵니다. host env는 **실행 중인 도구**의 `write_host_env`가 생성합니다. 그 함수의 바이트가 승인된 제품 commit의 동일 함수와 일치해야 하며, 경로·endpoint·용량·서비스 값은 제품 설정에서 읽습니다.
+
+`--apply`는 **최초 설치나 W1→W2 전환이 아닙니다**. 전송 전 `apply-origin`에서 같은 창에 수용된 기존 release의 ID·제품 SHA·inode 영수증과 설치된 설정을 읽어 대조합니다. 후보 host env의 `STACK_WORKER_PROFILE_FILE` 한 줄 및 issuer unit의 불변 `RootDirectory` 경로 외에 차이가 있으면 중단합니다. 계정·로그 설정·sysctl·swap·fstab의 차이를 고치거나 이전 host env를 통째로 덮어쓰지 않습니다. 실제 전환은 출처·네 개의 사전 대조 digest를 확인한 같은 호출자가 `same-window`로만 요청합니다. 기존 `current`나 수용 영수증이 없으면 최초 설치 분기로 우회하지 않습니다.
+
+새 시도의 `native deploy source` 두 SHA, 새 release ID와 `native attempt`의 payload SHA-256을 함께 보존합니다. 원격 비교 위치는 로그인 사용자의 `~/.hololive-host-native-osaka-<ID>`가 아니라 `/opt/hololive-bot/youtube-collector/releases/<ID>`입니다. root 소유로 복사한 직후(권한 정규화·rootfs 해제·profile 추가 전)의 전체 트리 digest가 kapu의 값과 같아야 합니다. 그 뒤 로그인 사용자와 `hololive:opc` 실행 역할의 실제 접근권, 세 unit의 Job·실행 세대, readiness 및 `apply-accepted`까지 별도로 확인합니다. 출처·전송 성공만으로 수용한 것이 아닙니다.
+
+기존 guard, 실패 후보, staging·rollback 자료 또는 이전 ID는 인수·삭제·재사용하지 않습니다. guard가 남아 있으면 **새 ID만으로도 진행할 수 없습니다**. 전송 단절·미정산 Job·관측 실패에서는 원래 시도의 guard·후보·영수증을 보존하고 hold합니다. 기존 시도의 종료와 소유권을 확인하고 별도 권한이 정해지기 전에는 재전송·재시작·임의 복원을 하지 않습니다.
+
 중앙 paired deploy는 실행 중인 collector c가 로컬 primary DB `hololive`를 가리키는지 먼저 확인합니다. 최초 전환의 선행 증명에만 기존 `holo-postgres:5432`를 인정하고, 후보 활성화·완료 검사는 `holo-pgbouncer:6432`만 인정합니다. 외부 DB override는 로컬 socket의 원장으로 대신 증명하지 않습니다. `hololive-db-migrate.container`와 같은 migrator 역할·관리 socket volume(`hololive-bot_holo-pg-admin-socket`, 읽기 전용)을 쓰는 일회성 client(network none)로 032의 원본 32쌍 또는 epoch-4의 기준선 1쌍과 후속 실적용 prefix, 그 위치의 물리·권한 계약 및 read-only guard `on`을 확인합니다. client image는 실행 중인 `holo-postgres`에서 선택하고 자신이 만든 임시 container만 정리합니다. 원장 부재·checksum 불일치·조회 실패는 변경 전에 거부하며 이 helper는 migration을 실행하지 않습니다. b는 중앙 관리 socket이 없으므로 같은 release의 c 수용 뒤 전환하고 `100.100.1.8:6433`을 확인합니다.
 
 issuer 기준 영수증(중앙 `/opt/hololive-bot/compose/po-current-c/`, iris-seoul `/opt/hololive-bot/collector-b/po-current-b/`; `rootfs-manifest.json`, `image-id`)은 `current` 밖의 호스트 상태입니다. 중앙 paired cutover는 실행 중인 issuer의 이 영수증으로 이전 pair의 rollback 기준점을 만들므로, issuer 이미지가 있는데 영수증이 없으면 백업·rollback 태그를 만들기 전에 `central issuer receipt missing`으로 거절합니다. 중앙 호스트를 교체할 때는 `current`와 함께 이 디렉터리를 root 소유 0644 그대로 옮깁니다. 이미 유실했다면 같은 issuer 산출물의 kapu 검토 영수증(Compose AP 배포 백업의 `po-sandbox-candidate-manifest.json`·`po-sandbox-candidate.image-id` 등)을 찾습니다. kapu에 남은 같은 issuer image의 `podman save --format docker-archive` 아카이브와 `sha256:` + `podman image inspect --format '{{.Id}}'`로 `scripts/build/po-sandbox-manifest.py image-ids`를 계산해 그 config digest가 영수증의 `image-id` 한 줄과 같을 때만, 같은 경로에 root 0644로 설치하고 `po_verify_image`로 대조한 뒤 cutover를 다시 실행합니다. 일치하는 검토 영수증이 없으면 실행 이미지에서 영수증을 새로 만들지 않습니다. 검토 근거가 실행 이미지 자신이 되기 때문이며, 이때는 cutover를 멈추고 복구 방법을 별도로 승인받습니다. 2026-10-08 v7.2.10 배포에서는 같은 날 중앙 VM 교체 때 영수증이 누락되었고, Seoul `b`의 10-07 배포 백업에 남은 같은 7.2.3 산출물의 영수증으로 이 절차를 거쳐 복원했습니다.
