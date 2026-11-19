@@ -2,12 +2,10 @@ package dbtest
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -43,10 +41,6 @@ func NewCollectorSessionPool(tb testing.TB, pool *pgxpool.Pool, role string) *pg
 func grantCollectorSessionRole(ctx context.Context, pool *pgxpool.Pool, role string) error {
 	quoted := pgx.Identifier{role}.Sanitize()
 
-	if _, err := pool.Exec(ctx, "CREATE ROLE "+quoted+" NOLOGIN"); err != nil && !isDuplicateRole(err) {
-		return fmt.Errorf("create role: %w", err)
-	}
-
 	for _, grant := range []string{
 		"GRANT USAGE ON SCHEMA public TO " + quoted,
 		"GRANT ALL ON ALL TABLES IN SCHEMA public TO " + quoted,
@@ -59,10 +53,4 @@ func grantCollectorSessionRole(ctx context.Context, pool *pgxpool.Pool, role str
 	}
 
 	return nil
-}
-
-func isDuplicateRole(err error) bool {
-	pgErr, ok := errors.AsType[*pgconn.PgError](err)
-
-	return ok && (pgErr.Code == "42710" || pgErr.Code == "23505")
 }

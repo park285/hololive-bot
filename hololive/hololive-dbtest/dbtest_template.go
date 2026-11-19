@@ -78,7 +78,7 @@ func acquireMigrationTemplate(tb testing.TB, baseDSN string) string {
 }
 
 func prepareMigrationTemplate(baseDSN, fingerprint string) (name string, err error) {
-	name = "dbtest_template_" + fingerprint[:16]
+	name = "dbtest_role_template_" + fingerprint[:16]
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 
