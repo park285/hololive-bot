@@ -55,23 +55,26 @@ func (items *translatedItems) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	}
 
 	out := translatedItems{}
+
 	for {
 		token, err := dec.ReadToken()
 		if err != nil {
 			return err
 		}
 
-		switch token.Kind() {
-		case jsontext.KindEndArray:
+		kind := token.Kind()
+		if kind == jsontext.KindEndArray {
 			*items = out
 			return nil
-		case jsontext.KindString:
-			item := token.String()
-			if strings.TrimSpace(item) != "" || hasControl(item) {
-				out = append(out, item)
-			}
-		default:
+		}
+
+		if kind != jsontext.KindString {
 			return errors.New("translated list item must be a string")
+		}
+
+		item := token.String()
+		if strings.TrimSpace(item) != "" || hasControl(item) {
+			out = append(out, item)
 		}
 	}
 }

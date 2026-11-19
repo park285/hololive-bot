@@ -218,6 +218,7 @@ func TestTranslatedItemsDoNotDiscardInvalidValues(t *testing.T) {
 		if err == nil {
 			err = validateTranslated(1, rows)
 		}
+
 		require.Error(t, err, item)
 	}
 }
