@@ -299,16 +299,20 @@ func applyFile(ctx context.Context, tx pgx.Tx, file migrationsource.File) error 
 		return fmt.Errorf("execute pending migration: %w", err)
 	}
 
-	if err := file.Verify(ctx, tx); err != nil {
-		return fmt.Errorf("verify migrated schema: %w", err)
-	}
-
 	if _, err := tx.Exec(ctx, mustSQL("record_migration_checksum.sql"), file.Name, file.Checksum); err != nil {
 		return fmt.Errorf("record checksum for %s: %w", file.Name, err)
 	}
 
 	if _, err := tx.Exec(ctx, `INSERT INTO public.schema_migrations(filename) VALUES($1)`, file.Name); err != nil {
 		return fmt.Errorf("record application of %s: %w", file.Name, err)
+	}
+
+	if err := migrationsource.SettleConstraints(ctx, tx); err != nil {
+		return fmt.Errorf("settle deferred effects of %s: %w", file.Name, err)
+	}
+
+	if err := file.Verify(ctx, tx); err != nil {
+		return fmt.Errorf("verify migrated schema: %w", err)
 	}
 
 	return nil

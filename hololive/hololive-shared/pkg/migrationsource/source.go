@@ -3,6 +3,7 @@ package migrationsource
 import (
 	"context"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"fmt"
 	"io/fs"
@@ -18,6 +19,9 @@ import (
 const Baseline = "001_schema_epoch4_baseline.sql"
 
 var suffixName = regexp.MustCompile(`^\d{3}_epoch4_[a-z0-9_]+\.sql$`)
+
+//go:embed queries/settle_constraints.sql
+var settleConstraints string
 
 type File struct {
 	Name     string
@@ -102,6 +106,18 @@ func (f File) Apply(ctx context.Context, tx pgx.Tx) error {
 func prepareMigrationSession(ctx context.Context, tx pgx.Tx) error {
 	if _, err := tx.Exec(ctx, `SET LOCAL search_path = pg_catalog, public, pg_temp; SET LOCAL check_function_bodies = on`); err != nil {
 		return fmt.Errorf("prepare migration namespace and function validation: %w", err)
+	}
+
+	return nil
+}
+
+func SettleConstraints(ctx context.Context, tx pgx.Tx) error {
+	if err := prepareMigrationSession(ctx, tx); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, settleConstraints); err != nil {
+		return fmt.Errorf("settle named constraints and restore initial timing: %w", err)
 	}
 
 	return nil

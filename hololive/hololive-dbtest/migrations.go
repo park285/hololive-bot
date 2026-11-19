@@ -130,12 +130,16 @@ func applyPending(ctx context.Context, tx pgx.Tx, files []migrationsource.File) 
 			return fmt.Errorf("apply dbtest migration: %w", err)
 		}
 
-		if err := file.Verify(ctx, tx); err != nil {
-			return fmt.Errorf("verify dbtest migration: %w", err)
-		}
-
 		if _, err := tx.Exec(ctx, `INSERT INTO `+dbtestLedgerSchema+`.schema_migrations(filename,checksum_sha256) VALUES ($1,$2)`, file.Name, file.Checksum); err != nil {
 			return fmt.Errorf("record dbtest migration %s: %w", file.Name, err)
+		}
+
+		if err := migrationsource.SettleConstraints(ctx, tx); err != nil {
+			return fmt.Errorf("settle deferred effects of %s: %w", file.Name, err)
+		}
+
+		if err := file.Verify(ctx, tx); err != nil {
+			return fmt.Errorf("verify dbtest migration: %w", err)
 		}
 	}
 

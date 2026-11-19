@@ -148,7 +148,7 @@ func classifyTxControl(stmt string) (txControl, error) {
 	switch strings.ToUpper(code[:end]) {
 	case "PREPARE":
 		return txControlNone, errors.New("top-level PREPARE is not supported in a migration")
-	case "BEGIN", "START", "COMMIT", "END", "ROLLBACK", "SAVEPOINT", "RELEASE", "ABORT":
+	case "BEGIN", "START", "COMMIT", "END", "ROLLBACK", "SAVEPOINT", "RELEASE", "ABORT", "SET":
 	default:
 		return txControlNone, nil
 	}
@@ -165,6 +165,12 @@ func classifyTxControl(stmt string) (txControl, error) {
 
 func classifyTxWords(words []string) (txControl, error) {
 	switch words[0] {
+	case "SET":
+		if len(words) >= 3 && words[1] == "CONSTRAINTS" && words[2] == "ALL" {
+			return txControlNone, errors.New("name the constraint instead of changing transaction-wide constraint timing")
+		}
+
+		return txControlNone, nil
 	case "BEGIN":
 		out, err := classifyTxWordsTail(txControlBegin, words)
 
