@@ -10,11 +10,12 @@ import (
 
 func TestBaselineRejectsUncommittedOrSplitFiles(t *testing.T) {
 	for name, sql := range map[string]string{
-		"late failure":           "BEGIN; CREATE TABLE probe(id int); SELECT 1/0; COMMIT;",
-		"trailing autocommit":    "BEGIN; CREATE TABLE probe(id int); COMMIT; SELECT 1;",
-		"concurrent index":       "BEGIN; CREATE TABLE probe(id int); CREATE INDEX CONCURRENTLY probe_idx ON probe(id); COMMIT;",
-		"transaction detachment": "BEGIN; CREATE TABLE probe(id int); PREPARE TRANSACTION 'fixture_migration'; COMMIT;",
-		"missing commit":         "BEGIN; CREATE TABLE probe(id int);",
+		"late failure":             "BEGIN; CREATE TABLE probe(id int); SELECT 1/0; COMMIT;",
+		"trailing autocommit":      "BEGIN; CREATE TABLE probe(id int); COMMIT; SELECT 1;",
+		"concurrent index":         "BEGIN; CREATE TABLE probe(id int); CREATE INDEX CONCURRENTLY probe_idx ON probe(id); COMMIT;",
+		"global constraint timing": "BEGIN; CREATE TABLE probe(id int); SET CONSTRAINTS ALL DEFERRED; COMMIT;",
+		"transaction detachment":   "BEGIN; CREATE TABLE probe(id int); PREPARE TRANSACTION 'fixture_migration'; COMMIT;",
+		"missing commit":           "BEGIN; CREATE TABLE probe(id int);",
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()

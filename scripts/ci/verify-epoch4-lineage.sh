@@ -38,6 +38,14 @@ cat >"$future/$step1" <<'SQL'
 BEGIN;
 CREATE TABLE public.fixture_memo(id boolean PRIMARY KEY, body text NOT NULL);
 INSERT INTO public.fixture_memo SELECT id,body FROM public.schedule_poster_translation_memo;
+CREATE TABLE public.fixture_parent(k integer PRIMARY KEY);
+CREATE TABLE public.fixture_child(k integer CONSTRAINT fixture_parent_fk REFERENCES public.fixture_parent(k) DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE public.fixture_immediate_child(k integer CONSTRAINT fixture_immediate_fk REFERENCES public.fixture_parent(k) DEFERRABLE INITIALLY IMMEDIATE);
+SET CONSTRAINTS public.fixture_immediate_fk DEFERRED;
+INSERT INTO public.fixture_immediate_child VALUES (1);
+INSERT INTO public.fixture_child VALUES (1);
+INSERT INTO public.fixture_parent VALUES (1);
+INSERT INTO public.fixture_child SELECT 2 FROM public.fixture_memo WHERE body = 'late_parent';
 SET LOCAL check_function_bodies = off;
 SET LOCAL search_path = pg_temp;
 COMMIT;
@@ -57,6 +65,19 @@ BEGIN
     END IF;
 END
 $settings$;
+DO $immediate$
+BEGIN
+    BEGIN
+        INSERT INTO public.fixture_immediate_child VALUES (2);
+        RAISE EXCEPTION 'initially immediate check leaked its previous deferred mode';
+    EXCEPTION WHEN foreign_key_violation THEN NULL;
+    END;
+END
+$immediate$;
+CREATE TABLE public.fixture_later_child(k integer CONSTRAINT fixture_later_fk REFERENCES public.fixture_parent(k) DEFERRABLE INITIALLY DEFERRED);
+INSERT INTO public.fixture_later_child VALUES (2);
+INSERT INTO public.fixture_child VALUES (2);
+INSERT INTO public.fixture_parent VALUES (2);
 ALTER TABLE public.fixture_memo ADD COLUMN revision integer NOT NULL DEFAULT 0;
 UPDATE public.fixture_memo SET revision=revision+1;
 ALTER TABLE public.fixture_memo ADD CONSTRAINT fixture_reviewed CHECK (body <> 'reject');
@@ -72,12 +93,25 @@ build_future plus2
 step3=004_epoch4_test_preservation.sql
 cat >"$future/$step3" <<'SQL'
 BEGIN;
+CREATE FUNCTION public.fixture_late_ledger_write() RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN
+    IF NEW.body = 'late_timestamp' THEN
+        UPDATE public.schema_migrations SET applied_at = applied_at - interval '1 second' WHERE filename LIKE '001_%';
+    ELSE
+        UPDATE public.schema_migrations SET applied_at = applied_at WHERE filename = '003_epoch4_test_revision.sql';
+    END IF;
+    RETURN NULL;
+END
+$fn$;
+CREATE CONSTRAINT TRIGGER fixture_late_ledger_write AFTER UPDATE ON public.fixture_memo
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.fixture_late_ledger_write();
 DO $tamper$
 BEGIN
     CASE (SELECT body FROM public.fixture_memo WHERE id)
       WHEN 'timestamp' THEN UPDATE public.schema_migrations SET applied_at = applied_at - interval '1 second' WHERE filename LIKE '001_%';
       WHEN 'checksum' THEN UPDATE public.schema_migration_checksums SET checksum_sha256 = repeat('0',64) WHERE filename LIKE '001_%';
       WHEN 'same_call' THEN UPDATE public.schema_migrations SET applied_at = applied_at WHERE filename = '003_epoch4_test_revision.sql';
+      WHEN 'late_timestamp', 'late_same_call' THEN UPDATE public.fixture_memo SET revision=revision+1;
       WHEN 'shape' THEN ALTER TABLE public.schema_migrations ADD COLUMN extra integer;
       ELSE RAISE EXCEPTION 'unrecognized preservation fixture';
     END CASE;
@@ -172,12 +206,17 @@ for root_db in hololive fresh; do
 
   tamper="tamper_$root_db"
   clone "$tamper" "$db"
-  for mutation in timestamp checksum same_call shape; do
+  for mutation in timestamp checksum same_call shape late_timestamp late_same_call; do
     sql "$tamper" -c "UPDATE schedule_poster_translation_memo SET body='$mutation'"
     candidate_bin=altered unchanged "$tamper" reject >"$work/refused-tamper" 2>&1
     grep -Fq 'modified a ledger definition or an earlier receipt' "$work/refused-tamper"
     [[ $(sql "$tamper" -c "SELECT to_regclass('public.fixture_memo') IS NULL") == t ]]
   done
+  sql "$tamper" -c "UPDATE schedule_poster_translation_memo SET body='late_parent'"
+  candidate_bin=plus2 unchanged "$tamper" reject >"$work/refused-fk" 2>&1
+  grep -Fq "settle deferred effects of $step1" "$work/refused-fk"
+  grep -Fq 'SQLSTATE 23503' "$work/refused-fk"
+  [[ $(sql "$tamper" -c "SELECT to_regclass('public.fixture_child') IS NULL") == t ]]
   bad_target="bad_target_$root_db"
   clone "$bad_target" "$db"
   sql "$bad_target" -c 'ALTER DEFAULT PRIVILEGES FOR ROLE hololive_migrator IN SCHEMA public REVOKE UPDATE ON TABLES FROM hololive_runtime'
@@ -218,6 +257,31 @@ for root_db in hololive fresh; do
   sql "$db" -c "DELETE FROM schema_migrations WHERE filename='$step1'; DELETE FROM schema_migration_checksums WHERE filename='$step1'"
   candidate_bin=plus2 unchanged "$db" reject
 done
+fixture_rows() {
+  sql "$1" -c "SELECT r::text FROM public.fixture_memo r ORDER BY id" \
+    -c 'SELECT k FROM public.fixture_parent ORDER BY k' -c 'SELECT k FROM public.fixture_child ORDER BY k' \
+    -c 'SELECT k FROM public.fixture_immediate_child ORDER BY k' -c 'SELECT k FROM public.fixture_later_child ORDER BY k'
+}
+for lineage in hololive fresh; do
+  combined="grouped_$lineage"
+  split="separate_$lineage"
+  clone "$combined" "$lineage"
+  clone "$split" "$lineage"
+  run "$combined" plus2
+  run "$split" plus1
+  run "$split" plus2
+  fixture_rows "$combined" >"$work/grouped-rows"
+  fixture_rows "$split" >"$work/separate-rows"
+  diff -u "$work/grouped-rows" "$work/separate-rows"
+done
+clone ambiguous_timing fresh
+sql ambiguous_timing <<'SQL'
+CREATE TABLE public.fixture_owner(k int PRIMARY KEY);
+CREATE TABLE public.fixture_left(k int CONSTRAINT shared_timing REFERENCES public.fixture_owner(k) DEFERRABLE INITIALLY IMMEDIATE);
+CREATE TABLE public.fixture_right(k int CONSTRAINT shared_timing REFERENCES public.fixture_owner(k) DEFERRABLE INITIALLY DEFERRED);
+SQL
+candidate_bin=plus1 unchanged ambiguous_timing reject >"$work/refused-ambiguity" 2>&1
+grep -Fq 'conflicting initial timing for constraints named public.shared_timing' "$work/refused-ambiguity"
 clone future_empty base
 run future_empty plus2 --initialize
 [[ $(sql future_empty -c 'SELECT revision FROM fixture_memo') == 1 ]]
