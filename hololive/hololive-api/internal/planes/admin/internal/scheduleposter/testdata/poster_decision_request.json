@@ -1,0 +1,36 @@
+{
+  "model": "gemini-decision-1",
+  "input": [
+    {
+      "type": "image",
+      "mime_type": "image/jpeg",
+      "data": "anBlZw=="
+    }
+  ],
+  "questions": {
+    "is_schedule": {
+      "type": "noul",
+      "instructions": "Is this image a streaming schedule: a graphic that lists planned live streams by day, with stream times or titles?",
+      "criteria": {
+        "true_description": "A graphic whose main content is a list or table of upcoming streams, each tied to a day or date, with times, titles, or 'off' days.",
+        "false_description": "A thumbnail for one stream or video, fan art, a merchandise, concert, or event announcement, a diary or message card, or any image without a day-by-day stream list."
+      }
+    },
+    "one_streamer": {
+      "type": "noul",
+      "instructions": "Is the schedule in this image for one streamer's own channel?",
+      "criteria": {
+        "true_description": "The schedule belongs to a single streamer; collab streams may appear as entries on that streamer's schedule.",
+        "false_description": "The schedule lists streams for a group or unit of several members together, or the image shows no schedule at all."
+      }
+    },
+    "one_week": {
+      "type": "noul",
+      "instructions": "Does the schedule in this image cover one week, about seven consecutive days?",
+      "criteria": {
+        "true_description": "The days shown span roughly one week, such as Monday to Sunday or seven consecutive dates.",
+        "false_description": "The image shows a whole month calendar, a single day, a multi-day event timetable, or no schedule at all."
+      }
+    }
+  }
+}

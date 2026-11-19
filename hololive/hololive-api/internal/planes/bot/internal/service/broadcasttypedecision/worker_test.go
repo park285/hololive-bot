@@ -3,11 +3,17 @@ package broadcasttypedecision
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
+	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"slices"
 	"testing"
 	"time"
@@ -79,10 +85,17 @@ type fakeJudge struct {
 }
 
 func (j *fakeJudge) Decide(_ context.Context, request geminidecision.Request) (geminidecision.Response, error) {
-	videoID := string(request.Input[1].Data)
+	contents := request.Input.ArrayOfDecisionInputContent
+
+	thumbnail, err := base64.StdEncoding.DecodeString(*contents[1].ImageContent.Data)
+	if err != nil {
+		return geminidecision.Response{}, fmt.Errorf("decode thumbnail: %w", err)
+	}
+
+	videoID := string(thumbnail)
 
 	j.asked = append(j.asked, videoID)
-	j.texts = append(j.texts, request.Input[0].Text)
+	j.texts = append(j.texts, contents[0].TextContent.Text)
 
 	if err := j.errs[videoID]; err != nil {
 		return geminidecision.Response{}, err
@@ -129,15 +142,51 @@ func unknownRows(count int) []candidate {
 	return rows
 }
 
-func testWorker(store *fakeStore, judge *fakeJudge, thumbs fakeThumbnails) *Worker {
+func testWorker(store *fakeStore, model judge, thumbs fakeThumbnails) *Worker {
 	if store.saved == nil {
 		store.saved = map[string]decision{}
 	}
 
 	return &Worker{
-		store: store, judge: judge, thumbnails: thumbs, logger: slog.New(slog.DiscardHandler),
+		store: store, judge: model, thumbnails: thumbs, logger: slog.New(slog.DiscardHandler),
 		now: func() time.Time { return testNow }, failed: map[string]struct{}{},
 	}
+}
+
+func TestWorkerSendsBroadcastDecisionRequest(t *testing.T) {
+	t.Parallel()
+
+	bodies := make(chan jsontext.Value, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1beta/decisions", func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+
+			return
+		}
+
+		bodies <- raw
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if _, err := io.WriteString(w, `{"answers":{"broadcast_type":{"type":"choice","choice":"singing","confidence":0.9}}}`); err != nil {
+			t.Error(err)
+		}
+	})
+
+	server := httptest.NewTestServer(t, mux)
+	worker := testWorker(&fakeStore{}, geminidecision.NewWithHTTPClient("test-key", server.Client()), fakeThumbnails{})
+	require.NoError(t, worker.decide(t.Context(), candidate{VideoID: "talk0000001", Title: "星の歌 <live> & 雑談", TopicID: "Music"}))
+
+	raw, err := os.ReadFile("testdata/broadcast_decision_request.json")
+	require.NoError(t, err)
+
+	want, got := jsontext.Value(raw), <-bodies
+	require.NoError(t, want.Compact())
+	require.NoError(t, got.Compact())
+	require.Equal(t, want, got)
 }
 
 func TestPassDecidesOnlyBroadcastsTheRulesLeaveUnknown(t *testing.T) {
@@ -278,14 +327,16 @@ func TestParseAnswerRejectsMissingOrOutOfRangeAnswers(t *testing.T) {
 	require.Equal(t, handlers.BroadcastTypeDecision{Type: broadcasttype.HorseRacing, Confidence: 0.61}, got)
 
 	for name, response := range map[string]geminidecision.Response{
-		"missing":     {},
-		"unknown":     answer(string(broadcasttype.Unknown), 0.9),
-		"outside set": answer("cooking", 0.9),
-		"confidence":  answer("talk", 1.2),
-		"no choice":   {Answers: map[string]geminidecision.Answer{questionKey: {Confidence: new(0.9)}}},
+		"missing":      {},
+		"unknown":      answer(string(broadcasttype.Unknown), 0.9),
+		"outside set":  answer("cooking", 0.9),
+		"echoed token": answer("api_key:synthetic-broadcast-test-key", 0.9),
+		"confidence":   answer("talk", 1.2),
+		"no choice":    {Answers: map[string]geminidecision.Answer{questionKey: {Confidence: new(0.9)}}},
 	} {
 		_, err := parseAnswer(response)
 		require.ErrorIs(t, err, errBadAnswer, name)
+		require.NotContains(t, err.Error(), "synthetic-broadcast-test-key", name)
 	}
 }
 

@@ -1,26 +1,40 @@
 package scheduleposter
 
 import (
+	"context"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/service/geminidecision"
 	posterstore "github.com/kapu/hololive-api/internal/service/scheduleposter"
 )
 
 const decisionTestKey = "test-key-0123456789abcdef"
+
+func testDecisionJudge(client *http.Client) *geminiJudge {
+	return &geminiJudge{decisions: geminidecision.NewWithHTTPClient(decisionTestKey, client)}
+}
+
+func refusedDecisionClient() *http.Client {
+	return &http.Client{Transport: &http.Transport{DialContext: func(context.Context, string, string) (net.Conn, error) {
+		return nil, syscall.ECONNREFUSED
+	}}}
+}
 
 func readChangeFixture(t *testing.T, name string) []byte {
 	t.Helper()
@@ -36,7 +50,8 @@ func decisionServer(t *testing.T, status int, body string) (*geminiJudge, *atomi
 
 	var calls atomic.Int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		calls.Add(1)
 		w.WriteHeader(status)
 
@@ -44,9 +59,8 @@ func decisionServer(t *testing.T, status int, body string) (*geminiJudge, *atomi
 			t.Error(err)
 		}
 	}))
-	t.Cleanup(server.Close)
 
-	return &geminiJudge{http: server.Client(), endpoint: server.URL, key: decisionTestKey}, &calls
+	return testDecisionJudge(server.Client()), &calls
 }
 
 func TestClassifyPostSendsTheBodyAsOneStringWithThePrototypeQuestions(t *testing.T) {
@@ -63,8 +77,10 @@ func TestClassifyPostSendsTheBodyAsOneStringWithThePrototypeQuestions(t *testing
 		Questions jsontext.Value `json:"questions"`
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.Header.Get("x-goog-api-key") != decisionTestKey ||
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path != "/v1beta/decisions" || r.Method != http.MethodPost || r.Header.Get("x-goog-api-key") != decisionTestKey ||
 			jsonv2.UnmarshalRead(r.Body, &received, jsonv2.RejectUnknownMembers(true)) != nil {
 			w.WriteHeader(http.StatusTeapot)
 
@@ -76,9 +92,8 @@ func TestClassifyPostSendsTheBodyAsOneStringWithThePrototypeQuestions(t *testing
 			t.Error(err)
 		}
 	}))
-	t.Cleanup(server.Close)
 
-	judge := &geminiJudge{http: server.Client(), endpoint: server.URL, key: decisionTestKey}
+	judge := testDecisionJudge(server.Client())
 
 	answer, spent, err := judge.classifyPost(t.Context(), body)
 	require.NoError(t, err)
@@ -94,7 +109,7 @@ func TestClassifyPostSendsTheBodyAsOneStringWithThePrototypeQuestions(t *testing
 	require.Equal(t, body, input)
 
 	require.NoError(t, received.Questions.Compact())
-	require.Equal(t, string(want), string(received.Questions), "질문과 criteria의 문구·순서는 측정한 decide.py와 같아야 한다")
+	require.Equal(t, want, received.Questions)
 }
 
 const (
@@ -127,16 +142,28 @@ func classifyFailure(t *testing.T, status int, body string) (string, string) {
 	}
 }
 
+func TestClassifyPostReadsOnlyThePostAnswers(t *testing.T) {
+	t.Parallel()
+
+	judge, _ := decisionServer(t, http.StatusOK, `{"answers":{"schedule_info":{"type":"noul","noul":0,"confidence":"unused"},
+		"kind":{"type":"choice","choice":"cancel"}},"usage":{"total_input_tokens":17},"prompt_feedback":{"block_reason_message":42}}`)
+	answer, spent, err := judge.classifyPost(t.Context(), "本文")
+	require.NoError(t, err)
+	require.Equal(t, postAnswer{ScheduleInfo: 0, Kind: "cancel"}, answer)
+	require.Equal(t, usage{model: decisionModel, prompt: 17}, spent)
+}
+
 func TestClassifyPostClosesFailuresCausedByThePost(t *testing.T) {
 	t.Parallel()
 
 	for body, reason := range map[string]string{
-		`{"prompt_feedback":{"block_reason":"SAFETY"},"usage":{"total_input_tokens":10}}`: reasonBlocked,
-		`{"answers":{"schedule_info":{"noul":0.9}}}`:                                      reasonBadAnswer,
-		`{"answers":{"kind":{"choice":"change"}}}`:                                        reasonBadAnswer,
-		`{"answers":{"schedule_info":{"noul":1.2},"kind":{"choice":"change"}}}`:           reasonBadAnswer,
-		`{"answers":{"schedule_info":{"noul":-0.1},"kind":{"choice":"change"}}}`:          reasonBadAnswer,
-		`{"answers":{"schedule_info":{"noul":0.9},"kind":{"choice":"maybe"}}}`:            reasonBadAnswer,
+		`{"prompt_feedback":{"block_reason":"SAFETY"},"usage":{"total_input_tokens":10}}`:          reasonBlocked,
+		`{"answers":{"schedule_info":{"type":"noul"},"kind":{"type":"choice","choice":"cancel"}}}`: reasonBadAnswer,
+		`{"answers":{"schedule_info":{"noul":0.9}}}`:                                               reasonBadAnswer,
+		`{"answers":{"kind":{"choice":"change"}}}`:                                                 reasonBadAnswer,
+		`{"answers":{"schedule_info":{"noul":1.2},"kind":{"choice":"change"}}}`:                    reasonBadAnswer,
+		`{"answers":{"schedule_info":{"noul":-0.1},"kind":{"choice":"change"}}}`:                   reasonBadAnswer,
+		`{"answers":{"schedule_info":{"noul":0.9},"kind":{"choice":"maybe"}}}`:                     reasonBadAnswer,
 		`{"answers":`: reasonBadAnswer,
 	} {
 		kind, got := classifyFailure(t, http.StatusOK, body)
@@ -149,6 +176,10 @@ func TestClassifyPostClosesFailuresCausedByThePost(t *testing.T) {
 		require.Equal(t, failedByPost, kind, code)
 		require.Equal(t, reasonBlocked, got, "글 reason은 계약 enum이라 안전 차단 코드는 blocked로 닫는다")
 	}
+
+	kind, reason := classifyFailure(t, http.StatusBadRequest, `{"error":{"code":"safety","details":42}}`)
+	require.Equal(t, failedByPost, kind)
+	require.Equal(t, reasonBlocked, reason)
 }
 
 func TestClassifyPostSeparatesServiceFromUnknownFailures(t *testing.T) {
@@ -172,7 +203,7 @@ func TestClassifyPostSeparatesServiceFromUnknownFailures(t *testing.T) {
 		{http.StatusInternalServerError, `{"error":{"code":500,"status":"INTERNAL"}}`, failedUnknown},
 		{http.StatusBadGateway, ``, failedUnknown},
 		{http.StatusGatewayTimeout, ``, failedUnknown},
-		{http.StatusOK, `{"answers":{"pad":"` + strings.Repeat("a", maxDecisionResponseBytes) + `"}}`, failedUnknown},
+		{http.StatusOK, `{"answers":{"pad":"` + strings.Repeat("a", 64<<10) + `"}}`, failedUnknown},
 	} {
 		kind, detail := classifyFailure(t, tc.status, tc.body)
 		require.Equal(t, tc.want, kind, "%d %.80s: %s", tc.status, tc.body, detail)
@@ -182,20 +213,18 @@ func TestClassifyPostSeparatesServiceFromUnknownFailures(t *testing.T) {
 func TestClassifyPostBlamesTheConnection(t *testing.T) {
 	t.Parallel()
 
-	closed := httptest.NewServer(http.NotFoundHandler())
-	closed.Close()
-
 	release := make(chan struct{})
-	hang := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
-	t.Cleanup(hang.Close)
+	hang := httptest.NewTestServer(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
 	t.Cleanup(func() { close(release) })
 
-	plain := &http.Client{Timeout: 100 * time.Millisecond}
+	plain := hang.Client()
 
-	_, _, err := (&geminiJudge{http: plain, endpoint: closed.URL, key: decisionTestKey}).classifyPost(t.Context(), "本文")
+	plain.Timeout = 100 * time.Millisecond
+
+	_, _, err := testDecisionJudge(refusedDecisionClient()).classifyPost(t.Context(), "本文")
 	require.ErrorIs(t, err, errChangeServiceFailed, "연결 실패는 어느 글도 판별할 수 없다")
 
-	_, _, err = (&geminiJudge{http: plain, endpoint: hang.URL, key: decisionTestKey}).classifyPost(t.Context(), "本文")
+	_, _, err = testDecisionJudge(plain).classifyPost(t.Context(), "本文")
 	require.ErrorIs(t, err, errChangeOutcomeUnknown, "연결 뒤 시간 초과는 그 글 때문일 수도 있다")
 	require.NotErrorIs(t, err, errChangeServiceFailed)
 }
