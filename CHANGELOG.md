@@ -14,6 +14,7 @@
 - **로컬 동기화 검사:** 오프라인에서 Valkey 어댑터의 매니페스트가 캐시에 없더라도 API `go.sum`의 체크섬과 일치하는 형제 `go.mod`로 메타데이터 drift를 검사합니다. 대체는 검사 중 임시 복사본에만 적용하며, 온라인 프록시와 운영 pin 검사는 바꾸지 않습니다.
 - **공통 모듈·런타임 의존성:** API·alarm-worker·collector·shared·dbtest의 `shared-go/postgres`를 `v1.0.3`으로 올리고 보안 CI의 형제 소스를 같은 릴리스 커밋으로 고정했습니다. 직접 사용하는 `valkey-go`는 `v1.0.80`, API의 Gemini SDK는 `v1.79.1`, collector의 격리 PO issuer는 `jsdom 31.0.1`을 씁니다. 루트·API(collector/PO 포함)·alarm-worker의 산출물 버전은 `19.2.1`입니다.
 - **배포 경계:** Hololive는 `pgxdb`를 쓰며 공용 `pgstore`의 inbox를 실행하지 않습니다. 자체 inbox 계약·스키마·운영 인덱스는 그대로입니다. 중앙 API와 alarm-worker는 이전 이미지·프로필 pair를 보존해 교체하고, AP는 슬롯별 절차로 같은 revision의 collector·issuer를 함께 검증합니다. Fallback delta: none.
+- **중앙 소스 배포:** 이미 schema-only migrator를 수용한 호스트에서는 `sync-opt-current.sh --source-only <기존 SHA>`로 실행 트리만 갱신합니다. 구 소스와 다른 파일이나 삭제가 있으면 거부하고, DB·pooler의 단일 파일 bind와 설치된 Quadlet·방화벽은 교체하지 않습니다.
 
 ## v19.2.0 - 2026-11-19
 
