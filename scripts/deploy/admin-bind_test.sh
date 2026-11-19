@@ -44,47 +44,7 @@ echo 'admin and PostgreSQL bind host identity fixtures passed'
 cp "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft"
 systemctl() { [[ "${inactive:-false}" == false ]]; }
 nft() { cat "$fixture/firewall.json"; }
-cat > "$fixture/valid.json" <<'JSON'
-{"nftables":[
-  {"set":{"name":"postgres_sources","elem":["100.100.1.3","100.100.1.5","100.100.1.6","100.100.1.8"]}},
-  {"chain":{"hook":"forward","name":"forward","prio":-20}},
-  {"rule":{"chain":"forward"}}, {"rule":{"chain":"forward"}},
-  {"rule":{"chain":"forward"}}, {"rule":{"chain":"forward"}},
-  {"rule":{"chain":"forward","expr":[
-    {"match":{"op":"in","left":{"ct":{"key":"status"}},"right":"dnat"}},
-    {"match":{"op":"==","left":{"ct":{"key":"proto-dst","dir":"original"}},"right":6433}},
-    {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":6432}},
-    {"match":{"op":"==","left":{"meta":{"key":"iifname"}},"right":"tailscale0"}},
-    {"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"@postgres_sources"}},
-    {"accept":null}
-  ]}},
-  {"rule":{"chain":"forward","expr":[
-    {"match":{"op":"in","left":{"ct":{"key":"status"}},"right":"dnat"}},
-    {"match":{"op":"==","left":{"ct":{"key":"proto-dst","dir":"original"}},"right":6433}},
-    {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":6432}},
-    {"reject":{"type":"tcp reset"}}
-  ]}},
-  {"rule":{"chain":"forward"}}, {"rule":{"chain":"forward"}},
-  {"chain":{"hook":"forward","name":"forward_preserve_postgres_source","prio":10}},
-  {"rule":{"chain":"forward_preserve_postgres_source","expr":[
-    {"match":{"op":"in","left":{"ct":{"key":"status"}},"right":"dnat"}},
-    {"match":{"op":"==","left":{"ct":{"key":"proto-dst","dir":"original"}},"right":5433}},
-    {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5432}},
-    {"match":{"op":"==","left":{"meta":{"key":"iifname"}},"right":"tailscale0"}},
-    {"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"@postgres_sources"}},
-    {"mangle":{"key":{"meta":{"key":"mark"}},"value":{"&":[{"meta":{"key":"mark"}},4278255615]}}}
-  ]}},
-  {"rule":{"chain":"forward_preserve_postgres_source","expr":[
-    {"match":{"op":"in","left":{"ct":{"key":"status"}},"right":"dnat"}},
-    {"match":{"op":"==","left":{"ct":{"key":"proto-dst","dir":"original"}},"right":6433}},
-    {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":6432}},
-    {"match":{"op":"==","left":{"meta":{"key":"iifname"}},"right":"tailscale0"}},
-    {"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"@postgres_sources"}},
-    {"mangle":{"key":{"meta":{"key":"mark"}},"value":{"&":[{"meta":{"key":"mark"}},4278255615]}}}
-  ]}},
-  {"set":{"name":"bot_postgres_sources","elem":["100.100.1.3"]}}
-]}
-JSON
+cp "$root/scripts/deploy/testdata/ingress-firewall.json" "$fixture/valid.json"
 cp "$fixture/valid.json" "$fixture/firewall.json"
 admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft"
 for filter in '.nftables[0].set.elem = []' '.nftables[0].set.elem += ["0.0.0.0/0"]' 'del(.nftables[1])' 'del(.nftables[2])' \
