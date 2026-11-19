@@ -2,9 +2,11 @@ package scheduleposter
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
+	"strings"
 
 	"google.golang.org/genai"
 
@@ -33,12 +35,48 @@ type extractedRow struct {
 type translatedRow struct {
 	Index   int                `json:"index"`
 	TitleKo string             `json:"title_ko"`
-	WithKo  []string           `json:"with_ko"`
+	WithKo  translatedItems    `json:"with_ko"`
 	PlaceKo string             `json:"place_ko"`
-	TagsKo  []string           `json:"tags_ko"`
+	TagsKo  translatedItems    `json:"tags_ko"`
 	NoteKo  string             `json:"note_ko"`
 	Terms   []posterstore.Term `json:"terms"`
 	DoubtKo string             `json:"doubt_ko"`
+}
+
+type translatedItems []string
+
+func (items *translatedItems) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	if dec.PeekKind() != jsontext.KindBeginArray {
+		return errors.ErrUnsupported
+	}
+
+	if _, err := dec.ReadToken(); err != nil {
+		return err
+	}
+
+	out := translatedItems{}
+
+	for {
+		token, err := dec.ReadToken()
+		if err != nil {
+			return err
+		}
+
+		kind := token.Kind()
+		if kind == jsontext.KindEndArray {
+			*items = out
+			return nil
+		}
+
+		if kind != jsontext.KindString {
+			return errors.New("translated list item must be a string")
+		}
+
+		item := token.String()
+		if strings.TrimSpace(item) != "" || hasControl(item) {
+			out = append(out, item)
+		}
+	}
 }
 
 func stringSchema(description string) *genai.Schema {
