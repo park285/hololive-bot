@@ -52,7 +52,7 @@ native_deployment_inputs() {
 }
 
 native_same_window_baseline() {
-  local old_target="$releases_root/$window_old" original_port=6433 n file paths drop directory persistent
+  local old_target="$releases_root/$window_old" n file paths drop directory persistent
   local -a drops
   [[ "$#" == 4 ]]
   for n in "$@"; do [[ "$n" =~ ^[0-9a-f]{64}$ ]]; done
@@ -64,7 +64,7 @@ native_same_window_baseline() {
   native_release_pin check profile "$host_env" "$old_target" "$release_dir" "$1"
   native_release_pin check issuer "$po_unit_file" "$old_target" "$release_dir" "$3"
   [[ "$(native_file_digest "$unit_file")" == "$2" && "$(native_file_digest "$po_socket_file")" == "$4" ]]
-  native_window_verify_original
+  original_port=6433 native_window_verify_original
   [[ "$(realpath -e "${unit_file%/*}")" == "${unit_file%/*}" ]]
   for n in "${window_units[@]}"; do
     native_window_live_generation "$n" >/dev/null
@@ -273,7 +273,7 @@ if [[ "$same_window" == true ]]; then
   native_release_pin check issuer "$po_unit_file" "$old_target" "$release_dir" "$issuer_digest"
   sudo -n mkdir -m 0700 "$window"
   native_window_boot | sudo -n tee "$window/boot" >/dev/null
-  printf '%s\n' "$apply_origin_pin" "$release_dir" "$window_digest" "$native_claim_nonce" | sudo -n tee "$window/pins" >/dev/null
+  printf '%s\n' "$apply_origin_pin" "$release_dir" "$window_digest" "${native_claim_nonce:?}" | sudo -n tee "$window/pins" >/dev/null
   sudo -n sha256sum "$old_target/rollback-contract/SHA256SUMS" | sudo -n tee "$window/inputs.sha256" >/dev/null
 fi
 stop_native_units_and_require_inactive() {
@@ -326,7 +326,7 @@ native_same_window_origin() {
   fi
   local current_link="$link"
   [[ "$(native_window_identity apply "$window_old" '')" == "$apply_origin_pin" &&
-     "$(sudo -n cat "$native_recovery_dir/claim")" == "$native_claim_nonce" &&
+     "$(sudo -n cat "${native_recovery_dir:?}/claim")" == "$native_claim_nonce" &&
      "$(sudo -n cat "$native_recovery_dir/owner-pid")" == "$cutover_restore_owner_pid" &&
      "$(sudo -n cat "$native_recovery_dir/release")" == "$release_dir" ]] || return 1
   sudo -n test ! -e "$native_recovery_dir/outcome" || return 1
@@ -353,8 +353,7 @@ native_same_window_stop() {
     [[ "$(native_window_prop "$n" ControlPID)" == 0 ]]
     printf 'InvocationID=%s\nUnitFileState=%s\n' "${original[$n]}" "$persistent" | sudo -n tee "$window/$n.before" >/dev/null
   done
-  local original_port=6433
-  native_window_verify_original
+  original_port=6433 native_window_verify_original
   for n in "${window_units[@]}"; do [[ "$(native_window_live_generation "$n")" == "${original[$n]}" ]]; done
   since="@$EPOCHREALTIME"
   sudo -n systemctl --job-mode=fail stop "$po_socket" "$po_service"
@@ -381,7 +380,7 @@ native_same_window_stop() {
 
 native_same_window_stop_phase() {
   native_cutover_run stop native_same_window_stop
-  [[ "$native_completion_verified" == true && "$native_worker_status" == 0 &&
+  [[ "${native_completion_verified:?}" == true && "${native_worker_status?}" == 0 &&
      "$(sudo -n cat "$native_recovery_dir/step")" == stop && "$(sudo -n cat "$native_recovery_dir/terminal")" == 0 ]]
   sudo -n ln -T -- "$window/original-stops" "$window/confirmed-stops"
 }
@@ -417,7 +416,7 @@ native_same_window_restore_state() {
 }
 
 native_same_window_restore() {
-  local n since receipt original_port=6433
+  local n since receipt
   native_same_window_recoverable
   native_rollback_validate "$old_target"
   native_rollback_endpoint_validate "$old_target" "$host_env"
@@ -449,7 +448,7 @@ native_same_window_restore() {
   done
   native_same_window_restore_state
   collector_readiness_poll 90 2 collector_readiness_fetch >/dev/null
-  native_window_verify_original
+  original_port=6433 native_window_verify_original
   native_same_window_restore_state
 }
 

@@ -202,6 +202,7 @@ native_swap_body() { printf 'vm.swappiness = 10\n'; }
 
 native_existing_host_check() {
   local buffer="$1" mib="$2"
+  : "${swapfile:?}" "${releases_root:?}" "${host_env:?}" "${unit_file:?}" "${po_unit_file:?}" "${po_socket_file:?}"
   native_logrotate_body | sudo -n cmp -s - /etc/logrotate.d/hololive-bot || return 1
   native_udp_body "$buffer" | sudo -n cmp -s - /etc/sysctl.d/99-hololive-quic-udp-buffer.conf || return 1
   native_swap_body | sudo -n cmp -s - /etc/sysctl.d/99-hololive-swap.conf || return 1
