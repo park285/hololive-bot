@@ -32,6 +32,15 @@ else
     installed_firewall="${test_root}/installed.nft"
     quadlet_dir="${test_root}/units"
 fi
+source_root="$deploy_root"
+compose_root="${deploy_root%/*}"
+if (( EUID != 0 )); then compose_root="$test_root/opt/hololive-bot/compose"; fi
+if [[ "$self_dir" == "$compose_root/app-sources/"* ]]; then
+    source_root="${self_dir%/scripts/deploy}"
+    sha="${source_root##*/}"
+    [[ "$sha" =~ ^[0-9a-f]{40}$ && "$self_dir" == "$compose_root/app-sources/$sha/scripts/deploy" ]] &&
+        cmp -s "$source_root/.source-revision" <(printf '%s\n' "$sha") || die "invalid pinned app prestart"
+fi
 
 render_env=false
 app_version_override=
@@ -147,7 +156,7 @@ write_secret_env() {
 }
 
 api_release_version() {
-    local file="${deploy_root}/hololive/hololive-api/VERSION"
+    local file="${source_root}/hololive/hololive-api/VERSION"
     local -a lines=()
     [[ -f "$file" && ! -L "$file" ]] || die "hololive-api VERSION is missing: ${file}"
     mapfile -t lines < "$file"
@@ -160,7 +169,7 @@ case "$target" in
     hololive-api|hololive-alarm-worker|hololive-youtube-collector-c)
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         if [[ "$render_env" != true ]]; then
-            postgres_capacity_assert_service "$deploy_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
+            postgres_capacity_assert_service "$source_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
         fi
         ;;
 esac
@@ -239,7 +248,7 @@ case "$target" in
             wait_for_tailnet_address HOLOLIVE_ADMIN_API_PORT_BIND_IP
             wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
             admin_bind_assert_host "$HOLOLIVE_ADMIN_API_PORT_BIND_IP"
-            admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
+            admin_network_assert_firewall "${source_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
         fi
         if [[ -n "$app_version_override" ]]; then
             APP_VERSION_VALUE="$app_version_override"
