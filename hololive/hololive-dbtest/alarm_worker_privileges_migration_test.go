@@ -3,7 +3,6 @@ package dbtest
 import (
 	"context"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -52,7 +51,7 @@ var alarmWorkerSequenceACL = map[string]string{
 func TestAlarmWorkerRoleGrantsAreLeastPrivilege(t *testing.T) {
 	pool := NewBlankPool(t)
 	role := createAlarmWorkerGrantRole(t, pool)
-	applyAlarmWorkerRoleMigration(t, pool, role)
+	applyRoleMigrations(t, pool, observationGrantRoles{}, role)
 
 	assertAlarmWorkerSchemaPrivileges(t, pool, role)
 	assertAlarmWorkerACL(t, pool, role, "table", alarmWorkerTableACL, `SELECT format('%I.%I', namespace.nspname, relation.relname),
@@ -104,12 +103,6 @@ func createAlarmWorkerGrantRole(t *testing.T, pool *pgxpool.Pool) string {
 	})
 
 	return role
-}
-
-func applyAlarmWorkerRoleMigration(t *testing.T, pool *pgxpool.Pool, role string) {
-	t.Helper()
-
-	applyRoleMigrations(t, pool, strings.NewReplacer("hololive_alarm_worker", role))
 }
 
 func assertAlarmWorkerSchemaPrivileges(t *testing.T, pool *pgxpool.Pool, role string) {

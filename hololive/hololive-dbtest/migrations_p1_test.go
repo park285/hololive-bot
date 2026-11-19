@@ -1,6 +1,7 @@
 package dbtest
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -72,16 +73,23 @@ func TestSourceObservationGrantsAreLeastPrivilege(t *testing.T) {
 func applyBaselineForRoles(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
 	t.Helper()
 
-	applyRoleMigrations(t, pool, strings.NewReplacer("hololive_runtime", roles.runtime, "hololive_scraper", roles.scraper))
+	applyRoleMigrations(t, pool, roles, "")
 }
 
-func applyRoleMigrations(t *testing.T, pool *pgxpool.Pool, replacer *strings.Replacer) {
+func applyRoleMigrations(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles, alarmWorker string) {
 	t.Helper()
 
 	files, err := readMigrations()
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	db := pool.Config().ConnConfig.Database
+	replacer := strings.NewReplacer(
+		"hololive_runtime", cmp.Or(roles.runtime, db+"_absent_runtime"),
+		"hololive_scraper", cmp.Or(roles.scraper, db+"_absent_scraper"),
+		"hololive_alarm_worker", cmp.Or(alarmWorker, db+"_absent_worker"),
+	)
 
 	for i := range files {
 		files[i].SQL = []byte(replacer.Replace(string(files[i].SQL)))
