@@ -12,6 +12,8 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   exec "$(dirname -- "$0")/quadlet-redeploy-service.sh" --rollback "$@"
 fi
 
+: "${ROOT_DIR:?}" "${deploy_root:?}" "${prefix?}" "${sealed:?}" "${pair_tool:?}" "${fence_dir:?}"
+
 . "$ROOT_DIR/scripts/deploy/lib/compose-env.sh"
 . "$ROOT_DIR/scripts/deploy/lib/postgres-endpoint.sh"
 . "$ROOT_DIR/scripts/deploy/lib/postgres-capacity.sh"
@@ -20,6 +22,7 @@ release="$(realpath -e -- "$1")" || die "release directory not found: $1"
 [[ "$release" == "$deploy_root/artifacts/worker-profile/releases/"* ]] ||
   die "release must live under $deploy_root/artifacts/worker-profile/releases"
 if [[ "$sealed" == true ]]; then
+  : "${releases:?}" "${revision:?}"
   [[ "$release" == "$1" && "${release%/*}" == "$releases" ]] || die 'noncanonical retained app release'
   sealed_authority tree "$release"
 fi

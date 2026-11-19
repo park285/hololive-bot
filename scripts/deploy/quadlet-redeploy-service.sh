@@ -614,8 +614,11 @@ if [[ "$mode" != quiesce ]]; then
 fi
 
 prepare_slot() {
-  stage=previous-pair
-  mkdir -p -m 0755 "$releases"
+  stage='previous-pair'
+  if [[ ! -d "$releases" ]]; then
+    mkdir -p -- "${releases%/*}"
+    mkdir -m 0755 -- "$releases"
+  fi
   release="$(mktemp -d "$releases/$service-v2-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")"
   release_paths[$service]="$release"
   chmod 0755 "$release"
@@ -654,7 +657,7 @@ prepare_slot() {
   echo "[ROLLBACK] $release (schema/admission compatibility must be approved before a later manual apply)"
 }
 prepare_candidate() {
-  stage=candidate-pair
+  stage='candidate-pair'
   python3 "$pair_tool" candidate "$service" "$release/candidate" "${candidate_ids[$service]}" <"$quadlet_dir/$service.container"
   python3 "$pair_tool" check "$service" "$release/candidate"
   python3 "$pair_tool" verify-source "$service" "$release/candidate"
@@ -720,7 +723,7 @@ fi
 stage=migration
 run_migration() {
   local migrate_dropins="$quadlet_dir/hololive-db-migrate.container.d" migrate_tmp
-  mkdir -p -m 0755 "$migrate_dropins"
+  [[ -d "$migrate_dropins" ]] || mkdir -m 0755 -- "$migrate_dropins"
   migrate_tmp="$(mktemp "$migrate_dropins/.50-migrator-image.conf.XXXXXX")"
   if [[ "$sealed" == true ]]; then
     sealed_migrator_dropin "$ROOT_DIR" "$migrator_id" >"$migrate_tmp"
@@ -745,7 +748,7 @@ run_migration() {
       sealed_check_units "$service"
       assert_infrastructure
       sealed_loaded hololive-db-migrate "$migrator_id"
-      sealed_single_job start hololive-db-migrate.service "$migrator_id" "$release/schema-job"
+      sealed_single_job start hololive-db-migrate.service "$migrator_id" "$release/schema-job" job_unknown
       sealed_check_result "$job_since" >"$release/schema-check" || die "[OUTCOME] outcome_unknown: candidate check exit or read-only head unconfirmed; do not retry"
       job_unknown=false
     else
@@ -857,13 +860,18 @@ for service in "${services[@]}"; do
     end_defer
   else
     echo "[RESTART] $unit (NRestarts before=$restarts_before)"
-    if [[ "$sealed" == true ]]; then sealed_restart "$unit"; else systemctl restart "$unit"; fi
+    if [[ "$sealed" == true ]]; then
+      sealed_single_job try-restart "$unit" "${candidate_ids[$service]}" "$release/writer-job" job_unknown
+    else
+      systemctl restart "$unit"
+    fi
   fi
   stage=verify
   systemctl is-active --quiet "$unit" || die "$unit is not active after restart"
   python3 "$pair_tool" verify-live "$service" "$release/candidate" "$service"
   if [[ "$sealed" == true ]]; then
-    sealed_accept "$service" "${candidate_ids[$service]}"
+    accepted_generation=
+    sealed_accept "$service" "${candidate_ids[$service]}" accepted_generation
     postgres_pooler_assert_writer_sql "$service"
   fi
   restarts="$(systemctl show "$unit" -p NRestarts --value)"

@@ -12,6 +12,7 @@ sealed_migrator_dropin() {
 }
 
 sealed_authority() {
+  : "${validator:?}" "${prefix?}"
   python3 -ISB - "$validator" "$prefix" "$@" <<'PY'
 import os
 from pathlib import Path
@@ -43,6 +44,7 @@ PY
 }
 
 sealed_bind_generation() {
+  : "${deploy_root:?}" "${ROOT_DIR:?}" "${prefix?}"
   local name="$1" state pid health bind file expected
   local -a binds
   state="$(podman container inspect --format '{{.State.Pid}} {{.State.Health.Status}}' "$name")" || return 1
@@ -106,6 +108,7 @@ sealed_assert_peer() {
 }
 
 sealed_peer_admission() {
+  : "${deploy_root:?}" "${store:?}" "${revision:?}" "${releases:?}" "${quadlet_dir:?}" "${pair_tool:?}"
   local peer="$unchanged_peer" pointer="$deploy_root/artifacts/worker-profile/active/$unchanged_peer.pair" pair dir image sha old tool
   local -a receipts=("$store"/transition-*-"$revision"/revisions)
   [[ ${#receipts[@]} == 1 ]] && sealed_authority files "${receipts[0]}" "$pointer" || return 1
@@ -123,7 +126,7 @@ sealed_peer_admission() {
        "$(podman image inspect --format '{{index .Config.Labels "org.opencontainers.image.title"}}' "$image")" == "$peer" ]] || return 1
   if [[ "$sha" == "$revision" ]]; then
     cmp -s "$dir/accepted-writer" <(printf '%s\n' "$peer_generation") || return 1
-    [[ "$peer" != hololive-api || "$image" == "$migrator_id" ]] || return 1
+    [[ "$peer" != hololive-api || "$image" == "${migrator_id:?}" ]] || return 1
   else
     [[ "$peer" == hololive-alarm-worker && "$sha" == "$old" ]] || return 1
   fi
@@ -133,6 +136,7 @@ sealed_peer_admission() {
 }
 
 sealed_write_intent() {
+  : "${deploy_root:?}" "${service:?}" "${quadlet_dir:?}" "${release:?}"
   local pointer="$deploy_root/artifacts/worker-profile/active/$service.pair" installed="$quadlet_dir/$service.container.d/50-worker-profile.conf"
   install -m0444 "$pointer" "$release/before.pair"
   install -m0444 "$installed" "$release/before.conf"
@@ -142,7 +146,7 @@ sealed_write_intent() {
 }
 
 sealed_single_job() {
-  local operation="$1" unit="$2" image="$3" record="$4" dependencies dep transaction line job='' type='' rc=0 done
+  local operation="$1" unit="$2" image="$3" record="$4" dependencies dep transaction line job='' type='' rc=0 completion
   dependencies="$(systemctl show "$unit" -p Requires -p Wants -p Requisite -p BindsTo --value)" || return 1
   [[ -n "$dependencies" ]] || die "$unit dependency inventory missing"
   for dep in $dependencies; do
@@ -153,7 +157,7 @@ sealed_single_job() {
   job_since="$EPOCHREALTIME"
   printf '%s %s %s %s\n' "$operation" "$unit" "$image" "$job_since" >"$record/request"
   sync -f "$record"
-  job_unknown=true
+  if [[ -n "${5:-}" ]]; then printf -v "$5" '%s' true; fi
   transaction="$(LC_ALL=C SYSTEMD_LOG_COLOR=0 SYSTEMD_LOG_LEVEL=info SYSTEMD_LOG_TARGET=console \
     systemctl --show-transaction --job-mode=ignore-dependencies "$operation" "$unit" 2>&1)" || rc=$?
   while IFS= read -r line; do
@@ -167,19 +171,18 @@ sealed_single_job() {
   printf '%s %s %s\n' "$job" "$type" "$rc" >"$record/anchor"
   sync -f "$record"
   [[ "$rc" == 0 ]] || die "[OUTCOME] outcome_unknown: inspect $unit job $job; no automatic retry"
-  done="$(journalctl --boot --quiet --no-pager -o json --since="@$job_since" --output-fields=INVOCATION_ID \
+  completion="$(journalctl --boot --quiet --no-pager -o json --since="@$job_since" --output-fields=INVOCATION_ID \
     _PID=1 "UNIT=$unit" "JOB_ID=$job" JOB_RESULT=done MESSAGE_ID=39f53479d3a045ac8e11786248231fbf)"
   job_invocation="$(python3 -ISB -c 'import json,re,sys
 i=json.load(sys.stdin)["INVOCATION_ID"]
 if not re.fullmatch("[0-9a-f]{32}",i) or not int(i,16): sys.exit(1)
-print(i)' <<<"$done")" || die "[OUTCOME] outcome_unknown: $unit manager completion missing"
+print(i)' <<<"$completion")" || die "[OUTCOME] outcome_unknown: $unit manager completion missing"
   printf '%s\n' "$job_invocation" >"$record/invocation"
   sync -f "$record"
 }
 
-sealed_restart() { sealed_single_job try-restart "$1" "${candidate_ids[$service]}" "$release/writer-job"; }
-
 sealed_intent_slot() {
+  : "${releases:?}" "${pair_tool:?}"
   local dir="$1" service="$2" current="$3" overlay="$4" hashes before
   hashes="$(cd "$dir" && sha256sum before.pair before.conf before.generation previous/pair.json candidate/pair.json candidate/50-worker-profile.conf)" &&
     cmp -s "$dir/activation.intent" <(printf '%s\n' "$hashes") || return 1
@@ -199,6 +202,7 @@ sealed_intent_slot() {
 }
 
 sealed_recovery_prestart() {
+  : "${store:?}"
   local pair="$1" pin generation script lib original
   pin="$(python3 -ISB -c 'import json,sys;print(json.load(open(sys.argv[1])).get("source_generation",""))' "$pair/pair.json")" || return 1
   if [[ -n "$pin" ]]; then
@@ -219,7 +223,9 @@ sealed_recovery_prestart() {
 }
 
 sealed_check_units() {
+  : "${quadlet_dir:?}" "${compose_env:?}" "${deploy_root:?}" "${pair_tool:?}" "${releases:?}" "${mode:?}"
   local service="$1" name=hololive-db-migrate base old current path match image sha values info
+  local mcs_pattern=$'^\\[Container\\]\nSecurityLabelLevel=s[0-9]+:c[0-9]+(,c[0-9]+)*$'
   base="$quadlet_dir/$name.container"
   sealed_authority files "$base" "$quadlet_dir/$service.container" || return 1
   if [[ -e "$base.d" || -L "$base.d" ]]; then sealed_authority directory "$base.d" || return 1; fi
@@ -234,7 +240,7 @@ sealed_check_units() {
     sealed_authority files "$path" || return 1
     [[ -f "$path" && ! -L "$path" ]] || die 'non-regular app unit overlay'
     if [[ "${path##*/}" != 50-worker-profile.conf && "${path##*/}" != 50-migrator-image.conf &&
-      "$(awk '!/^([[:space:]]*([#;]|$))/' "$path")" =~ ^\[Container\]$'\n'SecurityLabelLevel=s[0-9]+:c[0-9]+(,c[0-9]+)*$ ]]; then continue; fi
+      "$(awk '!/^([[:space:]]*([#;]|$))/' "$path")" =~ $mcs_pattern ]]; then continue; fi
     case "$path" in
       "$base.d/50-migrator-image.conf")
         image="$(sed -n 's/^Image=//p' "$path")"
@@ -287,7 +293,7 @@ sealed_accept() {
     podman exec "$cid" ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30007/internal/ready
   fi
   [[ "$(sealed_generation "$service")" == "$live" ]] || die 'writer changed during H3 acceptance'
-  accepted_generation="$live"
+  if [[ -n "${3:-}" ]]; then printf -v "$3" '%s' "$live"; fi
 }
 
 sealed_loaded() {
