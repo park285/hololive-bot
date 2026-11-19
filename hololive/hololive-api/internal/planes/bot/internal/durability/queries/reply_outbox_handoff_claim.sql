@@ -1,5 +1,3 @@
--- lease 없는 accepted 행을 확인 예정 시각 순으로 고르고 handoff_next_check_at을 앞으로 밀어 soft claim한다.
--- 밀어 둔 값이 이후 전이의 CAS 토큰이다. 경과 시간과 재발송 지평은 DB 시계 하나로 계산한다.
 WITH due AS MATERIALIZED (
     SELECT id
     FROM bot_reply_outbox
@@ -17,6 +15,7 @@ WHERE outbox.id = due.id
 RETURNING outbox.id,
           outbox.iris_request_id,
           outbox.handoff_next_check_at,
+          outbox.xmin,
           floor(EXTRACT(EPOCH FROM (clock_timestamp() - outbox.accepted_at)) * 1000)::bigint,
           outbox.attempts,
           outbox.operator_replay_grants,

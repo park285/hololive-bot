@@ -37,8 +37,6 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 		dbNow   time.Time
 	)
 
-	// NOW()는 전역·session 행 잠금 대기 전 트랜잭션 시작 시각이다. 대기 중 새로 due가 된 항목은
-	// 다음 호출로 남기고, 이번 후보 조회·재확인·FinalizeDue에는 같은 시각을 쓴다.
 	err := tx.QueryRow(ctx, finalizeNextDueLiveEndTxSQL).Scan(&videoID, &dbNow)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -49,8 +47,6 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 		return false, fmt.Errorf("claim due live end: %w", err)
 	}
 
-	// due 조회에서는 head를 선잠그지 않는다. consumer와 같은 session→head→evidence
-	// 순서로 잠근 뒤 최신 candidate와 due 조건을 다시 확인한다.
 	state, err := loadLiveState(ctx, tx, nil, []string{videoID})
 	if err != nil {
 		return false, fmt.Errorf("load live state: %w", err)

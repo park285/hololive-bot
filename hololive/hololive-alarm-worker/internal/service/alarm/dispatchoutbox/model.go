@@ -36,7 +36,6 @@ type Record struct {
 	DispatchGroupKey string
 	SendUnitID       int64
 	ClientRequestID  string
-	// RequestUnpinned는 조회 시점에 send unit의 요청이 아직 고정되지 않았다는 뜻이다.
 	RequestUnpinned  bool
 	Status           Status
 	AttemptCount     int
@@ -70,12 +69,10 @@ type EventRecord struct {
 	UpdatedAt            time.Time
 }
 
-// PublishBatchInput의 delivery는 항상 pending으로 저장한다.
 type PublishBatchInput struct {
 	Envelopes []AlarmQueueEnvelope
 }
 
-// PublishOutcome은 commit으로 확인한 입력별 발행 결과다.
 type PublishOutcome string
 
 const (
@@ -86,8 +83,6 @@ const (
 	PublishRejectedTerminal  PublishOutcome = "rejected_terminal"
 )
 
-// PublishReceipt의 Ordinal은 호출 입력의 위치이며 DedupeKey는 방별 영속 식별자다.
-// Receipt가 없는 입력은 수용 여부가 확인되지 않았으므로 성공으로 표시하지 않는다.
 type PublishReceipt struct {
 	Ordinal   int
 	DedupeKey string
@@ -117,18 +112,11 @@ func processedPublishBatchResult(result *PublishBatchResult) PublishBatchResult 
 	return *result
 }
 
-// DeliveryClaim은 소유자 전이의 대상 delivery와 호출자가 claim에서 관측한 attempt_count다. 모든 소유자 전이는 행의
-// (status, locked_by, attempt_count)를 이 claim과 맞춘다. 행의 attempt_count는 claim·반환·만료 회수에서 바뀌지 않으므로
-// claim마다 바뀌는 토큰은 locked_by다. 같은 worker ID가 같은 attempt의 행을 다시 claim하는 경우는 runner가 한 배치의
-// 정산을 끝낸 뒤에만 다음 claim을 하는 직렬 루프라서 생기지 않는다. 이 runner를 병렬화하면 claim별 토큰이 필요하다.
 type DeliveryClaim struct {
 	ID           int64 `json:"id"`
 	AttemptCount int   `json:"attempt_count"`
 }
 
-// FailureUpdate의 AttemptCount는 전이 뒤 attempt_count다. 실패 정산은 claim attempt + 1, 같은 attempt 재대기는 claim
-// attempt와 같아야 하며 SQL fence가 이 관계로 claim 세대를 맞춘다. RetryAfter는 TargetStatus가 StatusRetry일 때만
-// 쓰이고 SQL이 잠금 뒤 채취한 clock에 더해 next_attempt_at을 정한다.
 type FailureUpdate struct {
 	ID           int64         `json:"id"`
 	AttemptCount int           `json:"attempt_count"`
@@ -138,7 +126,6 @@ type FailureUpdate struct {
 	TargetStatus Status        `json:"target_status"`
 }
 
-// TerminalUpdate의 AttemptCount는 claim 당시 attempt_count이며 종료 전이는 attempt를 바꾸지 않는다.
 type TerminalUpdate struct {
 	ID           int64  `json:"id"`
 	AttemptCount int    `json:"attempt_count"`
@@ -160,7 +147,6 @@ type EventLoader interface {
 	LoadEventsByID(ctx context.Context, eventIDs []int64) (map[int64]EventRecord, error)
 }
 
-// DeliveryProgressWriter의 전이는 fence가 맞지 않은 대상을 바꾸지 않고 *sendfence.MissError로 보고한다.
 type DeliveryProgressWriter interface {
 	BeginSendRequest(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, expectedID string, lease time.Duration) error
 	MarkSent(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, irisRequestID string, firstCheck time.Duration) error

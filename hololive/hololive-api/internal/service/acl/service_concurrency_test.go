@@ -126,7 +126,6 @@ func TestRemoveRoomRevokesPersistedRoomMissingFromMemory(t *testing.T) {
 	require.False(t, admin.IsRoomAllowed("3001"))
 }
 
-// 메모리에 없는 방의 철회도 acl_rooms 전체를 다시 읽지 않고 대상 행 삭제 결과로 판단한다.
 func TestRemoveRoomMissingFromMemoryDoesNotReloadAllRooms(t *testing.T) {
 	store := newFakeACLStore()
 
@@ -148,7 +147,6 @@ func TestRemoveRoomMissingFromMemoryDoesNotReloadAllRooms(t *testing.T) {
 	require.False(t, removed)
 }
 
-// PG 행이 이미 없어도 메모리 판정에서 빠지면 철회된 것이므로 true를 돌려준다.
 func TestRemoveRoomPresentOnlyInMemoryReportsRemoved(t *testing.T) {
 	store := newFakeACLStore()
 
@@ -167,7 +165,6 @@ func TestRemoveRoomPresentOnlyInMemoryReportsRemoved(t *testing.T) {
 	assertServiceMatchesStore(t, admin, store)
 }
 
-// newLoadedTestService는 production 기동(NewACLService)과 같은 loadFromDatabase로 저장 상태를 snapshot에 적재한다.
 func newLoadedTestService(t *testing.T, store aclStore) *Service {
 	t.Helper()
 

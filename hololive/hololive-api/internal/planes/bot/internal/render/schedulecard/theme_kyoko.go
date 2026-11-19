@@ -173,7 +173,6 @@ func kyokoCellFor(f *fontSet, d day, cellW, k float64) (cell kyokoCell, lines in
 		sb := slotBox{s, tb, max(tb.height(), st.minSlot*k)}
 		stack := false
 
-		// 넓은 캡슐 옆에서 제목이 접히거나 잘리면 캡슐을 제목 위로 올려 폭을 돌려준다.
 		if !d.off() && pw > kyokoPillW(f, k, "") && (tb.cut || len(tb.main) > 1) {
 			lim.maxW = kyokoTitleW(f, cellW, k, s, true)
 			if up := layoutTitle(f, s, mainT, subT, lim); (!up.cut && len(up.main) < len(tb.main)) || (tb.cut && !up.cut) {
@@ -220,7 +219,6 @@ func kyokoBuild(f *fontSet, cols [][]day, cellW, avail, k float64) kyokoLayout {
 			out[ci] = append(out[ci], cell)
 		}
 
-		// 날짜가 적은 단에는 도장 칸 자리를 남긴다.
 		if len(days) < len(cols[0]) {
 			total += kyokoCellGap + kyokoStampMin
 		}
@@ -295,7 +293,6 @@ func kyokoColumn(c *canvas, p kyokoPal, g box, col []kyokoCell, short bool, k fl
 		weight += float64(max(1, len(cell.slots)))
 	}
 
-	// 남는 높이: 날짜가 적은 단은 도장 칸으로, 아니면 일정 건수에 비례해 칸에 나눈다.
 	slack := max(0, g.H-total)
 	stamp := 0.0
 
@@ -396,7 +393,6 @@ func kyokoDrawCell(c *canvas, p kyokoPal, b box, cell *kyokoCell, k float64) {
 func kyokoDrawSlot(c *canvas, p kyokoPal, x0, sy float64, sb *slotBox, stacked bool, k float64) {
 	capH := kyokoCapH * k
 
-	// 제목이 여러 줄이면 캡슐을 첫 줄에 맞춘다.
 	top := sy + (sb.h-sb.tb.height())/2
 	pcy := top + sb.tb.mainLH/2
 
@@ -458,7 +454,6 @@ func kyokoIDCard(c *canvas, p kyokoPal, b box, photo image.Image, strip bool) {
 		c.Photo(photo, pb.rrect(12), pb, 0)
 	}
 
-	// 사진 모서리에 남는 무대 배경을 검정으로 눌러 3색 규칙에 맞춘다.
 	c.Vignette(pb.rrect(12), pb.cx(), pb.cy(), min(pb.W, pb.H)*0.50, math.Hypot(pb.W, pb.H)*0.52, 0x17181C, 0.72)
 
 	if strip {

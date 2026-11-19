@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package dedup
 
 import (
@@ -45,8 +25,6 @@ type LogicalScheduleNotifiedData struct {
 	NotifiedAt     string `json:"notified_at"`
 }
 
-// Cache는 dedup 선점·기록이 요구하는 cache 작업이다. 선점 key(SetNX·Del·DelMany·Expire), JSON 기록(Get·Set),
-// 예정 알림 hash(HGetAll·HMSet), 여러 key의 묶음 조회(B·DoMulti)를 쓴다.
 type Cache interface {
 	cache.KeyValueCache
 	cache.HashCache
@@ -69,18 +47,12 @@ func NewService(c Cache, logger *slog.Logger) *Service {
 	}
 }
 
-// SETNX 기반 키 선점. 저장소 오류는 "이미 선점됨"(false, nil)과 구분해 오류로 돌려준다.
-// 호출자가 이를 실패(sendOutcomeFailed)로 기록해야 Valkey 장애 동안 알림이 skip으로 사라지지 않는다.
-// 선점 key에는 room 식별자가 보간되므로 오류와 로그에는 가명 토큰만 남긴다.
 func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	acquired, err := s.cache.SetNX(ctx, key, "1", ttl)
 	if err != nil {
 		return false, fmt.Errorf("dedup claim setnx: claim_key_token=%s: %w", privacylog.Pseudonym(key), err)
 	}
 
-	// Debug가 꺼진 운영 레벨에서도 claim마다 HMAC 가명을 계산해 버리던 비용을 없앤다.
-	// 운영 핸들러의 Enabled는 ctx와 무관하므로 기록 여부는 그대로이며, Handle에 넘기는
-	// ctx(Background)를 바꾸지 않으려고 DebugContext가 아닌 Debug를 유지한다.
 	if s.logger.Enabled(ctx, slog.LevelDebug) {
 		s.logger.Debug("dedup claim result",
 			slog.String("claim_key_token", privacylog.Pseudonym(key)),

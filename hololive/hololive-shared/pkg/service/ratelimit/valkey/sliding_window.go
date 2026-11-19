@@ -1,24 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
-// Package valkey는 분산 rate-limit 판정을 Valkey sorted-set 슬라이딩 윈도우로 구현하고 판정 결과 Decision을 소유한다.
 package valkey
 
 import (
@@ -68,10 +47,8 @@ redis.call('EXPIRE', key, ttl_sec)
 return {1, count + 1, 0}
 `
 
-// allowLua는 EVALSHA를 먼저 보내고 NOSCRIPT일 때만 valkey-go가 본문 EVAL로 다시 보낸다.
 var allowLua = valkeygo.NewLuaScript(allowScript)
 
-// Decision은 분산 슬라이딩 윈도우 판정 결과다.
 type Decision struct {
 	Allowed    bool
 	Current    int
@@ -257,8 +234,6 @@ func (l *SlidingWindowLimiter) memberID(nowMS int64) string {
 	return strconv.FormatInt(nowMS, 10) + ":" + l.instanceID + ":" + strconv.FormatUint(seq, 10)
 }
 
-// 생성자는 UUID를 덧붙여 같은 호스트의 서로 다른 limiter와 프로세스가 같은 밀리초·순번을 써도 표식이 겹치지 않게 한다. 호스트 이름을 얻지 못하면 random이나 "local"로 바꾸지 않고 오류다.
-// 같은 member를 두 인스턴스가 만들면 한도 판정이 어긋나기 때문이다.
 func resolveInstanceID(hostname func() (string, error)) (string, error) {
 	host, err := hostname()
 	if err != nil {

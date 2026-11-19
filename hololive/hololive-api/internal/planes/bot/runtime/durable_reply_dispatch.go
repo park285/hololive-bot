@@ -43,8 +43,6 @@ func (r *durableRuntime) processNextOutbox(ctx context.Context, claimed func()) 
 	return true
 }
 
-// dispatchOutboxClaim은 admission까지만 발송 예산(dispatchBudget) 안에서 기다린다. Handoff 확인은 accepted
-// 정산 뒤 reconciler가 lease 없이 이어 받는다.
 func (r *durableRuntime) dispatchOutboxClaim(ctx context.Context, claim *durability.ReplyOutboxClaim, token string) {
 	dispatchCtx, cancel := context.WithTimeout(ctx, r.dispatchBudget)
 	requestID, err := transport.DispatchStoredReply(dispatchCtx, r.irisClient, claim.RoomID, claim.Payload, claim.ClientRequestID)
@@ -110,8 +108,6 @@ func (r *durableRuntime) settleOutboxDispatch(
 	token, status, irisRequestID string,
 	dispatchErr error,
 ) (bool, error) {
-	// shutdown 취소 뒤에도 이미 관측한 전달 결과를 token fencing 아래 정산한다.
-	// inbox와 같은 유한 예산을 사용해 후속 plane의 종료 시간을 남긴다.
 	settleCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), r.settlementTimeout)
 	defer cancel()
 

@@ -11,7 +11,7 @@
 
 이 문서에서 `MUST`, `MUST NOT`, `SHOULD`는 구현 계약을 뜻한다. production migration, deploy, restart, live data 변경은 별도 승인 없이는 수행하지 않는다.
 
-2026-09-29 채널 통계 퇴역과 저장 구조 변경은 [저장 축소 계획](../plans/2026-09-29-youtube-storage-reduction.md)의 실행 기록 및 [API runbook](../runbooks/hololive-api.md#youtube-관측-저장-구조-전환)을 따릅니다. 아래 DDL 예시는 초기 설계이며 현행 물리 스키마는 migration manifest와 schema snapshot이 소유합니다. payload는 kind/schema/canonical profile별 공유 JSONB(LZ4), 32바이트 digest와 8바이트 FK로 저장하며 슬롯별 관측·오류·알림 의미는 유지합니다.
+2026-09-29 채널 통계 퇴역과 저장 구조 변경은 [API runbook](../runbooks/hololive-api.md#youtube-관측-저장-구조-전환)을 따릅니다. 아래 DDL 예시는 초기 설계이며 현행 물리 스키마는 migration manifest와 schema snapshot이 소유합니다. payload는 kind/schema/canonical profile별 공유 JSONB(LZ4), 32바이트 digest와 8바이트 FK로 저장하며 슬롯별 관측·오류·알림 의미는 유지합니다.
 
 2026-10-28 개정: source observation 수동 replay 파이프라인(요청 표 `source_observation_replay_requests`, `RequestReplay`, `ProcessNextReplay` loop, `YOUTUBE_PLANE_REPLAY_*`, replay audit retention, `source_observation_queue.replay_count`)을 migration 351에서 삭제했습니다. 운영 생산자(CLI·route)가 한 번도 생기지 않았기 때문입니다. 이 문서에서 replay 요청·재활성화·replay audit를 서술하는 §9.5·§12와 구현 순서(§18)·시험 표(§19)의 해당 항목은 초기 설계 기록이며 현행 계약이 아닙니다. replay epoch(`source_observation_replay_epoch`)는 claim 시점의 pre-epoch dead-letter 경계로 남습니다.
 
@@ -207,7 +207,7 @@ const (
 
 ### 3.4 `!라이브` 채널·영상 확인 관측 (2026-09-26)
 
-`DEC-20260926-hololive-live-absence-evidence`가 다음 추가 계약을 소유한다. 방송 탭·Holodex 목록과 absence slot은 LiveQuery의 채널 부재 근거가 아니다. 기존 absence 기반 종료 reducer 정책 자체는 변경하지 않는다.
+방송 탭·Holodex 목록과 absence slot은 LiveQuery의 채널 부재 근거가 아니다. 기존 absence 기반 종료 reducer 정책 자체는 변경하지 않는다.
 
 | 항목 | 채널 확인 | 영상 확인 |
 |---|---|---|
@@ -223,7 +223,7 @@ const (
 | completeness / continuity | 알려진 결과 COMPLETE, UNKNOWN은 UNKNOWN / NOT_APPLICABLE | 알려진 결과 PARTIAL, UNKNOWN은 UNKNOWN / NOT_APPLICABLE |
 | absence 권한 | POSITIVE_ONLY; reducer 호출 금지 | POSITIVE_ONLY; absence slot 생성 금지 |
 
-2026-09-30 수명 정합성 개정은 [실행 계획의 명시적 사용자 승인](../plans/2026-09-30-live-reconciliation-lifecycle.md)에 따라 영상 확인 schema 2/generation 2와 YouTube.js snapshot generation 3을 추가합니다. 위 표는 2026-09-26 최초 계약입니다. 채널 확인 열은 현행입니다. 영상 확인 열의 schema/generation 칸과 대상 칸은 이 개정을 따르며, 그 밖의 영상 확인 칸보다 아래 항목이 우선합니다. 현행 영상 확인 대상은 활성 operational roster 채널의 LIVE 영상과, 검토 결정이 없는(`reviewed_at IS NULL`) UPCOMING 중 예정 시각이 지난 영상 또는 예정 시각이 없는 `legacy_unknown` 영상입니다(`hololive/hololive-api/internal/planes/youtube/runtime/queries/live_check_videos.sql`). positive·가용성 관측의 신선도는 대상 포함 여부가 아니라 확인을 시작할 수 있는 시각(`NotBefore`)을 정합니다. 영상 확인 schema 1/generation 1과 YouTube.js snapshot generation 2는 2026-10-06 운영 저장행을 정리·확인한 뒤 consumer 지원 항목을 제거해 API가 받지 않습니다. 영상 확인 schema 1 decoder도 제거했고, snapshot generation 2 decoder는 현행 Holodex 계약이 쓰므로 남아 있습니다([canonical JSON 계약](../contracts/source-observation-canonical-json-v1.md), [폐기 기록](../plans/2026-10-06-verified-refactoring.md)). 현행 영상 확인 세대의 차이는 아래 항목을 따릅니다. 세대 활성화는 API·DB 준비와 분리한 승인된 cutover이며 채널 확인과 Holodex 세대는 바꾸지 않습니다.
+2026-09-30 수명 정합성 개정은 명시적 사용자 승인에 따라 영상 확인 schema 2/generation 2와 YouTube.js snapshot generation 3을 추가합니다. 위 표는 2026-09-26 최초 계약입니다. 채널 확인 열은 현행입니다. 영상 확인 열의 schema/generation 칸과 대상 칸은 이 개정을 따르며, 그 밖의 영상 확인 칸보다 아래 항목이 우선합니다. 현행 영상 확인 대상은 활성 operational roster 채널의 LIVE 영상과, 검토 결정이 없는(`reviewed_at IS NULL`) UPCOMING 중 예정 시각이 지난 영상 또는 예정 시각이 없는 `legacy_unknown` 영상입니다(`hololive/hololive-api/internal/planes/youtube/runtime/queries/live_check_videos.sql`). positive·가용성 관측의 신선도는 대상 포함 여부가 아니라 확인을 시작할 수 있는 시각(`NotBefore`)을 정합니다. 영상 확인 schema 1/generation 1과 YouTube.js snapshot generation 2는 2026-10-06 운영 저장행을 정리·확인한 뒤 consumer 지원 항목을 제거해 API가 받지 않습니다. 영상 확인 schema 1 decoder도 제거했고, snapshot generation 2 decoder는 현행 Holodex 계약이 쓰므로 남아 있습니다([canonical JSON 계약](../contracts/source-observation-canonical-json-v1.md), [폐기 기록](../plans/2026-10-06-verified-refactoring.md)). 현행 영상 확인 세대의 차이는 아래 항목을 따릅니다. 세대 활성화는 API·DB 준비와 분리한 승인된 cutover이며 채널 확인과 Holodex 세대는 바꾸지 않습니다.
 
 - 새 영상 세대는 지난 UPCOMING·출처 미상도 기존 lease·projection·1,000건 상한 안에서 확인합니다. LIVE가 우선이며 미래 UPCOMING 전수 polling과 새 retry/worker를 추가하지 않습니다.
 - 요청 영상·canonical 채널 identity, 신뢰와 현재 사실의 무모순성, 관측 시각 이하의 유효 ended_at, 더 새로운 positive/pending 부재를 확인한 영상별 명시적 종료만 시작 미관측 수명을 정산합니다. LIVE positive clock이 없는 이 시작 미관측 경로는 ended_at 이후의 positive가 grace 안에서 관측된 동안만 종료를 미루고, grace가 지나도록 더 새로운 positive가 없으면 공급자 지연으로 보고 끝냅니다(2026-10-08 개정. 이전의 신선도 없는 ended_at 직접 비교는 1초 송출 뒤 공급자가 잠시 UPCOMING을 유지한 영상을 영구히 남겼습니다). 기존 LIVE positive가 있는 경로는 관측 시각 이후 positive가 없으면 일반 명시적 종료 계약(관측 시각 기준 positive 비교와 grace)을 따릅니다. 수집 예정 시각을 EffectiveAt으로 쓰는 provider positive가 실제 ended_at보다 늦다는 이유로 종료를 거부하지 않습니다. 시작 근거가 없으면 started_at·positive clock은 NULL이며 과거 시작 알림을 만들지 않습니다.
@@ -233,7 +233,7 @@ const (
 
 새 확인 RPC는 전용 단일 시도 transport를 사용한다. 기존 feed·schedule transport의 재시도 정책은 바꾸지 않는다. HTML, 추가 browse, 다른 provider, 자동 재시도로 판정을 보완하지 않는다. 채널 RPC와 기존 live_snapshot fetch는 독립적으로 성공·실패를 기록한다. 한쪽의 실패가 다른 쪽의 유효 관측을 버리거나 completeness를 승격시키지 않는다. 새 확인의 요청 실패도 해당 subject의 UNKNOWN(`request_failed`)으로 관측하여, 이전 공개 불가 판정을 재확인 실패 뒤 계속 적용하지 않는다. 취소·lease 상실 때는 기존 publish fence를 우회하지 않는다.
 
-`DEC-20260927-live-check-slot-isolation`에 따라 `youtubejs_channel_live`는 `live_snapshot`만 발행한다. 채널 확인은 별도 job key·lease·scheduled_for로 COMPLETE/DEFERRED를 진행한다. 방송 탭의 같은-slot 재시도가 성공한 확인의 다음 2분 슬롯을 막거나 이미 발행한 확인을 다시 요청하게 하지 않는다. 같은 `channel_live_check`를 두 job에서 발행하는 호환 경로는 없다.
+`youtubejs_channel_live`는 `live_snapshot`만 발행한다. 채널 확인은 별도 job key·lease·scheduled_for로 COMPLETE/DEFERRED를 진행한다. 방송 탭의 같은-slot 재시도가 성공한 확인의 다음 2분 슬롯을 막거나 이미 발행한 확인을 다시 요청하게 하지 않는다. 같은 `channel_live_check`를 두 job에서 발행하는 호환 경로는 없다.
 
 #### 원시 사실과 payload
 
@@ -256,7 +256,7 @@ const (
 - 새 두 kind의 evidence retention 기본값은 각각 7일이다. `YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS`, `YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS`로 기존 positive-age/승인 검증을 적용한다. 74채널·2분이면 채널 관측은 하루 53,280건, 7일 372,960건이다. 운영 저장 비용은 payload/index를 포함해 릴리스 때 확인한다. canonical 최신값은 evidence 삭제와 별개다.
 - migration은 contract/target/consumer-offset kind CHECK, 두 generation 행, canonical 테이블·FK 인덱스·runtime 최소 DML grant를 추가한다. scraper에는 canonical 권한을 주지 않는다. API의 supported set·claim kinds·retention을 먼저 준비하고 migration/API → collector fleet 순으로 전환한다. 기존 live_snapshot 세대와 decoder는 바꾸지 않는다. migration 211의 LIVE coverage 부분 인덱스는 LiveQuery 전환 및 다른 소비자 부재 확인 뒤 별도 CONCURRENTLY drop migration으로 제거한다.
 
-검증 표본과 해석 한계는 `docs/review/live-absence-evidence-20260926.md`에 기록한다. 공개 불가 판정이 불가능한 private/deleted LIVE는 신선한 `identity_missing`과 채널 음성이 갖춰지면 LiveQuery가 먼저 빈 결과를 확정하고(v7.2.7), 같은 두 신호가 해소 불가 grace 동안 이어지면 `UNRESOLVABLE_VIDEO`로 끝나 영상 확인 대상에서 빠진다(v7.2.8). 채널별 youtubejs 스냅샷은 `ENDED`까지 scope에 넣어 첫 페이지에 continuation이 남으면 PARTIAL이므로 대부분 채널에서 이런 세션은 부재 종료로는 끝나지 않는다. 시작을 관측하지 못한 UPCOMING의 `identity_missing`·`identity_mismatch`는 끝내지 않고 추적 기간에 따라 재확인 주기를 최대 1시간까지 늦춘다(v7.2.9). 정리는 검토 영수증 흐름이 맡는다. 실제 배포·migration 적용·fleet 반영·운영 비교 관측은 별도 승인 사항이다.
+공개 불가 판정이 불가능한 private/deleted LIVE는 신선한 `identity_missing`과 채널 음성이 갖춰지면 LiveQuery가 먼저 빈 결과를 확정하고(v7.2.7), 같은 두 신호가 해소 불가 grace 동안 이어지면 `UNRESOLVABLE_VIDEO`로 끝나 영상 확인 대상에서 빠진다(v7.2.8). 채널별 youtubejs 스냅샷은 `ENDED`까지 scope에 넣어 첫 페이지에 continuation이 남으면 PARTIAL이므로 대부분 채널에서 이런 세션은 부재 종료로는 끝나지 않는다. 시작을 관측하지 못한 UPCOMING의 `identity_missing`·`identity_mismatch`는 끝내지 않고 추적 기간에 따라 재확인 주기를 최대 1시간까지 늦춘다(v7.2.9). 정리는 검토 영수증 흐름이 맡는다. 실제 배포·migration 적용·fleet 반영·운영 비교 관측은 별도 승인 사항이다.
 
 ## 4. Observation envelope v2
 
@@ -1508,7 +1508,7 @@ type ContentEvidenceClock struct {
 
 #### 최초공개 알림 소유권
 
-v9.3.0부터 구독자 최초공개 알림은 live alarm이 소유한다. 예정 최초공개는 발견 시 `NEW_VIDEO`를 만들지 않고, `youtube_live_sessions.is_premiere=true` 세션도 일반 방송과 같은 live upcoming 분 전 알림·일정 변경 알림과, 분 전 알림을 놓친 방의 live catchup 시작 알림 후보다. `is_premiere`는 알림 후보 제외가 아니라 `선행공개` 문구 분류로 쓰인다. 이 소유권은 `DEC-20260830-hololive-premiere-content-owned-notifications`의 `NEW_VIDEO` 소유를 대체한다. content→live premiere 병합은 계속 새 schema/table을 만들지 않으며, 그 병합 범위에는 alarm-side join을 넣지 않는다는 기존 경계를 유지한다. live alarm은 이번 틱의 video_id 집합으로 확정 최초공개 여부를 직접 읽고, `LoadRecentSessions`의 `last_seen` 창에 의존하지 않는다.
+v9.3.0부터 구독자 최초공개 알림은 live alarm이 소유한다. 예정 최초공개는 발견 시 `NEW_VIDEO`를 만들지 않고, `youtube_live_sessions.is_premiere=true` 세션도 일반 방송과 같은 live upcoming 분 전 알림·일정 변경 알림과, 분 전 알림을 놓친 방의 live catchup 시작 알림 후보다. `is_premiere`는 알림 후보 제외가 아니라 `선행공개` 문구 분류로 쓰인다. 이 소유권은 기존 `NEW_VIDEO` 소유를 대체한다. content→live premiere 병합은 계속 새 schema/table을 만들지 않으며, 그 병합 범위에는 alarm-side join을 넣지 않는다는 기존 경계를 유지한다. live alarm은 이번 틱의 video_id 집합으로 확정 최초공개 여부를 직접 읽고, `LoadRecentSessions`의 `last_seen` 창에 의존하지 않는다.
 
 ### 13.3 Live state
 
@@ -1867,7 +1867,7 @@ Global process readiness를 자동 실패시키지 않고 `degraded`로 노출�
 - parser drift는 permanent collection error로 metric을 남기고 complete-empty를 publish하지 않는다.
 - YouTube.js raw player 보강의 video identity 불일치, 잘못된 boolean/시각 shape 또는 아래의 접근 제한에 해당하지 않는 시각 부재는 `parser_drift`다. 보강 후보가 collector가 요청마다 정한 조회 상한(`max_schedule_lookups`, protocol 최대 32)을 넘으면 player 요청 전에 `response_too_large/RESOURCE_LIMIT`다. 두 경우 모두 해당 collection은 live observation과 checkpoint를 만들지 않으며 다른 provider 호출이나 표시 문자열 파싱으로 전환하지 않는다.
 - 관측된 `UNPLAYABLE`/`playerLegacyDesktopYpcOfferRenderer`와 정확한 video ID, `isUpcoming=true`, `isLiveContent=true`가 확인되고 두 기계가독 시각이 모두 없으면 `unavailable_live_sessions`에 ID·채널·`access_restricted`를 기록한다. 제한 행을 제외한 live observation은 PARTIAL이며 빈 sessions도 완전 수집으로 승격하지 않는다. 부재로 종료하지 않고 기존 canonical 상태·확인 시각을 보존하며, 명시적인 종료와 정상 positive는 기존 consumer 규칙을 따른다. poll은 완료하여 다음 기존 slot에서 재관측하고 추가 retry·stale 시각 재사용·provider를 만들지 않는다. 최대 32개 제한 행의 중복·중첩·교차 채널·미지 사유를 거부한다.
-- 이 접근 제한 예외의 소유자는 collector다. 구조화된 `youtubejs_live_schedule_unavailable` WARN은 ID·사유를, `youtube_collection_completeness_total`은 PARTIAL 발행을 나타낸다. renderer 변경 또는 다른 제한 유형의 독립 재현 때 범위를 재검토한다. `DEC-20260911-youtube-restricted-schedule-isolation`이 소유권과 예외를 통제한다.
+- 이 접근 제한 예외의 소유자는 collector다. 구조화된 `youtubejs_live_schedule_unavailable` WARN은 ID·사유를, `youtube_collection_completeness_total`은 PARTIAL 발행을 나타낸다. renderer 변경 또는 다른 제한 유형의 독립 재현 때 범위를 재검토한다.
 - 목록과 player 조회 사이에 실제 `LIVE`로 전환된 행은 예정 시각을 발명하지 않고 `LIVE`로 반영해 기존 catch-up admission에 맡긴다. 처음부터 `LIVE`인 목록 행도 상세 조회 없이 같은 경로를 유지한다.
 - circuit cooldown 동안 provider/kind freshness와 skip reason을 구분해 노출한다.
 
@@ -2243,7 +2243,7 @@ repository 전체 tracked current surface를 검사한다.
 ```bash
 git grep -nE \
   'hololive-youtube-producer|youtube-producer|AuthorityMode|source_authority_fences|legacy|shadow|authoritative' \
-  -- . ':!docs/history/**'
+  -- .
 ```
 
 historical document와 unrelated API vocabulary는 exact allowlist로만 제외한다. broad directory exclusion을 사용하지 않는다.

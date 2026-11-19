@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
-// 첫 오류로 형제를 취소하되 시작한 모든 작업의 종료 뒤에만 반환합니다.
 func runNamedSchedulers(ctx context.Context, logger *slog.Logger, prefix string, runners []NamedScheduler) error {
 	group, groupCtx := errgroup.WithContext(ctx)
 

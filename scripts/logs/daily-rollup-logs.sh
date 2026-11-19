@@ -242,9 +242,7 @@ emit_rollup_success_metric() {
     echo "# TYPE hololive_log_rollup_last_success_timestamp_seconds gauge"
     echo "hololive_log_rollup_last_success_timestamp_seconds $(date +%s)"
   } >"${tmp}" || { rm -f "${tmp}"; return 0; }
-  # mktemp는 항상 0600으로 만들어, nobody로 도는 node_exporter가 읽지 못한다.
   chmod 0644 "${tmp}" || { rm -f "${tmp}"; return 0; }
-  # node_exporter textfile collector가 쓰는 중인 파일을 읽어 부분 노출하지 않도록, 원자적 rename으로만 교체한다.
   mv -f "${tmp}" "${dir}/hololive_log_rollup.prom" || rm -f "${tmp}"
 }
 

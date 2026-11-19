@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// 이름 있는 정수도 fmt의 '*' 인자로 허용되므로 컨테이너 padding 전에 거부해야 합니다.
 func TestTemplateNamedIntegerPaddingRejectedBeforeAllocation(t *testing.T) {
 	type unsignedWidth uint64
 
@@ -180,7 +179,6 @@ func TestExecuteTemplateBudgetsFailWithoutPartialOutput(t *testing.T) {
 	}
 }
 
-// 병렬 테스트와 겹치지 않도록 순차 실행해 TotalAlloc 증가량을 잽니다.
 func TestTemplateAmplificationRejectedBeforeLargeAllocation(t *testing.T) {
 	const allocationBudget = 2 << 20
 
@@ -216,7 +214,6 @@ func TestTemplateAmplificationRejectedBeforeLargeAllocation(t *testing.T) {
 	}
 }
 
-// 본문 상한은 한 action 안에서 단계 확인 없이 실행되는 호출 수를 제한하므로 넘는 본문은 파싱 단계에서 거절합니다.
 func TestTemplateSourceOverLimitRejected(t *testing.T) {
 	t.Parallel()
 

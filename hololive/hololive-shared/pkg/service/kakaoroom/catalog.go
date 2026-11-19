@@ -108,7 +108,6 @@ func (c *Catalog) refresh(ctx context.Context) bool {
 		return false
 	}
 
-	// 방 ID와 무관하게 전체 목록 조회와 저장 순회를 함께 공유한다.
 	resultCh := c.loads.DoChan("", func() (any, error) {
 		return nil, c.refreshRooms(ctx)
 	})
@@ -117,13 +116,11 @@ func (c *Catalog) refresh(ctx context.Context) bool {
 	case <-ctx.Done():
 		return false
 	case <-resultCh:
-		// owner가 저장 중 만료돼도 이미 관측한 방 사실은 유효하다. 살아 있는 대기자는 cache로 판정한다.
 		return ctx.Err() == nil
 	}
 }
 
 func (c *Catalog) refreshRooms(ctx context.Context) error {
-	// 첫 대기자의 취소와 분리하되 HTTP와 모든 저장 작업에 하나의 시간 상한을 적용한다.
 	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), constants.QueryTimeout.Default)
 	defer cancel()
 

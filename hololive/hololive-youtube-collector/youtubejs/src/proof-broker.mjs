@@ -5,7 +5,6 @@ import { setTimeout as delay } from "node:timers/promises";
 const socketPath = "/run/hololive-youtube-po/worker.sock";
 const responseLimit = 64 * 1024;
 const requestLimit = 1024 * 1024;
-// po-broker의 IdleTimeout(30초)보다 훨씬 짧아, event loop가 수 초 멈춰도 유휴 연결을 서버가 아닌 client가 먼저 닫습니다.
 const idleSocketTimeoutMs = 1_000;
 const brokerStates = new Set(["IDLE", "STARTING", "AWAITING_CHALLENGE", "AWAITING_INTEGRITY", "READY"]);
 const brokerErrors = new Set([
@@ -14,7 +13,6 @@ const brokerErrors = new Set([
 const poTokenPattern = /^[A-Za-z0-9_-]+={0,2}$/;
 const generationPattern = /^[A-Za-z0-9_-]+$/;
 
-/** 비신뢰 응답/예외 원문을 진단 경계 밖으로 보내지 않습니다. */
 export class ProofError extends Error {
   /** @param {string} code */
   constructor(code) {
@@ -24,23 +22,17 @@ export class ProofError extends Error {
   }
 }
 
-/** 앱 helper socket과 별개인, 네트워크 없는 발급기의 제한된 IPC client입니다. */
 export class ProofBrokerClient {
   /** @param {{ socket?: string }} [options] */
   constructor(options = {}) {
     this.socket = options.socket ?? socketPath;
-    // 연결 재사용과 유휴 socket의 client 우선 종료를 위해 keep-alive를 유지합니다.
-    // Agent timeout은 유휴(free) socket만 파기합니다. 서버 IdleTimeout보다 짧게 두어
-    // 서버가 이미 닫은 socket을 재사용하는 경쟁을 줄이고, 진행 중 요청의 예산은 별도로 유지합니다.
     this.agent = new Agent({ keepAlive: true, maxSockets: 4, maxFreeSockets: 1, timeout: idleSocketTimeoutMs });
   }
 
   /** @param {AbortSignal} signal */
   async freshGeneration(signal) {
-    // worker의 30초 SDK 기동과 이전 세대 종료·서비스 재시작을 기다립니다. 발급 요청 예산과는 별개입니다.
     const readySignal = AbortSignal.any([signal, AbortSignal.timeout(40_000)]);
     let retiredGeneration;
-    // reset은 한 번만 보냅니다. 응답 유실은 새 generation 관측으로 판정하며 재전송하지 않습니다.
     while (!readySignal.aborted) {
       try {
         const health = await this.exchange("GET", "/health", undefined, readySignal);
@@ -69,7 +61,11 @@ export class ProofBrokerClient {
     throw new ProofError("broker_unavailable");
   }
 
-  /** @param {string} id @param {string} userAgent @param {AbortSignal} signal */
+  /**
+   * @param {string} id
+   * @param {string} userAgent
+   * @param {AbortSignal} signal
+   */
   async prepare(id, userAgent, signal) {
     const result = await this.exchange("POST", "/v1/session", {
       protocol_version: 1, generation: id, user_agent: userAgent,
@@ -91,7 +87,12 @@ export class ProofBrokerClient {
     return result.snapshot;
   }
 
-  /** @param {string} id @param {string} integrityToken @param {number} validForMs @param {AbortSignal} signal */
+  /**
+   * @param {string} id
+   * @param {string} integrityToken
+   * @param {number} validForMs
+   * @param {AbortSignal} signal
+   */
   async activate(id, integrityToken, validForMs, signal) {
     const result = await this.exchange("POST", "/v1/activate", {
       protocol_version: 1, generation: id, integrity_token: integrityToken, valid_for_ms: validForMs,
@@ -100,7 +101,11 @@ export class ProofBrokerClient {
     if (result.generation !== id || result.ready !== true) throw new ProofError("broker_protocol");
   }
 
-  /** @param {string} id @param {string} videoId @param {AbortSignal} signal */
+  /**
+   * @param {string} id
+   * @param {string} videoId
+   * @param {AbortSignal} signal
+   */
   async mint(id, videoId, signal) {
     const result = await this.exchange("POST", "/v1/mint", {
       protocol_version: 1, generation: id, video_id: videoId,
@@ -113,7 +118,10 @@ export class ProofBrokerClient {
     return result.po_token;
   }
 
-  /** @param {string} id @param {AbortSignal} signal */
+  /**
+   * @param {string} id
+   * @param {AbortSignal} signal
+   */
   async retire(id, signal) {
     const result = await this.exchange("DELETE", "/v1/session", { protocol_version: 1, generation: id }, signal);
     fields(result, ["protocol_version", "generation", "closed"]);
@@ -181,24 +189,37 @@ export class ProofBrokerClient {
   }
 }
 
-/** @param {unknown} value @param {string[]} keys */
+/**
+ * @param {unknown} value
+ * @param {string[]} keys
+ */
 function fields(value, keys) {
   if (!record(value) || Object.keys(value).length !== keys.length || keys.some((key) => !Object.hasOwn(value, key))) {
     throw new ProofError("broker_protocol");
   }
 }
 
-/** @param {unknown} value @returns {value is Record<string, unknown>} */
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** @param {unknown} value @param {number} limit @returns {value is string} */
+/**
+ * @param {unknown} value
+ * @param {number} limit
+ * @returns {value is string}
+ */
 function boundedString(value, limit) {
   return typeof value === "string" && value.length > 0 && Buffer.byteLength(value) <= limit;
 }
 
-/** @param {unknown} value @returns {value is string} */
+/**
+ * @param {unknown} value
+ * @returns {value is string}
+ */
 function generation(value) {
   return boundedString(value, 128) && generationPattern.test(value);
 }

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package settings
 
 import (
@@ -33,8 +13,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/envload"
 )
 
-// LoadIrisConfig는 Iris egress 클라이언트 입력(IRIS_*)을 읽는다. 필수 여부 판단은 runtime이
-// ValidateIrisEgressInputs 또는 ValidateIrisClientInputs로 결정한다.
 func LoadIrisConfig() (IrisConfig, error) {
 	webhookToken, botToken := LoadIrisTokens()
 
@@ -59,7 +37,6 @@ func LoadIrisConfig() (IrisConfig, error) {
 	return config, nil
 }
 
-// quic·http3 같은 옛 별칭은 기동 시 거절한다.
 func parseIrisTransport(raw string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return iris.TransportH3, nil
@@ -104,7 +81,6 @@ func LoadLoggingConfig() (LoggingConfig, error) {
 	return config, nil
 }
 
-// LoadHolodexConfig는 Holodex 클라이언트 운영값을 읽는다. 범위 검증은 ValidateHolodexConfig가 소유한다.
 func LoadHolodexConfig() (HolodexConfig, error) {
 	apiKey := envload.HolodexAPIKey()
 
@@ -144,8 +120,6 @@ func LoadHolodexConfig() (HolodexConfig, error) {
 	return config, nil
 }
 
-// LoadOfficialScheduleRuntimeConfig는 공식 일정 클라이언트 설정과 응답 본문 상한(MAX_RESPONSE_BODY_BYTES)을 함께 읽는다.
-// 두 값의 오류는 합쳐서 돌려주며, 검증은 ValidateOfficialScheduleRuntimeConfig가 소유한다.
 func LoadOfficialScheduleRuntimeConfig() (OfficialScheduleRuntimeConfig, error) {
 	officialSchedule, officialScheduleErr := loadOfficialScheduleConfig()
 	maxResponseBodyBytes, maxResponseBodyBytesErr := loadMaxResponseBodyBytes()
@@ -183,8 +157,6 @@ const (
 	seeMoreFoldDefault = true
 )
 
-// LoadSeeMoreFold는 bot plane이 쓰는 '전체보기' 접기 스위치를 읽는다. 기본값은 접기이며, 다른 bool env처럼
-// 잘못된 값은 기본값으로 바꾸지 않고 오류로 돌려준다.
 func LoadSeeMoreFold() (bool, error) {
 	var env envload.StrictEnv
 
@@ -196,7 +168,6 @@ func LoadSeeMoreFold() (bool, error) {
 	return fold, nil
 }
 
-// LoadBotConfig는 채팅 명령 표시 설정(BOT_*)을 읽고 잘못된 값 오류를 모두 합쳐 돌려준다.
 func LoadBotConfig() (BotConfig, error) {
 	var env envload.StrictEnv
 

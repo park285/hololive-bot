@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 공개 본문은 GitHub 생성 결과만 사용하고 운영 요약은 별도 기록에 둡니다.
 fail() { echo "[release] $*" >&2; exit 1; }
 [[ $# -ge 2 && $# -le 3 ]] || fail 'usage: bash scripts/publish-release.sh <tag> <previous-tag> [preview|create|edit]'
 tag=$1
@@ -25,7 +24,6 @@ jq --arg tag "$tag" '[.[][] | select(.tag_name == $tag)] | if length > 1 then er
 exists=$(jq '. != null' "$evidence/before.json")
 [[ "$mode" != create || "$exists" == false ]] || fail '이미 존재하는 Release입니다; edit을 사용하십시오'
 [[ "$mode" != edit || "$exists" == true ]] || fail '수정 대상 Release가 없습니다'
-# 기존 릴리즈 수정은 해당 게시 시각 이전의 직전 게시 릴리즈를 사용합니다.
 expected=$(jq -r --arg tag "$tag" --slurpfile before "$evidence/before.json" '
   [.[][] | select(.draft == false and .tag_name != $tag)
     | select(($before[0].published_at == null) or (.published_at < $before[0].published_at))]
@@ -45,7 +43,6 @@ if [[ "$mode" == create ]]; then
   gh release create "$tag" --repo "$repo" --verify-tag --title "$tag" --notes-file "$evidence/notes.md"
 else
   id=$(jq -r '.id' "$evidence/before.json")
-  # 수정은 제목과 본문만 PATCH하여 tag·첨부물·공개 상태를 보존합니다.
   jq --arg name "$tag" '{name: $name, body: .body}' "$evidence/generated.json" > "$evidence/edit.json"
   gh api --method PATCH "repos/$repo/releases/$id" --input "$evidence/edit.json" > "$evidence/result.json"
 fi

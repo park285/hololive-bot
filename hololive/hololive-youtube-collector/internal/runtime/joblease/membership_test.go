@@ -51,13 +51,11 @@ func jobContractFor(t *testing.T, spec *JobSpec) collection.JobContract {
 	return job
 }
 
-// 필드 dropped는 이어받지 않고, added는 새 generation부터의 대상으로 넣는다(재등록·cadence 변경 포함).
 type projectionChange struct {
 	dropped []leaseTarget
 	added   []leaseTarget
 }
 
-// 같은 의미로 이어진 대상은 member_since_generation을 그대로 이어받는다. 이전 generation 행의 valid_until은 남긴다.
 func transitionProjection(t *testing.T, pool *pgxpool.Pool, previous int64, change projectionChange) int64 {
 	t.Helper()
 
@@ -262,7 +260,6 @@ func assertSuperseded(t *testing.T, repository *Repository, lease *JobLease, spe
 	}
 }
 
-// 제거 후 같은 속성으로 재등록(ABA)해도 새 generation부터의 대상이므로 과거 lease를 허용하지 않는다.
 func TestRemovedAndReaddedTargetDoesNotRevalidateOldLease(t *testing.T) {
 	t.Parallel()
 
@@ -387,8 +384,6 @@ func testUnprovenMembershipIsNotAdmitted(t *testing.T) {
 	}
 }
 
-// retention이 lease 행을 지우고 다시 만들면 fence_epoch가 1부터 재시작한다. 과거 증명은 같은 owner·epoch여도 scheduled_for 등 증명 전체가 달라
-// renew·complete·release가 모두 소유 손실로 거절되며, 유효성은 lease 이력이 아니라 재사용되지 않는 projection generation에 묶인다.
 func TestLeaseRecreatedAfterRetentionDoesNotReviveOldProof(t *testing.T) {
 	t.Parallel()
 
@@ -552,8 +547,6 @@ func TestGuardWaitersEvaluateFreshSnapshotAfterTransition(t *testing.T) {
 	}
 }
 
-// API 전환이 lease 소유 subject의 대상을 제거하면, guard를 기다린 snapshot의 membership 판정도 잠금 이후
-// snapshot에서 이뤄져 전환 전 membership으로 통과하지 않고 superseded로 거절된다.
 func TestGuardWaiterSeesOwnMembershipRemovedByTransition(t *testing.T) {
 	t.Parallel()
 
@@ -603,8 +596,6 @@ func TestGuardWaiterSeesOwnMembershipRemovedByTransition(t *testing.T) {
 	}
 }
 
-// 전역 CURRENT_PROJECTION 작업은 자기 roster kind 전체가 범위다. 다른 kind 변경은 무관하고, 같은 kind의 subject 추가는
-// roster를 바꾸므로 superseded다.
 func TestGlobalProjectionJobScopeCoversRosterKinds(t *testing.T) {
 	t.Parallel()
 

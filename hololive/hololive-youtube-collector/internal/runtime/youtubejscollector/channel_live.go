@@ -10,11 +10,8 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// ChannelLiveJobKind는 방송 탭 snapshot job 종류입니다. 실행 profile은 이 값으로 예정 영상 조회 상한을 더합니다.
 const ChannelLiveJobKind collection.JobKind = "youtubejs_channel_" + channelKindLive
 
-// ChannelLiveRunner는 방송 탭 live_snapshot만 수집합니다. 채널 /live 확인은 별도 job 슬롯이 담당하므로
-// 방송 탭 실패는 이 job의 슬롯만 재시도하고 확인 관측의 진행을 막지 않습니다.
 type ChannelLiveRunner struct {
 	client ChannelClient
 }
@@ -52,7 +49,6 @@ func (r *ChannelLiveRunner) Collect(ctx context.Context, input *collection.RunIn
 		return collection.CollectResult{}, fmt.Errorf("live snapshot: %w", err)
 	}
 
-	// 방송 탭이 없으면 snapshot 없이 성공합니다. 실패한 목록 조회는 빈 snapshot으로 바꾸지 않습니다.
 	var envelopes []contract.Envelope
 
 	if snapshot != nil {
@@ -82,7 +78,6 @@ func (r *ChannelLiveRunner) liveSnapshotEnvelope(ctx context.Context, input *col
 		return nil, nil
 	}
 
-	// 새 collector는 generation 3의 실제 조회 증명만 발행한다.
 	if generationErr := input.RequireLiveSnapshotMetadataGeneration(); generationErr != nil {
 		return nil, fmt.Errorf("require live snapshot metadata generation: %w", generationErr)
 	}

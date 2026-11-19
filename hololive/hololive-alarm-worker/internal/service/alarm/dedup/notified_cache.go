@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package dedup
 
 import (
@@ -36,7 +16,6 @@ func (s *Service) readNotifiedData(ctx context.Context, key string) (NotifiedDat
 }
 
 func (s *Service) loadNotifiedData(ctx context.Context, key string) (NotifiedData, bool, error) {
-	// 구형 string 형상(WRONGTYPE)도 다른 저장소 오류와 같은 실패 경로다. 오류 문자열로 분류하지 않는다.
 	fields, err := s.readNotifiedHashFields(ctx, key)
 	if err != nil {
 		return NotifiedData{}, false, fmt.Errorf("load notified data: %w", err)

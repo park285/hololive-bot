@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package adminruntime
 
 import (
@@ -40,7 +20,6 @@ import (
 
 const testAPIKey = "test-key"
 
-// testAdminDomainHandlers는 route 등록과 인증만 검사하는 시험용이다. 각 handler의 의존성이 비어 있어 본문은 호출할 수 없다.
 func testAdminDomainHandlers() *server.DomainHandlers {
 	return &server.DomainHandlers{
 		Member:   &server.MemberHandler{},
@@ -125,7 +104,6 @@ func assertAPIRouterSuccess(t *testing.T, router *gin.Engine, err error) {
 	}
 }
 
-// admin API는 Iris Console gateway가 서버 대 서버로 호출하므로 CORS 표면이 없다.
 func TestAPIRouter_IgnoresOriginWithoutCORSHeaders(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)

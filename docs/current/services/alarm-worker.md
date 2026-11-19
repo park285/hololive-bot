@@ -24,7 +24,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Dispatch queue consume/render/send path, serialized by PostgreSQL `FOR UPDATE SKIP LOCKED` row claims and the single Quadlet instance
 - Alarm state cache warming and mutation coordination where configured
 - Pending `youtube_notification_outbox` claim/render/send under the `youtube_delivery` profile executor
-- v1 YouTube outbox는 v3 ledger로 넘기지 않고 `youtube_delivery` dispatcher가 direct egress까지 소유 (`DEC-20260926-hololive-outbox-v3-convergence`로 `shadow|cutover` handoff 삭제)
+- v1 YouTube outbox는 v3 ledger로 넘기지 않고 `youtube_delivery` dispatcher가 direct egress까지 소유 (`shadow|cutover` handoff 삭제)
 - Birthday and anniversary celebration production
 
 방송·콘텐츠·축하·X 스페이스 알림에는 단일·묶음·길이와 무관하게 자동 전체보기 패딩을 넣지 않습니다. worker의 렌더러와 dispatch 설정에는 접기 옵션이 없습니다. `BOT_SEE_MORE_FOLD`는 API의 조회·보고서 표시를 제어하며, worker는 공통 설정 로딩에서 값 형식만 검증합니다. 사용자 template/채널 override의 직접 패딩, 기존 예약 본문과 pinned request의 본문·route·ID는 유지합니다.
@@ -65,13 +65,13 @@ YouTube dispatcher의 `claimedDelivery`는 delivery 행·outbox·해당 claim �
 
 ## Startup requirements
 
-`DEC-20260926-youtube-only-stream-providers`에 따라 Chzzk·Twitch client와 조회 루프, platform mapping 동기화는 제거했습니다. 관련 자격 증명과 `ALARM_TWITCH_ENABLED`를 소비하지 않습니다. 보관된 비유튜브 방송 envelope는 전송 전에 기존 실패 경로로 거부하며 YouTube URL로 바꾸지 않습니다. 기존 retry 상한과 DLQ 전이는 유지합니다. X Spaces·celebration 알림과 YouTube 상태 소유권은 별도 계약대로 유지합니다.
+Chzzk·Twitch client와 조회 루프, platform mapping 동기화는 제거했습니다. 관련 자격 증명과 `ALARM_TWITCH_ENABLED`를 소비하지 않습니다. 보관된 비유튜브 방송 envelope는 전송 전에 기존 실패 경로로 거부하며 YouTube URL로 바꾸지 않습니다. 기존 retry 상한과 DLQ 전이는 유지합니다. X Spaces·celebration 알림과 YouTube 상태 소유권은 별도 계약대로 유지합니다.
 
 - PostgreSQL and Valkey availability
 - `NOTIFICATION_SCHEDULER_ROLE=worker` in the current deployment; the production validator accepts `worker|off`, and the Quadlet unit pins `worker` so the single instance always runs the alarm checker/scheduler
 - A single running instance: proactive egress exclusivity comes from PostgreSQL `FOR UPDATE SKIP LOCKED` row claims plus the Quadlet `ContainerName=`/fixed host port, not from a Valkey lease
 - `STACK_WORKER_PROFILE_FILE=/run/hololive-bot/worker-profiles/alarm-worker.json`
-- production profile executors `alarm_dispatch` and `youtube_delivery` enabled; v1 `youtube_delivery` is a canonical direct-egress pipeline, not a v3 handoff source (`DEC-20260926-hololive-outbox-v3-convergence`)
+- production profile executors `alarm_dispatch` and `youtube_delivery` enabled; v1 `youtube_delivery` is a canonical direct-egress pipeline, not a v3 handoff source
 - Alarm timing/config env
 
 ## Shutdown behavior
@@ -84,7 +84,7 @@ Runtime은 scheduler·egress·celebration·X Spaces runner를 같은 취소 및 
 
 부모 종료에 따른 순수 context 오류만 정상 종료로 처리합니다. 취소와 실제 오류가 함께 반환되면 오류 채널 또는 ERROR 로그에 원인을 남기며, 종료 중 소비되지 않는 오류 채널 때문에 작업이 멈추지 않도록 합니다.
 
-Alarm-worker는 Karing template을 보내지 않습니다(`DEC-20260926-hololive-karing-egress-disposition`). Karing 전역 전송 슬롯과 chunk planner는 Karing 경로와 함께 삭제했습니다. admission을 증명하지 못한 202 결과 불명은 SENDING(YouTube outbox), quarantine(alarm dispatch)으로 보존하고, handoff 결과 불명은 두 handoff reconciler가 격리합니다.
+Alarm-worker는 Karing template을 보내지 않습니다. Karing 전역 전송 슬롯과 chunk planner는 Karing 경로와 함께 삭제했습니다. admission을 증명하지 못한 202 결과 불명은 SENDING(YouTube outbox), quarantine(alarm dispatch)으로 보존하고, handoff 결과 불명은 두 handoff reconciler가 격리합니다.
 
 Alarm dispatch payload/전달 문맥 복원 실패와 event 누락은 PostgreSQL worker fence 및 rows-affected 검증으로 DLQ 전이가 확인된 뒤 해당 delivery의 dedup 키를 해제합니다. 전이 실패·정상 전달·retry·결과 불명에서는 이 해제를 수행하지 않습니다.
 

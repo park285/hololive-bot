@@ -82,8 +82,6 @@ func buildRuntimeConfig() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("load collector runtime ownership config: %w", err)
 	}
 
-	// 아래 공통 구획 다섯 개는 모두 읽은 뒤 오류를 합쳐 잘못된 env를 한 번의 기동 실패로 보인다.
-	// 그 앞의 worker profile·collector·ownership 로더는 첫 오류에서 반환한다.
 	server, serverErr := settings.LoadServerConfigWithAPIKey(sharedenv.String("METRICS_API_KEY", ""))
 	logging, loggingErr := settings.LoadLoggingConfig()
 	postgres, postgresErr := settings.LoadPostgresConfig()

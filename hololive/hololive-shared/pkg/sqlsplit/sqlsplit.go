@@ -1,29 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
-// Package sqlsplit는 migration SQL을 statement 단위로 분할한다.
-//
-// pgx simple query protocol이 멀티-statement 문자열을 암묵 트랜잭션 블록으로 감싸
-// CREATE INDEX CONCURRENTLY가 "cannot run inside a transaction block"으로 실패하므로,
-// 각 statement를 개별 autocommit Exec로 보내야 한다. 분할 계약: 구분자는 top-level
-// 세미콜론뿐이며 dollar-quote($$/$tag$)·인용 문자열·주석 내부의 세미콜론은 제외한다.
 package sqlsplit
 
 import "strings"
@@ -58,8 +32,6 @@ func Statements(sql string) []string {
 	return statements
 }
 
-// StripComments는 인용 문자열과 dollar quote 밖의 주석을 지운다. 줄 주석은 뒤의 줄바꿈을 남기고
-// 블록 주석은 공백 하나로 바꾸므로, 주석을 사이에 둔 키워드와 줄 단위 패턴은 그대로 구분된다.
 func StripComments(sql string) string {
 	runes := []rune(sql)
 

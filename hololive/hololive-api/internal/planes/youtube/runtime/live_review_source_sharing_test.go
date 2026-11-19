@@ -29,7 +29,6 @@ func seedLiveReviewSourceSharing(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// 공유 원본의 NULL·불일치·갱신 판정은 snapshot→semantic_facts의 기존 계약과 같아야 합니다.
 type liveReviewSourceCase struct {
 	name       string
 	before     []string
@@ -73,7 +72,6 @@ func liveReviewFactChangeCases() []liveReviewSourceCase {
 			`UPDATE youtube_video_availability SET availability='PUBLIC',method='player_public',unknown_reason=NULL,identity_confirmed=true`,
 		}},
 		{name: "positive_supersedes_availability", after: []string{
-			// 의미 사실은 그대로 두고 검토 가능 조건만 바꾸되 가용성의 두 기준 시각은 일치시킵니다.
 			`UPDATE youtube_video_availability SET scheduled_for=now()-interval '4 days',effective_at=now()-interval '4 days'`,
 		}},
 		{name: "availability_absent", before: []string{`DELETE FROM youtube_video_availability`}},
@@ -122,7 +120,6 @@ func TestLiveReviewQueriesShareSourcesWithoutSemanticDrift(t *testing.T) {
 					require.NoError(t, execErr)
 				}
 
-				// reviewable이 거짓인 동일 사실 영수증도 둬서 사실 일치만으로 닫히는 오류를 잡습니다.
 				_, err = tx.Exec(t.Context(), `
 					INSERT INTO youtube_live_review_receipts
 					(receipt_id,video_id,snapshot_sha256,original_snapshot,evidence_refs,disposition,operator_id,reason,recorded_at)
@@ -152,8 +149,6 @@ const liveReviewMatchingDuplicateSQL = `
 	       evidence_refs,'closed_unresolved','test-operator','중복 의미 검토',now()-interval '6 hours'
 	FROM youtube_live_review_snapshot('shared-review')`
 
-// oracle은 typed helper 대신 기존 전체 snapshot에서 의미 사실을 얻습니다.
-// 같은 SQL statement에서 나이까지 비교하므로 실행 시간 허용치나 벽시계 assertion이 필요 없습니다.
 const liveReviewSourceOracleSQL = `
 	oracle_states AS MATERIALIZED (
 	    SELECT session.video_id,session.channel_id,session.status,session.scheduled_start_time,session.lifecycle_origin,

@@ -1,5 +1,3 @@
--- 각 관측의 (subject, kind)가 현재 CURRENT에서 활성이고, lease 획득 generation 이전부터 같은 의미로 이어진 대상인지 확인한다.
--- RETIRED generation의 유효기간이 남아 있어도 허용하지 않는다.
 WITH current_projection AS (
     SELECT generation
     FROM youtube_collection_projection_generations

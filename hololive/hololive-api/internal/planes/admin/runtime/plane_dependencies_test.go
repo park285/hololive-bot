@@ -34,7 +34,6 @@ import (
 
 var errUnusedAlarmProvider = errors.New("alarm provider is not used by this test")
 
-// unusedAlarmProvider는 alarm-worker를 부르지 않는 경로 시험에서 필수 alarm client 자리를 채운다.
 type unusedAlarmProvider struct{}
 
 func (unusedAlarmProvider) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
@@ -69,8 +68,6 @@ func (c *onceCollector) RequestCollect() bool {
 	return c.requested.CompareAndSwap(false, true)
 }
 
-// buildTestAdminHandlers는 process 조립과 같은 buildAdminHandlers 경로로 handler를 만든다. 이 시험 경로는
-// alarm-worker와 Holodex를 호출하지 않으므로 둘은 자리 채움이다.
 func buildTestAdminHandlers(t *testing.T, infra *sharedmodules.InfraModule, deps Dependencies, logger *slog.Logger) *server.DomainHandlers {
 	t.Helper()
 
@@ -103,7 +100,6 @@ func buildTestAdminHandlers(t *testing.T, infra *sharedmodules.InfraModule, deps
 	return domains
 }
 
-// recordingIrisRooms는 bot plane이 넘기는 Iris client 방 목록 조회 자리에 들어가 호출 횟수를 센다.
 type recordingIrisRooms struct{ calls atomic.Int32 }
 
 func (r *recordingIrisRooms) GetRooms(context.Context) (*iris.RoomListResponse, error) {
@@ -135,8 +131,6 @@ func TestAdminRoutesUseInjectedPlaneDependencies(t *testing.T) {
 
 type adminTestServe func(method, path, body string) *httptest.ResponseRecorder
 
-// newAdminTestRouter는 process 조립과 같은 buildAdminHandlers·ProvideAPIRouter 경로로 admin router를 만든다.
-// ACL Service는 시험 DB를 쓰는 실제 인스턴스다.
 func newAdminTestRouter(t *testing.T, rooms *recordingIrisRooms) (adminTestServe, *acl.Service, *pgxpool.Pool) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

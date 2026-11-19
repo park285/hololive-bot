@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package member
 
 import (
@@ -35,14 +15,11 @@ import (
 )
 
 const (
-	// Durable epoch가 freshness를 소유하고, 이 TTL은 같은 epoch 안의 정기 DB refresh 상한을 둔다.
 	allMembersSnapshotTTL         = 5 * time.Minute
 	allMembersSnapshotLoadTimeout = 10 * time.Second
 	allMembersSnapshotRetryDelay  = time.Minute
 )
 
-// allMembersState는 게시 단위다. 성공 상태는 members와 그 불변 색인 index를 함께 갖고, 재시도 대기 상태는 직전 성공
-// 상태의 members·index를 그대로 공유한다.
 type allMembersState struct {
 	index         *memberSnapshotIndex
 	members       []*domain.Member
@@ -67,7 +44,6 @@ func newAllMembersState(members []*domain.Member, generation uint64, loadedAt ti
 
 var errAllMembersGenerationChanged = errors.New("member snapshot generation changed")
 
-// 돌려준 slice는 호출자 소유다. 공유 적재는 호출자 취소와 분리된 상한 안에서 끝까지 진행하고, 기다리던 호출자만 자기 ctx가 끝나면 즉시 ctx 오류로 빠진다.
 func (c *Cache) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	snap, err := c.membersSnapshot(ctx)
 	if err != nil {
@@ -77,8 +53,6 @@ func (c *Cache) LoadAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	return cloneMemberSlice(snap.members), nil
 }
 
-// membersSnapshot은 전체 멤버 조회가 쓰는 snapshot을 돌려준다. Epoch이 불확실하면 게시하지 않는 일회용 상태를
-// PostgreSQL에서 만들어 같은 색인 규칙으로 답한다.
 func (c *Cache) membersSnapshot(ctx context.Context) (*allMembersState, error) {
 	if c == nil {
 		return nil, errors.New("member cache is nil")
@@ -107,8 +81,6 @@ func (c *Cache) membersSnapshot(ctx context.Context) (*allMembersState, error) {
 	}
 }
 
-// loadAllMembersBypass는 epoch 불확실 구간의 직접 조회다. 공유 적재가 아니므로 호출자 취소를 그대로 따르고, 같은
-// 상한 시간을 둔다.
 func (c *Cache) loadAllMembersBypass(ctx context.Context) (*allMembersState, error) {
 	loader, err := c.allMembersLoader()
 	if err != nil {
@@ -126,8 +98,6 @@ func (c *Cache) loadAllMembersBypass(ctx context.Context) (*allMembersState, err
 	return newAllMembersState(members, 0, time.Now()), nil
 }
 
-// loadAllMembersResult는 공유 적재 결과를 돌려준다. ErrAllMembersGenerationChanged는 새 generation에서 다시 시도하라는
-// 신호다. 공유 적재가 실패하면 같은 generation의 직전 성공 snapshot을 stale 결과로 쓴다.
 func (c *Cache) loadAllMembersResult(
 	ctx context.Context,
 	snap *allMembersState,
@@ -138,8 +108,6 @@ func (c *Cache) loadAllMembersResult(
 		return loaded, nil
 	}
 
-	// 호출자 취소는 공유 적재 실패가 아니므로 stale snapshot으로 바꾸지 않는다. 공유 적재 panic은 결함이므로 stale
-	// 성공으로 가리지 않고 그대로 실패로 돌려준다.
 	if errors.Is(err, errAllMembersGenerationChanged) || ctx.Err() != nil || errors.Is(err, errAllMembersLoadPanicked) {
 		return nil, err
 	}
@@ -211,8 +179,6 @@ func (*Cache) snapshotReloadDeferred(snap *allMembersState, now time.Time) bool 
 	return snap != nil && !snap.retryAfter.IsZero() && now.Before(snap.retryAfter)
 }
 
-// 공유 적재는 첫 호출자 ctx의 값만 물려받고 취소와는 분리되며 allMembersSnapshotLoadTimeout 상한을 갖는다. 기다리는 호출자는 각자 ctx가 끝나면 다른 대기자와 공유 적재에 영향 없이
-// 빠진다.
 func (c *Cache) loadAllMembersSnapshot(ctx context.Context, generation uint64) (*allMembersState, error) {
 	loader, err := c.allMembersLoader()
 	if err != nil {
@@ -247,11 +213,8 @@ func (c *Cache) loadAllMembersSnapshot(ctx context.Context, generation uint64) (
 	}
 }
 
-// Stale snapshot으로 대체하지 않는다.
 var errAllMembersLoadPanicked = errors.New("member snapshot load panicked")
 
-// Singleflight.DoChan은 fn panic을 새 goroutine에서 다시 던져 어떤 호출자도 복구할 수 없게 하므로(프로세스 종료), 여기서 복구해 명시적 오류로 바꾼다. Panic은
-// snapshot 상태를 바꾸지 않으므로 다음 조회가 다시 적재를 시도한다.
 func (c *Cache) guardedReloadAllMembersSnapshot(
 	ctx context.Context,
 	loader func(context.Context) ([]*domain.Member, error),
@@ -388,9 +351,6 @@ func (c *Cache) logAllMembersSnapshotRecovery(snap *allMembersState, memberCount
 	c.logger.Info("member_snapshot_reload_recovered", slog.Int("member_count", memberCount))
 }
 
-// storeAllMembersSnapshot은 색인을 잠금 밖에서 만든 뒤, 적재를 시작한 generation과 이전 상태가 그대로일 때만 새
-// snapshot을 다음 generation으로 게시한다. Generation이 오르므로 이전 point overlay는 함께 무효가 된다. 게시하지
-// 못하면 nil이다.
 func (c *Cache) storeAllMembersSnapshot(previous *allMembersState, generation uint64, members []*domain.Member) *allMembersState {
 	nextGeneration := generation + 1
 	next := newAllMembersState(members, nextGeneration, time.Now())

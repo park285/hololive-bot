@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package handlers
 
 import (
@@ -204,7 +184,6 @@ func (c *UpcomingCommand) executeAllUpcoming(ctx context.Context, roomID string,
 	return nil
 }
 
-// Holodex 응답은 캐시와 공유될 수 있어 원본을 고치지 않는다. 등록되지 않은 채널은 기존처럼 응답 이름을 그대로 둔다.
 func (c *UpcomingCommand) withMemberDisplayNames(ctx context.Context, streams []*domain.Stream) ([]*domain.Stream, error) {
 	channelIDs := make([]string, 0, len(streams))
 	for _, stream := range streams {
@@ -236,9 +215,7 @@ func (c *UpcomingCommand) withMemberDisplayNames(ctx context.Context, streams []
 	return withCollabMembers(ctx, c.Deps().CollabMembers, named)
 }
 
-// replyDisplayNameFailure는 표시명·콜라보 출연자 조회 실패를 원천 이름이나 출연자 생략으로 덮지 않고 예정 조회 실패로 알린다.
 func (c *UpcomingCommand) replyDisplayNameFailure(ctx context.Context, roomID string, cause error) error {
-	// 요청 취소는 조회 실패가 아니므로 오류 응답과 ERROR 로그 없이 취소로 돌려준다(live와 같은 처리).
 	if ctx.Err() != nil {
 		return fmt.Errorf("upcoming display names canceled: %w", ctx.Err())
 	}

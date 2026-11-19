@@ -182,7 +182,6 @@ func TestBroadcastHistoryTimeSpan(t *testing.T) {
 			},
 			want: "⏰ 2026/12/31 23:00~2027/01/01 00:30 · 1시간 30분",
 		},
-		// 종료 오차를 확인하지 못한 세션은 종료 시각과 길이를 쓰지 않는다.
 		"unverified end": {
 			entry: BroadcastHistoryEntry{StartedAt: startedAt, Time: time.Date(2026, time.October, 20, 12, 0, 0, 0, kst), TimeLabel: "종료"},
 			want:  "⏰ 2026/10/17 20:59 시작",

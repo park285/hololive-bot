@@ -1,4 +1,3 @@
--- 이전 후보 정책의 테스트 전용 관계형 oracle. runtime 경로로 사용하지 않는다.
 WITH target_bundles AS (
     SELECT subject_key, MIN(poll_interval_ms) AS min_interval_ms,
            MAX(poll_interval_ms) AS max_interval_ms, MAX(priority) AS max_priority

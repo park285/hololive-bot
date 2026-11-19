@@ -366,7 +366,6 @@ func TestReduceReusedScheduleNeverRevertsANewerObservation(t *testing.T) {
 		Clock: LiveEvidenceClock{LastUpcomingPositiveAt: new(newerAt)},
 	}
 
-	// 다른 AP가 newerAt에 옮겨진 일정을 반영한 뒤, 캐시를 가진 AP가 reusedAt에 확인한 옛 일정을 다시 싣는다.
 	fact := sessionFact("UPCOMING")
 
 	fact.ScheduledAt = new(original)
@@ -432,8 +431,6 @@ func TestReduceLateNewerScheduleReplacesAnEarlierAppliedReuse(t *testing.T) {
 		IgnoredAbsences: LoadedIgnoredAbsences(nil),
 	}
 
-	// 캐시를 가진 AP의 재사용 관측(reuseSlot)이 먼저 처리되고, 그보다 앞 슬롯(confirmedAt)에
-	// 다른 AP가 player로 확인한 옮겨진 일정이 늦게 도착한다.
 	reused := sessionFact("UPCOMING")
 
 	reused.ScheduledAt = new(original)
@@ -454,7 +451,6 @@ func TestReduceLateNewerScheduleReplacesAnEarlierAppliedReuse(t *testing.T) {
 		t.Fatalf("late newer schedule was dropped behind a reused one: %#v", got)
 	}
 
-	// 늦게 도착한 관측은 일정만 반영하고 상태·제목·시계는 더 늦은 관측의 값을 유지한다.
 	if got.Clock.LastUpcomingPositiveAt == nil || !got.Clock.LastUpcomingPositiveAt.Equal(reuseSlot) ||
 		got.StatusObservedAt == nil || !got.StatusObservedAt.Equal(reuseSlot) || got.Title != "latest title" {
 		t.Fatalf("late schedule changed more than the schedule: %#v", got)

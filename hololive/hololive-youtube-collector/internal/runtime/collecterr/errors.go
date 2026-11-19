@@ -22,8 +22,6 @@ const (
 	MaxDetailBytes = 2048
 )
 
-// ErrInvalidFailureTuple은 호출 코드가 durable 계약 밖 code/class tuple을 만들었음을 알린다. 이런 오류는 미분류
-// Internal/ClassInternal로 닫히고, collector는 youtube_collection_invalid_failure_tuple_total로 위반을 센다.
 var ErrInvalidFailureTuple = errors.New("invalid collection failure tuple")
 
 type Error struct {
@@ -219,8 +217,6 @@ func unclassifiedError(err error) error {
 	return typed
 }
 
-// IsUnclassified는 오류가 명시적 분류 없이 기본 버킷에 담겼는지 알린다.
-// 미분류 여부로 치명 여부를 가르는 판정에만 쓴다.
 func IsUnclassified(err error) bool {
 	normalized := Normalize(err)
 
@@ -241,10 +237,6 @@ func newError(code contract.CollectionErrorCode, class contract.FailureClass, hi
 		return typed
 	}
 
-	// 계약 밖 code/class tuple은 code의 기본 class로 조용히 고치지 않는다. helper 응답은 youtubejs.mapHelperFailure가
-	// 고정 tuple로만 옮기므로 여기 닿는 비정규 tuple은 호출 코드 결함이다. 호출자가 붙인 분류를 믿을 수 없으므로
-	// 미분류 Internal로 닫아(치명이 아닌 지연 처리) 원래 tuple을 원인에 남기고, scheduler가 ErrInvalidFailureTuple로
-	// 위반 metric을 센다.
 	typed.code = contract.ErrorInternalInvariant
 	typed.class = contract.ClassInternal
 	typed.retry = defaultRetryHint()
@@ -279,10 +271,6 @@ func (e *Error) normalized() *Error {
 	return &Error{code: contract.ErrorInternalInvariant, class: contract.ClassInternal, retry: defaultRetryHint(), err: e.err, unclassified: e.unclassified}
 }
 
-// recognizedTransportTimeout은 net/http client가 *url.Error로 돌려준 수송 계층 타임아웃(dial·TLS handshake·
-// response header·Client.Timeout)과 DB 연결의 dial 타임아웃(*net.OpError Op "dial")을 알린다. 앞 단계가 context
-// deadline을 먼저 분류하고, 연결 단계 밖에서 생긴 socket deadline(os.ErrDeadlineExceeded)은 원인이 모호해 계속
-// 미분류로 남긴다.
 func recognizedTransportTimeout(err error) bool {
 	if urlErr, ok := errors.AsType[*url.Error](err); ok && urlErr != nil && urlErr.Timeout() {
 		return true
@@ -293,7 +281,6 @@ func recognizedTransportTimeout(err error) bool {
 	return ok && opErr != nil && opErr.Op == "dial" && opErr.Timeout()
 }
 
-// 연결 실패(pgconn.ConnectError) 전체를 일시 장애로 보지는 않는다. 인증 실패(28P01) 같은 설정 결함은 미분류로 남겨 장애 집계에 섞이지 않게 한다.
 func recognizedTransientNetwork(err error) bool {
 	if err == nil {
 		return false
@@ -319,7 +306,6 @@ func recognizedTransientNetwork(err error) bool {
 		errors.Is(err, syscall.ENETUNREACH)
 }
 
-// 이 코드들은 DB 재시작·장애 조치 동안 나타나고 연결을 다시 맺으면 해소된다.
 func transientPostgresError(err error) bool {
 	pgErr, ok := errors.AsType[*pgconn.PgError](err)
 	if !ok || pgErr == nil {

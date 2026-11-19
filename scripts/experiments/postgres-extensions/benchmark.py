@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""격리된 합성 DB에서 계측 조합의 비용을 비교합니다. 운영 접속 옵션은 없습니다."""
 
 import argparse
 import json
@@ -43,7 +42,6 @@ def wait_ready(container):
             ["podman", "exec", container, "pg_isready", "-U", "postgres"],
             capture_output=True, timeout=5,
         )
-        # entrypoint의 임시 서버를 지나 최종 PID 1 서버가 시작될 때까지 기다립니다.
         pid = command(["podman", "exec", container, "sh", "-c",
                        'if test -f "$PGDATA/postmaster.pid"; then head -1 "$PGDATA/postmaster.pid"; fi'])
         if ready.returncode == 0 and pid.strip() == "1":
@@ -110,8 +108,6 @@ def run_variant(image, variant, seconds, trial):
     container = f"hololive-pg-extension-bench-{uuid.uuid4().hex[:12]}"
     extensions = VARIANTS[variant]
     libraries = ",".join(("pg_stat_statements",) + extensions)
-    # kapu rootless Podman 기준이다. --tmpfs는 uid=/gid=를 받지 않아 U로 --user 소유를 맞추고,
-    # 저장소 bind를 relabel하지 않도록 SELinux label을 끈다.
     args = [
         "podman", "run", "-d", "--rm", "--pull=never", "--name", container, "--network", "none", "--read-only",
         "--cpus", "2", "--memory", "1536m", "--pids-limit", "256", "--user", "999:999",
@@ -157,7 +153,7 @@ def run_variant(image, variant, seconds, trial):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description="격리된 합성 DB에서 계측 조합의 비용을 비교합니다. 운영 접속 옵션은 없습니다.")
     parser.add_argument("--image", required=True)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--seconds", type=int, default=8)
@@ -165,7 +161,6 @@ def main():
     if not 2 <= args.seconds <= 60:
         parser.error("측정 시간은 2~60초여야 합니다")
     results = []
-    # 정방향·역방향 순서로 두 번 측정하여 순서에 따른 온도·부하 차이를 줄입니다.
     for trial, variants in enumerate((tuple(VARIANTS), tuple(reversed(VARIANTS))), 1):
         for variant in variants:
             results.extend(run_variant(args.image, variant, args.seconds, trial))

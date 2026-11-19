@@ -1,6 +1,3 @@
--- 격리 send unit의 재발송 없는 종료 결정만 기록한다. delivery/event/send unit은 수정하지 않는다.
--- preview의 targetIds(쉼표 구분)와 originalSha256을 정확히 전달한다.
--- 결과 불명 시 receipt_id로 조회한다. 자동 재실행하지 않는다.
 \set ON_ERROR_STOP on
 \if :{?receipt_id}
 \else

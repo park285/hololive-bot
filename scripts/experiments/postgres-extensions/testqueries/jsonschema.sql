@@ -2,7 +2,6 @@
 CREATE EXTENSION pg_jsonschema;
 CREATE SCHEMA extension_benchmark;
 
--- 운영 aliases CHECK와 같은 정책입니다. 원소 타입·추가 키·SQL NULL 허용을 강화하지 않습니다.
 CREATE FUNCTION extension_benchmark.aliases_builtin(value jsonb) RETURNS boolean
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
     SELECT value IS NULL OR (
@@ -60,8 +59,6 @@ BEGIN
 END
 $constraint$;
 
--- coverage의 기존 AND 표현식은 키 누락에서 NULL이므로 CHECK를 통과합니다.
--- required를 추가하는 JSON Schema는 계약 강화이며 별도 데이터/앱 검토가 필요합니다.
 SELECT (jsonb_typeof('{}'::jsonb)='object'
         AND jsonb_typeof('{}'::jsonb->'requested_channel_ids')='array') IS NOT FALSE AS legacy_missing_key_accepted,
        public.jsonb_matches_schema(

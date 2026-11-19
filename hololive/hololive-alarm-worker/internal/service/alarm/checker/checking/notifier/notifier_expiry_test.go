@@ -18,11 +18,12 @@ import (
 type expiryClaimCache struct {
 	cache.Client
 
-	released []string
+	duringClaim func()
+	released    []string
 }
 
-func (*expiryClaimCache) SetNX(context.Context, string, string, time.Duration) (bool, error) {
-	time.Sleep(2 * time.Second)
+func (c *expiryClaimCache) SetNX(context.Context, string, string, time.Duration) (bool, error) {
+	c.duringClaim()
 
 	return true, nil
 }
@@ -38,7 +39,7 @@ func TestUpcomingExpiresDuringDedupClaim(t *testing.T) {
 		item := newNotifierPublishTestItem("expiry-room", "expiry-stream", "expiry-channel", start, 5, nil)
 		outbox := &notifierBatchOutbox{}
 		logger := newCheckerTestLogger()
-		claimCache := &expiryClaimCache{}
+		claimCache := &expiryClaimCache{duringClaim: func() { time.Sleep(2 * time.Second) }}
 		n, err := NewNotifier(dedup.NewService(claimCache, logger), newCheckerTestPublisher(t, claimCache, outbox, queue.PublishConfig{WakeupEnabled: false, MaxDeliveriesPerBatch: 1000}), logger)
 		require.NoError(t, err)
 

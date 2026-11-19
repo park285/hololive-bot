@@ -9,7 +9,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
-// ReadySnapshot은 배치 한도가 아닌 durable claim 가능 delivery 수를 관측한다.
 func ReadySnapshot(ctx context.Context, pool *pgxpool.Pool) (workercontract.QueueValues, error) {
 	var (
 		depth      int64

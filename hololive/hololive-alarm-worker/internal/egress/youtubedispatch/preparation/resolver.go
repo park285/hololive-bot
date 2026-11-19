@@ -1,4 +1,3 @@
-// Package preparation은 외부 부수 효과 전에 논리 전송 그룹과 제공자 작업을 확정한다.
 package preparation
 
 import (
@@ -14,7 +13,6 @@ import (
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
-// DeliverySnapshot은 정본 논리 키를 구할 outbox 식별자와 개별 행의 결합이다.
 type DeliverySnapshot struct {
 	DeliveryID     int64
 	OutboxID       int64
@@ -151,8 +149,6 @@ func (r Resolution) Owner() DeliverySnapshot       { return r.owner }
 func (r Resolution) Followers() []DeliverySnapshot { return slices.Clone(r.followers) }
 func (r Resolution) Members() []DeliverySnapshot   { return slices.Clone(r.members) }
 
-// DueFloor는 보류 전이가 next_attempt_at에 거는 DB 유래 하한으로, 다른 batch owner의 next_attempt_at 또는 in-flight
-// SENDING 행의 lease 만료(locked_at + LockTimeout)이며 하한이 없으면 0 값이다.
 func (r Resolution) DueFloor() time.Time              { return r.dueFloor }
 func (r Resolution) InvariantReason() InvariantReason { return r.reason }
 func (r Resolution) Detail() string                   { return r.detail }
@@ -178,7 +174,6 @@ func NewResolver(config ResolverConfig) (Resolver, error) {
 	return Resolver{config: config}, nil
 }
 
-// 호출자가 일괄 조회한 ledger와 보존 행을 전달하며 함수 자체는 I/O와 시계 읽기를 수행하지 않는다.
 func (r Resolver) ResolveGroups(
 	rows []DeliverySnapshot,
 	ledger []LedgerEvidence,

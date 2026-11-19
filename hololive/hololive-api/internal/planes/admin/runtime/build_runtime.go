@@ -33,19 +33,13 @@ type alarmProvider interface {
 	io.Closer
 }
 
-// IrisRoomLister는 bot plane이 소유한 Iris client의 방 목록 조회다. 같은 프로세스에서 직접 호출하며
-// client 수명은 bot plane이 소유한다(admin drain이 끝난 뒤 닫힌다).
 type IrisRoomLister interface {
 	GetRooms(ctx context.Context) (*iris.RoomListResponse, error)
 }
 
-// Dependencies는 process 조립(app.BuildRuntime)이 소유하고 admin plane이 빌려 쓰는 in-process 의존성이다.
 type Dependencies struct {
-	// ACL은 process 하나에 하나뿐인 ACL Service다. 관리 변경은 같은 인스턴스를 쓰는 bot 판정에 바로 보인다.
-	ACL *acl.Service
-	// Holodex는 process 하나의 Holodex·공식 일정 서비스다(bot plane과 공유). 종료는 process 조립이 소유한다.
-	Holodex *holodexprovider.Service
-	// IrisRooms가 nil이면 joined-rooms endpoint는 503을 돌려준다.
+	ACL       *acl.Service
+	Holodex   *holodexprovider.Service
 	IrisRooms IrisRoomLister
 }
 
@@ -114,7 +108,6 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *apiconfig.AdminPlaneCo
 	return runtime, nil
 }
 
-// schedulePosterCollector는 nil 서비스를 nil interface로 돌려준다. 그대로 넣은 typed nil은 handler의 nil 검사를 통과한다.
 func schedulePosterCollector(service *posterservice.Service) server.SchedulePosterCollector {
 	if service == nil {
 		return nil
@@ -123,7 +116,6 @@ func schedulePosterCollector(service *posterservice.Service) server.SchedulePost
 	return service
 }
 
-// attachAdminBackgroundTasks는 nil 서비스를 interface 필드에 넣지 않는다. 넣으면 backgroundTasks의 nil 검사를 통과한다.
 func attachAdminBackgroundTasks(
 	runtime *AdminAPIRuntime,
 	photoSyncEnabled bool,
@@ -157,8 +149,6 @@ func buildSchedulePosters(
 	return store, service, nil
 }
 
-// buildSchedulePosterService는 설정 파일 경로가 비어 있으면 posterservice.ErrDisabled를 감싸 돌려준다.
-// 설정이 있는데 잘못되었으면 기동을 막는다.
 func buildSchedulePosterService(
 	ctx context.Context,
 	appConfig *apiconfig.AdminPlaneConfig,

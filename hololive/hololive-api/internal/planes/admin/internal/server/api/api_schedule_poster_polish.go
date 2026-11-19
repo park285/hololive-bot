@@ -68,8 +68,6 @@ func (r *schedulePosterKoreanRequest) korean() scheduleposter.Korean {
 	}
 }
 
-// PolishSchedulePosterRow는 포스터 행에서 온 칸 하나의 한국어 다섯 칸을 관리자가 고친 값으로 바꾼다. 칸은 일정표 응답의 ordinal로,
-// 읽은 일정은 그 응답의 updatedAt으로 가리킨다. Console gateway가 경로 변수로 {id}만 받으므로 둘 다 본문에 둔다.
 func (h *SchedulePosterHandler) PolishSchedulePosterRow(c *gin.Context) {
 	var request schedulePosterPolishRowRequest
 
@@ -78,7 +76,6 @@ func (h *SchedulePosterHandler) PolishSchedulePosterRow(c *gin.Context) {
 	})
 }
 
-// PolishSchedulePosterAddedSlot은 글이 더한 칸 하나를 PolishSchedulePosterRow처럼 바꾼다. 칸은 일정표 응답의 addedPostId·addedItem으로 가리킨다.
 func (h *SchedulePosterHandler) PolishSchedulePosterAddedSlot(c *gin.Context) {
 	var request schedulePosterPolishAddedRequest
 
@@ -90,7 +87,6 @@ func (h *SchedulePosterHandler) PolishSchedulePosterAddedSlot(c *gin.Context) {
 	})
 }
 
-// polish의 request와 fields는 같은 요청 구조체를 가리키고, slot은 본문을 디코드한 뒤에 부른다.
 func (h *SchedulePosterHandler) polish(
 	c *gin.Context, request any, fields *schedulePosterKoreanRequest, slot func() (scheduleposter.SlotKey, bool),
 ) {
@@ -128,7 +124,6 @@ func (h *SchedulePosterHandler) polish(
 	ginjson.Respond(c, http.StatusOK, gin.H{"id": strconv.FormatInt(id, 10)})
 }
 
-// GetSchedulePosterMemo는 번역 지시문에 참고 절로 붙는 관리자 메모를 돌려준다.
 func (h *SchedulePosterHandler) GetSchedulePosterMemo(c *gin.Context) {
 	if !h.ready(c) {
 		return
@@ -152,7 +147,6 @@ func (h *SchedulePosterHandler) GetSchedulePosterMemo(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, response)
 }
 
-// SaveSchedulePosterMemo는 메모 본문을 바꾼다. 줄바꿈은 \n으로 맞추고 앞뒤 공백은 뺀다. 저장한 메모는 다음 번역부터 쓰인다.
 func (h *SchedulePosterHandler) SaveSchedulePosterMemo(c *gin.Context) {
 	if !h.ready(c) {
 		return

@@ -1,4 +1,3 @@
-// Package scheduleposter는 X·유튜브의 멤버 주간 일정 포스터를 후보로 수집하고, 확정한 포스터에서 일정표 행을 뽑아 한국어로 옮긴다.
 package scheduleposter
 
 import (
@@ -50,25 +49,20 @@ var (
 	videoIDPattern   = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 )
 
-// Target은 X 계정(XUserID), 유튜브 커뮤니티(YouTubeCommunity), 영상 썸네일(YouTubeThumbnailVideoIDs) 가운데 하나 이상을 후보 출처로 둔다.
 type Target struct {
-	XUserID          string `json:"x_user_id"`
-	ChannelID        string `json:"channel_id"`
-	YouTubeCommunity bool   `json:"youtube_community"`
-	// YouTubeThumbnailVideoIDs는 멤버가 주간 일정을 썸네일로 바꿔 다는 영상(프리챗 등)이다. 그림이 바뀔 때마다 후보가 된다.
+	XUserID                  string   `json:"x_user_id"`
+	ChannelID                string   `json:"channel_id"`
+	YouTubeCommunity         bool     `json:"youtube_community"`
 	YouTubeThumbnailVideoIDs []string `json:"youtube_thumbnail_video_ids"`
 }
 
-// TranslationConfig의 인증은 GOOGLE_APPLICATION_CREDENTIALS(ADC)로 따로 공급한다. 파일에는 비밀을 넣지 않는다.
 type TranslationConfig struct {
-	Project  string `json:"project"`
-	Location string `json:"location"`
-	// Glossary는 멤버 이름(members 표에서 채움) 밖의 용어 표기다.
+	Project  string            `json:"project"`
+	Location string            `json:"location"`
 	Glossary map[string]string `json:"glossary"`
 	Rows     RowsConfig        `json:"rows"`
 }
 
-// RowsConfig는 일정표 행 추출과 번역 호출의 단계별 모델 파라미터다. Vertex 클라이언트는 TranslationConfig와 함께 쓴다.
 type RowsConfig struct {
 	Extract   RowStageConfig `json:"extract"`
 	Translate RowStageConfig `json:"translate"`
@@ -76,12 +70,10 @@ type RowsConfig struct {
 	Decide    DecideConfig   `json:"decide"`
 }
 
-// DecideConfig의 ScheduleInfoMin을 바꿔도 이미 판별한 글은 다시 판별하지 않는다.
 type DecideConfig struct {
 	ScheduleInfoMin float64 `json:"schedule_info_min"`
 }
 
-// RowStageConfig의 Temperature가 nil이면 요청에 넣지 않아 모델 기본값을 쓴다. TimeoutSeconds는 Vertex 요청 하나의 상한이다.
 type RowStageConfig struct {
 	Model          string              `json:"model"`
 	ThinkingLevel  genai.ThinkingLevel `json:"thinking_level"`
@@ -141,7 +133,6 @@ func (c RowsConfig) validate() error {
 	return nil
 }
 
-// Config의 ChangePollSeconds가 0이면 변경 감지를 끈다. 키를 넣어야 새 외부 호출 루프가 켜진다.
 type Config struct {
 	PollSeconds       int               `json:"poll_seconds"`
 	ChangePollSeconds int               `json:"change_poll_seconds"`
@@ -157,7 +148,6 @@ func (c Config) ChangePollInterval() time.Duration {
 	return time.Duration(c.ChangePollSeconds) * time.Second
 }
 
-// LoadConfig는 SCHEDULE_POSTER_CONFIG_FILE 경로가 비어 있으면 ErrDisabled를 돌려준다.
 func LoadConfig(path string) (result *Config, retErr error) {
 	if path == "" {
 		return nil, ErrDisabled
@@ -272,7 +262,6 @@ func validateTargets(targets []Target) error {
 	return nil
 }
 
-// glossaryText는 줄바꿈 같은 제어 문자를 막아 한 항목이 프롬프트의 한 줄을 넘지 않게 한다.
 func glossaryText(text string) bool {
 	count := utf8.RuneCountInString(strings.TrimSpace(text))
 

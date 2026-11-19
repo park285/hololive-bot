@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package dbx
 
 import (
@@ -114,9 +94,6 @@ func InPgxTxWithResult[T any](ctx context.Context, pool *pgxpool.Pool, fn func(t
 
 const maxHotpathBatchStatements = 128
 
-// Statement는 같은 트랜잭션 안에서 순서대로 실행할 SQL이다.
-// Operation은 오류 위치를 식별하는 고정 문자열이며 사용자 데이터나 인자를 넣지 않는다.
-// RequireRow가 참이면 행에 적용되지 않은 실행을 *NoRowsError로 실패시킨다.
 type Statement struct {
 	SQL        string
 	Args       []any
@@ -124,8 +101,6 @@ type Statement struct {
 	RequireRow bool
 }
 
-// NoRowsError는 RequireRow 문장이 어떤 행에도 적용되지 않았음을 뜻한다.
-// Index는 ExecStatements에 전달한 statements 안의 위치다.
 type NoRowsError struct {
 	Operation string
 	Index     int
@@ -147,11 +122,6 @@ type statementBatchSender interface {
 	SendBatch(context.Context, *pgx.Batch) pgx.BatchResults
 }
 
-// ExecStatements는 호출자가 소유한 트랜잭션에서 입력 순서대로 SQL을 실행한다.
-// Pgx 트랜잭션이면 최대 128개씩 전송하고, 배치를 지원하지 않으면 순차 실행한다.
-// 커밋/롤백은 호출자 책임이며, 오류 후에는 반드시 롤백해야 한다.
-// 기존 테이블의 DML 전용이다. 선행 DDL에 의존하는 문장은 별도 Exec로 실행한다.
-// 빈 입력은 I/O 없이 성공한다. 실행 결과는 다음 배치나 반환 전에 항상 닫는다.
 func ExecStatements(ctx context.Context, tx Tx, statements []Statement) error {
 	if len(statements) == 0 {
 		return nil
@@ -216,7 +186,6 @@ func execStatementBatch(ctx context.Context, sender statementBatchSender, statem
 		return errors.New("execute statement batch: results are nil")
 	}
 
-	// 정상 반환과 오류뿐 아니라 panic에서도 남은 응답을 회수한다.
 	defer func() {
 		if closeErr := results.Close(); closeErr != nil {
 			err = errors.Join(err, fmt.Errorf("close statement batch at %d: %w", offset, closeErr))

@@ -19,7 +19,6 @@ func TestTimeFinalizationTargetsHaveIndependentInputBudget(t *testing.T) {
 		})
 	}
 
-	// 운영 채널 네 종류와 전역 일정 하나를 포함해 전체 상한을 채운다.
 	for i := range MaxTargetCount - MaxInputLiveCheckVideoCount - 5 {
 		inputs.TimeFinalizationVideos = append(inputs.TimeFinalizationVideos, TimeFinalizationVideo{
 			VideoID: fmt.Sprintf("ended-%d", i), ChannelID: "outside-roster", NotBefore: projectionNow,

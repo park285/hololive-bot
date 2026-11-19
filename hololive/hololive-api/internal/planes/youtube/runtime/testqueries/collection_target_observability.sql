@@ -57,7 +57,6 @@ FROM youtube_collection_projection_generations CROSS JOIN (VALUES
  ('deferred','DEFERRED',interval '10 minutes',null)
 ) AS seed(subject,state,age,owner)
 WHERE status='CURRENT';
--- 같은 채널의 방송 탭 lease가 오래됐어도 채널 확인 job은 자기 key의 최근 완료로 집계된다.
 INSERT INTO youtube_collection_job_leases(job_key,provider,job_class,collection_job_kind,subject_key,
 projection_generation,poll_interval_ms,slot_state,scheduled_for,next_due_at,last_completed_at)
 SELECT 'collector:youtubejs:youtubejs_channel_live_check:stale','youtubejs','SUBJECT','youtubejs_channel_live_check','stale',

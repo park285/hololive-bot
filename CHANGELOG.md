@@ -8,6 +8,31 @@
 
 ## 미출시
 
+- **전달 확인의 정산 권한:** 응답과 알림의 전달 확인을 재예약한 뒤에는 이전 선점의 정산·재예약이 상태를 바꾸지 못합니다. 다음 확인 시각이 이전 선점의 토큰과 마이크로초까지 같아져도 마찬가지입니다. API 응답 outbox, 일반 알람, YouTube 알림의 세 경로에서 선점이 행 버전(`xmin`)을 함께 받아 요청 ID·확인 시각과 같이 대조합니다. 스키마와 확인 간격은 바뀌지 않습니다. Fallback delta: none.
+- 응답 수락 정산이 한 문장에서 시각을 한 번만 읽습니다. 첫 전달 확인은 수락 시각에서 정확히 설정한 지연만큼 떨어진 시각에 예약됩니다.
+- **PO 브로커 기동 기한:** worker에 첫 요청을 보내기 전에 기동 기한이 지나면 미분류가 아니라 `startup_failure=deadline`으로 기록합니다. 일반 취소의 분류와 준비된 challenge·mint 세션의 유지(만료된 요청은 504, 다음 요청은 정상 처리)는 그대로입니다. Fallback delta: none.
+- **테스트:** 알람 잠금 대기 테스트는 goroutine 프로파일이 얕은 환경(`GODEBUG=profstackdepth` 8 미만)에서 시간 초과까지 멈추지 않고 원인을 밝히며 즉시 실패하고, 관측 위치를 시계 해상도와 무관하게 판정합니다. `scripts/deploy/kapu-d-cutover_test.py`는 fixture의 소유자 불일치를 고쳐 일반 사용자로도 통과하며, 배포 스크립트나 collector·issuer Quadlet이 바뀌면 pre-push gate가 실행합니다.
+- 카드 창은 이미 풀링된 여섯 역할에서만 진행합니다. 030 상태의 단일 writer 배포를 거부하고 업무 migrator만으로 031/032를 적용합니다. PostgreSQL과 PgBouncer를 교체하거나 풀러 인증과 앱 자격을 다시 생성하지 않습니다.
+- **수집기 전환 검사:** Osaka는 관찰 중 PID 1이 승인한 정확한 job으로만 정상 issuer 퇴역을 인계하며, 새 issuer의 준비 한도와 기존 lease를 함께 적용합니다. 영속 시작 조건은 systemd 자동 재시작에서도 검사합니다.
+- **kapu d의 프로필 검사:** 동일 후보의 runtime 환경과 공개 PostgreSQL CA를 네트워크 없는 검사에 전달합니다. 잘못된 프로필·DB 설정을 기동 전에 거부하며, 별도의 실제 pooled SQL을 통과하기 전에는 두 unit의 mask를 풀지 않습니다.
+- **Quadlet writer 정지:** 중앙 API·worker와 collector b/c/d는 재기동을 먼저 차단하고 원래 `ExecStop`과 해당 CID의 종료를 확인한 뒤 영속 mask를 적용합니다. Collector 143은 정상 정지가 아닙니다. 재개 도중 기동 클라이언트가 사라져도 새로 요청하지 않고 원래 manager job과 컨테이너에 결합된 세대만 보호 정지합니다. 부분 해제나 교체된 세대에는 성공 영수증을 발행하지 않습니다. Fallback delta: none.
+- **PostgreSQL transaction pooling:** 중앙/API/worker/c와 AP a·b·d를 역할별 상한을 유지한 PgBouncer 경로로 전환하는 소스를 추가했습니다. DB의 현재 SCRAM verifier를 cert-only `auth_query`로 읽어 앱 비밀번호를 pooler 파일에 복제하지 않고, 같은 비밀번호 bootstrap은 verifier를 유지합니다. PgBouncer 1.26.1의 startup timeout 오염은 upstream `22d0aa1`을 backport한 공통 `1.26.1-guc1` 이미지로 수정했습니다. pgx prepared backend 교체·동명 동시 사용·재연결, timeout/cancel, control 예약, 실제 암호 회전과 장애 복구를 격리 환경에서 검증했습니다. direct↔pooler rollback은 HBA·endpoint의 조정 복구 전 재기동을 거부합니다. ChatBotGo는 같은 native 이미지에 별도 인스턴스·인증 DB·연결 예산을 사용합니다. 운영 인증서·DB/HBA·방화벽·서비스 전환은 별도 승인 사항입니다. Fallback delta: none.
+- PgBouncer 기동 health에 frontend/backend DNS 공개 확인을 추가했습니다. 정상 상태의 peer health와 별도 SQL 수용 검사는 유지하며, DNS 준비 전 성공 판정을 차단합니다.
+- **Pooler 전환·복구 안전성:** collector c·b에 이전 실행 pair를 보존하는 `quiesce/resume`과 영속 hold를 추가합니다. 재개 전 보관 drop-in과 실제 설치 후보를 검증하며 실패 시 direct writer를 자동 시작하지 않습니다. 중앙 앱의 effective pool 크기와 실행 pooler의 mount된 설정이 다르면 배포·재기동·복구를 거부하여 앱만 증설했을 때 예약 control이 backend 대기에 막히는 경로를 차단합니다. Fallback delta: none.
+- **SCRAM 역할 격리:** 원문이 달라도 pgx의 SCRAM 암호 준비 후 같아지는 역할 간·관리자 암호 중복을 DB 연결 전에 거부합니다. PostgreSQL/pgx 호환성 검사와 같은 비밀번호의 verifier 보존은 유지합니다. Fallback delta: none.
+- **최초 풀링 전환:** 새 배포 정의를 설치하기 전에 실행 중인 이전 writer와 실제 접속지를 보존합니다. 중앙 두 역할과 각 수집기는 실제 풀러 경유 SQL을 증명하기 전에는 업무를 시작하지 않습니다. 운영과 동일한 `pg_stat_statements` 기본 권한을 이용한 격리 시험을 추가했으며, 인증 역할에는 앱 데이터 권한을 부여하지 않습니다.
+- kapu d의 전환 영수증을 수집기 쓰기 경로와 분리했습니다. 정지할 때만 root 전용 디렉터리를 만들고, 재개 시 영수증이 없거나 권한이 다르면 기존 데이터의 소유권을 바꾸지 않고 중단합니다.
+- c·b의 정지 증명은 Bash의 epoch 마이크로초를 systemd journal에 그대로 전달합니다. 소수 초의 선행 0이 사라져 정상 정지를 놓치던 경우를 고쳤으며, 확인 실패 시 해당 unit·invocation·조회 하한과 journal 종료 코드를 남깁니다.
+- 풀러 설치 전의 direct 복구는 기존 writer의 실제 연결 예산을 검사하되 아직 없는 풀러 unit을 요구하지 않습니다. pooled 경로는 설치된 풀러의 원천과 실행 설정을 계속 검증합니다.
+- 결정 기록을 폐기하고 완료한 작업의 계획·검증 자료를 정리했습니다. 과거 결정과 근거는 Git 이력에서 확인할 수 있습니다.
+- **lint 경계:** hololive-api와 저장 template 실행기의 `os/exec`·`plugin` import 금지를 `rg` 스크립트(`check-repository-ownership.sh`) 대신 스택 golangci 템플릿의 `depguard` 규칙이 검사합니다. 시험 파일 제외와 대상 경로는 그대로이며, 문자열 리터럴을 import로 오인하던 일은 없어집니다. 같은 템플릿의 `encoding/json` v1·대체 codec·외부 UUID import 금지, v1 동작 복원 JSON option·legacy sort·untyped atomic·정적 target `errors.As` 금지(`forbidigo`), `TODO`·`FIXME`·`HACK`·`XXX` 주석 금지(`godox`)도 적용됩니다. 실행 코드는 바뀌지 않습니다.
+- **주석 금지:** 기계 지시문을 뺀 Go·SQL·JavaScript·shell·Python 주석과 doc 주석을 지웠습니다. shell heredoc으로 실행하는 Python 본문도 같은 검사를 받습니다. Go 파일별 MIT 머리글도 지웠으며 라이선스 고지는 루트 `LICENSE`가 유지합니다. youtubejs JSDoc은 tsc checkJs가 읽는 타입 전용 형식만 남깁니다. checksum 원장에 묶인 적용된 migration 31개는 `scripts/ci/sql-immutable-migrations.txt`에 두고 바이트를 유지합니다. pre-push gate가 `bash scripts/ci/verify-tools.sh scan`으로 강제합니다.
+- **SQL 조각 치환:** 주석 표식 문자열 치환 대신 `sqlassets.WithFragment`가 `/* fragment:<name> */` 표식을 정확히 한 번 바꾸며, 표식이 없거나 둘 이상이면 초기화가 실패합니다. youtube dispatch store, dispatch outbox, schedule poster 쿼리가 이 경로를 씁니다.
+- **형식 검증:** `verification/tla/CollectionJobLease/`, `verification/tla/AlarmDispatchClaim/`, `verification/lean/JSONNameOrder/`가 수집 lease, 알람 발송 claim, canonical 이름 순서를 검사합니다. `AlarmDispatchClaimBug.cfg`는 소비자가 여럿일 때만 드러나는 반례이며 현재 단일 소비자 배포에서는 도달하지 않습니다.
+- **테스트:** 실제 시간을 기다리던 `time.Sleep` 61곳을 synctest·채널 동기화로 바꾸고, 이름 순서와 template 치환 fuzz 대상을 추가했습니다. 시각 여유에 기대던 `TestLeaseSchedulerDefersCooldownUntilRetryAt`은 고정 deadline의 정확한 비교로, `TestLockCacheMutationRecordsContendedWait`는 goroutine profile로 잠금 대기를 확인하는 방식으로 바꿨습니다.
+- **런타임 검증:** `scripts/verify/hololive-runtime.sh`가 실제 hololive-api와 alarm-worker를 일회용 인프라로 구동하고, `docs/feature-map/`이 기능별 검증 경계를 정리합니다.
+- **mekpark-host 실험:** 인라인 스크립트 metadata와 `experiment.py.lock` 대신 `scripts/experiments/mekpark-host/pyproject.toml`·`uv.lock`이 실험 환경을 고정합니다. 실행 명령은 `uv run --locked --project scripts/experiments/mekpark-host scripts/experiments/mekpark-host/experiment.py`이며 고정한 패키지 버전과 해시는 그대로입니다.
+
 ## v19.1.0 - 2026-11-18
 
 - `!스케쥴`의 카드 양식(기존·궤도)을 Iris Console 멤버 관리에서 개별 설정합니다. 채팅 명령은 그대로이며 궤도 카드는 실제 편성 기간만 표시하며 밀집 편성을 한 앨범으로 보냅니다. 이미지 예산을 벗어나면 일부 PNG 대신 전체 편성 파일 하나를 보냅니다. 공유 채널도 이름으로 고른 멤버의 양식·사진을 사용합니다. migration 032가 소피아의 초기 양식을 궤도로 지정하며, 다른 멤버는 기존 양식을 유지합니다.
@@ -982,7 +1007,7 @@
 - 관측 저장량을 줄입니다. migration 238–242는 JSONB(LZ4) payload를 kind/schema/canonical profile+전체 32바이트 digest로 공유하고 슬롯별 관측은 독립 보존합니다. bounded backfill, 참조 보호 GC, 손상 시 오류, 동시 insert 가시성 검증을 포함합니다. 구 payload 열·backfill 함수와 임시 index는 cutover에서 제거합니다. API와 collector fleet의 coordinated cutover가 필요하며 구 이미지 단독 rollback은 불가능합니다.
 - 보관 기본값을 일반 원본 7일·schedule/absence 14일·profile/photo 30일·live-check 2일로 조정합니다. PROCESSED queue 1일·DLQ 14일·collision/replay 30일·application 추가 유예 3일·checkpoint 2일·RETIRED projection 7일입니다. 보호된 active/pending/head 조건은 유지하고 운영 master 값은 자동 변경하지 않습니다.
 - migration 235–237은 application의 orphan 제외 부분 UNIQUE, reasons+targets 실제 행 수로 제한한 projection 정리와 table-local vacuum 설정을 적용합니다. application 결과는 한 INSERT로 묶고 발행 fence/contract 검증은 한 pipeline으로 보냅니다. 새 fallback·재수집·dual writer·런타임 의존성은 없습니다.
-- 상세 측정·미달 목표·운영 승인과 적용 결과는 [실행 기록](docs/current/plans/2026-09-29-youtube-storage-reduction.md#실행-기록--2026-09-29), 이행·복구는 [API runbook](docs/current/runbooks/hololive-api.md#youtube-관측-저장-구조-전환)에 기록합니다. 백업 삭제·물리 공간 회수는 전환과 분리하여 승인받습니다.
+- 상세 측정·미달 목표·운영 승인과 적용 결과는 실행 기록, 이행·복구는 [API runbook](docs/current/runbooks/hololive-api.md#youtube-관측-저장-구조-전환)에 기록합니다. 백업 삭제·물리 공간 회수는 전환과 분리하여 승인받습니다.
 
 ## v7.1.1 - 2026-10-01
 

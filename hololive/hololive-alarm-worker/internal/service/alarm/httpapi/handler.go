@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package httpapi
 
 import (
@@ -51,7 +31,6 @@ type alarmHTTPReader interface {
 	CountAlarmEntries(context.Context) (int, error)
 }
 
-// AlarmService는 worker 알림 HTTP route가 호출하는 작업만 요구한다. 운영 구현은 subscriptions.AlarmService다.
 type AlarmService interface {
 	alarmHTTPWriter
 	alarmHTTPReader
@@ -64,7 +43,6 @@ type Handler struct {
 	logger *slog.Logger
 }
 
-// 요청 타입은 client와 공유하므로 검사는 여기서만 한다.
 func decodeAlarmRequest[T any](c *gin.Context, destination *T, validate func(*T) error) error {
 	if err := jsonv2.UnmarshalRead(c.Request.Body, destination); err != nil {
 		return fmt.Errorf("unmarshal read: %w", err)
@@ -120,7 +98,6 @@ func validateUpdateAdvanceMinutesRequest(req *contractsalarm.UpdateAdvanceMinute
 	return nil
 }
 
-// room_name 필드가 없으면 거부하고, 공백뿐인 값은 해제 요청으로 통과시킨다.
 func validateSetRoomNameRequest(req *contractsalarm.SetRoomNameRequest) error {
 	if req.RoomID == "" {
 		return errRoomIDRequired
@@ -321,7 +298,6 @@ func (h *Handler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, contractsalarm.Envelope[any]{Success: true, Data: contractsalarm.MinutesResponse{TargetMinutes: result.TargetMinutes}})
 }
 
-// 응답을 받는 alarmhttp client도 같은 규칙으로 검증하므로, 서버가 그 규칙을 어기는 결과를 확정으로 응답하지 않게 한다.
 func validAdvanceTargets(targets []int) bool {
 	if len(targets) == 0 {
 		return false

@@ -1,4 +1,3 @@
--- $1/$2는 같은 길이의 (kind, content_id) 쌍 배열이다. 쌍 단위로 비교해 kind×content_id 교차 조합을 읽지 않는다.
 SELECT kind,
     content_id,
     COALESCE(canonical_content_id, '') AS canonical_content_id,

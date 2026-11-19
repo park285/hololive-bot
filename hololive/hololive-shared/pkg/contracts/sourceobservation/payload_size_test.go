@@ -35,7 +35,6 @@ func TestPayloadJSONBTextSizeCanonicalProfile(t *testing.T) {
 }
 
 func TestPayloadStorageExactBoundary(t *testing.T) {
-	// ':' 한 개만 공백을 추가한다. 문자열 안 punctuation/escape는 크기 확장을 만들지 않는다.
 	for _, extra := range []int{0, 1} {
 		raw := jsontext.Value(`{"text":"` + strings.Repeat("x", MaxPayloadBytes-len(`{"text": ""}`)+extra) + `"}`)
 

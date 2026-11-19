@@ -5,7 +5,6 @@ WITH locked AS MATERIALIZED (
     WHERE job_key = $1
     FOR UPDATE
 ), clock AS MATERIALIZED (
-    -- locked를 읽은 뒤 평가되므로 행 잠금 대기 이후의 DB 시각이다. 만료 판정과 기록이 이 값 하나를 쓴다.
     SELECT clock_timestamp() AS now_at
     FROM locked
 ), eligible AS MATERIALIZED (

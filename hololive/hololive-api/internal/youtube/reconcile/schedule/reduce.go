@@ -20,8 +20,6 @@ func Reduce(state State, evidence Evidence) (Decision, error) {
 
 	items := make([]Item, 0, len(workingEvidence.Items))
 	sessions := make([]Session, 0)
-	// Decision.Sessions는 영상마다 이 관측을 모두 반영한 최종 상태 하나다. 저장은 잠금 안에서 읽은 행을
-	// 기준으로 영상당 한 번만 조건부로 쓴다.
 	sessionIndex := map[string]int{}
 	applications := make([]Application, 0, len(workingEvidence.Items))
 
@@ -94,7 +92,6 @@ func mergeSession(state *State, item *Item, evidence *Evidence) (Session, bool) 
 		return Session{}, false
 	}
 
-	// 서로 다른 원천도 필드별 실제 관측 시각으로 비교한다. 같은 시각의 충돌은 기존 정본을 유지한다.
 	changed := false
 
 	if item.Title != "" && (existing.TitleObservedAt == nil || evidence.EffectiveAt.After(*existing.TitleObservedAt)) {

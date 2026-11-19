@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// 1ms 미만은 설정 오류라 기본값으로 바꾸지 않고 오류로 돌려준다. 모든 claim·발송 진입·stale 격리가 같은 단위를 쓰도록 이 변환을 함께 쓴다.
 func leaseMilliseconds(d time.Duration) (int64, error) {
 	if d < time.Millisecond {
 		return 0, fmt.Errorf("duration must be at least 1ms: %s", d)
@@ -16,10 +15,6 @@ func leaseMilliseconds(d time.Duration) (int64, error) {
 	return d.Milliseconds(), nil
 }
 
-// MarkSent는 외부 발송 성공을 정산한다. 그룹 발송이 lease를 넘겨도 성공 발송은 sent로 확정해야 하므로(lease 조건이
-// 있으면 격리 뒤 재발송 중복) lease 만료는 보지 않는다. 입력 전원이 sent가 되면 같은 문장에서 단위에 Iris
-// requestId와 첫 handoff 확인 시각(firstCheck 뒤)을 기록한다. 미스는 외부 성공을 되돌리지 않고 *sendfence.MissError로
-// 보고하며, 그때 단위의 handoff 확인은 예약되지 않고 행은 stale 격리·회수 경로가 소유한다.
 func (r *PgxRepository) MarkSent(ctx context.Context, unitID int64, claims []DeliveryClaim, workerID, irisRequestID string, firstCheck time.Duration) error {
 	if len(claims) == 0 {
 		return nil
@@ -60,13 +55,10 @@ func (r *PgxRepository) applyClaims(ctx context.Context, action, query string, c
 	return r.applyFenced(ctx, r.pool, action, query, fencedTargetIDs(claims), jsonbRecordsetParam(raw), workerID)
 }
 
-// 잠금 뒤 clock 기준으로 lease가 유효한 소유 claim만 바꾼다.
 func (r *PgxRepository) RouteFailures(ctx context.Context, updates []FailureUpdate, workerID string) error {
 	return r.routeFailureUpdates(ctx, updates, workerID, routeFailuresSQL, fenceActionRouteFailures)
 }
 
-// RouteSendingFailures는 외부 호출 뒤 실패를 retry·dlq로 정산한다. 상태는 leased·sending을 받고 lease 만료는 보지 않는다.
-// 만료 회수는 leased만, stale 격리는 sending의 locked_by를 비우므로 소유자·attempt 일치가 소유권 증명이다.
 func (r *PgxRepository) RouteSendingFailures(ctx context.Context, updates []FailureUpdate, workerID string) error {
 	return r.routeFailureUpdates(ctx, updates, workerID, routeSendingFailuresSQL, fenceActionRouteSendingFailures)
 }
@@ -125,8 +117,6 @@ type failureRouteInput struct {
 	MarkDLQ      bool   `json:"mark_dlq,omitzero"`
 }
 
-// 상태에 따른 필드 갱신 정책은 코드에서 정한다. SQL은 잠금 뒤 clock에 retry_after_ms를 더하는 저장 연산만 한다.
-// 입력에 retry_after_ms가 없는 dlq 행은 next_attempt_at을 그대로 둔다.
 func prepareFailureUpdates(updates []FailureUpdate) []failureRouteInput {
 	inputs := make([]failureRouteInput, len(updates))
 	for i := range updates {

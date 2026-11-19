@@ -13,7 +13,6 @@ import (
 
 const preparedTestRequestID = "prepared:request"
 
-// 일반채팅은 RichText 서식을 표시하지 않으므로 오픈채팅 본문이 text 경로로 새면 안 된다.
 func TestPreparedMessagePreservesLaneAndBodyAcrossConfigurationChange(t *testing.T) {
 	message := delivery.MessageVariants{Plain: "일반 _본문_", RichText: "**fixed**"}
 	client := &irisSenderTestClient{}
@@ -42,7 +41,6 @@ func TestPreparedMessagePreservesLaneAndBodyAcrossConfigurationChange(t *testing
 	require.Equal(t, plain, client.textCalls[0].message)
 }
 
-// 이 값이 reconciler의 handoff 확인 대상이다.
 func TestPreparedMessageReturnsAdmittedRequestIDOnAllRoutes(t *testing.T) {
 	for _, route := range []string{"text", "richtext"} {
 		t.Run(route, func(t *testing.T) {

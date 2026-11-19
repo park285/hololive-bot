@@ -26,7 +26,6 @@ import (
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
-// acceptingIrisClient는 응답 송신을 request id와 함께 수락해 명령 결과가 outcome_unknown으로 끝나지 않게 한다.
 type acceptingIrisClient struct{ stubIrisClient }
 
 func (*acceptingIrisClient) SendMessageAccepted(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {

@@ -12,7 +12,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 )
 
-// dispatchoutbox.assignSendUnits가 한 send unit에 묶는 delivery 상한이다(maxDeliveriesPerSendUnit).
 const alarmDispatchTestMaxDeliveriesPerSendUnit = 10
 
 func alarmDispatchPersistedTextSendUnitEnvelopes(count int, build func() dispatchoutbox.AlarmQueueEnvelope) []dispatchoutbox.AlarmQueueEnvelope {

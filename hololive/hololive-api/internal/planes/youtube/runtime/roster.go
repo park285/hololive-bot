@@ -34,8 +34,6 @@ func (rosterReader) OperationalChannelIDs(ctx context.Context, tx dbx.Tx) ([]str
 	return out, nil
 }
 
-// LiveCheckVideos는 같은 projection transaction에서 운영 roster의 영상 확인 구조 membership과
-// 조회 statement의 DB 시각과 사실로 not_before를 계산합니다. 상한 초과는 절단하지 않고 거부합니다.
 func (rosterReader) LiveCheckVideos(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -93,9 +91,6 @@ func (rosterReader) LiveCheckVideos(
 	return videos, nil
 }
 
-// 신규 종료는 최근 순 300개까지 읽습니다. 과거 기록(backlog)은 첫 결과가 끝난 묶음 단위로 교체하고 첫 시도는
-// 한 번에 한 영상만 열며, 재시도 중인 행과 활성 묶음을 합쳐 2,000개를 넘기지 않아 전체 target 상한에 닿지
-// 않습니다. 운영 roster 밖의 옛 방송도 대상이며 재시도 시각은 membership이 아닌 NotBefore로 전달합니다.
 func (r rosterReader) TimeFinalizationVideos(ctx context.Context, tx dbx.Tx) ([]targetprojection.TimeFinalizationVideo, error) {
 	if tx == nil {
 		return nil, fmt.Errorf("%w: transaction is not configured", targetprojection.ErrInputRead)
@@ -133,7 +128,6 @@ func (r rosterReader) TimeFinalizationVideos(ctx context.Context, tx dbx.Tx) ([]
 	return videos, nil
 }
 
-// 미래 시각은 추적 없음과 같다.
 func unresolvableFor(asOf time.Time, since pgtype.Timestamptz) time.Duration {
 	if !since.Valid || !since.Time.Before(asOf) {
 		return 0
@@ -142,7 +136,6 @@ func unresolvableFor(asOf time.Time, since pgtype.Timestamptz) time.Duration {
 	return asOf.Sub(since.Time)
 }
 
-// SQL은 LIVE의 가용성을 제외하며, 미래 또는 NULL 시각은 신선도 근거가 아니다.
 type liveCheckFreshness struct {
 	asOf               time.Time
 	positiveAt         pgtype.Timestamptz
@@ -152,7 +145,6 @@ type liveCheckFreshness struct {
 }
 
 func (facts liveCheckFreshness) notBefore(budget time.Duration) time.Time {
-	// 기존 SQL의 millisecond 예산 정밀도를 보존한다.
 	budget = budget.Truncate(time.Millisecond)
 
 	positive := freshnessDeadline(facts.asOf, facts.positiveAt, facts.positiveSeenAt, budget)

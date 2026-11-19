@@ -1,4 +1,3 @@
--- 집계표를 읽는 소비자와 독립적으로 원본 및 현재 일치 영수증에서 모든 scalar를 재계산한다.
 WITH expected AS (
     SELECT coalesce(session.video_id, head.video_id)::text AS video_id, session.channel_id::text,
            session.status AS session_status, head.status AS head_status, session.scheduled_start_time, session.lifecycle_origin,

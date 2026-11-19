@@ -61,7 +61,6 @@ type leaseScheduler struct {
 	executor   *collectionExecutor
 	candidates projectionCandidateSource
 
-	// worker·queue·discovery 정책은 scheduler가 internal/config에서 한 번 받아 소유합니다.
 	workers          int
 	queueCapacity    int
 	queueMaxAge      time.Duration
@@ -69,8 +68,6 @@ type leaseScheduler struct {
 	pollCadence      time.Duration
 	dbTimeout        time.Duration
 
-	// 관측 의존성은 executor와 같은 인스턴스를 공유합니다. scheduler는 admission·discard·worker 수명을,
-	// executor는 attempt를 기록합니다.
 	metrics       *Metrics
 	logger        *slog.Logger
 	workerTracker *workercontract.ExecutorTracker
@@ -93,9 +90,8 @@ type leaseScheduler struct {
 	queueFull          bool
 	discoveryTruncated bool
 	projection         int64
-	// discoveryFailures는 cycleMu가 보호하는 후보 탐색 연속 실패 상태다. 키는 전역 실패(globalDiscoveryKey)나 runner ID다.
-	discoveryFailures map[string]*discoveryFailureStreak
-	candidatePolls    map[collection.JobID]candidatePollState
+	discoveryFailures  map[string]*discoveryFailureStreak
+	candidatePolls     map[collection.JobID]candidatePollState
 }
 
 func (s *leaseScheduler) Start(parent context.Context) error {

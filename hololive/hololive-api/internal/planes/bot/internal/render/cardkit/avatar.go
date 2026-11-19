@@ -11,13 +11,12 @@ import (
 )
 
 type AvatarStyle struct {
-	Ring       color.RGBA
-	RingWidth  int
-	Accent     color.RGBA
-	Background color.RGBA
-	Initials   font.Face
-	TextColor  color.RGBA
-	// 이니셜 baseline을 원 중심에서 아래로 내리는 오프셋(글리프 광학 중심 보정)
+	Ring        color.RGBA
+	RingWidth   int
+	Accent      color.RGBA
+	Background  color.RGBA
+	Initials    font.Face
+	TextColor   color.RGBA
 	InitialDrop int
 }
 

@@ -15,7 +15,6 @@ import (
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
-// publisher가 보낸 alarm:dispatch:wakeup 신호를 바로 소비하고 기존 alarm_dispatch_runner_wakeup_* 지표로 센다.
 func TestWakeupWaiterConsumesAlarmDispatchSignal(t *testing.T) {
 	client, mini := sharedtestutil.NewTestCacheServiceWithMini(t.Context(), t)
 
@@ -42,7 +41,6 @@ func TestWakeupWaiterConsumesAlarmDispatchSignal(t *testing.T) {
 	assert.InDelta(t, consumed+1, testutil.ToFloat64(alarmDispatchRunnerMetrics().wakeupConsumedTotal), 0)
 }
 
-// wakeup_enabled=false면 cache가 있어도 신호를 기다리지 않고 poll_interval_ms마다 조회한다.
 func TestWakeupWaiterPollsWithoutSignalWhenWakeupDisabled(t *testing.T) {
 	client, mini := sharedtestutil.NewTestCacheServiceWithMini(t.Context(), t)
 
@@ -70,7 +68,6 @@ func TestWakeupWaiterPollsWithoutSignalWhenWakeupDisabled(t *testing.T) {
 	assert.False(t, waiter.Wait(ctx))
 }
 
-// BRPOP이 실패하면 wakeup_error_total을 올리고 poll_interval_ms 대기를 wait_mode=fallback으로 센다.
 func TestWakeupWaiterCountsFallbackWaitAfterSignalFailure(t *testing.T) {
 	client, mini := sharedtestutil.NewTestCacheServiceWithMini(t.Context(), t)
 

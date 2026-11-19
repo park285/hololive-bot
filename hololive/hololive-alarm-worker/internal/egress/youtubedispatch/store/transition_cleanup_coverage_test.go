@@ -12,7 +12,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// 만료된 SENDING owner를 잠근 sweep과 보존 정리가 서로 다른 형제를 쥐고 상대 행을 기다리면 교착한다.
 func TestTransitionCleanupDoesNotWaitForStaleSweepOwnedLogicalGroup(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -32,7 +31,6 @@ func TestTransitionCleanupDoesNotWaitForStaleSweepOwnedLogicalGroup(t *testing.T
 	unrelatedOwnerID, unrelatedFollowerID := seedTransitionLogicalGroup(t, pool, "video-cleanup-unrelated", "room-cleanup-unrelated")
 	markTransitionDeliveriesTerminalFailed(t, pool, terminalAt, unrelatedOwnerID, unrelatedFollowerID)
 
-	// cleanup이 owner 잠금을 기다리면 이 시한에 걸려 실패한다.
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
@@ -55,13 +53,11 @@ func TestTransitionCleanupDoesNotWaitForStaleSweepOwnedLogicalGroup(t *testing.T
 	require.Equal(t, 2, countCleanupTestDeliveries(t, pool, ownerID, followerID))
 	require.Zero(t, countCleanupTestDeliveries(t, pool, unrelatedOwnerID, unrelatedFollowerID))
 
-	// stale sweep은 cleanup이 남긴 FAILED 증거까지 포함한 논리 그룹을 그대로 판정한다.
 	resolved, err := transition.resolveStaleSendingGroups(ctx, sweep, stale)
 	require.NoError(t, err)
 	require.Contains(t, resolved.rowsByID, followerID)
 	rollbackPlanModeSQLTest(t, sweep)
 
-	// 잠금이 풀리면 기존 판정대로 SENDING owner가 FAILED sibling 삭제를 막는다.
 	released, err := transition.CleanupTerminalOutboxes(ctx, cutoff, CleanupCursor{}, 10)
 	require.NoError(t, err)
 	require.Equal(t, 1, released.ExaminedOutboxes)

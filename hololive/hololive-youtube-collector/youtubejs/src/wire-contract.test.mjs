@@ -11,7 +11,6 @@ import { failureTuples } from "./upstream-errors.mjs";
 
 const invalidFailureTuplePattern = /invalid RPC failure tuple/;
 
-// Go 클라이언트 테스트와 같은 fixture로 helper wire 계약의 실제 검증·오류 생성 동작을 확인합니다.
 const fixture = JSON.parse(readFileSync(new URL("../testdata/wire-contract.json", import.meta.url), "utf8"));
 
 const endpoints = {
@@ -79,7 +78,6 @@ for (const [path, cases] of Object.entries(fixture.endpoints)) {
 
   test(`${path} validator rejects fixture invalid bodies`, () => {
     for (const item of cases.invalid) {
-      // 검증기 자체의 결함(TypeError 등)이 거부로 통과하지 않도록 응답 계약 오류와 명시적 pagination 불변식 위반만 인정합니다.
       assert.throws(
         () => endpoint.validateResponse(structuredClone(item.body)),
         (error) => error instanceof RpcResponseError || error.code === "helper_internal_invariant",

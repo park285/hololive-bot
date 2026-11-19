@@ -19,8 +19,6 @@ type VideoLiveCheckClient interface {
 	FetchVideoLiveCheck(ctx context.Context, request youtubejs.VideoLiveCheckRequest) (youtubejs.VideoLiveCheckResult, error)
 }
 
-// ChannelLiveCheckRunner는 채널 /live 주소 해석 결과 하나를 자체 job 슬롯으로 확인합니다.
-// 방송 탭 live_snapshot과 lease·재시도 슬롯을 공유하지 않으므로 방송 탭 실패가 확인의 진행을 막지 않습니다.
 type ChannelLiveCheckRunner struct {
 	client ChannelLiveCheckClient
 }
@@ -66,8 +64,6 @@ func (r *ChannelLiveCheckRunner) Collect(ctx context.Context, input *collection.
 	return out, nil
 }
 
-// VideoLiveCheckRunner는 target projection이 고른 영상 하나의 player 사실을 확인합니다.
-// 결과는 수명 전이 근거일 뿐 absence slot이나 채널 부재 근거가 아닙니다.
 type VideoLiveCheckRunner struct {
 	client VideoLiveCheckClient
 }
@@ -190,8 +186,6 @@ func channelLiveCheckEnvelope(ctx context.Context, client ChannelLiveCheckClient
 	return envelope, err
 }
 
-// 응답 계약 오류도 이전 음성·공개 불가 판정을 유지할 근거가 아니므로 UNKNOWN으로 대체한다. 수집 context 종료(취소·lease 기한)와 취소·대체·설정·불변식 오류는 반환해 publish
-// fence를 유지한다.
 func liveCheckRequestFailed(ctx context.Context, err error) bool {
 	if ctx.Err() != nil {
 		return false
@@ -213,7 +207,6 @@ func liveCheckRequestFailed(ctx context.Context, err error) bool {
 	}
 }
 
-// 판정이 UNKNOWN이어도 다른 subject의 응답은 이 subject의 관측이 아닙니다.
 func validateLiveCheckSubject(field, requested, returned string) error {
 	if returned != requested {
 		return collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract,
@@ -265,7 +258,6 @@ func videoLiveCheckPayload(subject string, result *youtubejs.VideoLiveCheckResul
 	}
 }
 
-// 채널을 추정해 채우지 않습니다.
 func failedVideoLiveCheck(subject string) contract.VideoLiveCheckV1 {
 	return contract.VideoLiveCheckV1{
 		VideoID:       subject,

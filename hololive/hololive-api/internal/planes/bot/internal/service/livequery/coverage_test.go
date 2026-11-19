@@ -8,7 +8,6 @@ import (
 )
 
 func TestCoverageReasonPrecedence(t *testing.T) {
-	// 여러 진단이 겹쳐도 projection·수집·상태·시간의 기존 우선순위를 유지합니다.
 	snapshot := channelSnapshot{Facts: inconsistentState | pendingEnd | futureClock | staleLive}
 	require.Equal(t, InvalidProjection, snapshot.channel().Reason)
 

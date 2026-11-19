@@ -16,7 +16,6 @@ func TestLiveRuntimeUpdateFilterInvalidatesCandidateReceiptFields(t *testing.T) 
 
 	for _, scenario := range []struct{ name, change, restore string }{
 		{"kind", `UPDATE youtube_live_reconciliation_heads SET end_candidate_kind='EXPLICIT_END' WHERE video_id='recorded'`, `UPDATE youtube_live_reconciliation_heads SET end_candidate_kind='SCOPED_ABSENCE' WHERE video_id='recorded'`},
-		// 실제 head 선행 저장 순서의 deferred FK 중간 상태를 검사한다.
 		{"observation", `UPDATE youtube_live_reconciliation_heads SET end_candidate_observation_id=8 WHERE video_id='recorded'`, `UPDATE youtube_live_reconciliation_heads SET end_candidate_observation_id=7 WHERE video_id='recorded'`},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {

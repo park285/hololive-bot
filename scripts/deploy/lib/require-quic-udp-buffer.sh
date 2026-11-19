@@ -5,8 +5,6 @@ host_name="${2:-AP host}"
 sysctl_root="${AP_SYSCTL_ROOT:-}"
 [[ "$required" =~ ^[0-9]+$ ]] || { echo "required udp buffer bytes must be an integer" >&2; exit 2; }
 current_value() { sysctl -n "$1" 2>/dev/null || echo 0; }
-# sysctl --system 적용 의미론을 따른다: /etc/sysctl.d/*.conf를 lexical 순서로 적용한 뒤
-# /etc/sysctl.conf가 마지막에 적용되므로 같은 키는 마지막 대입(last-wins)이 실효값이다.
 effective_persisted_value() {
   local key="$1" value="" file line candidate regex
   regex="^[[:space:]]*${key//./\\.}[[:space:]]*="

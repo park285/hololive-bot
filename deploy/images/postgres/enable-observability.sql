@@ -1,5 +1,3 @@
--- 관리자 전용 활성화입니다. 이미지 설치만으로 운영 DB나 preload 설정을 바꾸지 않습니다.
--- 기존 volume에는 init-db가 재실행되지 않으므로 승인된 재시작 뒤 이 파일을 적용합니다.
 \set ON_ERROR_STOP on
 
 BEGIN;
@@ -21,7 +19,6 @@ END
 $preload$;
 
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA public;
--- public USAGE가 없는 모니터도 앱 객체 접근을 넓히지 않고 새 통계만 읽도록 분리합니다.
 CREATE SCHEMA IF NOT EXISTS hololive_observability;
 DO $owner$
 BEGIN
@@ -35,8 +32,6 @@ REVOKE ALL ON SCHEMA hololive_observability FROM PUBLIC;
 GRANT USAGE ON SCHEMA hololive_observability TO pg_read_all_stats;
 CREATE EXTENSION IF NOT EXISTS pg_stat_kcache WITH SCHEMA hololive_observability;
 CREATE EXTENSION IF NOT EXISTS pg_wait_sampling WITH SCHEMA hololive_observability;
--- 공유 버퍼 점유 진단과 인덱스 무결성 검사용 contrib입니다. 확장 기본 권한을 유지하여
--- 버퍼 조회는 pg_monitor, evict 함수와 amcheck는 관리자만 실행합니다.
 CREATE EXTENSION IF NOT EXISTS pg_buffercache WITH SCHEMA hololive_observability;
 CREATE EXTENSION IF NOT EXISTS amcheck WITH SCHEMA hololive_observability;
 
@@ -60,7 +55,6 @@ BEGIN
 END
 $versions$;
 
--- 새 통계는 기존 pg_read_all_stats 구성원과 관리자만 읽습니다. 앱 역할 권한은 넓히지 않습니다.
 REVOKE ALL ON FUNCTION hololive_observability.pg_stat_kcache() FROM PUBLIC;
 REVOKE ALL ON FUNCTION hololive_observability.pg_stat_kcache_reset() FROM PUBLIC;
 REVOKE ALL ON TABLE hololive_observability.pg_stat_kcache, hololive_observability.pg_stat_kcache_detail FROM PUBLIC;
@@ -75,7 +69,6 @@ REVOKE ALL ON TABLE hololive_observability.pg_wait_sampling_current, hololive_ob
 GRANT EXECUTE ON FUNCTION hololive_observability.pg_wait_sampling_get_current(integer), hololive_observability.pg_wait_sampling_get_history(), hololive_observability.pg_wait_sampling_get_profile() TO pg_read_all_stats;
 GRANT SELECT ON TABLE hololive_observability.pg_wait_sampling_current, hololive_observability.pg_wait_sampling_history, hololive_observability.pg_wait_sampling_profile TO pg_read_all_stats;
 
--- 관리자 소유 view가 기존 public 통계를 참조합니다. 모니터에게 public USAGE를 부여하지 않습니다.
 CREATE OR REPLACE VIEW hololive_observability.statement_info AS
 SELECT stats_reset AS statements_reset_at, dealloc AS statements_deallocations
 FROM public.pg_stat_statements_info;

@@ -7,7 +7,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// scanTelemetryRow의 열 순서는 queries/repository_fetch_lock_pending.sql의 RETURNING 목록과 같아야 한다.
 func scanTelemetryRow(row pgx.CollectableRow) (YouTubeNotificationDeliveryTelemetry, error) {
 	var (
 		item                                              YouTubeNotificationDeliveryTelemetry

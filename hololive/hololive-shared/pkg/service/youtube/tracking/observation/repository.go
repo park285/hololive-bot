@@ -64,8 +64,6 @@ func NewRepository(db trackingDB) *PgxRepository {
 	return repo
 }
 
-// --- 위임: AlarmState ---
-
 func (r *PgxRepository) FindAlarmStateByPostID(ctx context.Context, kind domain.OutboxKind, postID string) (*domain.YouTubeCommunityShortsAlarmState, error) {
 	out, err := r.alarm.FindAlarmStateByPostID(ctx, kind, postID)
 	if err != nil {
@@ -83,8 +81,6 @@ func (r *PgxRepository) UpsertAlarmStateBatch(ctx context.Context, records []*do
 	return nil
 }
 
-// --- 위임: DeliveryState ---
-
 func (r *PgxRepository) MarkAlarmSentBatch(ctx context.Context, marks []AlarmSentMark) error {
 	if err := r.delivery.MarkAlarmSentBatch(ctx, marks); err != nil {
 		return fmt.Errorf("mark alarm sent batch: %w", err)
@@ -92,8 +88,6 @@ func (r *PgxRepository) MarkAlarmSentBatch(ctx context.Context, marks []AlarmSen
 
 	return nil
 }
-
-// --- 위임: Identity ---
 
 func (r *PgxRepository) FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error) {
 	out, err := r.identity.FindByIdentity(ctx, kind, contentID)
@@ -111,8 +105,6 @@ func (r *PgxRepository) UpsertBatch(ctx context.Context, records []*domain.YouTu
 
 	return nil
 }
-
-// --- 위임: SourcePost ---
 
 func (r *PgxRepository) UpsertSourcePostsBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsSourcePost) error {
 	if err := r.source.UpsertSourcePostsBatch(ctx, records); err != nil {

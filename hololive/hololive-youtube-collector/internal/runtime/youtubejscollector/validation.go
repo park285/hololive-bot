@@ -68,7 +68,6 @@ func validateLiveSchedules(sessions []youtubejs.LiveSessionItem, scheduledFor ti
 			return collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "youtube.js upcoming live response is missing scheduled time")
 		}
 
-		// 재사용 일정은 이번 슬롯보다 앞선 슬롯의 관측이어야 합니다. 같거나 늦으면 더 새 관측을 덮어쓸 수 있습니다.
 		if observed := sessions[i].ScheduleObservedAt; observed != nil &&
 			(sessions[i].Status != "UPCOMING" || !observed.Before(scheduledFor) ||
 				observed.Before(scheduledFor.Add(-contract.LiveScheduleObservationMaxAge))) {

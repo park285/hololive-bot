@@ -45,7 +45,6 @@ func TestRuntimeRunReturnsTerminalResultAfterCancelDrainAndClose(t *testing.T) {
 
 					errCh <- test.terminal
 				},
-				// shutdown hook은 시한을 강제하는 goroutine에서 돌므로 FailNow 계열을 쓰지 않는다.
 				shutdown: func(context.Context) error {
 					select {
 					case <-runtimeDone:
@@ -92,7 +91,6 @@ func TestRuntimeRunReturnsNilAfterShutdownSignal(t *testing.T) {
 	shutdownCalled := false
 	group := &runtimeGroupStub{
 		start: func(context.Context, chan<- error) {
-			// lifecycle.Run은 Start 전에 SIGTERM을 구독하므로 자기 프로세스에 보낸 신호가 테스트를 끝내지 않는다.
 			if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
 				t.Fatalf("send SIGTERM: %v", err)
 			}
@@ -185,7 +183,6 @@ func TestRuntimeStopSplitsDrainAndCloseBudgetWithoutCloseRejoin(t *testing.T) {
 
 		err := runLifecycleWithoutSignals(t, runtime)
 
-		// bootstrap이 Run 뒤에 부르는 Close가 미완료 회수에 다시 합류하면 stop 상한을 넘긴다.
 		runtime.Close()
 
 		elapsed := time.Since(start)
@@ -234,7 +231,6 @@ func TestRuntimeStopHasHardDeadlineWhenPlaneIgnoresCancellation(t *testing.T) {
 
 		elapsed := time.Since(start)
 
-		// 시한 뒤에 끝난 drain이 프로세스 종료와 겹쳐 자원 회수를 새로 시작하면 안 된다.
 		time.Sleep(5 * time.Second)
 		close(release)
 		synctest.Wait()
@@ -271,14 +267,12 @@ func TestRuntimeStopDeadlineKeepsEarlierCloseStepFailure(t *testing.T) {
 
 		close(release)
 
-		// 시한까지 쌓인 회수 오류는 Close가 다시 보고하지 않으므로 반환값에 남아야 한다.
 		if !errors.Is(err, stepErr) || !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("lifecycle error = %v, want earlier close step failure and stop deadline", err)
 		}
 	})
 }
 
-// synctest bubble 안에서 실제 signal.Notify를 부르지 않도록 Run과 같은 옵션에 signal 구독만 바꾼다.
 func runLifecycleWithoutSignals(t *testing.T, runtime *Runtime) error {
 	t.Helper()
 

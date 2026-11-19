@@ -43,7 +43,6 @@ func TestRealYouTubeDataRoundTrip(t *testing.T) {
 		t.Fatal("real channel returned no video items")
 	}
 
-	// 공개 시각은 영상별 확인 응답에서만 옵니다. 응답에 시각이 없을 수도 있으므로 존재는 요구하지 않습니다.
 	first := content.Items[0]
 
 	check, err := rpc.FetchVideoLiveCheck(ctx, VideoLiveCheckRequest{VideoID: first.VideoID, MaxSuccessResponseBytes: MaxLiveCheckResponseBytes})

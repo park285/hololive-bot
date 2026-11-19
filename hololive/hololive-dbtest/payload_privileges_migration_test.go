@@ -63,7 +63,6 @@ func assertPayloadPublicationAndGCAuthorized(t *testing.T, pool *pgxpool.Pool, r
 
 	ctx := t.Context()
 
-	// 정상 발행과 회수는 제한 후에도 실제 역할로 실행되어야 합니다.
 	tx := payloadRoleTransaction(t, pool, roles.scraper)
 
 	_, err := tx.Exec(ctx, `INSERT INTO source_observation_payloads

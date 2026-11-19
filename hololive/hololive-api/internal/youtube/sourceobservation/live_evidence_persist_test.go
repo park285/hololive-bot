@@ -108,7 +108,6 @@ func TestLiveSteadyConsumeAndFinalizerDoNotReloadOldAbsenceHistory(t *testing.T)
 	ctx := t.Context()
 
 	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusLive))
-	// 오래된 slot 10,000개의 필터 decode 오류가 현재 session과 확정 candidate에 전파되면 안 된다.
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_absence_slots
 		SELECT 1000000+g, $1::timestamptz-g*INTERVAL '1 minute', decode(repeat('a',64),'hex'),
@@ -120,7 +119,6 @@ func TestLiveSteadyConsumeAndFinalizerDoNotReloadOldAbsenceHistory(t *testing.T)
 	}
 
 	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusLive))
-	// 신규 LIVE도 positive 이전의 이력을 디코딩할 필요가 없다.
 	proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession("new-video", testStatusLive))
 	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof, liveSession(testVideoID, testStatusEnded))
 
@@ -259,7 +257,6 @@ func TestLiveSameSlotKeepsFirstCoverageAcrossProviders(t *testing.T) {
 		t.Fatal("fixture must reuse the same slot")
 	}
 
-	// Holodex의 첫 coverage는 UPCOMING만 포함한다. 같은 slot의 YouTube 전체 조회가 이를 바꾸지 못한다.
 	publishConsumeLiveFromProvider(ctx, t, publishkit.NewPublisher(pool), consumer, &holodexProof, contract.ProviderHolodex, testChannelID, liveSession("other-upcoming", testStatusUpcoming))
 	publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof)
 
@@ -322,7 +319,6 @@ func seedRetainedLiveEndEvidence(t *testing.T, pool *pgxpool.Pool) (positiveID, 
 
 	ctx := t.Context()
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderHolodex, contract.KindLiveSnapshot, testChannelID, "holodex_live")
-	// Holodex의 명시적 종료 근거로 원본 삭제 후 grace를 검사한다. streams 전체 coverage의 부재 근거는 섞지 않는다.
 	positiveFact := liveSession(testVideoID, testStatusLive)
 
 	positiveFact.StartedAt = new(proof.ScheduledFor)
@@ -355,8 +351,6 @@ func deleteRetainedLiveEndEvidence(t *testing.T, pool *pgxpool.Pool, repo *Repos
 		t.Fatal(err)
 	}
 
-	// 보존이 허용되는 퇴역 세대·비활성 lease로 전환한 뒤 원시 종료 근거를 삭제합니다.
-	// 아직 처리하지 않은 positive는 큐가 보호하므로 나중에 같은 근거로 grace를 평가할 수 있습니다.
 	if _, err := pool.Exec(ctx, `UPDATE youtube_collection_projection_generations SET status='RETIRED';
 		UPDATE youtube_collection_job_leases SET slot_state='IDLE',owner_instance=NULL,lease_expires_at=NULL,retry_not_before=NULL`); err != nil {
 		t.Fatal(err)
@@ -381,7 +375,6 @@ func TestLiveFinalizerUsesConsumerLockOrderAndRechecksDue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// consumer 대역은 shared 전역 잠금 뒤 정본 session 행을 먼저 잠근다. finalizer도 같은 순서로 session에서 기다려야 한다.
 	consumerTx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 
@@ -411,11 +404,9 @@ func TestLiveFinalizerUsesConsumerLockOrderAndRechecksDue(t *testing.T) {
 
 	waitObservationSettlementLock(ctx, t, pool, consumerTx.Conn().PgConn().PID(), done)
 
-	// session 행 대기 중에는 finalizer가 후보 head를 선잠그지 않아야 한다.
 	_, err = consumerTx.Exec(ctx, `SELECT video_id FROM youtube_live_reconciliation_heads WHERE video_id=$1 FOR UPDATE NOWAIT`, testVideoID)
 	require.NoError(t, err)
 
-	// 잠금 대기 중 due가 된 항목은 트랜잭션 시작 시각 기준으로 다음 호출까지 남긴다.
 	_, err = consumerTx.Exec(ctx, `UPDATE youtube_live_reconciliation_heads SET next_end_check_at=clock_timestamp() WHERE video_id=$1`, testVideoID)
 	require.NoError(t, err)
 

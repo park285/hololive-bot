@@ -14,13 +14,10 @@ import (
 )
 
 const (
-	// 기간을 주지 않은 !방송시간의 합산 기간이다.
 	defaultBroadcastTimeDays = 7
-	// 한 번에 합산하는 최대 방송 수로, 저장소 한 번 조회의 결과 상한과 같다.
-	broadcastTimeMaxEntries = maxBroadcastHistoryQueryLimit
+	broadcastTimeMaxEntries  = maxBroadcastHistoryQueryLimit
 )
 
-// BroadcastTimeCommand는 한 멤버가 기간(기본 7일) 안에 끝낸 방송의 시간 합계와 목록을 방송 이력 저장소에서 조회한다.
 type BroadcastTimeCommand struct {
 	handlercore.BaseCommand
 }
@@ -78,9 +75,8 @@ func (c *BroadcastTimeCommand) Execute(ctx context.Context, cmdCtx *botcommand.C
 		MemberName: channel.Name,
 		Days:       days,
 		Entries:    broadcastHistoryFormatterEntries(result.Entries),
-		// 상한만큼 모였으면 기간 안에 더 있을 수 있다.
-		Partial: result.Truncated || len(result.Entries) >= broadcastTimeMaxEntries,
-		Now:     now,
+		Partial:    result.Truncated || len(result.Entries) >= broadcastTimeMaxEntries,
+		Now:        now,
 	})
 	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, message); err != nil {
 		return fmt.Errorf("send message: %w", err)

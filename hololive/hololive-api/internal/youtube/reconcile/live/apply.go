@@ -210,8 +210,6 @@ func endSession(existing *SessionState, pending *PendingEnd, dbNow time.Time) {
 	terminateSession(existing, endedAt, pending.EffectiveAt, endReasonOf(pending.Kind), dbNow)
 }
 
-// terminateSession은 모든 종료 경로가 공유하는 ENDED 전이다. 종료 근거의 관측 시각(effectiveAt)과
-// 실제 종료 시각(endedAt)을 구분해 저장한다. 세션에 이미 있는 ended_at은 바꾸지 않고 head의 종료 시각만 새로 쓴다.
 func terminateSession(existing *SessionState, endedAt, effectiveAt time.Time, reason EndReason, dbNow time.Time) {
 	existing.Status = domain.LiveStatusEnded
 	existing.LifecycleOrigin = OriginObserved

@@ -2,7 +2,7 @@
 
 Module and runtime inventory for the `hololive-bot` workspace.
 
-This file is the current runtime ownership authority. Completed handoffs, incident reports, historical architecture snapshots, and verification captures belong under `docs/history/` and must not define current procedures.
+이 문서가 현재 런타임별 책임을 정합니다. 완료한 작업의 인계·검증 자료와 과거 아키텍처는 Git 이력에서 확인합니다. 과거 기록이나 장애 보고서는 현재 운영 절차가 아닙니다.
 
 ## Module Inventory
 
@@ -54,6 +54,7 @@ deployment baseline for the terminated Osaka VM (its boot volume was deleted on
 | Quadlet unit / container | Role | Notes |
 |---|---|---|
 | `holo-postgres` | PostgreSQL data store | Bridge-networked PostgreSQL (`hololive-net`); publishes `${POSTGRES_PORT_BIND_IP}:5433` to container `5432`; `ssl=on`; `iris-stack internal CA` server cert mounted read-only from `/etc/stack-secrets/hololive-bot/postgres-tls/` at `/run/hololive-bot/postgres-tls/` |
+| `holo-pgbouncer` | 앱 transaction pooler | 중앙 `holo-pgbouncer:6432`, AP `${POSTGRES_PORT_BIND_IP}:6433`; 고정 bridge IP `172.23.255.254`; 양방향 TLS와 역할별 SCRAM, cert-only `auth_query`; [전환·복구 계약](../../deploy/quadlet/README.md#transaction-pooling). 운영 수용 기록은 별도 baseline이 소유 |
 | `hololive-db-migrate` | Migration bootstrap/apply job | One-shot unit with `Network=none` and an isolated admin Unix socket volume; no TCP admin/migrator route. Production activation is recorded separately in the deployment baseline |
 | `valkey-cache` | Valkey HA node (hololive group) | TLS TCP `${VALKEY_BIND_IP}:16379`; apps discover the primary through Sentinel |
 | `hololive-youtube-po-c` / `hololive-youtube-po-b` | Isolated PO issuer for central / Seoul collectors | Private Unix sockets; native Osaka uses `hololive-youtube-po.service`; kapu `d` uses `hololive-youtube-po-d.service` |

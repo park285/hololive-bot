@@ -8,7 +8,6 @@ import (
 	"google.golang.org/genai"
 )
 
-// usage는 Vertex 응답 하나가 쓴 토큰이다. 응답을 받지 못한 호출은 zero value다.
 type usage struct {
 	model         string
 	prompt        int32
@@ -38,15 +37,13 @@ type vertexTranslator struct {
 	rows   RowsConfig
 }
 
-// newVertexTranslator의 인증은 GOOGLE_APPLICATION_CREDENTIALS(ADC)에서 SDK가 읽는다.
 func newVertexTranslator(ctx context.Context, config TranslationConfig) (*vertexTranslator, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		Backend:  genai.BackendVertexAI,
 		Project:  config.Project,
 		Location: config.Location,
 		HTTPOptions: genai.HTTPOptions{
-			APIVersion: "v1",
-			// 재시도는 translationRetryOptions 계약 하나로만 센다.
+			APIVersion:   "v1",
 			RetryOptions: &genai.HTTPRetryOptions{Attempts: new(int32(1))},
 		},
 	})
@@ -64,7 +61,6 @@ func posterContents(src source, prompt string) []*genai.Content {
 	}, genai.RoleUser)}
 }
 
-// emptyResponseReason은 결과 없는 응답의 차단·종료 사유를 모은다. 같은 포스터가 매번 막히는지 이 사유로만 가릴 수 있다.
 func emptyResponseReason(response *genai.GenerateContentResponse) string {
 	var reasons []string
 

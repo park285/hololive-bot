@@ -65,7 +65,6 @@ ap_host_load() {
         echo "AP_SERVICES/AP_CONTAINERS/AP_PORTS must have matching lengths in $conf" >&2
         return 2
     fi
-    # AP host는 모두 native이며 Seoul b는 iris-seoul Podman Quadlet(po-central-cutover.sh b)이다.
     case "${AP_RUNTIME_MODE}" in
         native) ;;
         *)
@@ -73,7 +72,6 @@ ap_host_load() {
             return 2
             ;;
     esac
-    # native AP 바이너리의 x86-64 마이크로아키텍처 수준이며, 배포 전 대상 CPU 지원을 확인한다.
     AP_GOAMD64="${AP_GOAMD64:-v1}"
     case "${AP_GOAMD64}" in
         v1|v2|v3|v4) ;;
@@ -111,13 +109,11 @@ ap_rsync_target() {
     printf '%s@%s:%s' "$AP_SSH_USER" "$AP_SSH_HOST" "$path"
 }
 
-# 인자를 %q로 인용한다: ssh가 원격 argv를 공백으로 재조립·재파싱하므로, 인용 없이 bash -s -- "$@"로 넘기면 값의 셸 메타문자가 원격에서 실행된다.
 ap_remote_bash() {
     local remote_cmd="bash -s --"
     local arg
     for arg in "$@"; do
         remote_cmd+=" $(printf '%q' "$arg")"
     done
-    # RHEL 계열 sshd의 비대화식 PATH에는 sbin이 없다. 원격 조각은 sudo 없이 sysctl을 부르므로 스크립트 앞에 붙인다.
     { printf '%s\n' "PATH=\"\$PATH:/usr/local/sbin:/usr/sbin:/sbin\""; cat; } | "${AP_SSH[@]}" "$remote_cmd"
 }

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package middleware
 
 import (
@@ -38,8 +18,8 @@ func TestAPIKeyAuthMiddleware(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		apiKey     string // 미들웨어에 설정된 키
-		headerVal  string // 요청 헤더에 담는 값 ("" = 헤더 미전송)
+		apiKey     string
+		headerVal  string
 		wantStatus int
 	}{
 		{
@@ -133,8 +113,8 @@ func TestNoRouteAuthHandler(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		apiKey     string // 핸들러에 설정된 키
-		headerVal  string // 요청 헤더에 담는 값 ("" = 헤더 미전송)
+		apiKey     string
+		headerVal  string
 		wantStatus int
 	}{
 		{
@@ -168,7 +148,6 @@ func TestNoRouteAuthHandler(t *testing.T) {
 			t.Parallel()
 
 			router := gin.New()
-			// NoRoute 핸들러만 등록 (실제 라우트 없음)
 			router.NoRoute(NoRouteAuthHandler(tt.apiKey))
 
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nonexistent", http.NoBody)

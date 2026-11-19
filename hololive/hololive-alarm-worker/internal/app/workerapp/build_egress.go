@@ -62,7 +62,6 @@ func buildNotificationEgress(
 }
 
 func buildNotificationSender(client egress.IrisClient, markdownReplies bool, rooms egress.OpenChat) *egress.IrisMessageSender {
-	// 방 정본은 오픈채팅 Markdown 판정에만 쓴다. alarm-worker는 Karing template을 보내지 않는다.
 	return egress.NewIrisMessageSender(
 		client,
 		egress.WithMarkdownReplies(markdownReplies),
@@ -95,7 +94,6 @@ func buildEgressRunners(
 		},
 	)
 
-	// v1 YouTube 알림은 v3 ledger로 넘기지 않는 정본 파이프라인이다.
 	runners, err = appendYouTubeDeliveryRunner(runners, appConfig, infra, irisSender, statusClient, messageStrings, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("append youtube delivery runner: %w", err)
@@ -182,8 +180,6 @@ func appendAlarmDispatchRunner(
 	), nil
 }
 
-// buildAlarmDispatchHandoffReconciler의 지평은 발송 정산과 같은 alarm_dispatch profile handoff_horizon_ms이고 idle 주기는
-// alarm_dispatch poll 주기다. DLQ 뒤 dedup claim 키는 발송 runner와 같은 cache로 해제한다.
 func buildAlarmDispatchHandoffReconciler(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
@@ -385,7 +381,6 @@ func newYouTubeOutboxDispatcher(
 	dispatcher, err := youtubedispatch.NewDispatcher(youtubedispatch.Dependencies{
 		DB: pool, Cache: infra.Cache, Sender: sender,
 		Renderer: template.NewRenderer(pool, logger), MessageStrings: messageStrings,
-		// 표시명은 PostgreSQL members 정본에서 읽어 Valkey 장애가 알림 이름과 발송을 막지 않게 한다.
 		MemberNames: alarmstore.NewRepository(infra.Postgres, logger),
 		WakeupCache: infra.Cache,
 	}, logger, &dispatchConfig)
@@ -396,12 +391,10 @@ func newYouTubeOutboxDispatcher(
 	return dispatcher, nil
 }
 
-// 생성자가 기본값을 채우지 않으므로 모든 필드를 profile에서 받는다.
 func youtubeDispatchConfig(appConfig *workerconfig.RuntimeConfig) youtubedispatch.Config {
 	profile := appConfig.AlarmWorkerProfile.YouTubeDelivery
 	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers[workerconfig.WorkerYouTubeDelivery]
 	attemptTimeout, _ := worker.Executor.AttemptTimeout.FixedDuration()
-	// 신선도는 delivery 생성 시각이 아니라 부모 outbox.created_at에서 계산한다.
 	freshness, _ := worker.Queue.MaxAge.FixedDuration()
 
 	return youtubedispatch.Config{

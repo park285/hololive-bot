@@ -1,7 +1,3 @@
--- 확정본의 주 범위를 바꾸고 판정 주체를 관리자로 기록한다.
--- 일정표 행의 날짜는 주 범위로 정하므로 행 묶음은 지우고 다시 뽑는다. 틀린 주로 뽑은 날짜를 그 사이 게시하지 않기 위해서다.
--- 묶음은 호출한 쪽이 같은 트랜잭션에서 delete_rows.sql로 지운다. 이 문장의 snapshot은 커밋 전이던 RecordRows의 행을 보지 못한다.
--- review_requested_at은 summary의 최신 후보를 바꾸므로 건드리지 않으며, 그래서 같은 주 판정(week_coverage)은 자동 확정본으로 계속 본다.
 WITH target AS (
     SELECT revision, review_status = 'confirmed' AS changeable,
            abs($3::date - (posted_at AT TIME ZONE 'Asia/Tokyo')::date) <= 7 AS near_post

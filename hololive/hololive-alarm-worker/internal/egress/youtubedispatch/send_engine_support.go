@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package youtubedispatch
 
 import (
@@ -65,7 +45,6 @@ func (d *SendEngine) dispatchRowsIndividually(
 	}
 }
 
-// 이름 조회나 렌더링이 실패하면 개별 발송으로 바꾸지 않고 오류를 돌려주며, 호출자가 그룹 전체를 재시도 가능한 포맷 실패로 전이한다. 표시명이 없는 채널만 예외 계약의 종단 문구를 쓴다.
 func (d *SendEngine) formatGroupedMessage(
 	ctx context.Context,
 	group *deliveryGroup,
@@ -88,7 +67,6 @@ func (d *SendEngine) formatGroupedMessage(
 	return message, nil
 }
 
-// 전체 오류는 모든 outbox를 포맷 실패로 표시하고 한 번만 기록한다. 항목별 오류는 그 outbox만 실패로 남긴다.
 func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64]domain.YouTubeNotificationOutbox) (messages map[int64]messagedelivery.MessageVariants, failures map[int64]bool) {
 	messages = make(map[int64]messagedelivery.MessageVariants, len(outboxByID))
 	failures = make(map[int64]bool)
@@ -135,11 +113,8 @@ func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64
 	return messages, failures
 }
 
-// errDeliverySendRequestInvalid는 provider 호출 전에 요청을 거절한 실패다. 요청이 나가지 않았으므로 결과 불명이 아니며,
-// iris.ErrPermanent와 달리 grouped fallback의 trigger가 아니다.
 var errDeliverySendRequestInvalid = errors.New("delivery send request is invalid")
 
-// sendDeliveryMessage는 고정 요청을 보내고 202가 증명한 Iris requestId를 돌려준다.
 func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRequest) (irisRequestID string, sendErr error) {
 	if err := validateDeliverySendRequest(req); err != nil {
 		return "", fmt.Errorf("validate delivery send request: %w: %w", errDeliverySendRequestInvalid, err)
@@ -162,7 +137,6 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 		return "", fmt.Errorf("send frozen delivery: stored text or richtext request required: %w", errDeliverySendRequestInvalid)
 	}
 
-	// client request ID는 Iris admission 중복 제거 키이며 고정 요청에서만 온다. 비었으면 보내지 않는다.
 	if req.clientRequestID == "" {
 		return "", fmt.Errorf("send frozen delivery: client request id required: %w", errDeliverySendRequestInvalid)
 	}
@@ -195,9 +169,6 @@ func (d *SendEngine) wrapDeliverySendError(sendCtx context.Context, err error) e
 	return fmt.Errorf("send delivery message: %w", err)
 }
 
-// 결과 미확정(outcome unknown) 송신은 claim 해제도, 실패·성공 집계도 하지 않는다.
-// 행이 SENDING+locked 상태로 남아야 QuarantineStaleSending(LockTimeout)이 격리하며,
-// 여기서 실패로 처리하면 이미 Iris에 도달했을 수 있는 메시지가 재전송되어 중복 게시된다.
 func (d *SendEngine) recordPerRoomSendOutcomeUnknown(
 	row *domain.YouTubeNotificationDelivery,
 	sendReq deliverySendRequest,

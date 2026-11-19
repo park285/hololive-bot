@@ -6,12 +6,10 @@ import (
 	"unicode"
 )
 
-// SupportsSubscriptions는 멤버별 구독을 제공하는 UNIT B 채널인지 확인한다.
 func SupportsSubscriptions(channelID string) bool {
 	return loadRules().unitForChannel(channelID) == "unit-b"
 }
 
-// SubscriptionMember는 UNIT B의 유효한 구독 대상과 [유닛b]를 붙인 표시 이름을 반환한다.
 func SubscriptionMember(channelID, hostID string) (Participant, bool) {
 	if !SupportsSubscriptions(channelID) {
 		return Participant{}, false
@@ -25,7 +23,6 @@ func SubscriptionMember(channelID, hostID string) (Participant, bool) {
 	return Participant{ID: member.ID, Name: subscriptionDisplayName(member.Name)}, true
 }
 
-// FindSubscriptionMember는 정확한 멤버 이름으로 UNIT B 채널과 구독 대상을 찾는다.
 func FindSubscriptionMember(query string) (string, Participant, bool) {
 	query = normalizeSubscriptionName(query)
 
@@ -64,7 +61,6 @@ func normalizeSubscriptionName(value string) string {
 	}, normalizeTitle(value))
 }
 
-// MatchesSubscription은 전체 구독을 유지하고, 진행자 미상일 때 유효한 멤버 구독을 통과시킨다.
 func (r Result) MatchesSubscription(hostID string) bool {
 	if hostID == "" {
 		return true

@@ -12,7 +12,6 @@ var sqlAssets embed.FS
 
 var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
 
-// 고정 SQL 자산은 초기화 때 한 번 읽는다. 획득 문장은 범위별 bundle과 공통 선점 CTE를 결합한다.
 var (
 	subjectCandidatesForProjectionSQL   = mustSQL("subject_candidates_for_projection.sql")
 	globalCandidatesForProjectionSQL    = mustSQL("global_candidates_for_projection.sql")

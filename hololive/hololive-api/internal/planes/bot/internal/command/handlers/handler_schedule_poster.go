@@ -16,7 +16,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 포스터의 주 범위는 일본 방송 기준이라 오늘 날짜를 JST로 정한다.
 var schedulePosterZone = time.FixedZone("JST", 9*60*60)
 
 const scheduleCardContentType = "image/png"

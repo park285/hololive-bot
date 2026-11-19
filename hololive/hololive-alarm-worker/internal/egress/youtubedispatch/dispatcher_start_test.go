@@ -38,7 +38,6 @@ func (p *dispatcherTickProbe) tick() {
 	}
 }
 
-// runDispatcherInBackground는 Run을 별도 goroutine에서 돌리고, 시험이 끝날 때 취소한 뒤 Run이 반환하기를 기다린다.
 func runDispatcherInBackground(t *testing.T, dispatcher *Dispatcher) {
 	t.Helper()
 

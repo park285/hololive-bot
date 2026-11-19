@@ -1,5 +1,3 @@
--- settled CTE(message_id, ordering_key, status)에 이어 붙는 head 전진 조각이다.
--- terminal로 끝난 행이 head였을 때만 다음 활성 행으로 옮기고, 활성 행이 없으면 head를 지운다.
 successor AS MATERIALIZED (
 SELECT settled.message_id AS old_message_id, settled.ordering_key, next_row.message_id
 FROM settled LEFT JOIN LATERAL (

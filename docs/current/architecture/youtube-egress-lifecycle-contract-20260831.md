@@ -1,13 +1,12 @@
 # YouTube egress lifecycle contract
 
 - 작성일: 2026-08-31 KST
-- 적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`
 - 적용 런타임: `hololive-alarm-worker`
 - 상위 아키텍처: [`youtube-egress-lifecycle-transition-ownership-20260831.md`](youtube-egress-lifecycle-transition-ownership-20260831.md)
 - Logical ledger: [`youtube-egress-logical-delivery-ledger-20260831.md`](youtube-egress-logical-delivery-ledger-20260831.md)
 - Commit 판정: [`youtube-egress-lifecycle-commit-adjudication-20260831.md`](youtube-egress-lifecycle-commit-adjudication-20260831.md)
 - 구현 선택 근거: [`youtube-egress-lifecycle-library-review-20260831.md`](youtube-egress-lifecycle-library-review-20260831.md)
-- Ledger backfill 현재 상태(2026-09-28): 운영 완료. backfill 명령과 writer·cleanup의 completion marker 확인은 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. migration 227은 적용 시점, migration 229는 state 폐기 직전의 완료를 검사합니다. 아래 backfill·completion 조항은 설계 근거입니다.
+- Ledger backfill 현재 상태(2026-09-28): 운영 완료. backfill 명령과 writer·cleanup의 completion marker 확인은 지웠습니다. migration 227은 적용 시점, migration 229는 state 폐기 직전의 완료를 검사합니다. 아래 backfill·completion 조항은 설계 근거입니다.
 
 ## 규범 용어
 

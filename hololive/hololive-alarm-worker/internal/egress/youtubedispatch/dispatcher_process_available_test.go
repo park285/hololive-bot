@@ -165,7 +165,6 @@ func TestDispatcher_RunResetsWaitAfterProcessedRows(t *testing.T) {
 
 	dispatcher.run(t.Context())
 
-	// 첫 조회가 행을 처리해 대기를 되돌리고, 깨어난 뒤의 빈 조회는 되돌리지 않은 채 다시 기다린다.
 	require.Equal(t, 1, idle.resets)
 	require.Equal(t, 2, idle.waitCalls)
 

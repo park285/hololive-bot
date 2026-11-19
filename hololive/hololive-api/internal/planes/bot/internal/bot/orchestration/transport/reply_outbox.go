@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package transport
 
 import (
@@ -56,7 +36,6 @@ type ReplyOutboxEntry struct {
 	ClientRequestID string
 }
 
-// ReplyClient는 저장된 bot 응답 발송에 필요한 로컬 계약이다. SDK의 공개 BotClient는 확장하지 않는다.
 type ReplyClient interface {
 	iris.FileSender
 	SendMessageAccepted(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
@@ -65,8 +44,6 @@ type ReplyClient interface {
 	SendMultipleImages(context.Context, string, [][]byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 }
 
-// DispatchStoredReply는 저장된 응답을 Iris에 보내고 durable admission이 증명한 Iris requestId를 돌려준다.
-// Handoff 결과는 기다리지 않는다. 그 확인은 outbox의 accepted 행을 읽는 reconciler가 맡는다.
 func DispatchStoredReply(ctx context.Context, client ReplyClient, room string, payload []byte, clientRequestID string) (string, error) {
 	if client == nil {
 		return "", errors.New("dispatch stored reply: iris client is nil")
@@ -109,8 +86,6 @@ func storedReplyOptions(reply *StoredReply) []iris.SendOption {
 	return opts
 }
 
-// acceptedReplyRequestID는 202 응답이 durable admission을 증명하는지 확인한다. 응답이나 requestId가
-// 없으면 admission 결과가 불명이므로 같은 clientRequestId 재확인 대상으로 남긴다.
 func acceptedReplyRequestID(accepted *iris.ReplyAcceptedResponse) (string, error) {
 	if accepted == nil {
 		return "", replyOutcomeUnknownError{reason: "iris returned no admission response"}
@@ -193,7 +168,6 @@ func encodeStoredReply(reply *StoredReply) (string, error) {
 }
 
 func (t *CommandTransport) recordReply(ctx context.Context, room string, emission replyEmission, reply *StoredReply) error {
-	// 공개 진입점이 nil transport를 먼저 거르므로 여기서는 writer 누락(조립 결함)만 확인한다.
 	writer := t.replyOutbox
 	if writer == nil {
 		return errors.New("reply outbox writer is not configured")

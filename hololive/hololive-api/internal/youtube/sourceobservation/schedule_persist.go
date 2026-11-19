@@ -16,8 +16,6 @@ func lockScheduleSubject(ctx context.Context, tx dbx.Tx, groupKey string) error 
 	return lockLiveSubject(ctx, tx, "schedule:"+groupKey)
 }
 
-// 함께 돌려주는 저장 행 map은 같은 행의 저장 열 전체이며 저장 시 조건부 갱신의 기준이다. 누적 schedule item은 reducer가 읽지 않고, youtube_schedule_items의 유일한
-// writer인 schedule consumer는 lockScheduleSubject advisory lock으로 이미 직렬화되므로 item 행을 읽거나 잠그지 않는다.
 func loadScheduleState(ctx context.Context, tx dbx.Tx, items []schedule.Item) (schedule.State, map[string]live.SessionState, error) {
 	state := schedule.State{Sessions: map[string]schedule.Session{}}
 	stored := map[string]live.SessionState{}
@@ -65,8 +63,6 @@ func loadScheduleSessions(
 		return fmt.Errorf("load schedule session rows: %w", err)
 	}
 
-	// session이 있으면 그 상태가 우선이다. 없는 영상만 기존 head의 상태를 읽는다.
-	// Schedule이 사용하지 않는 상세 clock/pending은 읽거나 잠그지 않는다.
 	missing := make([]string, 0)
 
 	for _, videoID := range videoIDs {
@@ -128,8 +124,6 @@ func persistScheduleDecision(
 	stored map[string]live.SessionState,
 	decision *schedule.Decision,
 ) error {
-	// 모든 item → 모든 session의 기존 순서와 트랜잭션을 유지한다.
-	// 인자 배열도 전송 단위로 만들어 큰 관측의 추가 메모리를 제한한다.
 	total := len(decision.Items) + len(decision.Sessions)
 	for start := 0; start < total; start += scheduleStatementBatchSize {
 		if err := ctx.Err(); err != nil {
@@ -164,7 +158,6 @@ func persistScheduleDecision(
 	return nil
 }
 
-// 수명 모델 입력이 아닌 schedule item 표는 빼고 세션 저장 대상만 포함한다.
 func scheduleDecisionRuntimeVideoIDs(decision *schedule.Decision) []string {
 	videoIDs := make([]string, len(decision.Sessions))
 	for i := range decision.Sessions {
@@ -186,8 +179,6 @@ func scheduleItemStatement(observation *Observation, item *schedule.Item) dbx.St
 	}
 }
 
-// scheduleSessionState는 schedule이 정하는 열만 잠금 안에서 읽은 행 위에 덮는다. 읽은 행이 없으면
-// 메타데이터 출처의 새 세션이다.
 func scheduleSessionState(stored map[string]live.SessionState, session *schedule.Session) live.SessionState {
 	next, ok := stored[session.VideoID]
 	if !ok || !next.Present {

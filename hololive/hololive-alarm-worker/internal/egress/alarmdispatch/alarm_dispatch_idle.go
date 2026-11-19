@@ -13,8 +13,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// WakeupConfig는 worker profile alarm_dispatch의 빈 대기 설정이다. BRPOP 상한은 BackoffMin(idle_backoff_min_ms)에서
-// BackoffMax(idle_backoff_max_ms)까지 늘고, wakeup을 끄거나 BRPOP이 실패하면 PollInterval(poll_interval_ms)만큼 잠든다.
 type WakeupConfig struct {
 	WakeupEnabled bool
 	PollInterval  time.Duration
@@ -22,8 +20,6 @@ type WakeupConfig struct {
 	BackoffMax    time.Duration
 }
 
-// NewWakeupWaiterWithConfig는 alarm:dispatch:wakeup을 기다리는 runner 대기를 만든다. 켜진 wakeup에 cache가 없으면
-// polling으로 바꾸지 않고 생성 오류로 드러낸다.
 func NewWakeupWaiterWithConfig(c cache.LowLevelCache, logger *slog.Logger, config WakeupConfig) (*wakeupwait.Waiter, error) {
 	if !config.WakeupEnabled {
 		c = nil
@@ -44,8 +40,6 @@ func NewWakeupWaiterWithConfig(c cache.LowLevelCache, logger *slog.Logger, confi
 	return waiter, nil
 }
 
-// wakeupObserver는 대기 결과를 alarm_dispatch_runner_* 지표로 남긴다. 지표의 wait_mode는 BRPOP 대기 wakeup, wakeup을
-// 끈 대기 poll, BRPOP 실패 뒤 대기 fallback이다.
 type wakeupObserver struct{}
 
 func (wakeupObserver) SignalWait(result wakeupwait.Result, elapsed time.Duration) {

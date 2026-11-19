@@ -31,7 +31,6 @@ const (
 	schedulePosterListMax = 50
 )
 
-// SchedulePosterCollector는 수집을 수집 주기와 상관없이 바로 돌리게 예약하며, 이미 예약돼 있으면 false다.
 type SchedulePosterCollector interface {
 	RequestCollect() bool
 }
@@ -367,7 +366,6 @@ func (h *SchedulePosterHandler) respondStoreError(c *gin.Context, action string,
 	}
 }
 
-// GetSchedulePosterSummary는 Console push monitor가 새 후보 알림을 판단하는 값이다.
 func (h *SchedulePosterHandler) GetSchedulePosterSummary(c *gin.Context) {
 	if !h.ready(c) {
 		return
@@ -447,7 +445,6 @@ func (h *SchedulePosterHandler) GetSchedulePoster(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, newSchedulePosterResponse(&poster))
 }
 
-// GetSchedulePosterImage는 포스터에 저장한 그림을 저장한 형식 그대로 보낸다. 그림을 저장하지 않은 포스터도 404다.
 func (h *SchedulePosterHandler) GetSchedulePosterImage(c *gin.Context) {
 	if !h.ready(c) {
 		return
@@ -477,7 +474,6 @@ func (h *SchedulePosterHandler) GetSchedulePosterImage(c *gin.Context) {
 	c.Data(http.StatusOK, image.MIME, image.Data)
 }
 
-// GetSchedulePosterChanges는 포스터의 수집 조건에 드는 글과, 지금 행 묶음에 대응한 글의 변경을 돌려준다.
 func (h *SchedulePosterHandler) GetSchedulePosterChanges(c *gin.Context) {
 	if !h.ready(c) {
 		return
@@ -506,7 +502,6 @@ func (h *SchedulePosterHandler) GetSchedulePosterChanges(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, schedulePosterPostsResponse{Posts: items})
 }
 
-// GetSchedulePosterRows는 포스터의 행 묶음에 반영 변경을 적용한 칸과, 오늘(JST) !스케쥴이 이 포스터를 보여 주는지를 돌려준다.
 func (h *SchedulePosterHandler) GetSchedulePosterRows(c *gin.Context) {
 	if !h.ready(c) {
 		return
@@ -546,7 +541,6 @@ func (h *SchedulePosterHandler) ConfirmSchedulePoster(c *gin.Context) {
 	})
 }
 
-// UpdateSchedulePosterWeek은 확정본의 주 범위를 고치고 일정표 행을 다시 뽑는다.
 func (h *SchedulePosterHandler) UpdateSchedulePosterWeek(c *gin.Context) {
 	var request schedulePosterWeekRequest
 
@@ -575,8 +569,6 @@ func (r *schedulePosterWeekRequest) week() (time.Time, time.Time, error) {
 	return weekStart, weekEnd, nil
 }
 
-// CollectSchedulePosters는 수집을 예약만 하고 끝나기를 기다리지 않는다. 결과는 목록과 요약에 나타난다.
-// 다른 변경과 같이 JSON 본문을 받으며 빈 객체만 허용한다.
 func (h *SchedulePosterHandler) CollectSchedulePosters(c *gin.Context) {
 	if h == nil || h.collector == nil {
 		sharedserver.RespondError(c, http.StatusServiceUnavailable, "schedule poster collection unavailable", nil)
@@ -607,7 +599,6 @@ func (h *SchedulePosterHandler) RejectSchedulePoster(c *gin.Context) {
 	})
 }
 
-// RequestSchedulePosterRows는 일정표 행만 다시 뽑게 예약하며 revision을 올리지 않는다.
 func (h *SchedulePosterHandler) RequestSchedulePosterRows(c *gin.Context) {
 	var request schedulePosterRevisionRequest
 
@@ -616,12 +607,10 @@ func (h *SchedulePosterHandler) RequestSchedulePosterRows(c *gin.Context) {
 	})
 }
 
-// RevokeSchedulePosterChange는 글 하나의 변경을 철회한다. Console gateway가 경로 변수로 {id}만 받으므로 글 id는 본문에 둔다.
 func (h *SchedulePosterHandler) RevokeSchedulePosterChange(c *gin.Context) {
 	h.changePost(c, "revoke schedule poster post", (*scheduleposter.Store).RevokePost)
 }
 
-// RestoreSchedulePosterChange는 철회한 글을 되살려 다음 주기에 다시 대응하게 한다.
 func (h *SchedulePosterHandler) RestoreSchedulePosterChange(c *gin.Context) {
 	h.changePost(c, "restore schedule poster post", (*scheduleposter.Store).RestorePost)
 }
@@ -665,7 +654,6 @@ func (h *SchedulePosterHandler) changePost(
 	ginjson.Respond(c, http.StatusOK, gin.H{"id": strconv.FormatInt(id, 10), "postId": strconv.FormatInt(postID, 10)})
 }
 
-// change의 request와 expectedRevision은 같은 요청 구조체를 가리킨다. 본문을 디코드한 뒤에 revision을 읽는다.
 func (h *SchedulePosterHandler) change(
 	c *gin.Context,
 	request any,

@@ -42,8 +42,6 @@ func storedPendingRows(t *testing.T, pool *pgxpool.Pool) map[string]storedPendin
 	return stored
 }
 
-// pendingRowXmax는 행 잠금 흔적을 읽는다. FOR UPDATE와 ON CONFLICT DO UPDATE는 값이 같아도 잠근
-// 트랜잭션 ID를 xmax에 남기므로, 값이 그대로여도 xmax가 바뀌면 그 행을 잠근 것이다.
 func pendingRowXmax(t *testing.T, pool *pgxpool.Pool, videoID string) string {
 	t.Helper()
 
@@ -54,7 +52,6 @@ func pendingRowXmax(t *testing.T, pool *pgxpool.Pool, videoID string) string {
 	return xmax
 }
 
-// YouTube.js streams 탭은 이미 ENDED인 세션도 매번 ENDED로 싣는다.
 func TestLiveConsumerFreezesPendingEndsOfEndedSessions(t *testing.T) {
 	t.Parallel()
 
@@ -103,7 +100,6 @@ func TestLiveConsumerFreezesPendingEndsOfEndedSessions(t *testing.T) {
 	require.Len(t, after, 2)
 }
 
-// 바꾸면 head 후보 FK가 commit에서 깨져 관측을 처리하지 못한다.
 func TestLiveConsumerKeepsCandidatePendingOfEndedSession(t *testing.T) {
 	t.Parallel()
 

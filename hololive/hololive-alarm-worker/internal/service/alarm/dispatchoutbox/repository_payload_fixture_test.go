@@ -18,8 +18,6 @@ type ledgerPayloadFixture struct {
 	wantHash    string
 }
 
-// event payload 바이트와 hash는 이미 저장된 event 행과의 동일성 기준이다. 바이트가 바뀌면 기존 event에 합류하는
-// 방의 delivery가 충돌로 거절되므로 출처별 대표 envelope의 적재 바이트를 고정한다.
 func TestBuildLedgerRowsEventPayloadBytesAreStable(t *testing.T) {
 	t.Parallel()
 

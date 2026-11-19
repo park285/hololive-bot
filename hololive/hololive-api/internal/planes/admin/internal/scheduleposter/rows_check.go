@@ -18,17 +18,15 @@ import (
 )
 
 const (
-	maxRowHour      = 29
-	maxRowItemChars = 200
-	maxRowTerms     = 40
-	// DB 배열 상한(migration 019 CHECK)과 같다.
+	maxRowHour         = 29
+	maxRowItemChars    = 200
+	maxRowTerms        = 40
 	maxRowWarnings     = 40
 	maxErrorValueChars = 120
 )
 
 var termBases = []string{"official_ko", "translated", "transliterated"}
 
-// 카드는 시간대를 그리지 않고 시각을 JST로 읽으므로, JST로 바꿀 수 없는 시간대의 행은 저장하지 않는다.
 var errUnsupportedZone = errors.New("extracted row has a time zone that cannot be converted to JST")
 
 var (
@@ -63,7 +61,6 @@ func validateExtracted(rows []extractedRow) ([]posterstore.Row, error) {
 			return nil, fmt.Errorf("extracted row %d: text is empty", i+1)
 		}
 
-		// text·tz·badges는 번역 지시문의 한 행 줄에 그대로 들어가므로 줄바꿈 같은 제어 문자로 줄을 늘리지 못하게 한다.
 		if hasControl(row.Text) || hasControl(optional(row.TZ)) || slices.ContainsFunc(row.Badges, func(badge string) bool {
 			return hasControl(badge) || utf8.RuneCountInString(badge) > maxRowItemChars
 		}) {
@@ -80,7 +77,6 @@ func validateExtracted(rows []extractedRow) ([]posterstore.Row, error) {
 		return records, nil
 	}
 
-	// 번역 전이라 비어 있는 title_ko에 source_text를 넣어 추출이 정하는 칸만 저장 조건으로 본다.
 	probe := slices.Clone(records)
 	for i := range probe {
 		probe[i].TitleKo = probe[i].SourceText
@@ -210,7 +206,6 @@ func extractWarnings(row *extractedRow, weekStart, weekEnd string) []string {
 	return append(warnings, row.Disagreements...)
 }
 
-// rowChecker의 경고는 모델 검증에 쓴 하니스 check_translate와 같아야 한다.
 type rowChecker struct {
 	owner       *domain.Member
 	members     []*domain.Member
@@ -295,7 +290,6 @@ func rowTexts(src *extractedRow, out *translatedRow) (source, korean string) {
 	return source, korean
 }
 
-// 저장한 표기는 같은 주 다른 포스터의 Earlier renderings로 퍼지므로 T8에 걸린 표기는 빼고 저장한다.
 func verifiedTerms(src *extractedRow, out *translatedRow) []posterstore.Term {
 	source, korean := rowTexts(src, out)
 
@@ -403,7 +397,6 @@ func missingDigits(source, korean string) []string {
 	return missing
 }
 
-// titleHasMarker는 하니스의 `@|\bwith\b|\bw/|\bch\.`(대소문자 무시)와 같다. Go의 \b는 ASCII 글자만 보므로 유니코드 경계를 직접 잰다.
 func titleHasMarker(title string) bool {
 	if strings.Contains(title, "@") {
 		return true

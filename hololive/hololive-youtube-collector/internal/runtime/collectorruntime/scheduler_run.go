@@ -48,7 +48,7 @@ func (e *collectionExecutor) runSpec(ctx context.Context, job *queuedJob) {
 	}
 
 	if err := e.runAcquired(ctx, job.registration, spec, lease); err != nil {
-		return // runAcquired가 실패를 지표·lease 정리·로그로 이미 기록했습니다.
+		return
 	}
 }
 
@@ -167,7 +167,6 @@ func (e *collectionExecutor) handleRunError(
 
 	switch decision.action {
 	case runFailureDeferInvariant:
-		// 검증 실패의 terminal 처리는 callback join 뒤 fatal 보고보다 먼저 수행한다.
 		e.deferInvariant(ctx, lease, spec, proof, err)
 		e.reportFatal(decision.fatal)
 	case runFailureReleaseSuperseded:
@@ -199,15 +198,12 @@ func (e *collectionExecutor) releaseSuperseded(ctx context.Context, lease joblea
 	return nil
 }
 
-// observeFenceLost는 callback join 뒤 fence 손실을 한 번만 센다. Publish·empty complete terminal에서 생긴 손실은
-// leasePhaseError 표식으로 phase=publish, 그 밖의 callback 경로는 phase=collect다.
 func (e *collectionExecutor) observeFenceLost(spec *joblease.JobSpec, err error) {
 	if phase := fenceLostPhase(err); phase != "" {
 		e.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phase)
 	}
 }
 
-// 분류·errors.Is는 감싼 오류를 그대로 따른다.
 type leasePhaseError struct {
 	phase string
 	err   error
@@ -256,7 +252,6 @@ func (e *collectionExecutor) deferFailedRun(
 	e.logFailure(ctx, "collect", code, class, detail, spec, proof)
 }
 
-// 입력을 만들 수 없는 진단(예: defer할 수 없는 code)도 lease 거절과 같은 비치명 defer 실패로 돌려줍니다.
 func (e *collectionExecutor) deferLease(
 	ctx context.Context,
 	lease joblease.Lease,
@@ -303,8 +298,6 @@ func (e *collectionExecutor) collectAndPublish(
 	return nil
 }
 
-// Collector가 반환하면 이 함수가 끝나면서 gate를 정확히 한 번 반환하므로 결과 검증과 발행은 gate 밖에서 진행합니다. Collector가 반환하지 않으면 upstream 호출이 남아 있을 수 있어
-// gate를 계속 점유합니다. 반환값 setupErr는 수집 전에 끝난 실패이고, fatal은 검증 대상인 수집 실패입니다.
 func (e *collectionExecutor) collectWithAdmission(
 	ctx context.Context,
 	registration RegisteredRunner,
@@ -357,7 +350,7 @@ func (e *collectionExecutor) runCollector(ctx context.Context, runner collection
 
 		return nil
 	})
-	// 반환 오류의 분류는 provider가 소유합니다. 실제 panic만 실행 불변 위반으로 분류합니다.
+
 	if !returned {
 		return collection.CollectResult{}, collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, recoveredErr)
 	}
@@ -420,7 +413,6 @@ func (e *collectionExecutor) commitCollectResult(
 
 		defer cancel()
 
-		// tab이 없는 정상 empty COMPLETE는 checkpoint 없이 lease만 완료한다. 관측 수락과 구분해 job kind로 센다.
 		if err := lease.CompleteCurrent(dbCtx); err != nil {
 			return markPublishLeaseError(fmt.Errorf("complete current: %w", err))
 		}

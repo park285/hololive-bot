@@ -42,7 +42,6 @@ var changeLastCompleted = promauto.NewGauge(prometheus.GaugeOpts{
 	Help: "Unix time of the last completed schedule poster change detection cycle.",
 })
 
-// 첫 증가에 시리즈가 생기면 Prometheus가 그 샘플을 기준점으로 삼아 첫 사건을 0으로 센다.
 func precreateCounterVec(vec *prometheus.CounterVec, values ...string) *prometheus.CounterVec {
 	for _, value := range values {
 		vec.WithLabelValues(value)

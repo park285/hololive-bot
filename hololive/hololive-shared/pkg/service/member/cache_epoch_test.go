@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package member
 
 import (
@@ -32,9 +12,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/alicebob/miniredis/v2/server"
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/internal/testredis"
@@ -129,7 +111,6 @@ func (f *fakeMemberEpochAuthority) setCurrentError(err error) {
 	f.mu.Unlock()
 }
 
-// 분산 캐시가 있으면 epoch authority가 필수라는 불변식(configureEpoch)을 직접 구성한 테스트 Cache에서도 지킨다.
 func withTestEpochAuthority(c *Cache) *Cache {
 	c.epoch = &fakeMemberEpochAuthority{epoch: 1}
 	c.authorityEpoch.Store(1)
@@ -233,104 +214,127 @@ func TestCacheEpoch_RemoteBumpRejectsStaleFallbackAfterReloadFailure(t *testing.
 }
 
 func TestCacheEpoch_PeriodicReconciliationRecoversMissedNotification(t *testing.T) {
-	authority := &fakeMemberEpochAuthority{epoch: 1}
-	c := newEpochTestCache(authority)
-	c.allMembersSnapshot.Store(newAllMembersState([]*domain.Member{{Name: testMemberNameOld}}, 0, time.Now()))
+	synctest.Test(t, func(t *testing.T) {
+		authority := &fakeMemberEpochAuthority{epoch: 1}
+		c := newEpochTestCache(authority)
+		c.allMembersSnapshot.Store(newAllMembersState([]*domain.Member{{Name: testMemberNameOld}}, 0, time.Now()))
 
-	ctx, cancel := context.WithCancel(t.Context())
+		ctx, cancel := context.WithCancel(t.Context())
 
-	defer cancel()
+		defer cancel()
 
-	go c.runEpochReconcileWorker(ctx, nil)
+		go c.runEpochReconcileWorker(ctx, nil)
 
-	authority.setEpochTwo()
-	assertEventually(t, func() bool {
-		return c.authorityEpoch.Load() == 2 && c.allMembersSnapshot.Load() == nil
+		authority.setEpochTwo()
+		synctest.Wait()
+		synctest.Sleep(c.epochReconcileInterval)
+
+		if c.authorityEpoch.Load() != 2 || c.allMembersSnapshot.Load() != nil {
+			t.Fatal("periodic reconciliation did not invalidate the epoch-1 snapshot")
+		}
 	})
 }
 
 func TestCacheEpoch_ReconciliationOutlivesBootstrapContext(t *testing.T) {
-	authority := &fakeMemberEpochAuthority{
-		epoch:       1,
-		subscribed:  make(chan struct{}, 1),
-		messages:    make(chan string, 1),
-		disconnects: make(chan error),
-	}
-	c := newEpochTestCache(authority)
-	bootstrapCtx, cancelBootstrap := context.WithCancel(t.Context())
-	runtimeCtx, stopRuntime := context.WithCancel(memberEpochRuntimeContext(bootstrapCtx))
+	synctest.Test(t, func(t *testing.T) {
+		authority := &fakeMemberEpochAuthority{
+			epoch:       1,
+			subscribed:  make(chan struct{}, 1),
+			messages:    make(chan string, 1),
+			disconnects: make(chan error),
+		}
+		c := newEpochTestCache(authority)
+		bootstrapCtx, cancelBootstrap := context.WithCancel(t.Context())
+		runtimeCtx, stopRuntime := context.WithCancel(memberEpochRuntimeContext(bootstrapCtx))
 
-	defer stopRuntime()
+		defer stopRuntime()
 
-	go c.runEpochReconciliation(runtimeCtx)
+		go c.runEpochReconciliation(runtimeCtx)
 
-	select {
-	case <-authority.subscribed:
-	case <-time.After(time.Second):
-		t.Fatal("subscriber did not start")
-	}
+		select {
+		case <-authority.subscribed:
+		case <-time.After(time.Second):
+			t.Fatal("subscriber did not start")
+		}
 
-	cancelBootstrap()
-	authority.setEpochTwo()
+		cancelBootstrap()
+		authority.setEpochTwo()
 
-	authority.messages <- `{"version":2,"epoch":2}`
+		authority.messages <- `{"version":2,"epoch":2}`
 
-	assertEventually(t, func() bool { return c.authorityEpoch.Load() == 2 })
+		synctest.Wait()
+
+		if got := c.authorityEpoch.Load(); got != 2 {
+			t.Fatalf("authority epoch = %d, want 2", got)
+		}
+	})
 }
 
 func TestCacheEpoch_SubscriptionConfirmationReconcilesMissedEpoch(t *testing.T) {
-	authority := &fakeMemberEpochAuthority{
-		epoch:       2,
-		subscribed:  make(chan struct{}, 1),
-		messages:    make(chan string),
-		disconnects: make(chan error),
-	}
-	c := newEpochTestCache(authority)
-	c.authorityEpoch.Store(1)
+	synctest.Test(t, func(t *testing.T) {
+		authority := &fakeMemberEpochAuthority{
+			epoch:       2,
+			subscribed:  make(chan struct{}, 1),
+			messages:    make(chan string),
+			disconnects: make(chan error),
+		}
+		c := newEpochTestCache(authority)
+		c.authorityEpoch.Store(1)
 
-	ctx, cancel := context.WithCancel(t.Context())
+		ctx, cancel := context.WithCancel(t.Context())
 
-	defer cancel()
+		defer cancel()
 
-	go c.runEpochReconciliation(ctx)
+		go c.runEpochReconciliation(ctx)
 
-	select {
-	case <-authority.subscribed:
-	case <-time.After(time.Second):
-		t.Fatal("subscriber did not start")
-	}
+		select {
+		case <-authority.subscribed:
+		case <-time.After(time.Second):
+			t.Fatal("subscriber did not start")
+		}
 
-	assertEventually(t, func() bool { return c.authorityEpoch.Load() == 2 })
+		synctest.Wait()
+
+		if got := c.authorityEpoch.Load(); got != 2 {
+			t.Fatalf("authority epoch = %d, want 2", got)
+		}
+	})
 }
 
 func TestCacheEpoch_ReconnectReconcilesBeforeRetry(t *testing.T) {
-	authority := &fakeMemberEpochAuthority{
-		epoch:       1,
-		subscribed:  make(chan struct{}, 2),
-		messages:    make(chan string),
-		disconnects: make(chan error, 1),
-	}
-	c := newEpochTestCache(authority)
+	synctest.Test(t, func(t *testing.T) {
+		authority := &fakeMemberEpochAuthority{
+			epoch:       1,
+			subscribed:  make(chan struct{}, 2),
+			messages:    make(chan string),
+			disconnects: make(chan error, 1),
+		}
+		c := newEpochTestCache(authority)
 
-	c.epochReconcileInterval = time.Hour
+		c.epochReconcileInterval = time.Hour
 
-	ctx, cancel := context.WithCancel(t.Context())
+		ctx, cancel := context.WithCancel(t.Context())
 
-	defer cancel()
+		defer cancel()
 
-	go c.runEpochReconciliation(ctx)
+		go c.runEpochReconciliation(ctx)
 
-	select {
-	case <-authority.subscribed:
-	case <-time.After(time.Second):
-		t.Fatal("subscriber did not start")
-	}
+		select {
+		case <-authority.subscribed:
+		case <-time.After(time.Second):
+			t.Fatal("subscriber did not start")
+		}
 
-	authority.setEpochTwo()
+		authority.setEpochTwo()
 
-	authority.disconnects <- errors.New("connection lost")
+		authority.disconnects <- errors.New("connection lost")
 
-	assertEventually(t, func() bool { return c.authorityEpoch.Load() == 2 })
+		synctest.Wait()
+
+		if got := c.authorityEpoch.Load(); got != 2 {
+			t.Fatalf("authority epoch = %d, want 2", got)
+		}
+	})
 }
 
 func TestCacheEpoch_MutationSucceedsWhenNotificationFails(t *testing.T) {
@@ -442,13 +446,12 @@ func (d *epochTestDatabase) load(context.Context) ([]*domain.Member, error) {
 
 type epochTestTopology struct {
 	mini      *miniredis.Miniredis
+	activity  chan struct{}
 	database  *epochTestDatabase
 	processes []*Cache
 	publisher *Cache
 }
 
-// Miniredis의 RESP2 Pub/Sub 연결 제약이 subscriber 자신의 mutation 명령을 간헐적으로 오염시키므로 실제 multi-process topology처럼 별도 client에서
-// mutation을 발행한다.
 func newEpochTestTopology(t *testing.T) *epochTestTopology {
 	t.Helper()
 
@@ -474,7 +477,15 @@ func newEpochTestTopology(t *testing.T) *epochTestTopology {
 		return service
 	}
 
-	topology := &epochTestTopology{mini: mini, database: &epochTestDatabase{}}
+	topology := &epochTestTopology{mini: mini, database: &epochTestDatabase{}, activity: make(chan struct{}, 1)}
+	mini.Server().SetPreHook(func(_ *server.Peer, _ string, _ ...string) bool {
+		select {
+		case topology.activity <- struct{}{}:
+		default:
+		}
+
+		return false
+	})
 	topology.database.name.Store("Old")
 
 	for range 2 {
@@ -483,11 +494,13 @@ func newEpochTestTopology(t *testing.T) *epochTestTopology {
 			t.Fatalf("NewMemberCache() error = %v", err)
 		}
 
+		t.Cleanup(process.Close)
+
 		process.loadAllMembers = topology.database.load
 		topology.processes = append(topology.processes, process)
 	}
 
-	assertEventually(t, func() bool { return mini.PubSubNumSub(memberEpochChannel)[memberEpochChannel] == 2 })
+	topology.waitFor(t, func() bool { return mini.PubSubNumSub(memberEpochChannel)[memberEpochChannel] == 2 })
 
 	publisherService := newService()
 
@@ -516,7 +529,7 @@ func (topology *epochTestTopology) converged(epoch uint64, name string) func() b
 func TestCacheEpoch_TwoProcessesConvergeAcrossValkey(t *testing.T) {
 	topology := newEpochTestTopology(t)
 
-	assertEventually(t, topology.converged(1, "Old"))
+	topology.waitFor(t, topology.converged(1, "Old"))
 
 	topology.database.name.Store("New")
 
@@ -524,9 +537,8 @@ func TestCacheEpoch_TwoProcessesConvergeAcrossValkey(t *testing.T) {
 		t.Fatalf("InvalidateAll() error = %v", err)
 	}
 
-	assertEventually(t, topology.converged(2, "New"))
+	topology.waitFor(t, topology.converged(2, "New"))
 
-	// Valkey에는 epoch authority만 남고 멤버 데이터 key는 쓰이지 않는다.
 	if keys := topology.mini.Keys(); len(keys) != 1 || keys[0] != memberEpochAuthorityKey {
 		t.Fatalf("valkey keys = %v, want only %s", keys, memberEpochAuthorityKey)
 	}
@@ -574,12 +586,12 @@ func TestCacheEpoch_RecreatedEpochAfterValkeyRestartConverges(t *testing.T) {
 		}
 	}
 
-	assertEventually(t, topology.converged(3, "Old"))
+	topology.waitFor(t, topology.converged(3, "Old"))
 
 	topology.database.name.Store("AfterRestart")
 	topology.mini.FlushAll()
 
-	assertEventually(t, topology.converged(1, "AfterRestart"))
+	topology.waitFor(t, topology.converged(1, "AfterRestart"))
 
 	topology.database.name.Store("AfterMutation")
 
@@ -587,7 +599,7 @@ func TestCacheEpoch_RecreatedEpochAfterValkeyRestartConverges(t *testing.T) {
 		t.Fatalf("InvalidateAll() after restart error = %v", err)
 	}
 
-	assertEventually(t, topology.converged(2, "AfterMutation"))
+	topology.waitFor(t, topology.converged(2, "AfterMutation"))
 }
 
 func TestValkeyMemberEpochAuthorityRejectsOverflowAndCorruption(t *testing.T) {
@@ -691,7 +703,9 @@ func TestCacheEpoch_CanceledSubscribeDoesNotWarn(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 
-	go c.runEpochReconciliation(ctx)
+	var worker sync.WaitGroup
+
+	worker.Go(func() { c.runEpochReconciliation(ctx) })
 
 	select {
 	case <-authority.subscribed:
@@ -701,7 +715,7 @@ func TestCacheEpoch_CanceledSubscribeDoesNotWarn(t *testing.T) {
 	}
 
 	cancel()
-	time.Sleep(20 * time.Millisecond)
+	worker.Wait()
 
 	if strings.Contains(logs.String(), `"level":"WARN"`) {
 		t.Fatalf("canceled subscribe logged a warning: %s", logs.String())
@@ -753,17 +767,17 @@ func TestParseMemberEpoch(t *testing.T) {
 	}
 }
 
-func assertEventually(t *testing.T, condition func() bool) {
+func (topology *epochTestTopology) waitFor(t *testing.T, condition func() bool) {
 	t.Helper()
 
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	for !condition() {
+		select {
+		case <-topology.activity:
+		case <-ctx.Done():
+			t.Fatal("cache processes did not converge before deadline")
 		}
-
-		time.Sleep(time.Millisecond)
 	}
-
-	t.Fatal("condition was not satisfied before deadline")
 }

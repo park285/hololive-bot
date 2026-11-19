@@ -178,7 +178,6 @@ func (s *RuntimeScheduler) runYouTubeIteration(ctx context.Context) error {
 			s.logger.Warn("Immediate alarm cache recovery failed after YouTube check error", slog.Any("error", recoveryErr))
 		}
 
-		// 신규 조회 실패와 무관하게 이미 durable 선정된 후보의 발행을 계속한다.
 		if dispatchErr := s.dispatchRecoveredYouTubeNotifications(ctx, notifications, targetPolicy); dispatchErr != nil {
 			return fmt.Errorf("run youtube iteration: recover staged candidates: %w", errors.Join(err, dispatchErr))
 		}
@@ -193,7 +192,6 @@ func (s *RuntimeScheduler) runYouTubeIteration(ctx context.Context) error {
 	return nil
 }
 
-// youtubeTargetPolicy는 반복 시작 시점의 target minute 설정 snapshot이다. 반복 중의 설정 변경은 다음 반복부터 반영된다.
 func (s *RuntimeScheduler) youtubeTargetPolicy() targetpolicy.TargetMinutePolicy {
 	return targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(s.targetMinutesSource.GetTargetMinutes()))
 }

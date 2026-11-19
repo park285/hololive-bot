@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package dbtest
 
 import (
@@ -35,9 +15,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 )
 
-// upstream reaper 연결은 TCP dial 직후 성공을 반환하고 filter 전송·ACK 수신은
-// goroutine에서 실행돼 실패해도 로그만 남는다. 프로비저닝 flock 안에서 동기
-// handshake를 마친 연결을 프로세스 수명 동안 보유해 바이너리마다 검증된 client를 보장한다.
 var verifiedReaperConn net.Conn
 
 const (
@@ -88,8 +65,6 @@ func connectSessionReaper(
 	lookup func(context.Context) (sessionReaper, bool, error),
 	register func(context.Context, sessionReaper) (net.Conn, error),
 ) (net.Conn, error) {
-	// package binary 사이의 client 공백에 Ryuk 교체가 시작될 수 있으므로,
-	// 교체 중 상태와 transport 오류에만 endpoint 재조회를 허용합니다.
 	for {
 		conn, err := tryConnectSessionReaper(ctx, lookup, register)
 		if err == nil {

@@ -4,8 +4,6 @@ package dispatchoutbox
 
 import "testing"
 
-// race 계측은 할당을 늘리므로 운영 빌드의 할당 예산은 race가 아닌 실행에서만 검사한다.
-// 이 테스트는 scripts/ci/go-test-nonrace.sh가 race 빌드와 별도로 실행한다.
 const (
 	dedupeKeyAllocBudget = 5
 	eventKeyAllocBudget  = 2

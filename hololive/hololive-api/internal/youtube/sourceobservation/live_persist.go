@@ -14,14 +14,11 @@ import (
 )
 
 const (
-	liveSessionBatchSize   = 64
-	liveSessionColumnCount = 16
-	// 갱신은 새 행과 잠금 안에서 읽은 행(video_id 제외)을 함께 보낸다.
+	liveSessionBatchSize      = 64
+	liveSessionColumnCount    = 16
 	liveSessionUpdateArgCount = 2*liveSessionColumnCount - 1
 )
 
-// LiveSessionConflictError는 잠금 안에서 읽은 세션 행을 기준으로 한 저장이 어떤 행에도 적용되지 않았음을 뜻한다.
-// 읽은 뒤 다른 writer가 행을 만들거나 바꿨으므로 이번 판정은 버리고 트랜잭션을 되돌려야 한다.
 type LiveSessionConflictError struct {
 	VideoID   string
 	Operation string
@@ -32,7 +29,6 @@ func (e *LiveSessionConflictError) Error() string {
 }
 
 func persistLiveDecision(ctx context.Context, tx dbx.Tx, stored map[string]live.SessionState, decision *live.Decision) error {
-	// 신규 행과 기존 행 모두 기존 consumer의 잠금 획득 순서를 유지한다.
 	slices.SortFunc(decision.Sessions, func(a, b live.SessionState) int { return strings.Compare(a.VideoID, b.VideoID) })
 	slices.SortFunc(decision.PendingEnds, func(a, b live.PendingEnd) int { return strings.Compare(a.VideoID, b.VideoID) })
 
@@ -47,7 +43,6 @@ func persistLiveDecision(ctx context.Context, tx dbx.Tx, stored map[string]live.
 	return nil
 }
 
-// 쓰지 않은 행의 key도 포함한다.
 func liveDecisionRuntimeVideoIDs(decision *live.Decision) []string {
 	videoIDs := make([]string, 0, len(decision.Sessions)+len(decision.PendingEnds))
 	for i := range decision.Sessions {
@@ -62,7 +57,6 @@ func liveDecisionRuntimeVideoIDs(decision *live.Decision) []string {
 }
 
 func persistLiveSessions(ctx context.Context, tx dbx.Tx, stored map[string]live.SessionState, sessions []live.SessionState) error {
-	// 전송뿐 아니라 인자 배열 구성도 최대 64세션/128문장으로 제한한다.
 	for start := 0; start < len(sessions); start += liveSessionBatchSize {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("persist live sessions at %d: %w", start, err)
@@ -79,7 +73,6 @@ func persistLiveSessions(ctx context.Context, tx dbx.Tx, stored map[string]live.
 	return nil
 }
 
-// RequireRow를 켠 문장은 세션 저장뿐이며 첫 인자가 video_id다.
 func execLiveSessionStatements(ctx context.Context, tx dbx.Tx, statements []dbx.Statement) error {
 	err := dbx.ExecStatements(ctx, tx, statements)
 	if err == nil {
@@ -104,8 +97,6 @@ func liveDecisionStatements(stored map[string]live.SessionState, sessions []live
 			}
 		}
 
-		// session A → head A → session B → head B의 기존 순서를 바꾸지 않는다.
-		// 미확정 LIVE 메타데이터와 부재는 새 authoritative head의 근거가 아니다.
 		if session.HeadPresent || session.LifecycleOrigin == live.OriginObserved {
 			statements = append(statements, liveHeadStatement(session))
 		}
@@ -202,7 +193,6 @@ func upsertConfirmedPremiereSession(ctx context.Context, tx dbx.Tx, session *liv
 	return nil
 }
 
-// 호출자는 sessions의 실제 원소만 전달한다. Nil 오류를 만들고 다시 전달하지 않는다.
 func liveHeadStatement(session *live.SessionState) dbx.Statement {
 	var kind, observationID, nextCheck, reason any
 
@@ -233,8 +223,6 @@ func liveHeadStatement(session *live.SessionState) dbx.Statement {
 	}
 }
 
-// ENDED 이력은 다시 판정에 쓰이지 않으므로 적재 여부와 무관하게 비운다.
-// 활성 세션의 미적재 이력은 SQL NULL로 보내 보존하고, 적재된 빈 이력만 명시적으로 지운다.
 func ignoredAbsenceArg(session *live.SessionState) any {
 	if session.Status == domain.LiveStatusEnded {
 		return []time.Time{}

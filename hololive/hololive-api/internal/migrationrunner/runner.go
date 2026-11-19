@@ -19,7 +19,6 @@ import (
 
 const AdvisoryLockKey int64 = 0x484F4C4F41504901
 
-// MaxStatementTimeout은 승인된 점검 창에서도 무제한 문장 실행을 허용하지 않는다.
 const MaxStatementTimeout = 10 * time.Minute
 
 const (
@@ -32,9 +31,9 @@ type Config struct {
 	BaselineThrough        string
 	LockKey                int64
 	AllowBlockingIndexDrop bool
-	// StatementTimeout이 0이면 기존 4분 제한을 유지한다.
-	StatementTimeout time.Duration
-	Logf             func(format string, args ...any)
+	CardWindow             bool
+	StatementTimeout       time.Duration
+	Logf                   func(format string, args ...any)
 }
 
 type Result struct {
@@ -101,6 +100,11 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 
 func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, cfg Config) (Result, error) {
 	ledger := dbmigrate.Ledger{}
+
+	if cfg.CardWindow {
+		return applyCardWindow(ctx, conn, fsys, exec, ledger, cfg)
+	}
+
 	if err := ledger.Ensure(ctx, exec.Exec); err != nil {
 		return Result{}, fmt.Errorf("ensure: %w", err)
 	}
@@ -142,6 +146,92 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guar
 	return result, nil
 }
 
+func applyCardWindow(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, cfg Config) (Result, error) {
+	entries, err := dbmigrate.Manifest(fsys)
+	if err != nil {
+		return Result{}, fmt.Errorf("load card manifest: %w", err)
+	}
+
+	if len(entries) != 32 || entries[30] != "031_retire_holodex_channel_profile.sql" || entries[31] != "032_schedule_poster_template.sql" {
+		return Result{}, errors.New("card window requires the reviewed 031/032 manifest")
+	}
+
+	var admitted, pending bool
+
+	if checkErr := conn.QueryRow(ctx, mustSQL("card_window_state.sql"), entries).Scan(&admitted, &pending); checkErr != nil {
+		return Result{}, fmt.Errorf("inspect card window: %w", checkErr)
+	}
+
+	if !admitted {
+		return Result{}, errors.New("card window refused: pool authentication, writer drain, schema or ledger not confirmed")
+	}
+
+	if !pending {
+		return verifyCardManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
+	}
+
+	return migrateDrainedCard(ctx, conn, fsys, exec, ledger, entries, cfg)
+}
+
+func requireCardGuard(ctx context.Context, conn *pgxpool.Conn) error {
+	var guarded bool
+
+	if err := conn.QueryRow(ctx, mustSQL("card_window_guard.sql")).Scan(&guarded); err != nil {
+		return fmt.Errorf("read pool admission guard: %w", err)
+	}
+
+	if !guarded {
+		return errors.New("card migration requires the live administrator who drained pool frontends")
+	}
+
+	return nil
+}
+
+func migrateDrainedCard(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (result Result, err error) {
+	if guardErr := requireCardGuard(ctx, conn); guardErr != nil {
+		return Result{}, guardErr
+	}
+
+	previous := conn.Conn().PgConn().ParameterStatus("application_name")
+	if _, markErr := conn.Exec(ctx, "SET application_name = 'hololive-pool-migrating'"); markErr != nil {
+		return Result{}, fmt.Errorf("hold pool admission during migration: %w", markErr)
+	}
+
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), advisoryUnlockTimeout)
+		defer cancel()
+
+		if _, restoreErr := conn.Exec(cleanup, "SELECT pg_catalog.set_config('application_name',$1,false)", previous); restoreErr != nil {
+			closeErr := conn.Conn().Close(cleanup)
+
+			err = errors.Join(err, fmt.Errorf("release migration admission: %w", restoreErr), closeErr)
+		}
+	}()
+
+	if guardErr := requireCardGuard(ctx, conn); guardErr != nil {
+		return Result{}, guardErr
+	}
+
+	return verifyCardManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
+}
+
+func verifyCardManifest(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (Result, error) {
+	if indexErr := assertNoInvalidIndexes(ctx, conn); indexErr != nil {
+		return Result{}, fmt.Errorf("check indexes before card migration: %w", indexErr)
+	}
+
+	result, err := applyManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
+	if err != nil {
+		return Result{}, fmt.Errorf("apply card manifest: %w", err)
+	}
+
+	if err := assertNoInvalidIndexes(ctx, conn); err != nil {
+		return Result{}, fmt.Errorf("check card schema indexes: %w", err)
+	}
+
+	return result, nil
+}
+
 func lockKey(cfg Config) int64 {
 	if cfg.LockKey != 0 {
 		return cfg.LockKey
@@ -150,8 +240,6 @@ func lockKey(cfg Config) int64 {
 	return AdvisoryLockKey
 }
 
-// session timeout(set_config)이 conn scope라 pool 실행으로 되돌리면 무효화된다 —
-// 모든 실행은 advisory lock을 쥔 pinned conn 하나에서 돌아야 한다.
 type guardedExecer struct {
 	conn                   *pgxpool.Conn
 	allowBlockingIndexDrop bool
@@ -165,8 +253,6 @@ func (e *guardedExecer) Exec(ctx context.Context, query string, args ...any) err
 	return nil
 }
 
-// dbmigrate.Execer는 non-nil return을 실패로 보고 호출자가 tx를 rollback한다 —
-// nil 검사 없이 감싸면 성공한 statement가 rollback을 유발한다.
 func txExecer(tx pgx.Tx) dbmigrate.Execer {
 	return func(ctx context.Context, query string, args ...any) error {
 		if _, err := tx.Exec(ctx, query, args...); err != nil {
@@ -177,8 +263,6 @@ func txExecer(tx pgx.Tx) dbmigrate.Execer {
 	}
 }
 
-// CONCURRENTLY 실패가 남긴 invalid index는 이름을 점유해 다음 실행의 IF NOT EXISTS를
-// no-op으로 만들 수 있다. 다른 운영 작업의 index를 건드리지 않도록 현재 파일의 대상만 정리한다.
 func (e *guardedExecer) execSegment(ctx context.Context, name string, segment sqlsplit.Segment) error {
 	if segment.Transactional {
 		if err := e.execTxSegment(ctx, name, segment.Statements); err != nil {

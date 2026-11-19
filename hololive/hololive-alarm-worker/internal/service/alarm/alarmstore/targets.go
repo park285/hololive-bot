@@ -14,31 +14,21 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// SubscriberCache는 구독자 조회 경로가 cache에 요구하는 작업이다. 조회기는 구독 set 조회(SMembers)만 쓰고,
-// 같은 cache를 받는 egress 조립이 pipeline 조회(B·DoMulti)를 쓴다.
 type SubscriberCache interface {
 	cache.SetCache
 	cache.LowLevelCache
 }
 
-// SubscriberResolver는 하나의 구독 cache와 구독 DB에 묶인 구독자 조회기다.
-// 같은 resolver로 들어온 같은 채널·알림 종류의 DB 조회만 하나로 합친다. 다른 DB, 다른 트랜잭션에 묶인 resolver와는
-// 조회 결과나 오류를 공유하지 않으므로 pool 조회는 연결 수명 동안 resolver 하나를 재사용하고, 트랜잭션 안의 조회는
-// 그 트랜잭션 전용 resolver를 만든다. CacheClient가 nil이면 cache를 건너뛰고, db가 nil이면 cache로 확정되지 않는
-// 조회를 오류로 반환한다. 복사하지 말고 반환된 포인터를 공유한다.
 type SubscriberResolver struct {
 	cache SubscriberCache
 	db    dbx.Querier
 	loads singleflight.Group
 }
 
-// NewSubscriberResolver는 cacheClient와 db에 묶인 구독자 조회기를 만든다. 두 인자 모두 nil을 허용한다.
 func NewSubscriberResolver(cacheClient SubscriberCache, db dbx.Querier) *SubscriberResolver {
 	return &SubscriberResolver{cache: cacheClient, db: db}
 }
 
-// DB 결과는 이번 호출에만 쓰고 cache를 다시 채우지 않는다. 구독 cache가 있는데 확정하지 못해 DB를 읽은 경우만 fallback 카운터로 센다. 구독 cache 없이 만든 resolver는 DB가
-// 기본 경로라 세지 않는다.
 func (r *SubscriberResolver) ResolveChannelSubscribersByType(
 	ctx context.Context,
 	channelID string,
@@ -86,7 +76,6 @@ func resolveChannelSubscribersFromCache(
 		return nil, false, nil
 	}
 
-	// TTL 없는 set은 eviction으로 사라지면 빈 set과 구분되지 않으므로 빈 set은 구독 0으로 확정하지 않는다.
 	normalizedSubscribers := normalizeSubscriberIDs(subscribers)
 
 	return normalizedSubscribers, len(normalizedSubscribers) > 0, nil
@@ -123,13 +112,6 @@ func (r *SubscriberResolver) resolveChannelSubscribersFromDB(
 	return subscribers, nil
 }
 
-// ResolveUncachedChannelSubscribersByType는 구독 cache set이 비어 있던 채널들의 구독자를 한 번의 DB 조회로 확정한다.
-// TTL 없는 set이 eviction으로 사라지면 빈 set과 구분되지 않으므로 cache만으로 구독 0을 확정하지 않는다.
-// 구독자가 있는 채널만 결과 map에 담는다.
-//
-// Checker 경로의 read-through라 PG 결과는 이번 호출에만 쓰고 subscriber set을 다시 채우지 않는다. 조회 뒤 SADD하면
-// 그 사이 커밋된 구독 해지의 SREM보다 늦게 도착해 해지된 방이 set에 되살아날 수 있기 때문이다. 대가로 다른 쓰기 경로
-// (구독 변경 동기화·전체 rebuild)가 set을 다시 채울 때까지 set이 빈 채널은 매 cycle 이 batch PG 조회 1회를 다시 치른다.
 func (r *SubscriberResolver) ResolveUncachedChannelSubscribersByType(
 	ctx context.Context,
 	channelIDs []string,

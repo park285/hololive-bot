@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package formatter
 
 import (
@@ -39,12 +19,10 @@ import (
 )
 
 type liveStreamView struct {
-	ChannelName string
-	Title       string
-	URL         string
-	// Elapsed는 조회 시각 기준 경과 표기다. 시작 시각을 믿을 수 없으면 비워 템플릿이 생략하게 한다.
-	Elapsed string
-	// CollabMembers는 호스트를 뺀 콜라보 출연자 표시명이다. 없으면 비워 템플릿이 줄을 생략하게 한다.
+	ChannelName   string
+	Title         string
+	URL           string
+	Elapsed       string
 	CollabMembers string
 }
 
@@ -84,8 +62,6 @@ type channelScheduleTemplateData struct {
 	Streams     []scheduleEntryView
 }
 
-// renderLiveStreams는 접기 전 본문을 돌려주어 LiveQuery가 머리 문단 안내를 더한 뒤 한 번만 접게 한다.
-// 경과 시간의 기준 시각 asOf가 zero이면 경과 시간을 표시하지 않는다.
 func (f *ResponseFormatter) renderLiveStreams(ctx context.Context, streams []*domain.Stream, asOf time.Time) (string, bool) {
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdLiveStreams, f.liveStreamsTemplateData(ctx, streams, asOf))
 	if err != nil {
@@ -118,17 +94,14 @@ func (f *ResponseFormatter) liveStreamViews(ctx context.Context, streams []*doma
 
 func (f *ResponseFormatter) liveStreamView(ctx context.Context, stream *domain.Stream, asOf time.Time) liveStreamView {
 	return liveStreamView{
-		ChannelName: f.formatChannelName(ctx, stream),
-		Title:       f.truncateTitle(stream.Title),
-		URL:         stream.GetYouTubeURL(),
-		Elapsed:     liveElapsed(stream.StartActual, asOf),
-		// 명령 핸들러가 CollaboTalentNames를 표시명으로 바꿔 넘긴다.
+		ChannelName:   f.formatChannelName(ctx, stream),
+		Title:         f.truncateTitle(stream.Title),
+		URL:           stream.GetYouTubeURL(),
+		Elapsed:       liveElapsed(stream.StartActual, asOf),
 		CollabMembers: officialidentity.Format(stream.CollaboTalentNames),
 	}
 }
 
-// 현재 시각 대신 asOf를 써야 함께 표시하는 방송 상태와 같은 시점의 경과가 된다. 시작 시각이나 asOf가 없으면 기준이 없고, 시작이 asOf보다 늦으면 시계가 어긋난 근거라서 빈 문자열을 돌려 경과를
-// 표시하지 않는다.
 func liveElapsed(startedAt *time.Time, asOf time.Time) string {
 	if startedAt == nil || asOf.IsZero() || startedAt.After(asOf) {
 		return ""
@@ -236,7 +209,6 @@ func (f *ResponseFormatter) scheduleEntryView(ctx context.Context, stream *domai
 const streamTitleMaxRunes = 100
 
 func (f *ResponseFormatter) truncateTitle(title string) string {
-	// 표시용 공백을 먼저 정리해야 선행 패딩이 제목의 길이 예산을 소모하지 않습니다.
 	title = strings.Join(strings.Fields(strings.ReplaceAll(title, kakaotext.ZeroWidthSpace, "")), " ")
 
 	return stringutil.TruncateString(title, streamTitleMaxRunes)

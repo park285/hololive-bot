@@ -245,7 +245,6 @@ func TestPhotoSyncWithRetryLogsFinalFailureOnce(t *testing.T) {
 		t.Fatalf("retry sleeps = %d, want 2", sleepCount)
 	}
 
-	// 재시도 직전 실패 2번만 "will retry"이고, 마지막 실패는 원인 오류를 담은 Error 한 줄이다.
 	assertRetryLogCounts(t, logs.String(), 2, 1)
 
 	if !strings.Contains(logs.String(), "third failure") {
@@ -318,7 +317,6 @@ func TestPhotoSyncWithRetryDoesNotRetryUpdateFailure(t *testing.T) {
 	}
 }
 
-// 대상 채널 가운데 Holodex 사진이 있는 채널만 고해상도 URL로 저장한다.
 func TestPhotoSyncStoresUpgradedPhotoForTargetsWithPhoto(t *testing.T) {
 	t.Parallel()
 

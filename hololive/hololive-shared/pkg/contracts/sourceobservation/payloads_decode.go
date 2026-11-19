@@ -18,7 +18,6 @@ type payloadDecodeInput struct {
 
 type payloadDecoder func(raw []byte, input payloadDecodeInput) (any, any, error)
 
-// liveSnapshotQueryStatuses는 streams 질의 증명이 정렬된 상태로 담아야 하는 상태 목록이다.
 var liveSnapshotQueryStatuses = []string{"ENDED", "LIVE", "UPCOMING"}
 
 var payloadDecoders = map[ObservationKind]payloadDecoder{
@@ -149,7 +148,6 @@ func decodeShortsListPayload(raw []byte, input payloadDecodeInput) (payload, cov
 	return value, value.Coverage, nil
 }
 
-// generation 2는 과거 coverage 의미를 보존하고 generation 3는 streams 조회 증명을 요구한다.
 func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, coverage any, err error) {
 	if input.contractGeneration != LiveSnapshotMetadataContractGeneration && input.contractGeneration != LiveSnapshotQueryContractGeneration {
 		return nil, nil, fmt.Errorf("unsupported live snapshot contract generation %d", input.contractGeneration)
@@ -175,7 +173,6 @@ func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, c
 	return value, value.Coverage, nil
 }
 
-// 같거나 늦은 값은 재사용 일정이 더 새 관측을 덮어쓰게 하므로 거부한다.
 func validateLiveScheduleObservations(value *LiveSnapshotV1, input payloadDecodeInput) error {
 	for i := range value.Sessions {
 		observed := value.Sessions[i].ScheduleObservedAt

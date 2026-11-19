@@ -29,7 +29,6 @@ func (r *Renderer) getTemplate(ctx context.Context, key domain.TemplateKey, chan
 		return nil, fmt.Errorf("%w: %q", ErrInvalidTemplateFormat, format)
 	}
 
-	// 최초 pool 대기부터 제한하며 소스 재확인으로 대기 예산을 연장하지 않습니다.
 	ctx, cancel := context.WithTimeout(ctx, templateLoadTimeout)
 	defer cancel()
 
@@ -55,7 +54,6 @@ func (r *Renderer) getTemplate(ctx context.Context, key domain.TemplateKey, chan
 }
 
 func (r *Renderer) resolveTemplate(ctx context.Context, key domain.TemplateKey, channelID string, format domain.TemplateFormat) (cacheKey, error) {
-	// 저장 완료 뒤 시작한 호출이 이전 버전의 진행 중 조회에 합류하지 않도록 먼저 확인합니다.
 	ck := cacheKey{templateKey: key}
 
 	err := r.pool.QueryRow(ctx, rendererResolveSQL, key, channelID, format).Scan(&ck.id, &ck.version, &ck.channelID)
@@ -80,7 +78,6 @@ func (r *Renderer) loadResolvedTemplate(ctx context.Context, ck cacheKey) (*temp
 			return tmpl, nil
 		}
 
-		// 한 대기자의 취소가 다른 요청을 실패시키지 않으며 공유 DB 조회는 5초로 제한합니다.
 		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), templateLoadTimeout)
 		defer cancel()
 
@@ -138,8 +135,6 @@ func (r *Renderer) cachedTemplate(ck cacheKey) *template.Template {
 func (r *Renderer) loadTemplate(ctx context.Context, ck cacheKey) (*template.Template, error) {
 	var body string
 
-	// 이미 선택한 행만 읽어 기본값을 공유하는 다른 채널의 override가 섞이지 않게 합니다.
-	// 본문 수정은 실제 읽은 버전으로 저장하며 소스 소실만 제한된 재확인을 허용합니다.
 	err := r.pool.QueryRow(ctx, rendererLoadSQL, ck.id, ck.templateKey, ck.channelID).Scan(&body, &ck.version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", errTemplateSourceChanged, ck.templateKey)
@@ -156,7 +151,6 @@ func (r *Renderer) loadTemplate(ctx context.Context, ck cacheKey) (*template.Tem
 	return r.parseTemplate(ck, body)
 }
 
-// 실제 본문 버전별로 파싱을 공유하므로 다른 키의 cache 접근은 파싱을 기다리지 않습니다.
 func (r *Renderer) parseTemplate(ck cacheKey, body string) (*template.Template, error) {
 	value, err, _ := r.parses.Do(fmt.Sprintf("%d/%d", ck.id, ck.version), func() (any, error) {
 		if tmpl := r.cachedTemplate(ck); tmpl != nil {

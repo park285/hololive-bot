@@ -1,7 +1,3 @@
-/** @typedef {import("../src/contracts.d.ts").FetcherSet} FetcherSet */
-
-// helper runtime 단위 테스트용 fetcher입니다. 수집 결과를 만들지 않으므로 production 진입점은 이 파일을 import하지 않습니다.
-/** @satisfies {FetcherSet} */
 export const stubFetchers = {
   fetchCommunity() {
     return {
@@ -32,7 +28,6 @@ export const stubFetchers = {
       termination_reason: "exhausted",
     };
   },
-  // 테스트 fetcher에는 upstream 응답이 없으므로 확인 결과를 음성이나 가용성으로 만들지 않습니다.
   fetchChannelLiveCheck(fetchOptions) {
     return {
       channel_id: fetchOptions.channelId,

@@ -16,8 +16,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// ErrCandidateContract는 특정 런너 또는 target bundle의 후보 계약 오류입니다.
-// DB·projection·요청 예산 오류는 이 표식을 붙이지 않고 cycle 전체를 중단합니다.
 var ErrCandidateContract = errors.New("candidate contract is invalid")
 
 func candidateContractError(err error) error {

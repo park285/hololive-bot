@@ -38,8 +38,6 @@ func (s *TransitionStore) ApplyStartedFailure(
 	return result, nil
 }
 
-// ApplyPreparedFailure는 claim 행의 논리 그룹을 실패 전이와 같은 트랜잭션에서 FOR UPDATE로 다시 읽고 claim fence를
-// 확인한다. COMMIT 응답을 잃어 이전 상태로 판정된 재시도도 재조회부터 다시 한다.
 func (s *TransitionStore) ApplyPreparedFailure(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
@@ -129,9 +127,6 @@ func preparedFailureGroup(
 	}, nil
 }
 
-// applyFailure는 load가 이 트랜잭션에서 돌려준 논리 그룹의 실패 전이를 같은 트랜잭션에 기록한다. COMMIT 응답을 잃어
-// 이전 상태로 판정되면 load부터 다시 실행한다. 전이를 만들지 못하면 판정 없이 prepareFailureTransitions가 정한 결과와
-// 오류를 돌려준다.
 func (s *TransitionStore) applyFailure(
 	ctx context.Context,
 	operationName string,
@@ -205,7 +200,6 @@ func (s *TransitionStore) applyFailure(
 	return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("%s: retry loop exhausted", operationName)
 }
 
-// applyFailureRows는 실패 전이와 owner 시도 telemetry를 tx에 함께 기록한다. 시도 종료 시각은 전이 문장의 DB 시계다.
 func applyFailureRows(
 	ctx context.Context,
 	tx dbx.Querier,
@@ -220,7 +214,6 @@ func applyFailureRows(
 		return nil, fmt.Errorf("%s: apply rows: %w", operationName, err)
 	}
 
-	// 실패 전이는 owner의 provider 실패와 prepared failure(message_missing, pre_send_claim 포함)를 모두 시도로 기록한다.
 	attempts := ownerAttempts(operation.groups, attemptResultFailure, reason)
 	if err := recordAttemptTelemetry(ctx, tx, mode, attempts, failedAt); err != nil {
 		return nil, fmt.Errorf("%s: record telemetry: %w", operationName, err)

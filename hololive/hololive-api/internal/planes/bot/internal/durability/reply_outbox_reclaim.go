@@ -17,8 +17,6 @@ type replyReclaimCandidate struct {
 	HorizonExpired       bool
 }
 
-// ReclaimExpired는 잠긴 만료 lease 행의 사실로 Go에서 전이를 결정합니다. 재시도 지평이 저장 전에 끝나면
-// 배치 전체를 롤백합니다. 후보는 submitting뿐이며, accepted의 재발송 여부는 handoff reconciler가 Iris 상태로 정합니다.
 func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize int32) (ReplyOutboxReclaim, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return ReplyOutboxReclaim{}, err
@@ -98,7 +96,6 @@ func newReplyReclaimMutation(candidates []replyReclaimCandidate, maxAttempts int
 	return mutation
 }
 
-// 호출자의 트랜잭션이 후보 행의 잠금을 유지해야 합니다.
 func applyReplyReclaim(ctx context.Context, tx pgx.Tx, candidates []replyReclaimCandidate, maxAttempts int32, horizonMS int64) (ReplyOutboxReclaim, error) {
 	if len(candidates) == 0 {
 		return ReplyOutboxReclaim{}, nil

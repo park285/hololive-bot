@@ -1186,7 +1186,6 @@ func TestCompleteCurrentFailsClosedAfterTargetDisabledOrProjectionStale(t *testi
 	}
 }
 
-// 인자 count는 범위 안의 활성 target 행 수이며 acquire가 기록하는 값과 같은 의미다.
 func seedSnapshotLease(t *testing.T, pool *pgxpool.Pool, spec *JobSpec, job collection.JobContract, generation int64, count int32) contract.LeaseProof {
 	t.Helper()
 
@@ -1459,7 +1458,6 @@ func newTestRepository(t *testing.T, pool *pgxpool.Pool) *Repository {
 	return repository
 }
 
-// 운영 완료는 현재 projection과 활성 target을 확인하는 CompleteCurrent만 씁니다.
 func (l *JobLease) Complete(ctx context.Context) error {
 	if l == nil || l.repository == nil {
 		return fmt.Errorf("complete collection job lease: %w", collection.ErrFenceLost)

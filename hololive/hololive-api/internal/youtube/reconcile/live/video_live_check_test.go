@@ -88,7 +88,6 @@ func mustReduce(t *testing.T, state *State, evidence Evidence) *Decision {
 }
 
 func TestReduceVerifiedTerminalEndWaitsForGraceAfterLaggedPositive(t *testing.T) {
-	// upcomingA의 positive(01:00)보다 1분 이른 종료다. 수집 예정 시각을 EffectiveAt으로 쓰는 positive가 늦은 경우다.
 	endedAt := time.Date(2026, time.August, 14, 0, 59, 0, 0, time.UTC)
 	checkAt := time.Date(2026, time.August, 14, 3, 0, 0, 0, time.UTC)
 	fact := sessionFact("ENDED")
@@ -113,7 +112,6 @@ func TestReduceVerifiedTerminalEndWaitsForGraceAfterLaggedPositive(t *testing.T)
 			}
 
 			if !tc.ended {
-				// 저장된 부재 slot 재적용으로 세션이 dirty가 될 수 있으므로 상태 자체로 확인한다.
 				next := stateFromDecision(&state, &decision)
 				if blocked := next.Sessions[testVideoID]; blocked.Status != domain.LiveStatusUpcoming || blocked.EndedAt != nil {
 					t.Fatalf("positive inside grace did not block terminal end: status=%s ended_at=%v", blocked.Status, blocked.EndedAt)

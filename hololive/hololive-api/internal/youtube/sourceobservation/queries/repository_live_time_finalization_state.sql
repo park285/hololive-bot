@@ -1,4 +1,3 @@
--- 세션 행은 loadLiveState가 이미 잠갔다. 확정 진행 행은 session → head → pending 다음 순서로 잠근다.
 SELECT session.times_source,
        progress.queue, progress.outcome, progress.attempts, progress.deferrals,
        progress.retry_base_at, progress.next_attempt_at, progress.observation_id, progress.enqueued_at

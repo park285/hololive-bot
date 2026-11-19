@@ -52,7 +52,6 @@ type leaseRunDecision struct {
 	supervisionPhase string
 }
 
-// Cleanup timeout에는 callback이 아직 실행 중일 수 있으므로 callback 실패 처리로 되돌리지 않는다.
 func decideLeaseRunOutcome(result joblease.LeaseRunResult) leaseRunDecision {
 	decision := leaseRunDecision{handled: true}
 
@@ -60,10 +59,8 @@ func decideLeaseRunOutcome(result joblease.LeaseRunResult) leaseRunDecision {
 	case joblease.LeaseRunCallbackCompleted:
 		return decision
 	case joblease.LeaseRunFenceLost:
-		// renew의 소유 손실은 callback에 섞인 publish/collect 손실과 중복 집계하지 않는다.
 		decision.leaseLostPhase = phaseRenew
 	case joblease.LeaseRunReleasedAfterSuperseded:
-		// membership 무효로 release한 결과는 lease 소유 손실이 아니다.
 	case joblease.LeaseRunReleasedAfterParentCancel:
 		decision.leaseLostPhase = fenceLostPhase(result.Err)
 	case joblease.LeaseRunReleasedAfterRenewFailure:
@@ -98,7 +95,6 @@ func fatalCollectionError(err error) bool {
 		return true
 	}
 
-	// Join된 release/context 오류의 순서가 callback의 fatal 분류를 가리지 않게 합니다.
 	if joined, ok := errors.AsType[interface {
 		error
 		Unwrap() []error

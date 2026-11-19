@@ -58,7 +58,6 @@ func prepareLiveReviewPlans(t *testing.T, tx pgx.Tx, mode string) {
 	_, err := tx.Exec(t.Context(), "SET LOCAL plan_cache_mode = "+mode)
 	require.NoError(t, err)
 
-	// SQL PREPARE/EXECUTE로 두 캐시 모드를 실제 매개변수 계획에 적용한다.
 	_, err = tx.Exec(t.Context(), "PREPARE review_observability(bigint) AS "+collectionTargetObservabilitySQL)
 	require.NoError(t, err)
 
@@ -110,7 +109,6 @@ func assertLiveReviewMembership(t *testing.T, tx pgx.Tx, query string, channels 
 	require.NoError(t, rows.Err())
 	rows.Close()
 
-	// 기존 snapshot→의미 사실 경로를 oracle로 써 새 집합 판정과 membership 전체를 비교한다.
 	rows, err = tx.Query(t.Context(), `
 		SELECT session.video_id FROM youtube_live_sessions session
 		WHERE session.channel_id=ANY($1::text[]) AND (

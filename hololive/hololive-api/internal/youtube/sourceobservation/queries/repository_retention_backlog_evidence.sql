@@ -1,5 +1,3 @@
--- 종류별 원본을 최대 $3개만 검사하고 첫 비보호 원본에서 보호 판정을 멈춘다.
--- 후보 수는 보호 판정 없이 별도로 센다. 한도를 채우고 모두 보호 중이면 known=false다.
 WITH policies AS (
     SELECT policy.kind, policy.cutoff FROM unnest($1::text[], $2::timestamptz[]) AS policy(kind, cutoff)
 ), measured AS (

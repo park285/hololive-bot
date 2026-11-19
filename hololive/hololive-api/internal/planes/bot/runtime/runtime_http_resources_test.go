@@ -163,7 +163,6 @@ func TestBotRuntimeClosesResourcesAfterIdleOnlyH3ShutdownError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// CONNECTION_CLOSE 없이 peer UDP socket만 없어지는 기존 재현을 유지한다.
 	if err := client.socket.Close(); err != nil {
 		t.Fatal(err)
 	}

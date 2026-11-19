@@ -1,4 +1,3 @@
-// Package geminidecision은 Gemini Developer API의 Decisions API(gemini-decision-1) 호출과 API 키 파일 적재를 맡는다.
 package geminidecision
 
 import (
@@ -17,7 +16,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/netguard"
 )
 
-// Model은 Decisions API가 받는 유일한 모델이다.
 const Model = "gemini-decision-1"
 
 const (
@@ -29,17 +27,13 @@ const (
 )
 
 var (
-	// ErrUnavailable은 어느 입력도 판정할 수 없는 실패다(연결 실패, 키·권한·모델·할당량·지역 오류).
 	ErrUnavailable = errors.New("gemini decisions api is unavailable")
-	// ErrBlocked는 입력이 안전 필터에 막혔다는 뜻이다. 같은 입력은 다시 보내도 막힌다.
-	ErrBlocked = errors.New("gemini decisions input blocked")
-	// ErrRejected는 안전 차단이 아닌 400이다. 응답만으로는 입력 탓인지 요청 꼴 탓인지 가릴 수 없다.
-	ErrRejected = errors.New("gemini decisions request rejected")
+	ErrBlocked     = errors.New("gemini decisions input blocked")
+	ErrRejected    = errors.New("gemini decisions request rejected")
 )
 
 var safetyBlockCodes = []string{"safety", "prohibited_content", "blocklist", "image_safety", "content_blocked"}
 
-// Input은 공유 입력의 content block 하나다. Data는 JSON에서 base64가 된다.
 type Input struct {
 	Type       string `json:"type"`
 	Text       string `json:"text,omitempty"`
@@ -48,7 +42,6 @@ type Input struct {
 	Resolution string `json:"resolution,omitempty"`
 }
 
-// Question의 Criteria는 질문 유형(noul·choice·score)이 정한 꼴을 그대로 직렬화한다.
 type Question struct {
 	Type         string `json:"type"`
 	Instructions string `json:"instructions"`
@@ -89,7 +82,6 @@ type wireResponse struct {
 	} `json:"prompt_feedback"`
 }
 
-// wireError의 code는 Decisions API 자체의 400에서는 문자열이고 게이트웨이 오류에서는 정수다.
 type wireError struct {
 	Error struct {
 		Code    any    `json:"code"`
@@ -122,10 +114,7 @@ func New(key string) *Client {
 	return &Client{http: client, endpoint: endpoint, key: key}
 }
 
-// Decide는 질문들을 한 요청으로 묻는다. 실패는 ErrUnavailable, ErrBlocked, ErrRejected 가운데 하나로 감싸고,
-// 그 밖의 실패(5xx, 응답 대기 시간 초과, 해석할 수 없는 응답)는 결과 불명이라 감싸지 않는다.
 func (c *Client) Decide(ctx context.Context, request Request) (Response, error) {
-	// map인 질문과 선택지를 정렬해 쓴다. 기본 직렬화는 요청마다 선택지 순서를 바꿔 같은 입력의 답이 흔들린다.
 	body, err := jsonv2.Marshal(wireRequest{Model: Model, Input: request.Input, Questions: request.Questions}, jsonv2.Deterministic(true))
 	if err != nil {
 		return Response{}, fmt.Errorf("encode decision request: %w", err)
@@ -168,8 +157,7 @@ func (c *Client) post(ctx context.Context, body []byte) (int, []byte, error) {
 	response, err := c.http.Do(request)
 	if err != nil {
 		err = fmt.Errorf("send decision request: %w", err)
-		// 이름 확인·연결은 netguard의 자체 시간 제한으로 이 기한보다 먼저 끝나므로, 기한이 지나 끝난 실패는
-		// 연결 뒤 응답을 기다리다 난 것이다. 결과를 알 수 없어 사용 불가로 감싸지 않는다.
+
 		if ctx.Err() != nil {
 			return 0, nil, err
 		}
@@ -187,7 +175,6 @@ func (c *Client) post(ctx context.Context, body []byte) (int, []byte, error) {
 	return response.StatusCode, raw, nil
 }
 
-// 잘못된 키(ErrorInfo reason API_KEY_INVALID)와 지원하지 않는 지역(FAILED_PRECONDITION)도 400으로 오므로 입력 탓 400보다 먼저 가른다.
 func failure(status int, raw []byte) error {
 	var decoded wireError
 
@@ -223,7 +210,6 @@ func failure(status int, raw []byte) error {
 	}
 }
 
-// unreachable은 요청 기한 안에 끝난 전송 실패(이름 확인·연결 실패와 그 시간 초과)를 ErrUnavailable로 감싼다.
 func unreachable(err error) error {
 	if _, ok := errors.AsType[*url.Error](err); ok {
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)

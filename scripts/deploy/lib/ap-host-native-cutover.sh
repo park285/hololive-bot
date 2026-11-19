@@ -1,6 +1,34 @@
 # shellcheck shell=bash
-# native 배포의 변경 결과만 기록합니다. argv·출력·환경 값은 복구 기록에 남기지 않습니다.
 native_recovery_dir=/opt/hololive-bot/youtube-collector/cutover-recovery
+native_claim_nonce=""
+
+native_capture_collector_state() {
+  local unit="$1" previous="$2" load persistent status=0
+  load="$(systemctl show "$unit" -p LoadState --value)" || status=$?
+  if [[ -z "$previous" && "$load" == not-found ]] && (( status == 0 || status == 4 )); then
+    collector_prechange_state=not-found
+    collector_prechange_enabled=false
+    collector_prechange_running=false
+    return 0
+  fi
+  [[ -n "$previous" && "$load" == loaded && "$status" == 0 ]] || return 1
+  collector_prechange_state="$(systemctl show "$unit" -p ActiveState --value)" || return 1
+  persistent="$(systemctl show "$unit" -p UnitFileState --value)" || return 1
+  case "$collector_prechange_state" in
+    active|activating|reloading) collector_prechange_running=true ;;
+    inactive|failed)
+      # shellcheck disable=SC2034
+      collector_prechange_running=false ;;
+    *) return 1 ;;
+  esac
+  case "$persistent" in
+    enabled) collector_prechange_enabled=true ;;
+    disabled)
+      # shellcheck disable=SC2034
+      collector_prechange_enabled=false ;;
+    *) return 1 ;;
+  esac
+}
 
 native_recovery_require_clear() {
   local guard_status=0
@@ -12,15 +40,18 @@ native_recovery_require_clear() {
 }
 
 native_cutover_claim() {
-  # 원자적 mkdir가 동시 배포와 미확정 이전 변경을 함께 거절합니다.
-  sudo -n mkdir -m 0700 "$native_recovery_dir"
-  sudo -n sh -c 'umask 077; printf "%s\n" "$1" > "$2/release"; printf "%s\n" "$3" > "$2/owner-pid"' \
-    sh "$1" "$native_recovery_dir" "$BASHPID"
+  local nonce
+  native_claim_nonce=""
+  IFS= read -r nonce < /proc/sys/kernel/random/uuid || return 1
+  [[ "$nonce" =~ ^[0-9a-f-]{36}$ ]] || return 1
+  sudo -n mkdir -m 0700 "$native_recovery_dir" || return
+  sudo -n sh -ec 'umask 077; printf "%s\n" "$1" > "$2/release"; printf "%s\n" "$3" > "$2/owner-pid"; printf "%s\n" "$4" > "$2/claim"' \
+    sh "$1" "$native_recovery_dir" "$BASHPID" "$nonce" || return
+  native_claim_nonce="$nonce"
 }
 
 native_cutover_signal() {
   native_signal_status="$1"
-  # wait가 중단됐을 때는 실행 중인 worker의 완료를 먼저 확인합니다.
   if [[ "${native_phase_active:-false}" != true && "${native_restoring:-false}" != true ]]; then
     native_restoring=true
     restore_native_after_failed_cutover "$1"
@@ -36,7 +67,23 @@ native_cutover_unknown() {
 }
 
 native_cutover_release_guard() {
-  sudo -n rm -r -- "$native_recovery_dir"
+  [[ -n "${native_claim_nonce:-}" && "${native_outcome_unknown:-false}" != true ]] || return 1
+  sudo -n sh -ec '
+    test ! -L "$1" && cd "$1" || exit 1
+    test "$(cat claim)" = "$2" && test "$(cat owner-pid)" = "$3" || exit 1
+    test ! -e outcome || exit 1
+    for item in ./* ./.[!.]* ./..?*; do
+      test ! -L "$item" || exit 1
+      test -e "$item" || continue
+      case "$item" in
+        ./step|./terminal|./worker-pid|./release|./owner-pid|./claim) test -f "$item" || exit 1 ;;
+        *) exit 1 ;;
+      esac
+    done
+    rm -f -- step terminal worker-pid release owner-pid claim
+    rmdir -- "$1"
+  ' sh "$native_recovery_dir" "$native_claim_nonce" "$BASHPID" || return
+  native_claim_nonce=""
 }
 
 native_cutover_run() {
@@ -58,7 +105,6 @@ native_cutover_run() {
     return "$native_signal_status"
   fi
   [[ "$-" != *m* ]] || monitor_was_set=true
-  # job control가 worker에 별도 소유 process group과 살아 있는 SIGINT를 줍니다.
   set -m
   # shellcheck disable=SC2034 # 연결된 ERR handler가 실행 중 변경의 미확정 상태를 읽습니다.
   native_phase_started=true
@@ -85,16 +131,13 @@ native_cutover_run() {
     native_cutover_unknown
     return "$worker_status"
   }
-  # 조건 문맥은 wait에만 적용합니다. worker의 실제 함수는 set -e를 유지합니다.
   wait "$native_worker_pid" || worker_status=$?
   if (( ${native_signal_status:-0} != 0 )); then
-    # 부모에만 신호가 오면 worker는 계속 실행됩니다. 완료 관찰은 5초에 한정합니다.
     for (( signal_wait=0; signal_wait<50; signal_wait++ )); do
       kill -0 "$native_worker_pid" 2>/dev/null || break
       sleep 0.1
     done
     if kill -0 "$native_worker_pid" 2>/dev/null; then
-      # 이 배포가 만든 worker group에만 전달합니다. daemon 결과를 복원 성공으로 추정하지 않습니다.
       kill -TERM -- "-$native_worker_pid" 2>/dev/null || true
       native_cutover_unknown
       native_worker_pid=""

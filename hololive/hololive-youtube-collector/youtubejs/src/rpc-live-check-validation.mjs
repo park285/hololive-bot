@@ -22,7 +22,10 @@ import {
 const channelLiveCheckRequestKeys = keySchema(["protocol_version", "channel_id", "max_success_response_bytes"]);
 const videoLiveCheckRequestKeys = keySchema(["protocol_version", "video_id", "max_success_response_bytes"]);
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").ChannelLiveCheckRequest} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").ChannelLiveCheckRequest}
+ */
 function validateChannelLiveCheckRequest(value) {
   const record = requestRecord(value);
   assertRequestKeys(record, channelLiveCheckRequestKeys);
@@ -33,7 +36,10 @@ function validateChannelLiveCheckRequest(value) {
   };
 }
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").VideoLiveCheckRequest} */
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.d.ts").VideoLiveCheckRequest}
+ */
 function validateVideoLiveCheckRequest(value) {
   const record = requestRecord(value);
   assertRequestKeys(record, videoLiveCheckRequestKeys);
@@ -50,8 +56,6 @@ const channelLiveCheckResponseKeys = keySchema(
 );
 
 /**
- * 채널 확인 결과는 pagination 없이 자체 불변식으로 검증합니다. 확인된 결과만 identity를 확정하고,
- * CHANNEL_PAGE는 선택 영상이 없으며 LIVE_VIDEO·UPCOMING_VIDEO는 선택 영상이 있어야 합니다.
  * @param {unknown} value
  * @returns {import("./contracts.d.ts").ChannelLiveCheckResult}
  */
@@ -112,8 +116,6 @@ const videoLiveCheckResponseKeys = keySchema(
 );
 
 /**
- * 영상 확인 결과를 검증합니다. method는 availability에서만 결정되고, UNKNOWN일 때만 사유가 있습니다.
- * identity가 확인되지 않은 결과는 다른 영상의 사실을 싣지 않으며, 신뢰 가능한 수명 사실은 서로 모순되지 않아야 합니다.
  * @param {unknown} value
  * @returns {import("./contracts.d.ts").VideoLiveCheckResult}
  */
@@ -171,7 +173,6 @@ export function validateVideoLiveCheckResponse(value) {
   if (confirmed && (unknownReason === undefined || unknownReason === "availability_unclassified")) {
     assertLifecycleFacts(facts, Date.now());
   }
-  // 예정 시각은 대기 상태가 확인된 경우에만 근거이므로 확인 사실 없이 내보내지 않습니다.
   if (facts.scheduled_at !== undefined && facts.waiting_state_confirmed !== true) {
     throw new RpcResponseError("video live check scheduled_at requires a confirmed waiting state");
   }
@@ -209,7 +210,6 @@ export function validateVideoLiveCheckResponse(value) {
 export const channelLiveCheckEndpoint = {
   validateRequest: validateChannelLiveCheckRequest,
   validateResponse: validateChannelLiveCheckResponse,
-  // 가장 작은 성공 본문은 선택 영상·사유가 없는 CHANNEL_PAGE이며 실제 채널 ID 길이는 성공 후 다시 계산합니다.
   minimumSuccessResponseBytes: Buffer.byteLength(JSON.stringify({
     protocol_version: 1,
     channel_id: "",
@@ -222,7 +222,6 @@ export const channelLiveCheckEndpoint = {
 export const videoLiveCheckEndpoint = {
   validateRequest: validateVideoLiveCheckRequest,
   validateResponse: validateVideoLiveCheckResponse,
-  // identity 미확인 UNKNOWN과 확인된 MEMBERS_ONLY 중 더 작은 본문이 성공 응답의 하한입니다.
   minimumSuccessResponseBytes: Math.min(
     Buffer.byteLength(JSON.stringify({
       protocol_version: 1,
@@ -243,7 +242,10 @@ export const videoLiveCheckEndpoint = {
   ),
 };
 
-/** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").ChannelLiveCheckOutcome} */
+/**
+ * @param {Record<string, unknown>} record
+ * @returns {import("./contracts.d.ts").ChannelLiveCheckOutcome}
+ */
 function channelLiveCheckOutcome(record) {
   const value = record.outcome;
   if (value === "LIVE_VIDEO" || value === "UPCOMING_VIDEO" || value === "CHANNEL_PAGE" || value === "UNKNOWN") {
@@ -252,7 +254,10 @@ function channelLiveCheckOutcome(record) {
   throw new RpcResponseError("channel live check outcome is invalid");
 }
 
-/** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").ChannelLiveCheckUnknownReason} */
+/**
+ * @param {Record<string, unknown>} record
+ * @returns {import("./contracts.d.ts").ChannelLiveCheckUnknownReason}
+ */
 function channelLiveCheckUnknownReason(record) {
   const value = record.unknown_reason;
   if (
@@ -269,7 +274,10 @@ function channelLiveCheckUnknownReason(record) {
   throw new RpcResponseError("channel live check unknown_reason is invalid");
 }
 
-/** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").VideoLiveCheckUnknownReason} */
+/**
+ * @param {Record<string, unknown>} record
+ * @returns {import("./contracts.d.ts").VideoLiveCheckUnknownReason}
+ */
 function videoLiveCheckUnknownReason(record) {
   const value = record.unknown_reason;
   if (
@@ -286,7 +294,10 @@ function videoLiveCheckUnknownReason(record) {
   throw new RpcResponseError("video live check unknown_reason is invalid");
 }
 
-/** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").VideoAvailability} */
+/**
+ * @param {Record<string, unknown>} record
+ * @returns {import("./contracts.d.ts").VideoAvailability}
+ */
 function videoAvailability(record) {
   const value = record.availability;
   if (value === "PUBLIC" || value === "MEMBERS_ONLY" || value === "PUBLIC_UNAVAILABLE" || value === "UNKNOWN") {
@@ -295,7 +306,10 @@ function videoAvailability(record) {
   throw new RpcResponseError("video live check availability is invalid");
 }
 
-/** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").VideoAvailabilityMethod} */
+/**
+ * @param {Record<string, unknown>} record
+ * @returns {import("./contracts.d.ts").VideoAvailabilityMethod}
+ */
 function videoAvailabilityMethod(record) {
   const value = record.method;
   if (value === "player_public" || value === "player_members_only" || value === "player_private" || value === "unknown") {
@@ -322,7 +336,6 @@ function availabilityMethodFor(availability) {
 }
 
 /**
- * 신뢰 가능한 수명 사실의 모순을 거부합니다. isLive 생략·false와 종료 시각의 조합은 종료 근거입니다.
  * @param {{ is_live?: boolean, is_live_now?: boolean, is_upcoming?: boolean, started_at?: string, ended_at?: string }} facts
  * @param {number} nowMs
  */

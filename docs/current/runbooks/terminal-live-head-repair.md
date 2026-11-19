@@ -1,6 +1,6 @@
 # 과거 종료 세션 대조 상태 복구
 
-`DEC-20260928-terminal-live-head-alignment`의 제한된 운영 도구입니다. 이미 종료된 정본 세션을 기준으로 과거 LIVE head의 표시 상태와 종료 시각만 일치시킵니다. 새 방송 종료 판정, observation replay 또는 알림 발송 경로가 아닙니다.
+이미 종료된 정본 세션을 기준으로 과거 LIVE head의 표시 상태와 종료 시각만 일치시킵니다. 새 방송 종료 판정, observation replay 또는 알림 발송 경로가 아닙니다.
 
 ## 대상과 보호 조건
 

@@ -474,7 +474,7 @@ func TestAPIClientCooldownExtensionPreservesRequestSpacing(t *testing.T) {
 			starts <- time.Now()
 			return policyResponse(http.StatusOK, ""), nil
 		})
-		// 첫 승인을 소비한 뒤 여러 호출이 간격을 기다리는 중 429가 도착합니다.
+
 		if _, err := client.DoRequest(t.Context(), http.MethodGet, "/live", nil); err != nil {
 			t.Fatal(err)
 		}
@@ -493,7 +493,6 @@ func TestAPIClientCooldownExtensionPreservesRequestSpacing(t *testing.T) {
 
 		client.rememberRetryAfter(t.Context(), "5")
 		time.Sleep(time.Second)
-		// 이미 cooldown을 기다리는 호출도 연장된 시각을 재확인해야 합니다.
 		client.rememberRetryAfter(t.Context(), "10")
 
 		for range 3 {

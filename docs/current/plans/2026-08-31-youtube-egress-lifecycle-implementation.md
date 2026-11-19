@@ -7,8 +7,6 @@
 - Commit 판정: [`../architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md`](../architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md)
 - Library 검토: [`../architecture/youtube-egress-lifecycle-library-review-20260831.md`](../architecture/youtube-egress-lifecycle-library-review-20260831.md)
 
-**Decisions:** `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership` (governing), `DEC-20260901-hololive-source-observation-replay-epoch` (constraint)
-
 ## 목적
 
 현재 YouTube egress의 분산된 SQL 상태 변경을 typed lifecycle policy, deterministic logical owner, version-fenced transition store, durable logical ledger로 교체합니다. 각 단계는 하나의 canonical writer만 남기며 old/new writer가 같은 row를 동시에 수정하는 dual-write 기간을 만들지 않습니다.
@@ -354,7 +352,7 @@ Rollback은 ledger-aware T04 compatibility binary로만 수행하며 schema/stat
 - Architecture test가 shared/poller의 delivery lifecycle direct update와 old store import를 금지합니다.
 - Compatibility-only code, old SQL, obsolete reason branch, old package를 제거하며 alias를 남기지 않습니다.
 - DB에서 row-version/terminal/ledger shape, impossible mixed state, backfill state를 read-only audit합니다.
-- Production observation evidence가 확보된 뒤에만 governing decision status를 `verified`로 전환합니다.
+- 운영 관측 근거를 확보해야 배포 검증이 끝납니다.
 
 검증: V15, V16
 완료 기준: AC14, AC15
@@ -415,7 +413,7 @@ Rollback은 ledger-aware T04 compatibility binary로만 수행하며 schema/stat
 
 ### AC14 — CI architecture gate가 old store import와 worker 밖 lifecycle update를 거부합니다.
 
-### AC15 — Focused unit/integration/fault-injection/race/schema tests와 승인된 rollout observation이 governing DEC의 verification evidence로 연결됩니다.
+### AC15 — 단위·통합·결함 주입·경쟁 상태·스키마 시험과 승인된 배포 관측으로 전이 동작을 검증합니다.
 
 ### AC16 — Immutable source replay epoch가 pre-epoch claim/finalize/manual replay를 차단하고 inactive 상태를 historical coverage로 오인하지 않습니다.
 
@@ -574,8 +572,8 @@ Integration test는 inactive passthrough, single immutable activation, bounded a
 
 ## Execution capsule
 **Goal:** YouTube egress를 ledger-first logical lifecycle과 단일 alarm-worker transition owner로 교체합니다.
-**Context:** Governing DEC와 네 architecture 문서, current schema/store/poller writer inventory를 정본으로 사용합니다.
+**Context:** 네 아키텍처 문서, current schema/store/poller writer inventory를 정본으로 사용합니다.
 **Constraints:** Canonical identity는 fail closed이고 dual writer, provider resend, unbounded migration backfill, incomplete-ledger cleanup을 금지합니다.
 **Evidence:** T01 writer/coverage audit, T10 replay epoch fence, fixed-high-water canonical anti-join, commit fault injection, architecture gate를 남깁니다.
 **Success:** AC01부터 AC16까지 충족하고 지원 schema version의 durable ledger completion marker가 존재합니다.
-**Output:** T02부터 T10까지의 reviewable PR, 승인된 rollout 기록, governing DEC verification evidence를 제출합니다.
+**Output:** T02부터 T10까지 검토할 PR, 승인된 배포 관측과 검증 근거를 제출합니다.

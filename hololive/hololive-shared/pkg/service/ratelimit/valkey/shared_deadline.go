@@ -12,7 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// 여러 프로세스가 동시에 기록해도 대기 시각은 뒤로만 밀린다. 본문은 hololive-api·hololive-worker ACL이 허용하는 GET과 SET만 쓴다.
 const extendDeadlineScript = `
 local current = tonumber(redis.call('GET', KEYS[1]) or '') or 0
 local candidate = tonumber(ARGV[1])
@@ -25,8 +24,6 @@ return 1
 
 var extendDeadlineLua = valkeygo.NewLuaScript(extendDeadlineScript)
 
-// SharedDeadline은 여러 프로세스가 함께 지키는 대기 시각(429 cooldown, circuit open)을 Valkey에 둔다.
-// 값은 Unix ms 시각이고 key는 그 시각에 만료한다. 만료·축출돼도 되는 rate limit 상태이며 정본이 아니다.
 type SharedDeadline struct {
 	cacheClient cache.LowLevelCache
 	now         func() time.Time

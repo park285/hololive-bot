@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package orchcmd
 
 import (
@@ -82,7 +62,6 @@ end
 return {1, 0}
 `
 
-// commandAdmissionLua는 EVALSHA를 먼저 보내고 NOSCRIPT일 때만 valkey-go가 본문 EVAL로 다시 보낸다.
 var commandAdmissionLua = valkey.NewLuaScript(commandAdmissionScript)
 
 type commandAdmissionLimiter interface {
@@ -233,8 +212,6 @@ func (l *atomicCommandAdmissionLimiter) cacheKey(bucket string) string {
 	return commandAdmissionKeyPrefix + ":" + bucket
 }
 
-// member는 rate-limit ZSET의 원소다. 같은 inbound가 재처리될 때 원소가 새로 쌓이면 quota를
-// 중복 소모하므로 message identity에서만 결정적으로 유도한다.
 func commandAdmissionMember(messageID string) (string, error) {
 	trimmed := strings.TrimSpace(messageID)
 	if trimmed == "" {
@@ -277,7 +254,6 @@ func parseCommandAdmissionResult(result valkey.ValkeyResult) (commandAdmissionDe
 	return commandAdmissionDecision{Allowed: allowed == 1, RetryAfter: time.Duration(retryAfterMS) * time.Millisecond}, nil
 }
 
-// 빈 값이면 제한하지 않는다. !라이브는 보존된 pending-end 이력을 훑는 PG 질의를 실행하므로 이력 명령과 같은 한도를 쓰되 버킷은 분리한다.
 func expensiveCommandAdmissionScope(commandKey string) string {
 	switch commandKey {
 	case "broadcast_history", "broadcast_thumbnail", "broadcast_time":

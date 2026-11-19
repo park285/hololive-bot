@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package adminruntime
 
 import (
@@ -62,7 +42,6 @@ type AdminAPIRuntime struct {
 	cleanupErr    error
 }
 
-// CloseContext는 live 작업을 cancel/join한 뒤 같은 자원 owner를 한 번 실행한다. Join 실패에서 DB·cache를 닫지 않는다.
 func (r *AdminAPIRuntime) CloseContext(ctx context.Context) error {
 	if r == nil {
 		return nil
@@ -117,7 +96,6 @@ func (r *AdminAPIRuntime) quiesced() bool {
 	closedBeforeStart := r.closing && !r.started
 	r.stateMu.Unlock()
 
-	// Start 진입을 닫은 미기동 runtime에는 join할 HTTP·background 작업이 없다.
 	if closedBeforeStart {
 		return true
 	}

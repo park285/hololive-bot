@@ -31,7 +31,7 @@ func TestScheduleConsumerRetainsNewestItemAcrossReverseObservationOrder(t *testi
 		stale bool
 	}{
 		{delta: 10 * time.Minute},
-		{delta: 10 * time.Minute}, // 같은 payload도 최신 관측 시각은 앞으로 이동해야 한다.
+		{delta: 10 * time.Minute},
 		{delta: -5 * time.Minute, stale: true},
 		{delta: -10 * time.Minute, stale: true},
 	} {

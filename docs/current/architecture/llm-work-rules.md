@@ -17,7 +17,7 @@ LLM이 `hololive-bot` 문서/계약 작업을 수행할 때 지켜야 하는 cur
 ## Rules
 
 - `docs/current`에는 현재 운영 기준만 둡니다.
-- Historical handoff, closeout, 완료 기록은 `docs/history`에 둡니다.
+- 완료한 작업의 인계 및 검증 기록은 Git 이력에서 확인합니다.
 - 확인되지 않은 provider, route, payload, error code, env는 확정하지 말고 `검토 필요`로 표시합니다.
 - RPC/gRPC 전환을 문서 작업 중에 끼워 넣지 않습니다.
 - 서비스 간 `internal` package import를 정당화하는 문서를 만들지 않습니다.

@@ -343,7 +343,6 @@ func TestPUB011CallerMutationDuringTxUsesPreparedClone(t *testing.T) {
 	}
 }
 
-// PARTIAL 발행과 직접 defer는 같은 retry 규칙을 쓴다. 재시도 시각과 실패 기록 시각은 잠금 이후 같은 DB 시각에서 나온다.
 func TestPUB012RetryAtClampsAgainstPostgresClock(t *testing.T) {
 	for _, test := range []struct {
 		name string

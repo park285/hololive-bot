@@ -22,7 +22,6 @@ const (
 	rowsStageBackoff   = 150 * time.Second
 )
 
-// extractBudget을 넘긴 추출 실행은 끊기고, 그때까지 성공한 실행들로 정한다.
 func (c RowsConfig) extractBudget() time.Duration {
 	return 2*c.Extract.timeout() + rowsStageBackoff
 }
@@ -50,7 +49,6 @@ type rowsKey struct {
 	revision int64
 }
 
-// rowsLoopState는 행 추출 goroutine만 만지므로 잠그지 않는다.
 type rowsLoopState struct {
 	budget          time.Duration
 	translateBudget time.Duration
@@ -92,7 +90,6 @@ func (s *Service) extractPendingRows(ctx context.Context) error {
 
 		return !done
 	}) {
-		// 이름표 없이 번역하면 이름이 뜻풀이로 바뀌므로, 멤버를 못 읽으면 대기 상태로 두고 다음 tick에 다시 본다.
 		members, err = s.members.GetAllMembers(ctx)
 		if err != nil {
 			return fmt.Errorf("load members for schedule poster rows: %w", err)
@@ -180,8 +177,6 @@ func (s *Service) recordRows(ctx context.Context, item posterstore.PendingRows, 
 	return nil
 }
 
-// extractOne의 reason이 비어 있는 오류는 저장소 오류라 기록하지 않고 대기 상태로 둔다.
-// 추출 경고와 번역은 포스터의 현지 날짜·시각으로 하고, 저장할 행만 JST로 바꾼다. 검증 하니스와 같은 입력을 쓰기 위해서다.
 func (s *Service) extractOne(
 	ctx context.Context, item posterstore.PendingRows, members, named []*domain.Member,
 ) ([]posterstore.Row, int, string, error) {
@@ -293,7 +288,7 @@ func (s *Service) extractOnce(ctx context.Context, item posterstore.PendingRows,
 	var rows []extractedRow
 
 	options := s.retryOptions(item.ID, stageRowsExtract)
-	// 표에 없는 시간대는 포스터에 인쇄된 값이라 다시 뽑아도 같게 나온다.
+
 	options.ShouldRetry = func(err error) bool {
 		return !errors.Is(err, errUnsupportedZone) && retryableTranslationError(err)
 	}
@@ -350,7 +345,6 @@ func (s *Service) translateRows(
 			combined[i].Terms = verifiedTerms(&extracted[i], out)
 		}
 
-		// 경고는 모델 출력 길이에 비례해 커지므로, 저장 상한을 넘는 출력은 경고를 만들기 전에 거부한다.
 		if err := posterstore.ValidateRows(combined); err != nil {
 			return fmt.Errorf("check translated rows: %w", err)
 		}

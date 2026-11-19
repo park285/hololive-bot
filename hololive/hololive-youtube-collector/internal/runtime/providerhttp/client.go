@@ -46,13 +46,11 @@ func NewProviderHTTPClient(cfg ProviderTransportConfig) (*ProviderHTTPClient, er
 			Transport:     httpclientmetrics.Instrument(cfg.MetricsClient, transport),
 			CheckRedirect: rejectRedirect,
 		},
-		// Close는 계측 wrapper가 아니라 실제 연결을 가진 *http.Transport의 유휴 연결을 닫는다.
 		transport: transport,
 		owned:     true,
 	}, nil
 }
 
-// WrapProviderHTTPDoer는 주입한 client를 복제해 redirect 거부 정책만 씌웁니다. 주입한 client의 연결은 닫지 않습니다.
 func WrapProviderHTTPDoer(client *http.Client) (*ProviderHTTPClient, error) {
 	if client == nil {
 		return nil, collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider HTTP client is nil")

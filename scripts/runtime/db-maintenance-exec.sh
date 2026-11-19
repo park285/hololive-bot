@@ -24,7 +24,6 @@ SECRETS_DIR="${SECRETS_DIR:-/etc/stack-secrets/hololive-bot}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-${OPT_CURRENT}/hololive/hololive-api/scripts/migrations}"
 PG_SERVICE="${PG_SERVICE:-hololive-db-maintenance}"
 
-# 중앙 컨테이너는 rootful Podman이 소유한다. 비root 실행은 sudo로 같은 store를 쓴다.
 PODMAN=(podman)
 if [[ "$(id -u)" -ne 0 ]]; then
   PODMAN=(sudo -n podman)
@@ -42,7 +41,6 @@ for path in "${MIGRATIONS_DIR}" "${SECRETS_DIR}/postgres/pg_service.conf" \
   fi
 done
 
-# Podman .Image는 실행 중인 container의 image ID다. 같은 image를 tag 변경과 무관하게 쓴다.
 image="$("${PODMAN[@]}" inspect "${DB_CONTAINER}" -f '{{.Image}}')" || {
   echo "cannot resolve image from ${DB_CONTAINER}" >&2; exit 1; }
 socket_volume="$("${PODMAN[@]}" inspect "${DB_CONTAINER}" \
@@ -50,7 +48,6 @@ socket_volume="$("${PODMAN[@]}" inspect "${DB_CONTAINER}" \
   echo "cannot resolve admin socket volume from ${DB_CONTAINER}" >&2; exit 1; }
 [[ -n "${image}" && -n "${socket_volume}" ]] || { echo "cannot resolve image/admin socket volume from ${DB_CONTAINER}" >&2; exit 1; }
 
-# bind 원본의 SELinux label은 rhel-host-security fcontext가 소유하므로 :z/:Z로 relabel하지 않는다.
 exec "${PODMAN[@]}" run --rm --pull=never --network none --user 0:0 \
   --read-only --tmpfs /tmp:size=64m \
   -v "${MIGRATIONS_DIR}:/migrations:ro" \

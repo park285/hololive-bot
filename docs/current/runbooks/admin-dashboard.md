@@ -41,6 +41,6 @@ Iris의 플랫폼 secret master/manifest를 거쳐 전달하며 여기에서 중
 공통 인증 조회·SSR·권한 거절·logout/PWA와 기존 봇·단축 링크 상태를 확인하고 임시 조회 계정은 정확한 ID로 폐기합니다.
 실제 AI 호출·메시지/푸시 발송·iOS 실기기 검증을 자동 smoke에 포함하지 않습니다.
 
-현재 전환 상태와 검증 근거는 스택의 `DEC-20260914-admin-unified-login`을, 자세한 native 적용은
+자세한 네이티브 앱 적용 절차는
 Iris Console의 운영 문서를 따릅니다.
 Fallback delta: none.

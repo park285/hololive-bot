@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package youtubedispatch
 
 import (
@@ -39,26 +19,23 @@ import (
 const outboxCleanupLoopInterval = 1 * time.Hour
 
 type Dispatcher struct {
-	claim     *ClaimManager
-	send      *SendEngine
-	telemetry *TelemetryProcessor
-	audit     *AuditLogger
-	metrics   *MetricsRecorder
-	grouper   *OutboxGrouper
-	logger    *slog.Logger
-	config    Config
-	// cleanupInterval은 cleanupLoop 주기다. assembleDispatcher가 outboxCleanupLoopInterval로 채운다.
+	claim           *ClaimManager
+	send            *SendEngine
+	telemetry       *TelemetryProcessor
+	audit           *AuditLogger
+	metrics         *MetricsRecorder
+	grouper         *OutboxGrouper
+	logger          *slog.Logger
+	config          Config
 	cleanupInterval time.Duration
 	started         atomic.Bool
 	workerTracker   *workercontract.ExecutorTracker
 	workerTotals    *workercontract.Counters
-	// idle은 빈 조회 뒤 다음 조회까지 기다린다. NewDispatcher가 채운다.
-	idle idleWaiter
+	idle            idleWaiter
 
 	testHooks dispatcherTestHooks
 }
 
-// Reset은 처리한 행이 있었을 때 다음 대기를 짧게 시작한다.
 type idleWaiter interface {
 	Wait(ctx context.Context) bool
 	Reset()
@@ -161,7 +138,6 @@ func (d *Dispatcher) run(ctx context.Context) {
 		slog.Int("subscriber_lookup_parallelism", d.grouper.config.SubscriberLookupParallelism))
 
 	for {
-		// 처리한 행이 있으면 뒤따른 행의 신호가 guard에 억제됐어도 짧은 대기 뒤 다시 조회한다.
 		if d.processOnce(ctx) {
 			d.idle.Reset()
 		}

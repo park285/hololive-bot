@@ -1,6 +1,3 @@
--- 후보 outbox를 잠근 cleanup은 경쟁 트랜잭션이 잠근 자식을 기다리지 않는다. 기다리는 동안 후보 부모·자식을 쥐고
--- 있으면 같은 논리 그룹을 잠그는 stale sweep과 교착한다. 잠근 행은 잠금 뒤 최신 값을 locked=TRUE로, 잠그지 못한
--- 행은 문장 snapshot 값을 locked=FALSE로 돌려 호출자가 그 후보를 불완전 관측으로 보호하게 한다.
 WITH locked_rows AS MATERIALIZED (
     SELECT delivery.id,
            delivery.outbox_id,

@@ -5,11 +5,6 @@ import (
 	"time"
 )
 
-// runDurableWorker는 durable 큐 하나의 worker 루프다. 인자 process는 claim에 성공하면 처리 전에 claimed를 호출하고,
-// claimed는 wake를 보내 다른 유휴 worker가 남은 행을 이어 받게 한다(burst 연쇄). 깨어난 worker는 행이 없으면 비어 있는 pollSlot을
-// 이어 받아 timer polling을 계속하므로, 처리 중에도 안전망이 유지된다. 유휴 상태에서는 pollSlot을 쥔 worker 하나만
-// pollEvery에서 durablePollMax까지 늘어나는 timer로 DB를 다시 보고 나머지는 wake만 기다린다. 생산자(webhook admission,
-// reply 기록)가 같은 프로세스에서 wake를 보내므로 polling은 retry_after가 지난 행과 lease가 만료된 행을 줍는 안전망이다.
 func runDurableWorker(
 	ctx context.Context,
 	queue string,
@@ -48,7 +43,6 @@ func newDurablePollSlot() chan struct{} {
 	return slot
 }
 
-// 반환값 polled는 timer를 돌렸는지(backoff를 늘릴지), ok는 ctx가 살아 있는지다.
 func waitDurableIdle(ctx context.Context, delay time.Duration, wake <-chan struct{}, pollSlot chan struct{}) (polled, ok bool) {
 	select {
 	case <-pollSlot:

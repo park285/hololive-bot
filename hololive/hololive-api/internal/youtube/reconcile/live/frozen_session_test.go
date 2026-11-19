@@ -155,7 +155,6 @@ func checkFrozenScenario(t *testing.T, scenario *frozenScenario, frozen SessionS
 		}
 	}
 
-	// 동결 pending은 결정에 그대로 실려 다시 쓰일 값이 같고, 없으면 새로 생기지 않는다.
 	if got, ok := pendingByVideo(withPending.PendingEnds)[testVideoID]; !ok || !reflect.DeepEqual(got, stored) {
 		t.Fatalf("frozen pending = %#v (present=%t), want %#v", got, ok, stored)
 	}
@@ -164,7 +163,6 @@ func checkFrozenScenario(t *testing.T, scenario *frozenScenario, frozen SessionS
 		t.Fatal("frozen session gained a pending end")
 	}
 
-	// 동결 pending을 읽지 않은 상태도 나머지 결정이 같아야 loader가 그 행을 건너뛸 수 있다.
 	withPending.PendingEnds = slices.DeleteFunc(withPending.PendingEnds, func(item PendingEnd) bool {
 		return item.VideoID == testVideoID
 	})
@@ -177,8 +175,6 @@ func checkFrozenScenario(t *testing.T, scenario *frozenScenario, frozen SessionS
 	}
 }
 
-// 종료 후보 없는 저장된 ENDED 세션은 어떤 사실·부재·due 정리로도 dirty가 되지 않고, 그 pending은 결정에 영향을 주지 않는다. 그래서 sourceobservation loader는 그
-// pending을 읽거나 잠그지 않으며, pending 삭제는 dirty 세션으로 한정되므로 읽지 않은 행이 지워지지 않는다.
 func TestReduceNeverDirtiesFrozenEndedSession(t *testing.T) {
 	t.Parallel()
 

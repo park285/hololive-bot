@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package dbtest
 
 import (
@@ -37,17 +17,14 @@ import (
 )
 
 const (
-	// TEST_DATABASE_URL이 설정되면 testcontainers 대신 해당 DSN을 base로 쓴다.
 	testDatabaseURLEnv        = "TEST_DATABASE_URL"
 	testDatabaseOwnerTokenEnv = "TEST_DATABASE_OWNER_TOKEN"
 	allowExternalTestDBEnv    = "ALLOW_EXTERNAL_TEST_DB"
 	ownershipSentinelQuery    = "SELECT token FROM ci_ephemeral_sentinel LIMIT 1"
 
-	// PostgreSQL 18 image로, production migration 기준과 같은 태그를 고정한다.
 	postgresImage = "postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015"
 )
 
-// baseProvider는 테스트 바이너리당 1개의 base DSN(컨테이너 또는 외부 DB)을 lazily 확보한다.
 type baseProvider struct {
 	once sync.Once
 	dsn  string
@@ -105,7 +82,6 @@ func newIsolatedPool(tb testing.TB, baseDSN, templateName string) *pgxpool.Pool 
 	return pool
 }
 
-// 식별자는 내부 생성(time+seq)이라 인젝션 위험이 없으나 quote로 안전하게 감싼다.
 func createIsolatedDatabase(ctx context.Context, baseDSN, dbName, templateName string) error {
 	adminPool, err := poolForDatabase(ctx, baseDSN, "")
 	if err != nil {
@@ -155,7 +131,6 @@ func acquireBaseDSN(tb testing.TB) string {
 	return sharedBase.dsn
 }
 
-// 컨테이너는 프로세스 종료 시 testcontainers reaper(Ryuk)가 회수하므로 명시적 종료를 등록하지 않는다.
 func provisionBaseDSN() (_ string, err error) {
 	if dsn := os.Getenv(testDatabaseURLEnv); dsn != "" {
 		out, presetErr := validatedPresetDSN(dsn)
@@ -279,12 +254,6 @@ func validateOwnershipEvidence(expectedToken, gotToken string, queryErr error, a
 	return nil
 }
 
-// 같은 go test 호출의 테스트 바이너리들은 testcontainers 세션(parent pid 기반)을 공유해
-// reaper(Ryuk) 컨테이너 1개를 같이 쓴다. 여러 바이너리가 첫 컨테이너 생성을 동시에 시작하면
-// reaper 기동과 재사용 조회가 경합해 늦게 진입한 프로세스의 reaper 연결이 소리 없이 유실되고,
-// Ryuk이 클라이언트 0으로 오판해 reconnection timeout(10s) 뒤 실행 중인 다른 바이너리의
-// PG 컨테이너까지 세션 라벨로 일괄 회수한다. SessionID()가 UUID fallback이 되어도
-// 같은 호출을 직렬화하도록 parent pid로 flock한다.
 func sessionProvisionLockPath() string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("dbtest-provision-%d.lock", os.Getppid()))
 }
@@ -316,7 +285,6 @@ func lockSessionProvisioning() (func() error, error) {
 	}, nil
 }
 
-// 테스트 서버는 PostgreSQL 18이므로 WITH (FORCE)만 사용하고 원래 오류를 보존한다. PG<13용 재시도는 같은 만료 context를 사용해 최초 실패를 가릴 수 있다.
 func dropDatabase(ctx context.Context, baseDSN, dbName string) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -334,8 +302,6 @@ func dropDatabase(ctx context.Context, baseDSN, dbName string) error {
 	return nil
 }
 
-// 빈 dbName은 base DSN의 데이터베이스를 그대로 쓴다는 뜻이다. URL 형식과 libpq keyword 형식(host=, dbname=)을 모두 받아야 하므로 url.Parse가 아니라
-// ParseConfig를 쓴다. TEST_DATABASE_URL이 keyword DSN으로 오면 url.Parse는 이를 깨뜨리지만, ParseConfig는 두 형식을 모두 처리한다.
 func poolForDatabase(ctx context.Context, baseDSN, dbName string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(baseDSN)
 	if err != nil {

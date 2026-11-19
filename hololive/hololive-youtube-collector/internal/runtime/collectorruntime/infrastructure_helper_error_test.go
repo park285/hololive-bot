@@ -7,9 +7,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
-// 같은 접두가 leaf·중간·호출부에서 반복되면 기동 실패 로그가 원인보다 접두로 채워진다.
 func TestStartYouTubeJSHelperFailureNamesActionOnce(t *testing.T) {
-	// helper 경로를 주지 않으면 다른 후보를 찾지 않고 기동 전에 실패한다.
 	collector := fixtureCollectorConfig(t)
 
 	collector.YouTubeJSNodePath = ""

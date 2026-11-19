@@ -1,7 +1,4 @@
 # shellcheck shell=bash
-# rootfs·소유권 검증과 이미지 내보내기는 kapu에서만 수행한다.
-# 런타임 호스트의 Podman은 적재한 이미지의 ID·리비전·아키텍처를 검토된 산출물과 대조한다.
-# identity는 sha256:<hex> 한 줄이며 Podman .Id는 접두어가 없어 붙여서 비교한다.
 po_image_id_matches() {
   local actual="$1" expected="$2"
   [[ "$actual" =~ ^sha256:[0-9a-f]{64}$ && "$actual" == "$expected" ]]

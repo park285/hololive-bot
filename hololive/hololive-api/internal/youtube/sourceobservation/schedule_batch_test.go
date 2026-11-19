@@ -22,7 +22,6 @@ func TestScheduleBatchesPreserveItemBeforeSessionAndDuplicateOrder(t *testing.T)
 	pool := dbtest.NewPool(t)
 	observation, decision := scheduleBatchFixture(129)
 
-	// 첫 session 저장 전에 모든 item이 같은 트랜잭션에서 보여야 한다.
 	_, err := pool.Exec(ctx, `
 		CREATE FUNCTION assert_schedule_items_ready() RETURNS trigger LANGUAGE plpgsql AS $$
 		BEGIN
@@ -36,9 +35,6 @@ func TestScheduleBatchesPreserveItemBeforeSessionAndDuplicateOrder(t *testing.T)
 	`)
 	require.NoError(t, err)
 
-	// 같은 시각의 중복은 최초 항목을 유지한다. 중복을 bulk upsert 한 문장으로 합치면
-	// PostgreSQL cardinality 오류가 나므로 실제 저장 결과로 순차 문장 계약을 확인한다.
-	// 세션은 reducer가 영상마다 최종 상태 하나만 내므로 채널 없는 세션만 더한다.
 	duplicate := decision.Items[0]
 
 	duplicate.Title = "must not replace first"
@@ -81,7 +77,6 @@ func TestScheduleBatchFailureRollsBackAllItemsAndSessions(t *testing.T) {
 			pool := dbtest.NewPool(t)
 			observation, decision := scheduleBatchFixture(260)
 
-			// 선행 배치가 성공해도 후속 item/session 실패 시 전체를 롤백한다.
 			_, err := pool.Exec(ctx, `
 				CREATE FUNCTION fail_schedule_batch() RETURNS trigger LANGUAGE plpgsql AS $$
 				BEGIN

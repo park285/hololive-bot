@@ -19,13 +19,12 @@ const (
 
 func defaultYouTubePlaneRetentionConfig() YouTubePlaneRetentionConfig {
 	return YouTubePlaneRetentionConfig{
-		Interval:           120 * time.Second,
-		BatchSize:          youtubePlaneRetentionMaxBatchSize,
-		QueueProcessedAge:  youtubePlaneRetentionDay,
-		QueueDLQAge:        14 * youtubePlaneRetentionDay,
-		CollisionAge:       30 * youtubePlaneRetentionDay,
-		LiveAbsenceSlotAge: 14 * youtubePlaneRetentionDay,
-		// live slot과 같은 기간이다. video_list·shorts_list 원본(7일)보다 길어 원본 재처리 범위를 덮는다.
+		Interval:              120 * time.Second,
+		BatchSize:             youtubePlaneRetentionMaxBatchSize,
+		QueueProcessedAge:     youtubePlaneRetentionDay,
+		QueueDLQAge:           14 * youtubePlaneRetentionDay,
+		CollisionAge:          30 * youtubePlaneRetentionDay,
+		LiveAbsenceSlotAge:    14 * youtubePlaneRetentionDay,
 		ContentAbsenceSlotAge: 14 * youtubePlaneRetentionDay,
 		CheckpointHistoryAge:  2 * youtubePlaneRetentionDay,
 		ProjectionRetiredAge:  2 * youtubePlaneRetentionDay,
@@ -73,7 +72,6 @@ type youtubePlaneRetentionAgeEnv struct {
 	age *time.Duration
 }
 
-// 적재 함수와 production 검증이 같은 표를 쓴다.
 func youtubePlaneRetentionAgeEnvs(retention *YouTubePlaneRetentionConfig) []youtubePlaneRetentionAgeEnv {
 	return []youtubePlaneRetentionAgeEnv{
 		{"YOUTUBE_PLANE_RETENTION_QUEUE_PROCESSED_DAYS", &retention.QueueProcessedAge},

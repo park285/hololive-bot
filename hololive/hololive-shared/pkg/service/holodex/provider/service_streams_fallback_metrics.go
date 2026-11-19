@@ -7,8 +7,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// 공식 일정 fallback metric의 service label은 holodex로, trigger label은 "primary가 비었고 실패한 org가 있음"을 뜻하는
-// on_empty_primary_with_error로 고정한다.
 const (
 	streamFallbackServiceLabel = "holodex"
 	streamFallbackTriggerLabel = "on_empty_primary_with_error"
@@ -24,7 +22,6 @@ type streamFallbackMetrics struct {
 	executionTotal *prometheus.CounterVec
 }
 
-// 기본 registry에는 한 번만 등록하므로 첫 관측 때 묶음으로 만든다.
 var streamFallbackMetricsFor = sync.OnceValue(func() *streamFallbackMetrics {
 	return &streamFallbackMetrics{
 		primaryTotal: promauto.NewCounterVec(
@@ -44,7 +41,6 @@ var streamFallbackMetricsFor = sync.OnceValue(func() *streamFallbackMetrics {
 	}
 })
 
-// 호출자 취소는 실패가 아니라 canceled로 센다.
 func observeStreamPrimary(operation string, result orgFetchResult) {
 	streamFallbackMetricsFor().primaryTotal.WithLabelValues(streamFallbackServiceLabel, operation, streamPrimaryOutcome(result)).Inc()
 }

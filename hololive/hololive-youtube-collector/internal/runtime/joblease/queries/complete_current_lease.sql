@@ -1,4 +1,3 @@
--- 호출자는 같은 트랜잭션에서 lease 행을 먼저 잠근다. clock은 잠금 대기 이후 시각이며 판정과 기록이 같이 쓴다.
 WITH clock AS MATERIALIZED (
     SELECT clock_timestamp() AS now_at
 )

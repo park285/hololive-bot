@@ -28,7 +28,6 @@ func attemptClaims(attempt int, ids ...int64) []DeliveryClaim {
 	return claims
 }
 
-// 각 unit의 멤버 전원이 records에 있어야 한다.
 func beginSendingFixture(tb testing.TB, repository *PgxRepository, owner string, records ...*Record) {
 	tb.Helper()
 

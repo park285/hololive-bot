@@ -37,7 +37,6 @@ func (c *imageCache[K]) get(key K) ([]byte, bool) {
 	return bytes.Clone(data), ok
 }
 
-// getImmutable의 결과는 교체되거나 퇴거된 뒤에도 읽기 전용이다.
 func (c *imageCache[K]) getImmutable(key K) ([]byte, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -56,7 +55,6 @@ func (c *imageCache[K]) put(key K, data []byte) {
 	c.putImmutable(key, bytes.Clone(data))
 }
 
-// putImmutable 이후 호출자도 data를 수정하면 안 된다.
 func (c *imageCache[K]) putImmutable(key K, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

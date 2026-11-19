@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package domain
 
 import (
@@ -58,7 +38,6 @@ type YouTubeCommunityPost struct {
 	LastSeenAt    time.Time      `db:"last_seen_at" json:"last_seen_at"`
 }
 
-// 동일 콘텐츠에 대해 실제 게시 시각, 최초 감지 시각, 최초 성공 발송 시각과 저장된 지연 분류값을 보존한다.
 type YouTubeContentAlarmTracking struct {
 	Kind                        OutboxKind                        `db:"kind" json:"kind"`
 	ContentID                   string                            `db:"content_id" json:"content_id"`
@@ -92,7 +71,6 @@ func ResolveYouTubeContentAlarmDeliveryStatus(alarmSentAt *time.Time) YouTubeCon
 	return YouTubeContentAlarmDeliveryStatusPending
 }
 
-// 감지된 게시물의 채널 정보와 canonical post identifier를 관찰용 원본 집합으로 보존한다.
 type YouTubeCommunityShortsSourcePost struct {
 	Kind              OutboxKind `db:"kind" json:"kind"`
 	PostID            string     `db:"post_id" json:"post_id"`
@@ -103,7 +81,6 @@ type YouTubeCommunityShortsSourcePost struct {
 	UpdatedAt         time.Time  `db:"updated_at" json:"updated_at"`
 }
 
-// canonical post identifier를 루트 키로 사용해 게시물당 하나의 상태 레코드만 유지한다.
 type YouTubeCommunityShortsAlarmState struct {
 	Kind              OutboxKind                             `db:"kind" json:"kind"`
 	PostID            string                                 `db:"post_id" json:"post_id"`
@@ -217,7 +194,6 @@ type YouTubeNotificationOutbox struct {
 	Error         string       `db:"error" json:"error,omitempty"`
 }
 
-// BuildYouTubeNotificationDedupeKey는 outbox kind/content_id에서 dedupe key를 생성한다.
 func BuildYouTubeNotificationDedupeKey(kind OutboxKind, contentID string) (string, error) {
 	normalizedKind := strings.TrimSpace(string(kind))
 	if normalizedKind == "" {

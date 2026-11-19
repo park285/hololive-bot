@@ -198,8 +198,6 @@ test("overlapping parser calls keep failure ownership with their request", async
 });
 
 test("successful unknown-node generation and schema updates remain usable inside a row", async () => {
-  // 행 내부의 미지 노드는 JIT 생성 진단만 남기고 행을 보존합니다. 본문 행 자체가 미지 renderer이면
-  // SDK가 목록에서 빼므로 collection-client 테스트에서 drift로 거부합니다.
   const client = await rawClient(call => {
     const row = rowNode("videos");
     row.videoRenderer.thumbnailOverlays = [

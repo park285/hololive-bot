@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# build-all.sh를 가짜 podman으로 실행한다. 배포 절차는 image revision label을 출처로 대조하므로
-# clean source revision이 build-arg로 들어가고 label로 확인되는지, collector가 PO issuer와 같은 revision으로
-# 짝지어 빌드되는지, dirty worktree가 검증된 revision을 주장하지 않는지, 모르는 target이나
-# runtime VERSION 누락·형식 오류가 빌드 전에 실패하는지 확인한다.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -23,7 +19,6 @@ git -C "$repo" add -A
 git -C "$repo" -c user.name=fixture -c user.email=fixture@example.invalid commit -qm fixture
 head="$(git -C "$repo" rev-parse HEAD)"
 
-# build는 --label의 revision 값(또는 FAKE_LABEL)을 tag의 label로 저장하고 image inspect가 돌려준다.
 cat > "$fakebin/podman" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail

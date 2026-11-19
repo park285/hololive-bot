@@ -12,8 +12,6 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
-// backlog·격리 gauge는 retention 주기와 무관하게 이 주기로 갱신한다. HololiveOutboxStale(60초 초과가 10분 지속)이
-// 현재 backlog를 평가할 표본을 10분 창마다 충분히 남기면서, 보존 격리 행 수에 비례하는 격리 집계 조회 비용을 제한한다.
 const (
 	alarmDispatchBacklogObservationInterval = 60 * time.Second
 	alarmDispatchBacklogObservationTimeout  = 10 * time.Second
@@ -30,7 +28,6 @@ type alarmDispatchBacklogSnapshotStore interface {
 	BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error)
 }
 
-// 관측 실패는 Start 오류가 아니다. 첫 오류가 나면 runNamedSchedulers가 형제 egress runner를 모두 취소한다.
 type alarmDispatchBacklogObserver struct {
 	store        alarmDispatchBacklogSnapshotStore
 	interval     time.Duration
@@ -38,7 +35,6 @@ type alarmDispatchBacklogObserver struct {
 	logger       *slog.Logger
 }
 
-// NewBacklogObserver는 PostgreSQL pool이 있는 infra를 받는다. 조립 쪽(buildNotificationEgress)이 기동 때 pool을 먼저 확인한다.
 func NewBacklogObserver(infra *sharedmodules.InfraModule, logger *slog.Logger) Scheduler {
 	return &alarmDispatchBacklogObserver{
 		store:        alarmDispatchMaintenancePgxStore{db: infra.Postgres.GetPool()},

@@ -13,7 +13,6 @@ import (
 )
 
 func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
-	// 승인 구간만 직렬화하고 HTTP 전송은 기존 세마포어의 동시성을 유지합니다.
 	select {
 	case c.admissionGate <- struct{}{}:
 		defer func() { <-c.admissionGate }()
@@ -38,16 +37,12 @@ func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
 			return fmt.Errorf("holodex admission canceled: %w", err)
 		}
 
-		// 분산 승인을 기다리는 동안 다른 프로세스가 받은 429도 반영합니다.
 		c.mergeSharedCooldown(ctx)
 
 		if c.cooldownRemaining() <= 0 {
-			// 분산 승인이 늦어져도 다음 요청은 이번 승인 완료 시각부터 간격을 지킵니다.
 			c.nextRequestAt = time.Now().Add(c.requestDelay)
 			return nil
 		}
-
-		// 로컬·분산 대기 중 받은 429 이후에는 이전 승인을 재사용하지 않습니다.
 	}
 }
 

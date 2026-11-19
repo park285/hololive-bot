@@ -126,7 +126,7 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	retryAt := time.Now().UTC().Add(200 * time.Millisecond)
+	retryAt := time.Date(9999, time.January, 1, 0, 0, 0, 123456000, time.UTC)
 	failing := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
 
 	cooldown := cooldownAt(t, "limited", retryAt)
@@ -154,16 +154,16 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 	}
 	runAdmittedSpec(ctx, t, executor, &spec)
 
-	var deferred time.Time
+	var deferred, databaseNow time.Time
 
 	if err := pool.QueryRow(ctx, `
-		SELECT retry_not_before FROM youtube_collection_job_leases WHERE job_key = $1
-	`, spec.JobKey).Scan(&deferred); err != nil {
+		SELECT retry_not_before, clock_timestamp() FROM youtube_collection_job_leases WHERE job_key = $1
+	`, spec.JobKey).Scan(&deferred, &databaseNow); err != nil {
 		t.Fatal(err)
 	}
 
-	if deferred.Before(retryAt.Add(-50*time.Millisecond)) || deferred.After(retryAt.Add(50*time.Millisecond)) {
-		t.Fatalf("retry_not_before = %s, want %s", deferred, retryAt)
+	if !deferred.Equal(retryAt) || !deferred.After(databaseNow.Add(testRetryBounds.Maximum)) {
+		t.Fatalf("retry_not_before = %s, want explicit deadline %s beyond DB now %s + %s", deferred, retryAt, databaseNow, testRetryBounds.Maximum)
 	}
 }
 
@@ -455,7 +455,6 @@ func collectYouTubeJSPartialVideoList(_ context.Context, input *collection.RunIn
 
 var testRetryBounds = collection.RetryBounds{Minimum: 100 * time.Millisecond, Maximum: time.Second}
 
-// CleanupTimeout은 admission_deadline_test가 기한 뒤 정리에 허용하는 3초보다 작아야 한다.
 func runtimeLeaseConfig() joblease.Config {
 	return joblease.Config{
 		LeaseTTL: time.Minute, RenewInterval: 20 * time.Second,

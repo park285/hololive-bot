@@ -1,5 +1,3 @@
--- 외부 호출 뒤 실패를 retry·dlq로 정산한다. 확정된 외부 결과를 lease 만료로 되돌리지 않으므로 lease는 보지 않는다.
--- 만료 회수(RecoverExpiredLeased)는 leased만, stale 격리는 sending의 locked_by를 비우므로 소유자 일치가 소유권 증명이다.
 WITH input AS MATERIALIZED (
     SELECT input.id, input.attempt_count, input.retry_after_ms, input.error, input.error_code,
            input.target_status, input.mark_dlq

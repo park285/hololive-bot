@@ -19,7 +19,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// countingMemberNameSource는 채널별 표시명 조회 횟수를 세고, err가 있으면 모든 조회에 그 오류를 돌려준다.
 type countingMemberNameSource struct {
 	name  string
 	err   error
@@ -36,8 +35,6 @@ func (s *countingMemberNameSource) GetMemberName(_ context.Context, channelID st
 	return s.name, s.err
 }
 
-// 여러 outbox 항목을 한 번에 포맷해도 채널별 override와 기본 template 선택이 항목·변형마다 유지되고,
-// payload를 읽지 못한 항목만 실패하며 다른 항목은 정상 본문을 받는다. 표시명은 채널마다 한 번만 조회한다.
 func TestFormatMessagesKeepsPerItemTemplateSelection(t *testing.T) {
 	t.Parallel()
 
@@ -90,7 +87,6 @@ VALUES ($1, $2, 'plain', $3), ($1, $2, 'richtext', $4)`,
 	}
 }
 
-// 표시명 조회 실패도 채널마다 한 번만 조회하고, 그 채널의 모든 항목이 대체 문구 없이 같은 실패를 받는다.
 func TestFormatMessagesSharesMemberNameLookupFailurePerChannel(t *testing.T) {
 	t.Parallel()
 
@@ -130,7 +126,6 @@ func (c *renderStatementCounter) TraceQueryStart(ctx context.Context, _ *pgx.Con
 
 func (*renderStatementCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
-// 묶음 메시지의 두 본문 변형은 template 버전 확인을 한 문장으로 끝낸다. 파싱 cache가 찬 뒤에는 그 한 문장만 실행한다.
 func TestFormatGroupedMessageResolvesBothVariantsInOneStatement(t *testing.T) {
 	t.Parallel()
 

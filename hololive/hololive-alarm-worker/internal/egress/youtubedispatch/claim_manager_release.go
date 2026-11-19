@@ -63,10 +63,6 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	}
 }
 
-// 보존 기간이 max(CleanupAfter, ClaimFreshnessWindow)인 이유: CleanupAfter >= ClaimFreshnessWindow가 config invariant로
-// 보장되지 않으므로, 삭제 대상을 항상 fanout claim의 신선도 하한(DB 시계 - ClaimFreshnessWindow)보다 오래된 outbox로
-// 묶어 다시 claim될 수 없게 한다. 보존 기간과 lease 만료는 claim과 같은 DB 시계로 판정한다.
-// NOT EXISTS delivery 가드는 ON DELETE CASCADE로 인한 delivery/telemetry 동반 삭제를 막는다.
 func (d *ClaimManager) cleanupExpiredFanoutOutboxes(ctx context.Context) {
 	var total int
 
@@ -148,7 +144,6 @@ func (d *ClaimManager) expirePendingDeliveries(ctx context.Context) {
 			return
 		}
 
-		// 만료와 기존 논리 결과 정산은 별도다. 확정 commit 뒤 projection보다 먼저 기록한다.
 		if result.Outcome == store.ApplyApplied {
 			for range result.StaleExpired {
 				d.workerTotals.RecordDiscard(workercontract.DiscardStale)

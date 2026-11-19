@@ -36,7 +36,6 @@ type collectMark struct {
 	newest   time.Time
 }
 
-// collectPosts는 페이지 하나라도 실패하면 아무 글도 돌려주지 않는다. 일부만 넣으면 뒤 글이 앞 글보다 먼저 처리된다.
 func (s *Service) collectPosts(ctx context.Context, target Target, schedule *posterstore.PublishedSchedule) (collectedPosts, error) {
 	floor := later(schedule.PostedAt, weekStartJST(schedule.WeekStart))
 
@@ -67,7 +66,6 @@ func (s *Service) collectPosts(ctx context.Context, target Target, schedule *pos
 	return collected, nil
 }
 
-// take는 페이지에서 마지막으로 나온 본인 원글의 시각을 돌려준다. 리포스트는 원글의 시각을 달고 오므로 수집 멈춤 판정에 쓰지 않는다.
 func (c *collectedPosts) take(page *statusPage, target Target, schedule *posterstore.PublishedSchedule) time.Time {
 	weekStart := weekStartJST(schedule.WeekStart)
 
@@ -141,7 +139,6 @@ func displayName(name string) string {
 	return strings.Join(strings.Fields(cleanPostText(name, maxAuthorNameRunes)), " ")
 }
 
-// withQuote는 인용한 글을 본문 뒤에 붙인다. 머리 줄의 문구와 시각 형식은 대응 지시문(match.txt)이 읽는 형식이다.
 func withQuote(body string, quote *quotedStatus) string {
 	header := quoteHead + displayName(quote.Author.Name) + " at " + time.Unix(quote.CreatedTimestamp, 0).In(jst).Format(matchClockLayout) + " JST:\n"
 

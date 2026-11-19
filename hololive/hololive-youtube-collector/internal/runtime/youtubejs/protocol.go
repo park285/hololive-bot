@@ -44,7 +44,6 @@ type HealthResponse struct {
 	Proof           *ProofStatus `json:"proof,omitempty"`
 }
 
-// ProofStatus는 발급 상태 진단이며 방송 상태나 helper readiness의 증거가 아닙니다.
 type ProofStatus struct {
 	State              string `json:"state"`
 	Generation         string `json:"generation,omitempty"`
@@ -95,8 +94,7 @@ type RPCFailure struct {
 type RPCErrorBody struct {
 	ProtocolVersion int16      `json:"protocol_version"`
 	Error           RPCFailure `json:"error"`
-	// ScheduleLookups는 /v1/channel live 요청이 실패 전까지 보낸 예정 영상 player 조회 수입니다. helper는 0이면 생략합니다.
-	ScheduleLookups *int `json:"schedule_lookups,omitempty"`
+	ScheduleLookups *int       `json:"schedule_lookups,omitempty"`
 }
 
 type Pagination struct {
@@ -185,14 +183,12 @@ type CommunityRequest struct {
 	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
 }
 
-// CommunityThumbnail은 helper community 응답의 이미지 wire 형식입니다.
 type CommunityThumbnail struct {
 	URL    string `json:"url"`
 	Width  int    `json:"width"`
 	Height int    `json:"height"`
 }
 
-// CommunityPost는 helper /v1/community 응답의 게시물 wire 형식입니다.
 type CommunityPost struct {
 	PostID         string               `json:"postId"`
 	UpstreamPostID string               `json:"upstreamPostId,omitempty"`
@@ -228,8 +224,6 @@ type ContentRequest struct {
 	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
 }
 
-// ContentItem은 목록 lockup 항목입니다. 목록 항목은 시각을 싣지 않으며, 공개 근거는 영상별 FetchVideoLiveCheck로만 얻습니다.
-// IsUpcoming은 lockup의 구조화된 예정 표시이며 시각 근거가 아니라 저장된 근거의 현재 일치 여부 판단에만 씁니다.
 type ContentItem struct {
 	VideoID    string `json:"video_id"`
 	ChannelID  string `json:"channel_id"`
@@ -248,31 +242,24 @@ type ContentResult struct {
 func (r *ContentResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
 func (r *ContentResult) validateSuccess() error         { return r.Validate() }
 
-// ChannelLiveMaxScheduleLookups는 live 채널 RPC 하나가 시각 없는 예정 영상마다 보내는 player 조회 수의 상한입니다.
-// 값은 helper protocol 상한과 같으며, 초과하는 snapshot은 helper가 response_too_large(RESOURCE_LIMIT)로 거부합니다.
-// 이 조회는 RPC 안에서 일어나므로 collector가 RPC 뒤에 limiter로 지불하고 job 호출 예산에 셉니다.
 const ChannelLiveMaxScheduleLookups = 32
 
-// ChannelRequest는 동일 bundle의 helper에 live 또는 metadata 수집만 요청합니다.
 type ChannelRequest struct {
-	ProtocolVersion int16  `json:"protocol_version"`
-	ChannelID       string `json:"channel_id"`
-	Kind            string `json:"kind"`
-	// MaxScheduleLookups는 FetchChannel이 live 요청에만 채웁니다. helper는 live 요청에서 이 값이 없으면 거부합니다.
-	MaxScheduleLookups      int `json:"max_schedule_lookups,omitzero"`
-	MaxSuccessResponseBytes int `json:"max_success_response_bytes"`
-	// ScheduledFor는 live 요청의 lease 슬롯 시각입니다. helper는 재사용 일정의 원래 관측 시각을 이 시계로 기록합니다.
-	ScheduledFor *time.Time `json:"scheduled_for,omitzero"`
+	ProtocolVersion         int16      `json:"protocol_version"`
+	ChannelID               string     `json:"channel_id"`
+	Kind                    string     `json:"kind"`
+	MaxScheduleLookups      int        `json:"max_schedule_lookups,omitzero"`
+	MaxSuccessResponseBytes int        `json:"max_success_response_bytes"`
+	ScheduledFor            *time.Time `json:"scheduled_for,omitzero"`
 }
 
 type LiveSessionItem struct {
-	VideoID      string     `json:"video_id"`
-	ChannelID    string     `json:"channel_id"`
-	Status       string     `json:"status"`
-	Title        string     `json:"title,omitempty"`
-	ThumbnailURL string     `json:"thumbnail_url,omitempty"`
-	ScheduledAt  *time.Time `json:"scheduled_at,omitempty"`
-	// ScheduleObservedAt은 helper가 앞선 슬롯에서 확인한 ScheduledAt을 재사용했을 때만 그 슬롯 시각을 싣습니다.
+	VideoID            string     `json:"video_id"`
+	ChannelID          string     `json:"channel_id"`
+	Status             string     `json:"status"`
+	Title              string     `json:"title,omitempty"`
+	ThumbnailURL       string     `json:"thumbnail_url,omitempty"`
+	ScheduledAt        *time.Time `json:"scheduled_at,omitempty"`
 	ScheduleObservedAt *time.Time `json:"schedule_observed_at,omitzero"`
 	StartedAt          *time.Time `json:"started_at,omitempty"`
 	EndedAt            *time.Time `json:"ended_at,omitempty"`
@@ -292,14 +279,12 @@ type ChannelPhotoVariant struct {
 	Height int    `json:"height"`
 }
 
-// UnavailableLiveSession은 시각이 가려진 영상의 관측 실패를 나타내며 canonical 상태를 바꾸지 않습니다.
 type UnavailableLiveSession struct {
 	VideoID   string `json:"video_id"`
 	ChannelID string `json:"channel_id"`
 	Reason    string `json:"reason"`
 }
 
-// ChannelResult는 수집 범위에 따른 결과와 접근 제한으로 확인하지 못한 영상을 구분합니다.
 type ChannelResult struct {
 	ProtocolMeta
 	Pagination
@@ -315,7 +300,6 @@ type ChannelResult struct {
 
 func (r *ChannelResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
 
-// 값이 없을 때 0으로 받아들이면 helper가 보낸 조회의 limiter 지불이 빠지므로 존재 여부를 따로 봅니다.
 func (r *ChannelResult) validateSuccess() error {
 	if err := r.Validate(); err != nil {
 		return err
@@ -332,18 +316,14 @@ func (r *ChannelResult) validateSuccess() error {
 	return nil
 }
 
-// MaxLiveCheckResponseBytes는 평탄한 확인 결과 하나의 성공 응답 상한입니다.
-// 확인 RPC는 목록 RPC의 응답 예산을 물려받지 않고 이 값 이하로 요청합니다.
 const MaxLiveCheckResponseBytes = 4 << 10
 
-// ChannelLiveCheckRequest는 채널 /live 주소 해석 확인 하나를 요청합니다.
 type ChannelLiveCheckRequest struct {
 	ProtocolVersion         int16  `json:"protocol_version"`
 	ChannelID               string `json:"channel_id"`
 	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
 }
 
-// ChannelLiveCheckResult는 pagination 없는 채널 확인 결과입니다. 수집기가 typed coverage를 붙입니다.
 type ChannelLiveCheckResult struct {
 	ProtocolMeta
 
@@ -356,7 +336,6 @@ type ChannelLiveCheckResult struct {
 
 func (r *ChannelLiveCheckResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
 
-// 요청 subject 대조와 세부 판정 모순은 호출자와 공유 envelope 계약이 소유합니다.
 func (r *ChannelLiveCheckResult) validateSuccess() error {
 	if strings.TrimSpace(r.ChannelID) == "" {
 		return errors.New("validate channel live check: channel_id is empty")
@@ -377,35 +356,32 @@ func (r *ChannelLiveCheckResult) validateSuccess() error {
 	return nil
 }
 
-// VideoLiveCheckRequest는 영상 player 확인 하나를 요청합니다.
 type VideoLiveCheckRequest struct {
 	ProtocolVersion         int16  `json:"protocol_version"`
 	VideoID                 string `json:"video_id"`
 	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
 }
 
-// VideoLiveCheckResult는 pagination 없는 영상 확인 결과입니다. 원시 boolean이 없으면 nil로 남습니다.
 type VideoLiveCheckResult struct {
 	ProtocolMeta
 
-	VideoID                 string     `json:"video_id"`
-	ChannelID               string     `json:"channel_id,omitempty"`
-	IdentityConfirmed       bool       `json:"identity_confirmed"`
-	IsLive                  *bool      `json:"is_live,omitempty"`
-	IsLiveNow               *bool      `json:"is_live_now,omitempty"`
-	IsUpcoming              *bool      `json:"is_upcoming,omitempty"`
-	IsLiveContent           *bool      `json:"is_live_content,omitempty"`
-	IsPrivate               *bool      `json:"is_private,omitempty"`
-	HasLiveBroadcastDetails *bool      `json:"has_live_broadcast_details,omitempty"`
-	StartedAt               *time.Time `json:"started_at,omitempty"`
-	ScheduledAt             *time.Time `json:"scheduled_at,omitempty"`
-	WaitingStateConfirmed   *bool      `json:"waiting_state_confirmed,omitempty"`
-	EndedAt                 *time.Time `json:"ended_at,omitempty"`
-	// PublishedAt은 player microformat publishDate가 시·분·초와 offset을 가진 RFC3339일 때만 있습니다.
-	PublishedAt   *time.Time                       `json:"published_at,omitempty"`
-	Availability  contract.VideoAvailability       `json:"availability"`
-	Method        contract.VideoAvailabilityMethod `json:"method"`
-	UnknownReason contract.LiveCheckUnknownReason  `json:"unknown_reason,omitempty"`
+	VideoID                 string                           `json:"video_id"`
+	ChannelID               string                           `json:"channel_id,omitempty"`
+	IdentityConfirmed       bool                             `json:"identity_confirmed"`
+	IsLive                  *bool                            `json:"is_live,omitempty"`
+	IsLiveNow               *bool                            `json:"is_live_now,omitempty"`
+	IsUpcoming              *bool                            `json:"is_upcoming,omitempty"`
+	IsLiveContent           *bool                            `json:"is_live_content,omitempty"`
+	IsPrivate               *bool                            `json:"is_private,omitempty"`
+	HasLiveBroadcastDetails *bool                            `json:"has_live_broadcast_details,omitempty"`
+	StartedAt               *time.Time                       `json:"started_at,omitempty"`
+	ScheduledAt             *time.Time                       `json:"scheduled_at,omitempty"`
+	WaitingStateConfirmed   *bool                            `json:"waiting_state_confirmed,omitempty"`
+	EndedAt                 *time.Time                       `json:"ended_at,omitempty"`
+	PublishedAt             *time.Time                       `json:"published_at,omitempty"`
+	Availability            contract.VideoAvailability       `json:"availability"`
+	Method                  contract.VideoAvailabilityMethod `json:"method"`
+	UnknownReason           contract.LiveCheckUnknownReason  `json:"unknown_reason,omitempty"`
 }
 
 func (r *VideoLiveCheckResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
@@ -443,12 +419,10 @@ var videoAvailabilityMethods = map[contract.VideoAvailability]contract.VideoAvai
 }
 
 func channelLiveCheckReason(reason contract.LiveCheckUnknownReason) bool {
-	// 가용성만 미상인 사유는 영상 확인 전용이다.
 	return reason != contract.LiveCheckReasonAvailabilityUnclassified && liveCheckReason(reason)
 }
 
 func videoLiveCheckReason(reason contract.LiveCheckUnknownReason) bool {
-	// not_waiting_state는 채널 /live 예정 연결 판정 전용이다.
 	return reason != contract.LiveCheckReasonNotWaitingState && liveCheckReason(reason)
 }
 

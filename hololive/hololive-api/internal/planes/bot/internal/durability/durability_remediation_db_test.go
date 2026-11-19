@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package durability
 
 import (
@@ -87,7 +67,7 @@ func TestReplyOutboxSettleRejectsPreDispatchAfterAcceptance(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.True(t, applied)
-		time.Sleep(5 * time.Millisecond)
+		advanceReplyRetry(ctx, t, pool, claim.ID)
 
 		reclaimed, err := repo.Claim(ctx, "token-b", durabilityTestLease)
 		require.NoError(t, err)
@@ -268,7 +248,7 @@ func assertInboxReclaimRequeuesExpiredLease(
 
 	_, err := repo.Claim(ctx, testClaimToken, time.Millisecond)
 	require.NoError(t, err)
-	time.Sleep(20 * time.Millisecond)
+	expireInboxLease(ctx, t, pool, msg.MessageID)
 
 	reclaim, err := repo.ReclaimExpired(ctx, 5, 100)
 	require.NoError(t, err)
@@ -299,7 +279,7 @@ func assertInboxReclaimAbandonsExhaustedAttempts(
 
 	_, err := repo.Claim(ctx, testClaimToken, time.Millisecond)
 	require.NoError(t, err)
-	time.Sleep(20 * time.Millisecond)
+	expireInboxLease(ctx, t, pool, msg.MessageID)
 
 	reclaim, err := repo.ReclaimExpired(ctx, 1, 100)
 	require.NoError(t, err)
@@ -424,7 +404,9 @@ func TestCommandExecutionClaimOwnership(t *testing.T) {
 		claimed, err := repo.Claim(ctx, "message:m-stale", "alarm", testClaimToken)
 		require.NoError(t, err)
 		require.True(t, claimed)
-		time.Sleep(20 * time.Millisecond)
+
+		_, err = pool.Exec(ctx, `UPDATE bot_command_executions SET claimed_at = claimed_at - interval '20 milliseconds' WHERE message_id = $1`, "message:m-stale")
+		require.NoError(t, err)
 
 		expired, err := repo.ExpireStaleClaims(ctx, 10*time.Millisecond, 100)
 		require.NoError(t, err)

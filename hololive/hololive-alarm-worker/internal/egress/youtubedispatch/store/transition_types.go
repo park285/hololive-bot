@@ -17,7 +17,6 @@ const (
 	DeliveryStatusQuarantined domain.OutboxStatus = "QUARANTINED"
 )
 
-// ApplyOutcome은 불변 수명주기 명령 하나의 결과 집합이다.
 type ApplyOutcome uint8
 
 const (
@@ -42,7 +41,6 @@ func (o ApplyOutcome) String() string {
 	}
 }
 
-// ApplyResult는 영속 전이 증거만 보고한다. 집계 projection은 수명주기 트랜잭션 밖에서 갱신한다.
 type ApplyResult struct {
 	Outcome            ApplyOutcome
 	TouchedOutboxIDs   []int64
@@ -92,8 +90,6 @@ func (e *commitResponseError) Error() string {
 
 func (e *commitResponseError) Unwrap() error { return e.err }
 
-// AtomicityBreachError는 원본 상태에 명령 envelope가 섞였음을 나타낸다.
-// 호출자가 추정으로 복구하거나 외부 부수 효과를 재실행하면 안 된다.
 type AtomicityBreachError struct {
 	Operation string
 	Detail    string
@@ -122,7 +118,6 @@ func (e *transitionMissingError) Error() string {
 }
 
 type TransitionConfig struct {
-	// Owner는 ClaimPending이 locked_by에 기록하는 이 워커 인스턴스 ID다.
 	Owner                string
 	MaxRetries           int
 	RetryBackoff         time.Duration
@@ -217,14 +212,12 @@ func transitionRowFromSnapshot(snapshot preparation.DeliverySnapshot, byID map[i
 	return row, nil
 }
 
-// checkedTransitionRow는 후보 SQL이 돌려준 행과 그 문장이 만료·신선도 판정에 쓴 DB 시계(checked_at)다.
 type checkedTransitionRow struct {
 	transitionRow
 
 	CheckedAt time.Time
 }
 
-// 한 문장의 clock은 한 번만 채취하므로 모든 행의 checked_at이 같고, 행이 없으면 0 값 시계를 돌려준다.
 func splitCheckedTransitionRows(checked []checkedTransitionRow) ([]transitionRow, time.Time) {
 	if len(checked) == 0 {
 		return nil, time.Time{}

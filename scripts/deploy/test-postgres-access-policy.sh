@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# 일회용 PG18.7 제품 검사. 포트 공개·운영 환경·운영 데이터를 사용하지 않는다.
 set -euo pipefail
-# kapu 사용자 계정의 rootless Podman에서만 실행한다. SELinux host에서 저장소 파일을 relabel하지 않도록
-# 일회용 검사 container는 label을 끈다. 원격 연결 설정이 있으면 거부한다.
 if [[ -n "${CONTAINER_HOST:-}${CONTAINER_CONNECTION:-}" ]] || [[ "$(podman info --format '{{.Host.Security.Rootless}}')" != true ]]; then
   echo 'policy test requires local rootless Podman without connection overrides' >&2
   exit 2
@@ -21,15 +18,13 @@ cleanup() {
   rm -rf "$fixture"
 }
 trap cleanup EXIT
-# 이미 빌드된 고정 PostgreSQL 이미지만 재사용하며 내려받거나 빌드하지 않는다.
 podman image inspect "$image" >/dev/null
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=holo-postgres \
   -addext subjectAltName=DNS:holo-postgres \
   -keyout "$fixture/server.key" -out "$fixture/server.crt" >/dev/null 2>&1
-chmod 0755 "$fixture"
 chmod 0644 "$fixture/server.crt"
-# 서버 진입점이 합성 테스트 파일을 전용 데이터 tmpfs로 복사한다.
-chmod 0644 "$fixture/server.key"
+chmod 0600 "$fixture/server.key"
+install -m 0644 "$root/deploy/postgres/pg_hba.conf" "$fixture/pg_hba.conf"
 podman network create --internal --subnet 172.31.249.0/24 "$network" >/dev/null
 podman volume create --driver local --opt type=tmpfs --opt device=tmpfs \
   --opt o=size=16m,mode=3775,uid=999,gid=999 "$socket" >/dev/null
@@ -37,7 +32,7 @@ podman run -d --name "$server" --pull never --security-opt label=disable --netwo
   --tmpfs /var/lib/postgresql:rw,size=512m \
   --mount "type=volume,src=$socket,dst=/var/run/postgresql" \
   --mount "type=bind,src=$fixture,dst=/fixture,readonly" \
-  --mount "type=bind,src=$root/deploy/postgres/pg_hba.conf,dst=/policy/pg_hba.conf,readonly" \
+  --mount "type=bind,src=$fixture/pg_hba.conf,dst=/policy/pg_hba.conf,readonly" \
   -e POSTGRES_USER=postgres_admin -e POSTGRES_PASSWORD=fixture -e POSTGRES_DB=hololive \
   -e PGDATA=/var/lib/postgresql/pgdata \
   --entrypoint /bin/sh "$image" -ec '
@@ -48,6 +43,7 @@ podman run -d --name "$server" --pull never --security-opt label=disable --netwo
     exec docker-entrypoint.sh postgres -c ssl=on \
       -c ssl_cert_file=/var/lib/postgresql/server.crt \
       -c ssl_key_file=/var/lib/postgresql/server.key \
+      -c ssl_ca_file=/var/lib/postgresql/server.crt \
       -c hba_file=/policy/pg_hba.conf -c max_connections=60
   ' >/dev/null
 for _ in $(seq 1 60); do
@@ -67,6 +63,7 @@ CREATE ROLE hololive_collector_c LOGIN PASSWORD 'fixture';
 CREATE ROLE hololive_collector_d LOGIN PASSWORD 'fixture';
 CREATE ROLE postgres_exporter LOGIN PASSWORD 'fixture';
 CREATE ROLE iris_db_nightly LOGIN CONNECTION LIMIT 2;
+CREATE ROLE hololive_pgbouncer_auth LOGIN PASSWORD NULL CONNECTION LIMIT 1;
 CREATE ROLE hololive_replicator LOGIN REPLICATION PASSWORD 'fixture';
 GRANT CREATE ON SCHEMA public TO hololive_migrator;
 GRANT hololive_scraper TO hololive_collector_a, hololive_collector_b, hololive_collector_c, hololive_collector_d;
@@ -76,7 +73,7 @@ podman exec -i "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=
 podman exec "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 -Atc \
   "SELECT count(*) = 0 FROM pg_hba_file_rules WHERE error IS NOT NULL" | grep -qx t
 podman exec "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 -Atc \
-  "SELECT count(*) = 10 AND bool_and(r.rolconnlimit = expected.maximum) AND bool_and(r.rolcanlogin = expected.can_login) FROM (VALUES ('hololive_runtime',17,true),('hololive_alarm_worker',8,true),('hololive_scraper',0,false),('hololive_collector_a',7,true),('hololive_collector_b',7,true),('hololive_collector_c',7,true),('hololive_collector_d',7,true),('hololive_migrator',1,true),('postgres_exporter',2,true),('iris_db_nightly',2,true)) expected(name,maximum,can_login) JOIN pg_roles r ON r.rolname=expected.name" | grep -qx t
+  "SELECT count(*) = 11 AND bool_and(r.rolconnlimit = expected.maximum) AND bool_and(r.rolcanlogin = expected.can_login) FROM (VALUES ('hololive_runtime',17,true),('hololive_alarm_worker',8,true),('hololive_scraper',0,false),('hololive_collector_a',7,true),('hololive_collector_b',7,true),('hololive_collector_c',7,true),('hololive_collector_d',7,true),('hololive_migrator',1,true),('postgres_exporter',2,true),('iris_db_nightly',2,true),('hololive_pgbouncer_auth',1,true)) expected(name,maximum,can_login) JOIN pg_roles r ON r.rolname=expected.name" | grep -qx t
 client() {
   local role="$1" mode="$2" database="${3:-hololive}"
   podman run --rm --pull never --security-opt label=disable --network "$network" \
@@ -85,19 +82,19 @@ client() {
     "host=holo-postgres dbname=$database user=$role sslmode=$mode sslrootcert=/ca.pem" \
     -X -v ON_ERROR_STOP=1 -Atc 'SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()'
 }
-for role in hololive_runtime hololive_alarm_worker hololive_collector_c postgres_exporter; do
-  [[ "$(client "$role" verify-full)" == t ]]
-  if client "$role" disable >"$fixture/rejected" 2>&1; then
-    echo "plaintext TCP unexpectedly accepted: $role" >&2; exit 1
-  fi
-done
-for role in postgres_admin hololive_migrator hololive_scraper iris_db_nightly hololive_replicator; do
-  if client "$role" verify-full >"$fixture/rejected" 2>&1; then
-    echo "privileged TCP unexpectedly accepted: $role" >&2; exit 1
-  fi
+role=postgres_exporter
+[[ "$(client "$role" verify-full)" == t ]]
+if client "$role" disable >"$fixture/rejected" 2>&1; then
+  echo "plaintext TCP unexpectedly accepted: $role" >&2; exit 1
+fi
+for role in hololive_runtime hololive_alarm_worker hololive_collector_a hololive_collector_b hololive_collector_c hololive_collector_d hololive_pgbouncer_auth postgres_admin hololive_migrator hololive_scraper iris_db_nightly hololive_replicator; do
+  for mode in verify-full disable; do
+    if client "$role" "$mode" >"$fixture/rejected" 2>&1; then
+      echo "direct TCP unexpectedly accepted: $role ($mode)" >&2; exit 1
+    fi
+  done
 done
 [[ "$(client postgres_exporter verify-full postgres)" == t ]]
-# 마이그레이션은 네트워크 없이 읽기 전용 소켓 마운트로 실행 가능해야 한다.
 podman run --rm --pull never --security-opt label=disable --network none \
   --mount "type=volume,src=$socket,dst=/var/run/postgresql,readonly" \
   --entrypoint psql "$image" \
@@ -113,4 +110,4 @@ for role in postgres_admin hololive_migrator hololive_replicator; do
     echo "unapproved replication TCP unexpectedly accepted: $role" >&2; exit 1
   fi
 done
-printf 'PASS: PG18.7 isolated migration socket, runtime/exporter TLS, nightly socket and privileged TCP rejection\n'
+printf 'PASS: PG18.7 isolated migration/nightly sockets, exporter TLS and direct runtime/privileged TCP rejection\n'

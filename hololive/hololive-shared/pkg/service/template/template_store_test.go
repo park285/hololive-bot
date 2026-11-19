@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 이때 row_version이 바뀌므로 Renderer는 캐시 무효화 호출 없이 다음 렌더부터 새 본문을 써야 한다.
 func saveTestTemplate(t *testing.T, pool *pgxpool.Pool, key domain.TemplateKey, channelID *string, body string) {
 	t.Helper()
 

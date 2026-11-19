@@ -48,7 +48,6 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	return c.finalizeLiveCatchupNotifications(ctx, stream, startAt, now, notifications, suppressedRooms), nil
 }
 
-// 예정 Premiere도 발견 시 NEW_VIDEO가 없으므로 분 전 알림을 놓친 방에는 일반 방송처럼 시작 알림을 보낸다.
 func isLiveCatchupCandidate(stream *domain.Stream) bool {
 	return stream != nil && stream.IsLive()
 }
@@ -90,8 +89,6 @@ func liveObservedRecently(observedAt []*time.Time, now time.Time) bool {
 	return !observed.After(now) && now.Sub(observed) <= tier.LiveCatchupWindow
 }
 
-// unsuppressedLiveCatchupNotifications는 예정 알림 marker 조회에 실패한 방을 이번 평가에서 건너뛴다.
-// 이 정책은 egress의 fail-open과 다르며, context가 끝난 경우에만 오류로 돌려준다.
 func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 	ctx context.Context,
 	channelID string,
@@ -105,7 +102,6 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 	candidateRooms := make([]string, 0, len(subscriberRooms))
 
 	for _, roomID := range subscriberRooms {
-		// 발송을 마쳤거나 ledger가 실패 종료로 결론 낸 방은 같은 delivery를 다시 만들지 않는다.
 		if _, settled := settledRooms[roomID]; settled {
 			suppressedRooms++
 			continue

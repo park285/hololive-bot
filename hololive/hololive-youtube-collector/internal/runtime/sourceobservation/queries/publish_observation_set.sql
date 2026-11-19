@@ -95,7 +95,6 @@ WITH input AS MATERIALIZED (
         input.contract_generation
     ) AS current ON TRUE
 ), payload_keys AS MATERIALIZED (
-    -- payload는 existing에 복사하지 않고 필요한 행만 input에서 ordinal로 다시 읽는다.
     SELECT DISTINCT ON (existing.observation_kind, existing.schema_version, existing.payload_sha256)
            existing.observation_kind, existing.schema_version, existing.payload_sha256, input.payload
     FROM existing
@@ -152,7 +151,6 @@ WITH input AS MATERIALIZED (
     ) AS resolved
     FROM payload_resolution
 ), provenance_resolved AS MATERIALIZED (
-    -- 출처 사전 행은 삽입할 원본의 distinct 3-tuple마다 한 번만 resolve한다.
     SELECT key.job_key, key.collector_instance, key.collection_job_kind,
            source_observation_provenance_id(key.job_key, key.collector_instance, key.collection_job_kind) AS provenance_id
     FROM (
@@ -251,7 +249,6 @@ WITH input AS MATERIALIZED (
     ON CONFLICT (observation_id) DO NOTHING
     RETURNING observation_id
 ), previous_checkpoint AS MATERIALIZED (
-    -- 같은 statement snapshot은 아래 checkpoint_write의 변경을 보지 않으므로 직전 durable 수락 시각이다.
     SELECT existing.ordinal,
            checkpoint.last_success_at
     FROM existing

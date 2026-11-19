@@ -10,7 +10,6 @@ import (
 
 const schemaRegenCmd = "SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-dbtest"
 
-// SnapshotSchema는 fresh bootstrap과 원장 전환의 스키마를 같은 catalog 표현으로 비교합니다.
 func SnapshotSchema(ctx context.Context, pool *pgxpool.Pool) (string, error) {
 	schema, err := querySchema(ctx, pool)
 	if err != nil {
@@ -324,7 +323,6 @@ func queryConstraints(ctx context.Context, pool *pgxpool.Pool) (map[string][]str
 	return out, nil
 }
 
-// 제약이 소유한 backing index는 CONSTRAINT 섹션에 이미 나타나므로 여기서 제외해 이중 기재를 막는다.
 func queryIndexes(ctx context.Context, pool *pgxpool.Pool) (map[string][]string, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT t.relname,

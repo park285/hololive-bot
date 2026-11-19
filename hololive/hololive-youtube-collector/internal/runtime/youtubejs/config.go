@@ -82,7 +82,6 @@ func validateResolvedConfig(cfg *Config) error {
 		return errors.New("body limits must be positive")
 	}
 
-	// helper 기동 인자는 요청 읽기 기한을 밀리초 정수로 받으므로 1ms 미만은 0으로 잘린다.
 	if cfg.RequestTimeout < time.Millisecond {
 		return errors.New("request timeout must be at least 1ms")
 	}

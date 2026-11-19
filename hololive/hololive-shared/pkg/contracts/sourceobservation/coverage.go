@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// 커버리지 어휘는 계약 상수라 호출마다 허용 집합을 만들지 않고 패키지 수준에 한 번 둔다.
 var (
 	liveCoverageStatusVocabulary = map[string]struct{}{
 		"CANCELLED": {}, //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.

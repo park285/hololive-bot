@@ -214,7 +214,6 @@ func TestCachedCelebrationCalendarFinder_ReusesSnapshotAcrossInstances(t *testin
 		t.Fatalf("calendar entries cache TTL = %s, want 1h", ttl)
 	}
 
-	// 같은 Valkey를 쓰는 두 번째 finder는 다른 인스턴스나 재시작한 프로세스를 뜻한다.
 	cachedRepo := &calendarRepoStub{err: errors.New("db should not be called")}
 	cachedFinder := NewCachedCelebrationCalendarFinder(cachedRepo, store, time.Hour)
 

@@ -20,9 +20,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 )
 
-// helperMaxOldSpaceMiB는 collector 메모리 상한 안의 Node helper 몫(192MiB, 관측 최대 RSS 176MiB)입니다.
-// 지정하지 않으면 V8 기본값이 cgroup 크기를 따라 커져(768MiB 상한에서 약 408MiB) Go 몫을 침범할 수 있습니다.
-// 상한을 넘은 helper는 heap OOM으로 종료되고 collector가 runtime fatal로 드러냅니다.
 const helperMaxOldSpaceMiB = 192
 
 var (
@@ -238,7 +235,6 @@ func helperSocketReadyResult(ctx context.Context, socketPath string) (bool, erro
 		return false, fmt.Errorf("verify helper socket: %w", socketErr)
 	}
 
-	// 소켓 파일은 bind 직후 생기므로 listen을 확인한 뒤 bootstrap을 한 번만 보낸다.
 	dialer := net.Dialer{}
 
 	conn, err := dialer.DialContext(ctx, "unix", socketPath)

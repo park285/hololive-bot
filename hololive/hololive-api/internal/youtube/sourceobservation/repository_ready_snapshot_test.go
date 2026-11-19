@@ -96,7 +96,6 @@ func TestReadySnapshotLockedListHeadDoesNotExposeFollower(t *testing.T) {
 
 	_, err = tx.Exec(t.Context(), `SELECT observation_id FROM source_observation_queue WHERE observation_id = $1 FOR UPDATE`, first)
 	require.NoError(t, err)
-	// 읽기 전용 snapshot은 순간적 행 잠금이 아니라 durable 선두 후보를 센다.
 	assertReadyDepth(t, repo, contentClaimOptions().Kinds, 1)
 
 	batch, err := repo.ClaimBatch(t.Context(), contentClaimOptions())

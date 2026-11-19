@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package durability
 
 import (
@@ -25,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -294,7 +275,8 @@ func TestReplyOutboxRepositoryTransitions(t *testing.T) {
 	entry := newReplyOutboxEntry(testMessageID, 0, `{"body":"x"}`)
 
 	t.Run("accept is fenced by the claim token", func(t *testing.T) {
-		assertReplyOutboxAcceptIsFenced(ctx, t, pool, repo, entry)
+		clockPool := newReplyDelayPool(t)
+		assertReplyOutboxAcceptIsFenced(t.Context(), t, clockPool, newTestReplyOutboxRepository(clockPool), entry)
 	})
 
 	t.Run("conflict settles the row terminally and releases the lease", func(t *testing.T) {
@@ -326,6 +308,10 @@ func assertReplyOutboxAcceptIsFenced(
 	truncateDurabilityTables(ctx, t, pool)
 
 	claim := claimOne(ctx, t, repo, entry)
+	_, err := pool.Exec(ctx, `CREATE SEQUENCE clock_sample;
+		CREATE OR REPLACE FUNCTION public.clock_timestamp() RETURNS timestamptz LANGUAGE sql VOLATILE
+		AS $$ SELECT statement_timestamp() + nextval('clock_sample') * interval '1 millisecond' $$`)
+	require.NoError(t, err)
 
 	applied, err := repo.SettleAccepted(ctx, claim.ID, "token-stale", "iris-1", time.Second)
 	require.NoError(t, err)
@@ -336,19 +322,20 @@ func assertReplyOutboxAcceptIsFenced(
 	assert.True(t, applied)
 
 	var (
-		status, irisRequestID string
-		leaseReleased         bool
-		firstCheckMS          float64
+		status, irisRequestID   string
+		leaseReleased           bool
+		accepted, next, updated time.Time
 	)
 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT status, iris_request_id,
 			claim_token IS NULL AND lease_until IS NULL AND accepted_at IS NOT NULL,
-			EXTRACT(EPOCH FROM handoff_next_check_at - accepted_at) * 1000
-		FROM bot_reply_outbox WHERE id = $1`, claim.ID).Scan(&status, &irisRequestID, &leaseReleased, &firstCheckMS))
+			accepted_at, handoff_next_check_at, updated_at
+		FROM bot_reply_outbox WHERE id = $1`, claim.ID).Scan(&status, &irisRequestID, &leaseReleased, &accepted, &next, &updated))
 	assert.Equal(t, ReplyOutboxAccepted, status)
 	assert.Equal(t, "iris-1", irisRequestID)
 	assert.True(t, leaseReleased, "accepted는 발송 lease 없이 handoff 확인을 기다린다")
-	assert.InDelta(t, 1000, firstCheckMS, 1, "첫 handoff 확인은 admission 정산 시각 기준이다")
+	assert.Equal(t, time.Second, next.Sub(accepted), "첫 handoff 확인은 admission 정산 시각 기준이다")
+	assert.Equal(t, accepted, updated)
 }
 
 func assertReplyOutboxConflictSettlesTerminally(
@@ -413,7 +400,7 @@ func assertReplyOutboxRetryableSettlementRequeues(
 	})
 	require.NoError(t, err)
 	require.True(t, applied)
-	time.Sleep(5 * time.Millisecond)
+	advanceReplyRetry(ctx, t, pool, claim.ID)
 
 	reclaimed, err := repo.Claim(ctx, "token-b", durabilityTestLease)
 	require.NoError(t, err)
@@ -469,8 +456,43 @@ func claimOne(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository, en
 	return claim
 }
 
-// newTestReplyOutboxRepository는 API worker profile fixture의 bot_reply_outbox 정책(max_attempts 5, 자동 replay 지평
-// iris.ReplyAutomaticReplayHorizon)으로 저장소를 만든다. 두 값은 NewReplyOutboxRepositoryWithPolicy 검증을 통과한다.
+func advanceReplyRetry(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id int64) {
+	t.Helper()
+
+	_, err := pool.Exec(ctx, `UPDATE bot_reply_outbox SET available_at = available_at - interval '1 millisecond' WHERE id = $1`, id)
+	require.NoError(t, err)
+}
+
+func newReplyDelayPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+
+	pool := newDurabilityPool(t)
+	_, err := pool.Exec(t.Context(), `
+		CREATE FUNCTION public.clock_timestamp() RETURNS timestamptz LANGUAGE sql STABLE
+			AS 'SELECT pg_catalog.statement_timestamp()';
+		DO $$ BEGIN
+			EXECUTE format('ALTER DATABASE %I SET search_path TO public, pg_catalog', current_database());
+		END $$`)
+	require.NoError(t, err)
+	pool.Reset()
+
+	return pool
+}
+
+func makeReplyRetryDue(ctx context.Context, pool *pgxpool.Pool, id int64, delay time.Duration) error {
+	tag, err := pool.Exec(ctx, `UPDATE bot_reply_outbox SET available_at = statement_timestamp()
+		WHERE id = $1 AND available_at - updated_at = $2::bigint * interval '1 millisecond'`, id, delay.Milliseconds())
+	if err != nil {
+		return fmt.Errorf("advance reply outbox retry: %w", err)
+	}
+
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("outbox row %d did not store retry delay %s", id, delay)
+	}
+
+	return nil
+}
+
 func newTestReplyOutboxRepository(pool *pgxpool.Pool) *ReplyOutboxRepository {
 	return &ReplyOutboxRepository{pool: pool, maxAttempts: 5, automaticReplayHorizon: iris.ReplyAutomaticReplayHorizon}
 }

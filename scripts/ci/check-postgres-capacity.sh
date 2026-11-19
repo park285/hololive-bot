@@ -16,13 +16,10 @@ policy_file="${2:-${root}/scripts/ci/postgres-capacity-policy.tsv}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 
-# 예산 산식은 배포 preflight와 같은 lib가 소유한다. 빈 target env는 policy 기본값만으로 예산을 센다.
 : >"${tmp}/quadlet-defaults.env"
-postgres_capacity_assert_policy_target "${policy_file}" "${tmp}/quadlet-defaults.env"
+postgres_capacity_write_pgbouncer_config "${policy_file}" "${tmp}/quadlet-defaults.env" "${tmp}/pgbouncer.ini"
 
-# 배포 원본인 Quadlet unit의 Exec 인자와 Environment 기본값이 policy pin·기본값과 같은지 본다.
-# [Container] Environment=KEY=${VAR}와 [Service] Environment=VAR=기본값을 ${VAR:-기본값}으로 합친다.
-"${CI_PYTHON_BIN}" - "${unit_dir}" "${policy_file}" <<'PY'
+"${CI_PYTHON_BIN}" - "${unit_dir}" "${policy_file}" "${root}/deploy/postgres/role-limits.sql" <<'PY'
 import re
 import shlex
 import sys
@@ -72,6 +69,21 @@ for unit in sorted(unit_dir.glob("*.container")):
 
 policy = [line.strip() for line in Path(sys.argv[2]).read_text().splitlines()]
 
+role_limits = {
+    role: int(limit)
+    for line in policy if line.startswith("@role-limit|")
+    for _, role, limit in [line.split("|")]
+}
+sql_limits = {
+    role: int(limit)
+    for role, limit in re.findall(
+        r"^ALTER ROLE ([a-z_][a-z0-9_]*) CONNECTION LIMIT ([0-9]+);$",
+        Path(sys.argv[3]).read_text(),
+        re.MULTILINE,
+    )
+}
+if sql_limits != role_limits:
+    raise SystemExit("[pg-capacity] PostgreSQL role limits differ from the capacity policy")
 
 def pinned(name: str) -> int:
     rows = [line.split("|", 1)[1] for line in policy if line.startswith(f"@{name}|")]
@@ -82,7 +94,6 @@ def pinned(name: str) -> int:
 
 server_limit = pinned("server-limit")
 superuser_reserved = pinned("superuser-reserved")
-# unit이 superuser_reserved_connections를 지정하지 않으면 PostgreSQL 기본값 3이 적용된다.
 postgres_default_superuser_reserved = 3
 command = [str(value) for value in services.get("holo-postgres", {}).get("command", [])]
 matches = [re.fullmatch(r"max_connections=(\d+)", value) for value in command]

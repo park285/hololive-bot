@@ -195,7 +195,6 @@ func TestPersistVideosTxDoesNotReactivateFailedOutbox(t *testing.T) {
 	require.Contains(t, outboxRows[0].Payload, `"version": "old"`)
 }
 
-// 빈 content_id는 영상 upsert 뒤 outbox 삽입에서 실패하므로, 호출자 트랜잭션 롤백으로만 무기록이 보장된다.
 func TestPersistVideosTxRejectsBlankNotificationContentID(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
@@ -303,7 +302,6 @@ func duplicatePollShortCase() duplicatePollCase {
 		seed: func(t *testing.T, pool *pgxpool.Pool, publishedAt, detectedAt time.Time) {
 			t.Helper()
 
-			// NEW_SHORT 행은 canonical content_id로 저장된다.
 			seedOutbox(t, pool, &domain.YouTubeNotificationOutbox{
 				Kind:          domain.OutboxKindNewShort,
 				ChannelID:     testChannelID,

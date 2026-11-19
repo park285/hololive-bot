@@ -11,7 +11,6 @@ var sqlAssets embed.FS
 
 var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
 
-// 고정 SQL 자산과 동적 upsert 문장의 고정 조각은 패키지 초기화 때 한 번 읽는다. 자산 바이트(끝 공백 포함)를 그대로 보존한다.
 var (
 	applyAlarmSentMarksSQL          = mustSQL("apply_alarm_sent_marks.sql")
 	buildAlarmStateUpsertQuery2SQL  = mustSQL("build_alarm_state_upsert_query_2.sql")

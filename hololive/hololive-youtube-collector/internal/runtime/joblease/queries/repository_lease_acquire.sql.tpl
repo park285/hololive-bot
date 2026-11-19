@@ -1,8 +1,3 @@
--- 범위별 bundle SQL을 고정 자산에서 채운다. 거절 사유는 Go에서 순서대로 판정한다.
--- guard share 잠금 이후에만 실행하며 기존 행은 SKIP LOCKED로 선점한다.
--- 잠겨 있거나 아직 due가 아닌 기존 행은 missing이 아니므로 INSERT에 도달하지 않는다.
--- due 판정과 기록 시각은 clock 하나를 쓴다. SKIP LOCKED라 행 잠금을 기다리지 않고, INSERT의 유일 키 대기는
--- 다음 initialize 문장이 그 뒤의 DB 시각으로 다시 확정한다.
 WITH clock AS MATERIALIZED (
     SELECT clock_timestamp() AS now_at
 ), bundle AS MATERIALIZED (
@@ -40,7 +35,6 @@ admission AS MATERIALIZED (
         fence_epoch = jobs.fence_epoch + 1,
         projection_generation = $1,
         poll_interval_ms = $7,
-        -- 주기가 줄면 직전 slot + 현재 주기를 실효 due로 삼아 scheduled_for의 단조 증가를 보존한다.
         scheduled_for = CASE
             WHEN jobs.slot_state = 'IDLE' THEN date_bin(
                 $7::bigint * INTERVAL '1 millisecond',
@@ -77,7 +71,6 @@ admission AS MATERIALIZED (
            missing.scheduled_for + ($8::bigint * INTERVAL '1 millisecond'),
            $3::text[], $9::boolean, missing.member_count, missing.scheduled_for
     FROM missing
-    -- 최초 생성 경쟁의 패자는 이미 생성된 행을 덮어쓰거나 같은 문장에서 재선점하지 않는다.
     ON CONFLICT (job_key) DO NOTHING
     RETURNING job_key, provider, job_class, collection_job_kind, subject_key,
               owner_instance, fence_epoch, projection_generation, scheduled_for

@@ -1,4 +1,3 @@
--- day·start_time의 JSON null은 그 값을 바꾸지 않는다는 뜻이라 그대로 NULL로 넣는다. start_time ''은 시각을 지운다는 뜻이다.
 INSERT INTO schedule_poster_changes (post_id, channel_id, item, kind, reason, slot, target_post_id, target_item, day, start_time,
                                      status, source_text, title_ko, with_ko, place_ko, tags_ko, note_ko, terms, doubt_ko, warnings)
 SELECT $1, p.channel_id, c.item, c.kind, c.reason, NULLIF(c.slot, 0), NULLIF(c.target_post_id, 0), NULLIF(c.target_item, 0), c.day,

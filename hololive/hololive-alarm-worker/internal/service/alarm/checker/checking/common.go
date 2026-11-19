@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package checking
 
 import (
@@ -200,8 +180,6 @@ func ScheduleChangeNotificationDetails(change *dedup.ScheduleChange) (message, p
 	return change.Message, change.PreviousScheduledString()
 }
 
-// LoadSubscriberRoomsByChannel은 채널별 LIVE 구독 방을 반환한다. 구독자가 있는 채널만 결과 map에 담는다.
-// Cache set이 비어 있는 채널은 subscribers resolver가 구독 DB로 확정한다.
 func LoadSubscriberRoomsByChannel(
 	ctx context.Context,
 	cacheClient cache.LowLevelCache,
@@ -229,8 +207,6 @@ func LoadSubscriberRoomsByChannel(
 		return result, nil
 	}
 
-	// TTL 없는 구독 set은 eviction으로 사라질 수 있어 빈 set을 구독 0으로 단정하면 LIVE 알림이 조용히 빠진다.
-	// set이 빈 채널은 이번 cycle에만 DB로 확정하고 set은 다시 채우지 않는다(read-through).
 	recovered, err := subscribers.ResolveUncachedChannelSubscribersByType(ctx, uncachedChannelIDs, domain.AlarmTypeLive)
 	if err != nil {
 		return nil, fmt.Errorf("load subscriber rooms by channel: resolve uncached channels: %w", err)

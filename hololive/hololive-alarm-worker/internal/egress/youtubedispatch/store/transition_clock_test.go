@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 func TestBeginSendingLeaseStartsAtDatabaseClockAfterLockWait(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	deliveryID := seedTransitionSingleDelivery(t, pool, "video-clock-begin", "room-clock-begin")
+	freezeTransitionClock(t, pool)
+
 	transition := newTestTransitionStore(t, pool)
 	claim := claimAndPrepare(t, pool, transition)
 
@@ -36,6 +39,8 @@ func TestBeginSendingLeaseStartsAtDatabaseClockAfterLockWait(t *testing.T) {
 func TestRetryDueCountsFromDatabaseClockAfterLockWait(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	deliveryID := seedTransitionSingleDelivery(t, pool, "video-clock-retry", "room-clock-retry")
+	freezeTransitionClock(t, pool)
+
 	transition := newTestTransitionStore(t, pool)
 	claim := claimAndPrepare(t, pool, transition)
 
@@ -70,13 +75,14 @@ func TestRetryDueCountsFromDatabaseClockAfterLockWait(t *testing.T) {
 func TestFanoutFailureRetryDueCountsFromDatabaseClockAfterLockWait(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	outboxID := seedTransitionFanoutOutbox(t, pool, "video-clock-fanout-retry")
+	freezeTransitionClock(t, pool)
+
 	transition := newTestTransitionStore(t, pool)
 
 	claimed, err := transition.ClaimOutboxesForFanout(t.Context(), 1)
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
 
-	// 첫 실패의 다음 시도 횟수는 1이므로 지연은 RetryBackoff(1초) 한 번이다.
 	const backoff = time.Second
 
 	release := holdRowLock(t, pool, lockOutboxRowSQL, outboxID)
@@ -154,6 +160,7 @@ func TestClaimPendingLeaseUsesDatabaseClock(t *testing.T) {
 	deliveryID := seedTransitionSingleDelivery(t, pool, "video-clock-claim", "room-clock-claim")
 	transition := newTestTransitionStore(t, pool)
 
+	freezeTransitionClock(t, pool)
 	setTransitionLockAge(t, pool, deliveryID, time.Minute-5*time.Second)
 
 	claimed, err := transition.ClaimPending(t.Context(), 10)
@@ -174,6 +181,8 @@ func TestClaimPendingLeaseUsesDatabaseClock(t *testing.T) {
 func TestStaleSendingQuarantineUsesDatabaseClock(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	deliveryID := seedTransitionSingleDelivery(t, pool, "video-clock-stale", "room-clock-stale")
+	freezeTransitionClock(t, pool)
+
 	transition := newTestTransitionStore(t, pool)
 	claim := claimAndPrepare(t, pool, transition)
 
@@ -200,7 +209,20 @@ const (
 	lockOutboxRowSQL   = `SELECT id FROM youtube_notification_outbox WHERE id = $1 FOR UPDATE`
 )
 
-// 반환한 release는 전이가 그 잠금에서 기다리기 시작한 것을 확인하고 잠시 더 머문 뒤 잠금을 풀며, 푼 직전의 DB 시계를 돌려준다.
+func freezeTransitionClock(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(), `
+		CREATE TABLE transition_clock AS SELECT clock_timestamp() AS at;
+		CREATE FUNCTION public.clock_timestamp() RETURNS timestamptz LANGUAGE sql VOLATILE
+			AS 'SELECT at FROM public.transition_clock';
+		DO $$ BEGIN
+			EXECUTE format('ALTER DATABASE %I SET search_path TO public, pg_catalog', current_database());
+		END $$`)
+	require.NoError(t, err)
+	pool.Reset()
+}
+
 func holdRowLock(t *testing.T, pool *pgxpool.Pool, lockQuery string, id int64) func() time.Time {
 	t.Helper()
 
@@ -215,21 +237,27 @@ func holdRowLock(t *testing.T, pool *pgxpool.Pool, lockQuery string, id int64) f
 	return func() time.Time {
 		t.Helper()
 
-		require.Eventually(t, func() bool {
-			var waiting int64
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		defer cancel()
 
-			err := pool.QueryRow(t.Context(), `
-				SELECT count(pid) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()
-			`).Scan(&waiting)
+		for {
+			var waiting bool
 
-			return err == nil && waiting > 0
-		}, 10*time.Second, 20*time.Millisecond, "transition never waited on the row lock")
+			err := pool.QueryRow(ctx, `
+				SELECT EXISTS (SELECT FROM pg_stat_activity WHERE $1::int = ANY(pg_blocking_pids(pid)))
+			`, tx.Conn().PgConn().PID()).Scan(&waiting)
+			require.NoError(t, err, "transition never waited on the row lock")
 
-		time.Sleep(300 * time.Millisecond)
+			if waiting {
+				break
+			}
+		}
 
 		var releasedAt time.Time
 
-		require.NoError(t, tx.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&releasedAt))
+		require.NoError(t, tx.QueryRow(t.Context(), `
+			UPDATE transition_clock SET at = at + INTERVAL '1 second' RETURNING at
+		`).Scan(&releasedAt))
 		require.NoError(t, tx.Commit(t.Context()))
 
 		return releasedAt

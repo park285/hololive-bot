@@ -10,8 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-// Decision.Clocks는 reducer 수렴 계약상 전체 상태를 유지하므로 변경 판별은 persist 계층이 로드 상태와 비교해 소유한다. 판별이 놓친 동일 값은 0037의 IS DISTINCT FROM
-// 가드가 다시 걸러 새 튜플을 만들지 않는다.
 func persistContentClocks(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -83,8 +81,6 @@ func contentClockStatement(clock *content.EntityState, coverage []byte) dbx.Stat
 	}
 }
 
-// Go가 같다고 판정한 clock은 문장을 보내지 않으므로 SQL 가드가 되살릴 수 없다. 그래서 두 인자 목록을 같은 contentClockStatement로 만들어, 0037에 열을 추가해도 비교에서 빠지지
-// 않게 한다.
 func sameStoredContentClock(stored, next *content.EntityState, nextCoverage []byte) (bool, error) {
 	storedCoverage, err := content.MarshalCoverage(stored.LastPositiveCoverage)
 	if err != nil {
@@ -108,7 +104,6 @@ func sameStoredContentClock(stored, next *content.EntityState, nextCoverage []by
 	return true, nil
 }
 
-// 비교 규칙이 없는 형식을 같다고 보면 변경이 조용히 유실되므로 오류로 드러낸다.
 func sameContentClockArg(stored, next any) (bool, error) {
 	switch storedValue := stored.(type) {
 	case time.Time:

@@ -1,7 +1,3 @@
--- 다음 시도 시각과 종결 시각은 대상 행을 잠근 뒤 한 번 채취한 DB 시계(clock)로 정한다. 잠금 대기가 길어도
--- 재시도·종결 시각이 대기 이전으로 앞당겨지지 않는다. 정확한 claim(status, attempt_count, locked_at)이 fence다.
--- $1 다음 상태, $2 다음 시도 횟수, $3 재시도 지연 ms, $4 종결 여부, $5 사유, $6 id, $7 PENDING, $8 시도 횟수,
--- $9 claim locked_at.
 WITH target AS MATERIALIZED (
     SELECT id
     FROM youtube_notification_outbox

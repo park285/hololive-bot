@@ -13,7 +13,6 @@ type rpcMetrics struct {
 	inFlight *prometheus.GaugeVec
 }
 
-// 호출 간격 interval은 프로세스 전체가 공유하며 외부 HTTP 요청 수의 상한은 아닙니다.
 func (c *RPC) EnableMetrics(registerer prometheus.Registerer, interval time.Duration) {
 	if registerer == nil {
 		registerer = prometheus.DefaultRegisterer

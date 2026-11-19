@@ -22,8 +22,6 @@ type fakeHistoryPageCall struct {
 	pageLimit     int
 }
 
-// fakeHistoryDB는 정렬된 rows에서 커서 행 다음부터 pageLimit 행을 돌려주고 페이지 요청을 기록한다. 오류를 돌려주는
-// fail 호출은 그 페이지 조회를 실패시킨다.
 type fakeHistoryDB struct {
 	broadcastHistoryDB
 
@@ -130,14 +128,11 @@ func historyVideoIDs(entries []handlercore.BroadcastHistoryEntry) []string {
 	return ids
 }
 
-// Type·TopicID가 없는 조회는 표시 건수+1행만 읽는다. Go에서 거르는 조회는 101행 페이지를 유지하고, 다음 페이지 커서는
-// 다음 페이지 존재 확인용 101번째 행이 아니라 처리한 100번째 행이다.
 func TestPgBroadcastHistoryRepositoryPageSizeFollowsGoFilters(t *testing.T) {
 	t.Parallel()
 
 	newest := time.Date(2026, time.November, 1, 12, 0, 0, 0, time.UTC)
 	unfiltered := fakeHistoryEntries("game", testTopicMinecraft, 20, newest)
-	// 처리 페이지 100행은 모두 거르는 대상이고, 101번째 행부터 일치 행이다.
 	filtered := slices.Concat(
 		fakeHistoryEntries("talk", "", broadcastHistoryPageSize, newest),
 		fakeHistoryEntries("game", testTopicMinecraft, 3, newest.Add(-broadcastHistoryPageSize*time.Minute)),
@@ -194,7 +189,6 @@ func TestPgBroadcastHistoryRepositoryPageSizeFollowsGoFilters(t *testing.T) {
 	}
 }
 
-// 조회 예산 deadline에 걸린 페이지는 오류가 아니라 그때까지 모은 결과와 Truncated로 끝난다.
 func TestPgBroadcastHistoryRepositoryElapsedBudgetReturnsTruncatedResult(t *testing.T) {
 	t.Parallel()
 

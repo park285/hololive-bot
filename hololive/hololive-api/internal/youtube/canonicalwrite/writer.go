@@ -1,26 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
-// Package canonicalwrite는 source observation 확정 트랜잭션 안에서 YouTube canonical 영상·커뮤니티 행,
-// outbox 삽입, tracking·source post·alarm state, watermark를 저장한다. 트랜잭션은 호출자가 소유하며
-// 이 패키지는 DB 핸들이나 독립 트랜잭션 경로를 두지 않는다.
 package canonicalwrite
 
 import (
@@ -35,7 +12,6 @@ import (
 
 const batchMaxSize = 50
 
-// PersistVideosTx는 호출자 트랜잭션 안에서 영상·쇼츠 확정 결과를 저장한다.
 func PersistVideosTx(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -67,7 +43,6 @@ func persistReconciledVideosTx(
 	trackingRows []*domain.YouTubeContentAlarmTracking,
 	watermark *domain.YouTubeContentWatermark,
 ) error {
-	// 종류별 reducer 상태에 없는 영상도 다른 종류로 이미 저장되어 있으면 Shorts로 소급 알리지 않습니다.
 	notifications, trackingRows, err := dropAlreadyKnownShortArtifacts(ctx, tx, notifications, trackingRows)
 	if err != nil {
 		return fmt.Errorf("drop already-known short artifacts: %w", err)
@@ -91,7 +66,6 @@ func persistReconciledVideosTx(
 	return nil
 }
 
-// PersistCommunityPostsTx는 호출자 트랜잭션 안에서 커뮤니티 게시글 확정 결과를 저장한다.
 func PersistCommunityPostsTx(
 	ctx context.Context,
 	tx dbx.Tx,

@@ -26,7 +26,6 @@ func TestShortsClaimWorkIsBoundedByActiveQueueNotRetainedHistory(t *testing.T) {
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
 	first := publishShortWindow(t, repo, &proof, "known")
 
-	// 한 채널의 긴 이력과 다수의 짧은 이력을 섞어 correlated subject 추정의 운영 편향을 재현합니다.
 	_, err := pool.Exec(ctx, `
 		INSERT INTO source_observations (
 			provider, observation_kind, subject_key, observation_key, schema_version, contract_generation,

@@ -26,10 +26,8 @@ func NewPprofServer(ctx context.Context, addr, apiKey string) *http.Server {
 	group.GET("/:profile", gin.WrapF(pprof.Index))
 
 	return &http.Server{
-		Addr:    addr,
-		Handler: router,
-		// /debug/pprof/profile?seconds=N은 N초간 블로킹 응답을 스트리밍하므로
-		// Read/WriteTimeout을 두면 프로파일이 잘린다. ReadHeaderTimeout만 건다.
+		Addr:              addr,
+		Handler:           router,
 		ReadHeaderTimeout: serverReadHeaderTimeout,
 		MaxHeaderBytes:    serverMaxHeaderBytes,
 	}

@@ -32,7 +32,6 @@ func seedOpsGroup(t *testing.T, pool *pgxpool.Pool, count int, grouped bool) []s
 	if err != nil {
 		t.Fatal(err)
 	}
-	// grouped면 모든 행이 한 send unit을 공유하고, 아니면 행마다 send unit을 따로 둔다(send_unit_id는 NOT NULL).
 	insertUnit := func(key, group, request string) int64 {
 		var id int64
 		err := pool.QueryRow(ctx, `INSERT INTO alarm_dispatch_send_units(unit_key,dispatch_group_key,room_id,client_request_id)
@@ -297,7 +296,6 @@ func TestOpsIntegrationActionPaginationUsesNumericOrder(t *testing.T) {
 	}
 }
 
-// 목록·상세·묶음·잠금 묶음 조회는 같은 행을 scanDelivery 열 순서대로 읽고 오류 원문 대신 분류 코드만 공개한다.
 func TestOpsIntegrationDeliveryReadsShareProjection(t *testing.T) {
 	repo, pool := setupOpsIntegration(t)
 	ctx := t.Context()

@@ -17,7 +17,7 @@ func TestLiveRuntimeRefreshPrivileges(t *testing.T) {
 
 	pool := NewBlankPool(t)
 	roles := createObservationGrantRoles(t, pool)
-	// 기록 역할의 기본 실행 권한이 새 의존 함수에도 이어지는지 확인합니다.
+
 	for _, role := range []string{roles.runtime, roles.scraper, "pg_monitor"} {
 		_, err := pool.Exec(t.Context(), "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO "+pgx.Identifier{role}.Sanitize())
 		require.NoError(t, err)

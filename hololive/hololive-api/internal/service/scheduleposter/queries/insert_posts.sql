@@ -1,11 +1,9 @@
--- 이미 있는 글은 새 본문이 저장한 본문 뒤에 내용을 더 붙인 것일 때만 본문을 바꾸고 판별부터 다시 한다(뒤늦게 붙은 인용 글이나 공식 일정).
--- 철회한 글은 그대로 둔다. 다시 판별하는 글의 옛 변경은 지워 published_changes.sql이 읽지 않게 한다.
 WITH stored AS (
     INSERT INTO schedule_poster_posts AS e (post_id, channel_id, posted_at, body)
     SELECT d.post_id, p.channel_id, d.posted_at, d.body
     FROM schedule_posters p
     CROSS JOIN unnest($2::bigint[], $3::timestamptz[], $4::text[]) AS d(post_id, posted_at, body)
-    WHERE p.id = $1 AND p.review_status = 'confirmed' AND /* post_window */
+    WHERE p.id = $1 AND p.review_status = 'confirmed' AND /* fragment:post_window */
     ON CONFLICT (post_id, channel_id) DO UPDATE
     SET body = EXCLUDED.body, status = 'unjudged', reason = '', schedule_info = NULL, kind = NULL,
         matched_poster_id = NULL, matched_rows_at = NULL

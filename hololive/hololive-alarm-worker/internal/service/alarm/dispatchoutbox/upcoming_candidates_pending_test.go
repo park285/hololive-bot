@@ -169,7 +169,7 @@ func TestUpcomingCandidatesKeepLocksUntilApply(t *testing.T) {
 	}
 
 	pending, err := store.Pending(ctx, now.Add(2*time.Second))
-	// 실패하더라도 먼저 진행 중인 transaction을 풀고 결과를 회수한다.
+
 	close(apply)
 
 	first := <-done

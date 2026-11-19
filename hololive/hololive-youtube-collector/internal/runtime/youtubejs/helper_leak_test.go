@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
@@ -25,6 +26,21 @@ func TestHLPLeak(t *testing.T) {
 		t.Skip("skip helper leak slope: /proc is unavailable")
 	}
 
+	const isolated = "YOUTUBEJS_HELPER_LEAK_PROCESS"
+
+	if os.Getenv(isolated) != "1" {
+		cmd := exec.CommandContext(t.Context(), "/proc/self/exe", "-test.run=^TestHLPLeak$")
+
+		cmd.Env = append(os.Environ(), isolated+"=1", "GOMAXPROCS="+strconv.Itoa(runtime.GOMAXPROCS(0)))
+		cmd.WaitDelay = 5 * time.Second
+
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("isolated helper leak test: %v\n%s", err, output)
+		}
+
+		return
+	}
+
 	base := shortRuntimeBase(t)
 
 	const (
@@ -32,19 +48,14 @@ func TestHLPLeak(t *testing.T) {
 		cycles = 100
 	)
 
-	for range warmup {
-		runFixtureCycle(t, base)
-	}
+	runHelperLeakCycles(t, base, warmup)
 
 	before := measureHelperLeak(t, base)
 
-	for range cycles {
-		runFixtureCycle(t, base)
-	}
+	runHelperLeakCycles(t, base, cycles)
 
 	after := measureHelperLeak(t, base)
 	if after != before {
-		// FD·프로세스·I/O 누수는 goroutineleak만으로 판별할 수 없어 기존 검사와 전체 스택도 유지한다.
 		for _, name := range []string{"goroutineleak", "goroutine"} {
 			var profile bytes.Buffer
 
@@ -61,10 +72,43 @@ func TestHLPLeak(t *testing.T) {
 	}
 }
 
-func runFixtureCycle(t *testing.T, base string) {
+func runHelperLeakCycles(t *testing.T, base string, count int) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	pprof.Do(t.Context(), pprof.Labels("helper_leak_cycle", "active"), func(ctx context.Context) {
+		for range count {
+			runFixtureCycle(ctx, t, base)
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	var profile bytes.Buffer
+
+	for {
+		profile.Reset()
+
+		if err := pprof.Lookup("goroutine").WriteTo(&profile, 1); err != nil {
+			t.Fatal(err)
+		}
+
+		if !bytes.Contains(profile.Bytes(), []byte(`"helper_leak_cycle":"active"`)) {
+			return
+		}
+
+		if ctx.Err() != nil {
+			t.Fatalf("helper goroutines still running after close:\n%s", &profile)
+		}
+
+		runtime.Gosched()
+	}
+}
+
+func runFixtureCycle(parent context.Context, t *testing.T, base string) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 
 	defer cancel()
 
@@ -73,18 +117,20 @@ func runFixtureCycle(t *testing.T, base string) {
 		t.Fatalf("Start: %v", err)
 	}
 
+	defer func() {
+		if err := helper.Close(ctx); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+
+		select {
+		case <-helper.Done():
+		default:
+			t.Error("helper done not closed after Close")
+		}
+	}()
+
 	if err := helper.Healthy(ctx); err != nil {
 		t.Fatalf("Healthy: %v", err)
-	}
-
-	if err := helper.Close(ctx); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
-	select {
-	case <-helper.Done():
-	case <-time.After(time.Second):
-		t.Fatal("helper done not closed")
 	}
 }
 
@@ -92,7 +138,6 @@ func measureHelperLeak(t *testing.T, base string) helperLeakSnap {
 	t.Helper()
 	runtime.GC()
 	runtime.GC()
-	time.Sleep(20 * time.Millisecond)
 
 	return helperLeakSnap{
 		fds:        countProcDir(t, "/proc/self/fd"),

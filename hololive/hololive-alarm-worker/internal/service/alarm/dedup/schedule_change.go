@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package dedup
 
 import (
@@ -46,8 +26,6 @@ func (c *ScheduleChange) PreviousScheduledString() string {
 	return keys.FormatScheduled(c.PreviousScheduled)
 }
 
-// DetectNotificationScheduleChanges는 방별 일정 변경을 찾는다. 방과 무관한 stream 단위 notified hash는 한 번만 읽고,
-// 거기서 변경이 확정되지 않을 때만 방별 logical schedule index를 읽는다.
 func (s *Service) DetectNotificationScheduleChanges(ctx context.Context, roomIDs []string, channelID string, stream *domain.Stream) (map[string]*ScheduleChange, error) {
 	changes := make(map[string]*ScheduleChange)
 

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package middleware
 
 import (
@@ -31,16 +11,11 @@ import (
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 )
 
-// 요청 로그 한 줄이 헤더 값에 끌려 커지지 않게 rune 단위로 자른다. 잘린 값 끝에는 "..."가 붙는다.
 const (
 	maxLoggedUserAgentRunes = 80
 	maxLoggedHeaderRunes    = 128
 )
 
-// skipPaths는 다음 형식을 지원합니다:
-//   - "/exact/path": 정확히 일치하는 경로 스킵
-//   - "*/suffix": 해당 suffix로 끝나는 경로 스킵 (예: "*/stream")
-//   - "/prefix*": 해당 prefix로 시작하는 경로 스킵 (예: "/api/holo/ws*")
 func LoggerMiddleware(ctx context.Context, logger *slog.Logger, skipPaths ...string) gin.HandlerFunc {
 	if logger == nil {
 		logger = slog.Default()
@@ -51,7 +26,6 @@ func LoggerMiddleware(ctx context.Context, logger *slog.Logger, skipPaths ...str
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		// 스킵 경로 확인
 		if matcher.shouldSkip(path) {
 			c.Next()
 
@@ -64,8 +38,6 @@ func LoggerMiddleware(ctx context.Context, logger *slog.Logger, skipPaths ...str
 
 		latency := time.Since(start)
 
-		// WebSocket 업그레이드 등으로 연결이 hijacked 상태면 로깅 스킵
-		// (hijacked 연결에서 c.Writer 접근 시 경고 발생 방지)
 		if c.Writer.Written() && c.Writer.Size() < 0 {
 			return
 		}
@@ -114,7 +86,6 @@ func logHTTPRequest(ctx context.Context, logger *slog.Logger, c *gin.Context, pa
 	sharedlog.Log(reqCtx, logger, level, "http.request.completed", "HTTP", attrs...)
 }
 
-// 요청 context는 net/http가 nil 없이 돌려준다. 요청이 없을 때만 middleware를 만든 ctx를 쓴다.
 func requestLogContext(ctx context.Context, c *gin.Context) context.Context {
 	if c != nil && c.Request != nil {
 		return c.Request.Context()

@@ -86,7 +86,6 @@ func decodeMatchResponse(response *genai.GenerateContentResponse) ([]matchItem, 
 	return decodeMatchItems(response.Text())
 }
 
-// decodeMatchItems의 오류에는 모델이 쓴 값을 넣지 않는다. 대응 응답은 글 본문을 옮긴 것이라 로그에 남기면 안 된다.
 func decodeMatchItems(text string) ([]matchItem, error) {
 	if len(text) > maxRowsResponseBytes {
 		return nil, fmt.Errorf("%w: match response exceeds %d bytes", errBadAnswer, maxRowsResponseBytes)

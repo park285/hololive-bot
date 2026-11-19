@@ -22,8 +22,6 @@ type InfraModule struct {
 	Cleanup          func()
 }
 
-// InfraOptions는 infra 생성이 실제로 소비하는 cache·DB 설정만 담는다.
-// Pool.Name은 DB pool 통계 지표의 pool 라벨이며, 한 프로세스 안에서 pool마다 달라야 한다.
 type InfraOptions struct {
 	Valkey   settings.ValkeyConfig
 	Postgres settings.PostgresConfig

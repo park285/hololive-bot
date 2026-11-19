@@ -126,7 +126,6 @@ func assertRecentlyDispatchedStreamIDs(t *testing.T, pool liveSessionPool, sourc
 	assert.NotContains(t, dispatched, testUpcomingIncludedID)
 	assert.NotContains(t, dispatched, testOldDispatchStreamID)
 
-	// 하한은 stream마다 따로 적용한다. 오래 이어진 방송은 시작 기준 하한으로 최초 event를 근거로 유지한다.
 	dispatched, err = source.RecentlyDispatchedStreamIDs(t.Context(), map[string]time.Time{testLiveIncludedID: now.Add(-30 * time.Minute), testOldDispatchStreamID: now.Add(-26 * time.Hour)})
 	require.NoError(t, err)
 	assert.NotContains(t, dispatched, testLiveIncludedID)
@@ -150,7 +149,6 @@ func assertRecentlySettledLiveStreamRooms(t *testing.T, pool liveSessionPool, so
 		{EventID: 3, RoomID: "room-4", Status: "sent", SentAt: &oldSentAt, CreatedAt: now.Add(-25 * time.Hour)},
 		{EventID: 3, RoomID: "room-old-quarantined", Status: "quarantined", TerminalAt: &oldTerminalAt, CreatedAt: now.Add(-25 * time.Hour)},
 		{EventID: 4, RoomID: "room-5", Status: "pending", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
-		// N분 전 알림은 dedupe key가 catchup과 달라 DLQ로 끝나도 catchup을 막지 않는다.
 		{EventID: 5, RoomID: "room-upcoming-dlq", Status: "dlq", TerminalAt: &terminalAt, CreatedAt: now.Add(-2 * time.Hour)},
 	})
 
@@ -160,7 +158,6 @@ func assertRecentlySettledLiveStreamRooms(t *testing.T, pool liveSessionPool, so
 	assert.Equal(t, map[string]map[string]struct{}{testLiveIncludedID: {testRoomID1: {}}}, settled.Sent)
 	assert.Equal(t, map[string]map[string]struct{}{testLiveIncludedID: {"room-dlq": {}, "room-cancel": {}}}, settled.TerminalFailed)
 
-	// 발송 완료는 발송 시각, 실패 종료는 실패 종료 시각을 stream별 하한과 비교한다.
 	settled, err = source.RecentlySettledLiveStreamRooms(t.Context(), map[string]time.Time{testLiveIncludedID: now.Add(-20 * time.Minute), testOldDispatchStreamID: now.Add(-26 * time.Hour)})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]map[string]struct{}{testOldDispatchStreamID: {"room-4": {}}}, settled.Sent)
@@ -332,7 +329,6 @@ func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.Yo
 
 	for i := range sessions {
 		session := &sessions[i]
-		// 현행 writer는 일정 메타데이터만 있는 UPCOMING을 metadata_only, 그 밖의 관측 상태를 observed로 기록한다.
 		origin := "observed"
 
 		if session.Status == domain.LiveStatusUpcoming {
@@ -405,7 +401,6 @@ func insertAlarmDispatchEvents(t *testing.T, pool liveSessionPool, events []test
 func insertAlarmDispatchDeliveries(t *testing.T, pool liveSessionPool, deliveries []testAlarmDispatchDelivery) {
 	t.Helper()
 
-	// 활성 delivery는 저장된 send unit이 있어야 하므로(migration 224) 운영 행과 같이 delivery마다 send unit을 둔다.
 	for index, delivery := range deliveries {
 		//nolint:misspell // cancelled_at·'cancelled'은 변경할 수 없는 정본 DB 열 이름과 상태 값입니다.
 		_, err := pool.Exec(t.Context(), `

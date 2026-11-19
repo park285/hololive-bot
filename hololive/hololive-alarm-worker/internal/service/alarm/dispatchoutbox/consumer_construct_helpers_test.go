@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// 시험의 격리 기준은 lease에서 계산하지 않는 고정값이며 기본 lease(60s)와 시험이 넘기는 lease보다 길다.
 const testConsumerQuarantineThreshold = 5 * time.Minute
 
 func mustNewConsumer(tb testing.TB, repository Repository, claimReleaser ClaimKeyReleaser, logger *slog.Logger, opts ...ConsumerOption) *Consumer {

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package member
 
 import (
@@ -59,7 +39,6 @@ type memberRowScanner interface {
 	Scan(dest ...any) error
 }
 
-// scanMemberRow는 멤버 조회 SQL(get_all_members·find_by_*·기념일 조회)의 공통 열 순서를 읽는다.
 func scanMemberRow(scanner memberRowScanner) (memberRow, error) {
 	var row memberRow
 
@@ -88,7 +67,6 @@ func scanMemberRow(scanner memberRowScanner) (memberRow, error) {
 	return row, nil
 }
 
-// member는 NULL 열을 빈 값으로 둔 domain.Member를 만든다.
 func (row *memberRow) member() (*domain.Member, error) {
 	var aliases domain.Aliases
 
@@ -144,14 +122,11 @@ func (r *Repository) querySingleMember(ctx context.Context, query string, args .
 	return out, nil
 }
 
-// rows.Err 오류 접두는 조회 경로별로 기존 문구를 유지합니다.
 const (
 	memberIterLabel            = "rows iteration error"
 	celebrationMemberIterLabel = "celebration member rows iteration"
 )
 
-// collectMembersFromRows는 rowLabel로 행 단위 scan/parse 오류를, iterLabel로 rows.Err 오류를 구분해 감쌉니다.
-// 한 행이 실패해도 나머지 행은 계속 수집하고, 오류는 errors.Join으로 함께 반환합니다.
 func collectMembersFromRows(rows pgx.Rows, iterLabel, rowLabel string) ([]*domain.Member, error) {
 	out, err := collectJoinedRows(rows, iterLabel, func(rows pgx.Rows) (*domain.Member, error) {
 		row, err := scanMemberRow(rows)

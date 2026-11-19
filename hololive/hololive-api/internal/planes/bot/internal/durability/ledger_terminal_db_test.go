@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package durability
 
 import (
@@ -28,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/assert"
@@ -159,6 +140,25 @@ func planSliceValue(node map[string]any, key string) []any {
 	return value
 }
 
+func waitForInboxLockContenders(t *testing.T, blocker pgx.Tx) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	for {
+		var waiting int
+
+		err := blocker.QueryRow(ctx, `SELECT count(*) FROM pg_locks
+			WHERE locktype = 'advisory' AND NOT granted AND pg_backend_pid() = ANY(pg_blocking_pids(pid))`).Scan(&waiting)
+		require.NoError(t, err)
+
+		if waiting == 2 {
+			return
+		}
+	}
+}
+
 func TestInboxConcurrentFirstAdmitsPreserveOneOldestHead(t *testing.T) {
 	pool := newDurabilityPool(t)
 	ctx := t.Context()
@@ -167,6 +167,8 @@ func TestInboxConcurrentFirstAdmitsPreserveOneOldestHead(t *testing.T) {
 	repo := NewInboxRepository(pool)
 	blocker, err := pool.Begin(ctx)
 	require.NoError(t, err)
+
+	defer func() { require.NoError(t, rollbackInboxTx(ctx, blocker)) }()
 
 	_, err = blocker.Exec(ctx, inboxOrderingKeyLockSQL, "room:barrier-first")
 	require.NoError(t, err)
@@ -184,7 +186,7 @@ func TestInboxConcurrentFirstAdmitsPreserveOneOldestHead(t *testing.T) {
 	}
 
 	close(start)
-	time.Sleep(20 * time.Millisecond)
+	waitForInboxLockContenders(t, blocker)
 	require.NoError(t, blocker.Commit(ctx))
 	require.NoError(t, <-errs)
 	require.NoError(t, <-errs)
@@ -211,6 +213,8 @@ func TestInboxAdmitRacingTerminalTransitionPreservesSuccessorHead(t *testing.T) 
 	blocker, err := pool.Begin(ctx)
 	require.NoError(t, err)
 
+	defer func() { require.NoError(t, rollbackInboxTx(ctx, blocker)) }()
+
 	_, err = blocker.Exec(ctx, inboxOrderingKeyLockSQL, "room:barrier-terminal")
 	require.NoError(t, err)
 
@@ -222,7 +226,7 @@ func TestInboxAdmitRacingTerminalTransitionPreservesSuccessorHead(t *testing.T) 
 		errs <- e
 	}()
 
-	time.Sleep(20 * time.Millisecond)
+	waitForInboxLockContenders(t, blocker)
 	require.NoError(t, blocker.Commit(ctx))
 	require.NoError(t, <-errs)
 	require.NoError(t, <-errs)
@@ -283,7 +287,11 @@ func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
 		accepted, err := repo.SettleAccepted(ctx, claim.ID, testClaimToken, "iris-req-1", time.Minute)
 		require.NoError(t, err)
 		require.True(t, accepted)
-		time.Sleep(20 * time.Millisecond)
+
+		var unleased bool
+
+		require.NoError(t, pool.QueryRow(ctx, `SELECT lease_until IS NULL FROM bot_reply_outbox WHERE id = $1`, claim.ID).Scan(&unleased))
+		require.True(t, unleased)
 
 		reclaim, err := repo.ReclaimExpired(ctx, 100)
 		require.NoError(t, err)
@@ -492,7 +500,9 @@ func releaseUntilTerminal(
 		}
 
 		require.Equal(t, InboxReleaseRetried, outcome)
-		time.Sleep(10 * time.Millisecond)
+
+		_, err = repo.pool.Exec(ctx, `UPDATE bot_webhook_inbox SET available_at = available_at - interval '1 millisecond' WHERE message_id = $1`, poison.MessageID)
+		require.NoError(t, err)
 	}
 
 	return outcome

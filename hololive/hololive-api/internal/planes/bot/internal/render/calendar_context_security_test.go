@@ -96,7 +96,6 @@ func TestFetchMemberPhotosBudgetExpiryReturnsPartialPhotos(t *testing.T) {
 				return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 			}
 
-			// 첫 사진의 다운로드·디코드가 끝난 뒤에 예산을 끝낸다.
 			time.Sleep(time.Second)
 			cancel()
 			<-req.Context().Done()
@@ -129,7 +128,6 @@ func TestFetchMemberPhotosBudgetExpiryReturnsPartialPhotos(t *testing.T) {
 	})
 }
 
-// 콜드 렌더 시간이 사진 수만큼의 왕복 합이 되지 않게 한다.
 func TestFetchMemberPhotosDownloadsConcurrentlyWithinWorkerLimit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const requestLatency = time.Second

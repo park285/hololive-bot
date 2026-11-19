@@ -61,7 +61,6 @@ WITH input AS (
 	WHERE i.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 	ORDER BY t.kind, post_id, alarm_sent_at ASC
 ), existing_state_updated AS (
-	-- 미발송 행은 delivery_status와 무관하게 SENT로 수렴한다.
 	UPDATE youtube_community_shorts_alarm_states AS s
 	SET alarm_sent_at = CASE
 	        WHEN s.alarm_sent_at IS NULL OR s.alarm_sent_at > i.alarm_sent_at THEN i.alarm_sent_at

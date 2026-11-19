@@ -21,7 +21,6 @@ import (
 
 const partialSettingsWriteTestEnv = "HOLOLIVE_TEST_PARTIAL_SETTINGS_WRITE"
 
-// RLIMIT_FSIZE와 SIGXFSZ 처리는 자식 테스트 프로세스에만 적용하여 다른 병렬 시험의 파일 쓰기를 건드리지 않는다.
 func TestSettingsAPIHandlerPartialWritePreservesFileSnapshotAndWorker(t *testing.T) {
 	if os.Getenv(partialSettingsWriteTestEnv) == "1" {
 		testSettingsPartialWrite(t)

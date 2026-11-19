@@ -12,10 +12,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 )
 
-// HandoffConsumer는 send unit handoff 확인의 claim과 적용이다. 적용의 fence 미스는 *sendfence.MissError이고, 확인
-// 소유가 남은 채 멤버가 바뀌어 확인을 닫은 미스는 dispatchoutbox.ErrHandoffCheckClosed로도 판별된다. 세대 소진은
-// sendfence.ErrGenerationExhausted다. 재발급 예산이 없는 failed의 dlq는 commit 뒤 정산 예산과 별도 예산으로 dedup
-// claim 키를 해제하고, 해제 실패는 dispatchoutbox.ErrHandoffClaimKeysNotReleased다.
 type HandoffConsumer interface {
 	dispatchoutbox.HandoffClaimer
 	dispatchoutbox.HandoffSettler
@@ -23,14 +19,11 @@ type HandoffConsumer interface {
 
 var _ HandoffConsumer = (*dispatchoutbox.HandoffConsumer)(nil)
 
-// HandoffReconcilerConfig의 Horizon은 alarm_dispatch worker settings handoff_horizon_ms이고 PollInterval은
-// alarm_dispatch poll 주기다.
 type HandoffReconcilerConfig struct {
 	Horizon      time.Duration
 	PollInterval time.Duration
 }
 
-// NewHandoffReconciler는 지평과 poll 주기가 1ms 이상이어야 만든다.
 func NewHandoffReconciler(consumer HandoffConsumer, client handoffcheck.ReplyStatusClient, config HandoffReconcilerConfig, logger *slog.Logger) (*handoffloop.Reconciler[dispatchoutbox.HandoffClaim], error) {
 	if consumer == nil {
 		return nil, errors.New("new alarm dispatch handoff reconciler: consumer is required")
@@ -57,8 +50,6 @@ func handoffQueryErrorAttrs(err error) []any {
 	return []any{slog.String("error_class", dispatchoutbox.ClassifyErrorCode(err))}
 }
 
-// handoffLedger는 send unit 확인을 handoffloop에 잇는다. Iris failed 재발급은 발송 실패와 같은 시도 상한과 선형
-// backoff를 쓴다.
 type handoffLedger struct {
 	HandoffConsumer
 }

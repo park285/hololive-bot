@@ -85,7 +85,6 @@ func TestContentFieldUpdatesRollBackAcrossBatchBoundary(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 
-	// 두 번째 전송 묶음의 오류도 앞서 실행된 첫 묶음 전체와 함께 롤백해야 한다.
 	const count = 129
 
 	if _, err := pool.Exec(ctx, `

@@ -1,8 +1,3 @@
--- 외부 발송 성공 정산이다. lease를 넘긴 그룹 발송도 sent로 확정해야 하므로 lease 만료는 보지 않는다.
--- QuarantineStaleSending이 sending을 회수할 때 locked_by를 비우므로 status·소유자·attempt 일치가 소유권 증명이다.
--- 다른 단위 전이와 같은 단위→멤버 순서로 잠근다. 단위($3) 잠금은 멤버 행 투영의 initplan이라 정렬 뒤 멤버 잠금보다
--- 먼저 끝난다. 행은 단위 소속까지 각자의 fence가 맞으면 sent가 되고, 입력 전원이 sent가 된 때만 같은 clock으로
--- 단위에 Iris requestId($4)와 첫 handoff 확인 시각(clock + $5 밀리초)을 기록한다. 일부만 적용되면 단위는 그대로다.
 WITH unit AS MATERIALIZED (
     SELECT u.id
     FROM alarm_dispatch_send_units u

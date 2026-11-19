@@ -1,4 +1,3 @@
-// Package broadcasttypedecision은 규칙과 영상별 검토가 미분류로 남긴 종료 방송의 유형을 Gemini Decisions API에 물어 저장한다.
 package broadcasttypedecision
 
 import (
@@ -19,15 +18,12 @@ import (
 )
 
 const (
-	passInterval     = 10 * time.Minute
-	recentWindow     = 3 * 24 * time.Hour
-	historyWindow    = handlers.MaxBroadcastHistoryDays * 24 * time.Hour
-	fullScanInterval = 24 * time.Hour
-	// 종료 시각 확정은 종료 관측 3분 뒤 처음, 결과를 모르면 30분 뒤 다시 player를 확인해 멤버 전용을 기록한다.
-	// 그 기록보다 먼저 물으면 멤버 한정 방송을 형식으로 저장하므로 기다린다.
-	endGrace = time.Hour
-	pageSize = 200
-	// 무료 등급 한도(분당 5만 입력 토큰)를 넘지 않도록 요청 사이를 띄운다. 한 요청은 썸네일 포함 약 1천 토큰으로 어림했다.
+	passInterval           = 10 * time.Minute
+	recentWindow           = 3 * 24 * time.Hour
+	historyWindow          = handlers.MaxBroadcastHistoryDays * 24 * time.Hour
+	fullScanInterval       = 24 * time.Hour
+	endGrace               = time.Hour
+	pageSize               = 200
 	requestGap             = 3 * time.Second
 	maxDecisionsPerPass    = 100
 	maxConsecutiveFailures = 3
@@ -56,11 +52,8 @@ type Worker struct {
 
 	lastCall     time.Time
 	lastFullScan time.Time
-	// fullScanning은 끝나지 않은 전체 훑기 주기를 이어 가는 중이라는 뜻이다. 이어 가는 회차가 failed를 지우면
-	// 계속 실패하는 방송에서 회차마다 다시 멈춰 주기가 끝나지 않는다.
 	fullScanning bool
-	// failed는 이번 전체 훑기 주기에 판정하지 못한 방송이다. 다음 전체 훑기 주기 전까지 다시 묻지 않는다.
-	failed map[string]struct{}
+	failed       map[string]struct{}
 }
 
 func New(pool *pgxpool.Pool, apiKey string, logger *slog.Logger) *Worker {
@@ -75,7 +68,6 @@ func New(pool *pgxpool.Pool, apiKey string, logger *slog.Logger) *Worker {
 	}
 }
 
-// Start는 ctx가 끝날 때까지 돌아오지 않는다.
 func (w *Worker) Start(ctx context.Context) {
 	w.logger.Info("Starting broadcast type decision worker", slog.String("model", geminidecision.Model))
 
@@ -155,7 +147,6 @@ func (w *Worker) decideSince(ctx context.Context, since time.Time) (bool, error)
 			case errors.Is(err, geminidecision.ErrUnavailable), ctx.Err() != nil:
 				return false, err
 			case errors.Is(err, handlercore.ErrBroadcastThumbnailNotFound):
-				// 삭제·비공개 영상의 썸네일 404는 그 영상만의 사유라 연속 실패에 넣지도, 그 수를 되돌리지도 않는다.
 				w.failed[c.VideoID] = struct{}{}
 
 				w.logger.Info("Broadcast type decision skipped missing thumbnail", slog.String("video_id", c.VideoID), slog.Any("error", err))
@@ -182,8 +173,6 @@ func (w *Worker) decideSince(ctx context.Context, since time.Time) (bool, error)
 	}
 }
 
-// decide는 썸네일 없이 제목만으로 묻지 않는다. 일시적인 내려받기 실패로 약한 답을 영구히 남기지 않도록, 내려받지 못한 방송은
-// 저장하지 않고 다음 전체 훑기에서 다시 묻는다.
 func (w *Worker) decide(ctx context.Context, c candidate) error {
 	image, mime, err := w.thumbnails.Download(ctx, &handlercore.BroadcastHistoryEntry{VideoID: c.VideoID, ThumbnailURL: c.ThumbnailURL})
 	if err != nil {

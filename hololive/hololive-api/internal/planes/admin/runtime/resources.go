@@ -9,7 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
-// adminRuntimeResources는 획득 즉시 등록한 자원을 실패 rollback과 정상 종료에서 같은 owner로 해제한다.
 type adminRuntimeResources struct {
 	once     sync.Once
 	alarm    io.Closer

@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# 중앙 Quadlet container의 ExecStartPre/ExecCondition이다. 설치 도구가 root 소유
-# /usr/local/libexec/hololive-bot/quadlet-prestart로 설치하며 lib/는 같은 디렉터리 아래에 둔다.
-#
-# systemd가 [Service] EnvironmentFile=compose.env로 읽은 값을 그대로 받는다. ExecStart 인자는
-# 다른 사용자도 /proc에서 읽을 수 있으므로 비밀번호·API key는 여기서 root 전용 env 파일로 옮기고
-# container가 --env-file로만 받게 한다. compose의 ${VAR:?}처럼 반드시 있어야 하는 값도 여기서 확인한다.
 set -euo pipefail
 
 self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,13 +6,14 @@ self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${self_dir}/lib/admin-bind.sh"
 # shellcheck source=scripts/deploy/lib/public-bind-mounts.sh
 . "${self_dir}/lib/public-bind-mounts.sh"
+# shellcheck source=scripts/deploy/lib/postgres-capacity.sh
+. "${self_dir}/lib/postgres-capacity.sh"
 
 # shellcheck source=scripts/deploy/lib/compose-env.sh
 . "${self_dir}/lib/compose-env.sh"
 
 die() { echo "[quadlet-prestart] $*" >&2; exit 1; }
 
-# 운영(root)에서는 경로를 고정한다. 테스트만 비root로 임시 root 아래 경로를 쓴다.
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     deploy_root=/opt/hololive-bot/compose/current
     env_dir=/run/hololive-bot/quadlet-env
@@ -26,6 +21,7 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     run_dir=/run/hololive-bot
     secrets_dir=/etc/stack-secrets/hololive-bot
     installed_firewall=/etc/nftables.d/admin-dashboard-ingress.nft
+    quadlet_dir=/etc/containers/systemd/hololive-bot
 else
     test_root="${HOLOLIVE_QUADLET_TEST_ROOT:?non-root execution is only for tests and requires HOLOLIVE_QUADLET_TEST_ROOT}"
     deploy_root="${test_root}/deploy"
@@ -34,6 +30,7 @@ else
     run_dir="${test_root}/run"
     secrets_dir="${test_root}/secrets"
     installed_firewall="${test_root}/installed.nft"
+    quadlet_dir="${test_root}/units"
 fi
 
 render_env=false
@@ -51,7 +48,6 @@ if [[ "$target" == --render-env ]]; then
     if [[ "$#" -eq 5 ]]; then
         [[ "$4" == --app-version && "$target" == hololive-api ]] \
             || die "--app-version is only supported for hololive-api"
-        # retained pair의 dropin_contents와 같은 허용 문자 계약을 쓴다.
         [[ "$5" =~ ^[0-9A-Za-z.+-]+$ ]] || die "retained APP_VERSION is not safe for a Quadlet drop-in"
         app_version_override="$5"
     fi
@@ -63,14 +59,11 @@ if [[ "$target" == --render-env ]]; then
     case "$env_dir/" in
         /run/hololive-bot/*|"$run_dir/"*) die "render-env output must not use the runtime directory" ;;
     esac
-    # 새 전용 디렉터리만 받으며 숨김 파일·끊어진 symlink도 기존 출력으로 본다.
     if ! (shopt -s nullglob dotglob; entries=("$env_dir/"*); [[ "${#entries[@]}" -eq 0 ]]); then
         die "render-env output directory must be empty"
     fi
 fi
 
-# bot.env 같은 서비스별 비밀 파일은 [Container] EnvironmentFile=(podman --env-file)로 읽힌다. podman은 '='가 없는 줄을
-# 호스트 env에서 끌어오므로 KEY=VALUE 줄만 받고 중복 key를 거부한다. 메시지에는 key 이름만 남긴다.
 validate_container_env_file() {
     local file="$1"
     [[ -f "$file" && ! -L "$file" && -s "$file" ]] || die "secret file is missing or empty: ${file}"
@@ -97,14 +90,10 @@ require_values() {
     done
 }
 
-# Podman은 publish 주소를 container 기동 때 확인하므로 tailnet 주소가 붙을 때까지 기다린다.
-# tailscale ip --assert 같은 검사보다 먼저 불러야 부팅 직후 netmap이 늦을 때 기동이 실패하지 않는다.
 wait_for_tailnet_address() {
     local name="$1" address="${!1:-}" attempt family=-4
-    # tailnet 주소만 기다린다. loopback·wildcard 같은 값의 허용 여부는 뒤의 bind 검사가 판정한다.
     case "$address" in
         100.*) ;;
-        # admin bind는 Tailscale IPv6(fd7a:115c:a1e0::/48)도 허용한다.
         fd7a:115c:a1e0:*) family=-6 ;;
         *) return 0 ;;
     esac
@@ -122,7 +111,6 @@ require_secret_file() {
     [[ -f "$path" && -s "$path" ]] || die "secret file is missing or empty: ${path}"
 }
 
-# 형식: CONTAINER_KEY=HOST_KEY, 끝의 !는 compose의 ${HOST_KEY:?}처럼 비어 있으면 실패한다.
 write_secret_env() {
     local container="$1" target tmp spec key source required value
     shift
@@ -148,7 +136,6 @@ write_secret_env() {
         printf '%s=%s\n' "$key" "$value" >> "$tmp"
     done
     if [[ "$render_env" == true ]]; then
-        # 같은 디렉터리의 완성된 파일만 공개하고 경합 중 생긴 출력도 덮어쓰지 않는다.
         if ! ln -T -- "$tmp" "$target"; then
             rm -f -- "$tmp"
             die "render-env output already exists or cannot be published"
@@ -159,7 +146,6 @@ write_secret_env() {
     fi
 }
 
-# 이미지 label이 아니라 배포 트리의 VERSION이 APP_VERSION이다(compose.sh가 HOLO_API_VERSION으로 넘기던 값).
 api_release_version() {
     local file="${deploy_root}/hololive/hololive-api/VERSION"
     local -a lines=()
@@ -171,8 +157,15 @@ api_release_version() {
 }
 
 case "$target" in
+    hololive-api|hololive-alarm-worker|hololive-youtube-collector-c)
+        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
+        if [[ "$render_env" != true ]]; then
+            postgres_capacity_assert_service "$deploy_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
+        fi
+        ;;
+esac
+case "$target" in
     collector-enabled)
-        # ExecCondition: 1이면 건너뛰고(unit 실패 아님), 잘못된 값은 255로 실패시킨다.
         case "${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}" in
             ""|0) exit 0 ;;
             1) echo "[quadlet-prestart] HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR=1; collector c stays stopped" >&2; exit 1 ;;
@@ -184,6 +177,7 @@ case "$target" in
         require_values POSTGRES_PORT_BIND_IP
         require_secret_file "${secrets_dir}/postgres-tls/server.crt"
         require_secret_file "${secrets_dir}/postgres-tls/server.key"
+        require_secret_file "${secrets_dir}/certs/postgres-ca.pem"
         wait_for_tailnet_address POSTGRES_PORT_BIND_IP
         admin_postgres_bind_assert "$deploy_root" "$POSTGRES_PORT_BIND_IP"
         admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
@@ -199,6 +193,20 @@ case "$target" in
             'HOLOLIVE_COLLECTOR_D_PASSWORD=HOLOLIVE_COLLECTOR_D_PASSWORD!' \
             'HOLOLIVE_REPLICATOR_PASSWORD=HOLOLIVE_REPLICATOR_PASSWORD'
         ;;
+    holo-pgbouncer)
+        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
+        require_values POSTGRES_PORT_BIND_IP
+        require_secret_file "${secrets_dir}/certs/postgres-ca.pem"
+        for tls_file in server.crt server.key backend-client.crt backend-client.key; do
+            require_secret_file "${secrets_dir}/pgbouncer/${tls_file}"
+        done
+        wait_for_tailnet_address POSTGRES_PORT_BIND_IP
+        admin_postgres_bind_assert "$deploy_root" "$POSTGRES_PORT_BIND_IP"
+        admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
+        install -d -m 0755 -- "${run_dir}/pgbouncer"
+        postgres_capacity_write_quadlet_config "$deploy_root" "$compose_env" "$quadlet_dir" \
+            "${run_dir}/pgbouncer/pgbouncer.ini"
+        ;;
     valkey-cache)
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values VALKEY_BIND_IP
@@ -206,18 +214,13 @@ case "$target" in
         ;;
     hololive-db-migrate)
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
-        write_secret_env hololive-db-migrate \
-            'PGPASSWORD=HOLOLIVE_MIGRATOR_PASSWORD' \
-            'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_A_PASSWORD=HOLOLIVE_COLLECTOR_A_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_B_PASSWORD=HOLOLIVE_COLLECTOR_B_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_C_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
-            'HOLOLIVE_COLLECTOR_D_PASSWORD=HOLOLIVE_COLLECTOR_D_PASSWORD!' \
-            'HOLOLIVE_ALARM_WORKER_PASSWORD=HOLOLIVE_ALARM_WORKER_PASSWORD!' \
-            'HOLOLIVE_DB_PASSWORD=HOLOLIVE_DB_PASSWORD!'
+        case "${2:-}" in
+            pool-auth) write_secret_env hololive-db-migrate 'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' ;;
+            schema) write_secret_env hololive-db-migrate 'PGPASSWORD=HOLOLIVE_MIGRATOR_PASSWORD!' ;;
+            *) die "hololive-db-migrate requires pool-auth or schema" ;;
+        esac
         ;;
     hololive-alarm-worker)
-        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS
         validate_container_env_file "${secrets_dir}/alarm-worker.env"
         if [[ "$render_env" == false ]]; then
@@ -228,7 +231,6 @@ case "$target" in
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     hololive-api)
-        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS \
             HOLOLIVE_API_PORT_BIND_IP HOLOLIVE_ADMIN_API_PORT_BIND_IP HOLOLIVE_H3_SERVER_NAME
         validate_container_env_file "${secrets_dir}/bot.env"
@@ -251,7 +253,6 @@ case "$target" in
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     hololive-youtube-collector-c)
-        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values LIVE_LOGS_PATH
         validate_container_env_file "${secrets_dir}/youtube-collector.env"
         if [[ "$render_env" == false ]]; then

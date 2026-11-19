@@ -1,6 +1,3 @@
--- 커뮤니티 후보 id는 글 ID sha256의 앞 60비트 + 1이다. 2^60보다 작아 수집 범위(최근 8일)의 X 게시물 번호(약 2×10^18)와 겹치지 않고,
--- 같은 글은 같은 id가 되어 ON CONFLICT가 중복을 막는다. 저장된 이미지 URL은 640px로 잘린 썸네일이라 크기 지정을 =s0(원본)으로 바꾼다.
--- 빈 문구 패턴은 본문이 없는(NULL) 글까지 모두 받는다.
 WITH posts AS (
     SELECT p.post_id, p.channel_id, p.content_text, COALESCE(p.published_at, p.first_seen_at) AS posted_at,
            regexp_replace(p.post_id, '^community:', '') AS public_id, p.images -> 0 ->> 'url' AS image_url

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package notifier
 
 import (
@@ -35,14 +15,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// Notifier는 dedup claim + 큐 발행 + 발송 마킹을 담당한다.
 type Notifier struct {
 	dedupService   *dedup.Service
 	queuePublisher *queue.Publisher
 	logger         *slog.Logger
 }
 
-// NewNotifier는 알림 발행기를 생성한다.
 func NewNotifier(
 	dedupService *dedup.Service,
 	queuePublisher *queue.Publisher,
@@ -63,8 +41,6 @@ func NewNotifier(
 	}, nil
 }
 
-// Send는 알림 목록을 독립 처리한다. 단일 큐 발행 실패가 전체 배치를 중단하지 않도록
-// 실패는 집계하고 나머지 알림은 계속 처리한다.
 func (n *Notifier) Send(
 	ctx context.Context,
 	notifications []*domain.AlarmNotification,
@@ -84,7 +60,6 @@ func (n *Notifier) publishPreparedBatch(ctx context.Context, prepared []claimedS
 
 	result.Skipped += len(expired)
 
-	// 느린 claim 해제가 아직 유효한 후보의 발행을 지연시키지 않도록 발행 뒤 정리한다.
 	defer n.releaseExpiredClaims(ctx, expired)
 
 	if len(active) == 0 {
@@ -124,7 +99,6 @@ type claimedSend struct {
 	claimKeys []string
 }
 
-// 이 중 skipped 는 payload 가 없는 정상 결과라서 (nil, nil) 로는 실패와 구분되지 않는다.
 type preparedSend struct {
 	payload   *sendInput
 	claimKeys []string

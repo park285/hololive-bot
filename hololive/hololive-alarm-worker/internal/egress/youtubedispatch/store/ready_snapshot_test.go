@@ -16,7 +16,6 @@ const (
 	readyTestFreshness = 2 * time.Hour
 )
 
-// 각 경계는 DB 시계 기준 상대값으로 seed한다.
 func TestReadySnapshotAndClaimShareThresholds(t *testing.T) {
 	for _, tc := range []struct {
 		name                          string

@@ -135,7 +135,7 @@ Live deploy, restart, rollback, secret writes, and production config mutation re
 - `members.photo` stays on hololive-api admin PhotoSync; YouTube channel photos are the `channel_photo` reducer;
 - final notification delivery is owned by `alarm-worker`.
 
-Current operational details live in `docs/current/services/youtube-collector.md` and `docs/current/runbooks/youtube-collector.md`. Dated plans under `docs/current/plans/` and records under `docs/history/` are supporting references, not the operational source of truth.
+현재 수집기 운영 절차는 `docs/current/services/youtube-collector.md`와 `docs/current/runbooks/youtube-collector.md`를 따릅니다. 날짜가 붙은 계획과 Git 이력은 운영 기준이 아닙니다.
 
 ## Where To Start For Common Tasks
 

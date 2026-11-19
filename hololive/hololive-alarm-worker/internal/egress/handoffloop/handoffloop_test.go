@@ -65,7 +65,6 @@ type testLedger struct {
 	claimErr error
 	calls    []ledgerCall
 	err      error
-	// release가 있으면 완료 정산은 release가 닫힐 때까지 연결을 쥔 것처럼 머문다.
 	release  chan struct{}
 	inflight atomic.Int32
 }
@@ -171,7 +170,6 @@ type logRecord struct {
 	attrs map[string]string
 }
 
-// logRecorder는 reconciler가 남긴 로그를 모은다.
 type logRecorder struct {
 	mu      sync.Mutex
 	records []logRecord
@@ -242,8 +240,6 @@ func newTestReconciler(t *testing.T, ledger *testLedger, client *testStatusClien
 	return reconciler
 }
 
-// 관측 하나가 판정 행동의 원장 정산 하나로 이어진다. 진행 중은 경과에 맞는 다음 간격과 지평으로 예약하고, 재발급은
-// 경고, 소진·격리는 오류로 남긴다.
 func TestReconcilerRoutesDecisionToLedger(t *testing.T) {
 	t.Parallel()
 
@@ -313,7 +309,6 @@ func TestReconcilerRoutesDecisionToLedger(t *testing.T) {
 	}
 }
 
-// 다음 확인으로 미룬 조회 오류는 원장 속성과 HTTP 상태만 남기고 Iris requestId를 남기지 않는다.
 func TestReconcilerLogsDeferredQueryWithoutRequestID(t *testing.T) {
 	t.Parallel()
 
@@ -336,7 +331,6 @@ func TestReconcilerLogsDeferredQueryWithoutRequestID(t *testing.T) {
 	}
 }
 
-// 종료로 끊긴 상태 조회는 관측이 아니므로 어떤 정산도 하지 않고 soft claim 만료 뒤 다음 확인에 맡긴다.
 func TestReconcilerSkipsLedgerWhenStatusQueryIsCanceled(t *testing.T) {
 	t.Parallel()
 
@@ -356,7 +350,6 @@ func TestReconcilerSkipsLedgerWhenStatusQueryIsCanceled(t *testing.T) {
 	require.Empty(t, ledger.recorded())
 }
 
-// claim 실패는 상태 조회 없이 원장 이름을 붙여 돌려준다.
 func TestReconcilerReturnsClaimFailure(t *testing.T) {
 	t.Parallel()
 
@@ -376,8 +369,6 @@ type gatedRun struct {
 	done   chan int
 }
 
-// startGatedRun은 synctest bubble 안에서 완료 관측 gatedClaimCount건의 RunOnce를 시작하고, 상태 조회가 모두 끝나 정산
-// 슬롯이 가득 찬 시점까지 진행한다.
 func startGatedRun(t *testing.T) gatedRun {
 	t.Helper()
 
@@ -409,8 +400,6 @@ func startGatedRun(t *testing.T) gatedRun {
 	return run
 }
 
-// batch의 상태 조회는 모두 병렬로 끝나도 DB 정산은 동시에 settleConcurrency건까지만 돈다. 앞 정산이 예산 안에 끝나면
-// 남은 정산이 모두 적용되고, 슬롯 대기가 정산 예산을 넘긴 정산은 적용하지 않고 다음 확인에 맡기는 경고로 남는다.
 func TestReconcilerBoundsConcurrentSettlements(t *testing.T) {
 	t.Run("queued settlements apply once slots free within budget", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
@@ -453,8 +442,6 @@ func TestReconcilerBoundsConcurrentSettlements(t *testing.T) {
 	})
 }
 
-// settleWithError는 완료 관측 하나를 err로 실패하는 정산에 적용하고, 남은 로그 하나와 fence 미스 지표 호출 수를
-// 돌려준다.
 func settleWithError(t *testing.T, config Config, err error, level slog.Level, msg string) (logRecord, int32) {
 	t.Helper()
 
@@ -472,9 +459,6 @@ func settleWithError(t *testing.T, config Config, err error, level slog.Level, m
 	return requireSingleLog(t, logs, level, msg), observed.Load()
 }
 
-// 정산 실패는 다음 확인이 이어받는지로 나뉜다. 확인을 닫은 실패와 확인이 닫힌 뒤의 후속 실패는 다시 판정할 확인이
-// 없으므로 오류이고, 확인을 닫지 않은 fence 미스와 예산 초과는 다음 확인이 다시 판정하므로 경고다. 확인을 닫는 종료가
-// 없는 원장에서는 같은 미스도 소유 상실 경고다.
 func TestReconcilerClassifiesSettlementFailures(t *testing.T) {
 	t.Parallel()
 

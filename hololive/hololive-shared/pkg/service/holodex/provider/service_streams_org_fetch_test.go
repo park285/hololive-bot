@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -28,31 +29,33 @@ func TestRunOrgFetchesCountsRecoveredPanicAsFailure(t *testing.T) {
 func TestRunOrgFetchesRespectsParallelismLimit(t *testing.T) {
 	t.Parallel()
 
-	var inFlight, maxInFlight atomic.Int32
+	synctest.Test(t, func(t *testing.T) {
+		var inFlight, maxInFlight atomic.Int32
 
-	result := runOrgFetches(t.Context(), 2, []string{"a", "b", "c", "d", "e", "f"}, func(context.Context, string) error {
-		current := inFlight.Add(1)
+		result := runOrgFetches(t.Context(), 2, []string{"a", "b", "c", "d", "e", "f"}, func(context.Context, string) error {
+			current := inFlight.Add(1)
 
-		for {
-			previous := maxInFlight.Load()
-			if current <= previous || maxInFlight.CompareAndSwap(previous, current) {
-				break
+			for {
+				previous := maxInFlight.Load()
+				if current <= previous || maxInFlight.CompareAndSwap(previous, current) {
+					break
+				}
 			}
+
+			time.Sleep(10 * time.Millisecond)
+			inFlight.Add(-1)
+
+			return nil
+		})
+
+		if result.Succeeded != 6 {
+			t.Fatalf("Succeeded = %d, want 6", result.Succeeded)
 		}
 
-		time.Sleep(10 * time.Millisecond)
-		inFlight.Add(-1)
-
-		return nil
+		if observedMax := maxInFlight.Load(); observedMax != 2 {
+			t.Fatalf("maxInFlight = %d, want 2", observedMax)
+		}
 	})
-
-	if result.Succeeded != 6 {
-		t.Fatalf("Succeeded = %d, want 6", result.Succeeded)
-	}
-
-	if observedMax := maxInFlight.Load(); observedMax > 2 {
-		t.Fatalf("maxInFlight = %d, want <= 2", observedMax)
-	}
 }
 
 func TestRunOrgFetchesCollectsFailuresInOriginalOrder(t *testing.T) {

@@ -59,7 +59,6 @@ func TestBotRuntimeHealthyReadinessCancellationIsNormalShutdown(t *testing.T) {
 			Service: service,
 			beforeWait: func(ctx context.Context) {
 				close(entered)
-				// 실제 캐시의 첫 PING 전에 종료하는 순서를 sleep 없이 고정한다.
 				<-ctx.Done()
 			},
 		}
@@ -148,7 +147,6 @@ func TestBotRuntimeReadinessOwnTimeoutBeforeShutdownRemainsFatal(t *testing.T) {
 			beforeWait: func(ctx context.Context) { contexts <- ctx },
 			afterWait: func(ctx context.Context) {
 				close(expired)
-				// 자체 timeout 이후 runtime의 오류 분류 직전에 종료를 요청한다.
 				<-ctx.Done()
 			},
 			timeout: 10 * time.Millisecond,

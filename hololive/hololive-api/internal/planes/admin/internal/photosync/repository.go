@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// repository는 members 테이블의 photo·photo_updated_at만 읽고 쓴다.
 type repository struct {
 	pool *pgxpool.Pool
 }

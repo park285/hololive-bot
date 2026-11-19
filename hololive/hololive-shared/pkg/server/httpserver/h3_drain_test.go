@@ -80,7 +80,6 @@ func startH3ShutdownFixture(t *testing.T, handler http.Handler) *h3ShutdownFixtu
 	return fixture
 }
 
-// 돌려준 socket을 닫으면 client 프로세스가 CONNECTION_CLOSE 없이 사라진 것처럼 서버 쪽 연결만 남는다.
 func (f *h3ShutdownFixture) newClient(t *testing.T) (*http.Client, net.PacketConn) {
 	t.Helper()
 
@@ -176,32 +175,36 @@ func TestRuntimeShutdownStopsMetricsWhileH3WaitsForIdleConnections(t *testing.T)
 		t.Fatalf("close client socket: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	shutdown := make(chan error, 1)
 
 	go func() { shutdown <- fixture.servers.Shutdown(ctx) }()
 
-	// H3가 idle 연결을 기다리는 도중에 scrape가 붙는다. metrics listener가 이미 닫혔으면 연결이 거절된다.
-	time.Sleep(200 * time.Millisecond)
+	select {
+	case err := <-metricsServed:
+		if !errors.Is(err, http.ErrServerClosed) {
+			t.Fatalf("metrics Serve() after Shutdown = %v, want http.ErrServerClosed", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("metrics listener remained open while H3 drained")
+	}
 
 	var dialer net.Dialer
 
-	if scrapeConn, dialErr := dialer.DialContext(t.Context(), "tcp", metricsListener.Addr().String()); dialErr == nil {
-		t.Cleanup(func() {
-			if err := scrapeConn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-				t.Errorf("close scrape connection: %v", err)
-			}
-		})
+	if conn, err := dialer.DialContext(t.Context(), "tcp", metricsListener.Addr().String()); err == nil {
+		if closeErr := conn.Close(); closeErr != nil {
+			t.Errorf("close late scrape: %v", closeErr)
+		}
+
+		t.Fatal("metrics listener accepted a late scrape")
 	}
+
+	cancel()
 
 	if err := <-shutdown; err != nil {
-		t.Fatalf("Shutdown() with only idle H3 connections and a late metrics connection = %v, want nil", err)
-	}
-
-	if err := <-metricsServed; !errors.Is(err, http.ErrServerClosed) {
-		t.Fatalf("metrics Serve() after Shutdown = %v, want http.ErrServerClosed", err)
+		t.Fatalf("Shutdown() with only idle H3 connections = %v, want nil", err)
 	}
 }
 
@@ -247,7 +250,6 @@ func TestRuntimeH3ShutdownWaitsForInFlightRequest(t *testing.T) {
 	}
 }
 
-// 시한이 지나면 quic-go가 연결을 닫아 요청 context가 끝난다.
 func TestRuntimeH3ShutdownReportsDeadlineWithRequestInFlight(t *testing.T) {
 	t.Parallel()
 

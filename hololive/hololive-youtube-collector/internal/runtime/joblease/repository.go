@@ -20,7 +20,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collection"
 )
 
-// 패키지 안에서 변경하지 않는다.
 var canonicalJobContracts = collection.InitialJobContracts()
 
 type Repository struct {
@@ -76,9 +75,6 @@ func (r *Repository) Acquire(ctx context.Context, spec *JobSpec, owner string) (
 	return &JobLease{repository: r, spec: *spec, contract: definition, scope: scope, proof: proof}, nil
 }
 
-// acquireTx의 잠금 순서는 projection guard(share) → lease 행(SKIP LOCKED)이며 publish·CompleteCurrent와 같다.
-// Proof의 projection generation은 획득 시점 CURRENT이고 lease 수명 동안 바뀌지 않는다. 이후 유효성은
-// 전역 generation 동일성이 아니라 lease에 기록한 범위·행 수와 target의 member_since_generation으로 판정한다.
 func (r *Repository) acquireTx(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -108,13 +104,10 @@ func (r *Repository) acquireTx(
 	return proof, nil
 }
 
-// lockProjectionGuard는 API refresh와 공유하는 guard를 share 잠금하고 잠금 이후 snapshot의 CURRENT를 읽는다.
-// CURRENT가 없어도 guard는 잠기며 current=false를 반환한다. 소유 손실 판정을 앞세울 호출자가 이어서 lease를 확인한다.
 func lockProjectionGuard(ctx context.Context, tx dbx.Tx) (int64, bool, error) {
 	return scanProjectionGuard(tx.QueryRow(ctx, lockProjectionGuardShareSQL))
 }
 
-// scanProjectionGuard는 lockProjectionGuardShareSQL 결과 한 행을 읽으며, 단독 문장과 pipeline batch가 같은 판정을 쓴다.
 func scanProjectionGuard(row pgx.Row) (int64, bool, error) {
 	var generation int64
 
@@ -149,12 +142,10 @@ func (b *acquireTargetBundle) admit(spec *JobSpec) (int32, error) {
 		return 0, fmt.Errorf("acquire collection job lease: %w: target cadence does not match job", ErrInvalidJob)
 	}
 
-	// 다음 확인 시각 전인 대상만 남았으면 지금은 입장시키지 않는다. 이미 획득한 작업에는 적용하지 않는다.
 	if b.admissibleCount == 0 {
 		return 0, ErrNotAcquired
 	}
 
-	// 범위 판정과 int32 변환이 같은 지역 값을 써야 행 수가 lease 열 범위 안에 있음을 증명할 수 있다.
 	memberCount := b.memberCount
 	if !b.membersProven || memberCount < b.targetCount || memberCount < 0 || memberCount > math.MaxInt32 {
 		return 0, fmt.Errorf("acquire collection job lease: %w: current target membership is unproven", ErrInvalidJob)
@@ -173,7 +164,6 @@ type acquiredJobIdentity struct {
 	subjectKey string
 }
 
-// 이 job_key가 다른 identity에 묶여 있으면 ErrInvalidJob을 반환해 epoch 증가를 포함한 트랜잭션 전체를 되돌린다.
 func verifyAcquireJobIdentity(spec *JobSpec, proof *contract.LeaseProof, identity acquiredJobIdentity) error {
 	if identity.provider != string(spec.Provider) || identity.class != spec.Class ||
 		proof.CollectionJobKind != spec.CollectionJobKind || identity.subjectKey != spec.SubjectKey {
@@ -183,7 +173,6 @@ func verifyAcquireJobIdentity(spec *JobSpec, proof *contract.LeaseProof, identit
 	return nil
 }
 
-// 거절된 bundle도 반환하므로 빈 선점 결과와 target·cadence·membership 오류를 구분한다.
 func acquireLeaseProof(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -239,8 +228,6 @@ func acquireLeaseProof(
 	identity := acquiredJobIdentity{provider: provider.String, class: class.String, subjectKey: subject.String}
 
 	if created {
-		// INSERT의 유일 키 대기가 끝난 뒤 DB 시계로 최초 slot과 TTL을 확정한다.
-		// 기존 행 획득에는 이 문장이 없고, 방금 생성해 잠근 행만 한 번 갱신한다.
 		if err := tx.QueryRow(ctx, repositoryLeaseInitializeSQL,
 			proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, leaseTTL.Milliseconds(),
 		).Scan(&proof.ScheduledFor); err != nil {
@@ -285,9 +272,6 @@ func (l *JobLease) Proof() contract.LeaseProof {
 	return l.proof
 }
 
-// Renew는 소유 증명과 job membership을 함께 판정한다. 소유를 잃었으면 ErrFenceLost를 반환하고,
-// 소유는 유지되지만 범위가 무효가 되었으면 lease를 연장하지 않고 ErrProjectionStale 또는 ErrTargetDisabled를 반환한다.
-// 후자의 경우 호출자는 callback을 취소·join한 뒤 ReleaseSuperseded로 fenced release한다.
 func (l *JobLease) Renew(ctx context.Context) error {
 	if l == nil || l.repository == nil {
 		return fmt.Errorf("renew collection job lease: %w", collection.ErrFenceLost)
@@ -302,8 +286,6 @@ func (l *JobLease) Renew(ctx context.Context) error {
 	return nil
 }
 
-// renewTx는 lease 행만 잠근다(guard 없음). 잠금 이후 별도 문장으로 membership을 평가해 publish 종료를 기다린 뒤에도
-// 새 snapshot으로 판정한다.
 func (l *JobLease) renewTx(ctx context.Context, tx dbx.Tx) error {
 	if err := lockActiveLease(ctx, tx, &l.proof); err != nil {
 		return fmt.Errorf("lock active lease: %w", err)
@@ -329,7 +311,6 @@ func (l *JobLease) renewTx(ctx context.Context, tx dbx.Tx) error {
 	return nil
 }
 
-// Defer는 executor가 만든 typed 재시도 입력으로 이 lease를 DeferLease 규칙에 따라 DEFERRED로 전환합니다.
 func (l *JobLease) Defer(ctx context.Context, input collection.DeferCollectionInput) error {
 	var (
 		q     dbx.Querier
@@ -343,11 +324,6 @@ func (l *JobLease) Defer(ctx context.Context, input collection.DeferCollectionIn
 	return DeferLease(ctx, q, proof, input)
 }
 
-// DeferLease는 ACTIVE lease를 typed 재시도 입력으로 DEFERRED로 전환합니다. 직접 실패는 pool에서 단독 문장으로,
-// PARTIAL 발행은 발행 트랜잭션 안에서 같은 문장을 실행하며, 발행 트랜잭션이 이미 잡은 lease 행 잠금은 대기 없이 다시 얻습니다.
-// 공개 진단 생성자는 redaction하지 않으므로 adapter 경계에서 detail을 한 번 더 정제하고,
-// retry_not_before는 행 잠금 이후 DB 시각에 최소 대기를 적용하며 일반 backoff에만 최대 대기를 적용합니다.
-// 입력이 무효면 ErrInvalidJob, q·proof가 없거나 소유를 잃었으면 ErrFenceLost를 반환합니다.
 func DeferLease(ctx context.Context, q dbx.Querier, proof *contract.LeaseProof, input collection.DeferCollectionInput) error {
 	if err := input.Validate(); err != nil {
 		return fmt.Errorf("defer collection job lease: %w: %w", ErrInvalidJob, err)
@@ -393,7 +369,6 @@ func (l *JobLease) Release(ctx context.Context, reason ReleaseReason) error {
 		return fmt.Errorf("release collection job lease: %w", collection.ErrFenceLost)
 	}
 
-	// 해제 사유의 상태 결정은 Go가 소유한다. DB 시각·fence 검증과 갱신은 한 문장으로 유지한다.
 	var (
 		jobKey string
 		err    error

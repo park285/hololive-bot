@@ -37,7 +37,6 @@ func TestObservationSettlementRejectsExpiryUnderUnchangedRowLock(t *testing.T) {
 
 			defer rollbackPublishTestTx(t.Context(), t, blocker, "observation clock blocker")
 
-			// 행 버전을 변경하지 않아 UPDATE 재평가에 기대지 않고 잠금 뒤 만료 검사를 검증한다.
 			_, err = blocker.Exec(ctx, "SELECT observation_id FROM source_observation_queue WHERE observation_id=$1 FOR UPDATE", work.ObservationID)
 			require.NoError(t, err)
 

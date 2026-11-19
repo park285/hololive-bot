@@ -17,11 +17,8 @@ import (
 const (
 	liveCheckOpsChannel = "UC_tp_stale_ops"
 
-	// DB 상대 fixture는 기록 뒤 조회 statement까지 흐른 실제 시간만큼 늙는다.
-	// 예산 안쪽 경계 fixture는 이 여유만큼 안쪽에 두어 테스트 실행 시간과 무관하게 신선하다.
 	freshBoundaryMargin = 10 * time.Second
 
-	// 영상별 not_before 분류: 받아들인 신선도 근거 없음, 다음 확인까지 대기, 지금 확인 가능.
 	notBeforeNone     = "none"
 	notBeforeSleeping = "sleeping"
 	notBeforeEligible = "eligible"
@@ -282,7 +279,6 @@ func TestProjectionRefreshKeepsLiveVideoMembershipAcrossFreshness(t *testing.T) 
 		t.Fatalf("next refresh after end kept the video target: %+v", ended)
 	}
 
-	// 같은 채널의 다른 target은 영상 대상 제거와 무관하므로 membership 시작 generation을 유지한다.
 	if memberSince := liveSnapshotMemberSince(t, pool, ended.Generation); memberSince != first.Generation {
 		t.Fatalf("unrelated live_snapshot member_since = %d, want %d", memberSince, first.Generation)
 	}
@@ -315,7 +311,6 @@ func liveSnapshotMemberSince(t *testing.T, pool *pgxpool.Pool, generation int64)
 	return memberSince
 }
 
-// 캡처한 refresh 시각으로 판정하면 새 positive는 미래로 보여 근거에서 빠진다.
 func TestProjectionRefreshJudgesPositiveCommittedAfterRefreshClock(t *testing.T) {
 	pool, refresh := newLatencyProjection(t)
 	ctx := t.Context()

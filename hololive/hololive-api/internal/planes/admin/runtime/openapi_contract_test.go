@@ -28,7 +28,6 @@ import (
 
 const roomsPath = "/api/holo/rooms"
 
-// adminOpenAPI는 admin plane /api/holo/* 생산자 계약(docs/current/contracts/admin-api.openapi.json)이다.
 type adminOpenAPI struct {
 	Paths      map[string]map[string]openAPIOperation `json:"paths"`
 	Components struct {
@@ -82,7 +81,6 @@ func loadAdminOpenAPI(t *testing.T) *adminOpenAPI {
 	return &spec
 }
 
-// 해당 status 응답이 없으면 default(ProducerError)를 쓴다.
 func (s *adminOpenAPI) assertResponse(t *testing.T, method, path string, rec *httptest.ResponseRecorder) {
 	t.Helper()
 
@@ -131,8 +129,6 @@ func (s *adminOpenAPI) assertResponse(t *testing.T, method, path string, rec *ht
 	}
 }
 
-// 요청 본문이 계약의 requestBody schema를 지키는지가 생산자 입력 검증의 수락 여부와 같아야 한다.
-// 생산자가 400으로 거절한 요청은 schema도 거절하고, 받아들인 요청은 schema를 지킨다.
 func (s *adminOpenAPI) assertRequest(t *testing.T, method, path, body string, accepted bool) {
 	t.Helper()
 
@@ -157,7 +153,6 @@ func (s *adminOpenAPI) assertRequest(t *testing.T, method, path, body string, ac
 	}
 }
 
-// jsonNumber는 숫자 리터럴을 그대로 보존한다. 1.0을 integer로 보지 않아야 정수 필드를 거절하는 생산자 디코더와 판정이 같다.
 type jsonNumber string
 
 var preserveNumbers = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, value *any) error {
@@ -175,7 +170,6 @@ var preserveNumbers = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(func(dec 
 	return nil
 }))
 
-// 계약이 쓰는 JSON Schema 키워드만 담는다. 형식(format)·uniqueItems·description은 판정하지 않는다.
 type jsonSchema struct {
 	Ref                  string                    `json:"$ref"`
 	Type                 jsontext.Value            `json:"type"`
@@ -411,7 +405,6 @@ func TestRoomOperationsMatchAdminOpenAPI(t *testing.T) {
 	}
 }
 
-// seedSchedulePosterSources는 목록 응답이 세 출처의 게시물·원본 URL을 모두 담게 한다.
 func seedSchedulePosterSources(t *testing.T, pool *pgxpool.Pool, store *scheduleposter.Store) {
 	t.Helper()
 

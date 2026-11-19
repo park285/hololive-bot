@@ -5,11 +5,8 @@ maintenance_dir=$(cd "$script_dir/../maintenance" && pwd)
 repo_root=$(cd "$script_dir/../.." && pwd)
 work=$(mktemp -d)
 name="iris-terminal-head-test-$$"
-# kapu rootless Podman에 이미 있는 고정 image만 쓴다(local CI 통합 DB와 같은 참조).
 image=docker.io/library/postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
 cid=
-# --pull=never에서는 --platform이 효과가 없어, 같은 digest의 다른 플랫폼 이미지가 로컬에 있으면 podman은
-# 경고만 내고 에뮬레이션으로 실행한다. 내려받지 않는 계약을 지키려고 실행 전에 플랫폼을 비교해 멈춘다.
 host_platform=$(podman info --format '{{.Host.OS}}/{{.Host.Arch}}')
 image_platform=$(podman image inspect --format '{{.Os}}/{{.Architecture}}' "$image")
 if [[ "$image_platform" != "$host_platform" ]]; then
@@ -33,7 +30,6 @@ for ((i=0;i<60;i++)); do
 done
 [[ "$ready" == true ]]
 psql_test() { podman exec -i "$cid" psql -U postgres -d hololive -X -qAt -v ON_ERROR_STOP=1 "$@"; }
-# 운영과 같은 runner로 전역 잠금·수명 모델 갱신 함수·FK를 적용한다. 컨테이너 내부 Unix socket의 trust 인증이라 TLS와 비밀번호는 쓰지 않는다.
 (cd "$repo_root" && CGO_ENABLED=0 go build -trimpath -o "$work/db-migrate" ./hololive/hololive-api/cmd/db-migrate)
 podman cp "$work/db-migrate" "$cid:/tmp/db-migrate"
 podman exec -e PGHOST=/var/run/postgresql -e PGPORT=5432 -e PGDATABASE=hololive -e PGUSER=postgres \
@@ -75,7 +71,6 @@ PY
 baseline=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h")
 runtime_baseline=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(s) ORDER BY video_id)::text) FROM youtube_live_runtime_state s")
 test "$(psql_test -c "SELECT count(*) FROM youtube_live_runtime_state WHERE video_id IN('a','b')")" = 2
-# 복구 표에 사용자 trigger가 하나라도 있으면 아무 것도 바꾸지 않고 거절한다.
 psql_test -c 'CREATE FUNCTION unreviewed_repair_trigger() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$'
 psql_test -c 'CREATE TRIGGER unreviewed_runtime_guard BEFORE UPDATE ON youtube_live_reconciliation_heads FOR EACH STATEMENT EXECUTE FUNCTION unreviewed_repair_trigger()'
 if psql_test -v expected_count="$count" -v expected_digest="$digest" \
@@ -94,7 +89,6 @@ if psql_test -v expected_count=1 -v expected_digest="$digest" \
   <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then
   echo 'wrong count was accepted' >&2; exit 1
 fi
-# 스냅샷 이후 새 positive가 도착하면 같은 대상 ID라도 전체 거절한다.
 psql_test -c "UPDATE youtube_live_reconciliation_heads SET last_live_positive_at='2026-08-20' WHERE video_id='a'"
 if psql_test -v expected_count="$count" -v expected_digest="$digest" \
   <"$maintenance_dir/reconcile-terminal-live-heads.sql" >"$work/rejected" 2>&1; then

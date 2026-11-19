@@ -77,8 +77,6 @@ func applyAbsenceToKnownSession(session *reduceSession, existing *SessionState, 
 		return
 	}
 
-	// 부재만으로 수명 추적을 시작하지 않는다. 과거 일정의 last_seen_at도
-	// positive clock으로 해석하지 않으며, 기존 observed 부재 슬롯 계약은 유지한다.
 	if (existing.LifecycleOrigin == OriginMetadataOnly || existing.LifecycleOrigin == OriginLegacyUnknown) &&
 		existing.Clock.LastUpcomingPositiveAt == nil && existing.Clock.LastLivePositiveAt == nil {
 		return
@@ -91,7 +89,6 @@ func applyAbsenceToKnownSession(session *reduceSession, existing *SessionState, 
 
 	ignoredSlots, loaded := ignoredAbsenceSlots(session, existing)
 	if !loaded {
-		// 적재하지 않은 이력을 빈 이력으로 보면 이미 무시한 slot을 다시 세거나 저장 시 이력을 잃는다.
 		session.fail(fmt.Errorf("apply absence slot %s to %s: %w",
 			slot.ScheduledFor.UTC().Format(time.RFC3339), existing.VideoID, errIgnoredAbsencesNotLoaded))
 
@@ -145,8 +142,6 @@ func recordAbsencePending(session *reduceSession, existing *SessionState, slot *
 	reapplyStoredEnds(session, existing.VideoID)
 }
 
-// ignoredAbsenceSlots는 무시한 부재 이력의 유일한 읽기 지점이다. 이력을 적재하지 않았으면
-// false를 반환하며, 호출자는 이를 빈 이력으로 해석하지 않는다.
 func ignoredAbsenceSlots(session *reduceSession, existing *SessionState) (map[time.Time]struct{}, bool) {
 	slots, loaded := existing.IgnoredAbsences.Slots()
 	if !loaded {
@@ -159,7 +154,6 @@ func ignoredAbsenceSlots(session *reduceSession, existing *SessionState) (map[ti
 
 	ignored := session.ignoredAbsences[existing.VideoID]
 	if ignored == nil {
-		// 신규 positive가 긴 이력을 복원할 때 같은 목록을 slot마다 선형 탐색하지 않는다.
 		ignored = make(map[time.Time]struct{}, len(slots))
 		for _, at := range slots {
 			ignored[at.UTC()] = struct{}{}
@@ -200,8 +194,6 @@ func countAbsenceSlot(entity *SessionState, slot *AbsenceSlot) {
 	}
 }
 
-// 한 reducer 호출에서 같은 coverage를 세션마다 다시 선형 탐색하지 않는다.
-// 빈 statuses는 모든 상태를 허용하지만 빈 channels는 아무 채널도 허용하지 않는다.
 type liveCoverageIndex struct {
 	channels map[string]struct{}
 	statuses map[string]struct{}
@@ -243,8 +235,6 @@ func (i liveCoverageIndex) covers(channelID, status string) bool {
 
 const liveCoverageLinearReadBudget = 32
 
-// coverage는 reducer가 복제한 불변 상태에서 빌린다. 작은 작업에 해시맵 할당을
-// 강제하지 않고, 선형 탐색 횟수를 고정 상한으로 제한한 뒤 인덱스로 전환한다.
 type liveCoverageMatcher struct {
 	channels    []string
 	statuses    []string
@@ -286,8 +276,6 @@ func (m *liveCoverageMatcher) coversLinearly(channelID, status string) bool {
 }
 
 func (s *reduceSession) absenceCovers(slot *AbsenceSlot, existing *SessionState) bool {
-	// 부재 적용은 slot을 바깥 루프에서 순회한다. 현재 slot만 유지하여
-	// 긴 이력 전체에 대한 O(H*C) 보조 메모리를 만들지 않는다.
 	if s.absenceCoverageSlot != slot {
 		s.absenceCoverage = newLiveCoverageMatcher(slot.Coverage.RequestedChannelIDs, slot.Coverage.Filters.Statuses)
 		s.absenceCoverageSlot = slot

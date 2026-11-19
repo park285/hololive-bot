@@ -1,8 +1,3 @@
--- 썸네일 후보 id는 'youtube_thumbnail:<영상 ID>:<그림 sha256>'의 sha256 앞 60비트 + 1이다. 같은 영상도 그림이 바뀌면 새 후보가 되고,
--- 같은 그림은 같은 id라 ON CONFLICT가 중복을 막는다. 생방송 기록이 없는 영상도 후보로 넣고 발췌만 비운다.
--- image_sha256은 같은 문장에서 저장하는 그림 바이트로 구하므로 저장한 그림과 어긋나지 않는다.
--- 그림 없이 들어온 같은 썸네일의 검토 대기·확정 행은 새 후보를 넣지 않는 주에도 이번에 받은 그림으로 채운다.
--- id와 해시가 같으면 같은 그림이라, 썸네일이 바뀌기 전에 받아 두면 그 뒤의 재검토·다시 뽑기가 수집 때 그림을 쓴다.
 WITH candidate AS (
     SELECT ('x' || left(encode(sha256(convert_to('youtube_thumbnail:' || c.video_id || ':' || h.image_sha256, 'UTF8')), 'hex'), 15))::bit(60)::bigint + 1 AS id,
            c.channel_id, c.video_id, c.image_data, c.image_mime, c.posted_at, h.image_sha256

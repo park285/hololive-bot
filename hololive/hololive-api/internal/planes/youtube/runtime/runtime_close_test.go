@@ -17,7 +17,6 @@ import (
 )
 
 func TestDisabledPrepareDoesNotRequireMutationDependencies(t *testing.T) {
-	// 비활성 executor는 claim probe나 projection 준비를 호출하지 않는다.
 	runtime := &Runtime{}
 	if err := runtime.prepare(t.Context()); err != nil {
 		t.Fatalf("prepare disabled source observation: %v", err)
@@ -64,8 +63,6 @@ func TestCloseAdmissionPreventsFirstStartBeforePoolCleanup(t *testing.T) {
 
 		t.Cleanup(runtime.Close)
 
-		// Close의 첫 task snapshot 직후 실행을 양보한 스케줄을 제어한다.
-		// 이 경계에서 첫 Start가 들어오면 nil snapshot을 믿고 pool을 먼저 닫을 수 있었다.
 		tasksDone := runtime.beginClose()
 		if tasksDone != nil {
 			t.Fatal("unstarted runtime unexpectedly registered tasks")

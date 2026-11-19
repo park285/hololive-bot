@@ -104,7 +104,6 @@ func TestRebuildSubscriberCacheFromRepository_WritesOnlyTypeSpecificSubscriberCa
 		assert.ElementsMatch(t, tc.want, subscribers, "%s %s", tc.channelID, tc.alarmType)
 	}
 
-	// 방 목록·방 이름·사용자 이름·멤버 표시명은 PG가 원천이라 rebuild가 방 단위 index나 이름 hash를 만들지 않는다.
 	var written []string
 
 	err = cacheClient.ScanKeyPages(ctx, "*", cacheScanBatchSize, func(keys []string) error {
@@ -322,7 +321,6 @@ func TestRebuildSubscriberCacheFromRepository_ClearsInBoundedPagesBeforeLoad(t *
 	}
 
 	pageStats := observeRebuildPages(t, cacheClient, &loaded, func() {
-		// clear 도중 커밋된 해지와 구독: DB 변경 뒤 구독 cache 동기화가 일어난다.
 		dbAlarms = []*domain.Alarm{liveAlarm("room-keep", "UC_KEEP"), liveAlarm("room-new", "UC_NEW")}
 
 		_, err := cacheClient.SRem(ctx, liveKey("UC_GONE"), []string{"room-gone"})
@@ -380,7 +378,6 @@ func observeRebuildPages(t *testing.T, client *cachemocks.Client, loaded *bool, 
 			return nil
 		}))
 
-		// 메모리 Valkey의 COUNT 해석과 무관하게 page 경계를 고정해 page별 삭제 순서를 검증한다.
 		for page := range slices.Chunk(matched, int(batchSize)) {
 			require.False(t, *loaded, "the DB snapshot must load only after every page is cleared")
 

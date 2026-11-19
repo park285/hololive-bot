@@ -56,8 +56,6 @@ func ClampToWidth(face font.Face, s string, maxPx int) string {
 	return ""
 }
 
-// 임베드 폰트 밖의 rune(이모지 등)은 두부(notdef 박스)로 그려진다 —
-// 그리기 전에 커버되지 않는 rune을 떨군다.
 func DropUncoveredRunes(face font.Face, s string) string {
 	var b strings.Builder
 

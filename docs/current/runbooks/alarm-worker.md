@@ -111,7 +111,7 @@ sudo podman exec hololive-alarm-worker ./bin/healthcheck --body-api-key-env API_
 
 ## Outbox 파이프라인 소유
 
-v1 YouTube 알림(`youtube_delivery`, `youtube_notification_delivery`)은 v3 alarm-dispatch ledger로 넘기지 않는 정본 파이프라인이고 executor가 direct egress를 소유합니다(`DEC-20260926-hololive-outbox-v3-convergence`). v3 handoff(`off`/`shadow`/`cutover`), 비교 전용 `shadowed` 상태, handoff metric은 삭제했습니다.
+v1 YouTube 알림(`youtube_delivery`, `youtube_notification_delivery`)은 v3 alarm-dispatch ledger로 넘기지 않는 정본 파이프라인이고 executor가 direct egress를 소유합니다. v3 handoff(`off`/`shadow`/`cutover`), 비교 전용 `shadowed` 상태, handoff metric은 삭제했습니다.
 
 ### YouTube 알람 상태 선점 열 삭제(migration 331)
 
@@ -320,12 +320,12 @@ Symptoms:
 - `youtube_notification_outbox`의 `NEW_VIDEO`/`LIVE_STREAM` 행은 없다.
 
 Diagnosis:
-- `YOUTUBE_LIVE_CATCHUP_DEDUPE_COLLISION_20260817.md`
+- [2026-08-17 알림 중복 판정 장애 보고서](../../incidents/YOUTUBE_LIVE_CATCHUP_DEDUPE_COLLISION_20260817.md)
 - `alarm_dispatch_events`에서 같은 `stream_id`의 첫 행은 `status=upcoming`, `minutes_until=5`이고, 마지막 행은 `status=live`에 `start_actual`이 있으며 `start_scheduled`가 1–2분 이동했는지 본다.
 - `youtube_live_sessions.live_first_seen_at`가 실제 시작 근처면 수집 지연이 아니라 checker dedupe 쪽이다.
 
 Mitigation:
-- `YOUTUBE_LIVE_CATCHUP_DEDUPE_COLLISION_20260817.md`의 수정이 포함된 alarm-worker image를 배포한다.
+- [2026-08-17 알림 중복 판정 장애 보고서](../../incidents/YOUTUBE_LIVE_CATCHUP_DEDUPE_COLLISION_20260817.md)의 수정이 포함된 alarm-worker image를 배포한다.
 - 배포 후 live catchup event category가 `live_catchup`이고, 같은 `stream_id`의 기존 sent room이 예정 시각 보정 뒤에도 다시 선택되지 않는지 확인한다.
 
 Rollback:
@@ -375,7 +375,7 @@ sudo podman exec hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007
   설정을 유지한 채 이전 image만 재기동하는 rollback은 지원하지 않습니다.
 - paired rollback이 준비되지 않았거나 send-unit schema 호환성이 확인되지 않으면 이전
   image로 전환하지 않고 current revision을 fix-forward합니다.
-- delivery telemetry 단일 경로(`DEC-20260926-hololive-delivery-telemetry-single-path`) 이전
+- delivery telemetry 단일 경로 이전
   image로 되돌리려면 운영 profile에 `youtube_delivery.telemetry_backfill_batch`를 다시 넣고
   같은 유지보수 단계에서 image를 전환합니다. exact-key 디코더라 키가 없으면 이전 image가
   기동하지 않습니다(`rollback.md`).

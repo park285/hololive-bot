@@ -42,7 +42,6 @@ func TestRetentionBacklogMeasuresRemainingParentsAndResets(t *testing.T) {
 	ctx := t.Context()
 	repo := NewRepository(pool)
 	now := time.Now().UTC()
-	// 배치 1건이면 한 tick은 창 상한만큼만 지우므로, 만료 원본을 그보다 두 건 많이 둔다(i번째는 100-i일 전).
 	expired := sourceRetentionMaxWindows + 2
 	ids := publishProcessedObservations(ctx, t, pool, repo, expired+1)
 
@@ -64,8 +63,6 @@ func TestRetentionBacklogMeasuresRemainingParentsAndResets(t *testing.T) {
 	result, err := repo.RunRetentionTick(ctx, cfg, now)
 	require.NoError(t, err)
 
-	// 기대 나이는 남은 가장 오래된 원본의 실제 received_at으로 계산한다. 원본을 하나씩 늙히는 동안 흐른 시간이
-	// tick 기준 시각과의 차이에 섞이지 않게 한다.
 	var oldestRemaining time.Time
 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT received_at FROM source_observations WHERE id=$1`, ids[sourceRetentionMaxWindows]).
@@ -92,7 +89,6 @@ func TestRetentionBacklogDoesNotClaimEmptyBeyondProtectedScanLimit(t *testing.T)
 	ids := publishProcessedObservations(ctx, t, pool, repo, 3)
 	ageObservations(t, pool, ids, 48*time.Hour)
 
-	// 큐가 남은 앞의 두 원본은 보호된다. 한도 뒤의 적격 원본을 보지 못한 경우는 미확정이다.
 	ageObservations(t, pool, ids[:2], 72*time.Hour)
 
 	_, err := pool.Exec(ctx, `DELETE FROM source_observation_queue WHERE observation_id=$1`, ids[2])

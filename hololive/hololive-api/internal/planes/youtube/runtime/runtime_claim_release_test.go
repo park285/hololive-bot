@@ -136,7 +136,7 @@ func TestDelayedWorkerDoesNotRegisterReleasedClaim(t *testing.T) {
 			return ctx.Err()
 		},
 	})
-	// 이미 batch에 등록된 claim을 해제한 뒤, 늦은 worker의 실제 처리 경로를 실행합니다.
+
 	runtime.Config.Enabled = false
 	runtime.remember(work)
 	runtime.Start(t.Context(), make(chan error, 1))
@@ -236,7 +236,6 @@ func pauseClaimRegistration(t *testing.T, runtime *Runtime) (<-chan struct{}, fu
 		<-resume
 	})
 
-	// DB 선점 성공 후 등록 전의 지연을 실제 claimer 경계에서 재현한다.
 	runtime.claimer = &pausedRegistrationClaimer{observationClaimer: runtime.claimer, pause: gate}
 
 	return entered, unblock

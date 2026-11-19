@@ -31,7 +31,6 @@ func TestCacheServiceWaitUntilReadyPreservesOwnDeadline(t *testing.T) {
 	service, _ := newTestCacheService(t)
 
 	synctest.Test(t, func(t *testing.T) {
-		// 첫 PING tick보다 짧은 자체 예산으로 네트워크 상태와 무관하게 만료한다.
 		err := service.WaitUntilReady(t.Context(), 10*time.Millisecond)
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("WaitUntilReady deadline=%v want context.DeadlineExceeded", err)

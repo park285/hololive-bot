@@ -147,9 +147,6 @@ func newAlarmWorkerRuntime(
 	}
 }
 
-// stopHolodexRetriesBeforeCleanup은 Holodex 캐시 워밍 재시도를 멈춘 뒤 infra를 닫는다.
-// 재시도는 예약한 요청 ctx의 취소와 분리되어 scheduler의 Stop만 끝낼 수 있다(holodexprovider retry_scheduler).
-// Valkey·PG infra를 먼저 닫으면 대기 중이거나 실행 중인 재시도가 닫힌 client를 쓴다.
 func stopHolodexRetriesBeforeCleanup(holodex interface{ Stop() }, cleanup func()) func() {
 	return func() {
 		holodex.Stop()
@@ -238,7 +235,6 @@ func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *sharedreadiness
 	)
 }
 
-// 허용값 검증은 config가 기동 때 한다.
 func alarmSchedulerEnabled(configuredRole string) bool {
 	role := strings.ToLower(strings.TrimSpace(configuredRole))
 
@@ -300,7 +296,6 @@ func buildAlarmFoundation(
 	}, nil
 }
 
-// 공식 일정 폴백을 쓰지 않으므로 멤버 identity 색인을 적재하는 scraper 없이 만든다.
 func buildAlarmHolodexService(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,

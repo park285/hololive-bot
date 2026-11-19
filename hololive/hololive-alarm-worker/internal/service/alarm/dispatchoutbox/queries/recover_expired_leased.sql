@@ -1,5 +1,3 @@
--- 만료 판정과 기록 시각은 문장 시작에 한 번 채취한 clock을 쓴다. 갱신 시점의 만료 재검사는 소유자가 그 사이
--- 정산했거나 다른 회수가 먼저 가져간 행을 건너뛴다.
 WITH clock AS MATERIALIZED (
     SELECT clock_timestamp() AS now
 ), expired_window AS MATERIALIZED (

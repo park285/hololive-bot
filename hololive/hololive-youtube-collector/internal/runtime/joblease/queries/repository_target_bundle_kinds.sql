@@ -1,5 +1,3 @@
--- 획득 전용 bundle이다. cadence와 membership을 같은 target 스캔에서 각각 집계한다.
--- not_before는 신규 입장에만 쓰며 이미 획득한 작업의 membership에는 적용하지 않는다.
 WITH current_projection AS (
     SELECT generation
     FROM youtube_collection_projection_generations

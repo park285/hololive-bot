@@ -34,7 +34,6 @@ func (c *alarmRequestTestStore) PinSendRequest(_ context.Context, envelopes []di
 	return &request, nil
 }
 
-// ReissueSendRequest는 재발급 세대가 남지 않은 저장소처럼 동작해 실패 경로가 격리로 끝나게 한다.
 func (c *alarmRequestTestStore) ReissueSendRequest(context.Context, []dispatchoutbox.AlarmQueueEnvelope, *dispatchoutbox.SendRequest) error {
 	c.reissueCalls++
 	return sendfence.ErrGenerationExhausted
@@ -64,7 +63,6 @@ func alarmTestAdmission(clientRequestID string, err error) (string, error) {
 	return "iris:" + clientRequestID, nil
 }
 
-// 내용 계약은 방 유형과 무관하게 두 변형 모두 지켜야 한다.
 func messageTexts(message delivery.MessageVariants) []string {
 	return []string{message.Plain, message.RichText}
 }

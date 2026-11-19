@@ -22,7 +22,6 @@ func (n *Notifier) claimDedup(
 		ctx, notifyKey, logicalKey, dedup.NotificationSentTTL,
 	)
 	if err != nil {
-		// 저장소 오류는 skip이 아니라 실패다. 이미 잡은 key1은 풀어 다음 시도가 다시 선점할 수 있게 한다.
 		if notifyClaimed {
 			n.releaseClaimsBestEffort(ctx, []string{notifyKey}, "release notification claim after dedup store error")
 		}

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package holodexprovider
 
 import (
@@ -27,8 +7,6 @@ import (
 	"time"
 )
 
-// 실패한 요청의 지연 재시도 기본값입니다. 지연은 apiclient circuit의 resetTimeout(30초)보다 5초 길게 두어
-// circuit이 닫힌 뒤 재시도하고, 대기 상한은 3개 org × 2개 조회 메서드에 여유를 더한 값입니다.
 const (
 	retrySchedulerDelay   = 35 * time.Second
 	retrySchedulerTimeout = 30 * time.Second
@@ -51,9 +29,7 @@ type retryScheduler struct {
 	delay   time.Duration
 	timeout time.Duration
 	logger  *slog.Logger
-	// stopCh는 예약된 재시도의 취소 수명을 소유한다. 재시도는 예약한 요청이 끝난 뒤 실행되므로
-	// 요청 ctx 취소와 분리하고, stop()이 닫는 stopCh만 실행 중인 재시도를 취소한다.
-	stopCh chan struct{}
+	stopCh  chan struct{}
 }
 
 func newRetryScheduler(delay, timeout time.Duration, maxSize int, logger *slog.Logger) *retryScheduler {
@@ -89,7 +65,6 @@ func (s *retryScheduler) schedule(ctx context.Context, key string, fn func(ctx c
 		key: key,
 	}
 
-	// 요청 ctx의 값(trace 등)은 유지하고 취소만 끊는다. 취소는 scheduler의 stopCh가 소유한다.
 	detachedCtx := context.WithoutCancel(ctx)
 
 	task.timer = time.AfterFunc(s.delay, func() {
@@ -120,7 +95,6 @@ func (s *retryScheduler) execute(parentCtx context.Context, key string, fn func(
 
 	defer cancel()
 
-	// fn이 반환하면 defer cancel()이 ctx를 끝내므로 감시 goroutine은 항상 종료된다.
 	go func() {
 		select {
 		case <-s.stopCh:

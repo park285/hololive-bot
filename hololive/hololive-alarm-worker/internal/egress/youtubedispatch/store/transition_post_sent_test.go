@@ -49,7 +49,6 @@ func TestCompleteSentMarksPostSentWithoutClaim(t *testing.T) {
 	requireTransitionPostSent(t, pool, postID, firstSentAt)
 }
 
-// 알람 상태 행(post 단위)은 만들지 않는다.
 func seedTransitionPostSentRows(t *testing.T, pool *pgxpool.Pool, videoID, postID string, roomIDs ...string) {
 	t.Helper()
 

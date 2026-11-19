@@ -11,9 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-// handoffFailure는 Iris failed·결과 불명 정산 하나의 전이 방식이다. 필드 status는 논리 그룹 SENT delivery의 다음 상태,
-// due는 그 next_attempt_at, reissue는 요청 세대를 올리는지, quarantine은 지운 SENT 원장을 QUARANTINED 원장으로
-// 바꾸는지다.
 type handoffFailure struct {
 	action     string
 	status     lifecycle.DeliveryStatus
@@ -22,8 +19,6 @@ type handoffFailure struct {
 	quarantine bool
 }
 
-// handoffSettlement는 commit 직전까지 정산 트랜잭션이 정한 결과다. 같은 트랜잭션에서 집계를 다시 계산한 부모 outbox가
-// touched이고, 멤버·원장·집계를 바꾸지 않고 확인만 닫았으면 그 원인이 closed다.
 type handoffSettlement struct {
 	touched []int64
 	closed  error
@@ -45,8 +40,6 @@ func (h handoffSettlement) result(adjudication CommitAdjudication) (ApplyResult,
 	return result, nil
 }
 
-// 정산 commit 응답을 잃으면 고정 요청을 primary에서 다시 읽어, claim 토큰이 그대로면 commit되지 않은 것(pre)이라 한 번 다시 적용하고, 기대한 정산 결과면 적용된 것(post)으로
-// 본다. 요청 갱신은 delivery·원장 전이와 부모 outbox 집계와 같은 트랜잭션이므로 요청의 post-state가 전체 commit의 증거다.
 func (s *TransitionStore) settleHandoffFailure(ctx context.Context, claim *HandoffClaim, failure handoffFailure, errorText string) (ApplyResult, error) {
 	if err := claim.validate(); err != nil {
 		return newApplyResult(ApplyConflict, nil), fmt.Errorf("%s: %w", failure.action, err)
@@ -106,14 +99,6 @@ func (s *TransitionStore) settleHandoffFailure(ctx context.Context, claim *Hando
 	return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("%s: retry loop exhausted", failure.action)
 }
 
-// settleHandoffFailureTx는 요청 → 영향 부모 outbox(id 순서) → 논리 그룹 delivery → 원장 순서로 잠근다. 보존 정리·fanout과
-// 같은 부모 → 자식 순서라 부모를 기다리는 동안 자식 잠금을 쥐지 않는다. 요청의 claim 소유를 잃었으면 부모·delivery를
-// 잠그기 전에 미스로 끝낸다. 사전 조회와 그룹 잠금 사이에 그룹의 부모 집합이 늘었으면 새 부모를 더 잠그지 않고 아무것도
-// 바꾸지 않은 membership 미스로 끝내며 확인을 닫지 않으므로, claim이 미룬 soft claim 뒤 다음 확인이 늘어난 집합으로 다시
-// 정산한다. 고정 멤버나 그 논리 단위가 admission 때와 다르면 멤버·원장을 바꾸지 않고 확인을 영구히 닫으며, 잠근
-// delivery만으로 어긋남이 확정되면 원장은 잠그지도 않는다. 전이를 적용했으면 마지막으로 이미 잠근 부모 중 바뀐 delivery의
-// 부모 집계를 canonical 집계 문장으로 다시 계산하므로, 집계가 실패하면 delivery·원장·요청 갱신이 함께 되돌아가고 claim
-// 토큰이 남아 soft claim 뒤 다음 확인이 다시 정산한다.
 func (s *TransitionStore) settleHandoffFailureTx(
 	ctx context.Context,
 	tx dbx.Querier,
@@ -151,8 +136,6 @@ func (s *TransitionStore) settleHandoffFailureTx(
 	return handoffSettlement{touched: touched}, nil
 }
 
-// 순서는 delivery 전이 → owner를 출처로 한 SENT 원장 삭제 → (격리면) QUARANTINED 원장 기록 → 요청 재발급 또는 확인 종료 → 바뀐 delivery의 부모 집계이며 모두 호출자의
-// 트랜잭션 하나다.
 func applyHandoffFailure(
 	ctx context.Context,
 	tx dbx.Querier,
@@ -193,8 +176,6 @@ func applyHandoffFailure(
 	return touched, nil
 }
 
-// 시도는 owner만 하나 쓰고 follower는 시도 수를 유지하며, 모두 같은 due를 쓴다(lifecycle.EvaluateFailure와 같은 규칙). PENDING·FAILED 등 SENT가 아닌 행은
-// 이 발송의 결과가 아니므로 두고, post 단위 tracking·알람 발송 표시는 다른 방 발송의 결과일 수 있으므로 되돌리지 않는다.
 func handoffFailureTransitions(units []handoffUnit, failure handoffFailure, errorText string) []rowTransition {
 	var transitions []rowTransition
 
@@ -227,8 +208,6 @@ func handoffFailureTransitions(units []handoffUnit, failure handoffFailure, erro
 	return transitions
 }
 
-// deleteHandoffSentLedger는 각 논리 키에서 그 owner를 출처로 한 SENT 원장만 지운다. 앞의 잠금에서 확인한 행이므로
-// 지운 수가 단위 수와 다르면 오류다.
 func deleteHandoffSentLedger(ctx context.Context, tx dbx.Querier, units []handoffUnit) error {
 	kinds := make([]string, 0, len(units))
 	logicalIDs := make([]string, 0, len(units))

@@ -130,7 +130,6 @@ func TestContentNoveltyVideosKnownElsewhereStaySilent(t *testing.T) {
 	assertNewVideoOutboxes(t, pool, "fresh")
 }
 
-// 기준을 늦은 목록으로 세우면 그 사이 업로드가 기준 목록으로 묻히기 때문입니다.
 func TestContentVideoListClaimsKeepSameChannelOrder(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

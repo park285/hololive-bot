@@ -155,7 +155,6 @@ func (e *pointLookupExpectations) assert(t *testing.T, label string, cache *Cach
 	}
 }
 
-// Warm 조회는 members 행을 지운 뒤에 수행해 snapshot에서 응답했음을 확인한다.
 func TestPointLookupsMatchRepositoryWithAndWithoutSnapshot(t *testing.T) {
 	repo, _ := seedSharedReviewMembers(t)
 	ctx := t.Context()
@@ -222,7 +221,6 @@ func TestCacheFindersSeparateNotFoundFromRepositoryFailure(t *testing.T) {
 	}
 }
 
-// 먼저 넣은 행을 갱신해 heap 순서가 ID 순서와 달라지게 만든다.
 func TestDuplicateNameLookupsAgreeOnSmallestID(t *testing.T) {
 	repo, pool := newPGXRepository(t)
 	ctx := t.Context()

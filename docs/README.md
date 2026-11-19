@@ -1,10 +1,10 @@
 # docs
 
-저장소 문서는 `current / history / design` 세 층으로 관리합니다.
+현재 운영 기준은 `docs/current/`, 설계 제안은 `docs/design/`에서 관리합니다.
 
 ## Current
 
-`docs/current`는 현재 운영 기준의 SSOT입니다. 운영자와 LLM은 먼저 current 문서를 읽고, history/design은 보조 근거로만 사용합니다. 중앙·Seoul의 Docker Compose와 Osaka·Osaka2 collector의 host-native systemd 배치 및 작업 절차는 `current/PROJECT_MAP.md`와 `current/runbooks/`에서 확인합니다. 과거 전환 기록과 캡처된 검토 프롬프트는 현재 작업 지시가 아닙니다.
+`docs/current`는 현재 운영 기준의 SSOT입니다. 운영자와 LLM은 먼저 current 문서를 읽고, 설계 문서는 보조 근거로만 사용합니다. 중앙·Seoul의 Docker Compose와 Osaka·Osaka2 collector의 host-native systemd 배치 및 작업 절차는 `current/PROJECT_MAP.md`와 `current/runbooks/`에서 확인합니다. 과거 전환 기록과 캡처된 검토 프롬프트는 현재 작업 지시가 아닙니다.
 
 - `current/README.md` - current 문서 인덱스
 - `current/PROJECT_MAP.md` - 현재 module/runtime 운영 인벤토리
@@ -17,30 +17,26 @@
 - `current/runbooks/README.md` - runtime/infra runbook 인덱스
 - `current/architecture/README.md` - current governance/architecture 인덱스
 
-## History
+## 장애 기록과 과거 작업
 
-`docs/history`는 완료된 migration, 과거 장애 대응, 더 이상 현재 기준이 아닌 handoff/closeout 문서를 둡니다.
-
-- `history/README.md` - historical 문서 규칙과 인덱스
+운영 장애 보고서는 `docs/incidents/`에 둡니다. 완료한 작업의 인계·검증 자료와 과거 결정은 Git 이력에서 확인합니다.
 
 ## Design
 
 `docs/design`은 아직 current로 승격되지 않은 설계 제안을 둡니다.
 
 - `design/README.md` - 설계 문서 규칙
-- `design/three-runtime-consolidation-plan.md` - 5개 Go runtime을 3개 runtime으로 줄이기 위한 migration plan (완료 — 2026-06-27 cutover, `history/runtime-split/THREE_RUNTIME_CUTOVER_20260627.md` 참조)
 - `design/2026-05-15-repo-structure-refactor-worklog.md` - repo structure refactor worklog
 - `design/repo-tree-classification.md` - completed top-level docs directory classification and move record
 
 ## Top-level 디렉터리 편입
 
-3층에 속하지 않는 top-level 경로는 아래 결정(2026-07-17)에 따라 제자리에서 층을 배정합니다. 스크립트, `.github`, `docs/current` 문서가 경로를 참조하는 디렉터리는 링크 안정성을 위해 이동하지 않습니다. 모든 경로는 current 문서에서 발견 가능해야 하며, 새 SSOT로 확장하지 않습니다.
+그 밖의 최상위 경로는 아래 결정(2026-07-17)에 따라 제자리에서 층을 배정합니다. 스크립트, `.github`, `docs/current` 문서가 경로를 참조하는 디렉터리는 링크 안정성을 위해 이동하지 않습니다. 모든 경로는 current 문서에서 발견 가능해야 하며, 새 SSOT로 확장하지 않습니다.
 
 | 경로 | 층 | 결정 |
 |---|---|---|
 | `PROJECT_MAP.md` | current | `current/PROJECT_MAP.md`로의 compatibility bridge. 유지. |
 | `architecture/` | history | 날짜 붙은 분석 `.md`는 5-runtime 시절 historical 기록이며 각 파일 상단 historical 배너로 구분. |
 | `runbook_execution/` | current | 배포/릴리스 runbook 실행 기록. `scripts/architecture/render-release-notes.sh`가 릴리스 노트 템플릿을 참조하므로 유지. 새 운영 runbook은 `current/runbooks/`에 작성. |
-| `handoff/` | history | 완료된 refactor handoff 기록(P1-P4 split, youtube-producer multi-worker). 새 handoff/closeout 문서는 `history/`에 작성. |
-| `review/` | history | 날짜 붙은 review snapshot. 새 review 기록은 `history/`에 작성. |
-| `../admin-dashboard/docs/` (삭제) | history | 퇴역 admin-dashboard BFF의 설계·bigbang 전환 증거였다. 디렉터리는 삭제했으며 `DEC-20260909-hololive-admin-bigbang-replacement`·`DEC-20260910-*`가 가리키는 파일은 `git show f258dc645:admin-dashboard/docs/<path>`로 조회한다. 웹은 Iris Console이 소유한다. |
+| `review/` | 검토 | 최근 검토 보고서를 둡니다. 퇴역한 보고서는 Git 이력에서 확인합니다. |
+| `../admin-dashboard/docs/` (삭제) | history | 퇴역 admin-dashboard BFF의 설계·bigbang 전환 증거였다. 삭제한 파일은 `git show f258dc645:admin-dashboard/docs/<path>`로 조회한다. 웹은 Iris Console이 소유한다. |

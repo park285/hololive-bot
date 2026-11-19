@@ -36,7 +36,6 @@ if [[ "${stage}" == "test-prod" || "${stage}" == "build-prod" ]]; then
     echo "test-prod and build-prod are only valid for hololive/hololive-youtube-collector" >&2
     exit 2
   fi
-  # JSON 검사와 배포 산출물 검사만 Python을 사용한다. 일반 tidy/vet/race는 Go만 준비한다.
   . "${SCRIPT_DIR}/python-runtime.sh"
   repo_python_init
 fi
@@ -54,8 +53,6 @@ export GOMEMLIMIT="${GOMEMLIMIT:-5GiB}"
 
 cd "${module_dir}"
 
-# hololive-dbtest는 테스트마다 템플릿을 복제한 데이터베이스로 격리하므로 패키지들이 PostgreSQL 하나를 공유한다.
-# 패키지마다 testcontainers PostgreSQL을 띄우는 기동 비용을 없앤다. 호출자가 준 DB가 있으면 그대로 쓴다.
 use_shared_test_database() {
   [[ -z "${TEST_DATABASE_URL:-}" ]] || return 0
   source "${SCRIPT_DIR}/local-ci-integration.sh"

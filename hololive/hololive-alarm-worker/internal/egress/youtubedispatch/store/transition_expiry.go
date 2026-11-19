@@ -16,15 +16,13 @@ const expiredPendingReason = "delivery freshness expired"
 type ExpiryResult struct {
 	ApplyResult
 
-	Examined int
-	NextID   int64
-	Expired  int
-	// StaleExpired는 expiredPendingReason으로 종료한 행만 센다. 정산/reconciliation은 제외한다.
+	Examined     int
+	NextID       int64
+	Expired      int
 	StaleExpired int
 	Blocked      []BlockedLogicalGroup
 }
 
-// 신선도와 lease 만료는 후보 SQL의 DB 시계(checked_at)로 판정한다. Keyset cursor로 격리 대기 중인 오래된 그룹이 뒤의 만료 행을 가로막지 않는다.
 func (s *TransitionStore) ExpirePending(ctx context.Context, afterID int64, limit int) (ExpiryResult, error) {
 	if limit <= 0 || afterID < 0 {
 		return ExpiryResult{}, errors.New("expire pending: invalid scan bounds")

@@ -26,7 +26,6 @@ type loginCredential struct {
 	password string
 }
 
-// API 비밀번호는 마지막에 바꾼다. 앞 역할에서 실패하면 실행 중인 API는 이전 비밀번호로 계속 재접속할 수 있다.
 var loginRoles = []loginRole{
 	{user: runtimepolicy.PostgresCollectorARoleUser, env: "HOLOLIVE_COLLECTOR_A_PASSWORD", connectionLimit: 7, collector: true},
 	{user: runtimepolicy.PostgresCollectorBRoleUser, env: "HOLOLIVE_COLLECTOR_B_PASSWORD", connectionLimit: 7, collector: true},
@@ -36,9 +35,6 @@ var loginRoles = []loginRole{
 	{user: runtimepolicy.PostgresRuntimeRoleUser, env: "HOLOLIVE_DB_PASSWORD", connectionLimit: 17},
 }
 
-// POSTGRES_ADMIN_PASSWORD가 명시되지 않으면 순수 migrate(롤백) 경로로 보고 bootstrap을 생략한다 — PGPASSWORD로 fallback하면 migrator 자격증명으로
-// admin 접속을 시도해 순수 migrate가 깨지기 때문이다. 역할 bootstrap을 할 때 역할별 비밀번호는 모두 필수이고 서로 달라야 한다. 비어 있을 때 admin
-// 비밀번호로 role을 ALTER하면 역할 분리가 깨지므로, 대신할 값을 찾지 않고 실패한다.
 func bootstrapLoginRoles(ctx context.Context) error {
 	adminPassword := os.Getenv("POSTGRES_ADMIN_PASSWORD")
 	if strings.TrimSpace(adminPassword) == "" {
@@ -58,7 +54,7 @@ func bootstrapLoginRoles(ctx context.Context) error {
 	scraperGroup := runtimepolicy.PostgresScraperRoleUser
 	database := envDefault("PGDATABASE", "hololive")
 
-	if err := ensureLoginRoles(ctx, adminConnString("postgres", adminUser, adminPassword), scraperGroup, credentials, database); err != nil {
+	if err := ensureLoginRoles(ctx, adminConnString(database, adminUser, adminPassword), scraperGroup, credentials, database); err != nil {
 		return fmt.Errorf("ensure login roles: %w", err)
 	}
 
@@ -72,18 +68,21 @@ func bootstrapLoginRoles(ctx context.Context) error {
 func loginCredentialsFromEnv(adminPassword string) ([]loginCredential, error) {
 	credentials := make([]loginCredential, 0, len(loginRoles))
 
+	adminPassword = pgxSCRAMPassword(adminPassword)
+
 	for _, role := range loginRoles {
 		password := os.Getenv(role.env)
 		if strings.TrimSpace(password) == "" {
 			return nil, fmt.Errorf("%s is required for login role bootstrap", role.env)
 		}
 
-		if password == adminPassword {
-			return nil, fmt.Errorf("POSTGRES_ADMIN_PASSWORD and %s must be distinct", role.env)
-		}
-
 		if _, err := pgxdb.SCRAMVerifier(password); err != nil {
 			return nil, fmt.Errorf("%s is not a compatible PostgreSQL password: %w", role.env, err)
+		}
+
+		password = pgxSCRAMPassword(password)
+		if password == adminPassword {
+			return nil, fmt.Errorf("POSTGRES_ADMIN_PASSWORD and %s must be distinct", role.env)
 		}
 
 		for _, previous := range credentials {
@@ -110,7 +109,6 @@ func ensureLoginRoles(
 		return fmt.Errorf("bootstrap: parse admin config: %w", err)
 	}
 
-	// 검증자도 자격 증명이므로 SQL이 오류·샘플·실행 계획·활동 보고에 노출되기 전에 세션을 보호한다.
 	protectCredentialSession(config)
 
 	conn, err := pgx.ConnectConfig(ctx, config)
@@ -119,6 +117,10 @@ func ensureLoginRoles(
 	}
 
 	defer func() { err = closeConn(ctx, conn, "admin", err) }()
+
+	if _, err := conn.Exec(ctx, mustSQL("bootstrap_pooler_auth.sql")); err != nil {
+		return fmt.Errorf("bootstrap: configure pooler authentication: %w", err)
+	}
 
 	if err := upsertScraperGroupRole(ctx, conn, scraperGroup); err != nil {
 		return fmt.Errorf("upsert scraper group role: %w", err)
@@ -223,6 +225,23 @@ func upsertLoginRole(ctx context.Context, conn roleConnection, user, password st
 	verifier, err := pgxdb.SCRAMVerifier(password)
 	if err != nil {
 		return fmt.Errorf("bootstrap: prepare login password: %w", err)
+	}
+
+	if exists {
+		var current string
+
+		if err := conn.QueryRow(ctx, mustSQL("read_role_password.sql"), user).Scan(&current); err != nil {
+			return fmt.Errorf("bootstrap: read login password: %w", err)
+		}
+
+		matches, err := matchesValidatedSCRAMPassword(password, current)
+		if err != nil {
+			return fmt.Errorf("bootstrap: compare login password: %w", err)
+		}
+
+		if matches {
+			verifier = current
+		}
 	}
 
 	roleIdent := pgx.Identifier{user}.Sanitize()

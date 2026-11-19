@@ -2,7 +2,6 @@ package scheduleposter
 
 import (
 	"embed"
-	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
@@ -73,5 +72,5 @@ var (
 )
 
 func withFragment(name, marker, fragment string) string {
-	return strings.Replace(mustSQL(name), "/* "+marker+" */", fragment, 1)
+	return sqlassets.WithFragment(mustSQL(name), marker, fragment)
 }

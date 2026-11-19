@@ -39,7 +39,6 @@ func TestQuarantineObservationPreservesValuesOnFailureAndClearsOnEmptySuccess(t 
 	require.GreaterOrEqual(t, lastSuccess, float64(before))
 	require.LessOrEqual(t, lastSuccess, float64(time.Now().Unix()))
 
-	// 실패는 마지막 성공 시각을 갱신하지 않으므로 경과 시간으로 현재 관측이 아님을 드러낸다.
 	alarmDispatchRunnerMetrics().backlogSnapshotLastSuccess.Set(float64(before - 600))
 	require.Error(t, observeQuarantineSnapshot(t.Context(), quarantineSnapshotObserver{err: errors.New("read failed")}))
 	requireQuarantineGauges(t, 55, 86400, 3, 3600)
@@ -98,7 +97,6 @@ func TestBacklogSnapshotExcludesOnlyRowsMatchingCloseoutReceipt(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
-	// receipt는 운영 세션의 시간대와 무관하게 같은 시각으로 비교된다.
 	recordQuarantineCloseout(t, conn, 10, "Asia/Seoul")
 
 	snapshot, err := store.BacklogSnapshot(ctx)
@@ -108,7 +106,6 @@ func TestBacklogSnapshotExcludesOnlyRowsMatchingCloseoutReceipt(t *testing.T) {
 	require.Zero(t, snapshot.UnreviewedQuarantinedRows)
 	require.Zero(t, snapshot.OldestUnreviewedQuarantinedAgeSeconds)
 
-	// receipt 없는 새 격리는 receipt가 있는 send unit과 섞여도 검토 대상이다.
 	_, err = conn.Exec(ctx, `INSERT INTO alarm_dispatch_deliveries (id, status, send_unit_id, attempt_count, quarantined_at, updated_at)
 		VALUES (3, 'quarantined', 30, 1, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day')`)
 	require.NoError(t, err)
@@ -119,7 +116,6 @@ func TestBacklogSnapshotExcludesOnlyRowsMatchingCloseoutReceipt(t *testing.T) {
 	require.Equal(t, int64(1), snapshot.UnreviewedQuarantinedRows)
 	require.InDelta(t, 86400, snapshot.OldestUnreviewedQuarantinedAgeSeconds, 5)
 
-	// 재처리 뒤 다시 격리된 행은 기존 receipt가 있어도 다시 검토 대상이다.
 	_, err = conn.Exec(ctx, `UPDATE alarm_dispatch_deliveries
 		SET attempt_count = 2, quarantined_at = NOW() - INTERVAL '2 days', updated_at = NOW() - INTERVAL '2 days'
 		WHERE id = 2`)
@@ -132,7 +128,6 @@ func TestBacklogSnapshotExcludesOnlyRowsMatchingCloseoutReceipt(t *testing.T) {
 	require.Equal(t, int64(2), snapshot.UnreviewedQuarantinedRows)
 	require.InDelta(t, 2*86400, snapshot.OldestUnreviewedQuarantinedAgeSeconds, 5)
 
-	// revision만 바뀌어도 기존 결정은 현재 행에 적용되지 않는다.
 	_, err = conn.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET updated_at = NOW() WHERE id = 1`)
 	require.NoError(t, err)
 
@@ -173,7 +168,6 @@ func newQuarantineReviewStore(t *testing.T) (alarmDispatchMaintenancePgxStore, *
 	require.NoError(t, err)
 	t.Cleanup(conn.Release)
 
-	// 임시 테이블이 같은 이름의 public 테이블을 가려 조회 SQL을 그대로 실행한다.
 	//nolint:misspell // cancelled_at은 변경할 수 없는 정본 DB 열 이름입니다.
 	_, err = conn.Exec(t.Context(), `
 		CREATE TEMP TABLE alarm_dispatch_deliveries (
@@ -191,7 +185,6 @@ func newQuarantineReviewStore(t *testing.T) (alarmDispatchMaintenancePgxStore, *
 	return alarmDispatchMaintenancePgxStore{db: conn}, conn
 }
 
-// recordQuarantineCloseout는 migration 228 snapshot과 같은 status_metadata 모양으로 receipt를 남긴다.
 func recordQuarantineCloseout(t *testing.T, conn *pgxpool.Conn, sendUnitID int64, timeZone string) {
 	t.Helper()
 

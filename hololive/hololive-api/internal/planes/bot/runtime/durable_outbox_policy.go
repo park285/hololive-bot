@@ -19,7 +19,6 @@ func replyOutboxRetryAfterWithBase(status string, attempts int32, base time.Dura
 	return backoff.ComputeExponentialBackoff(max(int(attempts)-1, 0), base, time.Minute, base/2)
 }
 
-// 오류가 없으면 Iris가 202와 requestId로 durable admission을 증명한 것이고 handoff는 reconciler가 확인한다.
 func replyOutboxSettlementStatusWithMaxAttempts(attempts, maxAttempts int32, err error) string {
 	if err == nil {
 		return durability.ReplyOutboxAccepted

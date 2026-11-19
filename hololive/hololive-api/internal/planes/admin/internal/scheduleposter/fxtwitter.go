@@ -41,7 +41,6 @@ type status struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	} `json:"author"`
-	// 해당 없음은 null이고, 미디어 없음은 객체 대신 빈 배열로 온다.
 	RepostedBy jsontext.Value `json:"reposted_by"`
 	ReplyingTo jsontext.Value `json:"replying_to"`
 	Media      jsontext.Value `json:"media"`
@@ -67,7 +66,6 @@ type quotedStatus struct {
 	} `json:"author"`
 }
 
-// quoted는 다른 계정의 글을 인용했을 때만 그 글을 돌려준다. 본인 글은 이미 따로 수집하므로, 방송 시작·감사 글에 딸린 지난 안내를 다시 읽지 않는다.
 func (s *status) quoted() (quotedStatus, bool) {
 	if len(s.Quote) == 0 || s.Quote[0] != '{' {
 		return quotedStatus{}, false
@@ -166,7 +164,6 @@ func (c *fxClient) image(ctx context.Context, rawURL string) (source, error) {
 	return sniffSource(body)
 }
 
-// httpsHost는 자격정보 없는 https URL의 호스트를 돌려준다. 호스트 허용은 호출자가 출처별로 정한다.
 func httpsHost(raw string) (string, bool) {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || parsed.User != nil {
@@ -176,7 +173,6 @@ func httpsHost(raw string) (string, bool) {
 	return parsed.Host, true
 }
 
-// sniffSource는 응답 헤더 대신 내용으로 형식을 정해, Vertex에 보내는 MIME이 실제 바이트와 어긋나지 않게 한다.
 func sniffSource(body []byte) (source, error) {
 	switch mediaType := http.DetectContentType(body); mediaType {
 	case "image/jpeg", "image/png", "image/webp":

@@ -215,7 +215,6 @@ func TestRichTextSeedsNormalizedEmptyFields(t *testing.T) {
 
 			for _, value := range []string{"", " \t\r\n ", "\u200b", " \u200b\t\u200b "} {
 				out := renderSeedBody(t, key, body, richTextDisplayData(t, key, value))
-				// 정규화 후 빈 표시값은 빈 문자열과 같은 분기를 타며 구분선·빈 강조를 만들지 않는다.
 				if strings.Contains(out, "****") || kakaoformat.Render(out) != kakaoformat.Render(empty) {
 					t.Errorf("정규화된 빈 입력이 가시 구문을 만듦: input=%q out=%q empty=%q", value, out, empty)
 				}
@@ -270,7 +269,6 @@ func TestRichTextSeedsCloseStaticEmphasis(t *testing.T) {
 
 	for _, key := range sampledata.GetAllTemplateKeys() {
 		t.Run(string(key), func(t *testing.T) {
-			// 입력에는 별표가 없으므로 CommonMark 변환 뒤 남는 **는 닫히지 않은 정적 강조다(구두점 뒤 조사 등).
 			out := renderSeedBody(t, key, pairs[key].newBody, richTextDisplayData(t, key, "표시 대상"))
 			plain := kakaoformat.Render(out)
 
@@ -319,7 +317,6 @@ func TestRichTextSeedsMultilineLiteralsRemainVisible(t *testing.T) {
 	}
 }
 
-// 오픈채팅은 긴 RichText를 머리말 묶음만 남기고 접으므로, 목록형 본문은 머리말 바로 다음 줄에 요약을 두고 그다음 줄을 비워 그 묶음을 끝낸다.
 func TestRichTextSeedsSummarizeCollapsedPreview(t *testing.T) {
 	pairs := loadTemplateFormatPairs(t)
 	secondLine := func(t *testing.T, key domain.TemplateKey, data any) string {

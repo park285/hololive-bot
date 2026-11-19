@@ -87,7 +87,6 @@ func (c *RPC) FetchContent(ctx context.Context, request ContentRequest) (Content
 	return *result, nil
 }
 
-// FetchChannel은 필수 Kind에 지정된 범위만 조회하며 접근 제한 목록을 정상 sessions와 구분해 반환합니다.
 func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (ChannelResult, error) {
 	request.ProtocolVersion = ProtocolVersion
 
@@ -105,7 +104,6 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 		request.ScheduledFor = nil
 	}
 
-	// helper에 요청을 다 보냈는지 기록합니다. 보낸 뒤 조회 수를 받지 못하면 상한만큼 지불해야 합니다.
 	var sent atomic.Bool
 
 	traced := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteRequest: func(info httptrace.WroteRequestInfo) {
@@ -138,8 +136,6 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 	return *result, nil
 }
 
-// 검증된 helper 오류 본문은 조회 수를 싣습니다(생략은 0). 요청을 helper에 보냈는데 그런 본문을 받지 못하면 시한 초과·취소·연결 끊김 전까지 보낸 조회 수를 알 수 없으므로, 요청한 상한만큼
-// 기다리지 않고 예약합니다. 요청이 끊기면 helper가 진행 중인 조회를 중단하므로 상한은 실제 조회 수의 상한입니다.
 func (c *RPC) payFailedScheduleLookups(ctx context.Context, err error, budget int, sent bool) error {
 	failure, ok := errors.AsType[*scheduleLookupError](err)
 	if !ok {
@@ -163,8 +159,6 @@ func (c *RPC) payFailedScheduleLookups(ctx context.Context, err error, budget in
 	return err
 }
 
-// 다음 RPC가 이 조회들과 같은 간격을 두게 하며, 예약을 한 번에 하나씩 기다리므로 대기 예약 수가 inflight를 넘지 않아 실행 프로필의 limiter 예산(호출 수 x inflight x 간격)과
-// 맞습니다. 기다리는 중 수집이 끝나면 조회는 이미 일어났으므로 남은 몫을 기다리지 않고 예약해 다음 RPC가 대신 기다리게 합니다.
 func (c *RPC) payScheduleLookups(ctx context.Context, lookups int) error {
 	for paid := range lookups {
 		if err := c.observeLimiterWait(ctx, "/v1/channel"); err != nil {
@@ -183,7 +177,6 @@ func (c *RPC) reserveLimiter(calls int) {
 	}
 }
 
-// 응답 예산은 MaxLiveCheckResponseBytes 이하로 제한하며 반환 channel_id와 요청 subject의 대조는 호출자가 소유합니다.
 func (c *RPC) FetchChannelLiveCheck(ctx context.Context, request ChannelLiveCheckRequest) (ChannelLiveCheckResult, error) {
 	request.ProtocolVersion = ProtocolVersion
 
@@ -202,7 +195,6 @@ func (c *RPC) FetchChannelLiveCheck(ctx context.Context, request ChannelLiveChec
 	return *result, nil
 }
 
-// 반환 video_id와 요청 subject의 대조는 호출자가 소유합니다.
 func (c *RPC) FetchVideoLiveCheck(ctx context.Context, request VideoLiveCheckRequest) (VideoLiveCheckResult, error) {
 	request.ProtocolVersion = ProtocolVersion
 
@@ -284,7 +276,6 @@ func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, succe
 
 	response := new(T)
 	if err := decodeHelperResponse(resp, successLimit, response); err != nil {
-		// 예정 영상 조회 수는 /v1/channel 오류 본문에만 있을 수 있습니다.
 		if failure, ok := errors.AsType[*scheduleLookupError](err); ok && failure.lookups > 0 && path != "/v1/channel" {
 			return nil, protocolMismatch(errors.New("youtube.js helper reported schedule lookups outside the channel endpoint"))
 		}
@@ -317,9 +308,6 @@ func minimumSuccessResponseBytes(path string) int64 {
 	return 1
 }
 
-// 같은 DTO를 marshal해 필드 이름과 선택 필드 생략을 wire와 함께 따라가며, 식별자는 비워 하한만 셉니다. 이 값이 helper 하한보다 크면 helper가 처리할 요청을 Go가 먼저 거부하므로
-// helper 하한을 넘지 않아야 합니다. 확인된 MEMBERS_ONLY의 필수 channel_id는 빈 값이면 생략되어 helper 하한보다 작게 계산되며, 그 사이의 요청은 helper가 같은
-// RESOURCE_LIMIT로 거부합니다.
 var minimumSuccessBytes = map[string]int64{
 	"/v1/community": encodedSize(&CommunityResult{
 		ProtocolVersion: ProtocolVersion, PageCount: 1, Exhausted: true,
@@ -354,7 +342,6 @@ var minimumSuccessBytes = map[string]int64{
 func encodedSize(value any) int64 {
 	raw, err := jsonv2.Marshal(value)
 	if err != nil {
-		// 고정된 DTO 값의 marshal 실패는 프로그램 결함이므로 package 초기화에서 드러낸다.
 		panic(fmt.Sprintf("encode minimal youtube.js helper success response: %v", err))
 	}
 
@@ -416,7 +403,6 @@ func readHelperBody(resp *http.Response, limit int64) ([]byte, error) {
 	payload, readErr := httputil.ReadAllLimited(resp.Body, limit)
 	closeErr := resp.Body.Close()
 
-	// 상한 초과는 수송 실패가 아니라 응답 크기 계약 위반이므로 문맥 분류 대신 status별 오류로 남긴다.
 	if errors.Is(readErr, httputil.ErrResponseBodyTooLarge) {
 		return nil, oversizedHelperResponse(resp.StatusCode)
 	}

@@ -113,7 +113,6 @@ func assertGroupQueryPreparedPlan(
 	_, err = tx.Exec(t.Context(), "SELECT set_config('plan_cache_mode', $1, true)", mode)
 	require.NoError(t, err)
 
-	// EXPLAIN 자체의 bind가 아니라 실제 SELECT를 PREPARE해야 generic 계획도 검증한다.
 	_, err = tx.Exec(t.Context(), "PREPARE group_rows_plan(bigint[], text[], text[], text[], bigint) AS "+query)
 	require.NoError(t, err)
 
@@ -167,7 +166,6 @@ func assertGroupQueryRequestScans(t *testing.T, plan groupRowsQueryPlan) {
 func groupQueryExecuteFixture(t *testing.T, pool *pgxpool.Pool, count int) (string, []int64) {
 	t.Helper()
 
-	// 요청 tuple과 방도 identity도 다른 행은 direct ID 분기에서만 반환되어야 한다.
 	directOnlyID := groupQueryPlanDeliveryID(t, pool, "plan-video-101", "plan-room-4")
 	wanted := make([]int64, 0, count*2+1)
 	idLiterals := make([]string, 0, count+1)
@@ -183,7 +181,6 @@ func groupQueryExecuteFixture(t *testing.T, pool *pgxpool.Pool, count int) (stri
 		id := groupQueryPlanDeliveryID(t, pool, contentID, "plan-room-0")
 		siblingID := groupQueryPlanDeliveryID(t, pool, " "+contentID+" ", "plan-room-0")
 
-		// 공백을 제거하면 같은 identity인 sibling은 direct IDs에 넣지 않는다.
 		wanted = append(wanted, id, siblingID)
 		idLiterals = append(idLiterals, strconv.FormatInt(id, 10))
 		rooms = append(rooms, "'plan-room-0'")
@@ -193,8 +190,6 @@ func groupQueryExecuteFixture(t *testing.T, pool *pgxpool.Pool, count int) (stri
 
 	slices.Sort(wanted)
 
-	// 후보 없는 direct-only 요청 1개도 group 수에 포함한다. LogicalGroupLimit는 production과 같은 100이다.
-	// 모든 SQL literal은 이 합성 fixture 소유다.
 	limit := (count+1)*(100+1) + len(idLiterals)
 	execute := fmt.Sprintf("EXECUTE group_rows_plan(ARRAY[%s]::bigint[], ARRAY[%s]::text[], ARRAY[%s]::text[], ARRAY[%s]::text[], %d)",
 		strings.Join(idLiterals, ","), strings.Join(rooms, ","), strings.Join(kinds, ","), strings.Join(candidates, ","), limit)

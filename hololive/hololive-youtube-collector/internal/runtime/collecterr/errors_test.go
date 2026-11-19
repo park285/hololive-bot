@@ -81,7 +81,6 @@ func TestERR006WrapWithRetryNormalizePreserveErrorChain(t *testing.T) {
 func TestERR007RejectsImpossibleCodeClassRetryDiagnosticTuple(t *testing.T) {
 	t.Parallel()
 
-	// 알려진 code라도 계약 밖 class는 기본 class로 고치지 않고 Internal로 닫으며 원래 tuple을 원인에 남긴다.
 	err := New(contract.ErrorCollectionFailed, contract.ClassTimeout, "impossible")
 	if CodeOf(err) != contract.ErrorInternalInvariant || ClassOf(err) != contract.ClassInternal {
 		t.Fatalf("known code with impossible class = %s/%s, want fail-closed internal", CodeOf(err), ClassOf(err))
@@ -129,7 +128,6 @@ func TestERR008ContextDeadlineAndCancelMapping(t *testing.T) {
 func TestERR009RetryAfterDeltaSecondsAndHTTPDate(t *testing.T) {
 	t.Parallel()
 
-	// 429/503 상태별 오류 분류는 providerhttp 테스트가 소유한다. 여기서는 헤더 해석 경계만 고정한다.
 	now := time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC)
 
 	if delta := ParseRetryAfter("12"); delta.Kind() != RetryAfter || delta.After() != 12*time.Second {
@@ -203,7 +201,6 @@ func TestERR015NewWriterRejectsLegacyHelperClassNames(t *testing.T) {
 func TestERR015bKnownCodeLegacyClassFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	// 구 helper class 이름을 code 기본 class로 수리하던 경로는 지웠다. 알려진 code라도 durable 진단은 Internal이다.
 	parser := New(contract.ErrorParserDrift, contract.FailureClass("RpcResponseError"), "parser drift")
 	if CodeOf(parser) != contract.ErrorInternalInvariant || ClassOf(parser) != contract.ClassInternal {
 		t.Fatalf("parser_drift+RpcResponseError = %s/%s, want fail-closed internal", CodeOf(parser), ClassOf(parser))
@@ -256,8 +253,6 @@ func TestRecognizedNetworkNormalizesToTransient(t *testing.T) {
 	}
 }
 
-// net/http client가 돌려준 수송 계층 타임아웃(response header·dial·Client.Timeout)은 *url.Error의 Timeout()으로
-// 드러난다. 이를 TIMEOUT으로 분류해야 운영 로그가 외부 지연을 내부 불변식 위반으로 기록하지 않는다.
 func TestERR012TransportTimeoutClassifiesAsCollectionTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -277,7 +272,6 @@ func TestERR012TransportTimeoutClassifiesAsCollectionTimeout(t *testing.T) {
 		}
 	}
 
-	// HTTP 요청 밖의 socket deadline과 타임아웃이 아닌 *url.Error는 기존대로 미분류다.
 	for name, err := range map[string]error{
 		"bare socket deadline":      os.ErrDeadlineExceeded,
 		"url error without timeout": &url.Error{Op: "Get", URL: "https://holodex.example", Err: errors.New("unexpected EOF reading trailer")},

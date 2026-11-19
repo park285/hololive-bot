@@ -46,7 +46,6 @@ func TestNewInternalRouteRegistrarAppliesAPIKeyAuth(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-// router나 alarm service가 없으면 route 없이 기동하지 않도록 registrar가 router 생성을 실패시킨다.
 func TestNewInternalRouteRegistrarFailsWhenRouterOrAlarmServiceMissing(t *testing.T) {
 	router := gin.New()
 

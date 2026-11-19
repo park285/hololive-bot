@@ -7,8 +7,7 @@
 
 Decision: accept the non-secret Git-history reconnaissance risk.
 
-- Current paths under `docs/agent-workflows/` and `docs/history/plan-kits/` are
-  excluded by repository `.gitignore` rules and are not tracked in the current index.
+- 점검 당시 워크스테이션의 로컬 자료는 `.gitignore`로 제외되어 Git 인덱스에 없었습니다.
 - The three retained workstation-local copies are public-safe summary/evidence
   stubs. A bounded static scan found no private-key header, common provider token
   form, or credential-like assigned value.
@@ -25,8 +24,7 @@ Decision: accept the non-secret Git-history reconnaissance risk.
 
 - This finding is recorded separately even though it cites the same three current
   paths, because the input finding and its closure evidence remain one-to-one.
-- Current paths under `docs/agent-workflows/` and `docs/history/plan-kits/` are
-  excluded by repository `.gitignore` rules and are not tracked in the current index.
+- 점검 당시 워크스테이션의 로컬 자료는 `.gitignore`로 제외되어 Git 인덱스에 없었습니다.
 - The retained local evidence is reduced to public-safe stubs. The same bounded
   static scan found no actual credential value; old history contains operational
   categories rather than known secret material.

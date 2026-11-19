@@ -87,7 +87,10 @@ function attachHelperServer(runtime, requestReadTimeoutMs) {
  */
 async function handleIncoming(req, res, runtime, server, requestReadTimeoutMs) {
   let wrote = false;
-  /** @param {number} status @param {unknown} body */
+  /**
+   * @param {number} status
+   * @param {unknown} body
+   */
   const send = (status, body) => {
     if (wrote || res.writableEnded || res.destroyed) {
       return;
@@ -168,9 +171,7 @@ async function handleIncoming(req, res, runtime, server, requestReadTimeoutMs) {
   }
 }
 
-/**
- * @param {IncomingMessage} req
- */
+/** @param {IncomingMessage} req */
 function isCollectionPath(req) {
   return req.method === "POST" && (
     req.url === "/v1/community" ||
@@ -206,7 +207,11 @@ async function dispatchCollection(url, raw, fetchers, maximumSuccessResponseByte
   return handleChannelRequest(raw, fetchers.fetchChannel, maximumSuccessResponseBytes);
 }
 
-/** @param {ServerResponse} res @param {number} status @param {unknown} body */
+/**
+ * @param {ServerResponse} res
+ * @param {number} status
+ * @param {unknown} body
+ */
 function writeJSON(res, status, body) {
   const raw = encodeResponseBody(body);
   res.writeHead(status, {
@@ -346,15 +351,12 @@ async function listenWithoutUnlink(server, socketPath) {
 
 /** @param {import("node:http").Server} server */
 function disarmPipeUnlink(server) {
-  // Node net.Server.close()가 _pipeName을 unlink하므로, socket 삭제는 Go만 수행한다.
   if ("_pipeName" in server) {
     server._pipeName = undefined;
   }
 }
 
-/**
- * @param {{ requestReadTimeoutMs: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
- */
+/** @param {{ requestReadTimeoutMs: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options */
 function normalizeListenOptions(options) {
   if (!Number.isSafeInteger(options.requestReadTimeoutMs) || options.requestReadTimeoutMs <= 0) {
     throw new Error("requestReadTimeoutMs must be a positive integer");
@@ -366,10 +368,7 @@ function normalizeListenOptions(options) {
   };
 }
 
-/**
- * Go helper.go가 세 인자를 항상 넘기므로, 빠지거나 형식이 틀린 인자는 대체값 없이 기동 실패로 드러냅니다.
- * @param {string[]} argv
- */
+/** @param {string[]} argv */
 function parseArgs(argv) {
   let socket = "";
   let protocolVersion = "";

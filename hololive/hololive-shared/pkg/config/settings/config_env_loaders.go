@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package settings
 
 import (
@@ -97,7 +77,6 @@ func LoadPostgresConfig() (PostgresConfig, error) {
 	return config, nil
 }
 
-// LoadPostgresEndpointConfig는 plane별 pool 정책과 독립적인 연결 설정만 읽는다.
 func LoadPostgresEndpointConfig() (PostgresConfig, error) {
 	var env envload.StrictEnv
 
@@ -120,12 +99,10 @@ func LoadPostgresEndpointConfig() (PostgresConfig, error) {
 	return config, nil
 }
 
-// LoadServerConfig는 API_SECRET_KEY를 인증 키로 쓰는 runtime의 HTTP listener 설정을 읽는다.
 func LoadServerConfig() (ServerConfig, error) {
 	return LoadServerConfigWithAPIKey(sharedenv.String("API_SECRET_KEY", ""))
 }
 
-// LoadServerConfigWithAPIKey: 런타임마다 인증 키 환경변수가 달라 호출자가 값을 넘긴다.
 func LoadServerConfigWithAPIKey(apiKey string) (ServerConfig, error) {
 	var env envload.StrictEnv
 
@@ -162,7 +139,6 @@ func LoadNotificationConfig() (NotificationConfig, error) {
 	}, nil
 }
 
-// LoadSettingsFilePath는 관리 화면이 저장하는 persisted settings(JSON) 경로다. SETTINGS_DIR(기본 data)/settings.json.
 func LoadSettingsFilePath() string {
 	dir := strings.TrimSpace(sharedenv.String("SETTINGS_DIR", ""))
 	if dir == "" {

@@ -14,27 +14,18 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
-// ContentPublicationMaxCalls는 content job 하나가 video_list 공개 근거를 얻으려고 추가로 보내는 /v1/video_live_check RPC 상한입니다.
-// 호출마다 RPC limiter를 한 번 기다리므로 fleet 호출 상한을 우회하지 않으며, registry의 job 최대 upstream 호출 수에 더해
-// 수집 시간 예산을 계산합니다. 목록 RPC 하나에 영상별 호출을 숨기지 않습니다.
 const ContentPublicationMaxCalls = 2
 
 const (
-	publicationCursorVersion = 1
-	// 최근 조회 이력만 cursor에 보존한다. 목록 전체의 다음 위치를 따로 기록하므로
-	// cache 상한 밖 항목도 순환 조회하며, checkpoint의 16KiB 상한을 넘지 않는다.
+	publicationCursorVersion    = 1
 	maxPublicationCursorEntries = 48
 	maxPublicationCursorBytes   = 16384
 )
 
-// ContentCursorReader는 같은 provider·kind·subject의 가장 최근 checkpoint cursor를 읽습니다.
-// 저장된 cursor가 없으면 nil을 반환합니다. *sourceobservation.Repository가 구현합니다.
 type ContentCursorReader interface {
 	LatestCheckpointCursor(ctx context.Context, provider contract.Provider, kind contract.ObservationKind, subjectKey string) (jsontext.Value, error)
 }
 
-// 관측·checkpoint와 같은 publish tx로 저장되므로 수락된 관측과 어긋나지 않으며, collector 재시작·다른 인스턴스도 이어 씁니다. ScheduledFor는 이 cursor와 함께 수락된
-// video_list 관측의 slot입니다. 같은 slot 재시도는 이미 수락된 관측을 다시 만들지 않습니다.
 type publicationCursor struct {
 	Version      int                      `json:"version"`
 	ScheduledFor time.Time                `json:"scheduled_for"`
@@ -43,7 +34,6 @@ type publicationCursor struct {
 	Entries      []publicationCursorEntry `json:"entries"`
 }
 
-// Publication이 nil이면 응답을 얻지 못한 시도라 근거가 아닙니다.
 type publicationCursorEntry struct {
 	VideoID     string                       `json:"video_id"`
 	AttemptedAt time.Time                    `json:"attempted_at"`
@@ -59,10 +49,6 @@ type publicationCandidate struct {
 	newHead    bool
 }
 
-// enrichPublications는 새로 목록 앞에 들어온 항목을 먼저 조회하고, 나머지 전체 목록은 저장된 위치부터 순환합니다.
-// 근거 cache가 가득 차도 뒤쪽 항목을 영구 제외하지 않습니다. 호출마다 기존 limiter를 기다리며 한 job에서
-// 최대 ContentPublicationMaxCalls번만 요청합니다. 실패한 시도도 위치를 전진시키고 같은 job의 추가 조회를 멈춥니다.
-// 부모 수집 문맥 자체가 끝났을 때만 관측을 포기하고, enrichCtx가 끝나면 그때까지 받은 근거를 보존합니다.
 func (r *ContentRunner) enrichPublications(
 	enrichCtx context.Context,
 	ctx context.Context,
@@ -108,8 +94,6 @@ func (r *ContentRunner) enrichPublications(
 	return publications, cursor, nil
 }
 
-// startPublicationCursor는 현재 목록의 head와 저장된 순환 위치로 새 cursor를 시작하고,
-// 직전 head 앞에 새로 들어온 항목 수를 반환합니다. 직전 head가 목록에 없으면 새 head 구간은 없습니다.
 func startPublicationCursor(items []youtubejs.ContentItem, prior *storedPublicationCursor) (publicationCursor, int) {
 	cursor := publicationCursor{Version: publicationCursorVersion}
 
@@ -174,7 +158,6 @@ func publicationCandidates(
 	return candidates, entries
 }
 
-// 응답을 얻지 못한 시도는 Publication이 nil인 항목으로 기록해 순환 위치를 전진시킵니다. 부모 문맥이 끝났거나 근거 조회 실패로 강등할 수 없는 오류만 반환합니다.
 func (r *ContentRunner) attemptPublication(
 	enrichCtx context.Context,
 	ctx context.Context,
@@ -191,7 +174,6 @@ func (r *ContentRunner) attemptPublication(
 		return publicationCursorEntry{}, fmt.Errorf("fetch video publication: %w", ctx.Err())
 	}
 
-	// 근거 조회 시한이 끝났어도 설정·취소·소유권·내부 오류를 정상 목록으로 숨기지 않습니다.
 	if !liveCheckRequestFailed(ctx, err) {
 		return publicationCursorEntry{}, fmt.Errorf("fetch video publication: %w", err)
 	}
@@ -216,7 +198,6 @@ func reusablePublication(publication *contract.VideoPublicationV1, item *youtube
 	return false
 }
 
-// 같은 우선순위에서는 순환 위치를 사용해 작은 cache가 큰 목록의 앞부분만 반복하지 않게 합니다.
 func comparePublicationCandidates(left, right publicationCandidate) int {
 	if left.newHead != right.newHead {
 		if left.newHead {
@@ -286,7 +267,6 @@ func classifyPublication(result *youtubejs.VideoLiveCheckResult, channelID strin
 	}
 
 	if result.IsUpcoming != nil && *result.IsUpcoming {
-		// 예정 시각은 대기 상태가 확인된 응답에서만 최초공개 근거이며, helper의 scheduled_at 출력 규칙에 기대지 않습니다.
 		if result.IsLiveContent == nil || *result.IsLiveContent || result.ScheduledAt == nil ||
 			result.WaitingStateConfirmed == nil || !*result.WaitingStateConfirmed {
 			return unresolved
@@ -313,8 +293,6 @@ type storedPublicationCursor struct {
 	nextPosition int
 }
 
-// loadPublicationCursor는 현재 관측 계약의 durable cursor만 읽습니다. 이력이 없으면 첫 조회이며,
-// 존재하지만 해석할 수 없는 cursor는 데이터 계약 오류입니다. 이를 이력 없음으로 숨기거나 자동 정산하지 않습니다.
 func (r *ContentRunner) loadPublicationCursor(ctx context.Context, channelID string) (storedPublicationCursor, error) {
 	raw, err := r.cursors.LatestCheckpointCursor(ctx, contract.ProviderYouTubeJS, contract.KindVideoList, channelID)
 	if err != nil {
@@ -377,8 +355,6 @@ func publicationCursorEntries(stored []publicationCursorEntry, now time.Time) (m
 	return entries, nil
 }
 
-// marshalPublicationCursor는 최근 cache부터 보존합니다. 순환 위치는 제거하지 않아 누락된 cache가 조회를 굶기지 않습니다.
-// JSONB가 구분자 뒤에 추가하는 공백도 보수적으로 계산해 DB의 cursor::text 16KiB 제약을 넘지 않게 합니다.
 func marshalPublicationCursor(cursor publicationCursor) (jsontext.Value, error) {
 	for {
 		raw, err := jsonv2.Marshal(cursor)

@@ -48,7 +48,6 @@ func TestCollectionRuntimeBundlesConcurrentWriters(t *testing.T) {
 	}
 }
 
-// 실제 backend blocker를 확인하므로 스케줄링 지연만으로 직렬화 성공을 추정하지 않는다.
 func runCollectionBundleBlockedWriter(t *testing.T, pool *pgxpool.Pool, firstSQL, secondSQL string, blocked func(pgx.Tx)) {
 	t.Helper()
 

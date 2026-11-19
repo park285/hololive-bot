@@ -12,7 +12,6 @@ INTEGRATION_POSTGRES_IMAGE="${INTEGRATION_POSTGRES_IMAGE:-docker.io/library/post
 INTEGRATION_VALKEY_IMAGE="${INTEGRATION_VALKEY_IMAGE:-docker.io/valkey/valkey:9.1.3-alpine3.24@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b}"
 INTEGRATION_TEST_DB_CONTAINER=""
 INTEGRATION_TEST_VALKEY_CONTAINER=""
-# 일회용 PostgreSQL·Valkey는 rootless Podman으로 띄운다. short-name 해석에 기대지 않도록 image는 전체 이름이다.
 
 check_integration_tag_compilation() {
     run_step "Integration-tag vet" \
@@ -62,8 +61,6 @@ provision_integration_test_database() {
     local published_port
     local owner_token
 
-    # 같은 index digest의 다른 플랫폼 이미지(교차 빌드가 받은 것)가 로컬에 있으면 podman은 경고만 내고
-    # 에뮬레이션으로 실행해 시간 의존 시험이 깨진다. 호스트 플랫폼을 명시하면 맞는 이미지를 쓰거나 받는다.
     platform="$(podman info --format '{{.Host.OS}}/{{.Host.Arch}}')"
     INTEGRATION_TEST_DB_CONTAINER="$(podman run --detach --rm \
         --platform "${platform}" \
@@ -76,7 +73,6 @@ provision_integration_test_database() {
         --tmpfs /var/lib/postgresql \
         "${INTEGRATION_POSTGRES_IMAGE}" \
         -c fsync=off -c synchronous_commit=off -c full_page_writes=off)"
-    # 테스트 DB는 보존할 데이터가 없으므로 데이터 디렉터리를 tmpfs에 두고 내구성 쓰기를 끈다(빌드 호스트 SSD 쓰기량 절감).
     trap cleanup_integration_test_services EXIT
 
     for _ in {1..60}; do

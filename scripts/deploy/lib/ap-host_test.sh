@@ -41,7 +41,6 @@ fi
 sed -i '/^AP_GOAMD64=/d' "$fixture_root/scripts/deploy/ap-hosts/osaka.conf"
 SSH_KEY="$fixture_root/KR.key" ap_host_load "$fixture_root" osaka
 
-# 실행 방식은 conf가 명시해야 하며 Compose AP는 허용하지 않는다.
 expect_load_rejected() {
   local name="$1" message="$2"
   shift 2

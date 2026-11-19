@@ -28,7 +28,6 @@ const (
 	PostgresCollectorDRoleUser  = "hololive_collector_d"
 )
 
-// PostgresCollectorRoleUser는 collector instance에 고정된 PostgreSQL login role을 반환합니다.
 func PostgresCollectorRoleUser(instanceID string) (string, bool) {
 	switch instanceID {
 	case "youtube-collector-a":
@@ -44,7 +43,6 @@ func PostgresCollectorRoleUser(instanceID string) (string, bool) {
 	}
 }
 
-// ValidateNoNotificationEgressOwnership: alarm-worker가 아닌 runtime이 proactive egress를 소유하지 못하게 한다.
 func ValidateNoNotificationEgressOwnership(runtime, egressRole, schedulerRole string) error {
 	if err := ValidateNotificationRoleEnvValues(egressRole, schedulerRole); err != nil {
 		return err
@@ -81,7 +79,6 @@ func RejectReservedEgressRoles(runtime, egressRole, schedulerRole string) error 
 	return nil
 }
 
-// RequireNotificationRoleEnv: runtime의 production 설정이 역할 env를 허용값 가운데 하나로 명시하도록 강제한다.
 func RequireNotificationRoleEnv(runtime, key, value string, allowed ...string) error {
 	if MatchesNotificationRole(value, allowed...) {
 		return nil

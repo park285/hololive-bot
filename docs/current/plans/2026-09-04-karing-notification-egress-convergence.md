@@ -10,8 +10,6 @@
 
 ## Plan controls
 
-**Decisions:** `DEC-20260904-hololive-karing-canonical-notification-egress` (governing), `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership` (constraint), `DEC-20260730-hololive-alarm-egress-lease-removed` (constraint), `DEC-20260517-iris-karing-runtime-capability` (context)
-
 - 기준 source revision은 `hololive-bot@69b2a76b5473a568eda2672e17e6068888a85fdf`입니다. 실행 직전에 branch, HEAD, worktree, active Git writer와 lock을 다시 확인하고 기준이 달라졌으면 연결 경로와 계약을 재검토합니다.
 - 깨진 불변조건은 `Iris가 Karing 요청을 queue에 수락한 사실과 Kakao로 handoff한 사실을 구분해야 한다`입니다. 현재 `SendKaringContentList`는 `202 Accepted` 응답 직후 성공을 반환하여 alarm dispatch와 YouTube outbox가 너무 일찍 `sent`를 기록할 수 있습니다.
 - Karing template mapping은 `1 -> 133266`, `2 -> 133223`, `3 -> 133222`, `4 -> 133267`을 유지합니다. Template 변수, 최대 네 항목, chunk 순서와 deterministic `clientRequestId`를 바꾸지 않습니다.
@@ -76,7 +74,7 @@ Go 파일 수정 직전에 Modern Go Guidelines CLI를 대상 경로 기준으�
 - Twitch/Chzzk-only, celebration, delivery digest, YouTube milestone과 generic delivery는 plain text를 유지합니다. 알 수 없는 kind나 불완전한 Karing 입력을 비호환 plain-text 유형으로 오인하지 않고 fail closed합니다.
 - Integrated content에서 YouTube target을 canonical Karing link로 선택하고 기존 item order, template map, community argument와 image validation을 유지합니다.
 - Alarm dispatch는 confirmed handoff 뒤에만 dispatched로 완료합니다. Known failure는 기존 bounded failure policy로 분류하고 outcome unknown은 retry 판단보다 먼저 분리하여 quarantine/preserved-unknown으로 종결하며 재post하지 않습니다.
-- YouTube outbox는 `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`의 `SENDING` 보존, stale sweeper quarantine, provider non-reexecution 규칙을 유지합니다. Sender 확인 context 소진을 일반 retryable deadline으로 낮추지 않습니다.
+- YouTube outbox는 `SENDING` 보존, stale sweeper quarantine, provider non-reexecution 규칙을 유지합니다. Sender 확인 context 소진을 일반 retryable deadline으로 낮추지 않습니다.
 - Supported Karing 경로의 post 또는 확인 실패에 text/Markdown fallback을 추가하지 않습니다.
 
 ### T04 — Retire stale flags and new short-link production
@@ -183,17 +181,16 @@ From `hololive-bot`:
 
 두 명령은 exit 0이어야 합니다. Alarm-worker runtime loader test는 세 retired key의 빈 값 presence까지 거부해야 합니다. Build 결과 외 tracked generated artifact가 생기면 제거하고, dependency/lockfile/schema/protocol/template diff는 없어야 합니다.
 
-### V05 — Architecture, documentation and catalog boundary
+### V05 — 아키텍처와 계약 문서 검증
 
-From `hololive-bot`, then `iris-stack`:
+`hololive-bot`에서 실행합니다.
 
 ```bash
 bash scripts/architecture/check-contract-map.sh
 git diff --check
-bash ../tools/checks/check-decision-catalog.sh check --submodules
 ```
 
-모든 command가 exit 0이어야 하며 Karing/short-link 문서가 contract map과 catalog에서 유효해야 합니다. Gate가 stale Markdown/flag/short-link producer reference를 찾으면 active owner를 수정하고 allowlist로 우회하지 않습니다.
+모든 command가 exit 0이어야 하며 Karing/short-link 문서가 계약 지도에서 유효해야 합니다. Gate가 stale Markdown/flag/short-link producer reference를 찾으면 active owner를 수정하고 allowlist로 우회하지 않습니다.
 
 ### V06 — Approved runtime convergence
 

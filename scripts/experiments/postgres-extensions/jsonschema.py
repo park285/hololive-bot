@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""공식 pg_jsonschema GNU 바이너리의 aliases 계약과 서버 실행 비용을 비교합니다."""
 
 import argparse
 import json
@@ -11,7 +10,7 @@ from benchmark import ROOT, command, sql, wait_ready
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description="공식 pg_jsonschema GNU 바이너리의 aliases 계약과 서버 실행 비용을 비교합니다.")
     parser.add_argument("--image", required=True)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     args = parser.parse_args()

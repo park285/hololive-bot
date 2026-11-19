@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package member
 
 import (
@@ -29,19 +9,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// FindMemberByChannelID는 채널 대표(가장 작은 영속 ID) 멤버를 돌려준다. 없으면 domain.ErrMemberNotFound를 감싼 오류다.
 func (c *Cache) FindMemberByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
 	return c.lookupPoint(ctx, pointLookupChannel, channelID)
 }
 
-// FindMemberByName은 english_name 정확 일치 멤버를 돌려준다. 없으면 domain.ErrMemberNotFound를 감싼 오류다.
 func (c *Cache) FindMemberByName(ctx context.Context, name string) (*domain.Member, error) {
 	return c.lookupPoint(ctx, pointLookupName, name)
 }
 
-// FindMemberByAlias는 게시된 snapshot에서 별칭을 먼저 찾는다. Snapshot이 없거나 snapshot에 없는 별칭은
-// PostgreSQL을 조회한다(epoch 무효화 없이 바뀐 행도 곧바로 보이도록 음성 결과는 캐시하지 않는다). 없으면
-// domain.ErrMemberNotFound를 감싼 오류다.
 func (c *Cache) FindMemberByAlias(ctx context.Context, alias string) (*domain.Member, error) {
 	return c.lookupPoint(ctx, pointLookupAlias, alias)
 }
@@ -125,7 +100,6 @@ func (c *Cache) lookupPointInMemory(kind pointLookupKind, key string) (*domain.M
 	case pointLookupName:
 		return overlay.byName[key], generation
 	case pointLookupAlias:
-		// 별칭은 snapshot 규칙만 쓰고 overlay를 보지 않는다.
 	}
 
 	return nil, generation
@@ -163,7 +137,6 @@ func (c *Cache) findPointInRepository(ctx context.Context, kind pointLookupKind,
 	return member, nil
 }
 
-// GetChannelIDs는 snapshot의 채널 ID 목록을, snapshot이 없으면 PostgreSQL 목록을 돌려준다. 돌려준 slice는 호출자 소유다.
 func (c *Cache) GetChannelIDs(ctx context.Context) ([]string, error) {
 	if c == nil {
 		return nil, errors.New("member cache is nil")

@@ -72,7 +72,6 @@ func newScheduleCardKey(member *domain.Member, schedule *scheduleposter.Publishe
 	return key
 }
 
-// ScheduleCardRenderer는 같은 포스터 개정판·판형·템플릿·멤버 표시 정보의 페이지를 한 묶음으로 캐시한다.
 type ScheduleCardRenderer struct {
 	format  schedulecard.Format
 	cache   *imageCache[scheduleCardKey]
@@ -81,7 +80,6 @@ type ScheduleCardRenderer struct {
 	draw    func(context.Context, schedulecard.Card, schedulecard.Format, cardtemplate.ID) ([][]byte, error)
 }
 
-// NewScheduleCardRenderer의 store가 nil이면 카드를 프로세스 메모리에만 둔다.
 func NewScheduleCardRenderer(store sharedcache.Store) *ScheduleCardRenderer {
 	r := newScheduleCardRenderer(scheduleCardFormat, scheduleCardCacheLimit, schedulecard.RenderPages)
 
@@ -116,7 +114,6 @@ func (r *ScheduleCardRenderer) RenderScheduleCards(ctx context.Context, member *
 		return pages, nil
 	}
 
-	// 같은 입력을 기다리는 다른 명령이 있으므로 공유 작업에는 독립된 마감 시각을 둔다.
 	parent := context.WithoutCancel(ctx)
 
 	resultCh := r.flights.DoChan(key.String(), func() (any, error) {
@@ -125,7 +122,6 @@ func (r *ScheduleCardRenderer) RenderScheduleCards(ctx context.Context, member *
 
 		var pages [][]byte
 
-		// DoChan의 goroutine panic은 호출자의 복구 경계를 벗어나므로 공유 렌더 안에서 오류로 돌려준다.
 		err := panicguard.RunE(slog.Default(), panicscope.BackgroundTask, "schedule-card-render", func() error {
 			var renderErr error
 
@@ -150,7 +146,6 @@ func (r *ScheduleCardRenderer) RenderScheduleCards(ctx context.Context, member *
 func waitSchedulePages(ctx context.Context, template cardtemplate.ID, resultCh <-chan singleflight.Result) ([][]byte, error) {
 	waitCtx := ctx
 	if deadline, ok := ctx.Deadline(); ok && template == cardtemplate.Orbit {
-		// 파일을 기록할 시간은 호출자에게 남기되 다른 대기자의 공유 작업은 취소하지 않는다.
 		var cancel context.CancelFunc
 
 		waitCtx, cancel = context.WithTimeoutCause(ctx, time.Until(deadline)*3/4, schedulecard.ErrRenderBudget)
@@ -238,7 +233,6 @@ func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleC
 		return nil, err
 	}
 
-	// 사진이 카드의 유일한 키비주얼이고 키가 한 주 내내 같으므로, 사진을 받지 못한 카드는 캐시하지 않고 다음 요청에서 다시 받는다.
 	if photos.cachePolicy.memoryCacheable && (member.Photo == "" || photo != nil) {
 		if record := encodeSchedulePages(hash, pages); record != nil {
 			r.cache.putImmutable(key, record[len(hash):])

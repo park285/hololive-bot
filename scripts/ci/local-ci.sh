@@ -10,12 +10,10 @@ source "${SCRIPT_DIR}/nilaway-inputs.sh"
 source "${SCRIPT_DIR}/local-ci-nilaway.sh"
 cd "${ROOT_DIR}"
 
-# local-ci-files.sh·local-ci-packages.sh가 형제 모듈을 포함한 이 배열로 경로를 판별한다.
 # shellcheck disable=SC2034
 GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
 source "${SCRIPT_DIR}/local-ci-files.sh"
 source "${SCRIPT_DIR}/go-work-sync-drift.sh"
-# local-ci-packages.sh가 이 배열을 입력으로 사용한다.
 # shellcheck disable=SC2034
 mapfile -t WORKSPACE_GO_PACKAGES < <(go_workspace_package_patterns)
 GO_PACKAGES=()
@@ -98,7 +96,6 @@ if (( $# != 0 )); then
     exit 2
 fi
 
-# 배포·운영 스크립트 테스트는 scripts/ci/pre-push-gate.sh 가 입력 변경 시에만 실행한다.
 configure_go_packages
 echo "[LOCAL CI] Go package scope: ${LOCAL_CI_GO_SCOPE} (${#GO_PACKAGES[@]} packages)"
 if has_go_packages; then
@@ -112,7 +109,6 @@ run_step "Architecture gates" ./scripts/architecture/ci-boundary-gate.sh
 run_step "Sensitive log scan" ./scripts/refactor/grep-sensitive-logs.sh
 run_step "Go toolchain" go env GOVERSION
 run_step "go work sync drift" verify_go_work_sync_drift "${ROOT_DIR}"
-# gofmt·go fix modernizer drift는 golangci-lint의 formatters와 modernize 린터가 소유한다.
 check_go_mod_tidy
 check_canonical_module_builds
 check_integration_tag_compilation
@@ -120,8 +116,6 @@ check_golangci_lint
 check_nilaway
 run_go_package_step "Go build" go_mod_readonly go build
 run_step "collector YouTube.js dependencies" bash scripts/ci/public-pr-collector-helper-install.sh
-# production JSON 테스트는 race 단계가 덮는 collector 테스트를 CGO_ENABLED=0으로 다시 돌려 환경 때문에 건너뛴
-# 테스트가 없는지 확인한다. Go 범위에 collector 모듈이 없으면 결과가 바뀌지 않으므로 생략한다.
 if [[ " ${GO_PACKAGES[*]} " == *" ./hololive/hololive-youtube-collector/... "* ]]; then
     run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
 else
@@ -144,9 +138,6 @@ run_go_tests() {
     fi
 }
 
-# budget 벤치마크와 Go 테스트는 hololive-dbtest를 쓴다. dbtest는 테스트마다 템플릿을 복제한 데이터베이스로
-# 격리하므로 두 단계가 rootless Podman 일회용 PostgreSQL 하나를 공유한다. DB를 주지 않으면 testcontainers가 Docker 소켓을 찾는다.
-# subshell에서 실행해 TEST_DATABASE_URL이 뒤의 통합 테스트 선택으로 새지 않고, 종료 시 컨테이너를 지운다.
 run_database_steps() {
     if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
         run_step "Provision test PostgreSQL" provision_integration_test_database
@@ -157,7 +148,6 @@ run_database_steps() {
     fi
 }
 
-# 산술 컨텍스트에 넣지 않더라도 go test 인자로 전달되므로 호출 env 값은 양의 정수만 허용한다(82cbfe75).
 if has_go_packages && [[ -n "${RACE_TEST_PARALLEL:-}" && ! "${RACE_TEST_PARALLEL}" =~ ^[1-9][0-9]*$ ]]; then
     echo "[LOCAL CI] invalid RACE_TEST_PARALLEL=${RACE_TEST_PARALLEL}; expected a positive integer" >&2
     exit 1
@@ -165,7 +155,5 @@ fi
 (run_database_steps)
 
 check_integration_tests
-
-# 의존성 hygiene(govulncheck)은 scripts/ci/pre-push-gate.sh 가 소유한다.
 
 echo "[LOCAL CI] Passed"

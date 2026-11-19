@@ -1,12 +1,10 @@
--- 재발급 예산이 없는 Iris failed를 멤버 전원의 dlq 전이(attempt_count + 1)와 확인 종료로 한 문장에 기록한다. 멤버
--- 조건이 어긋났으면 멤버를 바꾸지 않고 확인만 닫는다.
-/* handoff_fence */, updated AS (
+/* fragment:handoff_fence */, updated AS (
     UPDATE alarm_dispatch_deliveries d
     SET status = 'dlq',
         attempt_count = d.attempt_count + 1,
         dlq_at = clock.now,
-        last_error = $5,
-        last_error_code = $6,
+        last_error = $6,
+        last_error_code = $7,
         updated_at = clock.now
     FROM checked CROSS JOIN clock CROSS JOIN passed
     WHERE d.id = checked.id AND passed.value

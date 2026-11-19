@@ -90,7 +90,6 @@ func (*seeMoreFoldConsumer) Wait(context.Context) bool { return false }
 
 func (*seeMoreFoldConsumer) Reset() {}
 
-// 알림 이름은 종단 문구가 되며 접기 판단과 무관하다.
 type unregisteredMembers struct {
 	domain.MemberDataProvider
 }
@@ -147,7 +146,6 @@ func newSeeMoreFoldRendering(t *testing.T, overrides map[domain.TemplateKey]stri
 	return template.NewRenderer(pool, logger), store
 }
 
-// runSeeMoreFoldFinalPayload는 실제 DB template와 Runner 렌더링을 거쳐 Iris 텍스트 lane에 넘어간 최종 문자열을 반환한다.
 func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store *messagestrings.Store, envelopes ...dispatchoutbox.AlarmQueueEnvelope) string {
 	t.Helper()
 
@@ -168,7 +166,6 @@ func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store
 	return client.texts[0]
 }
 
-// 사용자 지정 본문의 단발 ZWSP는 접기 패딩으로 보지 않는다.
 func requireNoAutoPadding(t *testing.T, final string) {
 	t.Helper()
 

@@ -11,8 +11,6 @@
 
 ## Plan controls
 
-**Decisions:** `DEC-20260904-hololive-karing-regular-chat-egress` (governing), `DEC-20260731-reply-outcome-unknown-fail-closed` (constraint), `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership` (constraint)
-
 ## Ordered tasks
 
 ### T01 Characterize cross-redrain path changes
@@ -29,7 +27,7 @@ room-scoped text/Karing의 TransportError·deadline은 quarantine하고, 미접�
 
 ### T04 Validate the corrected failure boundary
 
-dispatchrun과 worker wiring의 표적 테스트, notification egress architecture gate와 diff check를 실행하고 evidence·PLN을 정합합니다.
+dispatchrun과 worker wiring의 표적 테스트, notification egress architecture gate와 diff check를 실행하고 검증 근거를 기록합니다.
 
 ## Acceptance criteria
 
@@ -61,7 +59,7 @@ alarm-worker workerapp의 실제 동작 시험으로 확인합니다.
 
 ### V03 Final diff and lifecycle checks pass
 
-Hololive와 meta `git diff --check`, decision catalog와 PLN post-validation이 통과합니다.
+Hololive와 meta의 `git diff --check`가 통과합니다.
 
 ## Failure behavior and stop rules
 

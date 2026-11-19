@@ -261,7 +261,6 @@ func TestAlarmDispatchLaterSerialGroupCannotSendAfterLeaseExpiry(t *testing.T) {
 	groups, requests := claimFrozenAlarmDispatchSerialGroups(t, pool, consumer)
 
 	client := &alarmDispatchCancellationIrisClient{onSend: func(sendCtx context.Context) error {
-		// 첫 provider 실행 중 아직 leased인 뒤 그룹의 소유권을 만료시킨다.
 		_, expireErr := pool.Exec(sendCtx, `UPDATE alarm_dispatch_deliveries
 			SET lock_expires_at=clock_timestamp()-INTERVAL '1 second' WHERE status='leased'`)
 
@@ -335,7 +334,6 @@ func claimFrozenAlarmDispatchSerialGroups(t *testing.T, pool *pgxpool.Pool, cons
 
 		requests[group.envelopes[0].SendUnitID] = request
 
-		// runner 밖에서 고정했으므로 봉투를 고정된 단위를 claim한 상태로 맞춘다.
 		for i := range group.envelopes {
 			group.envelopes[i].RequestUnpinned = false
 		}

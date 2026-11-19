@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package api
 
 import (
@@ -125,14 +105,11 @@ func joinedRoomFromIris(summary iris.RoomSummary) joinedRoom {
 	return room
 }
 
-// roomChangeRequest의 mode는 호출자가 본 ACL 모드다. 현재 모드와 다르면 409 acl_mode_changed로 쓰지 않고 거절한다.
 type roomChangeRequest struct {
 	Room string `json:"room" binding:"required"`
 	Mode string `json:"mode" binding:"required"`
 }
 
-// roomChangeResponse의 changed는 이번 요청이 목록을 바꿨는지다. 이미 원하는 상태(추가할 방이 있음, 제거할 방이 없음)면
-// 200과 changed:false로 수렴하므로, 응답을 잃은 뒤 같은 요청을 다시 보내도 거절로 보이지 않는다.
 type roomChangeResponse struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
@@ -193,7 +170,6 @@ func (h *RoomHandler) changeRoom(c *gin.Context, change roomChange) {
 
 	switch {
 	case errors.Is(err, acl.ErrInvalidRoomChatID):
-		// 방 이름 같은 비-chatID 값은 저장해도 어떤 방에도 적용되지 않으므로 입력 오류로 돌려준다.
 		sharedserver.RespondError(c, http.StatusBadRequest, "room must be a chat ID (signed 64-bit integer)", nil)
 	case errors.Is(err, acl.ErrACLModeChanged):
 		sharedserver.RespondError(c, http.StatusConflict, "ACL mode changed", gin.H{"code": aclModeChangedCode})
@@ -260,8 +236,6 @@ func (h *RoomHandler) applyACLSettings(c *gin.Context, req setACLRequest) bool {
 		return true
 	}
 
-	// 오류 응답을 보낸 뒤에도 이미 커밋된 부분(예: enabled만 저장되고 mode 저장 실패)은 감사 기록에 남긴다.
-	// 호출자가 재시도하지 않으면 이 변경의 activity가 남지 않기 때문이다.
 	h.logCommittedACLChange(beforeEnabled, beforeMode)
 
 	return false

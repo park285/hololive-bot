@@ -1,6 +1,3 @@
-// !라이브 채널·영상 확인 관측을 raw innertube 응답의 사실 필드로만 판정합니다.
-// 판정 순서는 identity → boolean·시각 사실 → 모순 → 가용성이며, 해석할 수 없는 응답은 예외 대신
-// UNKNOWN 결과로 돌려줍니다. upstream 요청 실패만 typed RPC 실패로 전파합니다.
 import { classifyUpstreamError, failureTuples, upstreamHTTPFailureCode } from "./upstream-errors.mjs";
 import { FetchTransportError } from "./fetch-transport.mjs";
 import { epochSecondsPattern } from "./live-metadata.mjs";
@@ -14,7 +11,6 @@ import { maxChannelIdentifierBytes, maxVideoIdentifierBytes } from "./rpc-valida
 const playabilityStatuses = new Set(["OK", "UNPLAYABLE", "LIVE_STREAM_OFFLINE", "LOGIN_REQUIRED", "ERROR"]);
 const playerResponseAssignmentPattern = /\bvar ytInitialPlayerResponse\s*=\s*(?=\{)/;
 
-/** raw 구조 해석 실패입니다. 호출 경계에서 UNKNOWN 사유로만 변환합니다. */
 class RawStructureError extends Error {
   constructor(reason, message) {
     super(message);
@@ -23,11 +19,7 @@ class RawStructureError extends Error {
   }
 }
 
-/**
- * 채널 확인 전용 Innertube를 만듭니다. 세션을 로컬에서 만들고 config 조회를 끄므로 생성 자체는 upstream을 호출하지 않습니다.
- * fetchImpl은 재시도 없는 단일 시도 transport여야 합니다.
- * @param {{ fetchImpl?: import("./upstream-feeds.d.ts").InnertubeFetch }} [options]
- */
+/** @param {{ fetchImpl?: import("./upstream-feeds.d.ts").InnertubeFetch }} [options] */
 export async function createLiveCheckInnertube({ fetchImpl } = {}) {
   if (typeof fetchImpl !== "function") {
     throw new FetchTransportError(
@@ -46,10 +38,6 @@ export async function createLiveCheckInnertube({ fetchImpl } = {}) {
   });
 }
 
-/**
- * `/channel/{id}/live`를 resolve_url 1회로 해석하고, 영상으로 연결되면 해당 영상 player를 최대 1회 조회합니다.
- * HTML·browse 보완이나 재시도는 하지 않습니다.
- */
 export async function fetchChannelLiveCheck(innertube, channelId, clock = Date.now, proof = undefined) {
   assertInnertube(innertube);
   const resolved = await executeRaw(innertube, "/navigation/resolve_url", {
@@ -70,7 +58,6 @@ export async function fetchChannelLiveCheck(innertube, channelId, clock = Date.n
   return classifyChannelPlayer(player.data, channelId, target.videoId, clock());
 }
 
-/** player를 조회하고, 시각이 빠진 멤버십 아카이브만 같은 RPC 슬롯에서 watch를 한 번 더 조회합니다. */
 export async function fetchVideoLiveCheck(innertube, videoId, clock = Date.now, proof = undefined) {
   assertInnertube(innertube);
   const player = await executePlayer(innertube, videoId, proof);
@@ -93,7 +80,6 @@ export async function fetchVideoLiveCheck(innertube, videoId, clock = Date.now, 
       (result.ended_at !== undefined && result.ended_at !== archive.ended_at)) {
     return result;
   }
-  // 가용성과 player의 기존 사실은 유지하고, 두 응답의 identity가 일치하는 방송 시각만 합칩니다.
   const enriched = parseVideoLiveCheck({
     ...player.data,
     microformat: {
@@ -132,7 +118,6 @@ async function readWatchPlayer(innertube, videoId) {
   }
 }
 
-// JSON 문자열 안의 중괄호·세미콜론은 경계가 아니며, 페이지의 JavaScript는 실행하지 않습니다.
 function watchPlayerJSON(html) {
   const assignment = playerResponseAssignmentPattern.exec(html);
   if (assignment === null) return undefined;
@@ -159,11 +144,7 @@ function watchPlayerJSON(html) {
   return undefined;
 }
 
-/**
- * resolve_url raw 응답을 분류합니다. 정상 endpoint의 WEB_PAGE_TYPE_CHANNEL과 요청 채널과 같은 browseId만
- * CHANNEL_PAGE이고, WATCH endpoint는 player 확인이 필요한 영상 ID를 돌려줍니다.
- * @returns {{ kind: "result", result: object } | { kind: "watch", videoId: string }}
- */
+/** @returns {{ kind: "result", result: object } | { kind: "watch", videoId: string }} */
 export function classifyResolvedChannel(raw, channelId) {
   try {
     return classifyResolvedEndpoint(raw, channelId);
@@ -175,10 +156,6 @@ export function classifyResolvedChannel(raw, channelId) {
   }
 }
 
-/**
- * /live가 고른 영상의 player 응답으로 채널 확인 결과를 만듭니다. 요청 채널의 현재 LIVE 사실이면 LIVE_VIDEO,
- * 요청 채널 예정 영상의 대기 상태가 확인되면 UPCOMING_VIDEO, 그 밖에는 UNKNOWN입니다.
- */
 export function classifyChannelPlayer(raw, channelId, selectedVideoId, nowMs) {
   const analysis = analyzePlayer(raw, selectedVideoId, nowMs);
   const video = analysis.result;
@@ -210,7 +187,6 @@ export function classifyChannelPlayer(raw, channelId, selectedVideoId, nowMs) {
   return unknownChannel(channelId, selectedVideoId, "not_waiting_state", true);
 }
 
-/** raw player 응답에서 영상 확인 사실과 가용성을 추출합니다. nowMs는 응답 수신 뒤의 helper 시각입니다. */
 export function parseVideoLiveCheck(raw, videoId, nowMs) {
   return analyzePlayer(raw, videoId, nowMs).result;
 }
@@ -289,7 +265,6 @@ function playerIdentity(raw, videoId) {
     return { ok: false, reason: "structure_unrecognized" };
   }
   const details = raw.videoDetails;
-  // 로봇 확인·비공개·오류 응답은 videoDetails 없이 상태만 줄 수 있으므로 identity 부재로 남깁니다.
   if (details === undefined) {
     return { ok: false, reason: "identity_missing" };
   }
@@ -336,8 +311,6 @@ function readFacts(details, microformat) {
   };
 }
 
-// publishDate는 신규성 판정의 부가 근거라 기존 가용성·수명 판정을 바꾸지 않습니다. 시·분·초와 offset을 가진
-// RFC3339만 정확한 공개 시각으로 받고, 날짜만 있는 값·다른 형식·비문자열은 근거 없음으로 생략합니다.
 function readPublishDate(microformat) {
   if (!isRecord(microformat) || !isRecord(microformat.playerMicroformatRenderer)) {
     return undefined;
@@ -353,7 +326,6 @@ function readPublishDate(microformat) {
   return new Date(parsed).toISOString();
 }
 
-// microformat renderer가 없으면 liveBroadcastDetails 존재 여부를 알 수 없으므로 false로 만들지 않습니다.
 function readBroadcastDetails(microformat) {
   const absent = { present: undefined, isLiveNow: undefined, startedAt: undefined, endedAt: undefined };
   if (microformat === undefined) {
@@ -378,7 +350,6 @@ function readBroadcastDetails(microformat) {
   };
 }
 
-// 가용성·대기 상태 판정은 구조화된 상태 코드와 renderer만 사용하고 번역된 reason·messages 문자열은 읽지 않습니다.
 function readPlayability(playabilityStatus, videoId) {
   const result = { status: undefined, membersOffer: false, offlineSlate: false, slateStart: undefined };
   if (playabilityStatus === undefined) {
@@ -429,8 +400,6 @@ function readPlayability(playabilityStatus, videoId) {
   return result;
 }
 
-// LIVE와 upcoming/종료의 공존, 종료가 시작보다 이르거나 수신 시각보다 늦음, 두 예정 시각의 불일치는 모두 모순입니다.
-// isLive 생략·false와 isLiveNow=false, 유효한 종료 시각의 조합은 종료 근거이므로 모순이 아닙니다.
 function hasContradiction(facts, playability, nowMs) {
   if (facts.isPrivate === true && playability.membersOffer) {
     return true;
@@ -461,7 +430,6 @@ function hasContradiction(facts, playability, nowMs) {
     facts.startedAt !== playability.slateStart;
 }
 
-// PUBLIC_UNAVAILABLE은 원시 boolean isPrivate=true일 때만 성립합니다. LOGIN_REQUIRED·ERROR 상태만으로는 공개 불가를 만들지 않습니다.
 /** @returns {AvailabilityFacts} */
 function classifyAvailability(facts, playability) {
   if (facts.isPrivate === true) {
@@ -482,7 +450,6 @@ function classifyAvailability(facts, playability) {
   return unknownAvailability("availability_unclassified");
 }
 
-// 대기 상태는 isUpcoming=true, isLiveNow=false, LIVE 아님, 기계 판독 가능한 예정 시각과 offline 상태 또는 slate가 모두 있어야 합니다.
 function isWaitingState(facts, playability) {
   return facts.isUpcoming === true &&
     facts.isLiveNow === false &&
@@ -544,17 +511,13 @@ function executePlayer(innertube, videoId, proof) {
   return proof === undefined ? send(undefined) : proof.runPlayer(videoId, send, currentRequestSignal());
 }
 
-/**
- * raw Actions 요청 1회를 실행합니다. HTTP·네트워크 실패는 typed RPC 실패로, 응답 본문 구조 실패는 UNKNOWN 사유로 돌려줍니다.
- * @returns {Promise<{ ok: true, data: unknown } | { ok: false, reason: "structure_unrecognized" }>}
- */
+/** @returns {Promise<{ ok: true, data: unknown } | { ok: false, reason: "structure_unrecognized" }>} */
 async function executeRaw(innertube, endpoint, payload) {
   let response;
   try {
     response = await innertube.actions.execute(endpoint, payload);
   } catch (error) {
     if (error instanceof SyntaxError) {
-      // 2xx 응답 본문이 JSON이 아니면 요청은 도달했지만 구조를 해석할 수 없는 응답입니다.
       return { ok: false, reason: "structure_unrecognized" };
     }
     throw requestFailure(error);
@@ -572,7 +535,6 @@ async function executeRaw(innertube, endpoint, payload) {
   return { ok: true, data: response.data };
 }
 
-// 취소와 이미 분류한 오류의 원인을 보존하며 RPC·pagination과 같은 정책을 적용합니다.
 function requestFailure(error) {
   if (currentRequestSignal()?.aborted || error instanceof FetchTransportError) return error;
   const code = classifyUpstreamError(error, "upstream");

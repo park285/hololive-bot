@@ -208,7 +208,6 @@ func preparePostgresRetry(
 
 func startPostgresContainer(ctx context.Context, image string) (*postgres.PostgresContainer, error) {
 	out, err := postgres.Run(ctx, image,
-		// 교차 빌드의 캐시가 테스트 DB를 다른 아키텍처의 에뮬레이션 이미지로 바꾸지 않게 한다.
 		testcontainers.WithImagePlatform("linux/"+runtime.GOARCH),
 		postgres.WithDatabase("dbtest"),
 		postgres.WithUsername("dbtest"),
@@ -216,8 +215,6 @@ func startPostgresContainer(ctx context.Context, image string) (*postgres.Postgr
 		testcontainers.WithEnv(map[string]string{
 			"POSTGRES_INITDB_ARGS": "--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8 --data-checksums",
 		}),
-		// 테스트 DB는 보존할 데이터가 없으므로 데이터 디렉터리를 tmpfs에 두고 내구성 쓰기를 끈다.
-		// 빌드 호스트 SSD 쓰기량을 줄이기 위한 설정이며, 컨테이너가 사라지면 데이터도 함께 사라진다.
 		testcontainers.WithTmpfs(map[string]string{
 			"/var/lib/postgresql": "rw",
 		}),

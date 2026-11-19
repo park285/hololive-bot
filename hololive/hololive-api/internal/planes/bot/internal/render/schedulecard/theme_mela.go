@@ -121,7 +121,6 @@ func melaWaves(c *canvas, p melaPal, b box) {
 
 	wh := min(b.H*0.5, 170)
 	wb := box{b.X, b.bottom() - wh, b.W, wh}
-	// 가운데 불꽃 끝이 위쪽 기한 딱지를 덮지 않게 높이를 묶는다.
 	fh := min((b.H-wh-6)/0.88, 250)
 
 	drawFlame(c, b.cx()-b.W*0.30, wb.Y-fh*0.12, fh*0.62, deg(-10), p.navy, 4)
@@ -144,15 +143,12 @@ func melaWaves(c *canvas, p melaPal, b box) {
 
 const melaPlateW = 124.0
 
-// melaMinCapH는 가장 작은 한 줄 제목(0.8배) 글자가 캡슐 흰 바탕 안에 드는 높이다.
 const melaMinCapH = 40.0
 
 const melaMinK = 0.8
 
 const melaFitRounds = 6
 
-// melaRows의 높이 단위는 줄 간격 pitch다. 제목이 기본 캡슐(capH)에 들지 않는 칸만 1보다 큰 단위를 받아 캡슐이 세로로 늘고,
-// 그만큼 나머지 칸의 줄 간격이 준다.
 type melaRows struct {
 	days      []day
 	dayUnits  []float64
@@ -240,8 +236,6 @@ func (r *melaRows) grow(f *fontSet, kMax float64, t box) bool {
 	return grew
 }
 
-// melaSlotUnits는 기본 캡슐에 들지 않는 제목을 기본 글자 크기(1배) 이상으로 다 보이는 가장 낮은 캡슐 높이를 찾아 단위로 바꾼다.
-// 기본 캡슐의 세 배로도 들지 않으면 늘리지 않고 melaTitle이 줄여 그린다.
 func melaSlotUnits(f *fontSet, kMax float64, s slot, t box, pitch, capH float64) float64 {
 	kTop := min(kMax, max(1, capH/84))
 	if melaFits(f, s, t, capH, capH, kTop, melaMinK) {

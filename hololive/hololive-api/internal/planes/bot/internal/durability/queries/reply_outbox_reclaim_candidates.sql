@@ -1,4 +1,3 @@
--- 만료 lease는 submitting만 가진다. accepted는 lease 없이 handoff reconciler가 소유한다.
 WITH locked AS MATERIALIZED (
     SELECT id, attempts, operator_replay_grants, first_attempt_at
     FROM bot_reply_outbox

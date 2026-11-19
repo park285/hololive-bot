@@ -153,8 +153,6 @@ func validateWeek(card *Card, start, end time.Time) error {
 	return nil
 }
 
-// cardDay는 주 범위 밖의 변환 항목을 가까운 끝 날 칸에 둔다. 요일을 붙일 시각이 없는 항목은 다른 날 칸에서 그날 일정으로 읽히므로 버린다.
-// 변환과 창 이동이 각각 하루씩 밀 수 있어 창에서 이틀 안의 항목만 접고, 더 먼 항목은 요일이 겹쳐 끝 날 일정으로 읽히므로 버린다.
 func cardDay(it *Item, start, end time.Time) (time.Time, bool) {
 	d := civil(it.Day)
 
@@ -252,7 +250,6 @@ func toSlot(it *Item, drawable func(rune) bool, template cardtemplate.ID) (slot,
 	return s, nil
 }
 
-// clockText의 시 상한 29는 저장 검증(ValidateRows, migration 019 CHECK)과 같다. 25:00 같은 심야 표기를 그대로 둔다.
 func clockText(v string) (text string, minutes int, err error) {
 	if v == "" {
 		return "", noTime, nil

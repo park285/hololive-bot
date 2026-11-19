@@ -21,7 +21,6 @@ type PgxRepository struct {
 	logger *slog.Logger
 }
 
-// fence 미스 오류의 Action이자 지표 action 라벨이다.
 const (
 	fenceActionLoadSendRequest      = "load_send_request"
 	fenceActionPinSendRequest       = "pin_send_request"
@@ -40,7 +39,6 @@ type fencedQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// PoolSource는 저장소가 쓸 pgx pool을 내준다. 운영 조립은 database.Client를, 테스트는 dbtest.WrapPool을 넘긴다.
 type PoolSource interface {
 	GetPool() *pgxpool.Pool
 }
@@ -57,8 +55,6 @@ func NewPgxRepository(postgres PoolSource, logger *slog.Logger) (*PgxRepository,
 	return &PgxRepository{pool: postgres.GetPool(), now: time.Now, logger: logger}, nil
 }
 
-// 미스는 대상별 원인을 지표·로그로 남기고 *sendfence.MissError를 그대로 돌려준다. 적용되지 않은 대상은 이 문장이 바꾸지 않았으므로 호출자는 소유권이 남은
-// 원인(sendfence.Reason.OwnershipHeld)일 때만 그 행에 후속 전이를 쓸 수 있다.
 func (r *PgxRepository) applyFenced(ctx context.Context, querier fencedQuerier, action, query string, want []int64, args ...any) error {
 	observed, err := queryFenceObservations(ctx, querier, action, query, args...)
 	if err != nil {
@@ -165,8 +161,6 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 	return &record, nil
 }
 
-// claimsFromEnvelopes는 drain이 복원한 envelope의 claim을 돌려준다. 각 attempt는 claim 시 행의 attempt_count이며
-// attachRecordMetadata가 0보다 클 때만 Retry로 옮겨 둔다.
 func claimsFromEnvelopes(envelopes []AlarmQueueEnvelope) []DeliveryClaim {
 	claims := make([]DeliveryClaim, 0, len(envelopes))
 	for i := range envelopes {

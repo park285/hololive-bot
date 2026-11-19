@@ -8,7 +8,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// -benchtime=30x로 실행해 전환 전 PublishConsume과 비교한다. WAL·테이블 크기에는 사전 비용도 포함된다.
 func BenchmarkPayloadDictionaryPublish(b *testing.B) {
 	for _, scenario := range []struct {
 		name  string

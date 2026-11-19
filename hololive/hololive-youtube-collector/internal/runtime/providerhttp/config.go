@@ -9,7 +9,6 @@ import (
 )
 
 type ProviderTransportConfig struct {
-	// MetricsClient는 hololive_http_client_*의 client 라벨이며 provider 이름을 쓴다.
 	MetricsClient         string
 	RequestTimeout        time.Duration
 	DialTimeout           time.Duration

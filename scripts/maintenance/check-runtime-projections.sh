@@ -3,9 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# libpq의 승인된 접속 설정만 사용한다. 비밀 파일을 직접 읽거나 접속 대상을 추측하지 않는다.
-# 같은 RR snapshot에서 두 모델을 비교하고, 오류 시 부분 결과를 정상 진단으로 출력하지 않는다.
-# 서비스 파일은 PGOPTIONS보다 우선하므로 제한을 접속 인자와 세션 SQL로 확정한다.
 if ! result=$(psql -X -w -qAt --dbname='connect_timeout=5' -v ON_ERROR_STOP=1 \
     -c 'SET default_transaction_read_only = on' \
     -c "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;

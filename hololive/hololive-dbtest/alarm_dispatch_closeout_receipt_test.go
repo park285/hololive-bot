@@ -217,7 +217,6 @@ func assertCloseoutReceiptAppendOnlyAndRetentionUnchanged(t *testing.T, pool *pg
 	_, err = pool.Exec(ctx, `TRUNCATE alarm_dispatch_closeout_receipts`)
 	require.ErrorContains(t, err, "append-only")
 
-	// 기존 delivery retention 삭제를 새 영수증이 막지 않는다.
 	_, err = pool.Exec(ctx, `DELETE FROM alarm_dispatch_deliveries WHERE send_unit_id = $1`, fixture.unitID)
 	require.NoError(t, err)
 

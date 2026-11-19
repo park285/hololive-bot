@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package botruntime
 
 import (
@@ -48,7 +28,6 @@ type BotRuntime struct {
 
 	Bot *orchestration.Bot
 
-	// IrisRooms는 bot plane이 소유한 Iris client의 방 목록 조회다. admin plane이 같은 프로세스에서 빌려 쓴다.
 	IrisRooms appbootstrap.IrisRoomLister
 
 	ServerAddr      string
@@ -85,11 +64,8 @@ type BotRuntime struct {
 	httpHandlersOnce   sync.Once
 }
 
-// Dependencies는 process 조립(app.BuildRuntime)이 소유하고 bot plane이 빌려 쓰는 in-process 의존성이다.
 type Dependencies struct {
-	// ACL은 process 하나에 하나뿐인 ACL Service다(admin plane과 공유).
-	ACL *acl.Service
-	// Holodex는 process 하나의 Holodex·공식 일정 서비스다(admin plane과 공유). 종료는 process 조립이 소유한다.
+	ACL     *acl.Service
 	Holodex *holodexprovider.Service
 }
 

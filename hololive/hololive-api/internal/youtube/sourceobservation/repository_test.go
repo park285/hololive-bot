@@ -373,21 +373,15 @@ func publishAndClaimCommunityPost(ctx context.Context, t *testing.T, pool *pgxpo
 	return batch
 }
 
-func requireLiveLease(ctx context.Context, t *testing.T, pool *pgxpool.Pool, observationID int64, label string) {
+func holdLeaseForExplicitExpiry(ctx context.Context, t *testing.T, pool *pgxpool.Pool, observationID int64, lease time.Duration) {
 	t.Helper()
 
-	var leaseExpiresAt time.Time
-
-	if err := pool.QueryRow(ctx, `
-		SELECT lease_expires_at
-		FROM source_observation_queue
-		WHERE observation_id = $1
-	`, observationID).Scan(&leaseExpiresAt); err != nil {
-		t.Fatalf("load initial lease: %v", err)
-	}
-
-	if !leaseExpiresAt.After(time.Now().UTC()) {
-		t.Fatalf("%s did not begin with a valid lease: %s", label, leaseExpiresAt)
+	tag, err := pool.Exec(ctx, `
+		UPDATE source_observation_queue SET lease_expires_at = TIMESTAMPTZ '9999-12-31 00:00:00+00'
+		WHERE observation_id = $1 AND lease_expires_at = updated_at + $2::bigint * INTERVAL '1 millisecond'
+	`, observationID, lease.Milliseconds())
+	if err != nil || tag.RowsAffected() != 1 {
+		t.Fatalf("hold claim %d with initial lease %s: rows=%d, error=%v", observationID, lease, tag.RowsAffected(), err)
 	}
 }
 
@@ -448,7 +442,7 @@ func TestFinalizeLeaseExpiryAtTerminalUpdateRollsBackAllSideEffects(t *testing.T
 	batch := publishAndClaimCommunityPost(ctx, t, pool, claimOptions())
 	observation := batch.Claims[0]
 
-	requireLiveLease(ctx, t, pool, observation.ObservationID, "claim")
+	holdLeaseForExplicitExpiry(ctx, t, pool, observation.ObservationID, claimOptions().LeaseDuration)
 
 	_, err := NewRepository(pool).Finalize(ctx, Claim{
 		ConsumerName:  batch.ConsumerName,
@@ -468,29 +462,48 @@ func TestFinalizeUnsupportedContractExpiryAtDeadLetterRollsBackState(t *testing.
 
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	options := claimOptions()
-
-	options.LeaseDuration = 2 * time.Second
-
-	batch := publishAndClaimCommunityPost(ctx, t, pool, options)
+	batch := publishAndClaimCommunityPost(ctx, t, pool, claimOptions())
 	observation := batch.Claims[0]
 
-	requireLiveLease(ctx, t, pool, observation.ObservationID, "DLQ regression")
+	holdLeaseForExplicitExpiry(ctx, t, pool, observation.ObservationID, claimOptions().LeaseDuration)
 
-	repo := NewRepositoryWithContracts(
-		pool,
-		delayedUnsupportedContracts{delay: 2500 * time.Millisecond},
-	)
+	var finalizeConn *pgx.Conn
 
-	_, err := repo.Finalize(ctx, Claim{
+	config := pool.Config()
+
+	config.PrepareConn = func(_ context.Context, conn *pgx.Conn) (bool, error) {
+		finalizeConn = conn
+
+		return true, nil
+	}
+
+	finalizePool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatalf("create finalize pool: %v", err)
+	}
+	defer finalizePool.Close()
+
+	checked := false
+	repo := NewRepositoryWithContracts(finalizePool, unsupportedAfterCheck(func() {
+		expireObservationClaim(t, finalizeConn, observation.ObservationID)
+
+		checked = true
+	}))
+
+	_, err = repo.Finalize(ctx, Claim{
 		ConsumerName:  batch.ConsumerName,
 		ObservationID: observation.ObservationID,
 		LeaseToken:    observation.LeaseToken,
 	}, func(context.Context, dbx.Tx, *Observation) (ReconcileResult, error) {
-		t.Fatal("unsupported contract must not invoke reconcile")
+		t.Error("unsupported contract must not invoke reconcile")
 
-		return ReconcileResult{}, nil
+		return ReconcileResult{}, errors.New("unexpected reconcile")
 	})
+
+	if !checked {
+		t.Fatal("claim was not live at the contract check")
+	}
+
 	if !errors.Is(err, ErrClaimLost) {
 		t.Fatalf("expired unsupported-contract DLQ error = %v, want ErrClaimLost", err)
 	}
@@ -632,24 +645,22 @@ func advanceLease(
 	return next
 }
 
-func expireObservationClaim(t *testing.T, pool *pgxpool.Pool, observationID int64) {
+func expireObservationClaim(t *testing.T, db dbx.Querier, observationID int64) {
 	t.Helper()
 
-	if _, err := pool.Exec(t.Context(), `
+	if _, err := db.Exec(t.Context(), `
 		UPDATE source_observation_queue
-		SET lease_expires_at = NOW() - INTERVAL '1 second'
+		SET lease_expires_at = clock_timestamp() - INTERVAL '1 second'
 		WHERE observation_id = $1
 	`, observationID); err != nil {
-		t.Fatalf("expire observation claim: %v", err)
+		t.Errorf("expire observation claim: %v", err)
 	}
 }
 
-type delayedUnsupportedContracts struct {
-	delay time.Duration
-}
+type unsupportedAfterCheck func()
 
-func (c delayedUnsupportedContracts) Supports(ContractVersion) bool {
-	time.Sleep(c.delay)
+func (check unsupportedAfterCheck) Supports(ContractVersion) bool {
+	check()
 
 	return false
 }

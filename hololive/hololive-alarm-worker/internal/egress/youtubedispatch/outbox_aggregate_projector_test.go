@@ -15,8 +15,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 부모 잠금을 보유한 세션에서도 실제 Project를 실행한다. 내부 transaction은
-// savepoint이고 바깥 READ COMMITTED transaction의 commit까지 부모 잠금은 유지된다.
 type aggregateProjectionTransaction struct {
 	pgx.Tx
 }
@@ -82,12 +80,9 @@ func runAggregateProjectionCompletionRace(t *testing.T, pending bool) {
 		<-finished
 	}()
 
-	// FAILED를 관측한 이전 projector가 실제 부모 row lock에서 기다린 뒤에만
-	// revive/send를 진행한다. sleep이나 SQL 문자열 검사로 경합을 추정하지 않는다.
 	waitAggregateProjectionLock(ctx, t, pool, parentTx, conn)
 
 	frozen := reviveCompleteAndProject(ctx, t, transition, newer, item)
-	// 이전 projector는 commit 뒤 더 늦은 DB 시계로 집계하므로, 완료된 발송을 덮어쓰면 아래 시각이 달라진다.
 	completed := readAggregateProjectionTimes(ctx, t, parentTx, item.ID)
 	require.NoError(t, parentTx.Commit(ctx))
 

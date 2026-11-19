@@ -7,8 +7,6 @@ import (
 )
 
 func DefaultPolicySchedules() map[contract.ObservationKind]Schedule {
-	// 채널 /live 확인과 영상 상태 확인은 live_snapshot과 같은 2분 cadence·우선순위를 쓴다.
-	// 같은 cadence를 쓰지만 각 job의 lease와 완료·재시도 슬롯은 독립이다.
 	live := Schedule{Priority: 20, PollInterval: 2 * time.Minute, Enabled: true}
 
 	return map[contract.ObservationKind]Schedule{

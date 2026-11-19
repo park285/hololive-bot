@@ -1,0 +1,6 @@
+name = "JSONNameOrder"
+version = "0.1.0"
+defaultTargets = ["JSONNameOrder"]
+
+[[lean_lib]]
+name = "JSONNameOrder"

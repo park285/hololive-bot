@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 const silentNode = "#!/bin/sh\nsleep 30\n"
@@ -18,7 +20,6 @@ func fakeNode(t *testing.T, name, script string) string {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), name)
-	// startWorker가 VM 실행 파일로 직접 실행한다.
 	//nolint:gosec // G306: 전용 t.TempDir의 테스트 파일에 소유자 실행 권한이 필요하다.
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
@@ -100,7 +101,6 @@ func TestRestartChangesGenerationAndRejectsStaleOperations(t *testing.T) {
 }
 
 func TestExpiredMintRetiresWorkerWithoutIssuing(t *testing.T) {
-	// 응답하지 않는 실행 파일에서 I/O 전 만료 판정과 전체 워커 프로세스 그룹 종료를 확인한다.
 	path := fakeNode(t, "silent-node", silentNode)
 
 	process, err := startWorker(t.Context(), path, "unused")
@@ -145,7 +145,8 @@ func phaseBroker(t *testing.T) (*Broker, string, string, string) {
 	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\n" +
 		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"prepared\",\"prepared\":true}'\n" +
 		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"snapshot\",\"snapshot\":\"snapshot-value\"}'\n" +
-		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"ready\",\"ready\":true}'\nsleep 30\n"
+		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"ready\",\"ready\":true}'\n" +
+		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"minted\",\"video_id\":\"video\",\"po_token\":\"token\"}'\nIFS= read -r stop\n"
 
 	b := New("revision", fakeNode(t, "phase-node", script), "unused")
 	initializeTestWorker(t, b)
@@ -274,6 +275,43 @@ func TestCanceledChallengeBeforeDispatchPreservesPreparedWorker(t *testing.T) {
 	}
 }
 
+func TestExpiredRequestBeforeDispatchPreservesWorker(t *testing.T) {
+	for _, state := range []State{AwaitingChallenge, Ready} {
+		t.Run(string(state), func(t *testing.T) {
+			b, prepare, challenge, activation := phaseBroker(t)
+			status, _ := call(t, b, http.MethodPost, "/v1/session", prepare)
+			require.Equal(t, http.StatusOK, status)
+
+			var request any = &challengeRequest{Program: "program", GlobalName: "name", Interpreter: "code"}
+
+			if state == Ready {
+				status, _ = call(t, b, http.MethodPost, "/v1/challenge", challenge)
+				require.Equal(t, http.StatusOK, status)
+
+				status, _ = call(t, b, http.MethodPost, "/v1/activate", activation)
+				require.Equal(t, http.StatusOK, status)
+
+				request = &mintRequest{VideoID: "video"}
+			}
+
+			ctx, cancel := context.WithTimeout(t.Context(), 0)
+			defer cancel()
+
+			w := httptest.NewRecorder()
+			b.dispatch(ctx, w, request, time.Now())
+			require.Equal(t, http.StatusGatewayTimeout, w.Code)
+
+			status, health := call(t, b, http.MethodGet, "/health", "")
+			require.Equal(t, http.StatusOK, status)
+			require.Equal(t, string(state), health["state"])
+
+			next := httptest.NewRecorder()
+			b.dispatch(t.Context(), next, request, time.Now())
+			require.Equal(t, http.StatusOK, next.Code)
+		})
+	}
+}
+
 func TestMalformedWorkerFrameFailsAndRetires(t *testing.T) {
 	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\n" +
 		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"prepared\",\"prepared\":true}'\n" +
@@ -390,7 +428,6 @@ func TestClientAbortDuringWorkerIORecordsRequestAborted(t *testing.T) {
 	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/v1/session", strings.NewReader(string(body)))
 	r.Header.Set("Content-Type", "application/json")
 
-	// worker가 응답하지 않으므로 요청은 worker IO 중에 client 끊김으로만 끝납니다.
 	time.AfterFunc(100*time.Millisecond, cancel)
 	b.handle(httptest.NewRecorder(), r)
 
@@ -400,9 +437,12 @@ func TestClientAbortDuringWorkerIORecordsRequestAborted(t *testing.T) {
 }
 
 func TestLoadedWorkerExitRecordsWorkerExited(t *testing.T) {
-	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nIFS= read -r request\nexit 0\n"
-	b := New("revision", fakeNode(t, "exiting-node", script), "unused")
-	initializeTestWorker(t, b)
+	b, socket, served := serveKeepAliveBroker(t)
+	conn := dialBroker(t, socket)
+
+	if status := roundTrip(t, conn, http.MethodGet, "/health", ""); status != http.StatusOK {
+		t.Fatalf("worker health = %d", status)
+	}
 
 	b.mu.RLock()
 
@@ -413,9 +453,13 @@ func TestLoadedWorkerExitRecordsWorkerExited(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	deadline := time.Now().Add(5 * time.Second)
-	for b.ExitReason() == "" && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+	select {
+	case err := <-served:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("broker did not stop after worker exit")
 	}
 
 	if reason := b.ExitReason(); reason != ExitWorkerExited {
@@ -438,11 +482,6 @@ func TestWorkerExitDuringRequestRecordsWorkerFailed(t *testing.T) {
 		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/session", strings.NewReader(string(body)))
 		r.Header.Set("Content-Type", "application/json")
 		b.handle(httptest.NewRecorder(), r)
-
-		deadline := time.Now().Add(5 * time.Second)
-		for b.ExitReason() == "" && time.Now().Before(deadline) {
-			time.Sleep(10 * time.Millisecond)
-		}
 
 		if reason := b.ExitReason(); reason != ExitWorkerFailed {
 			t.Fatalf("attempt %d: worker crash during request recorded exit reason %q", attempt, reason)

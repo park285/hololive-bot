@@ -1,11 +1,9 @@
--- handoff 결과 불명(outcome_unknown·모르는 상태·404·지평 미확인)을 멤버 전원의 quarantined 전이와 확인 종료로 한
--- 문장에 기록한다. 멤버 조건이 어긋났으면 멤버를 바꾸지 않고 확인만 닫는다.
-/* handoff_fence */, updated AS (
+/* fragment:handoff_fence */, updated AS (
     UPDATE alarm_dispatch_deliveries d
     SET status = 'quarantined',
         quarantined_at = clock.now,
-        last_error = $5,
-        last_error_code = $6,
+        last_error = $6,
+        last_error_code = $7,
         updated_at = clock.now
     FROM checked CROSS JOIN clock CROSS JOIN passed
     WHERE d.id = checked.id AND passed.value

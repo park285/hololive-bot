@@ -72,7 +72,6 @@ func checkCleanupJoin(t *testing.T, testCase cleanupJoinCase, completed bool) {
 
 	result := make(chan error, 1)
 	callbackErr := fmt.Errorf("callback request: %w", context.DeadlineExceeded)
-	// Fence의 선행 결과 확인 이후, 취소 시점에 callback 종료를 확정합니다.
 	cancelRunner := func() {
 		cancel()
 

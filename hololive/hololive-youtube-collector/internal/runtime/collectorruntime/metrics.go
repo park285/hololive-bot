@@ -98,8 +98,6 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 		Help: "YouTube observation publish outcomes.",
 	}, []string{labelProvider, labelKind, "outcome"})
 	metrics.publishTime, metrics.publishBytes = newPublishHistograms()
-	// 관측 kind별 실제 durable 수락 간격이다. 같은 checkpoint가 commit으로 전진했을 때만 직전 수락 이후 경과를 기록한다.
-	// subject는 label로 두지 않아 cardinality가 provider×kind로 제한된다.
 	metrics.acceptInterval = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "youtube_observation_accept_interval_seconds",
 		Help:    "Interval between consecutive durable acceptances of the same observation checkpoint.",
@@ -128,8 +126,6 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 	return metrics
 }
 
-// 실패 로그는 연속 실패 동안 주기적으로만 남기므로 매 cycle의 실패는 이 counter가 드러낸다. 두 결과 시리즈를 미리 만들어 첫 실패가 increase()에서 사라지지 않게 한다. 투영 세대
-// 교체(superseded)만 있는 cycle은 정상 종료라 ok로 센다.
 func newDiscoveryCycleCounter() *prometheus.CounterVec {
 	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_discovery_cycles_total",
@@ -142,13 +138,11 @@ func newDiscoveryCycleCounter() *prometheus.CounterVec {
 }
 
 func newPublishHistograms() (duration, encodedBytes *prometheus.HistogramVec) {
-	// 발행 트랜잭션(fence 확인·관측 저장·lease 종료) 한 번의 소요 시간이다. 결과와 무관하게 모든 발행 시도를 기록한다.
 	duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "youtube_observation_publish_duration_seconds",
 		Help:    "YouTube observation publish transaction duration by provider and job kind.",
 		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 	}, []string{labelProvider, labelKind})
-	// 성공한 발행이 SQL에 보낸 관측 JSON 크기다. 8 MiB 배치 상한(MaxPublishBatchBytes) 근접 빈도를 보려고 상단 버킷을 촘촘히 둔다.
 	encodedBytes = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "youtube_observation_publish_encoded_bytes",
 		Help:    "Encoded observation JSON bytes of committed YouTube observation publishes by provider and job kind.",
@@ -237,7 +231,6 @@ func (m *Metrics) ObservePublishDuration(provider contract.Provider, kind string
 	m.publishTime.WithLabelValues(string(provider), kind).Observe(duration.Seconds())
 }
 
-// ObservePublishBytes는 commit된 발행이 SQL에 보낸 관측 JSON 크기를 job kind별로 기록한다.
 func (m *Metrics) ObservePublishBytes(provider contract.Provider, kind string, encodedBytes int) {
 	if m == nil {
 		return
@@ -246,7 +239,6 @@ func (m *Metrics) ObservePublishBytes(provider contract.Provider, kind string, e
 	m.publishBytes.WithLabelValues(string(provider), kind).Observe(float64(encodedBytes))
 }
 
-// ObserveAccepted는 commit된 inserted·duplicate 관측의 수락 시각과, checkpoint가 전진한 경우 직전 수락 이후 간격을 기록한다.
 func (m *Metrics) ObserveAccepted(provider contract.Provider, kind contract.ObservationKind, at time.Time, interval time.Duration, hasInterval bool) {
 	if m == nil {
 		return
@@ -259,7 +251,6 @@ func (m *Metrics) ObserveAccepted(provider contract.Provider, kind contract.Obse
 	}
 }
 
-// 오류 자체는 미분류 Internal로 지연 처리되므로 이 counter가 위반 추세를 드러내는 유일한 신호다.
 func (m *Metrics) ObserveInvalidFailureTuple(provider contract.Provider, kind string) {
 	if m == nil {
 		return

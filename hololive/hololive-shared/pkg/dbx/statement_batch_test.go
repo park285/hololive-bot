@@ -15,8 +15,7 @@ import (
 const (
 	testStatementFirstSQL  = "first"
 	testStatementSecondSQL = "second"
-	// 이 접두사로 시작하는 문장은 오류 없이 0행 적용을 돌려준다.
-	testZeroRowsSQLPrefix = "zero-rows"
+	testZeroRowsSQLPrefix  = "zero-rows"
 )
 
 type statementRecordingTx struct {
@@ -176,7 +175,6 @@ func TestExecStatementsRequireRowReportsUnappliedStatement(t *testing.T) {
 		statements[i] = Statement{SQL: fmt.Sprintf("statement-%d", i), Operation: "required", RequireRow: true}
 	}
 
-	// 0행 적용은 RequireRow 문장에서만 오류다. 두 번째 배치의 위치도 입력 기준으로 보고한다.
 	statements[3] = Statement{SQL: testZeroRowsSQLPrefix + "-optional", Operation: "optional"}
 	statements[130].SQL = testZeroRowsSQLPrefix + "-required"
 

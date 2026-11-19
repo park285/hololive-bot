@@ -11,7 +11,6 @@ trap cleanup EXIT
 podman build --platform linux/amd64 --build-arg REVISION=test --tag "$image" "$root_dir/deploy/images/postgres"
 
 for user in 0:0 999:999; do
-  # SELinux host에서 저장소 파일을 relabel하지 않고 읽도록 일회용 검사 container만 label을 끈다.
   podman run --rm --platform linux/amd64 --security-opt label=disable --network none --read-only --memory 256m --pids-limit 128 --user "$user" \
     --tmpfs /var/lib/postgresql:rw,mode=0755,U \
     --tmpfs /var/run/postgresql:rw,mode=0755,U \

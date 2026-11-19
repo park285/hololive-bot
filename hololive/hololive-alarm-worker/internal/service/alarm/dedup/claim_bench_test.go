@@ -11,7 +11,6 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
-// 할당 수가 race 빌드에서도 같아 build tag를 두지 않는다.
 func TestTryClaimKeyInfoLevelAllocationBudget(t *testing.T) {
 	key := keys.BuildNotifyClaimKey("18412345678901234", "stream-1", time.Unix(1785499200, 0).UTC(), "target")
 	client := cachemocks.NewStrictClient()

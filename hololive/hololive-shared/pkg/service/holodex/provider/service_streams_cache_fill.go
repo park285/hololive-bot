@@ -6,7 +6,6 @@ import (
 	"sync"
 )
 
-// 완료 신호만 공유하며 결과와 오류는 각 호출자의 기존 캐시/조회 경로에 맡긴다.
 type streamCacheFillGate struct {
 	mu     sync.Mutex
 	owners map[string]chan struct{}

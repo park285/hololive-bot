@@ -1,1 +1,0 @@
-ok  	github.com/kapu/hololive-shared/pkg/config/settings	3.512s

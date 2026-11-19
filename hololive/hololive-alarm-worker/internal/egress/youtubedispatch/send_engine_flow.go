@@ -22,10 +22,9 @@ type deliverySendRequest struct {
 	clientRequestID string
 	frozen          *store.FrozenRequest
 	roomID          string
-	// variants는 고정 전 렌더 결과다. 고정할 때 발송기가 방 유형으로 하나를 골라 message에 최종 본문을 남긴다.
-	variants   messagedelivery.MessageVariants
-	message    string
-	dedupeKeys []string
+	variants        messagedelivery.MessageVariants
+	message         string
+	dedupeKeys      []string
 }
 
 var (
@@ -50,7 +49,6 @@ var deliveryFailureReasonBySentinel = []struct {
 	{err: iris.ErrAuthFailed, reason: deliveryReasonAuth, permanent: true},
 	{err: iris.ErrRateLimited, reason: deliveryReasonRateLimited},
 	{err: iris.ErrTransport, reason: deliveryReasonTransport},
-	// v4의 ErrNotSent(전송 전 확정 실패)는 ErrTransport가 아니지만 같은 transport 사유로 집계한다.
 	{err: iris.ErrNotSent, reason: deliveryReasonTransport},
 	{err: iris.ErrPermanent, reason: deliveryReasonPermanent, permanent: true},
 }
@@ -130,7 +128,6 @@ func deliveryFailureReason(err error) string {
 }
 
 func shouldFallbackGroupedSend(err error) bool {
-	// 모든 admission 충돌은 새 singleton ID로 우회하지 않는다.
 	if httpErr, ok := errors.AsType[*iris.HTTPError](err); ok && httpErr.StatusCode == http.StatusConflict {
 		return false
 	}
@@ -138,8 +135,6 @@ func shouldFallbackGroupedSend(err error) bool {
 	return !errors.Is(err, errDeliverySendOutcomeUnknown) && deliveryFailureReason(err) == deliveryReasonPermanent
 }
 
-// sender 호출 이후의 오류만 대상으로 한다. 호출 전 취소는 sendDeliveryMessage가 먼저 걸러내며,
-// 여기서 context 오류를 unknown으로 보는 이유는 요청이 이미 Iris에 도달했을 수 있기 때문이다.
 func deliverySendOutcomeUnknown(err error) bool {
 	kind := sendoutcome.Classify(err)
 	return kind == sendoutcome.OutcomeUnknown || kind == sendoutcome.TransportAmbiguous || errors.Is(err, errDeliverySendTimeout)

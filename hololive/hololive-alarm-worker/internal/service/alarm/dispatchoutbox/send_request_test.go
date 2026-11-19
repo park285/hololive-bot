@@ -45,7 +45,6 @@ func TestSendRequestPinsWholeUnitAndReissuesDurably(t *testing.T) {
 		require.Equal(t, generation, request.Generation)
 		require.NoError(t, repository.BeginSendRequest(ctx, unit, attemptClaims(generation, ids...), "owner", request.ClientRequestID, time.Minute))
 
-		// 확정 미발송의 sending 보상은 lease 만료 후에도 소유권으로 허용한다.
 		_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET lock_expires_at=clock_timestamp()-interval '1 second' WHERE id=ANY($1)`, ids)
 		require.NoError(t, err)
 
@@ -68,7 +67,6 @@ func TestSendRequestPinsWholeUnitAndReissuesDurably(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 2, published.DuplicateDeliveries)
 
-		// 같은 세대 스냅샷으로 다시 재발급하면 이미 retry로 정산된 행을 건드리지 않는다.
 		err = repository.ReissueSendRequest(ctx, unit, "owner", request, updates)
 		require.Zero(t, requireFenceMiss(t, err, sendfence.ReasonStatusChanged).Applied)
 
@@ -132,7 +130,6 @@ func pinConcurrentRequest(t *testing.T, repository *PgxRepository, unit int64, c
 	t.Helper()
 
 	ctx := t.Context()
-	// 동시 pin의 승자 하나가 이후 모든 request를 결정한다.
 	results := make([]*SendRequest, 2)
 	errs := make([]error, 2)
 
@@ -158,7 +155,6 @@ func assertPinnedReplay(t *testing.T, repository *PgxRepository, unit int64, ids
 	t.Helper()
 
 	ctx := t.Context()
-	// 저장 직후 프로세스 종료를 새 repository·claim으로 대체한다.
 	records, err := repository.ClaimDue(ctx, "owner", 10, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, records, 2)
@@ -171,7 +167,6 @@ func assertPinnedReplay(t *testing.T, repository *PgxRepository, unit int64, ids
 	require.Equal(t, request.Route, replay.Route)
 	require.Equal(t, request.BodyHash, replay.BodyHash)
 	require.Equal(t, request.BaseClientRequestID+fmt.Sprintf(":r%d", generation), replay.ClientRequestID)
-	// 새 generation을 claim한 뒤 이전 요청 ID로는 발송 상태에 진입할 수 없다.
 	require.Zero(t, requireFenceMiss(t, repository.BeginSendRequest(ctx, unit, claims, "owner", request.ClientRequestID, time.Minute), sendfence.ReasonRequestChanged).Applied)
 
 	return replay
@@ -299,7 +294,6 @@ func TestClaimReportsUnpinnedRequestOnlyUntilPinned(t *testing.T) {
 	_, err = repository.PinSendRequest(ctx, records[0].SendUnitID, recordClaims(records...), "owner", records[0].ClientRequestID, SendRequest{Body: "pinned", Route: SendRouteText})
 	require.NoError(t, err)
 
-	// 고정 직후 worker가 죽으면 attempt는 0인 채 lease만 만료돼 다시 claim된다.
 	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET locked_at=NOW()-INTERVAL '2 minutes',lock_expires_at=NOW()-INTERVAL '1 minute'`)
 	require.NoError(t, err)
 

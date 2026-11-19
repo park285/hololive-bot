@@ -39,7 +39,6 @@ type durableAdmitter struct {
 	totals *workercontract.Counters
 }
 
-// 같은 Message는 claim 때 webhook.DecodeMessage로 복원하므로 SDK Message의 Go 표현을 저장 형식으로 삼지 않는다.
 func (a durableAdmitter) AdmitMessage(ctx context.Context, msg *webhook.Message, body []byte) error {
 	if err := a.admit(ctx, msg, body); err != nil {
 		logDurableError(a.logger, "admit durable webhook", err)
@@ -196,7 +195,6 @@ type durableMessageProcessor interface {
 	ProcessMessage(context.Context, *webhook.Message) error
 }
 
-// Bot이 생성 시점에 writer를 받아야 하므로 inbox 처리기(bot을 소유)보다 먼저 만든다.
 type durableReplyOutbox struct {
 	repository *durability.ReplyOutboxRepository
 	wake       chan struct{}
@@ -260,7 +258,6 @@ func newDurableRuntime(
 		handlerTimeout: handlerTimeout,
 		inboxWake:      make(chan struct{}, 1), outboxWake: outbox.wake, handoffWake: make(chan struct{}, 1),
 		inboxPollSlot: newDurablePollSlot(), outboxPollSlot: newDurablePollSlot(), handoffPollSlot: newDurablePollSlot(),
-		// bot_reply_outbox attempt timeout은 admission 예산이자 handoff 확인 지평이다.
 		dispatchBudget:        dispatchBudget,
 		outboxClaimLease:      workercontract.Milliseconds(profile.BotReplyOutbox.ClaimLeaseMS),
 		heartbeatEvery:        workercontract.Milliseconds(profile.BotWebhookInbox.HeartbeatIntervalMS),
@@ -386,9 +383,6 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 	stopHeartbeat()
 	<-heartbeatDone
 
-	// shutdown이 runCtx를 취소한 뒤에도 정산은 성공해야 한다 — 취소된 ctx 그대로면
-	// command가 claimed로 방치되어 재시작 후 같은 방이 head-of-line에서 수 분간 정지한다.
-	// token fencing이 있어 소유권을 잃은 경우에도 안전한 no-op이다.
 	settleCtx, cancelSettle := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), r.settlementTimeout)
 	defer cancelSettle()
 

@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// AlarmQueueEnvelope의 JSON 형식은 이미 저장된 dispatch event payload를 그대로 decode할 수 있어야 한다.
 type AlarmQueueEnvelope struct {
 	DispatchOutboxID int64                              `json:"dispatch_outbox_id"`
 	DispatchGroupKey string                             `json:"dispatch_group_key,omitempty"`
@@ -23,8 +22,7 @@ type AlarmQueueEnvelope struct {
 	Version          uint8                              `json:"version"`
 	Retry            *AlarmQueueRetryMetadata           `json:"retry,omitempty"`
 	SourcePayloadRaw string                             `json:"source_payload,omitempty"`
-	// RequestUnpinned는 claim이 본 send unit 요청의 미고정 여부다. 큐 payload에는 싣지 않는다.
-	RequestUnpinned bool `json:"-"`
+	RequestUnpinned  bool                               `json:"-"`
 }
 
 type AlarmQueueRetryMetadata struct {
@@ -67,8 +65,6 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unmarshal alarm queue envelope: %w", err)
 	}
 
-	// 저장 payload는 발행 시점에 alarm_type을 채운다. 누락을 Live로 간주하지 않고, 다른 알림 종류로 오인해 보내지 않도록
-	// decode 오류로 드러낸다.
 	if wire.Notification.AlarmType == "" {
 		return errors.New("unmarshal alarm queue envelope: notification.alarm_type is empty")
 	}

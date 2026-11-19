@@ -31,7 +31,6 @@ type alarmDispatchRunnerMetricSet struct {
 	backlogSnapshotLastSuccess    prometheus.Gauge
 }
 
-// alarmDispatchRunnerMetrics는 runner·retention·backlog 지표를 첫 관측 때 기본 registerer에 한꺼번에 등록한다.
 var alarmDispatchRunnerMetrics = sync.OnceValue(func() *alarmDispatchRunnerMetricSet {
 	return &alarmDispatchRunnerMetricSet{
 		emptyPollsTotal: promauto.NewCounter(prometheus.CounterOpts{
@@ -204,7 +203,6 @@ func observeAlarmDispatchOldestAges(pending, retry, sending float64) {
 	metrics.oldestSendingAgeSeconds.Set(sending)
 }
 
-// members에 한국어 표시명이 없어 misc/vtuber_fallback 문구로 방송 알림을 만든 횟수다.
 var alarmDispatchMemberNameMissingTotal = sync.OnceValue(func() prometheus.Counter {
 	return promauto.NewCounter(prometheus.CounterOpts{
 		Name: "hololive_alarm_dispatch_member_name_missing_total",

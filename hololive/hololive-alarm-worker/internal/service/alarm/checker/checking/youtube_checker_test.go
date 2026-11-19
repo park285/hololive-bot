@@ -1,38 +1,24 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package checking
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"maps"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dedup"
@@ -41,6 +27,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	cachepkg "github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
@@ -55,8 +43,7 @@ type fakeYouTubeLiveSessionSource struct {
 	recentTerminalRooms   map[string][]string
 	loadRecentChannelArgs [][]string
 	sentRoomsSince        map[string]time.Time
-	// sentRoomsAt은 PostgreSQL 조회처럼 발송 시각이 stream별 하한 이후인 방만 근거로 돌려준다.
-	sentRoomsAt map[string]map[string]time.Time
+	sentRoomsAt           map[string]map[string]time.Time
 }
 
 func (s *fakeYouTubeLiveSessionSource) LoadRecentSessions(
@@ -64,7 +51,6 @@ func (s *fakeYouTubeLiveSessionSource) LoadRecentSessions(
 	ids []string,
 	_ time.Time,
 ) ([]PersistedYouTubeLiveSession, error) {
-	// 실제 PostgreSQL 조회처럼 기한이 지난 context에서는 실패한다.
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -286,11 +272,52 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 
 	defer server.Close()
 
-	cache := newCheckerTestCacheClient(t)
+	if tc.ctxTimeout > 0 {
+		synctest.Test(t, func(t *testing.T) {
+			tc.check(t, newPipeCheckerCache(t), server.URL, channelID, roomID, streamID, startScheduled)
+		})
+
+		return
+	}
+
+	tc.check(t, newCheckerTestCacheClient(t), server.URL, channelID, roomID, streamID, startScheduled)
+}
+
+func newPipeCheckerCache(t *testing.T) cachepkg.Client {
+	t.Helper()
+
+	mini := miniredis.NewMiniRedis()
+	t.Cleanup(mini.Close)
+
+	client, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress: []string{"localhost:6379"},
+		DialCtxFn: func(context.Context, string, *net.Dialer, *tls.Config) (net.Conn, error) {
+			return mini.Dial()
+		},
+		DisableCache: true, ForceSingleClient: true,
+	})
+	require.NoError(t, err)
+	t.Cleanup(client.Close)
+
+	return &mocks.Client{
+		GetClientFunc: func() valkey.Client { return client },
+		BFunc:         client.B,
+		SAddFunc: func(ctx context.Context, key string, members []string) (int64, error) {
+			return client.Do(ctx, client.B().Sadd().Key(key).Member(members...).Build()).AsInt64()
+		},
+		SMembersFunc: func(ctx context.Context, key string) ([]string, error) {
+			return client.Do(ctx, client.B().Smembers().Key(key).Build()).AsStrSlice()
+		},
+	}
+}
+
+func (tc *youtubeCheckerCheckTestCase) check(t *testing.T, cache cachepkg.Client, serverURL, channelID, roomID, streamID string, startScheduled time.Time) {
+	t.Helper()
+
 	logger := newCheckerTestLogger()
 	dedupService := dedup.NewService(cache, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), server.URL, "test-key", cache, nil, logger)
+	holodexService, err := holodexprovider.NewHolodexService(new(settings.DefaultHolodexOperationalConfig()), serverURL, "test-key", cache, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, 0, nil, nil, logger)
@@ -317,6 +344,22 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 		runCtx, cancel = context.WithTimeout(setupCtx, tc.ctxTimeout)
 
 		defer cancel()
+
+		started := make(chan struct{})
+		expiry := runCtx.Done()
+
+		runCtx = httptrace.WithClientTrace(runCtx, &httptrace.ClientTrace{GotFirstResponseByte: func() {
+			close(started)
+			<-expiry
+		}})
+
+		t.Cleanup(func() {
+			select {
+			case <-started:
+			default:
+				t.Error("provider request did not receive the caller's deadline trace")
+			}
+		})
 	}
 
 	notifications, checkErr := checker.Check(runCtx, testTargetPolicy(5, 3, 1))
@@ -338,6 +381,15 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 func newYouTubeCheckerScenarioServer(t *testing.T, scenario, channelID, streamID string, startScheduled time.Time) *httptest.Server {
 	t.Helper()
 
+	var watchdog <-chan struct{}
+
+	if scenario == "timeout" {
+		guard, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		t.Cleanup(cancel)
+
+		watchdog = guard.Done()
+	}
+
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != testUsersLivePath {
 			http.NotFound(w, r)
@@ -347,6 +399,22 @@ func newYouTubeCheckerScenarioServer(t *testing.T, scenario, channelID, streamID
 
 		if !strings.Contains(r.URL.Query().Get("channels"), channelID) {
 			http.Error(w, "missing channels query", http.StatusBadRequest)
+
+			return
+		}
+
+		if scenario == "timeout" {
+			w.WriteHeader(http.StatusOK)
+
+			if err := http.NewResponseController(w).Flush(); err != nil {
+				t.Error(err)
+			}
+
+			select {
+			case <-r.Context().Done():
+			case <-watchdog:
+				panic(http.ErrAbortHandler)
+			}
 
 			return
 		}
@@ -364,9 +432,6 @@ func writeYouTubeCheckerScenarioResponse(t *testing.T, w http.ResponseWriter, sc
 	case "ok", "dedup":
 		writeYouTubeTestResponse(t, w, buildUpcomingResponse(channelID, streamID, startScheduled))
 	case "not_found":
-		writeYouTubeTestResponse(t, w, `[]`)
-	case "timeout":
-		time.Sleep(150 * time.Millisecond)
 		writeYouTubeTestResponse(t, w, `[]`)
 	case "5xx":
 		w.WriteHeader(http.StatusInternalServerError)
@@ -767,7 +832,6 @@ func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *
 }
 
 func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing.T) {
-	// 전역 counter 증가분을 정확히 보므로 병렬로 돌리지 않는다.
 	const (
 		channelID = "UC_TEST_CHANNEL"
 		roomID    = testRoomID1
@@ -1480,7 +1544,6 @@ func TestYouTubeCheckerCheck_HolodexHangLeavesBudgetForPersistedSessions(t *test
 	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tier.NewTieredScheduler(logger), dedupService, 0, persistedSource, nil, logger)
 	require.NoError(t, err)
 
-	// 운영 비율(주기 45초, Holodex 25초)을 축소한다. 한도가 없으면 Holodex가 주기 기한까지 붙잡아 저장 세션 조회도 실패한다.
 	checker.holodexBudget = 200 * time.Millisecond
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)

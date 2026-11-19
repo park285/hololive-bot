@@ -17,7 +17,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-// 저장 세션 조회 창은 contracts/alarm.md persisted live session 예외의 한도(15분·30분)와 같아야 한다.
 const (
 	persistedLiveSessionRecentWindow    = 15 * time.Minute
 	persistedUpcomingSessionLookahead   = 30 * time.Minute
@@ -216,9 +215,6 @@ type settledLiveStreamRoomRow struct {
 	Sent     bool
 }
 
-// 실패 종료 상태는 ledger가 같은 delivery의 재발행을 rejected_terminal로 거절하는 상태다.
-// 방송마다 하나인 catchup delivery의 dedupe key와 같아지는 것은 catchup event의 실패 종료뿐이다.
-// N분 전·일정 변경 알림은 key가 달라 실패해도 catchup을 막지 않는다.
 var terminalFailedDeliveryStatuses = []string{
 	string(dispatchoutbox.StatusDLQ),
 	string(dispatchoutbox.StatusQuarantined),

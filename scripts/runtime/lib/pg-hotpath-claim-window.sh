@@ -346,7 +346,6 @@ claim_query_matches_target() {
   local is_alarm=false
   local is_youtube=false
 
-  # SQL selector와 같은 제외·배타 판정을 적용해 관측기나 EXPLAIN 결과를 발송 비용으로 세지 않는다.
   if [[ "${normalized_query}" =~ (^|[^[:alnum:]_])explain([^[:alnum:]_]|$) \
     || "${normalized_query}" == *pg_stat_statements* \
     || "$2" == *hololive-pg-hotpath-stats-observer* ]]; then

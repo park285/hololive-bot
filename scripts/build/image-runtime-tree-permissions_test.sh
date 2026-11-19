@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# umask 077 checkout(파일 600·디렉터리 700)에서 빌드해도 이미지에 들어가는 Node 런타임 트리를
-# runtime uid가 읽을 수 있는지 실제 컨테이너 안에서 확인한다. v7.0.0 배포에서 600 파일이 든 PO issuer
-# 이미지가 uid 65532로 worker.mjs를 열지 못해(EACCES) 중앙 쌍이 자동 rollback됐다.
-# 각 Node build stage를 검사한다. 최종 stage는 이 트리를 모드 변경 없이 복사하고 collector·alarm-worker만
-# 소유자를 runtime uid로 바꾸므로, 소유자가 root인 build stage에서 읽히면 최종 이미지에서도 읽힌다.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -17,7 +12,6 @@ pass() {
   echo "[PASS] $*"
 }
 
-# 빌드는 kapu의 rootless Podman에서만 하므로 Podman이 없으면 통과로 넘기지 않고 실패한다.
 if [[ -n "${CONTAINER_HOST:-}${CONTAINER_CONNECTION:-}" ]] ||
   [[ "$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" != true ]]; then
   fail "local rootless Podman unavailable; run this image build check on kapu"
@@ -37,7 +31,6 @@ collector=hololive/hololive-youtube-collector
 alarm=hololive/hololive-alarm-worker
 checkout="${TMP_DIR}/checkout"
 mkdir -p "${checkout}"
-# 작업 트리의 추적 파일을 umask 077로 풀어 제한적 umask에서 만든 checkout을 재현한다.
 git -C "${ROOT_DIR}" ls-files -z -- \
   "${collector}/Dockerfile.po-sandbox" "${collector}/Dockerfile.po-sandbox.dockerignore" \
   "${collector}/Dockerfile" "${collector}/Dockerfile.dockerignore" \
@@ -50,7 +43,6 @@ git -C "${ROOT_DIR}" ls-files -z -- \
 fixture_mode="$(stat -c '%a' "${checkout}/${collector}/po-sandbox/src/worker.mjs")"
 [[ "${fixture_mode}" == 600 ]] || fail "fixture must reproduce a umask 077 checkout (worker.mjs mode ${fixture_mode})"
 
-# 심볼릭 링크는 따라가지 않고, 디렉터리는 읽기·탐색, 파일은 읽기 권한을 runtime uid로 확인한다.
 # shellcheck disable=SC2016 # Node 코드이며 shell 확장이 아니다.
 walker='
 const fs = require("fs"), path = require("path");

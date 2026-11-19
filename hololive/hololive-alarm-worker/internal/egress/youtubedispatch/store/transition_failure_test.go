@@ -11,8 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// ApplyPreparedFailure는 논리 그룹 재조회와 실패 전이를 한 트랜잭션에서 한다. 첫 COMMIT 경계에 다른 worker가 follower를
-// claim해도 그 변경은 실패 전이 뒤에 오므로 그룹 전원이 함께 실패하고 follower에는 다른 소유자가 남지 않는다.
 func TestApplyPreparedFailureIsNotSplitByConcurrentFollowerClaim(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -61,7 +59,6 @@ func TestApplyPreparedFailureIsNotSplitByConcurrentFollowerClaim(t *testing.T) {
 	}
 }
 
-// 재조회와 전이를 묶은 트랜잭션의 COMMIT 응답을 잃으면 전이 대상 행의 사후 상태로 적용을 확정하고 다시 쓰지 않는다.
 func TestApplyPreparedFailureConfirmsLostCommitResponse(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

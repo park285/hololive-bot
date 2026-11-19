@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package youtubedispatch
 
 import (
@@ -26,41 +6,35 @@ import (
 	"time"
 )
 
-// Config의 값은 alarm-worker profile의 youtube_delivery 항목이 정본이다. 생성자는 profile 로더가 양수와 신선도 관계를
-// 검증한다는 전제로 기본값으로 바꾸거나 값을 끌어올리지 않고, 잘못된 값이면 Validate가 생성 오류로 드러낸다.
 type Config struct {
-	BatchSize                   int           // 한 번에 처리할 알림 수
-	LockTimeout                 time.Duration // 락 타임아웃 (처리 중 상태 유지 시간)
-	PollInterval                time.Duration // 폴링 간격
-	MaxRetries                  int           // 최대 재시도 횟수
-	RetryBackoff                time.Duration // 재시도 간격
-	CleanupAfter                time.Duration // 완료된 알림 정리 기간
-	CleanupEnabled              bool          // 정리 활성화 여부
-	ReviveEnabled               bool          // stale-failed revival sweep 활성화 여부
-	ReviveInterval              time.Duration // revival sweep 주기
-	ReviveFreshnessWindow       time.Duration // 되살릴 FAILED 알람의 최대 콘텐츠 신선도(created_at 기준)
+	BatchSize                   int
+	LockTimeout                 time.Duration
+	PollInterval                time.Duration
+	MaxRetries                  int
+	RetryBackoff                time.Duration
+	CleanupAfter                time.Duration
+	CleanupEnabled              bool
+	ReviveEnabled               bool
+	ReviveInterval              time.Duration
+	ReviveFreshnessWindow       time.Duration
 	ClaimFreshnessWindow        time.Duration
-	DeliveryParallelism         int           // room/delivery send 제한 병렬성
-	DeliverySendTimeout         time.Duration // room 단위 메시지 발송 1회 최대 시간
-	SubscriberLookupParallelism int           // 채널별 구독자 조회 제한 병렬성
-	AggregateSyncInterval       time.Duration // aggregate 동기화 유지보수 주기
-	TelemetryPollInterval       time.Duration // telemetry loop 폴링 주기
-	TelemetryFlushBatch         int           // telemetry 버퍼 플러시 최대 건수
-	TelemetryRetryBackoff       time.Duration // telemetry 플러시 실패 재시도 간격
-	TelemetryRetention          time.Duration // telemetry 버퍼 최소 보존 기간
-	HandoffHorizon              time.Duration // Iris handoff 확인 기한. Iris 큐 대기 때문에 DeliverySendTimeout보다 길 수 있다.
+	DeliveryParallelism         int
+	DeliverySendTimeout         time.Duration
+	SubscriberLookupParallelism int
+	AggregateSyncInterval       time.Duration
+	TelemetryPollInterval       time.Duration
+	TelemetryFlushBatch         int
+	TelemetryRetryBackoff       time.Duration
+	TelemetryRetention          time.Duration
+	HandoffHorizon              time.Duration
 }
 
-// minSendingFinalizeGrace는 계약 SendingFinalizeGrace = max(2*PollInterval, 5s)의 하한이다.
 const minSendingFinalizeGrace = 5 * time.Second
 
-// sendLeaseBudget은 provider 호출 한 번을 시작하는 데 필요한 최소 잔여 lease(DeliverySendTimeout + SendingFinalizeGrace)다.
 func (c *Config) sendLeaseBudget() time.Duration {
 	return c.DeliverySendTimeout + max(2*c.PollInterval, minSendingFinalizeGrace)
 }
 
-// Validate는 dispatcher가 쓰는 주기·한도·병렬성이 양수인지와, claim 신선도 기간이 revive 기간과 주기의 합 이상인지
-// 확인한다. 그보다 claim 기간이 짧으면 되살린 PENDING이 primary claim에서 탈락한다.
 func (c *Config) Validate() error {
 	required := []struct {
 		name  string

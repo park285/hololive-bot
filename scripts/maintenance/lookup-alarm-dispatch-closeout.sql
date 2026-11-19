@@ -1,4 +1,3 @@
--- commit 응답이 불명확하면 이 조회로 영수증 존재 여부를 먼저 확인한다.
 \set ON_ERROR_STOP on
 \if :{?receipt_id}
 \else

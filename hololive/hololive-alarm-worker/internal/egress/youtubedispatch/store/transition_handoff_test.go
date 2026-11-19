@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"sync"
@@ -21,8 +22,6 @@ import (
 
 const testHandoffHorizon = time.Minute
 
-// handoffTestUnit은 202로 보낸 고정 요청 하나다. 소유 행은 고정 멤버이며 follower는 같은 논리 키의 고정 멤버 밖 중복
-// 물리행이다. CompleteSent가 함께 SENT로 미러링했고, 두 행의 부모 outbox 집계도 SENT다.
 type handoffTestUnit struct {
 	contentID  string
 	roomID     string
@@ -62,7 +61,6 @@ func sendHandoffTestUnit(
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, completed.Outcome)
 
-	// dispatcher가 발송 정산 뒤 하듯 부모 outbox 집계를 SENT로 맞춘다. 실패 정산은 이 SENT 부모를 되돌려야 한다.
 	require.NoError(t, NewDeliveryRepository(pool, nil).UpdateOutboxAggregateStatuses(t.Context(), completed.TouchedOutboxIDs))
 	requireHandoffOutboxStatuses(t, pool, completed.TouchedOutboxIDs, domain.OutboxStatusSent)
 
@@ -235,6 +233,67 @@ func TestHandoffCompleteClosesCheckAndKeepsSent(t *testing.T) {
 	require.Equal(t, unit.ownerID, source)
 }
 
+const handoffClaimStep = 15 * time.Second
+
+func claimScheduledHandoff(t *testing.T, pool *pgxpool.Pool, transition *TransitionStore, baseID string) HandoffClaim {
+	t.Helper()
+
+	ctx := t.Context()
+	freezeTransitionClock(t, pool)
+
+	_, err := pool.Exec(ctx, `UPDATE transition_clock SET at = r.handoff_next_check_at
+		FROM youtube_notification_send_request r WHERE r.base_id = $1`, baseID)
+	require.NoError(t, err)
+
+	claims, err := transition.ClaimHandoffDue(ctx, 1, handoffClaimStep)
+	require.NoError(t, err)
+	require.Len(t, claims, 1)
+
+	return claims[0]
+}
+
+func TestHandoffRescheduleRevokesClaimAtSameDeadline(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	transition := newTestTransitionStore(t, pool)
+	unit := sendHandoffTestUnit(t, pool, transition, "video-handoff-same-deadline", testHandoffHorizon)
+	claim := claimScheduledHandoff(t, pool, transition, unit.admission.RequestBaseID)
+
+	result, err := transition.RescheduleHandoff(ctx, &claim, handoffClaimStep, testHandoffHorizon)
+	require.NoError(t, err)
+	require.Equal(t, ApplyApplied, result.Outcome)
+
+	state := requireHandoffRequest(t, pool, claim.RequestBaseID)
+	require.Equal(t, &claim.CheckToken, state.NextCheckAt)
+
+	result, err = transition.CompleteHandoff(ctx, &claim)
+
+	miss, ok := errors.AsType[*sendfence.MissError](err)
+	require.True(t, ok, "재예약한 확인에 이전 정산이 적용됨: %v, %v", result, err)
+	require.Equal(t, []sendfence.RowMiss{{ID: unit.ownerID, Reason: sendfence.ReasonVersionChanged}}, miss.Rows)
+	require.Equal(t, ApplyConflict, result.Outcome)
+
+	state = requireHandoffRequest(t, pool, claim.RequestBaseID)
+	require.Equal(t, &claim.CheckToken, state.NextCheckAt)
+	require.Nil(t, state.CheckedAt)
+
+	_, err = pool.Exec(ctx, `UPDATE transition_clock SET at = $1`, claim.CheckToken)
+	require.NoError(t, err)
+
+	fresh, err := transition.ClaimHandoffDue(ctx, 1, handoffClaimStep)
+	require.NoError(t, err)
+	require.Len(t, fresh, 1)
+	require.Equal(t, claim.RequestBaseID, fresh[0].RequestBaseID)
+
+	result, err = transition.CompleteHandoff(ctx, &fresh[0])
+	require.NoError(t, err)
+	require.Equal(t, ApplyApplied, result.Outcome)
+
+	state = requireHandoffRequest(t, pool, claim.RequestBaseID)
+	require.Nil(t, state.NextCheckAt)
+	require.Equal(t, &claim.CheckToken, state.CheckedAt)
+}
+
 func TestHandoffRescheduleClampsToHorizonAndClosesChangedMembers(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -379,8 +438,6 @@ func TestHandoffExhaustFailsLogicalUnitWithoutLedger(t *testing.T) {
 	status, _ := loadHandoffTestLedger(t, pool, unit)
 	require.Empty(t, status)
 
-	// 부모 집계는 같은 트랜잭션에서 FAILED가 되고, 부모 sent_at은 canonical 집계가 지우지 않으므로 앞선 SENT 시각이
-	// 그대로 남는다.
 	requireHandoffOutboxStatuses(t, pool, result.TouchedOutboxIDs, domain.OutboxStatusFailed)
 
 	var keptSentAt int
@@ -512,6 +569,95 @@ func TestHandoffConcurrentSettlementsApplyOnce(t *testing.T) {
 	}
 
 	require.Equal(t, 1, applied)
+}
+
+type rollbackFirstHandoffDB struct {
+	*pgxpool.Pool
+
+	afterRollback func()
+	attempts      int
+}
+
+func (db *rollbackFirstHandoffDB) BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
+	db.attempts++
+
+	tx, err := db.Pool.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if db.attempts == 1 {
+		return rollbackHandoffTx{Tx: tx, afterRollback: db.afterRollback}, nil
+	}
+
+	return tx, nil
+}
+
+type rollbackHandoffTx struct {
+	pgx.Tx
+
+	afterRollback func()
+}
+
+func (tx rollbackHandoffTx) Commit(ctx context.Context) error {
+	if err := tx.Rollback(ctx); err != nil {
+		return err
+	}
+
+	if tx.afterRollback != nil {
+		tx.afterRollback()
+	}
+
+	return pgx.ErrTxCommitRollback
+}
+
+func setupHandoffRollback(t *testing.T) (*TransitionStore, *rollbackFirstHandoffDB, HandoffClaim) {
+	t.Helper()
+
+	pool := dbtest.NewPool(t)
+	transition := newTestTransitionStore(t, pool)
+	unit := sendHandoffTestUnit(t, pool, transition, "video-handoff-rollback", testHandoffHorizon)
+	claim := claimScheduledHandoff(t, pool, transition, unit.admission.RequestBaseID)
+	db := &rollbackFirstHandoffDB{Pool: pool}
+
+	transition.db = db
+
+	return transition, db, claim
+}
+
+func TestHandoffReissueAfterRolledBackCommit(t *testing.T) {
+	t.Run("original claim retries", func(t *testing.T) {
+		transition, db, claim := setupHandoffRollback(t)
+
+		result, err := transition.ReissueAfterHandoff(t.Context(), &claim, contractsalarm.HandoffCodeFailed, "iris reply status failed")
+		require.NoError(t, err)
+		require.Equal(t, CommitConfirmedPre, result.CommitAdjudication)
+		require.Equal(t, ApplyApplied, result.Outcome)
+		require.Equal(t, 2, db.attempts)
+		require.Equal(t, claim.Generation+1, requireHandoffRequest(t, db.Pool, claim.RequestBaseID).Generation)
+	})
+
+	t.Run("same deadline reschedule conflicts without retry", func(t *testing.T) {
+		transition, db, claim := setupHandoffRollback(t)
+
+		db.afterRollback = func() {
+			result, err := transition.RescheduleHandoff(t.Context(), &claim, handoffClaimStep, testHandoffHorizon)
+			require.NoError(t, err)
+			require.Equal(t, ApplyApplied, result.Outcome)
+		}
+
+		result, err := transition.ReissueAfterHandoff(t.Context(), &claim, contractsalarm.HandoffCodeFailed, "iris reply status failed")
+		require.Equal(t, 1, db.attempts)
+		require.ErrorIs(t, err, pgx.ErrTxCommitRollback)
+		require.Equal(t, CommitConflict, result.CommitAdjudication)
+		require.Equal(t, ApplyIndeterminate, result.Outcome)
+
+		state := requireHandoffRequest(t, db.Pool, claim.RequestBaseID)
+		require.Equal(t, &claim.IrisRequestID, state.IrisRequestID)
+		require.Equal(t, claim.Generation, state.Generation)
+		require.Equal(t, &claim.CheckToken, state.NextCheckAt)
+		require.Nil(t, state.CheckedAt)
+	})
 }
 
 func TestHandoffReissueConfirmsLostCommitResponse(t *testing.T) {

@@ -37,7 +37,6 @@ func communityPayload(channelID string, posts []*youtubejs.CommunityPost, maxRes
 	}
 }
 
-// 항목 시각·Premiere 표시는 같은 위치의 player 공개 근거에서만 채우고, 근거가 없는 항목은 시각 없이 둡니다. 목록 lockup의 시각은 싣지 않습니다.
 func videoListPayload(
 	channelID string,
 	items []youtubejs.ContentItem,
@@ -102,11 +101,10 @@ func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem,
 
 	for _, session := range sessions {
 		item := contract.LiveSessionV1{
-			VideoID:     session.VideoID,
-			ChannelID:   channelID,
-			Status:      session.Status,
-			ScheduledAt: session.ScheduledAt,
-			// 재사용 일정의 원래 관측 시각을 그대로 넘겨 API가 더 새 일정과 비교하게 합니다.
+			VideoID:            session.VideoID,
+			ChannelID:          channelID,
+			Status:             session.Status,
+			ScheduledAt:        session.ScheduledAt,
 			ScheduleObservedAt: session.ScheduleObservedAt,
 			StartedAt:          session.StartedAt,
 			EndedAt:            session.EndedAt,

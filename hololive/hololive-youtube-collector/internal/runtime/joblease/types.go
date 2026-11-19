@@ -22,8 +22,6 @@ var (
 	ErrNotAcquired   = errors.New("collection job was not acquired")
 )
 
-// Config는 lease 저장소가 쓰는 TTL·갱신·DB 예산과 release jitter, 후보 조회의 방어 상한만 담습니다.
-// Worker 수·poll 주기는 scheduler가, 재시도 범위는 executor가 internal/config에서 직접 받습니다.
 type Config struct {
 	LeaseTTL         time.Duration
 	RenewInterval    time.Duration
@@ -131,7 +129,6 @@ func (s *JobSpec) validate(contracts collection.StaticJobContracts) (collection.
 	return definition, kinds, nil
 }
 
-// ValidateContract는 큐 admission과 lease 획득이 같은 불변 job identity 경계를 적용하게 한다.
 func (s *JobSpec) ValidateContract(definition collection.JobContract) error {
 	if s == nil || invalidJobSpecIdentity(s) {
 		return fmt.Errorf("%w: identity or poll interval is outside bounds", ErrInvalidJob)

@@ -15,7 +15,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// 전역 등록 counter를 교체하거나 병렬 실행하지 않아 전체 suite에서도 delta를 격리합니다.
 func TestConsumerMarkSendingRegisteredCounterWithPGFence(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := newTestRepository(t, pool)

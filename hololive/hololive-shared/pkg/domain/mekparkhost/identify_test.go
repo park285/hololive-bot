@@ -141,7 +141,6 @@ func TestIdentifyTitleEvidence(t *testing.T) {
 func TestIdentifyMembershipPrefixedRole(t *testing.T) {
 	t.Parallel()
 
-	// 「メン限」은 앞이 경계이고 뒤에 이름+역할이 올 때만 인정한다.
 	cases := []struct {
 		name, title, display string
 		hosts                []string
@@ -151,7 +150,6 @@ func TestIdentifyMembershipPrefixedRole(t *testing.T) {
 		{name: "Eg4oGw409DA", title: "【BOMBANANA!】🖤メン限さやな視点🖤猿になっても強いです😉 #ACHRORA #ACHRORAコラボ", hosts: []string{"sumishio-sayana"}, display: "아크로라 · 사야나"},
 		{name: "21_tEwWriv8", title: "【BOMBANANA!】🐳メン限りらら視点🐳あくろらの絆見せつけます💪 #ACHRORA #ACHRORAコラボ", hosts: []string{"rumigaki-rirara"}, display: "아크로라 · 리라라"},
 		{name: "halfwidth_prefix", title: "🐣ﾒﾝ限ひなみ視点🐣", hosts: []string{"yuikawa-hinami"}, display: "아크로라 · 히나미"},
-		// 같은 시각의 단체 본방은 개인 근거가 없으므로 유닛 이름만 유지한다.
 		{name: "WABiewDiAYU_group", title: "【BOMBANANA!】活動開始から3か月‼\ufe0f友情崩壊の危機…⁉\ufe0f🙈🙊🙉#ACHRORA #ACHRORAコラボ【#9月のあくろら観測会議】", hosts: []string{}, display: "아크로라"},
 		{name: "prefix_inside_word", title: "ラーメン限ひなみ視点", hosts: []string{}, display: "아크로라"},
 		{name: "prefix_without_role", title: "メン限ひなみ雑談", hosts: []string{}, display: "아크로라"},
@@ -171,7 +169,6 @@ func TestIdentifyMembershipPrefixedRole(t *testing.T) {
 func TestIdentifyRepeatedTokenUsesTitleBoundary(t *testing.T) {
 	t.Parallel()
 
-	// 앞 일치를 거부한 뒤에도 잘라 낸 조각이 아니라 원래 제목의 앞 문자로 경계를 판단해야 한다.
 	cases := []struct {
 		name, channel, title, label string
 	}{

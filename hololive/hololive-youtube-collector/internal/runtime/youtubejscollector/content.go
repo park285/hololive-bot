@@ -12,17 +12,14 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
-// ContentClient는 목록 RPC와, video_list 공개 근거를 얻는 영상별 확인 RPC를 제공합니다. 두 RPC 모두 호출마다 limiter를 기다립니다.
 type ContentClient interface {
 	FetchContent(ctx context.Context, request youtubejs.ContentRequest) (youtubejs.ContentResult, error)
 	FetchVideoLiveCheck(ctx context.Context, request youtubejs.VideoLiveCheckRequest) (youtubejs.VideoLiveCheckResult, error)
 }
 
 type ContentRunner struct {
-	client  ContentClient
-	cursors ContentCursorReader
-	// publicationReserve는 공개 근거 조회가 쓰지 않고 남겨 두는 수집 기한입니다. 실행 profile의 RPC 외 작업 여유(overhead)이며,
-	// 근거 조회가 수집 기한을 끝까지 써서 이미 받은 목록·근거까지 버려지지 않게 합니다.
+	client             ContentClient
+	cursors            ContentCursorReader
 	publicationReserve time.Duration
 }
 
@@ -31,7 +28,6 @@ type contentKind struct {
 	tab  string
 }
 
-// 공개 근거 cursor는 video_list 관측만 싣습니다.
 type contentObservation struct {
 	envelope contract.Envelope
 	cursor   jsontext.Value
@@ -49,7 +45,6 @@ const (
 	contentTabShorts = "shorts"
 )
 
-// ContentJobKind는 content runner의 job 종류입니다. 실행 profile은 이 값으로 공개 근거 RPC 상한을 더합니다.
 const ContentJobKind collection.JobKind = "youtubejs_content"
 
 var contentKinds = []contentKind{
@@ -82,9 +77,6 @@ func (r *ContentRunner) Collect(ctx context.Context, input *collection.RunInput)
 	return out, nil
 }
 
-// 근거 조회가 목록 RPC의 수집 기한을 먼저 쓰지 않게 하려는 순서입니다. 부분 결과는 기존 정책대로 video_list 관측만 싣습니다. 근거 조회 단계의 오류는 근거 조회 실패로 강등할 수 없는 오류뿐이라
-// job 전체를 실패시킵니다. 같은 slot의 video_list가 이미 수락됐으면(DEFERRED 재시도) 목록과 근거를 다시 조회하지 않습니다. 같은 slot은 같은 관측 identity이므로 다시 만든
-// payload가 달라지면 collision이 되고 cursor 전진도 저장되지 않기 때문입니다.
 func (r *ContentRunner) collectAllowedKinds(
 	ctx context.Context,
 	input *collection.RunInput,
@@ -116,7 +108,6 @@ func (r *ContentRunner) collectAllowedKinds(
 		}
 
 		if err != nil {
-			// 부분 결과로 발행할 수 없는 실패면 근거 조회 RPC를 쓰지 않고 바로 실패합니다.
 			if ctx.Err() != nil || !collection.PartialFailureClassAllowed(collecterr.ClassOf(err)) {
 				return partialContentResultForError(ctx, nil, started, item.kind, err)
 			}
@@ -147,13 +138,11 @@ func (r *ContentRunner) collectAllowedKinds(
 	return collection.NewCompleteResult(output), nil
 }
 
-// List가 nil이면 video_list가 수집 대상이 아니거나, 이 slot에서 이미 수락됐거나, 탭이 없어 방출할 관측이 없습니다.
 type videoListFetch struct {
 	list  *contentListFetch
 	prior storedPublicationCursor
 }
 
-// 직전 cursor의 slot이 현재 lease slot과 같다는 것은 같은 publish tx로 이 slot의 video_list가 수락됐다는 뜻입니다.
 func (r *ContentRunner) collectVideoList(ctx context.Context, input *collection.RunInput) (videoListFetch, error) {
 	subject := input.Subject()
 
@@ -331,8 +320,6 @@ func shortsObservation(input *collection.RunInput, fetched *contentListFetch) (c
 	return contentObservation{envelope: envelope}, nil
 }
 
-// 근거 조회는 수집 기한에서 publicationReserve를 남긴 하위 기한 안에서만 하므로, 근거 조회가 끊겨도 그때까지 받은 근거와 목록 관측을 발행합니다. 근거 조회 실패는 해당 항목을 근거 미수집으로
-// 남길 뿐 목록 관측 자체를 버리지 않습니다.
 func (r *ContentRunner) videoListObservation(
 	ctx context.Context,
 	input *collection.RunInput,

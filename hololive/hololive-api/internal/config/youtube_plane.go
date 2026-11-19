@@ -59,15 +59,13 @@ type YouTubePlaneConfig struct {
 	ClaimInterval          time.Duration
 	TransactionTimeout     time.Duration
 
-	ShutdownTimeout     time.Duration
-	Retention           YouTubePlaneRetentionConfig
-	TargetProjection    YouTubePlaneTargetProjectionConfig
-	LiveEndFinalizer    YouTubePlaneLiveEndFinalizerConfig
-	ContentAbsenceGrace time.Duration
-	LiveEndGrace        time.Duration
-	// LiveUnresolvableGrace는 LIVE 영상의 identity_missing이 UNRESOLVABLE_VIDEO 종료 전에 이어져야 하는 최소 지속 시간이다.
-	LiveUnresolvableGrace time.Duration
-	// TimeFinalizationBacklogBatchSize는 0이면 과거 방송 시각 확정 수집을 중지합니다.
+	ShutdownTimeout                  time.Duration
+	Retention                        YouTubePlaneRetentionConfig
+	TargetProjection                 YouTubePlaneTargetProjectionConfig
+	LiveEndFinalizer                 YouTubePlaneLiveEndFinalizerConfig
+	ContentAbsenceGrace              time.Duration
+	LiveEndGrace                     time.Duration
+	LiveUnresolvableGrace            time.Duration
 	TimeFinalizationBacklogBatchSize int
 
 	ProfileClearMinObservations int

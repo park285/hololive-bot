@@ -37,7 +37,6 @@ type officialScheduleMetrics struct {
 	lastSuccessSeconds *prometheus.GaugeVec
 }
 
-// 기본 registry에는 한 번만 등록하므로 첫 관측 때 묶음으로 만든다.
 var officialScheduleMetricsFor = sync.OnceValue(func() *officialScheduleMetrics {
 	return &officialScheduleMetrics{
 		fallbackTotal: promauto.NewCounterVec(

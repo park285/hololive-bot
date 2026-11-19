@@ -8,9 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCollectionMembershipMigrationInitializesOnlyCurrent는 재적용 가능한 259가 CURRENT의 bounded target만
-// membership을 초기화하고 과거 generation은 backfill하지 않으며, 이전 lock 함수를 제거하는지 확인한다.
-
 func TestLockCurrentProjectionWaitsForRefreshAndReadsNewCurrent(t *testing.T) {
 	t.Parallel()
 

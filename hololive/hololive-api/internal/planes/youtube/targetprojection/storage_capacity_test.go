@@ -12,10 +12,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// BenchmarkProjectionStorageCapacity는 합성 대상의 출입과 not_before 갱신이 만드는 실제 PG
-// 저장량을 비교한다. 압축 표현은 실험용 임시 테이블이며 운영 이행 구현이 아니다.
-// -benchtime=120x는 5초 refresh 10분에 해당하는 입력 횟수다. 실행 시각을 기다리지 않으므로
-// 운영 vacuum 주기와 동시 부하 또는 실시간 10분 성능을 재현했다고 해석하지 않는다.
 func BenchmarkProjectionStorageCapacity(b *testing.B) {
 	for _, targetCount := range []int{620, 1240} {
 		for _, mode := range []string{"membership_changes", "freshness_only", "unchanged_heartbeat"} {
@@ -95,7 +91,6 @@ func benchmarkProjectionStorageCapacity(b *testing.B, targetCount int, mode stri
 func reportProjectionTupleChanges(b *testing.B, pool *pgxpool.Pool, initialTuples map[projectionTupleKey]string, mode string) {
 	b.Helper()
 
-	// xmin/ctid는 같은 값을 쓴 UPDATE도 드러낸다. 전체 UPDATE 횟수가 아니라 살아 있는 변경 tuple 수다.
 	changed := changedProjectionTuples(initialTuples, projectionTupleVersions(b, pool))
 	b.ReportMetric(float64(changed["target"]), "target-tuples-changed")
 	b.ReportMetric(float64(changed["reason"]), "reason-tuples-changed")
@@ -232,7 +227,6 @@ func measureCapacityArchive(b *testing.B, pool *pgxpool.Pool) int64 {
 	return archiveBytes
 }
 
-// 운영 lease 경쟁·cutover·복구를 검증하는 구현은 아니다.
 func measureCapacityCompaction(b *testing.B, pool *pgxpool.Pool, archiveBytes int64, targetCount int) {
 	b.Helper()
 

@@ -31,7 +31,6 @@ type wireEndpointFixture struct {
 	} `json:"invalid"`
 }
 
-// JS 검증기 테스트와 같은 본문을 실제 RPC decode와 envelope 생성·분류에 통과시킵니다.
 func loadWireEndpointFixture(t *testing.T, path string) wireEndpointFixture {
 	t.Helper()
 
@@ -89,7 +88,6 @@ func TestChannelLiveRunnerPublishesWireFixture(t *testing.T) {
 			t.Fatalf("%s: payload = %#v", valid.Name, payload)
 		}
 
-		// 재사용 일정의 원래 확인 슬롯이 발행 payload까지 그대로 전달되어야 reducer가 더 새 일정을 지킵니다.
 		for i := range body.LiveSessions {
 			var session struct {
 				ScheduleObservedAt *time.Time `json:"schedule_observed_at"`

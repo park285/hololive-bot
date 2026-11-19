@@ -27,9 +27,8 @@ const (
 	testCanonicalShortFromShortID = "short:" + testShortID
 	testCanonicalShortFromVideoID = "short:" + testVideoID
 
-	testDuplicatePostID  = "post-duplicate"
-	testDuplicateVideoID = "video-duplicate"
-	// NEW_SHORT canonical content_id(testDuplicateVideoID 기준).
+	testDuplicatePostID         = "post-duplicate"
+	testDuplicateVideoID        = "video-duplicate"
 	testDuplicateShortContentID = "short:video-duplicate"
 
 	testAuthorName    = "author"

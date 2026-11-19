@@ -179,7 +179,6 @@ func seedRequestClockUnit(t *testing.T, repo *PgxRepository) (int64, []int64, st
 	return claimed[0].SendUnitID, ids, claimed[0].ClientRequestID
 }
 
-// 실제 PostgreSQL 대기를 확인한 뒤 잠금을 풀어 transaction/statement 시작 시각과 구별한다.
 func runRequestClockBlocked(ctx context.Context, t *testing.T, pool *pgxpool.Pool, lock string, unit, member int64, expires time.Time, call func(context.Context) error) (time.Time, error) {
 	t.Helper()
 
@@ -300,7 +299,6 @@ func TestBeginSendRequestRejectsChangedFencesAtomically(t *testing.T) {
 	require.Error(t, repo.BeginSendRequest(t.Context(), unit, nil, requestClockOwner, request.ClientRequestID, time.Minute))
 	assertRequestClockLeased(t.Context(), t, pool, ids)
 
-	// 멤버 하나가 다른 소유자에게 넘어가면 그 멤버는 owner_changed, 나머지는 함께 막힌 peer_missed다.
 	_, err = pool.Exec(t.Context(), `UPDATE alarm_dispatch_deliveries SET locked_by='foreign' WHERE id=$1`, ids[1])
 	require.NoError(t, err)
 

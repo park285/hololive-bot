@@ -10,7 +10,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
-// 발급이 계속 실패해도 helper는 READY이므로 /ready 대신 scrape 시점의 PO 상태 메트릭으로 드러나야 한다.
 func TestHLP014(t *testing.T) {
 	base := shortRuntimeBase(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
@@ -66,7 +65,6 @@ youtubejs_po_proof_upstream_requests_total 4
 		t.Fatalf("Close: %v", err)
 	}
 
-	// 종료된 helper는 상태를 추정하지 않고 읽기 실패만 드러낸다.
 	const closed = `
 # HELP youtubejs_helper_health_scrape_success Whether the YouTube.js helper /health response was read and decoded at scrape time.
 # TYPE youtubejs_helper_health_scrape_success gauge

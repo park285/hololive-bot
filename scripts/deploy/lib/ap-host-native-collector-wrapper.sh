@@ -11,7 +11,6 @@ fi
 if [ -z "${POSTGRES_DB:-}" ]; then
   export POSTGRES_DB=hololive
 fi
-# Collector는 고정 instance 역할의 전용 자격만 사용한다.
 if [ -z "${POSTGRES_PASSWORD:-}" ]; then
   if [ -z "${HOLOLIVE_COLLECTOR_A_PASSWORD:-}" ]; then
     echo "collector wrapper: HOLOLIVE_COLLECTOR_A_PASSWORD is required" >&2

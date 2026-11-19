@@ -88,8 +88,6 @@ func (s *TransitionStore) beginSendingOnce(
 	return started, transitions, touched, nil
 }
 
-// beginSendingTx는 owner를 SENDING으로 전이하고, 전이 문장이 잠근 뒤 채취한 DB 시계를 owner의 locked_at(발송 시작
-// 시각)으로 StartedOperation에 싣는다.
 func (s *TransitionStore) beginSendingTx(
 	ctx context.Context,
 	tx dbx.Querier,
@@ -212,8 +210,6 @@ func startedFollowers(
 	return followers, nil
 }
 
-// sendingTransitionRow는 claim 소유자(locked_by)를 유지한 채 SENDING으로 올린다. 발송 시작 시각(locked_at)은 전이
-// 문장의 DB 시계로 기록한다.
 func sendingTransitionRow(before transitionRow) transitionRow {
 	after := before
 
@@ -316,8 +312,6 @@ func deliverysqlSelectTransitionRows(
 	return nil
 }
 
-// sameTransitionState는 commit 판정용 상태 등가다. 모든 쓰기가 row_version을 올리므로 시각 열(next_attempt_at·
-// locked_at·sent_at)은 비교하지 않으며, 이 값들은 전이 문장의 DB 시계가 정해 호출자가 미리 알 수 없다.
 func sameTransitionState(actual, expected transitionRow) bool {
 	return actual.ID == expected.ID &&
 		actual.OutboxID == expected.OutboxID &&

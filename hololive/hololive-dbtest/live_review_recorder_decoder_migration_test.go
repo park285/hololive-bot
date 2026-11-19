@@ -37,7 +37,6 @@ func TestLiveReviewRecorderDecoderMigrationPreservesRestrictedRecording(t *testi
 func assertRestrictedRecorderReopens(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles, receiptID, beforeReceipts string) {
 	t.Helper()
 
-	// 매 재적용 뒤 새로운 사실을 기록하여 기존 영수증 조회만 성공하는 경우를 배제한다.
 	ctx := t.Context()
 	_, err := pool.Exec(ctx, `UPDATE youtube_live_sessions SET title=$1 WHERE video_id='none'`, receiptID)
 	require.NoError(t, err)
@@ -104,5 +103,3 @@ func recordLiveReviewAsRole(t *testing.T, pool *pgxpool.Pool, role, receiptID st
 
 	return tx.Commit(t.Context())
 }
-
-// decoder 외 함수 ACL·invoker 경계·표 ACL·역할 구성은 forward grant 전후에 그대로여야 한다.

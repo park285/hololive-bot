@@ -110,7 +110,6 @@ func TestCollectionRuntimeBundlesGuardPrecedesSourceLocks(t *testing.T) {
 			pool := NewPool(t)
 			seedCollectionBundleRetention(t, pool)
 			runCollectionBundleBlockedWriter(t, pool, `SELECT lock_youtube_collection_runtime_bundles()`, tc.sql, func(guard pgx.Tx) {
-				// 대기 중인 writer가 원본을 먼저 잠갔다면 NOWAIT가 실패하여 guard/source 역순을 드러낸다.
 				execCollectionBundleSQL(t, guard, `SELECT generation FROM youtube_collection_projection_generations WHERE generation=103 FOR UPDATE NOWAIT;
 					SELECT subject_key FROM youtube_collection_targets WHERE projection_generation=103 FOR UPDATE NOWAIT;
 					SELECT reason_key FROM youtube_collection_target_reasons WHERE projection_generation=103 FOR UPDATE NOWAIT`)

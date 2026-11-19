@@ -203,8 +203,6 @@ func TestResolveChannelSubscribersByTypeReturnsAuthoritativeEmptyOnlyAfterDBFall
 	}
 }
 
-// 빈 set은 eviction과 구분되지 않으므로 DB 없는 resolver는 구독 0으로 확정하지 않고 오류를 돌려준다.
-// 엄격한 mock은 SMembers 밖의 cache 호출에서 panic하므로 다른 cache 확인이 없음을 함께 고정한다.
 func TestResolveChannelSubscribersByTypeEmptySetWithoutDatabaseFails(t *testing.T) {
 	t.Parallel()
 
@@ -228,9 +226,13 @@ func TestResolveChannelSubscribersByType_SingleflightDeduplicatesConcurrentDBFal
 
 	var queryCount atomic.Int32
 
+	var joined sync.WaitGroup
+
+	joined.Add(3)
+
 	registerAlarmQueryHook(t, db, func() {
 		queryCount.Add(1)
-		time.Sleep(50 * time.Millisecond)
+		joined.Wait()
 	})
 
 	start := make(chan struct{})
@@ -252,7 +254,7 @@ func TestResolveChannelSubscribersByType_SingleflightDeduplicatesConcurrentDBFal
 			<-start
 
 			results[i].subscribers, results[i].err = resolver.ResolveChannelSubscribersByType(
-				t.Context(),
+				subscriberCallerContext(t.Context(), &joined),
 				"UC_batch_channel",
 				domain.AlarmTypeShorts,
 			)
@@ -287,8 +289,12 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts},
 	})
 
+	var joined sync.WaitGroup
+
+	joined.Add(2)
+
 	registerAlarmQueryHook(t, db, func() {
-		time.Sleep(50 * time.Millisecond)
+		joined.Wait()
 	})
 
 	start := make(chan struct{})
@@ -307,12 +313,12 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 	wg.Go(func() {
 		<-start
 
-		first, firstErr = resolver.loadChannelSubscriberAlarms(t.Context(), "UC_pointer_channel", domain.AlarmTypeLive)
+		first, firstErr = resolver.loadChannelSubscriberAlarms(subscriberCallerContext(t.Context(), &joined), "UC_pointer_channel", domain.AlarmTypeLive)
 	})
 	wg.Go(func() {
 		<-start
 
-		second, secondErr = resolver.loadChannelSubscriberAlarms(t.Context(), "UC_pointer_channel", domain.AlarmTypeLive)
+		second, secondErr = resolver.loadChannelSubscriberAlarms(subscriberCallerContext(t.Context(), &joined), "UC_pointer_channel", domain.AlarmTypeLive)
 	})
 
 	close(start)
@@ -555,7 +561,6 @@ func TestResolveChannelSubscribersByType_DBFallbackMetrics(t *testing.T) {
 		return testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues(result))
 	}
 
-	// 빈 cache는 구독 set이 없어 확정하지 못하므로 DB를 읽고, 그 결과를 센다.
 	resolver := NewSubscriberResolver(newMemoryCacheClient(t), db)
 
 	hitBefore := fallback("hit")
@@ -576,7 +581,6 @@ func TestResolveChannelSubscribersByType_DBFallbackMetrics(t *testing.T) {
 	require.Error(t, err)
 	assert.InDelta(t, float64(1), fallback("error")-errorBefore, 1e-9)
 
-	// cache 없이 만든 resolver는 DB가 기본 경로라 fallback으로 세지 않는다.
 	hitBefore, missBefore = fallback("hit"), fallback("miss")
 
 	subscribers, err := NewSubscriberResolver(nil, db).ResolveChannelSubscribersByType(t.Context(), "UC_metric", domain.AlarmTypeLive)
@@ -597,10 +601,12 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
 	})
 
-	releaseQuery := make(chan struct{})
+	var joined sync.WaitGroup
+
+	joined.Add(2)
 
 	registerAlarmQueryHook(t, db, func() {
-		<-releaseQuery
+		joined.Wait()
 	})
 
 	start := make(chan struct{})
@@ -611,7 +617,7 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {
 		go func() {
 			<-start
 
-			_, err := resolver.loadChannelSubscriberAlarms(t.Context(), "UC_shared_metric", domain.AlarmTypeLive)
+			_, err := resolver.loadChannelSubscriberAlarms(subscriberCallerContext(t.Context(), &joined), "UC_shared_metric", domain.AlarmTypeLive)
 			done <- err
 		}()
 	}
@@ -619,8 +625,6 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {
 	before := testutil.ToFloat64(alarmSubscriberDBSingleflightSharedTotal)
 
 	close(start)
-	time.Sleep(20 * time.Millisecond)
-	close(releaseQuery)
 
 	require.NoError(t, <-done)
 	require.NoError(t, <-done)
@@ -698,6 +702,22 @@ func (*releasedSubscriberQueryDB) Exec(context.Context, string, ...any) (pgconn.
 
 func (*releasedSubscriberQueryDB) QueryRow(context.Context, string, ...any) pgx.Row {
 	panic("unexpected subscriber query QueryRow")
+}
+
+func subscriberCallerContext(ctx context.Context, joined *sync.WaitGroup) context.Context {
+	return &subscriberWaitContext{Context: ctx, joined: sync.OnceFunc(joined.Done)}
+}
+
+type subscriberWaitContext struct {
+	context.Context //nolint:containedctx // 공유 적재 합류 시점을 관찰하는 Context wrapper이며 원래 취소·값 계약을 그대로 위임한다.
+
+	joined func()
+}
+
+func (c *subscriberWaitContext) Done() <-chan struct{} {
+	c.joined()
+
+	return c.Context.Done()
 }
 
 type alarmTargetLookupTestDB struct {

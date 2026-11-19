@@ -48,14 +48,11 @@ const (
 	postStop
 )
 
-// changeLoopState는 detectChanges goroutine만 만지므로 잠그지 않는다. 프로세스가 다시 뜨면 비어 있고 종단 기준을 처음부터 다시 센다.
-// 두 맵(judging, matches)의 항목은 기록에 성공하거나 대기열에서 사라질 때만 지운다. 종단 기준이 첫 시도부터라 먼저 지우면 기준이 늦춰진다.
 type changeLoopState struct {
 	collected map[string]collectMark
 	judging   map[judgeKey]time.Time
 	matches   map[matchKey]matchEntry
-	// mentions는 다른 멤버의 글에서 찾은, 그 채널 멤버가 출연하는 방송의 글이다. 그 멤버의 확정본이 나중에 게시돼도 넣을 수 있게 lookback 동안 둔다.
-	mentions map[string]map[int64]posterstore.Post
+	mentions  map[string]map[int64]posterstore.Post
 }
 
 type judgeKey struct {
@@ -83,7 +80,6 @@ const (
 	matchReady
 )
 
-// 계산에 쓴 앞선 변경(prior)이 지금과 내용이 다르면 입력이 바뀐 것이라 다시 계산한다. 진행이 matchJudged면 result.Changes는 재번역 전의 판정이다.
 type matchDone struct {
 	progress matchProgress
 	prior    []posterstore.Change
@@ -110,7 +106,6 @@ func (s *Service) detectsChanges() bool {
 	return s.classifier != nil && s.config.ChangePollSeconds > 0
 }
 
-// detectChanges는 goroutine 하나에서만 돌린다. 같은 멤버의 글을 게시 순서로 하나씩 대응해야 뒤 글의 입력이 앞 글의 변경을 담는다.
 func (s *Service) detectChanges(ctx context.Context) error {
 	now := s.now()
 	roster := &changeRoster{}
@@ -173,7 +168,6 @@ func (s *Service) detectChanges(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// detectTarget이 단계와 함께 돌려준 오류는 모델 실패이고, 단계 없이 돌려준 오류는 저장소 오류다.
 func (s *Service) detectTarget(ctx context.Context, target Target, today time.Time, roster *changeRoster) (string, error) {
 	schedule, ok, err := s.changes.PublishedRows(ctx, target.ChannelID, today)
 	if err != nil {
@@ -184,7 +178,6 @@ func (s *Service) detectTarget(ctx context.Context, target Target, today time.Ti
 		return "", nil
 	}
 
-	// JST로 바꾼 행은 글이 말하는 현지 시각과 대응할 수 없다.
 	if slices.ContainsFunc(schedule.Rows, func(row posterstore.Row) bool { return row.SourceZone != "" }) {
 		s.logger.Info("Schedule poster change detection skipped",
 			slog.String("channel_id", target.ChannelID), slog.String("reason", "unsupported_zone"))
@@ -244,7 +237,6 @@ func (s *Service) processPosts(
 			continue
 		}
 
-		// 앞 글의 기록을 담아야 뒤 글의 대응 입력이 그 변경을 반영한다.
 		current, ok, err := s.changes.PublishedRows(ctx, target.ChannelID, today)
 		if err != nil {
 			return "", fmt.Errorf("reload published schedule rows for changes: %w", err)
@@ -265,7 +257,6 @@ func (s *Service) processPosts(
 			return "", nil
 		}
 
-		// 반영 변경을 기록하면 저장소가 같은 묶음의 뒤 글을 대기열로 돌려보낸다. 다시 읽어야 그 글이 더 뒤의 글보다 먼저 대응된다.
 		if applied {
 			pending, err = s.changes.PendingPosts(ctx, schedule, changeBatch)
 			if err != nil {
@@ -343,7 +334,6 @@ func (s *Service) storePosts(ctx context.Context, target Target, schedule *poste
 	return nil
 }
 
-// fetchPosts가 false를 돌려주면 X 글을 읽지 못한 것이고 이번 주기에는 본인 글을 넣지 않는다. 오류는 저장소 오류이거나 ctx 종료다.
 func (s *Service) fetchPosts(
 	ctx context.Context, target Target, schedule *posterstore.PublishedSchedule, roster *changeRoster,
 ) (collectedPosts, bool, error) {
@@ -497,8 +487,6 @@ func samePrior(kept, prior []posterstore.Change) bool {
 	})
 }
 
-// computeMatch가 오류와 함께 돌려준 값은 다음 주기에 이어 쓸 진행이고, 오류는 기록하지 않고 멈출 실패다.
-// 글 탓 실패와 종단 기준이 지난 불명 실패는 match_failed 결과로 돌려준다.
 func (s *Service) computeMatch(
 	ctx context.Context, target Target, schedule *posterstore.PublishedSchedule, post *posterstore.Post, prior []posterstore.Change,
 	roster *changeRoster, deadline time.Time, done matchDone,
@@ -623,7 +611,6 @@ func vertexServiceFailure(err error) bool {
 	return ok && slices.Contains(changeServiceCodes, apiErr.Code) || vertexUnreachable(err)
 }
 
-// vertexUnreachable은 요청이 Vertex에 닿기 전의 실패(이름 확인·연결·TLS 인증서·토큰 발급)다. 응답을 기다리다 난 실패는 그 글 때문일 수 있어 넣지 않는다.
 func vertexUnreachable(err error) bool {
 	if _, ok := errors.AsType[genai.APIError](err); ok {
 		return false
@@ -638,7 +625,6 @@ func vertexUnreachable(err error) bool {
 	return lookup || isOp && opErr.Op == "dial" || certificate || record || token
 }
 
-// closingReason이 빈 값이면 기록하지 않고 멈출 실패다.
 func (s *Service) closingReason(err error, deadline time.Time) string {
 	if fault, ok := errors.AsType[*postFaultError](err); ok {
 		return fault.reason

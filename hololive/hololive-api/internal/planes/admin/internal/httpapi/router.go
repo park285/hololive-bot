@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package httpapi
 
 import (
@@ -125,15 +105,10 @@ func newAPIRouter(ctx context.Context, appConfig *apiconfig.AdminPlaneConfig, lo
 		logger = slog.Default()
 	}
 
-	// admin API는 Iris Console gateway가 서버 대 서버로 API key를 붙여 호출하므로 CORS·Client Hints 같은
-	// 브라우저용 middleware를 두지 않는다.
 	routerOptions := &sharedserver.RuntimeRouterOptions{
-		APIKey:       appConfig.Server.APIKey,
-		EnableGzip:   true,
-		SkipLogPaths: []string{"/metrics"},
-		// admin-api는 Tailscale 직결(reverse-proxy 없음)이라 신뢰 가능한 클라이언트 IP는
-		// TCP RemoteAddr 뿐이다. CF-Connecting-IP/X-Forwarded-For 위조로 IP 기준 rate limit을
-		// 우회하지 못하도록 RemoteAddr만 신뢰한다.
+		APIKey:                 appConfig.Server.APIKey,
+		EnableGzip:             true,
+		SkipLogPaths:           []string{"/metrics"},
 		TrustRemoteAddrOnly:    true,
 		InternalReadyResponder: readiness.GinHandler(ctx, readyProbe),
 	}

@@ -20,8 +20,6 @@ import (
 
 const sourceObservationsTable = "source_observations"
 
-// reloptions는 schema_snapshot.golden.sql 직렬화(컬럼·제약·인덱스)에 포함되지 않아
-// 111의 autovacuum 튜닝은 골든 대신 이 구조 테스트로 고정한다.
 func TestTelemetryHotTableAutovacuumTuned(t *testing.T) {
 	t.Parallel()
 
@@ -420,7 +418,6 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		t.Fatalf("resolve migrations dir for observation lock API check: %v", err)
 	}
 
-	// 발행 SQL은 collector, 소비 SQL은 API의 sourceobservation 패키지가 소유한다.
 	publishQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation", "queries"))
 	consumeQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "internal", "youtube", "sourceobservation", "queries"))
 	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
@@ -449,7 +446,6 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 	}
 }
 
-// 파일 읽기는 Begin 앞에 둔다. 트랜잭션을 연 채 Fatalf로 빠져나가면 연결이 pool에 돌아가지 않아 cleanup의 pool.Close가 go test timeout까지 멈추기 때문이다.
 func runObservationRoleQueries(
 	t *testing.T,
 	pool *pgxpool.Pool,
@@ -488,9 +484,6 @@ func runObservationRoleQueries(
 	}
 }
 
-// execObservationRoleQuery는 Close 뒤 Err()까지 본다. Err()를 확인하지 않으면 pgx가 그쪽으로
-// 넘긴 권한 오류가 다음 쿼리의 25P02로 둔갑해 원인 쿼리를 잃고, 목록 마지막 쿼리의 오류는 조용히
-// 통과한다.
 func execObservationRoleQuery(ctx context.Context, tx pgx.Tx, query string, args []any) error {
 	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
@@ -670,8 +663,6 @@ const (
 	membershipGrantOwner   = "grant-check-collector"
 )
 
-// 이때 scraper는 guard 테이블 권한 없이 SECURITY DEFINER lock 함수로만 공유 잠금하고 membership을 판정하며, runtime은 refresh의 guard FOR UPDATE만
-// 할 수 있고 guard row 변경이나 collector 함수 실행은 거부돼야 한다.
 func assertCollectionMembershipAPIAccess(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
 	t.Helper()
 
@@ -680,7 +671,6 @@ func assertCollectionMembershipAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 		t.Fatalf("resolve migrations dir for collection membership check: %v", err)
 	}
 
-	// projection guard SQL은 collector sourceobservation, lease membership SQL은 collector joblease 패키지가 소유한다.
 	collectorQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation", "queries"))
 	membershipQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "joblease", "queries"))
 	refreshQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "internal", "planes", "youtube", "targetprojection", "queries"))
@@ -793,7 +783,6 @@ func seedScraperCollectionMembership(t *testing.T, tx pgx.Tx, role, jobKey strin
 	return generation
 }
 
-// 이 guard row는 lock 함수로만 공유 잠금한다. 직접 잠금·삭제 권한이 있으면 refresh의 배타 잠금을 막거나 guard를 지워 collector 전체를 멈출 수 있다.
 func assertScraperProjectionGuardDenied(t *testing.T, tx pgx.Tx, role string) {
 	t.Helper()
 
@@ -856,7 +845,6 @@ func assertRuntimeProjectionGuardAccess(t *testing.T, pool *pgxpool.Pool, role, 
 	}
 }
 
-// 다른 오류나 성공은 권한 경계가 아니라 다른 원인이므로 실패로 돌려준다.
 func expectObservationPermissionDenied(ctx context.Context, tx pgx.Tx, query string) error {
 	if _, err := tx.Exec(ctx, "SAVEPOINT observation_permission_check"); err != nil {
 		return fmt.Errorf("open permission savepoint: %w", err)

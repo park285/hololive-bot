@@ -23,7 +23,6 @@ const (
 	testUnitBMemberName = "유닛 B"
 )
 
-// !알람 추가와 삭제의 동명이인 안내는 모두 "알람 추가" 예시를 쓴다.
 func TestAlarmAmbiguousMemberUsesAddExampleForEveryAction(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	renderer := serviceTemplate.NewRenderer(dbtest.NewPool(t), logger)
@@ -60,7 +59,6 @@ func TestAlarmAmbiguousMemberUsesAddExampleForEveryAction(t *testing.T) {
 	}
 }
 
-// 졸업 차단은 알람 추가에만 적용하고, 구독 전용 host 대상도 그 채널 대표의 졸업 여부로 막는다. 삭제는 졸업 멤버도 진행한다.
 func TestAlarmGraduationBlocksOnlyAdd(t *testing.T) {
 	t.Parallel()
 

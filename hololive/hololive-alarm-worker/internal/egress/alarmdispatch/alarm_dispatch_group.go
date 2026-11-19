@@ -14,12 +14,9 @@ type alarmDispatchGroup struct {
 	minutesUntil  int
 	envelopes     []dispatchoutbox.AlarmQueueEnvelope
 	notifications []domain.AlarmNotification
-	// envelopeErr는 발송할 수 없는 봉투(퇴역 제공자, 대상 없음, 미지원 source·축하 종류)의 사유다. 이런 봉투는 발송 전 실패로 라우팅한다.
-	envelopeErr error
+	envelopeErr   error
 }
 
-// 모든 봉투를 Text 경로로 보낸다. 오픈채팅은 sender가 Markdown으로 전송한다. 저장된 send unit이 있는 delivery만 claim되므로
-// send unit이 발송 경계다.
 func groupAlarmDispatchEnvelopesForDelivery(envelopes []dispatchoutbox.AlarmQueueEnvelope) []alarmDispatchGroup {
 	grouped := make([]alarmDispatchGroup, 0, len(envelopes))
 	index := map[string]int{}
@@ -29,7 +26,6 @@ func groupAlarmDispatchEnvelopesForDelivery(envelopes []dispatchoutbox.AlarmQueu
 		envelopeErr := alarmDispatchEnvelopeError(envelope)
 		key := fmt.Sprintf("send-unit|%d", envelope.SendUnitID)
 
-		// 발송할 수 없는 봉투는 같은 send unit의 발송 가능한 봉투와 섞이지 않게 별도 그룹으로 둔다.
 		if envelopeErr != nil {
 			key = "invalid|" + key
 		}
@@ -81,7 +77,6 @@ func alarmDispatchEnvelopeError(envelope *dispatchoutbox.AlarmQueueEnvelope) err
 
 	switch envelope.SourceKind {
 	case domain.AlarmDispatchSourceKindCelebration:
-		// 고정된 요청은 렌더를 건너뛰므로 지원하지 않는 축하 종류는 여기서 막아야 발송되지 않는다.
 		if envelope.Celebration != nil && !envelope.Celebration.Kind.IsValid() {
 			return fmt.Errorf("celebration kind %q has no egress path", envelope.Celebration.Kind)
 		}

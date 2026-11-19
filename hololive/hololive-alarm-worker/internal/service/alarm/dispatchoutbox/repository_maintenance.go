@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// RecoverExpiredLeased는 발송 단위를 분할하지 않는다. 첫 단위가 limit보다 크면 그 단위 전체를
-// 복구하므로 반환 행 수는 최대 maxDeliveriesPerSendUnit-1만큼 상한을 넘을 수 있다.
 func (r *PgxRepository) RecoverExpiredLeased(ctx context.Context, limit int) (int, error) {
 	if limit <= 0 {
 		return 0, errors.New("recover expired leased dispatch deliveries: limit must be positive")

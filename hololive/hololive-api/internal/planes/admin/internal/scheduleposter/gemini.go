@@ -16,7 +16,6 @@ import (
 	"google.golang.org/genai"
 )
 
-// 자동 검토는 Gemini Developer API(API 키)를 쓴다. Decisions API는 이 API에만 있고, 번역은 그대로 Vertex(ADC)를 쓴다.
 const (
 	geminiAPIHost            = "generativelanguage.googleapis.com"
 	decisionEndpoint         = "https://" + geminiAPIHost + "/v1beta/decisions"
@@ -36,7 +35,6 @@ const periodPrompt = `Read the period this streaming schedule covers, exactly as
 
 var periodFields = []string{"first_month", "first_day", "first_weekday", "last_month", "last_day", "last_weekday"}
 
-// 모델은 질문 키를 보지 않으므로 질문 전체를 instructions와 criteria에 쓴다.
 const (
 	questionSchedule    = "is_schedule"
 	questionOneWeek     = "one_week"
@@ -70,11 +68,8 @@ var posterQuestions = map[string]decisionQuestion{
 	},
 }
 
-// errUnjudgeable은 이 후보 때문에 판정할 수 없다는 뜻이다(400, 입력 차단, 빠진 답, 해석할 수 없는 응답).
-// 다시 보내도 같으므로 관리자 검토로 넘긴다.
 var errUnjudgeable = errors.New("schedule poster candidate cannot be judged")
 
-// errReviewUnavailable은 어느 후보도 판정할 수 없는 Gemini API 실패다(연결 실패, 키·권한·모델·할당량·지역 오류).
 var errReviewUnavailable = errors.New("schedule poster auto review is unavailable")
 
 type decisionCriteria struct {
@@ -133,7 +128,6 @@ func (s posterScores) lowest() float64 {
 	return min(s.schedule, s.oneWeek, s.oneStreamer)
 }
 
-// printedPeriod의 0은 인쇄되지 않았거나 읽지 못한 값이고, 요일은 1(월)~7(일)이다.
 type printedPeriod struct {
 	FirstMonth   int `json:"first_month"`
 	FirstDay     int `json:"first_day"`
@@ -178,7 +172,6 @@ func newGeminiJudge(ctx context.Context, key string) (*geminiJudge, error) {
 	return &geminiJudge{http: httpClient, endpoint: decisionEndpoint, key: key, client: client}, nil
 }
 
-// TODO(kapu): google.golang.org/genai 릴리스에 Client.Decisions가 들어오면 이 REST 호출을 그 클라이언트로 바꾼다.
 func (j *geminiJudge) judge(ctx context.Context, src source) (posterScores, usage, error) {
 	body, err := jsonv2.Marshal(decisionRequest{
 		Model:     decisionModel,
@@ -307,8 +300,6 @@ func periodFailure(err error) error {
 	return apiFailure(apiErr.Code, apiErr.Status, reasons, err)
 }
 
-// apiFailure는 Gemini API 오류 응답을 나눈다. Decisions API 자체의 400(code "invalid_request")은 깨진 이미지와 잘못된 요청을
-// 가리지 않아 둘 다 후보 탓이 된다. 잘못된 키와 지원하지 않는 지역도 400이라 ErrorInfo reason과 status로 먼저 뺀다.
 func apiFailure(code int, status string, reasons []string, err error) error {
 	switch {
 	case code == http.StatusUnauthorized, code == http.StatusForbidden, code == http.StatusNotFound,
@@ -322,8 +313,6 @@ func apiFailure(code int, status string, reasons []string, err error) error {
 	}
 }
 
-// unreachable은 Gemini 호스트에 닿지 못한 실패를 errReviewUnavailable로 감싼다. 이름 확인·연결 실패는 netguard가 감싸 돌려주므로
-// 그 시간 초과도 여기에 든다. 연결 뒤 응답을 기다리다 난 시간 초과(url.Error에 바로 실림)는 그 후보 때문일 수 있어 그대로 둔다.
 func unreachable(err error) error {
 	if urlErr, ok := errors.AsType[*url.Error](err); ok && !urlErr.Timeout() {
 		return fmt.Errorf("%w: %w", errReviewUnavailable, err)
@@ -332,7 +321,6 @@ func unreachable(err error) error {
 	return err
 }
 
-// periodRequest는 인쇄된 날짜만 읽게 한다. Decisions 문서 권고대로 주 계산과 게시일 비교는 printedPeriod.week가 코드로 한다.
 func periodRequest(src source) ([]*genai.Content, *genai.GenerateContentConfig) {
 	properties := make(map[string]*genai.Schema, len(periodFields))
 
@@ -363,7 +351,6 @@ func parsePeriod(text string) (printedPeriod, error) {
 
 var jst = time.FixedZone("JST", 9*60*60)
 
-// week의 posted는 JST 게시일의 UTC 자정이다.
 func (p printedPeriod) week(posted time.Time) (time.Time, time.Time, error) {
 	switch {
 	case p.FirstDay == 0:
@@ -431,7 +418,6 @@ func daysApart(a, b time.Time) int {
 	return max(days, -days)
 }
 
-// postedDate는 확정 SQL(confirm.sql)과 같은 JST 날짜를 UTC 자정으로 돌려준다.
 func postedDate(postedAt time.Time) time.Time {
 	local := postedAt.In(jst)
 

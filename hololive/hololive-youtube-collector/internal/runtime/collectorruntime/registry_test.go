@@ -104,7 +104,6 @@ func TestExecutionProfileRejectsDurationOverflow(t *testing.T) {
 	}
 }
 
-// 방송 탭 snapshot은 RPC 하나 뒤에 예정 영상 조회마다 limiter를 기다리므로, 수집 시간이 그 최악 경로를 덮어야 한다.
 func TestChannelLiveProfileCoversScheduleLookupPayments(t *testing.T) {
 	t.Parallel()
 

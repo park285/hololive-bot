@@ -24,13 +24,10 @@ func newCheckerTestCacheClient(t *testing.T) cache.Client {
 	return testutil.NewTestCacheService(t.Context(), t)
 }
 
-// testTargetPolicy는 runtime scheduler가 반복마다 만드는 것과 같은 규칙으로 target minute 정책을 만든다.
 func testTargetPolicy(targetMinutes ...int) targetpolicy.TargetMinutePolicy {
 	return targetpolicy.NewTargetMinutePolicy(targetpolicy.NormalizeTargetMinutes(targetMinutes))
 }
 
-// claimNotificationPair는 production claimDedup과 같은 notify/logical key 쌍을 TryClaimPair로 선점하고
-// notify key와 그 선점 여부를 돌려준다.
 func claimNotificationPair(
 	t *testing.T,
 	n *Notifier,

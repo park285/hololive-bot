@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package orchcmd
 
 import (
@@ -118,7 +98,6 @@ func (r *CommandRouter) executeRegisteredCommand(
 
 		unknownMessage := r.messageStrings.Text(messagestrings.Key{Namespace: messagestrings.NamespaceError, Name: messaging.ErrUnknownCommand})
 		if unknownMessage == "" {
-			// bot plane 기동 검증이 error/unknown_command를 보장한다. 빈 문구를 보내지 않고 조립 결함으로 드러낸다.
 			return registeredCommandResult{handled: true, err: errors.New("unknown command message is not loaded")}
 		}
 
@@ -137,7 +116,6 @@ func (r *CommandRouter) executeRegisteredCommand(
 	return registeredCommandResult{handled: true, err: fmt.Errorf("execute command: %w", err)}
 }
 
-// outcome unknown은 실패가 아니라 미확정이므로 Error 집계에서 분리한다.
 func (r *CommandRouter) logExecutionFailure(ctx context.Context, err error, attrs []slog.Attr) {
 	if transport.IsReplyOutcomeUnknown(err) {
 		sharedlog.Warn(ctx, r.logger, EventBotReplyOutcomeUnknown, "command reply outcome unknown", attrs...)
@@ -159,7 +137,6 @@ func (r *CommandRouter) handleAdmissionError(ctx context.Context, cmdCtx *botcom
 
 	rateLimitMessage := r.messageStrings.Text(messagestrings.Key{Namespace: messagestrings.NamespaceError, Name: messaging.ErrCommandRateLimited})
 	if rateLimitMessage == "" {
-		// bot plane 기동 검증이 error/command_rate_limited를 보장한다. 빈 문구를 보내지 않고 조립 결함으로 드러낸다.
 		return errors.New("command rate limit message is not loaded")
 	}
 

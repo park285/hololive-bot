@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package dedup
 
 import (
@@ -262,7 +242,6 @@ func configureMockDedupStringCache(client *cachemocks.Client, state *mockDedupCa
 	}
 }
 
-// notificationPairKeys는 alarm-worker notifier와 같은 규칙으로 notify/logical claim key를 만든다.
 func notificationPairKeys(roomID, channelID string, stream *domain.Stream, minutesUntil int) (notifyKey, logicalKey string) {
 	category := keys.NotificationCategory([]int{5, 3, 1}, minutesUntil)
 
@@ -576,7 +555,6 @@ func TestService_TryClaimPair_Key2ErrorReturnsErrorWithKey1Acquired(t *testing.T
 
 	service := NewService(cacheMock, newTestLogger())
 
-	// key1은 이미 선점됐으므로 호출자가 release할 수 있게 acquired1=true를 함께 돌려준다.
 	a1, a2, err := service.TryClaimPair(t.Context(), "pk:k1", "pk:k2", 5*time.Minute)
 	require.ErrorContains(t, err, "key2 error")
 	assert.True(t, a1)

@@ -10,8 +10,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// collectionTargetJobCount는 collection_target_observability.sql mapping의 실행 job 수입니다.
-// 일부 job만 담긴 snapshot을 성공으로 기록하지 않습니다.
 const collectionTargetJobCount = 6
 
 type collectionTargetSample struct {
@@ -73,7 +71,6 @@ func newCollectionTargetMetrics(reg prometheus.Registerer) *collectionTargetMetr
 }
 
 func (r *Runtime) observeCollectionTargets(ctx context.Context) {
-	// 지표 집계는 claim 경로를 오래 점유하지 않으며 실패를 정상 0으로 덮지 않습니다.
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
@@ -153,7 +150,6 @@ func (m *collectionTargetMetrics) observe(samples []collectionTargetSample, now 
 		m.requiredRate.WithLabelValues(s.kind).Set(s.requiredRate)
 	}
 
-	// 방송 상태 진단은 작업 종류별 수요가 아니라 동일 SQL 스냅샷의 운영 채널 집계입니다.
 	live := &samples[0]
 	m.liveState.WithLabelValues("LIVE").Set(float64(live.live))
 	m.liveState.WithLabelValues("UPCOMING").Set(float64(live.upcoming))

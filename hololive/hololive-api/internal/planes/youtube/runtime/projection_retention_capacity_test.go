@@ -161,8 +161,6 @@ func TestProjectionRetentionDeadlineKeepsSourceCleanupIndependent(t *testing.T) 
 func TestProjectionRetentionCatchesUpWithObservedGenerationVolume(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
-	// 운영에서 세대마다 약 600개 target과 reason이 생성됐다. 16세대는
-	// 120초당 실측 약 12세대보다 크며, CURRENT와 유효 lease는 별도로 보존한다.
 	generations := make([]int64, 0, 18)
 
 	for i := range 18 {

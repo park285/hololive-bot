@@ -54,18 +54,15 @@ const (
 )
 
 type PublishedObservation struct {
-	ObservationID int64
-	Outcome       PublishOutcome
-	Ordinal       int
-	// AcceptedInterval은 이 발행이 같은 checkpoint를 실제로 전진시켰을 때 직전 durable 수락 이후 경과 시간이다.
-	// 최초 checkpoint·충돌·checkpoint가 바뀌지 않은 동일 slot 재생에서는 HasAcceptedInterval이 false다.
+	ObservationID       int64
+	Outcome             PublishOutcome
+	Ordinal             int
 	AcceptedInterval    time.Duration
 	HasAcceptedInterval bool
 }
 
 type PublishBatchResult struct {
-	Results []PublishedObservation
-	// EncodedBytes는 발행 SQL에 보낸 관측 JSON 크기다. MaxPublishBatchBytes 상한 근접 빈도를 관측하는 데 쓴다.
+	Results      []PublishedObservation
 	EncodedBytes int
 }
 

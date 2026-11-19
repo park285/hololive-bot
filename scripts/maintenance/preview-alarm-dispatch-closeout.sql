@@ -1,4 +1,3 @@
--- psql -v addressed_delivery_id=2042 -f scripts/maintenance/preview-alarm-dispatch-closeout.sql
 \set ON_ERROR_STOP on
 \if :{?addressed_delivery_id}
 \else

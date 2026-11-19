@@ -22,7 +22,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-// RequestConsumer의 fence 미스는 *sendfence.MissError이고, 재발급 세대 소진은 sendfence.ErrGenerationExhausted다.
 type RequestConsumer interface {
 	LoadSendRequest(context.Context, []dispatchoutbox.AlarmQueueEnvelope) (*dispatchoutbox.SendRequest, error)
 	PinSendRequest(context.Context, []dispatchoutbox.AlarmQueueEnvelope, dispatchoutbox.SendRequest) (*dispatchoutbox.SendRequest, error)
@@ -88,10 +87,8 @@ type RunnerConfig struct {
 	WorkerTotals      *workercontract.Counters
 }
 
-// errAlarmDispatchSendUnitRoomMismatch는 저장된 send unit 요청의 room이 claim한 group과 다른 상태다.
 var errAlarmDispatchSendUnitRoomMismatch = errors.New("alarm dispatch stored send unit room differs from the claimed group")
 
-// NewRunner는 consumer·sender·idleWaiter가 빠진 runner를 조용히 끄지 않고 기동 오류로 드러낸다.
 func NewRunner(
 	consumer Consumer,
 	sender delivery.PreparedMessageSender,
@@ -145,8 +142,6 @@ func (r *Runner) dispatchGroups(ctx context.Context, groups []alarmDispatchGroup
 	members := &alarmDispatchMembers{provider: r.members}
 
 	for _, group := range groups {
-		// 부모 종료 시 남은 그룹은 leased로 둔다. 각 그룹의 MarkSending은
-		// 만료된 소유권을 거부하고 성공한 경우에만 기존 SENDING lease를 부여한다.
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("dispatch alarm groups: %w", err)
 		}
@@ -161,8 +156,6 @@ func (r *Runner) dispatchGroups(ctx context.Context, groups []alarmDispatchGroup
 
 const alarmDispatchStateTimeout = 5 * time.Second
 
-// 상태 기록과 실패 라우팅은 발송 attempt가 끝난 뒤에도 완료돼야 한다. 이 attempt의 deadline이나
-// 종료 신호로 같이 끊기면 드레인된 행이 sending으로 남아 terminal quarantine으로 굳는다.
 func (r *Runner) withStateContext(ctx context.Context, fn func(context.Context) error) error {
 	stateCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), alarmDispatchStateTimeout)
 	defer cancel()
@@ -191,10 +184,6 @@ func (r *Runner) markSending(ctx context.Context, group alarmDispatchGroup) (pro
 	return false, nil
 }
 
-// 이 문장들은 단위 전원이 함께 전이하므로 미스면 그룹의 어떤 행도 바뀌지 않았다. 모든 원인이 소유권을 남길 때만 이 claim의 행에 후속 전이를 쓴다. - member_terminal: 미고정 단위까지
-// 포함해 현재 멤버가 종료됐거나 고정 멤버가 사라져 단위를 다시 모을 수 없으므로 격리한다. 고정 요청은 이미 발송됐을 수도 있어 운영 검토 대상이다. 반환하면 claim과 반환이 끝없이 반복된다. -
-// membership_changed: 미발송 claim이므로 격리하지 않고 반환해 다음 claim이 단위 전원을 다시 모으게 한다. - 그 밖(lease 만료, 상태·소유자·attempt 변경, 요청 변경):
-// 회수 경로나 현재 소유자의 몫이므로 손대지 않는다.
 func (r *Runner) routePreSendMiss(ctx context.Context, group alarmDispatchGroup, miss *sendfence.MissError) error {
 	ownershipHeld := true
 
@@ -231,7 +220,6 @@ func (r *Runner) routePreSendMiss(ctx context.Context, group alarmDispatchGroup,
 	}
 }
 
-// markDispatched는 발송 성공을 정산한다. 정산의 handoff 지평은 handoff reconciler와 같은 profile handoff_horizon_ms다.
 func (r *Runner) markDispatched(ctx context.Context, envelopes []dispatchoutbox.AlarmQueueEnvelope, irisRequestID string) error {
 	return r.withStateContext(ctx, func(stateCtx context.Context) error {
 		if err := r.consumer.MarkDispatched(stateCtx, envelopes, irisRequestID, r.handoffHorizon); err != nil {
@@ -271,7 +259,6 @@ func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup, me
 }
 
 func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup, members *alarmDispatchMembers) error {
-	// 요청 읽기·고정 fence는 claim에서 본 client_request_id까지 확인하므로 다른 세대를 보내지 않는다.
 	request, err := r.prepareGroupRequest(ctx, group, members)
 	if err != nil {
 		if miss, ok := errors.AsType[*sendfence.MissError](err); ok {
@@ -282,8 +269,6 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 	}
 
 	if request.RoomID != group.roomID {
-		// 저장된 send unit과 claim한 group의 room이 어긋난 불변식 위반이다. 이 group만 발송 전 실패로 기록해
-		// 같은 batch의 다른 group 처리를 막지 않고, 반복 claim이 시도 상한에서 DLQ로 수렴하게 한다.
 		if r.logger != nil {
 			r.logger.Error("alarm dispatch stored send unit room differs from the claimed group; not sending",
 				privacylog.RoomIDAttr(group.roomID),
@@ -301,8 +286,6 @@ func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGr
 }
 
 func (r *Runner) prepareGroupRequest(ctx context.Context, group alarmDispatchGroup, members *alarmDispatchMembers) (*dispatchoutbox.SendRequest, error) {
-	// claim 때 미고정이던 단위는 lease 동안 이 worker만 고정할 수 있으므로 load 왕복을 생략한다.
-	// 그 사이 고정됐더라도 PinSendRequest가 저장된 요청을 돌려준다.
 	if !slices.ContainsFunc(group.envelopes, func(envelope dispatchoutbox.AlarmQueueEnvelope) bool { return envelope.RequestUnpinned }) {
 		request, err := r.consumer.LoadSendRequest(ctx, group.envelopes)
 		if err == nil {
@@ -341,8 +324,6 @@ func (r *Runner) dispatchPreparedMessageGroup(ctx context.Context, group alarmDi
 		return markErr
 	}
 
-	// MarkSending의 분리된 상태 컨텍스트가 성공해도 발송 컨텍스트는 이미 끝났을 수 있다.
-	// provider 호출 전이므로 같은 attempt와 소유권 fence로 sending을 재대기시킨다.
 	if err := ctx.Err(); err != nil {
 		return r.withStateContext(ctx, func(stateCtx context.Context) error {
 			return r.persistMarkSendingFailure(stateCtx, group.envelopes, err)
@@ -358,7 +339,6 @@ func (r *Runner) dispatchPreparedMessageGroup(ctx context.Context, group alarmDi
 	return r.markDispatched(ctx, group.envelopes, irisRequestID)
 }
 
-// DB 상태 반영 결과는 발송 결론을 바꾸지 않는다.
 func (r *Runner) sendPreparedRequest(ctx context.Context, request *dispatchoutbox.SendRequest) (irisRequestID string, err error) {
 	if r.attemptTimeout > 0 {
 		var cancel context.CancelFunc

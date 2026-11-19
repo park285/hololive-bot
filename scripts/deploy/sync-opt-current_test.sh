@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# sync-opt-current.sh 행동 테스트. 실제 설치기를 user·mount namespace의 root로 실행하고, 설치 경로
-# (/etc/containers/systemd, /usr/local/libexec, /etc/stack-secrets, /etc/systemd/system, /etc/nftables.d)는
-# 그 namespace 안에서만 임시 디렉터리로 가린다. staging 검사는 실제 quadlet 생성기가 한다.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -28,7 +25,6 @@ cat >"${fakebin}/hostname" <<'EOF'
 #!/usr/bin/env bash
 echo hololive-seoul
 EOF
-# unit 상태 조회는 inactive·disabled로 보고, 나머지 호출은 기록만 한다.
 cat >"${fakebin}/systemctl" <<'EOF'
 #!/usr/bin/env bash
 printf 'systemctl %s\n' "$*" >>"${SYNC_TEST_EVENTS:?}"
@@ -37,14 +33,12 @@ case "$1" in
   is-enabled) exit 1 ;;
 esac
 EOF
-# map-root-user namespace에는 uid 1000이 없어 런타임 데이터 chown을 기록만 한다.
 cat >"${fakebin}/chown" <<'EOF'
 #!/usr/bin/env bash
 printf 'chown %s\n' "$*" >>"${SYNC_TEST_EVENTS:?}"
 EOF
 chmod +x "${fakebin}"/*
 
-# 설치기가 git archive로 읽는 배포 원본만 담은 fixture 저장소를 만든다.
 make_repo() {
   local repo="$1" path
   mkdir -p "${repo}"
@@ -52,13 +46,12 @@ make_repo() {
     scripts/deploy/lib/compose-env.sh scripts/deploy/quadlet-prestart.sh \
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     scripts/deploy/lib/admin-bind.sh scripts/deploy/lib/public-bind-mounts.sh \
+    scripts/deploy/lib/postgres-endpoint.sh scripts/deploy/lib/source-revision.sh \
     scripts/systemd/admin-dashboard-ingress-firewall.service scripts/systemd/admin-dashboard-ingress.nft \
-    deploy/postgres/pg_hba.conf deploy/nginx/admin-dashboard-ingress.conf.template \
-    deploy/quadlet/hololive-bot deploy/quadlet/optional; do
+    hololive/hololive-api/scripts/init-db deploy; do
     mkdir -p "${repo}/$(dirname "${path}")"
     cp -R "${ROOT_DIR}/${path}" "${repo}/${path}"
   done
-  # 실행 트리 소유권 검사는 실제 호스트 경로 chain을 보므로 호출 인자만 기록한다.
   cat >"${repo}/scripts/deploy/verify-exec-tree-ownership.sh" <<'EOF'
 #!/usr/bin/env bash
 printf 'verify %s\n' "$#" >>"${SYNC_TEST_EVENTS:?}"
@@ -72,10 +65,12 @@ commit_repo() {
   git -C "$1" -c user.name=fixture -c user.email=fixture@example.invalid commit -qm "$2"
 }
 
-# 호스트 경로 대역과 이전 설치 상태(옛 unit, worker profile drop-in, 옛 x-spaces drop-in, 이전 current)를 만든다.
 make_host() {
   local host="$1" x_spaces="$2" installed="${1}/etc-containers-systemd/hololive-bot"
   mkdir -p "${host}"/{etc-containers-systemd,usr-local-libexec,etc-stack-secrets/hololive-bot,etc-systemd-system,etc-nftables.d,run-lock}
+  mkdir -p "${host}/run/hololive-bot/pgbouncer" "${host}/run/lock"
+  mkdir -m 0700 "${host}/run/mount"
+  printf 'accepted pool configuration\n' >"${host}/run/hololive-bot/pgbouncer/pgbouncer.ini"
   mkdir -p "${installed}/hololive-api.container.d" "${installed}/hololive-alarm-worker.container.d"
   printf '[Container]\nContainerName=stale\nImage=localhost/stale:old\n' >"${installed}/stale.container"
   printf '[Container]\nLabel=io.hololive.test.worker-profile=1\n' \
@@ -89,9 +84,10 @@ make_host() {
 }
 
 host_snapshot() {
-  local host="$1"
-  (cd "${host}" && find etc-containers-systemd usr-local-libexec etc-systemd-system etc-nftables.d opt/current \
-    -printf '%p %m\n' -type f -exec sha256sum {} + | LC_ALL=C sort)
+  local host="$1" opt=opt/current
+  [[ "${2:-}" != --application-only ]] || opt=opt
+  (cd "${host}" && find etc-containers-systemd usr-local-libexec etc-systemd-system etc-nftables.d etc-stack-secrets run "$opt" \
+    -printf '%p %m %U:%G %i\n' -type f -printf '%p %T@ %C@\n' -exec sha256sum {} + | LC_ALL=C sort)
 }
 
 run_sync() {
@@ -108,6 +104,7 @@ run_sync() {
     mount --bind "${host}/etc-stack-secrets" /etc/stack-secrets
     mount --bind "${host}/etc-systemd-system" /etc/systemd/system
     mount --bind "${host}/etc-nftables.d" /etc/nftables.d
+    mount --bind "${host}/run" /run
     mount --bind "${host}/run-lock" /run/lock
     exec "$@"
   ' _ "${host}" env PATH="${fakebin}:${PATH}" SYNC_TEST_EVENTS="${host}/events" \
@@ -116,13 +113,17 @@ run_sync() {
 }
 
 assert_rejected_without_change() {
-  local host="$1" repo="$2" label="$3" expected="${4:-staged Quadlet units do not generate; nothing was installed}" before
-  before="$(host_snapshot "${host}")"
-  if run_sync "${host}" "${repo}"; then
+  local host="$1" repo="$2" label="$3" expected="${4:-staged Quadlet units do not generate; nothing was installed}" before after
+  before="$(host_snapshot "${host}" "${5:-}")"
+  if run_sync "${host}" "${repo}" "${@:5}"; then
     cat "${host}/out" >&2
-    fail "${label}: installer accepted units that do not generate"
+    fail "${label}: installer accepted the invalid deployment"
   fi
-  [[ "$(host_snapshot "${host}")" == "${before}" ]] || fail "${label}: host state changed after a rejected dry-run"
+  after="$(host_snapshot "${host}" "${5:-}")"
+  if [[ "$after" != "$before" ]]; then
+    diff -u <(printf '%s\n' "$before") <(printf '%s\n' "$after") >&2 || :
+    fail "${label}: host state changed after a rejected dry-run"
+  fi
   ! grep -q 'daemon-reload' "${host}/events" || fail "${label}: daemon-reload ran after a rejected dry-run"
   grep -Fq "${expected}" "${host}/out" ||
     { cat "${host}/out" >&2; fail "${label}: rejection did not come from the expected check"; }
@@ -134,7 +135,6 @@ assert_rejected_without_change() {
 base_repo="${tmp}/repo-base"
 make_repo "${base_repo}"
 
-# 1. 정상 설치: staged unit·x-spaces drop-in이 설치되고 설치기가 소유하지 않는 drop-in은 보존된다.
 host="${tmp}/host-ok"
 make_host "${host}" 1
 run_sync "${host}" "${base_repo}" || { cat "${host}/out" >&2; fail "valid units were rejected"; }
@@ -150,6 +150,26 @@ for unit in hololive-api hololive-alarm-worker; do
     "${installed}/${unit}.container.d/40-x-spaces.conf" || fail "x-spaces drop-in not installed for ${unit}"
 done
 [[ -x "${host}/usr-local-libexec/hololive-bot/quadlet-prestart" ]] || fail "prestart helper not installed"
+for lib in admin-bind.sh public-bind-mounts.sh postgres-capacity.sh compose-env.sh postgres-endpoint.sh; do
+  cmp -s "${base_repo}/scripts/deploy/lib/${lib}" "${host}/usr-local-libexec/hololive-bot/lib/${lib}" ||
+    fail "prestart dependency not installed: ${lib}"
+done
+bash -c 'source "$1"; source "$2"; postgres_endpoint_quadlet "$3" "$4"' _ \
+  "${host}/usr-local-libexec/hololive-bot/lib/compose-env.sh" \
+  "${host}/usr-local-libexec/hololive-bot/lib/postgres-endpoint.sh" \
+  "${installed}/hololive-api.container" "${host}/etc-stack-secrets/hololive-bot/compose.env" >/dev/null ||
+  fail "installed endpoint library cannot resolve the effective application endpoint"
+bash -c 'source "$1"; postgres_capacity_write_pgbouncer_config "$2" "$3" "$4"' _ \
+  "${host}/usr-local-libexec/hololive-bot/lib/postgres-capacity.sh" \
+  "${host}/opt/current/scripts/ci/postgres-capacity-policy.tsv" \
+  "${host}/etc-stack-secrets/hololive-bot/compose.env" "${host}/pgbouncer.ini" ||
+  fail "installed capacity library cannot generate the pooler configuration"
+[[ -s "${host}/pgbouncer.ini" && "$(stat -c '%a' "${host}/pgbouncer.ini")" == 644 ]] ||
+  fail "pooler configuration is missing or unreadable by the container"
+for config in pg_hba.conf stats-users.txt; do
+  cmp -s "${base_repo}/deploy/pgbouncer/${config}" "${host}/opt/current/deploy/pgbouncer/${config}" ||
+    fail "pooler configuration not installed: ${config}"
+done
 installed_validator="${host}/usr-local-libexec/hololive-bot/lib/compose-env.sh"
 bash -c '. "$1"; compose_env_validate_file_format "$2"' _ \
   "$installed_validator" "${host}/etc-stack-secrets/hololive-bot/compose.env" ||
@@ -169,7 +189,6 @@ grep -q '^verify ' "${host}/events" || fail "exec-tree ownership verification di
 ! compgen -G "${host}/opt/.quadlet-check.*" >/dev/null || fail "Quadlet check directory was left behind"
 pass "valid units install with x-spaces drop-ins, keep the worker-profile drop-in and record the source revision"
 
-# 2. 생성되지 않는 staged unit은 아무것도 설치하지 않는다.
 broken_repo="${tmp}/repo-broken-unit"
 cp -R "${base_repo}" "${broken_repo}"
 printf '[Container]\nContainerName=broken\n' >"${broken_repo}/deploy/quadlet/hololive-bot/broken.container"
@@ -179,7 +198,6 @@ make_host "${host}" 1
 assert_rejected_without_change "${host}" "${broken_repo}" "broken staged unit"
 pass "a staged unit that does not generate leaves /opt, prestart, units and daemon state untouched"
 
-# 3. x-spaces drop-in은 켜졌을 때만 검사 대상이며, 생성 실패 시 아무것도 설치하지 않는다.
 dropin_repo="${tmp}/repo-broken-dropin"
 cp -R "${base_repo}" "${dropin_repo}"
 printf '[Container]\nUnknownKeyForSyncTest=1\n' \
@@ -197,7 +215,6 @@ installed="${host}/etc-containers-systemd/hololive-bot"
   fail "x-spaces drop-in stayed installed with HOLOLIVE_X_SPACES_ENABLED=0"
 pass "x-spaces drop-ins are part of the staged check only when enabled"
 
-# 4. 호스트 compose.env의 pool 값이 PostgreSQL 연결 예산을 넘으면 아무것도 설치하지 않는다.
 host="${tmp}/host-capacity"
 make_host "${host}" 0
 printf 'BOT_POSTGRES_POOL_MAX_CONNS=40\n' >>"${host}/etc-stack-secrets/hololive-bot/compose.env"
@@ -205,7 +222,6 @@ assert_rejected_without_change "${host}" "${base_repo}" "connection budget" \
   "PostgreSQL connection budget check failed"
 pass "an exhausted PostgreSQL connection budget leaves /opt, prestart, units and daemon state untouched"
 
-# 5. artifact-only 갱신은 현재 runtime bytes·mode를 유지하고 작업 트리의 미검토 설정을 복사하지 않는다.
 host="${tmp}/host-preserved-runtime"
 make_host "${host}" 0
 for path in data logs backups runtime-config artifacts/worker-profile; do
@@ -229,7 +245,77 @@ for backup in "${host}/opt/"current.bak-*; do
 done
 pass "artifact-only sync preserves runtime bytes and metadata without copying runtime configuration"
 
-# 6. 같은 revision을 다시 반영해도 기존 backup을 덮거나 보존 개수만으로 지우지 않는다.
+migrator_path=deploy/quadlet/hololive-bot/hololive-db-migrate.container
+w1_repo="${tmp}/repo-pool"
+cp -a "${base_repo}" "${w1_repo}"
+sed -e 's/^Exec=--schema-only$/Exec=--pool-only=auth/' \
+  -e 's/ hololive-db-migrate schema$/ hololive-db-migrate pool-auth/' \
+  "${base_repo}/${migrator_path}" >"${w1_repo}/${migrator_path}"
+commit_repo "${w1_repo}" pool-window
+w1_host="${tmp}/host-pool"
+make_host "${w1_host}" 1
+run_sync "${w1_host}" "${w1_repo}" || { cat "${w1_host}/out" >&2; fail "pool-window installation failed"; }
+for path in data logs backups runtime-config artifacts/worker-profile; do
+  mkdir -p "${w1_host}/opt/current/${path}"
+  printf 'accepted runtime\n' >"${w1_host}/opt/current/${path}/accepted"
+done
+pool_dropin="${w1_host}/etc-containers-systemd/hololive-bot/holo-pgbouncer.container.d"
+mkdir -p "$pool_dropin"
+printf '[Container]\nImage=sha256:%064d\n' 1 >"$pool_dropin/50-pooler-image.conf"
+touch -d @1 "${w1_host}/opt/current/deploy/postgres/pg_hba.conf" \
+  "${w1_host}/opt/current/deploy/pgbouncer/"* "${w1_host}/opt/current/hololive/hololive-api/scripts/init-db/"*
+
+protected_snapshot() (
+  cd "$1"
+  find etc-containers-systemd usr-local-libexec etc-systemd-system etc-nftables.d etc-stack-secrets run/hololive-bot \
+    opt/current/{deploy/{pgbouncer,postgres,nginx,topology},hololive/hololive-api/scripts/init-db,data,logs,backups,runtime-config,artifacts/worker-profile} \
+    -type f ! -name hololive-db-migrate.container -printf '%p %i %m %U:%G %T@ %C@\n' -exec sha256sum {} + | LC_ALL=C sort
+)
+w2_repo="${tmp}/repo-card"
+cp -a "${base_repo}" "$w2_repo"
+printf 'card release\n' >"$w2_repo/hololive/hololive-api/VERSION"
+commit_repo "$w2_repo" card-window
+host="${tmp}/host-card"
+cp -a "$w1_host" "$host"
+before="$(protected_snapshot "$host")"
+run_sync "$host" "$w2_repo" --application-only || { cat "$host/out" >&2; fail "card-window publication failed"; }
+[[ "$(protected_snapshot "$host")" == "$before" ]] || fail "card window changed a protected inode, mode or content"
+! grep -q '^systemctl ' "$host/events" || fail "source publication changed daemon state"
+cmp "$w2_repo/$migrator_path" "$host/etc-containers-systemd/hololive-bot/${migrator_path##*/}"
+cmp "$w2_repo/$migrator_path" "$host/opt/current/$migrator_path"
+cmp "$w2_repo/hololive/hololive-api/VERSION" "$host/opt/current/hololive/hololive-api/VERSION"
+[[ "$(<"$host/opt/current/.source-revision")" == "$(git -C "$w2_repo" rev-parse HEAD)" ]] ||
+  fail "card deployment revision was not published"
+backups=("$host/opt/current.bak-$(git -C "$w2_repo" rev-parse --short HEAD)-"*)
+[[ "${#backups[@]}" == 1 && ! -e "${backups[0]}/runtime-config" && ! -e "${backups[0]}/data" ]] ||
+  fail "card rollback copy included runtime data"
+cmp "$w1_repo/$migrator_path" "${backups[0]}/$migrator_path"
+pass "application-only publishes the card tree and schema migrator without touching accepted pool/runtime inodes"
+
+for path in opt/current/deploy/postgres/pg_hba.conf opt/current/deploy/pgbouncer/stats-users.txt \
+    opt/current/hololive/hololive-api/scripts/init-db/00-assert-pg18-runtime.sql \
+    etc-containers-systemd/hololive-bot/{hololive-api,holo-pgbouncer,hololive-alarm-worker}.container \
+    etc-containers-systemd/hololive-bot/hololive-api.container.d/40-x-spaces.conf \
+    usr-local-libexec/hololive-bot/quadlet-prestart etc-nftables.d/admin-dashboard-ingress.nft; do
+  host="$(mktemp -d "${tmp}/host-drift.XXXXXX")"
+  cp -a "$w1_host/." "$host/"
+  printf '\n# drift\n' >>"$host/$path"
+  assert_rejected_without_change "$host" "$w2_repo" "$path" "application-only" --application-only
+done
+host="${tmp}/host-override"
+cp -a "$w1_host" "$host"
+dropin="$host/etc-containers-systemd/hololive-bot/hololive-db-migrate.container.d"
+mkdir -p "$dropin"
+printf '[Container]\nExec=--pool-only=auth\n' >"$dropin/60-command.conf"
+assert_rejected_without_change "$host" "$w2_repo" "migrator override" "requires the schema-only migrator" --application-only
+assert_rejected_without_change "$w1_host" "$w1_repo" "pool candidate" "requires the schema-only migrator" --application-only
+drift_repo="${tmp}/repo-infra-change"
+cp -a "$w2_repo" "$drift_repo"
+printf 'drift\n' >"$drift_repo/deploy/pgbouncer/unreviewed.conf"
+commit_repo "$drift_repo" changed-infrastructure
+assert_rejected_without_change "$w1_host" "$drift_repo" "candidate infrastructure" "application-only tree drift" --application-only
+pass "application-only rejects candidate, installed, drop-in and privileged bind drift before backup or publication"
+
 host="${tmp}/host-retained-backups"
 make_host "${host}" 0
 for number in 1 2 3 4; do
@@ -278,14 +364,15 @@ make_host "$host" 0
 exec 8>"${host}/run-lock/hololive-quadlet-redeploy.lock"
 flock 8
 assert_rejected_without_change "$host" "$base_repo" "central writer lock" "another central Quadlet writer is running"
+assert_rejected_without_change "$host" "$base_repo" "card writer lock" "another central Quadlet writer is running" --application-only
 # shellcheck disable=SC2016 # namespace 안의 bash가 확장한다.
 if unshare --user --map-root-user --mount bash -c '
   set -euo pipefail
   mount --bind "$1/run-lock" /run/lock
   exec bash "$2/scripts/deploy/lib/po-central-remote.sh" c deploy \
     /opt/hololive-bot/compose/po-staging-20261118T000000Z \
-    /opt/hololive-bot/compose/backups/po-c-20261118T000000Z \
-    0123456789abcdef0123456789abcdef01234567 1.0.0
+    /opt/hololive-bot/compose/backups/card-po-c-20261118T000000Z \
+    0123456789abcdef0123456789abcdef01234567 1.0.0 -
 ' _ "$host" "$ROOT_DIR" >"${host}/collector-out" 2>&1; then
   fail "collector c ran while another central writer held the lock"
 fi

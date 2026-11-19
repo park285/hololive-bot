@@ -18,7 +18,6 @@ import (
 func TestCollectRoomsByChannel_PerformsTypedLookupsConcurrently(t *testing.T) {
 	t.Parallel()
 
-	// DB fixture의 실제 IO와 수명은 가상 시계 bubble 밖에서 소유한다.
 	cache := cachemocks.NewStrictClient()
 	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &Config{})
 
@@ -55,7 +54,6 @@ func TestCollectRoomsByChannel_PerformsTypedLookupsConcurrently(t *testing.T) {
 			})
 		}()
 
-		// 두 조회가 모두 release를 기다리는지 확인하며 wall-clock 속도는 판정하지 않는다.
 		synctest.Wait()
 
 		shortsConcurrent, communityConcurrent := false, false

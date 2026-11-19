@@ -64,7 +64,6 @@ func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeC
 	return collectorInfra, nil
 }
 
-// 실패한 pool은 provider가 닫고 반환하므로 재시도 사이에 이전 연결이나 통계 등록이 남지 않는다.
 func provideCollectorDatabase(
 	ctx context.Context,
 	appConfig *collectorconfig.RuntimeConfig,

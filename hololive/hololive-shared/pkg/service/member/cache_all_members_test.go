@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package member
 
 import (
@@ -27,15 +7,15 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 const (
-	testMemberNameOld = "Old"
-	testMemberNameNew = "New"
-	// TestMemberMiko·testMemberMikoSlug·testMemberPekora는 패키지 테스트가 함께 쓰는 멤버 이름 fixture다.
+	testMemberNameOld  = "Old"
+	testMemberNameNew  = "New"
 	testMemberMiko     = "Miko"
 	testMemberMikoSlug = "miko"
 	testMemberPekora   = "Pekora"
@@ -155,69 +135,71 @@ func TestCacheAllMembers_ReloadsAfterTTLExpiry(t *testing.T) {
 func TestCacheAllMembers_ConcurrentCallsConvergeToSingleLoad(t *testing.T) {
 	t.Parallel()
 
-	var calls atomic.Int64
+	synctest.Test(t, func(t *testing.T) {
+		var calls atomic.Int64
 
-	release := make(chan struct{})
-	c := &Cache{
-		logger: slog.New(slog.DiscardHandler),
-		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
-			calls.Add(1)
-			<-release
+		release := make(chan struct{})
+		c := &Cache{
+			logger: slog.New(slog.DiscardHandler),
+			loadAllMembers: func(context.Context) ([]*domain.Member, error) {
+				calls.Add(1)
+				<-release
 
-			return testMembers(), nil
-		},
-	}
-
-	const goroutines = 50
-
-	start := make(chan struct{})
-
-	var wg sync.WaitGroup
-
-	results := make([][]*domain.Member, goroutines)
-	errs := make([]error, goroutines)
-
-	for i := range goroutines {
-		wg.Go(func() {
-			<-start
-
-			results[i], errs[i] = c.LoadAllMembers(t.Context())
-		})
-	}
-
-	close(start)
-	time.Sleep(50 * time.Millisecond)
-	close(release)
-	wg.Wait()
-
-	if n := calls.Load(); n != 1 {
-		t.Fatalf("loader called %d times under concurrent stampede, want 1", n)
-	}
-
-	for i := range goroutines {
-		if errs[i] != nil {
-			t.Fatalf("goroutine %d error = %v", i, errs[i])
+				return testMembers(), nil
+			},
 		}
 
-		if len(results[i]) != 3 {
-			t.Fatalf("goroutine %d len = %d, want 3", i, len(results[i]))
+		const goroutines = 50
+
+		start := make(chan struct{})
+
+		var wg sync.WaitGroup
+
+		results := make([][]*domain.Member, goroutines)
+		errs := make([]error, goroutines)
+
+		for i := range goroutines {
+			wg.Go(func() {
+				<-start
+
+				results[i], errs[i] = c.LoadAllMembers(t.Context())
+			})
 		}
-	}
 
-	firstMember := results[0][0]
+		close(start)
+		synctest.Wait()
+		close(release)
+		wg.Wait()
 
-	results[0][0] = nil
-
-	for i := 1; i < goroutines; i++ {
-		if results[i][0] != firstMember {
-			t.Fatalf("caller 0 mutated caller %d's result slice", i)
+		if n := calls.Load(); n != 1 {
+			t.Fatalf("loader called %d times under concurrent stampede, want 1", n)
 		}
-	}
 
-	cached, err := c.LoadAllMembers(t.Context())
-	if err != nil || cached[0] != firstMember {
-		t.Fatalf("caller mutated cached snapshot: members=%v error=%v", cached, err)
-	}
+		for i := range goroutines {
+			if errs[i] != nil {
+				t.Fatalf("goroutine %d error = %v", i, errs[i])
+			}
+
+			if len(results[i]) != 3 {
+				t.Fatalf("goroutine %d len = %d, want 3", i, len(results[i]))
+			}
+		}
+
+		firstMember := results[0][0]
+
+		results[0][0] = nil
+
+		for i := 1; i < goroutines; i++ {
+			if results[i][0] != firstMember {
+				t.Fatalf("caller 0 mutated caller %d's result slice", i)
+			}
+		}
+
+		cached, err := c.LoadAllMembers(t.Context())
+		if err != nil || cached[0] != firstMember {
+			t.Fatalf("caller mutated cached snapshot: members=%v error=%v", cached, err)
+		}
+	})
 }
 
 func TestCacheAllMembers_ExpiredSnapshotFallsBackOnLoaderFailure(t *testing.T) {
@@ -256,7 +238,6 @@ func TestCacheAllMembers_ExpiredSnapshotFallsBackOnLoaderFailure(t *testing.T) {
 	}
 }
 
-// AllMembers는 공유 적재 대기 select에서만 Done을 부르므로, 대기자가 진행 중인 공유 적재에 합류했다는 시점을 sleep 없이 관측한다.
 type doneObservedContext struct {
 	context.Context //nolint:containedctx // 공유 적재 합류 시점을 관찰하는 Context wrapper이며 원래 취소·값 계약을 그대로 위임한다.
 
@@ -422,48 +403,60 @@ func TestCacheAllMembers_ReturnsClonedSlice(t *testing.T) {
 func TestCacheInvalidateAllRacesWithSnapshotReload(t *testing.T) {
 	t.Parallel()
 
-	c := &Cache{
-		logger:      slog.New(slog.DiscardHandler),
-		snapshotTTL: time.Nanosecond,
-		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
-			return testMembers(), nil
-		},
-	}
+	synctest.Test(t, func(t *testing.T) {
+		const invalidations = 200
 
-	var wg sync.WaitGroup
+		started := make(chan struct{})
+		resume := make(chan struct{})
 
-	stop := make(chan struct{})
+		var loads atomic.Int32
 
-	wg.Go(func() {
-		for {
+		c := &Cache{
+			logger: slog.New(slog.DiscardHandler),
+			loadAllMembers: func(context.Context) ([]*domain.Member, error) {
+				if loads.Add(1) <= invalidations {
+					started <- struct{}{}
+
+					<-resume
+
+					return []*domain.Member{{Name: testMemberNameOld}}, nil
+				}
+
+				return []*domain.Member{{Name: testMemberNameNew}}, nil
+			},
+		}
+
+		done := make(chan struct{})
+
+		var (
+			members []*domain.Member
+			loadErr error
+		)
+
+		go func() {
+			defer close(done)
+
+			members, loadErr = c.LoadAllMembers(t.Context())
+		}()
+
+		for round := range invalidations {
 			select {
-			case <-stop:
-				return
-			default:
+			case <-started:
+			case <-done:
+				t.Fatalf("reload finished during invalidation %d: members=%v, err=%v", round, members, loadErr)
 			}
 
-			if _, err := c.LoadAllMembers(t.Context()); err != nil {
-				t.Errorf("AllMembers() error = %v", err)
-
-				return
-			}
-		}
-	})
-
-	wg.Go(func() {
-		for range 200 {
 			if err := c.InvalidateAll(t.Context()); err != nil {
-				t.Errorf("InvalidateAll() error = %v", err)
-
-				return
+				t.Fatal(err)
 			}
+
+			resume <- struct{}{}
+		}
+
+		<-done
+
+		if loadErr != nil || loads.Load() != invalidations+1 || len(members) != 1 || members[0].Name != testMemberNameNew {
+			t.Fatalf("reload after %d invalidations: loads=%d members=%v err=%v", invalidations, loads.Load(), members, loadErr)
 		}
 	})
-
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		close(stop)
-	}()
-
-	wg.Wait()
 }

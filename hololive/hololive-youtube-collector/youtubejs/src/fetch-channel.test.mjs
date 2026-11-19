@@ -11,8 +11,6 @@ import { ScheduleLookupCache } from "./schedule-cache.mjs";
 
 const liveBadges = [{ style: "BADGE_STYLE_TYPE_LIVE_NOW" }];
 
-// 실제 SDK Video 노드입니다. 예정 표시는 UPCOMING time-status overlay이고, scheduledAt이 있으면 upcomingEventData로
-// 목록 시각을 싣습니다. 나머지 값은 원시 videoRenderer 필드입니다.
 function upcomingVideo(videoId, { scheduledAt, title = videoId, ...raw } = {}) {
   return new YTNodes.Video({
     videoId,
@@ -23,7 +21,6 @@ function upcomingVideo(videoId, { scheduledAt, title = videoId, ...raw } = {}) {
   });
 }
 
-// 재생 시간 time-status overlay만 가진 종료 방송 Video 노드입니다.
 function endedVideo(videoId) {
   return new YTNodes.Video({
     videoId,
@@ -32,7 +29,6 @@ function endedVideo(videoId) {
   });
 }
 
-// 상태 표시가 하나도 없는 Video 노드입니다.
 function unmarkedVideo(videoId) {
   return new YTNodes.Video({ videoId, title: { simpleText: videoId } });
 }
@@ -101,7 +97,6 @@ function steppingClock(startIso) {
 }
 
 test("a reused far-future schedule skips the player, reports no lookup, and keeps its lookup time", async () => {
-  // fixture 예정 시각(11:00Z)보다 10시간 앞이므로 재사용 구간에 듭니다.
   const time = steppingClock("2026-09-01T01:00:00Z");
   const scheduleCache = new ScheduleLookupCache({ now: time.now });
   const calls = [];
@@ -117,7 +112,6 @@ test("a reused far-future schedule skips the player, reports no lookup, and keep
   const first = await handleChannelRequest(request("2026-09-01T00:59:30Z"), fetcher);
   time.advance(2 * 60_000);
   const second = await handleChannelRequest(request("2026-09-01T01:01:30Z"), fetcher);
-  // 같은 슬롯의 재시도는 재사용하지 않고 player로 다시 확인합니다.
   const retry = await handleChannelRequest(request("2026-09-01T00:59:30Z"), fetcher);
   assert.equal(first.body.schedule_lookups, 1);
   assert.equal(first.body.live_sessions[0].schedule_observed_at, undefined);
@@ -175,7 +169,6 @@ test("a schedule the streams tab shows directly clears the reused lookup", async
   feed = { videos: [upcomingVideo("later", { scheduledAt: "2026-09-01T12:00:00Z" })] };
   time.advance(2 * 60_000);
   await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor: "2026-09-01T01:02:00Z" });
-  // 목록이 다시 시각을 감추면 재사용하지 않고 player로 확인합니다.
   feed = { videos: [upcomingVideo("later")] };
   time.advance(2 * 60_000);
   const next = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor: "2026-09-01T01:04:00Z" });
@@ -198,7 +191,6 @@ test("a slower lookup from an earlier slot never revives an entry a later slot i
       await earlier;
       return rawPlayerResponse(videoId);
     }
-    // 다음 슬롯은 시작이 임박한 옮겨진 일정을 확인하므로 재사용하지 않고 매 poll 다시 확인해야 합니다.
     return rawPlayerResponse(videoId, { startTimestamp: "2026-09-01T01:15:00Z" });
   });
   const poll = (scheduledFor) => fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor });
@@ -239,7 +231,6 @@ test("a later slot that sees the schedule in the listing stops an earlier slot f
     actions: { execute: async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); } },
   };
   const poll = (scheduledFor) => fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube, scheduleCache, scheduledFor });
-  // 앞 슬롯이 streams 응답을 기다리는 동안 뒤 슬롯이 목록에서 시각을 직접 봅니다. 그 영상은 아직 캐시에 없습니다.
   const slow = poll("2026-09-01T01:00:00Z");
   await started;
   time.advance(2 * 60_000);
@@ -323,8 +314,6 @@ test("liveSessionRows fail-closes on rows without a status marker", () => {
   );
 });
 
-// 원시 lockupViewModel을 SDK가 파싱한 실제 LockupView입니다. 썸네일은 ThumbnailView.image 또는
-// CollectionThumbnailView.primary_thumbnail.image에만 있습니다.
 function lockupView(id, title, badges, { collection = false } = {}) {
   const thumbnailViewModel = {
     image: { sources: [{ url: `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`, width: 1280, height: 720 }] },
@@ -577,7 +566,6 @@ test("fetchChannelFeed permits exactly 32 metadata lookups", async () => {
 });
 
 test("fetchChannelFeed rejects candidates beyond the lookup budget as a resource limit before a metadata request", async () => {
-  // 조회 상한은 collector 호출 예산이므로 응답 형상 오류(parser_drift)가 아니라 자원 한도입니다.
   for (const [count, maxScheduleLookups] of [[33, undefined], [2, 1], [1, 0]]) {
     let calls = 0;
     const feed = { videos: Array.from({ length: count }, (_, index) => upcomingVideo(`video-${index}`)) };

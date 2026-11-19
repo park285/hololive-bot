@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -47,7 +48,12 @@ func (l *countedTerminalLease) CompleteCurrent(ctx context.Context) error {
 func newExecutorFixture(t *testing.T, runner collection.JobRunner, fatal *[]error) (*collectionExecutor, *joblease.JobSpec) {
 	t.Helper()
 
-	pool := dbtest.NewPool(t)
+	return newExecutorFixtureOnPool(t, dbtest.NewPool(t), runner, fatal)
+}
+
+func newExecutorFixtureOnPool(t *testing.T, pool *pgxpool.Pool, runner collection.JobRunner, fatal *[]error) (*collectionExecutor, *joblease.JobSpec) {
+	t.Helper()
+
 	seedRuntimeCommunityTarget(t, pool)
 
 	executor := newRunErrorExecutor(t, fatal)
@@ -140,7 +146,6 @@ func TestResultInvariantRecordsFailedAttemptOnce(t *testing.T) {
 	}
 }
 
-// 계약 밖 failure tuple은 기본 class로 수리하지 않는다.
 func TestInvalidFailureTupleDefersAndCountsViolation(t *testing.T) {
 	var fatal []error
 

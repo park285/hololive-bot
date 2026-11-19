@@ -39,7 +39,6 @@ func TestAdvanceMinutesResultOwnsTargetsAndPreservesZeroNormalization(t *testing
 
 	assert.Equal(t, []int{20, 3, 1}, service.GetTargetMinutes())
 
-	// 공개 0분 의미 결정과 분리하여 기존 local normalization을 보존한다.
 	result, err = service.UpdateAlarmAdvanceMinutes(t.Context(), 0)
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.RequestedMinutes)

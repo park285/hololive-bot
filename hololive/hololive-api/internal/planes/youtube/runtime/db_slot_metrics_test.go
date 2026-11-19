@@ -14,7 +14,6 @@ import (
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
 )
 
-// 드문 사건의 시리즈가 첫 증가 때 생기면 Prometheus increase()가 그 사건을 0으로 센다.
 func TestRareOutcomeSeriesAreExportedBeforeFirstEvent(t *testing.T) {
 	require.Subset(t, gatheredLabelValues(t, "hololive_youtube_plane_consume_total", "result"), []string{
 		consumeResultSuccess, consumeResultRetry, consumeResultRetryError, consumeResultClaimLost,
@@ -33,7 +32,6 @@ func TestRareOutcomeSeriesAreExportedBeforeFirstEvent(t *testing.T) {
 		[]string{"claim", "consume", "retry", "projection_refresh", "retention_source"})
 }
 
-// 슬롯을 끝내 얻지 못한 작업도 대기 시간이 남아야 포화 원인을 지표로 가를 수 있다.
 func TestWithDBRecordsSlotWaitOnFailedAcquireAndHoldAfterRelease(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})

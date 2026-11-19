@@ -43,8 +43,6 @@ var privacylogOnlyAttrKeys = map[string]string{
 	sharedprivacylog.KeyCacheField: "privacylog.CacheFieldAttr",
 }
 
-// 이 package들의 "key"는 Kakao 식별자가 아니라 고정 cache name 또는 Holodex retry/cache identifier다.
-// 다른 attr key는 계속 검사한다.
 var reviewedNonSensitiveRestrictedKeys = map[string][]string{
 	sharedprivacylog.KeyCacheKey: {
 		"pkg/service/holodex/provider",
@@ -63,8 +61,6 @@ var slogLevelMethods = map[string]struct{}{
 	"LogAttrs": {},
 }
 
-// 이 facade들은 가변인자가 slog.Attr라 loose-kv 스캔 대상이 아니다. 스캔하면 event/message 리터럴이
-// key로 잘못 수집된다.
 var structuredLogFacades = map[string]struct{}{
 	"sharedlog": {}, "sharedlogging": {}, "logging": {},
 }
@@ -399,7 +395,6 @@ func collectBotPlaneLogAttrKeys(fileSet *token.FileSet, sources scannedSources) 
 				return true
 			}
 
-			// 이름이 같은 logger.Error와 혼동하지 않고 실제 net/http.Error 함수만 구분한다.
 			if isHTTPErrorFunction(call, sources.typesInfo[file]) {
 				return true
 			}
@@ -544,7 +539,6 @@ func logAttrKeysFromCall(scope string, fileSet *token.FileSet, call *ast.CallExp
 	return append(uses, compositeLiteralKeys(scope, fileSet, call.Args, constants)...)
 }
 
-// slog는 loose key/value 쌍과 slog.Attr을 한 호출에 섞을 수 있어 고정 stride로는 parity가 어긋난다.
 func looseKeyIndexes(call *ast.CallExpr, method string) []int {
 	var indexes []int
 

@@ -18,7 +18,6 @@ type xSpaceSessionResponse struct {
 	Accepted   bool           `json:"accepted"`
 }
 
-// GetXSpaceSession은 인증 값 없이 연결 상태와 마지막 성공 시각을 조회한다.
 func (h *SettingsHandler) GetXSpaceSession(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
@@ -33,8 +32,6 @@ func (h *SettingsHandler) GetXSpaceSession(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, xSpaceSessionResponse{Status: "ok", Connection: status})
 }
 
-// SubmitXSpaceSession은 후보를 암호화하여 저장한다. 검증과 실제 교체는 worker가 수행한다.
-// Accepted=false이면 비활성 또는 다른 제출과의 충돌이며 기존 세션을 덮어쓰지 않는다.
 func (h *SettingsHandler) SubmitXSpaceSession(c *gin.Context) {
 	var request struct {
 		AuthToken        string `json:"authToken"`

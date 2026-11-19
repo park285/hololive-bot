@@ -21,8 +21,6 @@ type CalendarCardRenderer struct {
 	strings     *messagestrings.Store
 }
 
-// calendarCachePolicy의 diskCacheable은 프로세스 밖 공유 cache(Valkey)에 저장해도 되는지다.
-// 저장하면 모든 인스턴스와 재시작 뒤 요청이 같은 이미지를 받는다.
 type calendarCachePolicy struct {
 	memoryCacheable bool
 	diskCacheable   bool
@@ -35,7 +33,6 @@ type renderedCalendarImage struct {
 
 type CalendarCardRendererOption func(*CalendarCardRenderer)
 
-// WithCalendarImageCache는 렌더한 달력 PNG를 인스턴스와 재시작 사이에서 공유할 cache를 지정한다.
 func WithCalendarImageCache(store sharedcache.Store) CalendarCardRendererOption {
 	return func(r *CalendarCardRenderer) {
 		r.sharedCache = sharedPNGCache{store: store, ttl: calendarImageCacheTTL, event: "calendar_image_cache_failed"}
@@ -371,8 +368,6 @@ func entryDisplayName(ctx context.Context, m *calendarMetrics, member *domain.Me
 	return member.Name
 }
 
-// 기념일 카드 문구는 message_strings calendar namespace(DB 정본)에서만 읽는다. 기동 때 bot plane 검증이 key를
-// 보장하므로 코드 대체 문구를 두지 않는다.
 func (m *calendarMetrics) calStr(key messagestrings.Key) string {
 	return m.strings.Text(key)
 }

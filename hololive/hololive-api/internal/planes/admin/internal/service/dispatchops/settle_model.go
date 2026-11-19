@@ -6,8 +6,6 @@ import (
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
-// SettleRequest는 외부 발송 없이 실패 묶음을 취소하거나 격리합니다.
-// OperatorID는 인증된 gateway 세션에서만 결합합니다.
 type SettleRequest struct {
 	OperatorID string     `json:"operatorId"`
 	Reason     string     `json:"reason"`

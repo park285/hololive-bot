@@ -17,7 +17,6 @@ func (r *ScheduleCardRenderer) cachedPages(key scheduleCardKey) ([][]byte, bool)
 	return decodeSchedulePages(body)
 }
 
-// 공유 값은 입력 해시, 전체 바이트 수, 페이지 수, (길이, PNG) 순서다. 메모리 캐시는 키 자체로 입력을 식별한다.
 func encodeSchedulePages(hash [sha256.Size]byte, pages [][]byte) []byte {
 	if len(pages) == 0 || len(pages) > schedulecard.MaxPages {
 		return nil

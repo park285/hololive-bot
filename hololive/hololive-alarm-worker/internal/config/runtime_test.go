@@ -50,7 +50,6 @@ func TestLoadRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	}
 }
 
-// 사진 동기화처럼 hololive-api만 읽는 env는 worker가 검사하지 않는다.
 func TestLoadRuntimeRejectsInvalidCommonEnv(t *testing.T) {
 	for key, value := range map[string]string{
 		"BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS": "1d",
@@ -66,7 +65,6 @@ func TestLoadRuntimeRejectsInvalidCommonEnv(t *testing.T) {
 	}
 }
 
-// alarm-worker는 Iris로 발송하므로 bot 토큰·base URL 원천과 Holodex API 키를 요구한다.
 func TestLoadRuntimeRequiresEgressInputs(t *testing.T) {
 	for key, want := range map[string]string{
 		settingstest.IrisBotTokenEnv: "IRIS_BOT_TOKEN is required",
@@ -84,7 +82,6 @@ func TestLoadRuntimeRequiresEgressInputs(t *testing.T) {
 	}
 }
 
-// alarm-worker는 webhook을 받지 않고 room ACL도 소비하지 않으므로 webhook 토큰과 room seed 없이 기동한다.
 func TestLoadRuntimeDoesNotRequireWebhookTokenOrRoomSeed(t *testing.T) {
 	setRuntimeEnv(t)
 	t.Setenv(settingstest.IrisWebhookTokenEnv, "")

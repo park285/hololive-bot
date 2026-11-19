@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
-// 조회와 실패 결과의 runner 값은 호출자가 넘긴 런너 목록의 위치입니다.
 type capacityCycleRequest struct {
 	runnerCount int
 	start       int
@@ -93,7 +92,6 @@ func (s *capacityCycleState) runStep(req *capacityCycleRequest, index, total int
 	if err != nil {
 		s.result.queryErr = errors.Join(s.result.queryErr, err)
 		s.result.failures = append(s.result.failures, runnerQueryFailure{runner: (req.start + index) % total, err: err})
-		// 계약 오류는 해당 런너에서만 닫고, 전역 장애와 취소는 뒤 조회를 중단합니다.
 		s.result.globalFailure = !errors.Is(err, joblease.ErrCandidateContract) ||
 			errors.Is(err, collection.ErrProjectionStale) ||
 			errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
@@ -236,7 +234,6 @@ func discoveryLimit(remaining, remainingRunners, acquisitionBatch int) int {
 	return limit
 }
 
-// 정렬·정규화는 저장소의 normalizeExcludedJobKeys가 소유합니다.
 func addExcludedKey(excluded []string, key string) []string {
 	if key == "" || slices.Contains(excluded, key) {
 		return excluded

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package middleware
 
 import (
@@ -28,7 +8,6 @@ import (
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 )
 
-// SecurityHeadersMiddleware 보안 헤더 추가 미들웨어.
 func SecurityHeadersMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Content-Type-Options", "nosniff")
@@ -45,7 +24,6 @@ const (
 	maxRequestIDLength = 128
 )
 
-// RequestIDMiddleware 요청마다 고유 X-Request-ID를 생성/전파하는 미들웨어.
 func RequestIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		reqID := sanitizedRequestID(c.GetHeader(requestIDHeaderKey))
@@ -91,9 +69,8 @@ func sanitizedRequestID(raw string) string {
 	return raw
 }
 
-const maxBodyBytes int64 = 1 << 20 // 1MiB
+const maxBodyBytes int64 = 1 << 20
 
-// MaxBodySizeMiddleware는 요청 본문 읽기를 maxBodyBytes까지로 제한한다. 한도를 넘는 읽기는 *http.MaxBytesError로 실패한다.
 func MaxBodySizeMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.Body != nil {

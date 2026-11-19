@@ -24,26 +24,34 @@ func acceptReply(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository,
 	require.NoError(t, err)
 	require.True(t, applied)
 
+	var firstCheck, accepted time.Time
+
+	require.NoError(t, repo.pool.QueryRow(ctx, `SELECT handoff_next_check_at, accepted_at
+		FROM bot_reply_outbox WHERE id = $1`, claim.ID).Scan(&firstCheck, &accepted))
+	require.Equal(t, time.Millisecond, firstCheck.Sub(accepted), "first handoff check delay")
+
 	return claim.ID
+}
+
+func advanceHandoffChecks(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository) {
+	t.Helper()
+
+	_, err := repo.pool.Exec(ctx, `UPDATE bot_reply_outbox
+		SET accepted_at = statement_timestamp() - (handoff_next_check_at - accepted_at),
+		    handoff_next_check_at = statement_timestamp()
+		WHERE status = 'accepted'`)
+	require.NoError(t, err)
 }
 
 func claimOneHandoffDue(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository) ReplyHandoffClaim {
 	t.Helper()
+	advanceHandoffChecks(ctx, t, repo)
 
-	deadline := time.Now().Add(5 * time.Second)
+	claims, err := repo.ClaimHandoffDue(ctx, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, claims, 1)
 
-	for {
-		claims, err := repo.ClaimHandoffDue(ctx, 10, time.Minute)
-		require.NoError(t, err)
-
-		if len(claims) > 0 || time.Now().After(deadline) {
-			require.Len(t, claims, 1)
-
-			return claims[0]
-		}
-
-		time.Sleep(5 * time.Millisecond)
-	}
+	return claims[0]
 }
 
 func completeReplyHandoff(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository, claim *ReplyOutboxClaim) {
@@ -59,7 +67,7 @@ func completeReplyHandoff(ctx context.Context, t *testing.T, repo *ReplyOutboxRe
 }
 
 func TestReplyHandoffClaimSkipsLockedRowsAndSoftClaimsWhatItReturns(t *testing.T) {
-	pool := newDurabilityPool(t)
+	pool := newReplyDelayPool(t)
 	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
@@ -72,7 +80,7 @@ func TestReplyHandoffClaimSkipsLockedRowsAndSoftClaimsWhatItReturns(t *testing.T
 	firstID := acceptReply(ctx, t, repo, first, "iris-first")
 	secondID := acceptReply(ctx, t, repo, second, "iris-second")
 
-	time.Sleep(10 * time.Millisecond)
+	advanceHandoffChecks(ctx, t, repo)
 
 	locker, err := pool.Begin(ctx)
 	require.NoError(t, err)
@@ -100,7 +108,7 @@ func TestReplyHandoffClaimSkipsLockedRowsAndSoftClaimsWhatItReturns(t *testing.T
 }
 
 func TestReplyHandoffTransitionsAreFencedByClaimTokenAndRequestID(t *testing.T) {
-	pool := newDurabilityPool(t)
+	pool := newReplyDelayPool(t)
 	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
@@ -120,7 +128,9 @@ func TestReplyHandoffTransitionsAreFencedByClaimTokenAndRequestID(t *testing.T) 
 
 	current := claimOneHandoffDue(ctx, t, repo)
 
-	mismatched := ReplyHandoffClaim{ID: current.ID, IrisRequestID: "iris-other", CheckToken: current.CheckToken}
+	mismatched := current
+
+	mismatched.IrisRequestID = "iris-other"
 
 	applied, err = repo.SettleHandoff(ctx, ReplyHandoffSettlement{Claim: mismatched, Status: ReplyOutboxHandoffCompleted})
 	require.NoError(t, err)
@@ -135,7 +145,7 @@ func TestReplyHandoffTransitionsAreFencedByClaimTokenAndRequestID(t *testing.T) 
 }
 
 func TestReplyHandoffSettlementsShapeTheRow(t *testing.T) {
-	pool := newDurabilityPool(t)
+	pool := newReplyDelayPool(t)
 	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 
@@ -184,9 +194,8 @@ func TestReplyHandoffSettlementsShapeTheRow(t *testing.T) {
 	}
 }
 
-// 세대는 그 claim의 reissue ladder가 409 FAILED를 보고 올린다.
 func TestReplyHandoffFailedReturnsTheStoredReplyToTheClaimQueue(t *testing.T) {
-	pool := newDurabilityPool(t)
+	pool := newReplyDelayPool(t)
 	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
@@ -201,7 +210,7 @@ func TestReplyHandoffFailedReturnsTheStoredReplyToTheClaimQueue(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, applied)
-	time.Sleep(5 * time.Millisecond)
+	advanceReplyRetry(ctx, t, pool, claim.ID)
 
 	resend, err := repo.Claim(ctx, "token-resend", durabilityTestLease)
 	require.NoError(t, err)
@@ -213,7 +222,7 @@ func TestReplyHandoffFailedReturnsTheStoredReplyToTheClaimQueue(t *testing.T) {
 }
 
 func TestReplyHandoffRescheduleNeverPassesTheHorizon(t *testing.T) {
-	pool := newDurabilityPool(t)
+	pool := newReplyDelayPool(t)
 	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)
@@ -227,18 +236,18 @@ func TestReplyHandoffRescheduleNeverPassesTheHorizon(t *testing.T) {
 	require.True(t, applied)
 	assert.LessOrEqual(t, delay, 2*time.Second)
 
-	var untilHorizonMS float64
+	var atHorizon bool
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT EXTRACT(EPOCH FROM handoff_next_check_at - accepted_at) * 1000
-		FROM bot_reply_outbox WHERE id = $1`, id).Scan(&untilHorizonMS))
-	assert.InDelta(t, 2000, untilHorizonMS, 1, "지평 시각의 확인이 마지막 확인이다")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT handoff_next_check_at = accepted_at + interval '2 seconds'
+		FROM bot_reply_outbox WHERE id = $1`, id).Scan(&atHorizon))
+	assert.True(t, atHorizon, "지평 시각의 확인이 마지막 확인이다")
 
 	status, _, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
 	assert.Equal(t, ReplyOutboxAccepted, status, "재예약은 상태를 바꾸지 않는다")
 }
 
 func TestReplyHandoffAcceptedPredecessorHoldsTheRoomUntilConfirmed(t *testing.T) {
-	pool := newDurabilityPool(t)
+	pool := newReplyDelayPool(t)
 	repo := newTestReplyOutboxRepository(pool)
 	ctx := t.Context()
 	truncateDurabilityTables(ctx, t, pool)

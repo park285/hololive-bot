@@ -49,7 +49,6 @@ func TestDisabledRuntimeOnlyRunsAndJoinsQueueSampler(t *testing.T) {
 		})
 		t.Cleanup(runtime.Close)
 
-		// 비활성 준비 경로는 획득 상태 조회나 프로젝션 갱신을 하지 않아야 한다.
 		runtime.refresher = nil
 		require.NoError(t, runtime.prepare(t.Context()))
 
@@ -103,7 +102,6 @@ func TestDisabledRuntimeReportsDurableQueueDepth(t *testing.T) {
 		return runtime.WorkerRegistration().QueueSnapshot().Status == workercontract.QueueSnapshotCurrent
 	}, 5*time.Second, time.Millisecond)
 
-	// 나머지 API 큐 둘은 봇 런타임 소유이므로 이 실행 영역의 등록만 격리한다.
 	loaded := settingstest.LoadProfileFixture(t, apiconfig.APIWorkerIdentity(), configtest.APIProfileFixture(t))
 	worker := loaded.Profile.Workers[apiconfig.WorkerSourceObservation]
 

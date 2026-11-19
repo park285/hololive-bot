@@ -164,7 +164,6 @@ func TestHandoffReconcilerRoutesObservationToLedgerAction(t *testing.T) {
 	}
 }
 
-// handoffOutcomeLevels는 reconciler가 단위별 정산 결과로 남긴 로그 수준을 send_unit_id별로 모은다.
 type handoffOutcomeLevels struct {
 	mu     sync.Mutex
 	levels map[int64]slog.Level
@@ -204,7 +203,6 @@ func (h *handoffOutcomeLevels) snapshot() map[int64]slog.Level {
 	return maps.Clone(h.levels)
 }
 
-// failingHandoffConsumer의 완료·dlq 정산은 err를 돌려준다.
 type failingHandoffConsumer struct {
 	handoffTestConsumer
 
@@ -219,8 +217,6 @@ func (c *failingHandoffConsumer) DLQAfterHandoff(context.Context, *dispatchoutbo
 	return c.err
 }
 
-// 저장소의 alarm dispatch 실패 sentinel이 엔진 분류로 이어진다. 확인이 닫힌 미스와 DLQ commit 뒤 claim 키 해제
-// 실패는 다시 판정할 확인이 없으므로 오류이고, 확인을 닫지 않은 소유 상실 미스는 다음 확인이 다시 판정하므로 경고다.
 func TestHandoffReconcilerClassifiesSettlementFailures(t *testing.T) {
 	t.Parallel()
 

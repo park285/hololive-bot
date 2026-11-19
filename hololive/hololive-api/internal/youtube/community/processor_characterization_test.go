@@ -12,9 +12,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 기대값은 parser DTO 왕복 경로(삭제 전)에서 그대로 통과한 값이다. 바꾸면 저장 행·outbox payload 계약이 바뀐다.
 const (
-	// 접두사·raw ID·URL 표현이 모두 합쳐지는 canonical ID다.
 	aliasCanonicalID = "community:abc"
 	defCanonicalID   = "community:def"
 	cccCanonicalID   = "community:ccc"
@@ -149,7 +147,6 @@ func characterizationCases() []characterizationCase {
 	}
 }
 
-// 정렬하지 않고 첫 등장 순서를 유지해야 한다.
 func aliasWindowPayload() contract.CommunityPayloadV1 {
 	return contract.CommunityPayloadV1{
 		ChannelID: testChannelID,

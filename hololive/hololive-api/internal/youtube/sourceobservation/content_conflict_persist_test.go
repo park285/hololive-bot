@@ -19,7 +19,6 @@ func TestContentConsumerRecordsEqualTimeConflictOnce(t *testing.T) {
 	coverage, err := contract.MarshalPayloadV1(contract.ChannelListCoverageV1{ChannelID: testChannelID, MaxResults: 10, Exhausted: true})
 	require.NoError(t, err)
 
-	// 관측과 같은 effective_at에 다른 값 digest를 가진 clock을 두어 같은 시각의 값 충돌을 만든다.
 	_, err = pool.Exec(ctx, `
 		INSERT INTO youtube_videos (video_id, channel_id, title, first_seen_at, last_seen_at)
 		VALUES ('vid-x', $1, 'stored title', $2, $2)

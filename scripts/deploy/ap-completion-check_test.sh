@@ -30,9 +30,7 @@ cp "$ROOT_DIR/scripts/deploy/lib/youtubejs-node-version.sh" "$fixture_root/scrip
 cp "$ROOT_DIR/scripts/deploy/lib/ap-collector-readiness.sh" "$fixture_root/scripts/deploy/lib/ap-collector-readiness.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/ap-host-native-po.sh" "$fixture_root/scripts/deploy/lib/ap-host-native-po.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py" "$fixture_root/scripts/deploy/lib/worker-profile-pair.py"
-# 기존 collector readiness 사례는 issuer 도입 전 release로의 명시적 rollback을 검증한다.
 export PO_EXPECTED_PRESENCE=absent
-# 원격 fake의 재시도 횟수는 그대로 실행하고 대기만 기록해 실제 6분 경과에 의존하지 않는다.
 export FAKE_DELAY_LOG="$tmp/delays"
 cat > "$fakebin/sleep" <<'EOF'
 #!/usr/bin/env bash
@@ -40,7 +38,6 @@ set -euo pipefail
 printf '%s\n' "$*" >> "${FAKE_DELAY_LOG:?}"
 EOF
 chmod +x "$fakebin/sleep"
-# 원격 Node 판정은 build host의 node 버전이 아니라 지원 runtime을 보고하는 AP fake로 고정한다.
 cat > "$fakebin/node" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail

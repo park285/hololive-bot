@@ -15,8 +15,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// DB 장애(연결 거부·재시작 중 SQLSTATE 57P03·연결 dial 타임아웃)는 코드 결함이 아니므로 INTERNAL로 집계되면 안 된다.
-// 반대로 인증 실패(28P01)는 설정 결함이라 일시 장애로 숨기지 않고 미분류로 남는다.
 func TestDatabaseConnectFailuresClassification(t *testing.T) {
 	t.Parallel()
 
@@ -146,8 +144,6 @@ func connectError(t *testing.T, addr string) error {
 	return err
 }
 
-// pollDeadlineDialError는 연결 대기의 poll deadline이 context 타이머보다 먼저 끝났을 때 net이 돌려주는 dial 오류다.
-// 이때 원인은 context.DeadlineExceeded가 아닌 os.ErrDeadlineExceeded이고, pgconn은 이를 dial 오류로 감싼다.
 func pollDeadlineDialError() error {
 	return fmt.Errorf("dial error: %w", &net.OpError{Op: "dial", Net: "tcp", Err: os.ErrDeadlineExceeded})
 }

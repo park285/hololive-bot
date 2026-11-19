@@ -705,8 +705,7 @@ type contentFake struct {
 	videoErrs   map[string]error
 	videoCalls  []string
 	tabs        []string
-	// videoBlock 영상의 확인 요청은 요청 문맥이 끝날 때까지 응답하지 않습니다.
-	videoBlock map[string]bool
+	videoBlock  map[string]bool
 }
 
 func (f *contentFake) FetchContent(_ context.Context, request youtubejs.ContentRequest) (youtubejs.ContentResult, error) {
@@ -751,7 +750,6 @@ func (f *contentFake) FetchVideoLiveCheck(ctx context.Context, request youtubejs
 	}, nil
 }
 
-// 실제 저장소 경로는 sourceobservation 저장소 테스트가 다룹니다.
 type cursorFake struct {
 	cursor []byte
 	err    error

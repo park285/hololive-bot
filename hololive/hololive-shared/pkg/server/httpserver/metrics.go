@@ -13,8 +13,6 @@ import (
 	"github.com/kapu/hololive-shared/internal/workerobservability"
 )
 
-// 운영 표면이 H3 전용이라 Prometheus가 직접 scrape하지 못해,
-// /metrics만 노출하는 평문 HTTP/1.1 리스너를 분리한다(PR-P6-01 0단계).
 func NewMetricsServer(ctx context.Context, addr, metricsKey string, registry *workercontract.Registry) *http.Server {
 	router := newReleaseModeEngine()
 	applyBaseMiddleware(ctx, router, nil, "/metrics")

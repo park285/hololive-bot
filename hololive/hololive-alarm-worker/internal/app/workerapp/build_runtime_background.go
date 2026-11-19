@@ -19,8 +19,6 @@ type alarmWorkerBackgroundRunners struct {
 	xSpaces     workerruntime.Scheduler
 }
 
-// buildAlarmWorkerBackgroundRunners는 설정에서 켜진 X Spaces·celebration runner를 만든다.
-// 두 runner 모두 PostgreSQL을 쓰므로, PostgreSQL이 없는 infra는 runner를 끄고 넘어가지 않고 조립 오류로 돌려준다.
 func buildAlarmWorkerBackgroundRunners(
 	appConfig *workerconfig.RuntimeConfig,
 	infra *sharedmodules.InfraModule,

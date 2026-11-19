@@ -223,7 +223,6 @@ func TestMapRequestErrorFromRealClientDialRefused(t *testing.T) {
 		t.Skipf("closed port did not yield ECONNREFUSED: %v", doErr)
 	}
 
-	// 상대가 연결을 거부하면 일시 장애다. 미분류 INTERNAL로 두면 외부 장애가 코드 결함으로 집계된다.
 	mapped := MapRequestError("request holodex live", doErr, "secret-key")
 	if collecterr.IsUnclassified(mapped) ||
 		collecterr.CodeOf(mapped) != contract.ErrorCollectionFailed || collecterr.ClassOf(mapped) != contract.ClassTransient {
@@ -282,8 +281,6 @@ func TestMapRequestErrorFromRealClientTLSVerifyFailure(t *testing.T) {
 	}
 }
 
-// Holodex·official 응답이 ResponseHeaderTimeout 안에 header를 보내지 않으면 net/http는 Timeout()이 참인 *url.Error를
-// 돌려준다. 운영 로그에서 가장 흔한 provider 실패라 INTERNAL 불변식이 아니라 TIMEOUT으로 기록돼야 한다.
 func TestMapRequestErrorFromRealClientResponseHeaderTimeout(t *testing.T) {
 	t.Parallel()
 

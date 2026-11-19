@@ -70,7 +70,6 @@ func BenchmarkLiveCoverageMembership(b *testing.B) {
 	}
 }
 
-// 한 번만 조회할 때는 선형 탐색이 유리할 수 있다.
 func BenchmarkLiveCoverageSlotBuildAndRead(b *testing.B) {
 	channels := make([]string, 256)
 	for i := range channels {

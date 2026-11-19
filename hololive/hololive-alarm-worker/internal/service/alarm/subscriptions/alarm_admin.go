@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package subscriptions
 
 import (
@@ -29,8 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// GetAllAlarmKeys는 방·채널 쌍마다 한 항목을 PG에서 만든다. 방 이름은 관리자 지정 이름 → Kakao 방 이름 → 방 ID 순이고,
-// 멤버 조회 실패는 이름 없는 목록이 아니라 오류다.
 func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error) {
 	entries, err := as.alarmRepository.ListAlarmEntries(ctx)
 	if err != nil {
@@ -62,7 +40,6 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 	return entries, nil
 }
 
-// CountAlarmEntries는 멤버 표시명 조회와 목록 직렬화를 거치지 않고 관리 통계의 알림 개수를 반환한다.
 func (as *AlarmService) CountAlarmEntries(ctx context.Context) (int, error) {
 	count, err := as.alarmRepository.CountAlarmEntries(ctx)
 	if err != nil {
@@ -72,7 +49,6 @@ func (as *AlarmService) CountAlarmEntries(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-// 공백뿐인 이름은 지정을 해제해 관리 목록이 Kakao 방 이름으로 돌아간다.
 func (as *AlarmService) SetRoomName(ctx context.Context, roomID, roomName string) error {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {

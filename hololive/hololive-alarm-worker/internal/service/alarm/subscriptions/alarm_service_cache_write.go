@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package subscriptions
 
 import (
@@ -30,7 +10,6 @@ import (
 	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
 )
 
-// 채널 registry가 유실되면 일부 채널만으로 재생성하지 않고 먼저 DB 전체를 복구한다.
 const addToExistingChannelRegistryScript = `
 if redis.call('EXISTS', KEYS[1]) == 0 then
   return -1
@@ -38,10 +17,8 @@ end
 return redis.call('SADD', KEYS[1], ARGV[1])
 `
 
-// addToExistingChannelRegistryLua는 EVALSHA를 먼저 보내고 NOSCRIPT일 때만 valkey-go가 본문 EVAL로 다시 보낸다.
 var addToExistingChannelRegistryLua = valkey.NewLuaScript(addToExistingChannelRegistryScript)
 
-// 호출자는 mutation mutex를 보유한다. DB가 비어 있었던 경우에만 singleton registry를 만들 수 있다.
 func (as *AlarmService) cacheAlarmChannelRegistry(ctx context.Context, channelID string) error {
 	registered, err := as.addToExistingChannelRegistry(ctx, channelID)
 	if err != nil {
@@ -87,7 +64,6 @@ func (as *AlarmService) addToExistingChannelRegistry(ctx context.Context, channe
 	return added >= 0, nil
 }
 
-// markAlarmCacheChanged는 구독 변경 뒤 빈 cache 표식을 지워 target 조회가 subscriber set을 다시 읽게 한다.
 func (as *AlarmService) markAlarmCacheChanged(ctx context.Context) error {
 	if err := as.cache.Del(ctx, alarmkeys.AlarmSubscriberCacheEmptyKey); err != nil {
 		return fmt.Errorf("clear empty subscriber cache marker: %w", err)

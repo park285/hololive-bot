@@ -111,7 +111,6 @@ func (s *TransitionStore) quarantineStaleOnce(
 	return result, transitions, writes, nil
 }
 
-// 만료 판정은 후보 SQL의 DB 시계(checked_at)로, ledger 관측 시각과 결과 불명 시도의 종료 시각은 격리 전이 문장의 DB 시계로 기록한다.
 func (s *TransitionStore) quarantineStaleTx(
 	ctx context.Context,
 	tx dbx.Querier,
@@ -153,7 +152,6 @@ func (s *TransitionStore) quarantineStaleTx(
 		return result, transitions, writes, fmt.Errorf("quarantine logical groups: record ledger: %w", err)
 	}
 
-	// 결과 불명으로 격리한 owner 시도는 공백으로 두지 않고 같은 트랜잭션에서 outcome_unknown으로 기록한다.
 	if err := recordAttemptTelemetry(ctx, tx, deliveryModeStaleSweep, attempts, quarantinedAt); err != nil {
 		return result, transitions, writes, fmt.Errorf("quarantine logical groups: record telemetry: %w", err)
 	}
@@ -214,9 +212,8 @@ func buildQuarantineChanges(
 type quarantineResolutionChange struct {
 	transitions []rowTransition
 	write       *LedgerWrite
-	// attempt는 격리한 in-flight owner의 결과 불명 시도다. fulfilled 전파는 시도가 아니라 비워 둔다.
-	attempt *deliveryAttempt
-	blocked *BlockedLogicalGroup
+	attempt     *deliveryAttempt
+	blocked     *BlockedLogicalGroup
 }
 
 func quarantineResolution(
@@ -254,8 +251,6 @@ func quarantineResolution(
 	return quarantineResolutionChange{}, fmt.Errorf("quarantine logical groups: unsupported resolution kind %d", resolution.Kind())
 }
 
-// quarantineInFlightResolution은 후보로 잠근 owner의 lease가 cutoff(후보 SQL의 DB 시계 - LockTimeout) 전에 끝났을 때만
-// 그룹을 격리하고, ledger 관측 시각은 전이 뒤에 채운다.
 func quarantineInFlightResolution(
 	resolution preparation.Resolution,
 	rowsByID map[int64]transitionRow,
@@ -339,8 +334,6 @@ func loadStaleSendingCandidates(
 	return candidates, checkedAt, nil
 }
 
-// resolveStaleSendingGroups는 stale 후보의 논리 그룹을 같은 트랜잭션에서 잠가 다시 읽고 해석한다. 후보는 claim 행이
-// 아니므로 claim fence가 없고, 조회 창의 깨진 정체성 행은 오류 없이 그룹 밖으로 건너뛴다.
 func (s *TransitionStore) resolveStaleSendingGroups(
 	ctx context.Context,
 	db dbx.Querier,

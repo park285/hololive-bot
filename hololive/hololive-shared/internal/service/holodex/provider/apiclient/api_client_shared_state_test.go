@@ -16,7 +16,6 @@ import (
 	ratelimitvalkey "github.com/kapu/hololive-shared/pkg/service/ratelimit/valkey"
 )
 
-// 넘겨받은 ctx가 끝났으면 실패해 호출자 취소와 분리된 기록인지 확인할 수 있다.
 type memorySharedState struct {
 	mu        sync.Mutex
 	deadlines map[string]time.Time
@@ -249,7 +248,6 @@ func TestAPIClientSharedCircuitOpenedDuringRetryStopsRequest(t *testing.T) {
 		client = newSharedPolicyClient(t, shared, func(*http.Request) (*http.Response, error) {
 			calls++
 
-			// 첫 응답이 오는 사이 다른 프로세스가 circuit을 연 상황이다.
 			if _, err := shared.OpenOnce(t.Context(), client.sharedCircuitKey(), time.Now().Add(circuitResetTimeout)); err != nil {
 				t.Errorf("seed shared circuit: %v", err)
 			}

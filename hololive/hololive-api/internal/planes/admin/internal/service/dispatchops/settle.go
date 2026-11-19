@@ -9,8 +9,6 @@ import (
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
-// Settle는 실패 묶음의 상태와 감사를 원자적으로 변경하며 발송 큐에 등록하지 않습니다.
-// 이미 발송 중이거나 완료·취소된 묶음 및 오래된 리비전은 거부합니다.
 func (r *Repository) Settle(ctx context.Context, id string, request SettleRequest) (RequeueResult, error) {
 	result := RequeueResult{IDs: []string{}}
 
@@ -66,7 +64,6 @@ func (r *Repository) Settle(ctx context.Context, id string, request SettleReques
 		return result, ErrConflict
 	}
 
-	// 연결 단절을 성공이나 실패로 추정하지 않습니다. 호출자는 재조회로 결과를 확인합니다.
 	if err := tx.Commit(ctx); err != nil {
 		return result, fmt.Errorf("commit dispatch settlement: %w", conflictError(err))
 	}

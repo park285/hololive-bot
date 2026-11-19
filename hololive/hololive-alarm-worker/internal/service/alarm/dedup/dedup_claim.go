@@ -11,9 +11,6 @@ import (
 
 const NotificationSentTTL = 24 * time.Hour
 
-// 두 키를 한 pipeline으로 SetNX하면 경쟁자끼리 키를 나눠 잡은 뒤 서로 release해
-// 승자 0명이 될 수 있다(중복 배치에서 알림 전량 skip). 그래서 key1 승자만 key2를 시도한다.
-// 두 번째 key의 저장소 오류에서는 acquired1=true를 함께 돌려줘 호출자가 key1을 release할 수 있게 한다.
 func (s *Service) TryClaimPair(ctx context.Context, key1, key2 string, ttl time.Duration) (acquired1, acquired2 bool, err error) {
 	acquired1, err = s.tryClaimKey(ctx, key1, ttl)
 	if err != nil {

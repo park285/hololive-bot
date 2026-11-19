@@ -34,7 +34,6 @@ func newIntegrationDispatcher(
 	dispatcher, err := youtubedispatch.NewDispatcher(youtubedispatch.Dependencies{
 		DB: db, Cache: cacheClient, Sender: sender,
 		Renderer: template.NewRenderer(db, logger), MessageStrings: messageStrings,
-		// 운영과 같이 PostgreSQL 정본에서 표시명을 읽는다.
 		MemberNames: alarmstore.NewRepository(&databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return db }}, logger),
 	}, logger, youtubedispatch.WithTestDispatchConfigDefaults(config))
 	require.NoError(tb, err)

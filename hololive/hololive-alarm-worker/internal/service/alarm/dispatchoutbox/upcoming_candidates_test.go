@@ -29,7 +29,6 @@ func TestUpcomingCandidatesRecoverFrozenPartialPublishAfterRestart(t *testing.T)
 	store := NewUpcomingCandidates(pool)
 	require.NoError(t, store.Stage(t.Context(), "staged-channel", now, []*domain.AlarmNotification{first, second}))
 
-	// 첫 방 commit 뒤 publish 응답 소실: 수용 receipt를 못 받아도 ledger가 증거다.
 	repository := newTestRepository(t, pool)
 	_, err := repository.InsertBatch(t.Context(), PublishBatchInput{Envelopes: []AlarmQueueEnvelope{{Notification: *first, Version: 1}}})
 	require.NoError(t, err)
@@ -77,7 +76,6 @@ func TestUpcomingCandidatesCommitResponseLossAndConstraintFailure(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, recovered, 1)
 
-	// DB constraint 실패는 오류로 드러나고 후보를 남기지 않는다.
 	invalid := candidateNotification(strings.Repeat("r", 101), now.Add(5*time.Minute))
 
 	err = NewUpcomingCandidates(pool).Stage(t.Context(), "staged-channel", now.Add(time.Minute), []*domain.AlarmNotification{invalid})

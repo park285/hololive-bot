@@ -1,6 +1,4 @@
--- 논리 그룹 delivery를 (created_at, id) 순서로 잠근다. 후보 조건은 transition_group_candidates.sql 조각이다.
--- $5는 잠글 행 한도다.
-WITH /* transition_group_candidates */
+WITH /* fragment:transition_group_candidates */
 SELECT delivery.id,
        delivery.outbox_id,
        delivery.room_id,

@@ -1,6 +1,7 @@
 package sourceobservation
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -16,6 +17,8 @@ func TestRepeatedPartialCollisionAdvancesSlotAndKeepsFreshVideos(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, "youtubejs_content")
+	startPartialSlotClock(t, pool, &proof)
+
 	leases := partialSlotLeaseRepository(t, pool)
 	repo := NewRepository(pool)
 	spec := joblease.JobSpec{
@@ -41,8 +44,7 @@ func TestRepeatedPartialCollisionAdvancesSlotAndKeepsFreshVideos(t *testing.T) {
 
 	for i, attempt := range attempts {
 		if i > 0 {
-			// 정상 cadence와 bounded defer가 실제 DB 시계에서 due가 된 뒤 재획득합니다.
-			time.Sleep(1100 * time.Millisecond)
+			makePartialSlotDue(t, pool, proof.JobKey)
 
 			lease, err := leases.Acquire(ctx, &spec, proof.OwnerInstance)
 			if err != nil {
@@ -80,6 +82,37 @@ func TestRepeatedPartialCollisionAdvancesSlotAndKeepsFreshVideos(t *testing.T) {
 	assertTableCount(t, pool, "source_observations", 4)
 	assertTableCount(t, pool, "source_observation_queue", 4)
 	assertTableCount(t, pool, "source_observation_collisions", 3)
+}
+
+func startPartialSlotClock(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseProof) {
+	t.Helper()
+
+	setup, err := os.ReadFile("../testdata/slot_clock.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = pool.Exec(t.Context(), string(setup)); err != nil {
+		t.Fatal(err)
+	}
+
+	pool.Reset()
+
+	if err = pool.QueryRow(t.Context(), `
+		UPDATE youtube_collection_job_leases
+		SET scheduled_for = clock_timestamp(), next_due_at = clock_timestamp()
+		WHERE job_key = $1 RETURNING scheduled_for
+	`, proof.JobKey).Scan(&proof.ScheduledFor); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func makePartialSlotDue(t *testing.T, pool *pgxpool.Pool, jobKey string) {
+	t.Helper()
+
+	if _, err := pool.Exec(t.Context(), `SELECT advance_slot_clock($1)`, jobKey); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func partialSlotLeaseRepository(t *testing.T, pool *pgxpool.Pool) *joblease.Repository {

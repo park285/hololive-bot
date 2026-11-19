@@ -17,7 +17,6 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-// 원본 트리거가 없으므로 writer가 바꾼 key를 빠뜨리면 누락·값 변경 행으로 드러난다.
 func requireLiveRuntimeRefreshed(t *testing.T, pool *pgxpool.Pool, step func()) {
 	t.Helper()
 
@@ -95,7 +94,6 @@ func TestFinalizeRefreshesReportedLiveRuntimeKeys(t *testing.T) {
 	}
 }
 
-// 커밋 실패 사례는 커밋 때 검사되는 deferred FK를 어기는 head를 함께 써서 갱신 뒤 커밋을 실패시킨다.
 func reportedLiveWrite(reportAll, failCommit bool) ReconcileWrite {
 	return func(ctx context.Context, tx dbx.Tx, _ *Observation) (ReconcileResult, error) {
 		if _, err := tx.Exec(ctx, `INSERT INTO youtube_live_sessions (video_id, channel_id, status, lifecycle_origin)
@@ -137,7 +135,6 @@ func TestLiveRuntimeRefreshLiveSnapshotWriter(t *testing.T) {
 	})
 	requireLiveRuntimeSession(t, pool, testStatusLive)
 
-	// 부재 slot 두 개가 grace 0의 LIVE를 끝내며 head 부재 이력과 세션 종료를 쓴다.
 	requireLiveRuntimeRefreshed(t, pool, func() {
 		proof = publishConsumeLive(ctx, t, pool, publishkit.NewPublisher(pool), consumer, &proof)
 	})
@@ -205,7 +202,6 @@ func TestLiveRuntimeRefreshVideoLiveCheckWriter(t *testing.T) {
 		})
 		require.True(t, loadLiveRuntimeRow(t, pool).availabilitySet)
 
-		// 검증된 종료는 같은 관측에서 가용성과 세션·head 종료를 함께 쓴다.
 		videoProof = advanceLease(ctx, t, pool, &videoProof, time.Minute)
 
 		requireLiveRuntimeRefreshed(t, pool, func() {
@@ -227,7 +223,6 @@ func TestLiveRuntimeRefreshVideoLiveCheckWriter(t *testing.T) {
 
 		var olderID int64
 
-		// 적용되지 않은 가용성 저장은 원본을 바꾸지 않으므로 갱신 key가 없어도 모델이 그대로 맞아야 한다.
 		requireLiveRuntimeRefreshed(t, pool, func() {
 			olderID = publishLiveCheck(ctx, t, publishkit.NewPublisher(pool), videoLiveCheckEnvelope(t, &older, liveVideoCheck(contract.VideoAvailabilityMembersOnly)))
 			consumeLiveChecks(ctx, t, consumer)

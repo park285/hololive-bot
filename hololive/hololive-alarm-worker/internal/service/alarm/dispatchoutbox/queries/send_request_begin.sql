@@ -1,7 +1,3 @@
--- 고정된 send unit 요청으로 발송 상태에 들어가는 단일 문장이다. 다른 경로와 같은 단위→멤버 순서로 잠근다.
--- 단위 id를 initplan으로 읽어 멤버 잠금 전에 단위 잠금을 끝낸다. 멤버 전원 잠금 뒤 채취한 clock 하나로 lease를
--- 판정하고 sending 진입 시각과 새 lease($5 밀리초)를 기록한다. 단위 멤버 전원의 조건이 참일 때만 전원을 바꾼다.
--- 요청 조건은 고정 여부와 호출자가 claim에서 본 client_request_id 등가다.
 WITH unit AS MATERIALIZED (
     SELECT u.id, u.client_request_id, u.request_body_hash, u.request_delivery_ids
     FROM alarm_dispatch_send_units u

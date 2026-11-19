@@ -10,8 +10,7 @@ import (
 )
 
 type OutboxGrouper struct {
-	cache alarmstore.SubscriberCache
-	// lookupSubscribers는 같은 채널·알림 종류의 여러 제목을 구독 조회 한 번으로 처리한다.
+	cache             alarmstore.SubscriberCache
 	lookupSubscribers func(context.Context, string, []string, domain.AlarmType) (map[string][]string, error)
 	logger            *slog.Logger
 	config            Config

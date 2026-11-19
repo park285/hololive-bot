@@ -21,7 +21,6 @@ func TestTimeFinalizationGuardsProgressShape(t *testing.T) {
 		t.Fatalf("new session times_source = %q, %v; want observed", source, err)
 	}
 
-	// 아직 결과가 없는 backlog만 다음 시도 시각 없이 pending일 수 있고, 최종 상태는 완료 시각을 가진다.
 	if _, err := pool.Exec(ctx, `INSERT INTO youtube_live_time_finalizations
         (video_id,queue,outcome,reason,attempts,next_attempt_at,completed_at) VALUES
         ('tf-1','backlog','pending',NULL,0,NULL,NULL),
@@ -55,5 +54,3 @@ func TestTimeFinalizationGuardsProgressShape(t *testing.T) {
 		t.Fatalf("times_source vocabulary validated = %v, %v", validated, err)
 	}
 }
-
-// liveRowVersions는 세션·확정 진행 행의 행 버전 목록이다. 재적용이 행을 다시 쓰면 바뀐다.

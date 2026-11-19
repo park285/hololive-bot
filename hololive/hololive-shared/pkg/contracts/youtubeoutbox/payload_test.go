@@ -10,8 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 아래 JSON은 계약 타입을 도입하기 전 domain 구조체를 그대로 직렬화하던 producer의 출력이다. 저장된 payload를
-// 읽는 소비자가 있으므로 필드 이름·순서·omitempty가 달라지면 안 된다.
 const (
 	wantVideoJSON = `{"video_id":"vid00000001","channel_id":"UCabc","title":"새 영상 \"제목\" <b>",` +
 		`"published_at":"2026-09-01T12:30:00Z","is_short":false,"is_live_replay":false,"view_count":0,` +
@@ -106,7 +104,6 @@ func TestStoredPayloadsDecodeIntoContractTypes(t *testing.T) {
 		require.Equal(t, tc.want, string(got))
 	}
 
-	// 쇼츠 payload도 영상 renderer가 Video로 읽는다. canonical_post_id는 무시되고 영상 필드는 같다.
 	var shortAsVideo Video
 
 	require.NoError(t, jsonv2.Unmarshal([]byte(wantShortJSON), &shortAsVideo))

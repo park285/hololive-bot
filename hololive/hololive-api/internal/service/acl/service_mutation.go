@@ -25,7 +25,6 @@ func (s *Service) GetACLStatus() (enabled bool, mode ACLMode, rooms []string) {
 	return s.enabled, s.mode, rooms
 }
 
-// 같은 값이면 PG에 쓰지 않는다.
 func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -55,7 +54,6 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	return nil
 }
 
-// 같은 값이면 PG에 쓰지 않는다.
 func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -90,12 +88,6 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	return nil
 }
 
-// AddRoom은 호출자가 본 모드(expectedMode)의 목록에 방을 추가한다. 새 등록값은 chatID만 받는다(ErrInvalidRoomChatID).
-// 현재 모드가 expectedMode와 다르면 PG에 쓰지 않고 ErrACLModeChanged를 돌려준다. 화면을 읽은 뒤 모드가 바뀌면
-// 허용하려던 방이 차단 목록에 들어가는 반대 효과가 성공으로 보고되기 때문이다. SetMode도 mutationMu를 잡으므로
-// 비교와 저장 사이에 모드가 바뀌지 않는다. 이미 있으면 PG에 쓰지 않고 false를 돌려준다.
-// 커밋 뒤 응답을 잃은 요청의 재시도는 메모리에 방이 없어도 PG에 행이 있으므로, 삽입하지 않은 경우도
-// 메모리를 PG에 맞추고 false를 돌려준다.
 func (s *Service) AddRoom(ctx context.Context, expectedMode ACLMode, room string) (bool, error) {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -147,10 +139,6 @@ func (s *Service) AddRoom(ctx context.Context, expectedMode ACLMode, room string
 	return true, nil
 }
 
-// RemoveRoom은 호출자가 본 모드(expectedMode)의 목록에서 방을 제거한다. 저장 행은 migration 349 이후 모두 chatID이므로
-// AddRoom과 같은 형식을 요구한다. 현재 모드가 다르면 PG에 쓰지 않고 ErrACLModeChanged를 돌려준다.
-// 과거 경합으로 메모리와 PG가 어긋난 방도 철회되도록 메모리 상태와 무관하게 대상 행을 삭제하고 메모리에서도 지운다.
-// 메모리에 없고 삭제된 행도 없으면 false를 돌려준다.
 func (s *Service) RemoveRoom(ctx context.Context, expectedMode ACLMode, room string) (bool, error) {
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()

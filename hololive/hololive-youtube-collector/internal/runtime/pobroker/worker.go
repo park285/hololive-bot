@@ -19,12 +19,13 @@ var errWorker = errors.New("worker failed")
 
 var errBeforeDispatch = errors.New("request canceled before worker dispatch")
 
+var errDeadlineBeforeDispatch = errors.Join(errBeforeDispatch, context.DeadlineExceeded)
+
 type worker struct {
-	cmd   *exec.Cmd
-	stdin io.WriteCloser
-	out   *bufio.Reader
-	done  chan struct{}
-	// waitErr는 done을 닫기 전에 한 번 쓰고 닫힌 뒤에만 읽는다.
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	out     *bufio.Reader
+	done    chan struct{}
 	waitErr error
 	frame   []byte
 }
@@ -35,12 +36,22 @@ func (b *Broker) initializeWorker(ctx context.Context) error {
 		return err
 	}
 
+	return b.loadWorker(ctx, worker)
+}
+
+func (b *Broker) loadWorker(ctx context.Context, worker *worker) error {
 	b.mu.Lock()
 
-	if b.retiring || ctx.Err() != nil {
+	if err := ctx.Err(); b.retiring || err != nil {
 		b.mu.Unlock()
 
-		return errors.Join(errWorker, worker.stop())
+		stopErr := worker.stop()
+
+		if errors.Is(err, context.DeadlineExceeded) {
+			return errors.Join(errWorker, errDeadlineBeforeDispatch, stopErr)
+		}
+
+		return errors.Join(errWorker, stopErr)
 	}
 
 	b.worker = worker
@@ -54,9 +65,6 @@ func (b *Broker) initializeWorker(ctx context.Context) error {
 		return errors.Join(errWorker, err)
 	}
 
-	// 기동 중 종료는 exchange가 실패로 돌려주어 Serve가 startup_failed로 퇴역시킵니다.
-	// 감시는 loaded 뒤에 시작해 기동 실패의 퇴역 원인을 worker_exited와 경합시키지 않습니다.
-	// 요청이 worker IO(직렬 슬롯)를 쥔 중의 종료는 그 요청 경로와 같은 worker_failed로 기록합니다.
 	go func() {
 		<-worker.done
 
@@ -72,14 +80,11 @@ func (b *Broker) initializeWorker(ctx context.Context) error {
 	return nil
 }
 
-// worker는 generation이 소유합니다. 시작 전 취소는 거부하되, 장수 VM에
-// 요청 context의 값·참조를 보존하지 않습니다. 종료는 stop/retirement가 담당합니다.
 func startWorker(ctx context.Context, node, script string) (*worker, error) {
-	if ctx.Err() != nil {
-		return nil, errBeforeDispatch
+	if err := beforeDispatch(ctx); err != nil {
+		return nil, err
 	}
 
-	// contextcheck: generation은 시작 RPC보다 오래 살며 stop이 종료하므로 요청 값도 보존하지 않습니다.
 	//nolint:contextcheck // generation 전용 수명
 	// #nosec G204 -- 경로는 요청 데이터가 아닌 운영 시작 인수이며 rootfs로 제한됩니다.
 	cmd := exec.CommandContext(context.Background(), node, "--permission", "--allow-fs-read=/app/po-sandbox",
@@ -87,7 +92,6 @@ func startWorker(ctx context.Context, node, script string) (*worker, error) {
 
 	cmd.Env = []string{"HOME=/tmp", "TMPDIR=/tmp", "TZ=UTC", "LANG=C.UTF-8"}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	// VM 리더가 종료된 뒤 하위 프로세스가 stderr를 보유해도 Wait와 브로커 종료를 막지 못하게 한다.
 	cmd.WaitDelay = 500 * time.Millisecond
 
 	in, err := cmd.StdinPipe()
@@ -101,7 +105,7 @@ func startWorker(ctx context.Context, node, script string) (*worker, error) {
 		return nil, errWorker
 	}
 
-	cmd.Stderr = io.Discard // os/exec가 원본 stderr를 저장·출력하지 않고 비운다.
+	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
 		_ = in.Close()
 		_ = out.Close()
@@ -111,7 +115,6 @@ func startWorker(ctx context.Context, node, script string) (*worker, error) {
 
 	w := &worker{cmd: cmd, stdin: in, out: bufio.NewReaderSize(out, 4096), done: make(chan struct{}), frame: make([]byte, 0, maxWorkerFrame)}
 
-	// 정상 여부와 관계없이 done을 닫아 해당 세대를 종료한다.
 	go func() {
 		w.waitErr = cmd.Wait()
 		close(w.done)
@@ -120,14 +123,23 @@ func startWorker(ctx context.Context, node, script string) (*worker, error) {
 	return w, nil
 }
 
-// 파이프 I/O는 요청 제한 시간을 상속하지 않아 전용 goroutine을 사용한다.
-// 취소되면 브로커가 프로세스 그룹을 종료한다.
-func (w *worker) exchange(ctx context.Context, input, output any) error {
-	if ctx.Err() != nil {
+func beforeDispatch(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return errDeadlineBeforeDispatch
+		}
+
 		return errBeforeDispatch
 	}
 
-	// nil input은 최초 loaded frame 수신 전용이며 worker에 명령을 쓰지 않는다.
+	return nil
+}
+
+func (w *worker) exchange(ctx context.Context, input, output any) error {
+	if err := beforeDispatch(ctx); err != nil {
+		return err
+	}
+
 	var data []byte
 
 	if input != nil {
@@ -141,8 +153,8 @@ func (w *worker) exchange(ctx context.Context, input, output any) error {
 		data = append(data, '\n')
 	}
 
-	if ctx.Err() != nil {
-		return errBeforeDispatch
+	if err := beforeDispatch(ctx); err != nil {
+		return err
 	}
 
 	result := make(chan error, 1)
@@ -159,7 +171,6 @@ func (w *worker) exchange(ctx context.Context, input, output any) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-w.done:
-		// 성공 응답이 파이프에 남아 있어도 워커 종료를 복구 가능한 전이로 취급하지 않는다.
 		return errWorker
 	}
 }
@@ -211,7 +222,6 @@ func (w *worker) readFrame() ([]byte, error) {
 	}
 }
 
-// 수행·확인하지 못한 정리만 오류로 보고하며 워커 출력은 포함하지 않는다.
 func (w *worker) stop() error {
 	if w == nil {
 		return nil
@@ -219,7 +229,6 @@ func (w *worker) stop() error {
 
 	var err error
 
-	// 리더가 종료되어도 그룹 구성원이 남을 수 있다. ESRCH여야 모두 사라졌다고 확인할 수 있다.
 	if killErr := syscall.Kill(-w.cmd.Process.Pid, syscall.SIGKILL); killErr != nil && !errors.Is(killErr, syscall.ESRCH) {
 		err = fmt.Errorf("kill worker process group: %w", killErr)
 	}
@@ -239,8 +248,6 @@ func (w *worker) stop() error {
 	return err
 }
 
-// reapFailure는 종료 코드·신호와 관계없이 리더 회수 여부만 판정한다.
-// 파이프를 보유한 하위 프로세스는 그룹 종료로 제거한다.
 func reapFailure(err error) error {
 	if _, exited := errors.AsType[*exec.ExitError](err); err == nil || exited || errors.Is(err, exec.ErrWaitDelay) {
 		return nil

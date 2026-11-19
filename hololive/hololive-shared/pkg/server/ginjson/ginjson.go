@@ -39,7 +39,6 @@ func (r jsonRender) WriteContentType(w http.ResponseWriter) {
 	}
 }
 
-// Respond는 data를 HTML-safe encoding/json/v2 JSON으로 인코딩해 status와 함께 응답한다.
 func Respond(c *gin.Context, status int, data any) {
 	c.Render(status, jsonRender{Data: data})
 }

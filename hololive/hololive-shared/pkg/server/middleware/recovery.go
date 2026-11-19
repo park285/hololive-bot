@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package middleware
 
 import (
@@ -31,9 +11,6 @@ import (
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 )
 
-// RecoveryMiddleware는 HTTP boundary에서 발생한 panic이 프로세스 밖으로 전파되지 않도록
-// 공통 복구 정책을 적용합니다. NewRuntimeRouter·NewMetricsServer·NewPprofServer가 만드는 router는
-// 이 미들웨어를 항상 설치하므로 신규 gin.Engine 작성자가 gin.Recovery를 별도로 기억하지 않아도 됩니다.
 func RecoveryMiddleware(ctx context.Context, logger *slog.Logger) gin.HandlerFunc {
 	log := logger
 	if log == nil {
@@ -76,7 +53,6 @@ func logRecoveredPanic(ctx context.Context, logger *slog.Logger, c *gin.Context,
 	sharedlog.Error(panicLogContext(ctx, c), logger, "http.request.panic_recovered", "", attrs...)
 }
 
-// 요청 context는 net/http가 nil 없이 돌려준다. 요청이 없을 때만 middleware를 만든 ctx를 쓴다.
 func panicLogContext(ctx context.Context, c *gin.Context) context.Context {
 	if c != nil && c.Request != nil {
 		return c.Request.Context()

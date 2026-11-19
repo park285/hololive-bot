@@ -80,7 +80,6 @@ func TestPublishAcceptsUnrelatedProjectionChange(t *testing.T) {
 	assertPublishSideEffects(t, pool, 1, 1, 1)
 }
 
-// 자기 target이 빠졌다가 새 generation에서 다시 추가되면(ABA) member_since가 증명 generation보다 커서 거절된다.
 func TestPublishRejectsReaddedOwnTarget(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -96,7 +95,6 @@ func TestPublishRejectsReaddedOwnTarget(t *testing.T) {
 	assertPublishSideEffects(t, pool, 0, 0, 0)
 }
 
-// RETIRED generation의 남은 valid_until은 발행 근거가 아니다.
 func TestPublishRejectsRetiredGenerationWithoutCurrent(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -212,7 +210,6 @@ func TestPublishRejectsHeaderExpiryCommittedWhileWaitingForProjectionGuard(t *te
 		publishers.Wait()
 	}()
 
-	// 이 writer PID에 막힌 Publish를 확인해 무관한 lock 대기를 근거로 삼지 않는다.
 	require.Eventually(t, func() bool {
 		var waiting bool
 

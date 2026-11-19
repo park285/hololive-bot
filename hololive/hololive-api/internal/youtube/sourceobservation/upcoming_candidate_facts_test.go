@@ -11,9 +11,6 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-// alarm-worker의 분 전 알림 후보(alarm_upcoming_candidates)는 이 consumer가 쓴 youtube_live_sessions 사실을 읽어
-// 후보 유지 여부를 판정한다. worker 시험은 아래 canonical 상태를 SQL로 세우므로, consumer 쪽 의미는 여기서 고정한다.
-
 func TestPremiereClassificationKeepsCandidateFacts(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

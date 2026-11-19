@@ -54,7 +54,6 @@ func TestStaleQuarantineRejectsIncompleteGroupWindow(t *testing.T) {
 	require.Zero(t, ledgerRows)
 }
 
-// stale sweep에는 claim 행이 없으므로 조회 창에 걸린 깨진 정체성 sibling은 오류가 아니라 그룹 밖으로 건너뛴다.
 func TestStaleQuarantineSkipsMalformedSiblingIdentity(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)
@@ -75,7 +74,6 @@ func TestStaleQuarantineSkipsMalformedSiblingIdentity(t *testing.T) {
 	require.Equal(t, domain.OutboxStatusPending, loadHandoffTestDelivery(t, pool, malformedDelivery.ID).status)
 }
 
-// stale sweep도 claim 경로처럼 완전한 조회 창 안에서 한 키의 행이 LogicalGroupLimit를 넘으면 아무 행도 바꾸지 않는다.
 func TestStaleQuarantineRejectsGroupBeyondLogicalLimit(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)

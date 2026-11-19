@@ -1,4 +1,3 @@
-// Package configtest는 hololive-api runtime 설정 시험이 공유하는 worker profile fixture와 기동 env helper다.
 package configtest
 
 import (
@@ -17,9 +16,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 )
 
-// irisRuntimeDiagnosticsTLS는 진단 서버 인증서와 CA PEM을 프로세스당 한 번 만든다. CA 파일은 호출한 시험마다
-// 그 시험의 임시 디렉터리에 다시 쓴다. 첫 시험의 디렉터리를 공유하면 그 시험이 끝난 뒤 처음 시스템 root를
-// 적재하는 시험이 지워진 SSL_CERT_FILE을 읽어 인증서 검증에 실패한다.
 var irisRuntimeDiagnosticsTLS = sync.OnceValues(func() (tls.Certificate, error) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer server.Close()
@@ -31,7 +27,6 @@ var irisRuntimeDiagnosticsTLS = sync.OnceValues(func() (tls.Certificate, error) 
 	return server.TLS.Certificates[0], nil
 })
 
-// APIProfileFixture는 hololive-api worker identity와 짝을 이루는 profile fixture 경로다.
 func APIProfileFixture(t *testing.T) string {
 	t.Helper()
 
@@ -43,7 +38,6 @@ func APIProfileFixture(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "testdata", "stack-worker-profile-api.json")
 }
 
-// SetRequiredLoadEnv: bot/admin 런타임 로더가 성공하는 최소 환경을 세운다.
 func SetRequiredLoadEnv(t *testing.T) {
 	t.Helper()
 	settingstest.UseProfileFixture(t, APIProfileFixture(t))
@@ -66,7 +60,6 @@ func SetH3CertificateEnv(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", settingstest.HololiveH3KeyPath)
 }
 
-// NewIrisRuntimeDiagnosticsServer: Iris runtime 진단 응답을 흉내내는 TLS 서버다.
 func NewIrisRuntimeDiagnosticsServer(t *testing.T, body string) *httptest.Server {
 	t.Helper()
 

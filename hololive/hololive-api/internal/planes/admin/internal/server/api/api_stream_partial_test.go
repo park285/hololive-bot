@@ -20,7 +20,6 @@ import (
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
-// 부분 응답을 드러내는 필드가 필요하면 공개 계약 변경이므로 별도 결정이 먼저다.
 func TestGetStreamsOrgAllPartialFailureRespondsInternalErrorWithoutPartialBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -39,7 +38,6 @@ func TestGetStreamsOrgAllPartialFailureRespondsInternalErrorWithoutPartialBody(t
 	assertOrgAllPartialRespondsInternalError(t, recorder, "live", handler.GetLiveStreams)
 	assertOrgAllPartialRespondsInternalError(t, recorder, "upcoming", handler.GetUpcomingStreams)
 
-	// provider의 org=all cache key는 live_streams_all, upcoming_streams_all_<hours>다.
 	for _, key := range mini.Keys() {
 		if strings.HasSuffix(key, "live_streams_all") || strings.Contains(key, "upcoming_streams_all_") {
 			t.Fatalf("cache key %q written for a partial org=all result", key)
@@ -72,7 +70,6 @@ func newPartialOrgUpstream(t *testing.T) *httptest.Server {
 	return upstream
 }
 
-// respondedErrorRecorder는 500 응답과 함께 기록되는 error 속성을 잡는 slog.Handler다.
 type respondedErrorRecorder struct {
 	err error
 }

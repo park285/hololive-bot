@@ -11,10 +11,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
 )
 
-// BotCommandStaleAfter는 command 소유권 heartbeat가 갱신해야 하는 고정 stale 경계다.
 const BotCommandStaleAfter = 5 * time.Minute
 
-// LoadAPIWorkerProfile은 hololive-api 역할의 Stack Worker Profile v1을 읽고 bot·source observation 설정 관계를 검증한다.
 func LoadAPIWorkerProfile() (*APIWorkerProfile, error) {
 	loaded, err := workercontract.LoadProfileFromEnv(APIWorkerIdentity())
 	if err != nil {
@@ -140,7 +138,6 @@ func sourceObservationProblems(settings SourceObservationWorkerSettings, worker 
 		problems = append(problems, "source_observation transaction timeout must be between 1s and 1m")
 	}
 
-	// 범위를 확인한 값만 곱해 잘못된 프로필의 정수 overflow가 lease 검증을 우회하지 못하게 한다.
 	if validBatch && validTransactionTimeout {
 		minimumLeaseMS := int64(settings.ClaimBatchSize)*timeoutMS + 10000
 		if settings.ClaimLeaseMS < minimumLeaseMS {

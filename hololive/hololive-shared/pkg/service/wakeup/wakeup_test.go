@@ -36,7 +36,6 @@ func TestSignalerPushesOnceWithinGuardWindow(t *testing.T) {
 	}
 }
 
-// 신호는 commit 뒤 부가 작업이므로 호출자가 취소돼도 보내고, Valkey 오류는 호출자에게 돌려주지 않는다.
 func TestSignalerIgnoresCallerCancellationAndFailsOpen(t *testing.T) {
 	client, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
 	signaler := NewSignaler(client, YouTubeDelivery, nil)

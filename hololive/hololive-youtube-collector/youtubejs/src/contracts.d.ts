@@ -58,9 +58,7 @@ export interface ChannelRequest {
   protocol_version: number;
   channel_id: string;
   kind: "live" | "metadata";
-  /** live 요청에만 있으며, 예정 영상 player 조회 수의 상한입니다. collector가 호출 예산으로 소유합니다. */
   max_schedule_lookups?: number;
-  /** live 요청에만 있으며, collector lease 슬롯 시각입니다. 재사용 일정의 원래 관측 시각으로 씁니다. */
   scheduled_for?: string;
   max_success_response_bytes: number;
 }
@@ -122,7 +120,6 @@ export interface FetcherSet {
   fetchChannel: ChannelFetcher;
   fetchChannelLiveCheck: ChannelLiveCheckFetcher;
   fetchVideoLiveCheck: VideoLiveCheckFetcher;
-  /** bootstrap에서 READY 전에 한 번 호출합니다. 요청 context 밖에서 공유 자원을 만듭니다. */
   prepare?: () => Promise<void>;
   proofStatus?: () => ProofStatus | undefined;
   close?: () => Awaitable<void>;
@@ -181,7 +178,6 @@ export interface RPCFailure {
 
 export interface RPCErrorBody extends ProtocolMeta {
   error: RPCFailure;
-  /** 실패 전까지 수행한 예정 영상 player 조회 수입니다. 0이면 생략합니다. */
   schedule_lookups?: number;
 }
 
@@ -212,14 +208,10 @@ export interface CommunityPost {
   videoId?: string;
 }
 
-/**
- * 목록 lockup 항목입니다. 시각을 싣지 않습니다. 공개·예정 시각은 영상별 video_live_check 응답만 근거로 씁니다.
- */
 export interface ContentItem {
   video_id: string;
   channel_id: string;
   title: string;
-  /** videos 탭 lockup의 구조화된 예정 표시가 있을 때만 true로 싣습니다. 시각 근거가 아닙니다. */
   is_upcoming?: true;
 }
 
@@ -236,7 +228,6 @@ export interface LiveSessionItem {
   title?: string;
   thumbnail_url?: string;
   scheduled_at?: string;
-  /** helper가 이전 poll에서 확인한 `scheduled_at`을 재사용할 때만 싣는, 그 확인 요청의 lease 슬롯 시각입니다. */
   schedule_observed_at?: string;
   started_at?: string;
   ended_at?: string;
@@ -264,7 +255,6 @@ export interface ChannelResult extends Pagination {
   profile: ChannelProfileItem;
   photo: ChannelPhotoVariant[];
   missing_tab?: boolean;
-  /** live_query와 함께만 있으며, 이 RPC가 수행한 예정 영상 player 조회 수입니다. */
   schedule_lookups?: number;
   live_query?: {
     channel_id: string;
@@ -276,7 +266,6 @@ export interface ChannelResult extends Pagination {
   };
 }
 
-/** 접근 제한으로 시각을 확인하지 못한 영상입니다. 정상 live_sessions와 중복될 수 없습니다. */
 export interface UnavailableLiveSession {
   video_id: string;
   channel_id: string;
@@ -287,7 +276,6 @@ export type ChannelLiveCheckOutcome = "LIVE_VIDEO" | "UPCOMING_VIDEO" | "CHANNEL
 export type VideoAvailability = "PUBLIC" | "MEMBERS_ONLY" | "PUBLIC_UNAVAILABLE" | "UNKNOWN";
 export type VideoAvailabilityMethod = "player_public" | "player_members_only" | "player_private" | "unknown";
 
-/** helper가 만드는 UNKNOWN 사유입니다. request_failed는 RPC 실패를 받은 collector만 기록합니다. */
 export type ChannelLiveCheckUnknownReason =
   | "identity_missing"
   | "identity_mismatch"
@@ -306,7 +294,6 @@ export type VideoLiveCheckUnknownReason =
   | "error_unclassified"
   | "availability_unclassified";
 
-/** 채널 /live 주소 해석 결과입니다. 음성은 identity가 확인된 UPCOMING_VIDEO와 CHANNEL_PAGE뿐입니다. */
 export interface ChannelLiveCheckResult {
   protocol_version: number;
   channel_id: string;
@@ -316,7 +303,6 @@ export interface ChannelLiveCheckResult {
   unknown_reason?: ChannelLiveCheckUnknownReason;
 }
 
-/** 영상 player 사실입니다. 선택 boolean·시각은 원시 필드가 없으면 생략하며 false로 채우지 않습니다. */
 export interface VideoLiveCheckResult {
   protocol_version: number;
   video_id: string;
@@ -332,7 +318,6 @@ export interface VideoLiveCheckResult {
   scheduled_at?: string;
   waiting_state_confirmed?: boolean;
   ended_at?: string;
-  /** player microformat publishDate가 시·분·초와 offset을 가진 RFC3339일 때만 있습니다. */
   published_at?: string;
   availability: VideoAvailability;
   method: VideoAvailabilityMethod;

@@ -1,5 +1,3 @@
--- CURRENT 세대의 PK 범위를 한 번 읽어 입력과 비교한 뒤 변경 tuple만 찾아 갱신한다.
--- membership은 migration 또는 새 generation에서만 부여하며, NULL을 heartbeat로 복구하지 않는다.
 WITH current_targets AS MATERIALIZED (
     SELECT ctid, subject_key, observation_kind, not_before
     FROM youtube_collection_targets

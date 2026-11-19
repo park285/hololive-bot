@@ -69,7 +69,6 @@ func sopiaSky(c *canvas, in box) {
 		l.Glow(in.X+in.W*0.15, in.bottom(), in.W*0.55, 0xB36BE0, 0.34)
 		l.Glow(in.right(), in.Y+in.H*0.2, in.W*0.5, 0x5FA8FF, 0.26)
 
-		// 고정 난수로 별을 뿌린다(같은 판형은 항상 같은 하늘).
 		seed := uint32(11)
 		rnd := func() float64 {
 			seed = seed*1664525 + 1013904223
@@ -246,7 +245,6 @@ func sopiaRowFrame(c *canvas, p sopiaPal, r box, quiet bool) {
 
 func sopiaBadge(c *canvas, p sopiaPal, bcx, cy float64, d day) {
 	sat := d.date.Weekday() == time.Saturday
-	// 고리 앞쪽 호가 날짜 숫자 아래를 지나도록 중심을 내린다.
 	ringM := place(bcx, cy+8, 1, deg(-13))
 	ring := func(a0, a1 float64) {
 		var s shape

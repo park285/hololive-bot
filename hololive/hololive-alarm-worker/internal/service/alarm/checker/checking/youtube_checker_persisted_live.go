@@ -10,8 +10,6 @@ import (
 )
 
 const (
-	// LIVE 알림 근거는 사전 알림을 포함해 라이브 시작 전 이 범위부터 인정한다.
-	// 기준을 평가 시각이 아니라 실제 시작 시각에 두어야 24시간 넘게 이어지는 방송도 최초 알림을 근거로 유지한다.
 	liveDispatchEvidenceLookback      = 24 * time.Hour
 	persistedLiveGuardrailGraceWindow = 2 * time.Minute
 )
@@ -26,14 +24,10 @@ type YouTubeLiveSessionSource interface {
 	LoadRecentSessions(ctx context.Context, channelIDs []string, now time.Time) ([]PersistedYouTubeLiveSession, error)
 	LoadRecentLiveChannelIDs(ctx context.Context, channelIDs []string, now time.Time) ([]string, error)
 	LoadConfirmedPremiereIDs(ctx context.Context, videoIDs []string) (map[string]struct{}, error)
-	// 두 조회는 stream마다 주어진 하한 이후의 LIVE 알림만 근거로 본다.
 	RecentlyDispatchedStreamIDs(ctx context.Context, sinceByStreamID map[string]time.Time) (map[string]struct{}, error)
 	RecentlySettledLiveStreamRooms(ctx context.Context, sinceByStreamID map[string]time.Time) (LiveStreamRoomSettlements, error)
 }
 
-// LiveStreamRoomSettlements는 stream별로 dispatch ledger가 결론을 낸 방이다.
-// Sent는 발송을 마친 방이다. TerminalFailed는 catchup delivery가 DLQ·격리·취소로 끝난 방이며, ledger가 같은
-// delivery의 재발행을 rejected_terminal로 거절하므로 catchup을 다시 만들지 않는다.
 type LiveStreamRoomSettlements struct {
 	Sent           map[string]map[string]struct{}
 	TerminalFailed map[string]map[string]struct{}
@@ -46,10 +40,6 @@ func newLiveStreamRoomSettlements() LiveStreamRoomSettlements {
 	}
 }
 
-// liveDispatchEvidenceSince는 방송별 알림 근거의 하한이다. 실제 시작 시각, 처음 LIVE로 관측한 시각, 평가 시각 순으로
-// 과거인 첫 값을 기준으로 삼는다. YouTube가 실제 시작 시각을 주지 않아도 처음 관측 시각이 있으면 24시간을 넘긴 방송의
-// 최초 알림을 근거로 유지한다. 예정 시각은 쓰지 않는다. 갱신되지 않은 예정 시각은 며칠 전 사전 알림까지 근거로 넓혀
-// 시작 catchup을 막는다.
 func liveDispatchEvidenceSince(stream *domain.Stream, liveFirstSeenAt, now time.Time) time.Time {
 	anchor := now.UTC()
 

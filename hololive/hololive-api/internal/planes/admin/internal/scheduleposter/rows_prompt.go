@@ -15,7 +15,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 두 지시문은 모델 검증을 거친 원문이다. 고치면 다시 검증해야 한다.
 var (
 	//go:embed prompts/extract.txt
 	extractPromptTemplate string
@@ -32,7 +31,6 @@ const (
 
 var channelTitlePattern = regexp.MustCompile(`(?i)Ch\.|Ch。|ch\.|Channel|チャンネル|hololive|ReGLOSS|FLOW GLOW|holoX|所属`)
 
-// buildExtractPrompt의 형식은 모델 검증에 쓴 하니스와 바이트 단위로 같아야 한다.
 func buildExtractPrompt(weekStart, weekEnd time.Time, named []*domain.Member) string {
 	var prompt strings.Builder
 
@@ -130,7 +128,6 @@ func posterZone(zones []string) string {
 	return zone
 }
 
-// earlierRenderings는 다른 포스터의 모델 출력이라 용어집과 같은 기준으로 걸러 한 항목이 지시문의 한 줄을 넘지 않게 한다.
 func earlierRenderings(terms []posterstore.Term) map[string]string {
 	renderings := map[string]string{}
 
@@ -159,8 +156,6 @@ func writePairs(prompt *strings.Builder, pairs map[string]string) {
 	}
 }
 
-// buildTranslatePrompt의 형식은 memo가 비면 모델 검증에 쓴 하니스와 바이트 단위로 같아야 한다. Editor notes 절(memo가 붙임)은 그 검증 밖이다.
-// 인자 zone은 포스터 전체 행에서 정한 값이다. 넘긴 행이 일부일 수 있어 여기서 계산하지 않는다.
 func buildTranslatePrompt(
 	rows []extractedRow, zone string, owner *domain.Member, named []*domain.Member, glossary, renderings map[string]string, memo string,
 ) string {
@@ -238,7 +233,6 @@ func rowLine(index int, row extractedRow) string {
 }
 
 var (
-	// 닫는 대괄호는 원문 뒤에 코드가 붙이므로 여는 쪽만으로 판정한다.
 	markerHeads    = []string{"[update:", "[badges:", "[day off", "[" + string(posterstore.RowCancelled)}
 	markerBrackets = strings.NewReplacer("[", "(", "]", ")")
 )
@@ -249,7 +243,6 @@ func forgesMarker(text string) bool {
 	return slices.ContainsFunc(markerHeads, func(head string) bool { return strings.Contains(lower, head) })
 }
 
-// markerSafe는 원문이 코드가 붙이는 표지를 흉내 내지 못하게 한다. 표지가 없는 원문은 하니스와 바이트 단위로 같아야 해서 그대로 둔다.
 func markerSafe(text string) string {
 	if !forgesMarker(text) {
 		return text

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package youtubedispatch
 
 import (
@@ -43,20 +23,16 @@ import (
 
 const defaultLogicalGroupScanLimit = 100
 
-// Dependencies는 dispatcher의 저장소와 메시지 전달 의존성을 명시한다.
 type Dependencies struct {
 	DB             deliverysql.DeliveryDB
 	Cache          alarmstore.SubscriberCache
 	Sender         delivery.PreparedMessageSender
 	Renderer       *template.Renderer
 	MessageStrings *messagestrings.Store
-	// MemberNames는 알림 표시명의 PostgreSQL 정본 조회다. Valkey 장애가 표시명을 바꾸거나 발송을 막지 않게 한다.
-	MemberNames format.MemberNameSource
-	// WakeupCache는 hololive-api YouTube plane의 commit 신호로 빈 대기를 깨운다. 없으면 poll_interval_ms 주기로만 조회한다.
-	WakeupCache cache.LowLevelCache
+	MemberNames    format.MemberNameSource
+	WakeupCache    cache.LowLevelCache
 }
 
-// NewDispatcher는 의존성을 연결하고 전이 저장소 초기화 오류를 반환한다. 작업 루프는 시작하지 않는다.
 func NewDispatcher(deps Dependencies, logger *slog.Logger, config *Config) (*Dispatcher, error) {
 	if deps.DB == nil || reflectutil.IsNil(deps.DB) {
 		return nil, errors.New("initialize youtube dispatcher: db is required")

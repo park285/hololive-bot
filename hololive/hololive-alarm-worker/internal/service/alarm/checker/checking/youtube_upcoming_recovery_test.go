@@ -25,7 +25,6 @@ func TestUpcomingCandidateVirtualTimePreservesSelectedCategoryUntilStart(t *test
 
 		time.Sleep(65 * time.Second)
 
-		// 현재 crossing에서는 5분을 다시 선정할 수 없어도 저장된 후보는 유효하다.
 		_, crossed := targetpolicy.NewTargetMinutePolicy([]int{5}).HighestCrossed(start, targetpolicy.ResolveEvaluationWindow(now.Add(time.Minute), time.Now(), 75*time.Second))
 		require.False(t, crossed)
 		require.Empty(t, upcomingCandidateTermination(&candidate, nil, time.Now()))

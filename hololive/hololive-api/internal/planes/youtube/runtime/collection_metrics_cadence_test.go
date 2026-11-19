@@ -27,7 +27,6 @@ type collectionCadenceCase struct {
 func TestCollectionTargetCadenceMatchesSchedulerCandidates(t *testing.T) {
 	const idleLeaseState = "IDLE"
 
-	// collector 내부 패키지를 복제하지 않고 실제 후보 SQL을 같은 migration DB에서 실행한다.
 	candidateSQL, err := os.ReadFile("../../../../../hololive-youtube-collector/internal/runtime/joblease/queries/subject_candidates_for_projection.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -105,8 +104,6 @@ func assertCollectionCadenceMetrics(t *testing.T, pool *pgxpool.Pool, fixtureTim
 		t.Fatalf("metric due = %v, want scheduler candidate count %d", got, tc.wantDue)
 	}
 
-	// DB 시각으로 조회 구간을 감싸서 실제 effective due의 나이를 검증한다.
-	// recently_eligible은 lease due가 더 오래됐어도 eligibility 이후의 나이만 허용한다.
 	dueAt := fixtureTime.Add(tc.wantEffectiveAt)
 	minimum := max(0, before.Sub(dueAt).Seconds())
 	maximum := max(0, after.Sub(dueAt).Seconds())
@@ -170,7 +167,6 @@ func seedCollectionCadence(t *testing.T, pool *pgxpool.Pool, tc collectionCadenc
 		t.Fatal(err)
 	}
 
-	// target 갱신 trigger가 runtime bundle의 현재 cadence를 갱신하되 완료한 lease의 이전 cadence는 보존한다.
 	if _, err := pool.Exec(ctx, `
 		UPDATE youtube_collection_targets SET poll_interval_ms=$2 WHERE projection_generation=$1
 	`, generation, tc.current.Milliseconds()); err != nil {

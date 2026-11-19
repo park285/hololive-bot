@@ -12,9 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
 
-// BroadcastTimeSummary는 한 멤버가 기간 안에 끝낸 방송의 합계와 목록이다.
-// Partial은 조회 예산이나 합산 상한에 걸려 기간 안 방송을 다 모으지 못했다는 뜻이다.
-// Now는 목록 시각에서 연도를 생략할지 정하는 기준이다.
 type BroadcastTimeSummary struct {
 	MemberName string
 	Days       int
@@ -25,7 +22,6 @@ type BroadcastTimeSummary struct {
 
 const broadcastTimePartialNotice = "조회 한도에 도달해 최근 방송 일부만 합산했습니다."
 
-// 합계는 시작·종료가 확인된 방송만 더하며, 종료를 확인하지 못한 방송은 횟수에만 넣고 그 수를 함께 밝힌다.
 func (f *ResponseFormatter) BroadcastTime(ctx context.Context, summary *BroadcastTimeSummary) string {
 	name := broadcastHistoryDisplayLine(summary.MemberName)
 
@@ -72,7 +68,6 @@ func (f *ResponseFormatter) BroadcastTime(ctx context.Context, summary *Broadcas
 		b.WriteByte('\n')
 	}
 
-	// 1건이어도 접는다. 머리 문단의 합계가 요약이고 목록은 전체보기에서 본다.
 	return f.foldSeeMore(strings.TrimRight(b.String(), "\n"), true)
 }
 
@@ -145,7 +140,6 @@ func broadcastTimeDate(t, now time.Time) string {
 	return timeutil.FormatKST(t, broadcastHistoryTimeLayout)
 }
 
-// 예시 명령은 복사할 수 있게 escape만 한다.
 func (f *ResponseFormatter) BroadcastTimeUsage() string {
 	return "❌ 멤버 이름을 입력해주세요.\n예) " + kakaoformat.EscapeMarkdown(f.Prefix()+"방송시간 페코라")
 }

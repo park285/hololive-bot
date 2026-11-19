@@ -46,8 +46,6 @@ func youtubeStatus(state string) func(string) (*iris.ReplyStatusSnapshot, error)
 	}
 }
 
-// youtubeHandoffFixture는 send engine이 202로 보내고 SENT로 정산한 뒤 부모 outbox 집계도 SENT가 된, handoff 확인
-// 대기 고정 요청 하나다.
 type youtubeHandoffFixture struct {
 	pool          *pgxpool.Pool
 	transition    *store.TransitionStore
@@ -112,7 +110,6 @@ func sendYouTubeHandoffFixture(t *testing.T) youtubeHandoffFixture {
 	require.True(t, engine.completeLifecycleSent(ctx, &attempt, store.DeliveryModePerRoom, &result))
 	require.Len(t, sender.ids, 1)
 
-	// dispatcher가 발송 정산 뒤 하듯 부모 outbox 집계를 SENT로 맞춘다. 실패 정산은 이 SENT 부모를 되돌려야 한다.
 	require.NoError(t, newOutboxAggregateProjector(store.NewDeliveryRepository(pool, logger)).Project(ctx, result.TouchedOutboxIDs))
 
 	return youtubeHandoffFixture{

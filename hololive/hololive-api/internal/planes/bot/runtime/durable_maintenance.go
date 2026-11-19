@@ -75,7 +75,6 @@ func (r *durableRuntime) observeReplyOutboxManualReview(ctx context.Context) {
 	stats, err := r.outbox.ManualReviewStats(ctx)
 	if err != nil {
 		replyOutboxManualReviewObservationFailuresTotal.Inc()
-		// 이전 건수·경과를 0으로 덮지 않고 유효성만 내린다. 마지막 성공 시각도 유지해 관측 공백을 드러낸다.
 		replyOutboxManualReviewSnapshotSuccess.Set(0)
 		r.logError("observe reply outbox manual review backlog", err)
 
@@ -137,8 +136,6 @@ func safeErrorLogAttrs(err error) ([]any, bool) {
 		return attrs, true
 	}
 
-	// durability의 ErrInvalidArgument 계열은 위반된 필드명과 제약만 담고 메시지 본문·방·발신자 값은
-	// 담지 않는다. 그 불변식 덕분에 원문을 그대로 로그에 실어도 개인정보가 새지 않는다.
 	if errors.Is(err, durability.ErrInvalidArgument) {
 		return []any{
 			slog.String("reason", "invalid_argument"),

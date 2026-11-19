@@ -19,10 +19,6 @@ const (
 	prunePlanBatchSize    = 100
 )
 
-// 운영 풀은 cache_statement로 같은 prepared statement를 15초마다 다시 실행하므로, custom plan과 기본 plan_cache_mode(auto)가 여러 번 실행된 뒤 고르는
-// 계획을 함께 고정한다. 기본 모드는 generic plan 비용이 custom plan 평균보다 높으면 custom plan을 유지한다. 강제 generic plan(force_generic_plan)에서도 세
-// candidate CTE는 cutoff Index Cond로 terminal 부분 인덱스를 쓴다. 다만 LIMIT $3 값을 모르는 플래너가 candidate를 수백 행(cutoff 선택도 1/3에 LIMIT
-// 기본 10%)으로 추정해 DELETE ... USING 조인만 Hash Join과 seq scan을 고르므로, 그 모드는 여기서 요구하지 않는다.
 func TestDurablePruneUsesTerminalIndexesInsteadOfScanningRetainedHistory(t *testing.T) {
 	pool := newDurabilityPool(t)
 	ctx := t.Context()
@@ -89,7 +85,6 @@ func explainDurablePrune(ctx context.Context, t *testing.T, pool *pgxpool.Pool, 
 	tx, err := conn.Begin(ctx)
 	require.NoError(t, err)
 
-	// EXPLAIN ANALYZE는 실제로 삭제하므로 트랜잭션을 되돌려 다음 모드가 같은 데이터로 계획되게 한다.
 	defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
 
 	_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = "+mode)
@@ -103,7 +98,6 @@ func explainDurablePrune(ctx context.Context, t *testing.T, pool *pgxpool.Pool, 
 
 	var planJSON []byte
 
-	// auto 모드는 custom plan 5회 뒤부터 generic plan과 비용을 비교하므로 마지막 실행의 계획을 본다.
 	for range executions {
 		require.NoError(t, tx.QueryRow(ctx, explain).Scan(&planJSON))
 	}

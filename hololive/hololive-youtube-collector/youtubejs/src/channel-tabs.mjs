@@ -6,7 +6,7 @@ import { inspectChannelTab } from "./collection-client.mjs";
 
 /** @typedef {import("youtubei.js").YT.Channel} Channel */
 
-/** 원시 목록이 증명하는 부재만 missing으로 반환합니다.
+/**
  * @param {Channel} channel
  * @param {string} tab
  * @param {() => Promise<Channel>} load

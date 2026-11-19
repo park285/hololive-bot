@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// RowStatus는 포스터가 그 칸에 대해 말한 상태이며 migration 019의 CHECK와 같은 값이다.
 type RowStatus string
 
 const (
@@ -32,33 +31,25 @@ func (s RowStatus) Valid() bool {
 	}
 }
 
-// MaxRows는 migration 019의 ordinal CHECK와 같다.
 const MaxRows = 100
 
 const (
 	maxRowTextChars = 1000
 	maxRowTZChars   = 40
 	maxRowListItems = 40
-	// 하루 밀기 값의 상한이며 migration 019의 rows_day_shift CHECK와 같다.
 	maxRowsDayShift = 1
 )
 
 var rowTimePattern = regexp.MustCompile(`^([01]?\d|2\d):[0-5]\d$`)
 
-// Term은 번역이 정한 이름 표기 하나다. Basis는 official_ko, translated, transliterated 가운데 하나다.
 type Term struct {
 	Source string `json:"source"`
 	Ko     string `json:"ko"`
 	Basis  string `json:"basis"`
 }
 
-// Row는 포스터의 일정 한 칸이다. Day·Start·End는 JST 날짜와 "HH:MM"(심야 표기는 29:59까지)이고 시각이 없으면 빈 문자열이다.
-// JST가 아닌 포스터의 행은 JST로 바꿔 TZ를 "JST"로, SourceZone을 포스터에 적힌 시간대로 둔다. JST 행의 SourceZone은 비어 있다.
-// PublishedRows는 Terms, DoubtKo, Warnings를 비우고, PosterRows는 Terms만 비운다.
 type Row struct {
-	// Ordinal은 RecordRows가 묶음 안 순서대로 1부터 매긴다.
-	Ordinal int `json:"ordinal"`
-	// Day는 encoding/json/v2가 format 태그를 거부해(Go 1.27.4) RecordRows가 DateOnly 문자열로 따로 넣는다.
+	Ordinal    int       `json:"ordinal"`
 	Day        time.Time `json:"-"`
 	Start      string    `json:"start_time"`
 	End        string    `json:"end_time"`
@@ -74,45 +65,36 @@ type Row struct {
 	NoteKo     string    `json:"note_ko"`
 	Terms      []Term    `json:"terms"`
 	DoubtKo    string    `json:"doubt_ko"`
-	// Warnings는 구조 검사가 이 행에서 찾은 경고다. 저장을 막지 않는다.
-	Warnings []string `json:"warnings"`
-	// EditedAt은 관리자가 한국어 다섯 칸을 마지막으로 고친 시각이며 고친 적이 없으면 zero다. PolishSlot만 쓴다.
-	EditedAt time.Time `json:"-"`
+	Warnings   []string  `json:"warnings"`
+	EditedAt   time.Time `json:"-"`
 }
 
-// PendingRows는 일정표 행을 뽑을 확정본이다. 그 사이 거절·주 범위 수정·재추출 예약으로 RowsRevision이 오르면 결과를 기록하지 않는다.
 type PendingRows struct {
-	ID        int64
-	ChannelID string
-	ImageURL  string
-	// ImageSHA256은 썸네일 후보만 채운다.
+	ID           int64
+	ChannelID    string
+	ImageURL     string
 	ImageSHA256  string
 	WeekStart    time.Time
 	WeekEnd      time.Time
 	RowsRevision int64
 }
 
-// PublishedSchedule은 !스케쥴이 보여 줄 확정본의 행 묶음이다.
 type PublishedSchedule struct {
-	PosterID    int64
-	WeekStart   time.Time
-	WeekEnd     time.Time
-	ExtractedAt time.Time
-	PostedAt    time.Time
-	// RowsPending은 재추출이 예약돼 행 묶음이 바뀔 예정이라는 뜻이다. 그동안 새 글을 대응하지 않는다.
-	RowsPending bool
-	// RowsDayShift는 행 묶음의 JST 날짜가 주 범위보다 며칠 밀렸는지(-1..1)다. 게시 범위와 카드 창은 주 범위를 이만큼 민다.
+	PosterID     int64
+	WeekStart    time.Time
+	WeekEnd      time.Time
+	ExtractedAt  time.Time
+	PostedAt     time.Time
+	RowsPending  bool
 	RowsDayShift int
 	Rows         []Row
-	// Changes는 현재 행 묶음에 대응한 글의 변경 가운데 거절(rejected)을 뺀 것이다. 같음(same)은 Applied가 아니다.
-	Changes []Change
+	Changes      []Change
 }
 
 func (s *PublishedSchedule) Slots() []Slot {
 	return ApplyChanges(s.Rows, s.Changes)
 }
 
-// UpdatedAt은 행 묶음을 뽑은 시각, Applied인 변경을 기록한 시각, 관리자가 행이나 Applied인 변경의 한국어를 고친 시각 가운데 가장 늦은 값이다.
 func (s *PublishedSchedule) UpdatedAt() time.Time {
 	latest := s.ExtractedAt
 
@@ -137,7 +119,6 @@ func laterOf(a, b time.Time) time.Time {
 	return a
 }
 
-// PendingRows의 today는 JST 날짜다.
 func (s *Store) PendingRows(ctx context.Context, today time.Time, limit int) ([]PendingRows, error) {
 	rows, err := s.pool.Query(ctx, pendingRowsSQL, today, min(max(limit, 1), maxListLimit))
 	if err != nil {
@@ -156,7 +137,6 @@ func (s *Store) PendingRows(ctx context.Context, today time.Time, limit int) ([]
 	return pending, nil
 }
 
-// WeekTerms는 같은 주를 덮는 다른 확정본이 먼저 정한 표기를 저장한 순서대로 돌려준다. 같은 원문이 여러 번 나올 수 있다.
 func (s *Store) WeekTerms(ctx context.Context, item PendingRows) ([]Term, error) {
 	rows, err := s.pool.Query(ctx, weekTermsSQL, item.ID, item.WeekStart, item.WeekEnd)
 	if err != nil {
@@ -175,8 +155,6 @@ func (s *Store) WeekTerms(ctx context.Context, item PendingRows) ([]Term, error)
 	return terms, nil
 }
 
-// RecordRows는 이전 행 묶음과 그 하루 밀기 값(PublishedSchedule.RowsDayShift)을 새 값으로 바꾼다. 묶음이 ValidateRows를 통과하지
-// 못하거나 dayShift가 -1..1 밖이면 오류이고, 그 사이 거절·주 범위 수정·재추출 예약으로 대상이 달라졌으면 아무것도 바꾸지 않고 false를 돌려준다.
 func (s *Store) RecordRows(ctx context.Context, item PendingRows, rows []Row, dayShift int) (bool, error) {
 	if dayShift < -maxRowsDayShift || dayShift > maxRowsDayShift {
 		return false, fmt.Errorf("record schedule poster rows: day shift %d is outside -%d..%d", dayShift, maxRowsDayShift, maxRowsDayShift)
@@ -218,8 +196,6 @@ func (s *Store) RecordRows(ctx context.Context, item PendingRows, rows []Row, da
 	return recorded, nil
 }
 
-// ValidateRows는 migration 019의 CHECK와 같은 조건을 DB에 가기 전에 검사한다. 글 길이는 char_length처럼 문자 수로 세고,
-// jsonb와 text가 받지 못하는 잘못된 UTF-8과 NUL 문자, DateOnly로 네 자리 연도가 되지 않는 날짜도 거부한다.
 func ValidateRows(rows []Row) error {
 	if len(rows) == 0 || len(rows) > MaxRows {
 		return fmt.Errorf("validate schedule poster rows: rows must be 1..%d, got %d", MaxRows, len(rows))
@@ -325,7 +301,6 @@ func encodeRows(rows []Row) (string, error) {
 	return string(payload), nil
 }
 
-// RecordRowsFailure는 이전 행 묶음을 그대로 둔다. 실패 사유 reason은 관리자에게 보이는 분류다.
 func (s *Store) RecordRowsFailure(ctx context.Context, item PendingRows, reason string) (bool, error) {
 	tag, err := s.pool.Exec(ctx, recordRowsFailureSQL, item.ID, item.RowsRevision, reason)
 	if err != nil {
@@ -335,9 +310,6 @@ func (s *Store) RecordRowsFailure(ctx context.Context, item PendingRows, reason 
 	return tag.RowsAffected() == 1, nil
 }
 
-// PublishedRows의 day는 JST 날짜다. 같은 멤버에서 queries/published_poster.sql의 규칙(오늘을 덮는 주, 없으면 7일 안에 시작하는 주)으로
-// 확정본 하나를 고르고, 행을 저장한 적이 없으면 false다.
-// 행과 그 묶음의 반영 변경은 한 snapshot에서 읽어, 묶음이 바뀌는 중에도 다른 묶음의 변경이 섞이지 않는다.
 func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Time) (PublishedSchedule, bool, error) {
 	var schedule PublishedSchedule
 
@@ -393,17 +365,13 @@ func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Ti
 	return schedule, true, nil
 }
 
-// PosterSchedule은 포스터 하나의 행 묶음과 그 포스터가 게시되는지다. 확정본이 아니거나 묶음을 저장한 적이 없으면
-// Rows와 Changes가 비고 ExtractedAt은 zero value다.
 type PosterSchedule struct {
 	PublishedSchedule
 
-	Confirmed bool
-	// TodayPosterID는 같은 멤버로 그 날짜에 PublishedRows가 고르는 확정본이며 없으면 0이다. 확정본이 아니면 0이다.
+	Confirmed     bool
 	TodayPosterID int64
 }
 
-// PosterRows의 day는 JST 날짜다. 포스터가 없으면 ErrNotFound다. 포스터, 게시 대상, 행과 반영 변경은 한 snapshot에서 읽는다.
 func (s *Store) PosterRows(ctx context.Context, id int64, day time.Time) (PosterSchedule, error) {
 	var schedule PosterSchedule
 
@@ -428,7 +396,6 @@ func (s *Store) PosterRows(ctx context.Context, id int64, day time.Time) (Poster
 			return nil
 		}
 
-		// 확정본은 migration 010의 CHECK가 주 범위를 요구한다.
 		if weekStart != nil && weekEnd != nil {
 			schedule.WeekStart, schedule.WeekEnd = *weekStart, *weekEnd
 		}

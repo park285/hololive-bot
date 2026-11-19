@@ -149,7 +149,6 @@ func TestNewAPIRouterValidation(t *testing.T) {
 func TestAPIRateLimitNilCacheAndAbortResponse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	// cache가 없으면 통과시키는 middleware 대신 기동 오류다(fail-closed).
 	if handler, err := apiRateLimitMiddleware(nil, nil); err == nil || handler != nil {
 		t.Fatalf("apiRateLimitMiddleware(nil) = (%v, %v), want startup error", handler != nil, err)
 	}
@@ -212,7 +211,6 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 	}
 }
 
-// testDomainHandlers는 route 등록과 인증만 검사하는 시험용이다. 각 handler의 의존성이 비어 있어 본문은 호출할 수 없다.
 func testDomainHandlers() *server.DomainHandlers {
 	return &server.DomainHandlers{
 		Member:   &server.MemberHandler{},

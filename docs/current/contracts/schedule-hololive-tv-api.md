@@ -2,7 +2,7 @@
 
 ## 상태와 소유권
 
-`Holodex`는 live/upcoming/channel identity의 primary source입니다. 공식 일정 source는 `Holodex`가 실패한 경우 org upcoming을 보충하는 secondary source입니다. channel schedule(`GetChannelSchedule`)은 Holodex만 원천으로 쓰고 실패를 그대로 돌려줍니다(`DEC-20260926-hololive-source-fallbacks-retirement`).
+`Holodex`는 live/upcoming/channel identity의 primary source입니다. 공식 일정 source는 `Holodex`가 실패한 경우 org upcoming을 보충하는 secondary source입니다. channel schedule(`GetChannelSchedule`)은 Holodex만 원천으로 쓰고 실패를 그대로 돌려줍니다.
 
 공식 일정 source는 `GET https://schedule.hololive.tv/api/list/2`만 소비합니다. `/lives/hololive` HTML scraper, source mode, API-to-HTML fallback 및 관련 rollback branch는 지원하지 않습니다.
 
@@ -27,7 +27,7 @@ API의 `isLive` 값은 live truth로 사용하지 않습니다. 모든 유효한
 | Redirect용 trailing slash | 사용하지 않음 |
 | Timeout | `OFFICIAL_SCHEDULE_TIMEOUT_SECONDS`, 기본 15초 |
 | Body limit | `MAX_RESPONSE_BODY_BYTES`, 기본 2MiB |
-| Cache expiry | 없음. channel schedule 보충 경로와 그 Valkey 캐시를 `DEC-20260926-hololive-source-fallbacks-retirement`로 삭제했습니다. |
+| Cache expiry | 없음. channel schedule 보충 경로와 그 Valkey 캐시를 삭제했습니다. |
 | Process cache | `OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS`, 기본 15초 |
 
 Base URL은 HTTPS origin이어야 하며 userinfo, path, query, fragment를 포함할 수 없습니다. startup validation과 request construction에서 모두 fail closed합니다.
@@ -92,7 +92,7 @@ video identity는 검증된 `v` query입니다. output link는 `https://www.yout
 
 하나의 normalized key가 정확히 하나의 distinct ChannelID를 가리킬 때만 매핑합니다. 같은 ChannelID로 수렴하는 중복 alias는 하나로 인정합니다. 서로 다른 ChannelID가 충돌하거나 key가 없으면 `ChannelID`를 비워 둡니다.
 
-unmapped stream은 org upcoming 결과에 유지합니다. partial/contains matching은 사용하지 않습니다. 식별 색인을 만들 멤버 데이터를 적재하지 못하면 빈 색인으로 두지 않고 scraper service 생성(기동)이 실패합니다(`DEC-20260926-hololive-source-fallbacks-retirement`).
+unmapped stream은 org upcoming 결과에 유지합니다. partial/contains matching은 사용하지 않습니다. 식별 색인을 만들 멤버 데이터를 적재하지 못하면 빈 색인으로 두지 않고 scraper service 생성(기동)이 실패합니다.
 
 ## Fallback semantics
 
@@ -127,11 +127,11 @@ channel cache -> Holodex /live?channel_id=...
               -> 실패는 그대로 오류(보충·캐시 없음)
 ```
 
-Holodex 실패를 YouTube channel source나 공식 API로 보충하던 경로, 그 보충 결과를 5분(`CacheTTL.ChannelSchedule`) 다시 캐시하던 provider 경로, htmlscraper의 1분 보충 TTL은 `DEC-20260926-hololive-source-fallbacks-retirement`(PLN-20260926-stack-audit-refactoring T19)로 함께 삭제했습니다. 성공한 Holodex 결과만 `CacheTTL.ChannelSchedule` 동안 캐시합니다. T18(2026-09-26) 30일 로그에서 이 경로의 fallback 경고는 0건이었습니다.
+Holodex 실패를 YouTube channel source나 공식 API로 보충하던 경로, 그 보충 결과를 5분(`CacheTTL.ChannelSchedule`) 다시 캐시하던 provider 경로, htmlscraper의 1분 보충 TTL은 함께 삭제했습니다. 성공한 Holodex 결과만 `CacheTTL.ChannelSchedule` 동안 캐시합니다. T18(2026-09-26) 30일 로그에서 이 경로의 fallback 경고는 0건이었습니다.
 
 ### Live
 
-Holodex live primary가 실패하면 source failure를 반환합니다. 공식 일정의 upcoming-only 결과로 success-empty를 만들지 않습니다. `GetChannelsLiveStatus`의 YouTube live-status scraper fallback은 `DEC-20260926-hololive-live-status-scraper-fallback-removal`로 삭제했으며, alarm-worker는 이 source failure를 받으면 persisted live session으로 판단합니다.
+Holodex live primary가 실패하면 source failure를 반환합니다. 공식 일정의 upcoming-only 결과로 success-empty를 만들지 않습니다. `GetChannelsLiveStatus`의 YouTube live-status scraper fallback은 삭제했으며, alarm-worker는 이 source failure를 받으면 persisted live session으로 판단합니다.
 
 ## Cache와 동시성
 

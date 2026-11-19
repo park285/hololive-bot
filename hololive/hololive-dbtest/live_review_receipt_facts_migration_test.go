@@ -9,14 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// liveReviewReceiptSideFactsSQL은 270 youtube_live_review_current_receipt가 호출마다 영수증에서 다시 계산하던 식이다.
 const liveReviewReceiptSideFactsSQL = `public.youtube_live_review_semantic_facts(
 	CASE WHEN jsonb_typeof(receipt.original_snapshot->'head') = 'object'
 	     THEN jsonb_set(receipt.original_snapshot,'{head}',(receipt.original_snapshot->'head') - 'ignored_absence_scheduled_for')
 	     ELSE receipt.original_snapshot
 	END)`
-
-// 기존 246·262 형식 영수증의 판정은 저장 사실로 바꾼 뒤에도 같고, 저장 사실은 270 영수증 쪽 식과 같다.
 
 func TestLiveReviewReceiptFactsStoredOnRecordAndImmutable(t *testing.T) {
 	t.Parallel()
@@ -50,7 +47,7 @@ func TestLiveReviewReceiptFactsPrivilegesOverrideBroadDefaultACL(t *testing.T) {
 	ctx := t.Context()
 	roles := createObservationGrantRoles(t, pool)
 	runtime := pgx.Identifier{roles.runtime}.Sanitize()
-	// 이 시험은 테이블 기본 권한만 넓혀 invoker 기록 함수 실행 권한은 주지 않습니다.
+
 	for _, role := range []string{roles.runtime, roles.scraper} {
 		_, err := pool.Exec(ctx, "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "+pgx.Identifier{role}.Sanitize())
 		require.NoError(t, err)
@@ -76,7 +73,6 @@ func TestLiveReviewReceiptFactsPrivilegesOverrideBroadDefaultACL(t *testing.T) {
 		require.False(t, canWrite, check.role)
 	}
 
-	// scraper에는 개별 권한이 없으므로 PUBLIC 실행 권한이 남았는지도 함께 드러난다.
 	for _, function := range []string{
 		"youtube_live_review_receipt_semantic_facts(jsonb)",
 		"store_youtube_live_review_receipt_facts()",
@@ -106,7 +102,6 @@ func TestLiveReviewReceiptFactsPrivilegesOverrideBroadDefaultACL(t *testing.T) {
 	require.True(t, reviewed, "runtime은 저장 사실을 읽어 기존 판정을 계산해야 합니다")
 }
 
-// 서울 시간대 세션에서 기록하고 pending end를 포함해 시간대·pending 사실도 저장 사실 비교에 넣는다. 기록 뒤 제목이 바뀐 reopened는 더 이상 면제되지 않는다.
 func seedRecordedLiveReviews(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
@@ -156,7 +151,6 @@ func recordLiveReviewInSeoul(t *testing.T, pool *pgxpool.Pool, receiptID, videoI
 	require.NoError(t, tx.Commit(ctx))
 }
 
-// 비교 세션은 UTC라 서울 시간대에서 기록한 사실이 시간대와 무관한지도 함께 확인한다.
 func assertLiveReviewReceiptFactsMatchReceipts(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 

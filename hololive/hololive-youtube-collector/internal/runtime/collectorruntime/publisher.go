@@ -13,9 +13,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/sourceobservation"
 )
 
-// Publisher는 contract generation 조회와 관측 발행 저장소를 직접 소유합니다.
-// 발행 저장소는 결과의 개수·순서·식별자를 커밋 전에 검증하고,
-// 관측 발행과 lease 완료 또는 defer를 하나의 트랜잭션으로 확정합니다.
 type Publisher struct {
 	contracts    *postgresContractGenerationReader
 	observations *sourceobservation.Repository
@@ -190,7 +187,6 @@ func validatePartialPublishInput(
 	return partial, nil
 }
 
-// Checkpoint는 관측과 1:1로 같은 순서이며, runner가 관측과 함께 넘긴 cursor(video_list 공개 근거 이력)만 싣습니다.
 func publishBatchInput(lease *contract.LeaseProof, output collection.RunOutput) *sourceobservation.PublishBatchInput {
 	observations := output.Observations()
 	entries := make([]sourceobservation.CheckpointEntry, len(observations))

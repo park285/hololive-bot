@@ -154,7 +154,6 @@ test("real Video lockups map to videos items without list-derived times", () => 
   const video = (videoId, extra = {}) => new YTNodes.Video({ videoId, title: { simpleText: videoId }, ...extra });
   const feed = { videos: [
     video("future-premiere", { upcomingEventData: { startTime: "4102444800" }, publishedTimeText: { simpleText: "Premieres Jan 1, 2100" } }),
-    // 예정 시각이 지난 대기 영상도 streams 판정과 같이 예정 표시를 유지합니다. 현재 시각에 따라 바뀌는 SDK getter를 쓰지 않습니다.
     video("stale-premiere", { upcomingEventData: { startTime: "1758362400" } }),
     video("relative", { publishedTimeText: { simpleText: "3 hours ago" } }),
     video("absolute-text", { publishedTimeText: { simpleText: "Premiered Sep 20, 2026" } }),

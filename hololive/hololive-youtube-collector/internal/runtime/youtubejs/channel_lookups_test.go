@@ -63,7 +63,6 @@ func TestFetchChannelPaysScheduleLookupsThroughLimiter(t *testing.T) {
 			t.Fatalf("requested lookups = %d, reported = %v", requested, result.ScheduleLookups)
 		}
 
-		// RPC 예약은 즉시이고 조회 세 건이 2초 간격 예약을 차례로 기다린다.
 		if elapsed := time.Since(started); elapsed != 6*time.Second {
 			t.Fatalf("elapsed = %s, want 6s", elapsed)
 		}
@@ -114,7 +113,6 @@ func TestFetchChannelRejectsLookupsOutsideTheRequestedBudget(t *testing.T) {
 	}
 }
 
-// 예정 영상 조회 수는 /v1/channel 오류 본문에만 있을 수 있으며, 다른 endpoint에 오면 exact-key 위반이다.
 func TestScheduleLookupsOutsideChannelEndpointAreProtocolMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -158,7 +156,6 @@ func TestFetchChannelReservesUnpaidLookupsWhenPaymentIsCanceled(t *testing.T) {
 			return jsonResponse(http.StatusOK, fmt.Sprintf(liveChannelBody, 3)), nil
 		})
 
-		// RPC는 0초, 첫 조회는 2초에 지불하고 4초 예약을 기다리는 3초에 수집이 끝난다.
 		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 		defer cancel()
 
@@ -166,7 +163,6 @@ func TestFetchChannelReservesUnpaidLookupsWhenPaymentIsCanceled(t *testing.T) {
 			t.Fatal("canceled payment returned success")
 		}
 
-		// 남은 두 조회가 4초·6초를 차지하므로 다음 예약은 8초다.
 		if got := nextLimiterWait(t, limiter); got != 5*time.Second {
 			t.Fatalf("next limiter wait = %s, want 5s", got)
 		}
@@ -207,7 +203,6 @@ func TestFetchChannelReservesLookupBudgetOnlyWhenTheCountIsLost(t *testing.T) {
 	}
 }
 
-// lease 슬롯 시각은 재사용 일정의 관측 시각에만 쓰이므로 live 요청에만 실리고 metadata 요청에서는 빠진다.
 func TestFetchChannelSendsLeaseSlotOnlyForLiveRequests(t *testing.T) {
 	t.Parallel()
 
@@ -229,7 +224,6 @@ func TestFetchChannelSendsLeaseSlotOnlyForLiveRequests(t *testing.T) {
 			return jsonResponse(http.StatusInternalServerError, `{"protocol_version":1,"error_code":"helper_internal_invariant","error_class":"INTERNAL","message":"stop"}`), nil
 		})}, "http://helper", nil)
 
-		// helper 오류 본문으로 요청만 기록하고 끝냅니다.
 		if _, err := client.FetchChannel(t.Context(), ChannelRequest{ChannelID: lookupChannelID, Kind: kind, ScheduledFor: new(slot)}); err == nil {
 			t.Fatalf("%s request unexpectedly succeeded", kind)
 		}

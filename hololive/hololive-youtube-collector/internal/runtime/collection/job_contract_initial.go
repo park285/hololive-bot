@@ -6,13 +6,10 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// ScheduleSubject는 공식 일정 job의 lease subject이자, 공식 일정과 Holodex가 방출하는 schedule 관측의 subject·group key입니다.
 const ScheduleSubject = "global:hololive-schedule"
 
-// initialJobContracts는 검증을 마친 불변 계약 handle 집합이다. 패키지 밖으로는 map 복제본만 노출한다.
 var initialJobContracts = buildInitialJobContracts()
 
-// InitialJobContracts는 호출자가 확장할 수 있는 새 map을 반환합니다. 불변 계약 handle만 공유합니다.
 func InitialJobContracts() StaticJobContracts {
 	jobs := make(StaticJobContracts, len(initialJobContracts))
 	maps.Copy(jobs, initialJobContracts)
@@ -50,7 +47,6 @@ func initialSubjectJobContracts() StaticJobContracts {
 			[]contract.ObservationKind{contract.KindLiveSnapshot},
 			nil,
 		),
-		// 채널 /live 확인은 방송 탭 snapshot과 lease·재시도 슬롯을 공유하지 않는 별도 exact-subject job이다.
 		mustJobID(contract.ProviderYouTubeJS, "youtubejs_channel_live_check"): mustJobContract(
 			mustJobID(contract.ProviderYouTubeJS, "youtubejs_channel_live_check"),
 			JobClassSubject, JobMembershipExactSubject, "",

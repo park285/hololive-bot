@@ -46,7 +46,6 @@ func TestAdminPlaneBootsWithoutIrisEgressTokens(t *testing.T) {
 		t.Fatalf("admin plane load error = %v", err)
 	}
 
-	// 같은 env에서 bot plane은 Iris egress 입력을 요구한다.
 	server := configtest.NewIrisRuntimeDiagnosticsServer(t, configtest.WorkerProfileDiagnosticsJSON())
 	t.Setenv("IRIS_BASE_URL", server.URL)
 	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", configtest.URLHostname(t, server.URL))
@@ -90,7 +89,6 @@ func TestPlaneLoadersIgnoreInvalidYouTubeCollectorEnv(t *testing.T) {
 	})
 }
 
-// admin plane 로더가 X_SPACES_KEY_FILE을 읽어 X 세션 저장소 조립에 넘긴다. 값이 없으면 빈 경로(비활성)다.
 func TestAdminPlaneLoadsXSpacesKeyFile(t *testing.T) {
 	setAdminPlaneEnv(t)
 	settingstest.UnsetEnv(t, "X_SPACES_KEY_FILE")
@@ -116,7 +114,6 @@ func TestAdminPlaneLoadsXSpacesKeyFile(t *testing.T) {
 	}
 }
 
-// admin plane의 PHOTO_SYNC_ENABLED는 미설정이면 켜지고, 잘못된 값은 기본값으로 바꾸지 않고 오류로 돌려준다.
 func TestLoadIngestionConfigPhotoSyncEnv(t *testing.T) {
 	settingstest.UnsetEnv(t, "PHOTO_SYNC_ENABLED")
 

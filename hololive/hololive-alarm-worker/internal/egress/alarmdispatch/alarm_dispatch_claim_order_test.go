@@ -34,7 +34,6 @@ func (c *alarmDispatchOrderConsumer) MarkDispatched(ctx context.Context, envelop
 	return c.alarmDispatchRunnerTestConsumer.MarkDispatched(ctx, envelopes, irisRequestID, handoffHorizon)
 }
 
-// 같은 worker ID가 같은 attempt의 행을 다시 claim하지 않는 근거는 직렬 루프다.
 func TestAlarmDispatchRunnerClaimsNextBatchOnlyAfterSettlingPrevious(t *testing.T) {
 	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 	second := alarmDispatchRunnerTestEnvelope("room-2", nil)

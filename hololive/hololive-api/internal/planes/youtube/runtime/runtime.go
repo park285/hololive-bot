@@ -65,31 +65,26 @@ type Runtime struct {
 	Config apiconfig.YouTubePlaneConfig
 	Logger *slog.Logger
 
-	pool               *pgxpool.Pool
-	closePool          func()
-	claimer            observationClaimer
-	consumer           observationConsumer
-	refresher          projectionRefresher
-	projectionRetainer projectionRetainer
-	finalizer          liveEndFinalizer
-	retainer           observationRetainer
-	builder            targetprojection.Builder
-	// liveFreshnessBudget는 builder와 같은 schedule에서 도출한 not_before 예산이며 수요 지표가 씁니다.
+	pool                *pgxpool.Pool
+	closePool           func()
+	claimer             observationClaimer
+	consumer            observationConsumer
+	refresher           projectionRefresher
+	projectionRetainer  projectionRetainer
+	finalizer           liveEndFinalizer
+	retainer            observationRetainer
+	builder             targetprojection.Builder
 	liveFreshnessBudget time.Duration
 	now                 func() time.Time
 
-	dbSem     chan struct{}
-	workCh    chan sourceobservation.ClaimWork
-	claim     sourceobservation.ClaimOptions
-	runCancel context.CancelFunc
-	started   atomic.Bool
-	claiming  atomic.Bool
-	ready     atomic.Bool
-	// retention 실패는 ready와 따로 두고 Ready()가 합친다.
-	// retention 성공이 다른 루프가 내린 ready를 되살리지 않게 하기 위해서다.
-	retentionFailed atomic.Bool
-	// degraded 상태는 원인별로 따로 갱신하고 Degraded()가 OR로 합친다.
-	// projection refresh 성공이 DEAD_LETTER backlog 신호를 지우지 않게 하기 위해서다.
+	dbSem              chan struct{}
+	workCh             chan sourceobservation.ClaimWork
+	claim              sourceobservation.ClaimOptions
+	runCancel          context.CancelFunc
+	started            atomic.Bool
+	claiming           atomic.Bool
+	ready              atomic.Bool
+	retentionFailed    atomic.Bool
 	projectionDegraded atomic.Bool
 	deadLetterBacklog  atomic.Bool
 	loopDone           chan struct{}
@@ -114,8 +109,6 @@ type Runtime struct {
 	collectionObservation queueObservationThrottle
 }
 
-// Build의 wakeupCache는 알림 행 commit 뒤 alarm-worker를 깨우는 신호에만 쓴다. 없거나 실패해도 plane readiness와 처리에는
-// 영향이 없고 alarm-worker polling이 행을 잡는다.
 func Build(
 	ctx context.Context,
 	plane *apiconfig.YouTubePlaneConfig,
@@ -277,7 +270,6 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 	r.lifecycleMu.Lock()
 	defer r.lifecycleMu.Unlock()
 
-	// Close의 시작 차단 뒤와 취소된 task의 join 전에는 기동을 허용하지 않는다.
 	if r.closing || r.closed || r.tasksDone != nil {
 		return
 	}
@@ -321,14 +313,12 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 		})
 	}
 
-	// plane이 켜져 있으면 retention은 항상 돈다. 보존 기간은 YOUTUBE_PLANE_RETENTION_*_DAYS가 소유한다.
 	r.loopCount++
 	r.startGuarded(runCtx, errCh, "youtube-retention-loop", &r.loopTasks, func() {
 		r.runRetentionLoop(runCtx, errCh)
 	})
 }
 
-// startCoreLoops는 Start가 lifecycle 잠금을 소유한 동안 필수 supervisor 작업을 등록한다.
 func (r *Runtime) startCoreLoops(runCtx context.Context, errCh chan<- error) {
 	r.loopCount = 3
 	r.startGuarded(runCtx, errCh, "youtube-claim-loop", &r.loopTasks, func() {
@@ -381,7 +371,6 @@ func (r *Runtime) finishStart() {
 
 	done := r.tasksDone
 
-	// 모든 task 등록이 끝났으므로 Wait와 Add가 경쟁하지 않는다.
 	go func() {
 		r.tasks.Wait()
 		close(done)
@@ -395,8 +384,6 @@ func (r *Runtime) stopTasks() (tasksDone, loopDone, workerDone <-chan struct{}) 
 	return r.stopTasksLocked()
 }
 
-// beginClose는 첫 Start 차단과 이미 등록된 task snapshot을 같은 잠금에서 확정한다.
-// 기동 차단 상태인 closing은 자원 해제 완료를 나타내는 closed와 구분한다.
 func (r *Runtime) beginClose() <-chan struct{} {
 	r.lifecycleMu.Lock()
 	defer r.lifecycleMu.Unlock()
@@ -408,7 +395,6 @@ func (r *Runtime) beginClose() <-chan struct{} {
 	return tasksDone
 }
 
-// stopTasksLocked는 lifecycleMu를 보유한 호출자가 등록된 작업을 취소하고 snapshot을 얻는다.
 func (r *Runtime) stopTasksLocked() (tasksDone, loopDone, workerDone <-chan struct{}) {
 	r.started.Store(false)
 	r.claiming.Store(false)
@@ -452,8 +438,6 @@ func (r *Runtime) releaseClaims(ctx context.Context) error {
 	claimDone := r.claimDone
 	r.lifecycleMu.Unlock()
 
-	// ClaimBatch 성공 뒤 등록이 지연되면 빈 해제 결과를 최종 결과로 봉인하지 않습니다.
-	// 취소 전용 부모와 분리한 기존 settlement 예산을 등록 join과 token-fenced 해제에 함께 씁니다.
 	deadline := time.Now().Add(r.Config.TransactionTimeout)
 	if parentDeadline, ok := ctx.Deadline(); ok && parentDeadline.Before(deadline) {
 		deadline = parentDeadline
@@ -498,7 +482,6 @@ func (r *Runtime) releaseClaims(ctx context.Context) error {
 	return err
 }
 
-// 종료 대기가 끝나지 않으면 pool 소유권을 유지하여 후속 close가 다시 기다릴 수 있다.
 func (r *Runtime) CloseContext(ctx context.Context) error {
 	if r == nil {
 		return nil
@@ -519,7 +502,6 @@ func (r *Runtime) CloseContext(ctx context.Context) error {
 	r.lifecycleMu.Lock()
 	defer r.lifecycleMu.Unlock()
 
-	// 다른 Shutdown이 아직 release 중이면 timeout을 보고하고 pool을 보유한다.
 	if r.releaseDone != nil {
 		select {
 		case <-r.releaseDone:
@@ -582,7 +564,6 @@ func (r *Runtime) Degraded() bool {
 	return r != nil && (r.projectionDegraded.Load() || r.deadLetterBacklog.Load())
 }
 
-// 슬롯 대기는 획득에 실패해도, 보유는 획득부터 반환까지 operation별 히스토그램에 남긴다.
 func (r *Runtime) withDB(ctx context.Context, operation dbOperation, fn func(context.Context) error) error {
 	waitStarted := time.Now()
 

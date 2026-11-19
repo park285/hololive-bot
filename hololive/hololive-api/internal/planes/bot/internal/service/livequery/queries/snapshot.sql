@@ -3,7 +3,6 @@ WITH clock AS MATERIALIZED (
 ), roster AS MATERIALIZED (
     SELECT channel_id,
            string_agg(DISTINCT COALESCE(NULLIF(org, ''), 'Hololive'), ' / ' ORDER BY COALESCE(NULLIF(org, ''), 'Hololive')) AS org,
-           -- 명령 응답 표시명 순서(short_korean_name→korean_name→english_name)는 domain.Member.DisplayName과 같다.
            string_agg(DISTINCT COALESCE(NULLIF(short_korean_name, ''), NULLIF(korean_name, ''), NULLIF(english_name, ''), channel_id), ' / '
                       ORDER BY COALESCE(NULLIF(short_korean_name, ''), NULLIF(korean_name, ''), NULLIF(english_name, ''), channel_id)) AS channel_name
     FROM members
@@ -32,7 +31,6 @@ WITH clock AS MATERIALIZED (
      AND c.projection_generation IN (SELECT generation FROM generation)
      AND c.enabled
 ), coverage AS MATERIALIZED (
-    -- 목록 누락과 absence slot은 부재 근거가 아니다. 최신 /live의 검증된 음성만 읽는다.
     SELECT t.channel_id, c.effective_at AS covered_at
     FROM targets t JOIN youtube_channel_live_checks c USING (channel_id)
     WHERE t.check_collected AND c.channel_identity_confirmed
@@ -42,9 +40,6 @@ WITH clock AS MATERIALIZED (
       AND c.observed_at BETWEEN t.as_of - t.check_budget AND t.as_of
       AND c.received_at BETWEEN t.as_of - t.check_budget AND t.as_of
 ), unavailable AS MATERIALIZED (
-    -- 신선한 positive와 비정상 session/head는 가용성으로 덮지 않는다.
-    -- 익명 player는 비공개·삭제 영상에 videoDetails를 주지 않아 identity_missing UNKNOWN만 남기므로,
-    -- 신선한 identity_missing도 공개 불가와 같은 시각 경계로 종료를 증명할 수 없는 stale LIVE를 제외한다.
     SELECT s.video_id
     FROM youtube_live_sessions s JOIN targets t USING (channel_id)
     JOIN youtube_live_reconciliation_heads h USING (video_id)
@@ -83,7 +78,6 @@ WITH clock AS MATERIALIZED (
     WHERE kind = 'EXPLICIT_END' AND NOT has_session AND NOT has_head
     GROUP BY channel_id
 ), ended_pending_diagnostics AS MATERIALIZED (
-    -- D2는 pending 채널과 canonical session 채널 어느 조회에서도 보이게 하고, 같은 채널이면 한 번만 센다.
     SELECT r.channel_id, count(DISTINCT p.video_id) AS ended_pending_ends
     FROM pending_state p
     CROSS JOIN LATERAL (VALUES (p.channel_id), (p.session_channel_id)) attributed(channel_id)
@@ -97,7 +91,6 @@ WITH clock AS MATERIALIZED (
     WHERE s.status = 'ENDED' AND h.status IS DISTINCT FROM 'ENDED'
     GROUP BY s.channel_id
 ), unresolved_pending AS MATERIALIZED (
-    -- D1/D2는 보존 진단일 뿐 현재 후보가 아니다. head-only와 channel 불일치는 계속 차단한다.
     SELECT p.video_id, p.channel_id, p.has_session OR p.has_head AS has_state
     FROM pending_state p
     WHERE p.session_status IS DISTINCT FROM 'ENDED'
@@ -143,8 +136,6 @@ WITH clock AS MATERIALIZED (
            jsonb_build_object('retained_orphan_ends', COALESCE(o.retained_orphan_ends, 0),
                               'ended_pending_ends', COALESCE(e.ended_pending_ends, 0),
                               'ended_head_mismatches', COALESCE(m.ended_head_mismatches, 0)) AS diagnostics,
-           -- coverageFacts 비트는 projection, collected, inconsistent, pending, future, stale 순서다.
-           -- 관측 사실만 압축하며 사유 우선순위는 Go가 결정한다.
            t.projection_valid::int
              | ((t.collected AND t.check_collected)::int << 1)
              | (COALESCE(bool_or(f.inconsistent), false)::int << 2)

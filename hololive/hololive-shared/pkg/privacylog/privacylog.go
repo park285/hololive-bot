@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package privacylog
 
 import (
@@ -39,9 +19,6 @@ const (
 	pseudonymBytes = 8
 )
 
-// Kakao 방 제목과 검색어는 엔트로피가 낮아 unsalted digest면 사전 대입으로 원문이 복원된다.
-// 프로세스 밖으로 나가지 않는 key로 HMAC을 걸어, 한 프로세스 수명 안에서만 상관관계가
-// 성립하고 로그 수집기 쪽에서는 원문을 되돌릴 수 없게 한다.
 var pseudonymKey = []byte(rand.Text())
 
 func RoomIDAttr(room string) slog.Attr {
@@ -88,9 +65,6 @@ func IdentifierToken(value string) string {
 	return Pseudonym(trimmed)
 }
 
-// LoggerPrivacyKeys는 hololive 세 runtime이 shared-go logging.Options.PrivacyKeys로 넘기는 개인 식별자 키다.
-// 내장 목록은 shared-go v2.18.0에서 사라져 서비스가 키를 소유한다. 이전 내장 목록 가운데 hololive가 실제로 로그에
-// 쓰는 키만 둬 마스킹 결과를 그대로 유지한다. 상관관계 키(room_id·user_id 등)는 넘기지 않아 보존된다.
 func LoggerPrivacyKeys() []string {
 	return []string{"room", "room_name", KeyChatID, "user_name", "thread_id"}
 }

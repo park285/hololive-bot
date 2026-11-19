@@ -118,8 +118,6 @@ func startPeerH3Server(t *testing.T) (addr, caFile string, conns <-chan *quic.Co
 	return localAddr.String(), caFile, accepted
 }
 
-// API가 종료 때 내부 H3 client를 닫지 않으면 peer(alarm-worker 등)는 CONNECTION_CLOSE를 받지 못하고, 그 연결이 QUIC idle timeout까지 남아 peer의
-// graceful shutdown이 종료 시한을 넘긴다.
 func TestCloseClientSendsCleanConnectionCloseToPeer(t *testing.T) {
 	addr, caFile, conns := startPeerH3Server(t)
 

@@ -12,7 +12,6 @@ import (
 	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
-// 원본 관측의 수명과 신규성 판단의 수명은 다릅니다.
 func TestContentObservationDeletionDoesNotRenotify(t *testing.T) {
 	for _, status := range []string{"baseline", "SENT", "FAILED"} {
 		t.Run(status, func(t *testing.T) {
@@ -49,7 +48,6 @@ func TestContentObservationDeletionDoesNotRenotify(t *testing.T) {
 			require.EqualValues(t, 1, deleted.RowsAffected())
 			require.Equal(t, before, retirementContentIdentity(t, pool))
 
-			// 삭제한 관측의 재수신과 이후 정기 수집을 모두 검사합니다.
 			proof = moveContentLease(ctx, t, pool, &proof, proof.FenceEpoch+1, proof.ScheduledFor)
 			_, err = publisher.PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, testVideoID)))
 			require.NoError(t, err)

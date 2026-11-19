@@ -1,4 +1,3 @@
-// Package xspaces는 스페이스 인증 후보와 활성 세션을 암호화하여 보관한다.
 package xspaces
 
 import (
@@ -23,16 +22,13 @@ import (
 
 var cookiePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{16,512}$`)
 
-// ErrDisabled는 세션 저장용 키 파일이 설정되지 않았음을 나타낸다.
 var ErrDisabled = errors.New("x session store disabled")
 
-// Cookies는 X 웹 세션의 두 인증 값이다. 응답·로그에 넣지 않는다.
 type Cookies struct {
 	AuthToken string `json:"auth_token"`
 	CSRFToken string `json:"ct0"`
 }
 
-// Validate는 헤더 주입과 잘못된 인증 값의 저장을 거부한다.
 func (c Cookies) Validate() error {
 	if !cookiePattern.MatchString(c.AuthToken) || !cookiePattern.MatchString(c.CSRFToken) {
 		return errors.New("invalid X session cookies")
@@ -41,7 +37,6 @@ func (c Cookies) Validate() error {
 	return nil
 }
 
-// Status는 secret을 제외한 관리자용 인증 상태다. 시각 부재는 확인되지 않았음을 뜻한다.
 type Status struct {
 	Available      bool       `json:"available"`
 	Revision       string     `json:"revision"`
@@ -54,7 +49,6 @@ type Status struct {
 	NextCheckAt    *time.Time `json:"nextCheckAt"`
 }
 
-// Snapshot은 worker 한 번의 관측과 마지막 오류를 제공한다. Revision 조건으로 오래된 결과의 반영을 막는다.
 type Snapshot struct {
 	Revision       int64
 	ActiveRevision int64
@@ -65,13 +59,11 @@ type Snapshot struct {
 	LastError      string
 }
 
-// Store는 API의 후보 제출과 worker의 검증·승격을 공유한다.
 type Store struct {
 	pool *pgxpool.Pool
 	aead cipher.AEAD
 }
 
-// NewStore는 256-bit 전용 키를 사용한다. DB에는 nonce와 인증 암호문만 기록한다.
 func NewStore(pool *pgxpool.Pool, key []byte) (*Store, error) {
 	if pool == nil || len(key) != 32 {
 		return nil, errors.New("x session store requires database and 32-byte key")
@@ -90,8 +82,6 @@ func NewStore(pool *pgxpool.Pool, key []byte) (*Store, error) {
 	return &Store{pool: pool, aead: aead}, nil
 }
 
-// LoadStore는 각 runtime 설정 로더가 X_SPACES_KEY_FILE에서 읽은 키 파일 경로 path가 비어 있으면 ErrDisabled를
-// 돌려준다. 설정된 잘못된 키는 오류다. 키 파일은 static secret master에서 배포한 private regular file이어야 한다.
 func LoadStore(pool *pgxpool.Pool, path string) (store *Store, retErr error) {
 	if path == "" {
 		return nil, ErrDisabled
@@ -204,7 +194,6 @@ func (s *Store) Status(ctx context.Context) (Status, error) {
 	return status, nil
 }
 
-// Submit은 후보를 저장한다. False는 충돌을 뜻하며 기존 인증을 바꾸지 않고, 저장 성공은 X 인증 검증 성공과 다르다.
 func (s *Store) Submit(ctx context.Context, c Cookies, expected string) (bool, error) {
 	revision, err := strconv.ParseInt(expected, 10, 64)
 	if err != nil || revision < 0 || strconv.FormatInt(revision, 10) != expected {
@@ -228,7 +217,6 @@ func (s *Store) Submit(ctx context.Context, c Cookies, expected string) (bool, e
 	return result.RowsAffected() == 1, nil
 }
 
-// Snapshot은 복호화한 세션을 반환한다. 호출자는 이를 로그·응답에 넣지 않는다.
 func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 	var (
 		snapshot          Snapshot
@@ -262,8 +250,6 @@ func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 	return snapshot, nil
 }
 
-// ResolveCandidate는 검증 성공 시에만 후보를 승격한다. 세대가 다른 결과는 반영하지 않는다.
-// Rejection은 authentication만 허용하며 기존 활성 인증을 보존한다.
 func (s *Store) ResolveCandidate(ctx context.Context, revision int64, rejection string) (bool, error) {
 	query := promoteSQL
 
@@ -283,7 +269,6 @@ func (s *Store) ResolveCandidate(ctx context.Context, revision int64, rejection 
 	return result.RowsAffected() == 1, nil
 }
 
-// 후보 검증 실패는 활성 세대를 무효화하지 않는다. False이면 세대가 달라졌으므로 호출자는 해당 관측으로 발송하지 않는다.
 func (s *Store) Observe(ctx context.Context, activeRevision int64, code string, next time.Time) (bool, error) {
 	state := "connected"
 
@@ -311,7 +296,6 @@ func (s *Store) Observe(ctx context.Context, activeRevision int64, code string, 
 	return result.RowsAffected() == 1, nil
 }
 
-// ValidErrorCode는 비밀 값이 없는 helper 오류와 worker의 인증 확인 대기 코드만 허용한다.
 func ValidErrorCode(code string) bool {
 	switch code {
 	case "", "authentication", "authentication_pending", "api_error", "rate_limited", "upstream", "invalid_response", "unexpected_user", "invalid_targets", "invalid_cookies", "forbidden_endpoint", "forbidden_credentials", "redirect", "response_too_large", "collector_failed", "timeout":
@@ -321,7 +305,6 @@ func ValidErrorCode(code string) bool {
 	}
 }
 
-// CandidateFailure는 후보의 조회 실패를 기록한다. 네트워크 장애는 인증 거부가 아니므로 후보와 활성 인증 모두 보존한다.
 func (s *Store) CandidateFailure(ctx context.Context, revision int64, code string, next time.Time) error {
 	if code == "" || !ValidErrorCode(code) {
 		return errors.New("invalid candidate failure code")

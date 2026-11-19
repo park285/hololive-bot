@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package template
 
 import (
@@ -35,10 +15,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/kakaotext"
 )
-
-// 런타임 renderer는 missingkey 옵션 없이 파싱해 map 데이터의 키 누락이 `<no value>`로
-// 조용히 노출된다(struct 필드 누락만 에러). 이 테스트가 명시적 missingkey=error로 전 키를
-// 시드 본문 그대로 렌더해, 시드-샘플-변수 계약 위반을 배포 전에 유일하게 차단한다.
 
 const (
 	fieldScheduledKST    = "ScheduledKST"
@@ -144,7 +120,6 @@ func auditSeedRender(t *testing.T, key domain.TemplateKey, body string, data any
 		t.Errorf("%s: 렌더 결과에 <no value> 노출", key)
 	}
 
-	// 실행 예산 계측과 제한판 함수는 기본 seed의 출력을 한 바이트도 바꾸지 않아야 합니다.
 	boundedTmpl, err := parseTemplateBody(string(key), body, true)
 	if err != nil {
 		t.Errorf("%s: 제한판 파싱 실패: %v", key, err)
@@ -359,7 +334,6 @@ func TestSeedTemplates_OutboxVideoGroupSeparatesRenderedItems(t *testing.T) {
 				t.Errorf("OUTBOX_VIDEO_GROUP: 빈 항목 생략·독립 URL 계약 위반: %q", out)
 			}
 
-			// 일반 텍스트는 렌더된 항목에만 연속 번호를 붙이고, RichText는 번호 없이 항목 사이에만 구분선을 둔다.
 			numbered := strings.Contains(out, "\n1 · ") && strings.Contains(out, "\n2 · ") && !strings.Contains(out, "\n3 · ")
 			separated := strings.Count(out, "──────────") == 1 && !strings.Contains(out, "\n1 · ")
 
@@ -421,7 +395,6 @@ func hasSeedLine(out, want string) bool {
 	return false
 }
 
-// 변형은 발송 경로의 표현만 다르고 동적 문자 보호·독립 URL 줄·빈 상태 계약은 같다.
 var templateFormats = []domain.TemplateFormat{domain.TemplateFormatPlain, domain.TemplateFormatRichText}
 
 func seedBody(t *testing.T, pool *pgxpool.Pool, key domain.TemplateKey, format domain.TemplateFormat) string {

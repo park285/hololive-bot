@@ -83,6 +83,7 @@ LC_ALL=C cut -f1 "$manifest" | LC_ALL=C sort -u >"$tmpdir/registered"
     deploy/quadlet/*/*.container
     deploy/podman/*/*.container
     deploy/postgres/pg_hba.conf
+    deploy/pgbouncer/pg_hba.conf
     deploy/nginx/*.conf
     deploy/nginx/*.template
     scripts/systemd/*.nft
@@ -157,10 +158,8 @@ done <"$manifest"
 
 assert_assignment "osaka AP host" AP_SSH_HOST "$osaka" "$root_dir/scripts/deploy/ap-hosts/osaka.conf"
 assert_assignment "osaka AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$osaka" "$root_dir/scripts/deploy/ap-hosts/osaka.conf"
-# Seoul collector b는 iris-seoul Podman Quadlet이다. metrics 게시 주소가 seoul tailnet 주소인지 본다.
 assert_count "seoul collector b metrics bind" 1 "PublishPort=$seoul:30096:30096/tcp" "$root_dir/deploy/podman/iris-seoul/hololive-youtube-collector-b.container"
 
-# 30192 shortlink 출처는 공개 ingress 역할(osaka2)이다. 30006/udp admin API 출처는 Console이 남는 seoul만 둔다.
 public_ingress_sources=("$osaka2")
 for source in "${public_ingress_sources[@]}"; do
   assert_count "central ingress public gateway source" 1 "allow $source;" \
@@ -171,7 +170,6 @@ assert_count "central ingress bind owner" 1 "allow @BIND_IP@;" "$root_dir/deploy
 [[ "$(grep -Ec '^[[:space:]]*allow[[:space:]]+' "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template")" -eq \
   $((2 + ${#public_ingress_sources[@]})) ]] || fail "central ingress allow directive set"
 public_ingress_nft="$(printf 'iifname "tailscale0" ip saddr %s tcp dport 30192 accept\n' "${public_ingress_sources[@]}")"
-# 전체 문법과 순서를 고정해 source/target/DNAT 조건 삭제나 넓은 accept를 거절한다.
 postgres_sources="$(printf '%s\n' "$central" "$workstation" "$seoul" "$osaka" | LC_ALL=C sort | paste -sd, - | sed 's/,/, /g')"
 cat >"$tmpdir/expected-nft-grammar" <<EOF
 table inet admin_dashboard_ingress {
@@ -191,9 +189,9 @@ tcp dport { 30191, 30192 } reject with tcp reset
 iifname "lo" udp dport 30006 accept
 iifname "tailscale0" ip saddr $seoul udp dport 30006 accept
 udp dport 30006 reject
-iifname "lo" tcp dport 5433 accept
-iifname "tailscale0" ip saddr @postgres_sources tcp dport 5433 accept
-tcp dport 5433 reject with tcp reset
+iifname "lo" tcp dport { 5433, 6433 } accept
+iifname "tailscale0" ip saddr @postgres_sources tcp dport { 5433, 6433 } accept
+tcp dport { 5433, 6433 } reject with tcp reset
 iifname "lo" tcp dport { 5432, 5458 } accept
 iifname "tailscale0" ip saddr @bot_postgres_sources tcp dport { 5432, 5458 } accept
 tcp dport { 5432, 5458 } reject with tcp reset
@@ -204,12 +202,15 @@ ct status dnat ct original proto-dst 30006 udp dport 30006 iifname "tailscale0" 
 ct status dnat ct original proto-dst 30006 udp dport 30006 reject
 ct status dnat ct original proto-dst 5433 tcp dport 5432 iifname "tailscale0" ip saddr @postgres_sources accept
 ct status dnat ct original proto-dst 5433 tcp dport 5432 reject with tcp reset
+ct status dnat ct original proto-dst 6433 tcp dport 6432 iifname "tailscale0" ip saddr @postgres_sources accept
+ct status dnat ct original proto-dst 6433 tcp dport 6432 reject with tcp reset
 ct status dnat ct original proto-dst { 5432, 5458 } tcp dport 5432 iifname "tailscale0" ip saddr @bot_postgres_sources accept
 ct status dnat ct original proto-dst { 5432, 5458 } tcp dport 5432 reject with tcp reset
 }
 chain forward_preserve_postgres_source {
 type filter hook forward priority 10; policy accept;
 ct status dnat ct original proto-dst 5433 tcp dport 5432 iifname "tailscale0" ip saddr @postgres_sources meta mark set meta mark and 0xff00ffff
+ct status dnat ct original proto-dst 6433 tcp dport 6432 iifname "tailscale0" ip saddr @postgres_sources meta mark set meta mark and 0xff00ffff
 }
 }
 EOF

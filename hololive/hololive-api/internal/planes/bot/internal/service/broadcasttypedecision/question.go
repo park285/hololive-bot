@@ -16,8 +16,6 @@ const (
 	thumbnailResolution = "medium"
 )
 
-// 모델은 질문 키를 보지 않으므로 질문 전체를 instructions와 선택지 설명에 쓴다. 설명과 우선순위는 broadcast_type_rules.json의
-// 규칙 순서(멤버 한정 → 동시시청 → 노래 → ASMR·경마 → 이벤트 → 뉴스 → 일반 형식)를 따라야 규칙 분류와 기준이 같다.
 var typeCriteria = map[broadcasttype.Type]string{
 	broadcasttype.Membership: "Restricted to paying channel members: the title or thumbnail says members-only " +
 		"(for example メン限, メンバー限定, members only), whatever the stream does.",

@@ -7,7 +7,7 @@
 ## 표본과 규칙
 
 - 어려운 표본(hard): 한때 규칙이 미분류로 남겼다가 사람이 공개 자료로 검토한
-  [40건](classifier-unclassified-20260911.json)이다. 이 가운데 `reviewed_video` 11건이 제목 단서가
+  40건이다. 이 가운데 `reviewed_video` 11건이 제목 단서가
   없는 방송으로, 운영에서 Gemini가 받을 방송과 가장 닮았다.
 - 회귀 코퍼스(corpus): `broadcast_type_corpus.json`의 기대 유형이다. `unknown`을 빼고 hard와 겹치는
   40건을 hard로 두어 139건이다. 정답이 제목·주제로 정한 것이라 hard보다 쉽다.

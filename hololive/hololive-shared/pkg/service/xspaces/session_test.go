@@ -50,7 +50,6 @@ func verifyCandidateReplacement(t *testing.T, store *Store, cookies Cookies) {
 
 	ctx := t.Context()
 
-	// 잘못된 새 세션을 제출해도 기존 활성 인증을 보존한다.
 	newCookies := Cookies{AuthToken: strings.Repeat("c", 40), CSRFToken: strings.Repeat("d", 64)}
 
 	accepted, err := store.Submit(ctx, newCookies, "1")
@@ -142,7 +141,6 @@ func TestAuthenticationConfirmationSurvivesStoreRestart(t *testing.T) {
 	require.Equal(t, cookies, *snapshot.Active)
 }
 
-// LoadStore는 호출자가 넘긴 키 경로만 쓴다. 빈 경로는 env에 키가 있어도 비활성이다.
 func TestLoadStoreUsesGivenKeyPath(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	keyPath := filepath.Join(t.TempDir(), "key")

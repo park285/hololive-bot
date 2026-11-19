@@ -27,7 +27,6 @@ func orbitLimb(y float64) float64 {
 	return -240 + 430*math.Sqrt(max(0, 1-0.54*v*v))
 }
 
-// 고정 판형의 배경 한 장만 보관한다. 인물·글·날짜는 캐시에 넣지 않는다.
 var orbitBackdrop = sync.OnceValue(func() *image.RGBA {
 	w, h, _ := Format3x4.size()
 	c := newCanvas(w, h, 1, nil)
@@ -217,7 +216,6 @@ var orbitTints = func() (shades [23]image.Uniform) {
 	return shades
 }()
 
-// 경계가 긴 날짜에서도 별도 판 크기 마스크 없이 한 줄씩 하늘에 섞는다.
 func orbitWash(c *canvas, g *orbitGroup) {
 	start, end := g.y+3, g.y+g.h-3
 	for y := int(math.Ceil(start * c.s)); y < int(end*c.s); y++ {

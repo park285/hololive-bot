@@ -38,7 +38,6 @@ test("PAG-013 response validator requires termination_reason and rejects impossi
     continuity: "CONTIGUOUS",
   };
   assert.throws(() => validateCommunityResponse(base), terminationReasonRequiredPattern);
-  // pagination 필드는 helper 생성기만 만들므로 어떤 위반이든 생성기와 같은 helper_internal_invariant입니다.
   for (const pagination of [
     { page_count: 0, termination_reason: "exhausted" },
     { page_count: 1.5, termination_reason: "exhausted" },

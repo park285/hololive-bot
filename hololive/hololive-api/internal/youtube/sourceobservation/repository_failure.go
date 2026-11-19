@@ -14,7 +14,6 @@ import (
 
 const attemptsExhaustedCode = "attempts_exhausted"
 
-// 소진한 관측은 다시 선점하지 않고 DEAD_LETTER로 끝낸다.
 func attemptsExhausted(attemptCount int) bool {
 	return attemptCount >= MaxAttempts
 }
@@ -40,8 +39,6 @@ func (r *Repository) Retry(ctx context.Context, input RetryInput) (contract.Stat
 		return "", fmt.Errorf("validate retry input: %w", err)
 	}
 
-	// claim이 반환한 시도 횟수로 정책을 정하고 동일 횟수·token을 DB에서 다시 검증한다.
-	// 추가 SELECT 없이 재시도와 소진 종료를 결정하며 DB 시각에 따른 lease 만료 검증은 유지한다.
 	query := retrySQL
 	target := contract.StatusPending
 	args := []any{input.ObservationID, input.LeaseToken, input.Delay.Milliseconds(), input.ErrorCode, input.ErrorDetail, input.AttemptCount}
@@ -92,7 +89,6 @@ func (r *Repository) DeadLetter(ctx context.Context, input DeadLetterInput) erro
 		return fmt.Errorf("validate: %w", err)
 	}
 
-	// 단일 fenced UPDATE이므로 별도 BEGIN/COMMIT 왕복 없이 같은 원자성을 얻는다.
 	if err := persistDeadLetter(ctx, r.pool, input); err != nil {
 		return fmt.Errorf("persist dead letter: %w", err)
 	}

@@ -33,7 +33,6 @@ func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, erro
 	}
 
 	if dest != nil {
-		// 문자열을 거치지 않고 응답 바이트를 바로 디코드한다.
 		raw, err := resp.AsBytes()
 		if err != nil {
 			c.logger.Error("Cache value conversion failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
@@ -51,7 +50,6 @@ func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, erro
 	return true, nil
 }
 
-// getResult는 GET 응답을 돌려주며 miss는 (false, nil)로 구분한다.
 func (c *Service) getResult(ctx context.Context, key string) (valkey.ValkeyResult, bool, error) {
 	resp := c.client.Do(ctx, c.client.B().Get().Key(key).Build())
 	if errors.Is(resp.Error(), valkey.Nil) {
@@ -154,7 +152,6 @@ func (c *Service) DelMany(ctx context.Context, keys []string) (int64, error) {
 	return totalDeleted, nil
 }
 
-// KEYS와 달리 Redis를 블로킹하지 않지만 비원자적이므로 scan 중 바뀐 key는 누락·중복될 수 있다. Visit에 넘긴 slice는 호출 뒤 재사용하지 않는다.
 func (c *Service) ScanKeyPages(ctx context.Context, pattern string, batchSize int64, visit func(keys []string) error) error {
 	if batchSize <= 0 {
 		batchSize = 100
@@ -237,7 +234,7 @@ func (c *Service) SetNX(ctx context.Context, key, value string, ttl time.Duratio
 
 	resp := c.client.Do(ctx, cmd)
 	if errors.Is(resp.Error(), valkey.Nil) {
-		return false, nil // 키가 이미 존재 - 락 획득 실패
+		return false, nil
 	}
 
 	if resp.Error() != nil {

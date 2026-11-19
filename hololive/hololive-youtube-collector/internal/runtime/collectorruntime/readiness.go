@@ -78,7 +78,6 @@ func evaluateReadiness(ctx context.Context, deps *readinessDeps) readinessRespon
 	return collectionReadiness(ctx, deps, &body)
 }
 
-// newReadinessResponse는 scheduler 관련 필드를 비워 두고, schedulerDependency가 snapshot 한 번으로 채웁니다.
 func newReadinessResponse(deps *readinessDeps) readinessResponse {
 	return readinessResponse{
 		Runtime:       runtimeName,

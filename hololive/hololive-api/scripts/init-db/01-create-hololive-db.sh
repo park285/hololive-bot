@@ -1,30 +1,8 @@
 #!/bin/sh
-# Copyright (c) 2025 Kapu
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
 
 set -eu
 set +x
 
-# Fresh-PGDATA-only bootstrap uses psql role SQL. Never log those credential-bearing
-# statements, even when production slow/error logging is enabled on the server.
-# The ordinary Go migrator separately generates SCRAM verifiers client-side.
 PGOPTIONS="${PGOPTIONS:+$PGOPTIONS }-c log_statement=none -c log_min_duration_statement=-1 \
 -c log_min_duration_sample=-1 -c log_transaction_sample_rate=0 \
 -c log_min_error_statement=panic -c log_min_messages=panic \
@@ -41,8 +19,6 @@ POSTGRES_ADMIN_PASSWORD="${POSTGRES_ADMIN_PASSWORD:-}"
 HOLOLIVE_DB_NAME="${HOLOLIVE_DB_NAME:-hololive}"
 HOLOLIVE_MIGRATOR_USER="${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}"
 
-# 역할별 비밀번호는 모두 필수다. 비어 있을 때 admin DB_PASSWORD로 역할을 만들던 폴백은 역할 분리를 깨므로
-# 두지 않는다.
 HOLOLIVE_DB_PASSWORD="${HOLOLIVE_DB_PASSWORD:-}"
 HOLOLIVE_ALARM_WORKER_PASSWORD="${HOLOLIVE_ALARM_WORKER_PASSWORD:-}"
 HOLOLIVE_MIGRATOR_PASSWORD="${HOLOLIVE_MIGRATOR_PASSWORD:-}"
@@ -77,7 +53,6 @@ if [ -z "${POSTGRES_ADMIN_PASSWORD}" ]; then
   exit 1
 fi
 
-# 로그인 역할 비밀번호가 같으면 한 서비스의 비밀값으로 다른 서비스 권한을 얻으므로 거부한다.
 role_password_names="POSTGRES_ADMIN_PASSWORD HOLOLIVE_DB_PASSWORD HOLOLIVE_ALARM_WORKER_PASSWORD HOLOLIVE_MIGRATOR_PASSWORD
 HOLOLIVE_COLLECTOR_A_PASSWORD HOLOLIVE_COLLECTOR_B_PASSWORD HOLOLIVE_COLLECTOR_C_PASSWORD HOLOLIVE_COLLECTOR_D_PASSWORD"
 for first in $role_password_names; do

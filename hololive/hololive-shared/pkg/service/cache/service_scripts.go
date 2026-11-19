@@ -16,7 +16,6 @@ else
   return 0
 end`
 
-// compareAndDeleteLua는 EVALSHA를 먼저 보내고 NOSCRIPT일 때만 valkey-go가 본문 EVAL로 다시 보낸다.
 var compareAndDeleteLua = valkey.NewLuaScript(compareAndDeleteScript)
 
 func (c *Service) CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error) {

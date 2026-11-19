@@ -7,7 +7,6 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// 재사용 일정의 원래 관측 슬롯이 reducer 입력까지 전달되어야 옛 일정이 더 새 관측을 덮지 않는다.
 func TestLiveEvidenceCarriesReusedScheduleObservationTime(t *testing.T) {
 	t.Parallel()
 

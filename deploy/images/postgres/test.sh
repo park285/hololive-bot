@@ -22,7 +22,6 @@ start_server() {
   attempts=0
   while :; do
     kill -0 "$server"
-    # postmaster PID를 비교하여 initdb의 임시 서버와 QEMU의 프로세스 이름에 의존하지 않습니다.
     postmaster_pid=
     if [ -f "$PGDATA/postmaster.pid" ]; then
       read -r postmaster_pid < "$PGDATA/postmaster.pid"
@@ -47,9 +46,7 @@ start_observability() {
     -c compute_query_id=on
 }
 
-# 이미지 설치만으로 활성화되지 않으며 preload 누락 시 SQL 전체가 거부되어야 합니다.
 start_server
-# 운영 public 스키마와 같은 경계로 검증합니다. 모니터는 public USAGE를 받지 않습니다.
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
   -c 'REVOKE USAGE ON SCHEMA public FROM PUBLIC;'
 if psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
@@ -64,7 +61,6 @@ start_observability
 [ "$(psql -h /var/run/postgresql -U postgres -Atqc 'SHOW server_version_num')" = 180007 ]
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
   -f /usr/local/share/hololive/enable-observability.sql
-# 재적용이 객체나 권한을 망가뜨리지 않아야 합니다.
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
   -f /usr/local/share/hololive/enable-observability.sql
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 <<'SQL'
@@ -142,7 +138,6 @@ $app$;
 RESET ROLE;
 SQL
 
-# 1초 넘는 문장은 시간 계측 없이 실제 행 수와 버퍼가 담긴 계획으로 기록되어야 합니다.
 plan="$(psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
   -c 'SET client_min_messages = log' -c 'SELECT count(*) FROM pg_class, pg_sleep(1.1)' 2>&1)"
 printf '%s\n' "$plan" | grep -q 'duration: .* plan:'
@@ -153,7 +148,6 @@ if printf '%s\n' "$plan" | grep -q 'actual time='; then
   exit 1
 fi
 
-# 의도적인 서로 다른 세션의 행 잠금 대기를 수집합니다.
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 -c \
   'CREATE TABLE extension_lock_test (id integer PRIMARY KEY, value integer NOT NULL); INSERT INTO extension_lock_test VALUES (1, 0);'
 PGAPPNAME=extension_lock_holder psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 -c \
@@ -186,7 +180,6 @@ $lock$;
 DROP TABLE extension_lock_test;
 SQL
 
-# 정상 종료·재시작에서 kcache 누적값은 복원되고 wait 표본은 새로 시작합니다.
 stop_server
 start_observability
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 <<'SQL'

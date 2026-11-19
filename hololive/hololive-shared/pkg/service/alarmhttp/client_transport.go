@@ -120,7 +120,6 @@ func encodeJSONRequestBody(path string, body any) (io.Reader, error) {
 	var buf bytes.Buffer
 
 	if body == nil {
-		// nil reader는 "본문 없음"이라 http.NoBody로 바꾸면 Content-Length가 0으로 붙는다.
 		var empty io.Reader
 
 		return empty, nil

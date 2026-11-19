@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 )
 
-// 같은 채널·종류의 배치에도 진행자가 다른 영상이 섞이므로 조회 대상을 진행자 집합으로 나눈다.
 func outboxSubscriberTarget(item *domain.YouTubeNotificationOutbox) (targetKey, title string, err error) {
 	if !mekparkhost.SupportsSubscriptions(item.ChannelID) {
 		return item.ChannelID, "", nil

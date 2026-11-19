@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# tracked+untracked(비-ignore) 전체를 훑어야 CI checkout(=tracked 전체)과 로컬
-# 작업 트리 스코프를 동시에 포섭한다 — 목록을 좁히면 한쪽 게이트가 약해진다.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

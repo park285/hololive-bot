@@ -16,10 +16,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// 이 dedup claim 은 키별 멱등이라 병렬 안전하며, Valkey 부하 제어를 위해 낮게 잡는다.
 const prepareBatchConcurrency = 8
 
-// 입력 순서대로 집계해 발행 순서를 결정적으로 유지한다.
 type prepareOutcome struct {
 	notification *domain.AlarmNotification
 	payload      *sendInput
@@ -37,8 +35,6 @@ func (n *Notifier) prepareSendBatch(
 	return assemblePrepared(outcomes, ctxErr, n)
 }
 
-// prepareOutcomes: notification 별 prepareOne 을 bounded 병렬로 수행하되, 결과는 입력 인덱스 슬롯에 기록해 순서를 보존한다.
-// 여기서 ctx 취소가 발생하면 errgroup 의 context-done error 를 함께 반환한다(직렬 base 와 동등한 error 전파를 위해).
 func (n *Notifier) prepareOutcomes(
 	ctx context.Context,
 	notifications []*domain.AlarmNotification,
@@ -55,7 +51,6 @@ func (n *Notifier) prepareOutcomes(
 		eg.Go(func() error {
 			return panicguard.RunE(n.logger, panicscope.BackgroundTask, "alarm-notifier-prepare", func() error {
 				if err := egCtx.Err(); err != nil {
-					// ctx 취소: claim 미수행이므로 발송 대상에서 제외(누락 아님). zero-value outcome 으로 어떤 카운터에도 넣지 않는다.
 					outcomes[i] = prepareOutcome{notification: notification}
 					return fmt.Errorf("prepare notification: %w", err)
 				}

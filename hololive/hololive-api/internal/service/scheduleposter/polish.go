@@ -13,17 +13,13 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// MaxMemoChars는 migration 026의 body CHECK와 같다.
 const MaxMemoChars = 4000
 
 var (
-	// ErrInvalidKorean은 고친 한국어 칸이 migration 019·020의 CHECK를 넘거나 제어 문자를 담았다는 뜻이다.
 	ErrInvalidKorean = errors.New("schedule poster korean fields are invalid")
-	// ErrInvalidMemo는 번역 메모가 MaxMemoChars를 넘거나 줄바꿈 밖의 제어 문자를 담았다는 뜻이다.
-	ErrInvalidMemo = errors.New("schedule poster translation memo is invalid")
+	ErrInvalidMemo   = errors.New("schedule poster translation memo is invalid")
 )
 
-// SlotKey는 Slot 하나를 가리킨다. 포스터 행은 Ordinal로, 글이 더한 칸은 AddedPostID·AddedItem으로 가리킨다.
 type SlotKey struct {
 	Ordinal     int
 	AddedPostID int64
@@ -64,11 +60,6 @@ func (k Korean) validate() error {
 	return nil
 }
 
-// PolishSlot은 확정본 칸 하나의 한국어 다섯 칸을 관리자가 고친 값으로 바꾼다. 값은 그 칸의 한국어를 마지막으로 정한 포스터 행이나
-// 글의 변경에 쓰고, 그 행이나 변경의 terms는 고친 글에 남은 표기만 두며 doubt_ko와 warnings는 비운다.
-// 인자 seen은 호출자가 읽은 PosterSchedule.UpdatedAt을 초 단위로 자른 값이다. 포스터가 없으면 ErrNotFound, 확정본이 아니거나 행 묶음을
-// 저장한 적이 없으면 ErrInvalidState, 그 뒤에 일정이 바뀌었거나 칸이 없으면 ErrRevisionConflict, 값이 한도를 넘으면 ErrInvalidKorean이다.
-// 포스터 행을 잠그므로 읽은 행 묶음을 그 사이 RecordRows가 바꾸지 못한다.
 func (s *Store) PolishSlot(ctx context.Context, posterID int64, seen time.Time, key SlotKey, korean Korean) error {
 	if err := korean.validate(); err != nil {
 		return fmt.Errorf("polish schedule poster slot: %w", err)
@@ -123,7 +114,6 @@ func (s *Store) PolishSlot(ctx context.Context, posterID int64, seen time.Time, 
 }
 
 func polish(ctx context.Context, tx pgx.Tx, posterID int64, slot *Slot, korean Korean) error {
-	// pgx는 nil slice를 NULL로 보내고 두 열은 NOT NULL이다.
 	with, tags := append([]string{}, korean.WithKo...), append([]string{}, korean.TagsKo...)
 	text := strings.Join(slices.Concat([]string{korean.TitleKo}, with, []string{korean.PlaceKo}, tags, []string{korean.NoteKo}), " ")
 
@@ -147,7 +137,6 @@ func polish(ctx context.Context, tx pgx.Tx, posterID int64, slot *Slot, korean K
 	return nil
 }
 
-// Memo는 번역 지시문에 참고 절로 붙는 관리자 메모다. 저장한 적이 없으면 UpdatedAt이 zero다.
 type Memo struct {
 	Body      string
 	Revision  int64
@@ -171,8 +160,6 @@ func (s *Store) TranslationMemo(ctx context.Context) (Memo, error) {
 	return memo, nil
 }
 
-// SaveTranslationMemo는 메모 본문을 바꾸고 새 revision을 돌려준다. 인자 expectedRevision이 지금 값과 다르면 ErrRevisionConflict,
-// 본문이 ValidMemo를 통과하지 못하면 ErrInvalidMemo다.
 func (s *Store) SaveTranslationMemo(ctx context.Context, expectedRevision int64, body string) (int64, error) {
 	if !ValidMemo(body) {
 		return 0, fmt.Errorf("save schedule poster translation memo: %w", ErrInvalidMemo)
@@ -192,7 +179,6 @@ func (s *Store) SaveTranslationMemo(ctx context.Context, expectedRevision int64,
 	return revision, nil
 }
 
-// ValidMemo는 본문이 MaxMemoChars 이하이고 줄바꿈(\n) 밖의 제어 문자가 없는지 본다. 빈 본문은 메모가 없다는 뜻이다.
 func ValidMemo(body string) bool {
 	return utf8.ValidString(body) && utf8.RuneCountInString(body) <= MaxMemoChars &&
 		!strings.ContainsFunc(body, func(r rune) bool { return r != '\n' && unicode.IsControl(r) })

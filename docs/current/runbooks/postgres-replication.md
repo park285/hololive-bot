@@ -13,9 +13,9 @@ single-primary 구성입니다. Seoul AP 호스트(`iris-seoul` / `100.100.1.5`)
 다시 사용하려면 명시적 승인을 새로 받고 대상 호스트용 정의를 새로 승인받은 뒤, 당시 primary에서 새
 `pg_basebackup`으로 standby를 재시딩해야 합니다.
 
-`kapu`의 기존 시간별 dump/restore는 사용자 지시로 2026-09-05 종료했습니다
-(`DEC-20260905-kapu-db-backup-retirement`). 후속 승인으로 로컬 `holo-postgres` container와
-`hololive-bot_holo-pg-data` volume을 제거했습니다(`DEC-20260905-stack-disk-cleanup`).
+`kapu`의 기존 시간별 dump/restore는 사용자 지시로 2026-09-05 종료했습니다.
+후속 승인으로 로컬 `holo-postgres` container와
+`hololive-bot_holo-pg-data` volume을 제거했습니다.
 2026-09-29 metadata 확인에서는 과거 09-05 static dump가 없고 `archive/`도 비어 있습니다.
 `kapu`는 `x86_64`이므로 현재 `aarch64` primary의 물리 standby로 전환하지 않습니다.
 Seoul 복제를 제거하여 동기화된 대기 복구와 자동 승격 역량도 없습니다.

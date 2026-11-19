@@ -5,8 +5,6 @@ import (
 	"fmt"
 )
 
-// settingsOperationGate는 SettingsHandler 하나가 소유한다. 저장과 worker 적용을 같은 순서로 묶고,
-// GET이 저장 뒤 적용 전의 서로 다른 snapshot을 조합하지 않게 한다. 대기는 요청의 전체 예산에 포함된다.
 type settingsOperationGate struct {
 	requests chan struct{}
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 운영 구현은 canonicalTxWriter 하나이며, 테스트만 롤백 원자성을 검증하려고 실패 구현을 주입한다.
 type canonicalWriter interface {
 	PersistTx(context.Context, dbx.Tx, *community.Batch) error
 	PersistVideosTx(context.Context, dbx.Tx, []*domain.YouTubeVideo, []*domain.YouTubeNotificationOutbox, []*domain.YouTubeContentAlarmTracking, *domain.YouTubeContentWatermark) error

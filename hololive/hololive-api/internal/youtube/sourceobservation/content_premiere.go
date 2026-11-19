@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-// mergeContentPremieres는 확정된 최초공개를 세션에 반영하고 적용 결정과 수명 모델 입력을 바꿀 수 있는 영상 key를 돌려준다.
 func mergeContentPremieres(
 	ctx context.Context,
 	tx dbx.Tx,

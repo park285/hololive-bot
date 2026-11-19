@@ -87,7 +87,6 @@ func TestCollectionRuntimeBundlesExactAggregation(t *testing.T) {
 	assertCollectionRuntimeBundles(t, pool)
 }
 
-// 진단 SQL이 늘 0을 내면 운영 점검도 정상으로 오판하므로, 집계와 매핑을 직접 손상시켜 종류마다 한 건씩 세는지 확인한다.
 func TestCollectionRuntimeBundlesDriftCountsEachMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -216,7 +215,6 @@ func TestCollectionRuntimeBundlesExpiryRemainsQueryTime(t *testing.T) {
 
 	before := collectionBundleTupleSnapshot(t, pool)
 
-	// 같은 저장 bundle을 소비하더라도 CURRENT 헤더의 유효기간은 매 문장마다 판정한다.
 	const query = `SELECT count(*) FROM youtube_collection_runtime_bundles bundle
 		JOIN youtube_collection_projection_generations header ON header.generation=bundle.projection_generation
 		WHERE header.status='CURRENT' AND header.valid_until>statement_timestamp()`

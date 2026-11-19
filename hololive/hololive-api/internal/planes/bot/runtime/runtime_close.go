@@ -57,8 +57,6 @@ func (r *BotRuntime) joinBackgroundTasks(ctx context.Context) error {
 	return r.backgroundErr
 }
 
-// CloseContext는 공유 종료 예산으로 같은 작업을 join한 뒤 같은 owner의 정리를 기다린다.
-// 작업 join 미완료에서는 DB/cache를 닫지 않는다. 정리 중 deadline이 끝나도 두 번째 정리를 시작하지 않는다.
 func (r *BotRuntime) CloseContext(ctx context.Context) error {
 	if r == nil {
 		return nil

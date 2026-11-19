@@ -1,11 +1,10 @@
--- ready 판정·lease·잠금 시각은 문장 시작에 한 번 채취한 clock 하나를 쓴다. lease는 $3 밀리초다.
 WITH clock AS MATERIALIZED (
 	SELECT clock_timestamp() AS now
 ), due_window AS MATERIALIZED (
 	SELECT d.send_unit_id, d.next_attempt_at, d.id AS delivery_id
 	FROM alarm_dispatch_deliveries d
 	WHERE $1::INT > 0
-	  AND /* ready_predicate */
+	  AND /* fragment:ready_predicate */
 	ORDER BY d.next_attempt_at ASC, d.id ASC
 	LIMIT $1::INT * $4::INT
 ), unit_candidates AS (

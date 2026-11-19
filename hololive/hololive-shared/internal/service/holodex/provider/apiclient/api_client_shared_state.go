@@ -10,9 +10,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// sharedState는 같은 Holodex API key를 쓰는 hololive-api와 alarm-worker가 429 대기와 circuit open을 함께 지키게 한다.
-// Valkey 오류는 로컬 상태만으로 진행하고(fail-open) 경고 로그와 counter로 드러낸다. 공유 상태는 만료·축출돼도
-// 되는 rate limit 상태이며, 같은 Valkey를 쓰는 분산 rate limit은 계속 fail-closed다.
 type sharedState interface {
 	Extend(ctx context.Context, key string, until time.Time) error
 	OpenOnce(ctx context.Context, key string, until time.Time) (bool, error)
@@ -20,7 +17,6 @@ type sharedState interface {
 }
 
 const (
-	// 공유 기록은 호출자 취소와 분리하되 요청 흐름을 오래 붙잡지 않게 짧게 끝낸다.
 	sharedStateWriteTimeout = time.Second
 
 	sharedStateCooldownRead  = "cooldown_read"
@@ -44,7 +40,6 @@ func (c *APIClient) sharedCircuitKey() string {
 	return c.distributedRLCfg.BucketBase + ":circuit_open"
 }
 
-// 호출자가 취소해도 대기 시각을 지우지 않는 계약을 따른다.
 func (c *APIClient) publishCooldown(ctx context.Context, until time.Time) {
 	if c.shared == nil {
 		return
@@ -73,7 +68,6 @@ func (c *APIClient) mergeSharedCooldown(ctx context.Context) {
 	c.extendLocalCooldown(until)
 }
 
-// 열려 있지 않거나 읽지 못하면 0이다.
 func (c *APIClient) sharedCircuitRemaining(ctx context.Context) time.Duration {
 	if c.shared == nil {
 		return 0
@@ -89,8 +83,6 @@ func (c *APIClient) sharedCircuitRemaining(ctx context.Context) time.Duration {
 	return time.Until(until)
 }
 
-// publishCircuitOpen은 로컬 circuit이 열린 시점에 한 번만 공유 open을 연다. 이미 열려 있으면 만료 시각을 늘리지 않아
-// circuitResetTimeout보다 긴 재시도 지연(retry scheduler) 불변식을 지킨다.
 func (c *APIClient) publishCircuitOpen(ctx context.Context) bool {
 	if c.shared == nil {
 		return false
@@ -109,7 +101,6 @@ func (c *APIClient) publishCircuitOpen(ctx context.Context) bool {
 	return opened
 }
 
-// 호출자 취소·기한 만료는 Valkey 장애가 아니므로 counter와 Warn에 넣지 않고, 요청은 뒤따르는 ctx 검사에서 끝난다.
 func (c *APIClient) recordSharedStateReadFailure(ctx context.Context, operation string, err error) {
 	if ctx.Err() != nil {
 		return

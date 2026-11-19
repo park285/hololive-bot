@@ -44,7 +44,6 @@ INSERT INTO youtube_notification_delivery_ledger AS current (
             WHEN EXCLUDED.sent_at < current.sent_at THEN EXCLUDED.source_delivery_id
             ELSE COALESCE(current.source_delivery_id, EXCLUDED.source_delivery_id)
         END
-    -- 동시 conflict의 최신 행에서 실제로 바뀌는 값이 있을 때만 새 행 버전을 쓴다.
     WHERE current.status <> 'SENT'
        OR EXCLUDED.first_recorded_at < current.first_recorded_at
        OR EXCLUDED.updated_at > current.updated_at

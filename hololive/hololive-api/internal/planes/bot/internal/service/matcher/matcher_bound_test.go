@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package matcher
 
 import (
@@ -60,7 +40,6 @@ func TestStoreMatch_EvictsOldestWhenFull(t *testing.T) {
 	mm := newBoundTestMatcher()
 	base := time.Now()
 
-	// cap 을 정확히 채우되 결정적 Timestamp 로 oldest 를 고정한다.
 	for i := range matchCacheMaxEntries {
 		key := fmt.Sprintf("match:k-%d", i)
 
@@ -97,7 +76,7 @@ func TestStoreMatch_PrefersExpiredEviction(t *testing.T) {
 	for i := range matchCacheMaxEntries {
 		key := fmt.Sprintf("match:k-%d", i)
 		ts := base.Add(time.Duration(i) * time.Millisecond)
-		// 인덱스 5 를 만료시킨다(가장 오래된 것은 0번).
+
 		if i == 5 {
 			ts = base.Add(-2 * mm.matchCacheTTL)
 		}

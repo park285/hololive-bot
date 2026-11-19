@@ -65,9 +65,6 @@ func deliveryRequestFromFrozen(frozen store.FrozenRequest) (deliverySendRequest,
 	return deliverySendRequest{roomID: frozen.RoomID, message: frozen.Message, dedupeKeys: frozen.DedupeKeys, clientRequestID: id, frozen: &frozen}, nil
 }
 
-// 확정 pre-handoff 실패도 한 번의 delivery attempt를 소비한다. 새 세대는 다음
-// 정규 retry에서 보내므로 기존 backoff·최대 시도·신선도 예산을 우회하지 않는다. 성공하면 202의 Iris requestId를
-// attempt에 남겨 CompleteSent가 handoff admission으로 기록하게 한다.
 func (d *SendEngine) sendFrozenDelivery(ctx context.Context, attempt *deliveryAttempt) error {
 	req, operation := attempt.request, attempt.operation
 

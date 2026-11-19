@@ -18,7 +18,6 @@ func NewCanvas(width, height int, background color.Color) *image.RGBA {
 	return img
 }
 
-// 고해상도 캔버스를 표시폭(outputWidth)으로 다운스케일(SSAA) 후 PNG 인코딩한다.
 func EncodePNG(img *image.RGBA, outputWidth int) ([]byte, error) {
 	out := downscaleToWidth(img, outputWidth)
 
@@ -54,7 +53,6 @@ type BadgeStyle struct {
 	BaselineLift int
 }
 
-// badgeLeft는 장식용이 아니다 — 호출자가 이 값으로 이름 폭 예산을 잘라야 배지와 겹치지 않는다.
 func BadgeRightAligned(img *image.RGBA, rightX, y int, text string, s BadgeStyle) (badgeLeft int) {
 	bw := MeasureText(s.Face, text)
 	bx := rightX - bw - s.PadX*2

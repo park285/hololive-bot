@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package formatter
 
 import (
@@ -56,7 +36,6 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 
 	assert.Equal(t, "CLEAR 3", formatter.FormatAlarmCleared(t.Context(), 3))
 
-	// 후보 목록은 정본 표시명, 복사 예시는 matcher가 다시 해석하는 검색 키 형식이다.
 	ambiguous := formatter.FormatAmbiguousMembers(t.Context(), []*domain.Member{
 		{Name: "Miko", NameKo: "사쿠라 미코", ShortKoreanName: "미코", Org: "Hololive"},
 		{Name: "Miko", NameKo: "미코 니지", Org: "Nijisanji"},

@@ -24,8 +24,6 @@ func withoutUpcomingNotifications(notifications []*domain.AlarmNotification) []*
 	return result
 }
 
-// Go 종료 판단에는 이번 provider 조회의 응답만 전달한다. Canonical 종료·일정 변경은
-// Pending SQL이 필드별 실제 관측 시각 > selected_at을 검증하므로 과거 보강 데이터로 다시 판단하지 않는다.
 func (c *YouTubeChecker) recoverUpcomingCandidates(ctx context.Context, streams map[string][]*domain.Stream, now time.Time) ([]*domain.AlarmNotification, error) {
 	pending, err := c.upcomingCandidates.Pending(ctx, now)
 	if err != nil {
@@ -34,7 +32,6 @@ func (c *YouTubeChecker) recoverUpcomingCandidates(ctx context.Context, streams 
 
 	result := make([]*domain.AlarmNotification, 0, len(pending))
 	subscriptions := make(map[upcomingSubscriptionKey][]string)
-	// 종료 판정은 outcome별로 모아 한 UPDATE씩 보낸다. 중간 조회가 실패해도 그때까지 판정한 종료는 반영한다.
 	finished := make(map[string][]string)
 
 	for i := range pending {
@@ -87,7 +84,6 @@ func (c *YouTubeChecker) upcomingSubscriptionTermination(ctx context.Context, ca
 	rooms, ok := subscriptions[key]
 
 	if !ok {
-		// 취소 판단은 cache 누락이 아닌 현재 DB 구독 사실에만 근거한다.
 		var err error
 
 		rooms, err = c.pendingSubscribers.ResolveEventSubscribers(ctx, key.channel, key.title, domain.AlarmTypeLive)
@@ -125,7 +121,6 @@ func upcomingCandidateTermination(candidate *dispatchoutbox.UpcomingCandidate, s
 		}
 	}
 
-	// provider 목록 누락만으로 취소를 추정하지 않는다.
 	return ""
 }
 

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package youtubedispatch
 
 import (
@@ -108,7 +88,6 @@ func (g *OutboxGrouper) collectRoomsByChannel(ctx context.Context, items []domai
 	return result
 }
 
-// UNIT B 채널은 진행자 조합마다 항목이 생기지만 구독 목록은 채널·종류 단위로 같으므로 한 번만 읽는다.
 type subscriberLookupGroup struct {
 	channelID string
 	alarmType domain.AlarmType
@@ -159,7 +138,6 @@ func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []cha
 	return results
 }
 
-// 조회가 실패하면 묶음의 모든 항목을 실패로 남겨, 항목마다 따로 조회하던 때와 같이 해당 대상의 발송을 만들지 않는다.
 func (g *OutboxGrouper) resolveSubscriberGroup(ctx context.Context, entries []channelAlarmEntry, group subscriberLookupGroup, results []subscriberLookupResult) {
 	titles := make([]string, 0, len(group.entries))
 	for _, entryIndex := range group.entries {

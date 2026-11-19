@@ -284,8 +284,6 @@ test("videos tab lockup times never become item times and only the structured up
   assert.ok(requests.every(request => !request.url.includes("/player")));
 });
 
-// 실제 streams/videos 탭의 lockupViewModel 형태입니다. 배지는 thumbnailBottomOverlayViewModel에 실립니다.
-// null은 해당 필드를 원문에서 빼라는 뜻입니다.
 const lockupRow = (id, badges, { contentType = "LOCKUP_CONTENT_TYPE_VIDEO", title = { content: id } } = {}) => ({ lockupViewModel: {
   contentId: id, ...(contentType === null ? {} : { contentType }),
   contentImage: { thumbnailViewModel: { image: { sources: [] }, overlays: [{ thumbnailBottomOverlayViewModel: { badges } }] } },
@@ -299,7 +297,6 @@ const grid = (tab, rows) => ({ tabRenderer: { title: tab, selected: true, endpoi
 
 test("streams lockups take their status from structured badges only", async () => {
   const rows = [lockupRow("live-row", [liveBadge]), lockupRow("upcoming-row", [upcomingBadge]), lockupRow("ended-row", [durationBadge])];
-  // lockup에는 기계가독 예정 시각이 없으므로 UPCOMING 행만 raw /player로 보강합니다.
   const player = { videoDetails: { videoId: "upcoming-row", isUpcoming: true, isLiveContent: true }, playabilityStatus: { status: "OK" },
     microformat: { playerMicroformatRenderer: { liveBroadcastDetails: { isLiveNow: false, startTimestamp: "2100-01-01T00:00:00Z" } } } };
   const { client, requests } = await localClient([page([grid("streams", rows.map(richItem))]), player]);
@@ -308,7 +305,6 @@ test("streams lockups take their status from structured badges only", async () =
     [["live-row", "LIVE", undefined], ["upcoming-row", "UPCOMING", "2100-01-01T00:00:00.000Z"], ["ended-row", "ENDED", undefined]]);
   assert.equal(requests.length, 2);
   assert.equal(requests[1].body.videoId, "upcoming-row");
-  // 배지가 없는 lockup은 종료로 추정하지 않습니다.
   await rejectsDrift(scenarios[3], [page([grid("streams", [richItem(lockupRow("unmarked-row", []))])])]);
 });
 
@@ -330,14 +326,11 @@ for (const scenario of scenarios) {
   const row = scenario.tab === "posts" ? rowNode("posts") : richItem(lockupRow("row-1", [durationBadge]));
   const unknown = { unknownRowRenderer: { id: "row-2" } };
   test(`${scenario.tab} rejects body rows the SDK list leaves out or adds`, async () => {
-    // SDK가 분류하지 못한 renderer, contentType 없는 lockup, null 행은 진단 없이 목록에서 빠집니다.
     for (const dropped of [unknown, richItem(unknown), richItem(lockupRow("row-2", [durationBadge], { contentType: null })), richItem(null)]) {
       await rejectsDrift(scenario, [page([grid(scenario.tab, [row, dropped])])]);
     }
-    // 중첩 shelf의 항목은 본문 행 하나에 여러 항목을 더합니다.
     const shelf = { richSectionRenderer: { content: { richShelfRenderer: { contents: [richItem(lockupRow("shelf-1", [durationBadge])), richItem(lockupRow("shelf-2", [durationBadge]))] } } } };
     await rejectsDrift(scenario, [page([grid(scenario.tab, [row, shelf])])]);
-    // 같은 검사가 continuation 페이지에도 적용됩니다. streams 수집은 첫 페이지만 읽습니다.
     if (scenario.tab === "streams") return;
     await rejectsDrift(scenario, [page([grid(scenario.tab, [row, continuation("next")])]), continued([row, unknown])]);
     const { client, requests } = await localClient([page([grid(scenario.tab, [row, continuation("next")])]), continued([row])]);

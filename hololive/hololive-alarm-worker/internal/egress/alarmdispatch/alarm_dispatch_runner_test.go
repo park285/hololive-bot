@@ -73,8 +73,6 @@ func (c *alarmDispatchRunnerTestConsumer) DrainBatch(context.Context, int) ([]di
 	return withAlarmDispatchTestSendUnitIdentity(batch), nil
 }
 
-// 운영 claim은 send unit이 저장된 delivery만 돌려주므로, 식별자 없는 테스트 봉투에는 생산자와 같은 dispatch group key로
-// 결정적인 send unit과 client_request_id를 붙인다.
 func withAlarmDispatchTestSendUnitIdentity(batch []dispatchoutbox.AlarmQueueEnvelope) []dispatchoutbox.AlarmQueueEnvelope {
 	out := make([]dispatchoutbox.AlarmQueueEnvelope, len(batch))
 	for i := range batch {
@@ -194,7 +192,6 @@ func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, processed)
-	// YouTube 방송 알림도 Text 경로로 저장된 send-unit ID를 붙여 보낸다.
 	assert.Equal(t, testAlarmRoomID, sender.roomID)
 	require.Len(t, sender.messages, 1)
 	require.Len(t, sender.clientRequestIDs, 1)
@@ -861,7 +858,6 @@ func alarmDispatchRunnerIntrinsicTextEnvelope() dispatchoutbox.AlarmQueueEnvelop
 	return alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 }
 
-// alarmDispatchRunnerPinnedEnvelope는 요청을 미리 고정해 attempt deadline 검증을 렌더러의 실제 DB I/O와 분리한다.
 func alarmDispatchRunnerPinnedEnvelope(store *alarmRequestTestStore, roomID string) dispatchoutbox.AlarmQueueEnvelope {
 	envelope := alarmDispatchRunnerTestEnvelope(roomID, nil)
 
@@ -1016,7 +1012,6 @@ func TestAlarmDispatchRunnerBoundsStateContextWhenParentCanceled(t *testing.T) {
 	assert.True(t, consumer.quarantineDeadline, "취소를 끊은 정리 컨텍스트에도 시간 상한이 있어야 한다")
 }
 
-// alarmGroupRenderEnvelope는 members 정본 이름이 memberName인 채널의 방송 알림 envelope를 만든다.
 func alarmGroupRenderEnvelope(minutesUntil int, memberName, streamID, title string) dispatchoutbox.AlarmQueueEnvelope {
 	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 

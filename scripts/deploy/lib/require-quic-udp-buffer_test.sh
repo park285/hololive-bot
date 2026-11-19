@@ -15,7 +15,6 @@ pass() {
     echo "[PASS] $*"
 }
 
-# persisted 검증은 sysctl --system 적용 의미론(last-wins: sysctl.d lexical 순서 후 sysctl.conf 최종)을 따라야 한다.
 mkdir -p "${fixture_root}/etc/sysctl.d"
 printf 'net.core.rmem_max=2048\nnet.core.wmem_max=2048\n' > "${fixture_root}/etc/sysctl.d/10-high.conf"
 printf 'net.core.rmem_max=512\nnet.core.wmem_max=512\n' > "${fixture_root}/etc/sysctl.d/90-low-override.conf"

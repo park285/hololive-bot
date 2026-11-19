@@ -22,13 +22,11 @@ func broadcastTimeTestSummary() *BroadcastTimeSummary {
 				EndedAt:   time.Date(2026, time.November, 7, 10, 38, 0, 0, time.UTC),
 			},
 			{
-				// 미분류 방송도 합계와 목록에 넣는다.
 				TypeLabel: "미분류",
 				StartedAt: time.Date(2026, time.November, 7, 2, 0, 0, 0, time.UTC),
 				EndedAt:   time.Date(2026, time.November, 7, 5, 34, 0, 0, time.UTC),
 			},
 			{
-				// 자정을 넘긴 방송은 종료에 날짜를 붙인다.
 				TypeLabel: "멤버십",
 				StartedAt: time.Date(2026, time.November, 6, 12, 59, 0, 0, time.UTC),
 				EndedAt:   time.Date(2026, time.November, 6, 15, 8, 0, 0, time.UTC),

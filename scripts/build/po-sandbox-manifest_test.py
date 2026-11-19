@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Podman archive identity와 런타임별 적재 identity 대조를 검사한다."""
 import hashlib
 import io
 import json
@@ -23,7 +22,6 @@ def digest(data):
 
 class ImageIdentityTests(unittest.TestCase):
     def archive(self, directory):
-        # podman save --format docker-archive 배치: manifest.json, <config hex>.json, <layer>.tar
         config = json.dumps({"architecture": "arm64", "os": "linux"}).encode()
         config_id = digest(config)
         entries = {
@@ -49,7 +47,6 @@ class ImageIdentityTests(unittest.TestCase):
                               capture_output=True, text=True, timeout=10).returncode == 0
 
     def verify_loaded(self, reported_id, recorded):
-        # 적재 호스트의 sudo·podman CLI를 가짜로 두고 po_verify_image의 identity 정규화를 실행한다.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "bin").mkdir()

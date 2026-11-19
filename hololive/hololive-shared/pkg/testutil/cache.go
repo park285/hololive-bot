@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package testutil
 
 import (
@@ -31,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// NewTestCacheService는 miniredis 기반 테스트용 캐시 서비스를 생성합니다.
 func NewTestCacheService(ctx context.Context, t *testing.T) *cache.Service {
 	t.Helper()
 
@@ -40,8 +19,6 @@ func NewTestCacheService(ctx context.Context, t *testing.T) *cache.Service {
 	return service
 }
 
-// NewTestCacheServiceWithMini는 테스트용 캐시 서비스와 miniredis 인스턴스를 함께 반환합니다.
-// 캐시 서비스와 miniredis는 테스트 종료 시 함께 닫힙니다.
 func NewTestCacheServiceWithMini(ctx context.Context, t *testing.T) (*cache.Service, *miniredis.Miniredis) {
 	t.Helper()
 

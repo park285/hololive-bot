@@ -30,7 +30,6 @@ type TransitionStore struct {
 	logger *slog.Logger
 	config TransitionConfig
 
-	// afterCommit은 PostgreSQL의 COMMIT 성공 뒤 응답 유실과 재조회를 재현하는 비공개 테스트 훅이다.
 	afterCommit func(operation string) error
 }
 
@@ -70,8 +69,6 @@ func NewTransitionStore(db deliverysql.DeliveryDB, logger *slog.Logger, config T
 	return &TransitionStore{db: db, logger: logger, config: config}, nil
 }
 
-// ClaimPending은 claim 가능한 PENDING 행을 이 인스턴스 소유로 잠그며, lease 만료·due·신선도 판정과 새 locked_at을
-// 모두 DB 시계로 정한다.
 func (s *TransitionStore) ClaimPending(ctx context.Context, batchSize int) ([]domain.YouTubeNotificationDelivery, error) {
 	if batchSize <= 0 {
 		return nil, errors.New("claim pending: batch size must be positive")
@@ -135,7 +132,6 @@ type resolvedLogicalGroups struct {
 	ledgerByKey map[ytcontentid.LogicalKey]DeliveryLedgerRecord
 }
 
-// 다시 읽은 행이 호출자 claim과 다르면 해석 전에 operation 이름의 *sendfence.MissError를 돌려준다.
 func (s *TransitionStore) resolveClaimedGroups(
 	ctx context.Context,
 	db dbx.Querier,
@@ -160,9 +156,6 @@ func (s *TransitionStore) resolveClaimedGroups(
 	return resolved, nil
 }
 
-// resolveLogicalGroups는 요청 키의 논리 그룹 행을 같은 트랜잭션에서 잠가 다시 읽고 ledger와 함께 해석한다. 이번 claim
-// batch 행(currentIDs)은 InCurrentBatch로 표시하고 정체성이 깨졌으면 오류로 보며, 다른 행의 깨진 정체성은 그룹 밖으로
-// 건너뛴다. 잠근 행 전체는 키별 한도 확인 뒤, ledger 조회 전에 checkLocked로 검사하며 claim이 없는 경로는 nil을 넘긴다.
 func (s *TransitionStore) resolveLogicalGroups(
 	ctx context.Context,
 	db dbx.Querier,
@@ -181,7 +174,6 @@ func (s *TransitionStore) resolveLogicalGroups(
 
 	requestedKeys, requestedSet := requestedLogicalKeys(requested)
 
-	// 조회 창의 완전성을 확인한 뒤 키별 행 한도를 검사한다. 다른 키의 별칭 후보가 창을 채운 경우도 앞에서 거부한다.
 	rowsByID, snapshots, err := s.resolutionSnapshots(rows, currentIDs, requestedSet)
 	if err != nil {
 		return resolvedLogicalGroups{}, fmt.Errorf("resolve logical groups: build snapshots: %w", err)
@@ -286,8 +278,6 @@ func resolutionSnapshot(
 	return key, row.snapshot(current), true, nil
 }
 
-// 상태를 PENDING으로 둔 채 소유자와 row_version을 바꾸는 것이 claim이므로 셋이 모두 같아야 호출자가 아직 그 행을 소유한다. 하나라도 어긋나면 대상 전원을 미적용으로 담은 미스를 돌려주며,
-// 호출자는 이 트랜잭션에서 아무 행도 바꾸지 않는다.
 func checkClaimFence(operation string, claimed []domain.YouTubeNotificationDelivery, rows []transitionRow) error {
 	loaded := make(map[int64]transitionRow, len(rows))
 	for i := range rows {
@@ -409,8 +399,6 @@ func queryLogicalGroupRows(ctx context.Context, db dbx.Querier, args []any) ([]t
 	return rows, nil
 }
 
-// logicalGroupArgs는 transition_group_candidates.sql 조각을 쓰는 문장의 $1..$5(직접 id, 요청 조합 배열 셋, 행 한도)다.
-// 그룹 잠금과 handoff 부모 사전 조회가 같은 값을 쓰도록 한 곳에서 만든다.
 func (s *TransitionStore) logicalGroupArgs(requested []requestedLogicalGroup) []any {
 	ids := make([]int64, 0, len(requested))
 	roomIDs := make([]string, 0, len(requested)*3)
@@ -419,7 +407,6 @@ func (s *TransitionStore) logicalGroupArgs(requested []requestedLogicalGroup) []
 
 	for i := range requested {
 		ids = append(ids, requested[i].delivery.ID)
-		// 배열의 같은 위치가 한 요청 조합입니다. 개별 중복 제거는 교차 조합까지 잠그게 합니다.
 		for _, candidate := range requested[i].candidate {
 			roomIDs = append(roomIDs, requested[i].key.RoomID)
 			kinds = append(kinds, string(requested[i].key.Kind))
@@ -432,12 +419,10 @@ func (s *TransitionStore) logicalGroupArgs(requested []requestedLogicalGroup) []
 	return []any{ids, roomIDs, kinds, candidates, limit}
 }
 
-// logicalGroupWindowLimit는 요청마다 직접 id 하나와 키별 한도 초과를 관측할 여분 한 행을 배정한다.
 func (s *TransitionStore) logicalGroupWindowLimit(requestedCount int) int {
 	return requestedCount * (s.config.LogicalGroupLimit + 2)
 }
 
-// 한도에 닿으면 창 밖 형제의 유무를 증명할 수 없으므로 불완전하며, 빈 요청은 완전한 빈 집합이다.
 func (s *TransitionStore) logicalGroupWindowComplete(requestedCount, observedCount int) bool {
 	return requestedCount == 0 || observedCount < s.logicalGroupWindowLimit(requestedCount)
 }
@@ -495,9 +480,6 @@ func loadTransitionLedger(
 	return ledgerByKey, evidence, nil
 }
 
-// rowTransition의 after는 시각 열을 뺀 다음 상태다. 시각 열은 전이 문장이 대상을 잠근 뒤 채취한 DB 시계로 정하며,
-// next_attempt_at은 due를, locked_at은 lockFromClock이면 그 시계를 아니면 NULL을, sent_at은 sentFromClock이면 그
-// 시계를 아니면 after.SentAt(DB에서 읽은 ledger sent_at 또는 nil)을 쓴다.
 type rowTransition struct {
 	before        transitionRow
 	after         transitionRow
@@ -523,7 +505,6 @@ type transitionVectors struct {
 	nextErrors       []string
 }
 
-// 한 대상이라도 fence가 어긋나면 아무 행도 바꾸지 않고 *sendfence.MissError를 돌려준다. 성공하면 전이 시각(DB 시계)을 함께 돌려준다.
 func applyRowTransitions(
 	ctx context.Context,
 	db dbx.Querier,
@@ -533,7 +514,6 @@ func applyRowTransitions(
 	return applyFencedRowTransitions(ctx, db, operation, transitions, nil)
 }
 
-// 정지했던 소유자가 lease 밖에서 발송을 시작하지 않도록 행 fence에 더해 claim lease(locked_at + lease)가 DB 시계 기준으로 살아 있어야 한다.
 func applySendingTransitions(
 	ctx context.Context,
 	db dbx.Querier,
@@ -597,7 +577,6 @@ func applyFencedRowTransitions(
 		return nil, time.Time{}, fmt.Errorf("%s: row fence: %w", operation, err)
 	}
 
-	// fence를 통과했으면 대상 전원이 관측되었으므로 첫 행의 전이 시각이 문장 전체의 시계다.
 	return transitionOutboxIDs(transitions), scanned[0].transitionedAt.UTC(), nil
 }
 
@@ -670,7 +649,6 @@ func (v *transitionVectors) appendTransition(transition rowTransition, nextAttem
 	v.nextErrors = append(v.nextErrors, deliverysql.TruncateString(transition.after.Error, 500))
 }
 
-// 유지는 지연 NULL, 하한이 없으면 하한 NULL이다.
 func dueVectorValues(due lifecycle.DueSpec) (*int64, *time.Time) {
 	if due.Mode != lifecycle.DueDelay {
 		return nil, nil

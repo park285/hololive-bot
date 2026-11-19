@@ -8,8 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// InsertBatch는 정상 entry와 collision audit을 함께 commit한다. 충돌 entry는 delivery를 만들지 않으며
-// 호출자는 error가 nil이어도 입력별 Receipts의 수용 여부를 확인해야 한다.
 func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput) (PublishBatchResult, error) {
 	if r == nil || r.pool == nil {
 		return PublishBatchResult{}, errors.New("insert dispatch ledger batch: postgres pool is nil")
@@ -37,8 +35,6 @@ func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput
 
 const pgErrCodeDeadlockDetected = "40P01"
 
-// 40P01은 tx 전체가 롤백되므로 재시도 단위도 tx 전체여야 한다 — preflight의 ORDER BY로
-// publisher 교차 잠금은 제거했지만 후속 INSERT ... ON CONFLICT 경합의 40P01은 남는다.
 func runPublishBatchWithDeadlockRetry(
 	result *PublishBatchResult,
 	attempt func() (PublishBatchResult, error),

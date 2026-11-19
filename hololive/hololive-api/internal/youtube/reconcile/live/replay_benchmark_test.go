@@ -13,8 +13,6 @@ func BenchmarkLiveIgnoredAbsenceHistory(b *testing.B) {
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 	initial := liveEvidence(1, base, contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("UPCOMING"))
 
-	// 운영과 같은 observed UPCOMING positive 세션에서 시작한다. newSession의 metadata_only
-	// 세션은 부재 적용 전에 걸러져 이력 재생 비용을 측정하지 못한다.
 	created, err := Reduce(State{}, initial, time.Hour, initial.ReceivedAt)
 	if err != nil {
 		b.Fatal(err)

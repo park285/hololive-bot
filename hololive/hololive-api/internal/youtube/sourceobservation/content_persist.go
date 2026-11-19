@@ -111,7 +111,6 @@ func domainNotification(intent *content.NotificationIntent) *domain.YouTubeNotif
 	}
 }
 
-// 정규화할 수 없는 값은 빈 문자열로 싣고 canonical 저장 전 검증이 그 행을 거부한다.
 func shortCanonicalPostID(contentID string) string {
 	canonicalID, err := ytcontentid.ForShort(contentID)
 	if err != nil {
@@ -233,7 +232,6 @@ func boundedVideoTitle(title string) string {
 		return title
 	}
 
-	// 기존 바이트 상한을 지키면서 JSON과 PostgreSQL에 유효한 UTF-8 접두사만 저장한다.
 	end := maxTitleBytes
 	for end > 0 && !utf8.RuneStart(title[end]) {
 		end--

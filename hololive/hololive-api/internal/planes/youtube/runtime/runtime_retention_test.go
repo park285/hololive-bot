@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
@@ -15,13 +17,14 @@ import (
 )
 
 func TestShutdownJoinsRetentionWorker(t *testing.T) {
-	var retentionTicks atomic.Int64
+	ticked := make(chan struct{})
+	recordTick := sync.OnceFunc(func() { close(ticked) })
 
 	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
 	runtime.retainer = fakeRetainer{
 		tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
-			retentionTicks.Add(1)
+			recordTick()
 
 			return sourceobservation.RetentionResult{}, nil
 		},
@@ -32,7 +35,7 @@ func TestShutdownJoinsRetentionWorker(t *testing.T) {
 		t.Fatalf("loopCount = %d, want 5 with claim/projection/live-end/metrics/retention", runtime.loopCount)
 	}
 
-	waitForTicks(t, &retentionTicks)
+	awaitSignal(t, ticked, "retention worker did not run")
 
 	if err := runtime.Shutdown(t.Context()); err != nil {
 		t.Fatalf("shutdown: %v", err)
@@ -40,37 +43,52 @@ func TestShutdownJoinsRetentionWorker(t *testing.T) {
 }
 
 func TestRetentionTickKeepsSourceWhenProjectionFails(t *testing.T) {
-	var sourceTicks atomic.Int64
+	synctest.Test(t, func(t *testing.T) {
+		runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
 
-	runtime := newTestRuntime(t, fakeClaimer{}, fakeConsumer{})
+		runtime.Config.Retention.Interval = time.Millisecond
+		runtime.Config.Retention.ProjectionRetiredAge = 24 * time.Hour
+		runtime.projectionRetainer = fakeProjectionRetainer{
+			retain: func(context.Context, time.Time, time.Duration, int) (targetprojection.RetentionResult, error) {
+				return targetprojection.RetentionResult{}, errors.New("projection retain failed")
+			},
+		}
 
-	runtime.Config.Retention.ProjectionRetiredAge = 24 * time.Hour
-	runtime.projectionRetainer = fakeProjectionRetainer{
-		retain: func(context.Context, time.Time, time.Duration, int) (targetprojection.RetentionResult, error) {
-			return targetprojection.RetentionResult{}, errors.New("projection retain failed")
-		},
-	}
-	runtime.retainer = fakeRetainer{
-		tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
-			sourceTicks.Add(1)
+		var sourceTicks atomic.Int32
 
-			return sourceobservation.RetentionResult{Table: "source_observation_queue", Deleted: 1}, nil
-		},
-	}
+		runtime.retainer = fakeRetainer{
+			tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
+				sourceTicks.Add(1)
 
-	errCh := make(chan error, 1)
-	runtime.Start(t.Context(), errCh)
-	waitForTicks(t, &sourceTicks)
+				return sourceobservation.RetentionResult{Table: "source_observation_queue", Deleted: 1}, nil
+			},
+		}
 
-	select {
-	case err := <-errCh:
-		t.Fatalf("retention must not kill the process: %v", err)
-	default:
-	}
+		errCh := make(chan error, 1)
+		runtime.Start(t.Context(), errCh)
+		synctest.Wait()
 
-	if err := runtime.Shutdown(t.Context()); err != nil {
-		t.Fatalf("shutdown: %v", err)
-	}
+		select {
+		case err := <-errCh:
+			t.Errorf("retention must not kill the process: %v", err)
+		default:
+		}
+
+		if ticks := sourceTicks.Load(); ticks != 1 || !runtime.retentionFailed.Load() || runtime.Ready() {
+			t.Errorf("after projection failure: source ticks=%d, retention failed=%t, ready=%t", ticks, runtime.retentionFailed.Load(), runtime.Ready())
+		}
+
+		synctest.Sleep(runtime.Config.Retention.Interval)
+		synctest.Wait()
+
+		if ticks := sourceTicks.Load(); ticks != 2 {
+			t.Errorf("source ticks = %d, want 2 after the next retention interval", ticks)
+		}
+
+		if err := runtime.Shutdown(t.Context()); err != nil {
+			t.Fatalf("shutdown: %v", err)
+		}
+	})
 }
 
 func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
@@ -105,7 +123,6 @@ func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
 		}
 	}
 
-	// claim하는 모든 kind는 evidence 보존 기간을 가져야 무기한 누적되지 않는다.
 	for _, kind := range youtubePlaneClaimKinds() {
 		if _, ok := ages[kind]; !ok {
 			t.Fatalf("claimed kind %s has no evidence retention age", kind)
@@ -132,21 +149,6 @@ func TestPlaneRetentionConfigIncludesDependentRetention(t *testing.T) {
 		got.CheckpointHistoryAge != cfg.CheckpointHistoryAge {
 		t.Fatalf("dependent retention config = %#v", got)
 	}
-}
-
-func waitForTicks(t *testing.T, ticks *atomic.Int64) {
-	t.Helper()
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if ticks.Load() > 0 {
-			return
-		}
-
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	t.Fatal("worker tick did not run")
 }
 
 type fakeRetainer struct {

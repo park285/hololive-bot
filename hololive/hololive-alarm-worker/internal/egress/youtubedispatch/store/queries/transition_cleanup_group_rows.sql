@@ -1,14 +1,3 @@
--- cleanup 전용 same-logical 조회다. $1은 요청 자식 delivery id다. $2·$3·$4·$5는 같은 위치끼리 한 요청 identity 조합
--- (room_id, kind, candidate)과 그 조합을 만든 논리 키 번호(1부터)다. $6은 논리 키마다 남길 행 수(LogicalGroupLimit+1)다.
--- 한도는 논리 키마다 따로 둔다. batch 전체가 한도 하나를 나눠 쓰면 오래된 과대 그룹이 창을 채워 무관한 키의 관측까지
--- 끊는다. 키 번호마다 그 키의 조합이 찾은 행을 (created_at, id) 순서로 $6행까지만 남기고, $6번째 행에 그 키 번호를
--- saturated_keys로 붙인다. 조합이 다른 키로 풀리는 행을 찾아도 그 행은 조합을 만든 키의 한도를 쓰므로, 한도에 닿으면
--- 그 키만 불완전 관측이 된다. 반환 행은 최대 len($1) + 키 수×$6이다.
--- 그룹 잠금 문장의 후보 관계는 요청을 DISTINCT로 합쳐 delivery id만 남기므로 키 번호를 보존할 수 없어 여기서 따로 만든다.
--- identity 표현식 index가 없어 조합별 LATERAL은 조합마다 outbox를 다시 훑으므로, 등가 hash join을 한 번 하고 키 안에서
--- 순위를 매긴다.
--- 후보 부모·자식을 쥔 cleanup이 경쟁 트랜잭션이 잠근 행을 기다리면 stale sweep과 교착하므로 SKIP LOCKED로 잠근다.
--- 잠근 행은 잠금 뒤 최신 값을 locked=TRUE로, 잠그지 못한 행은 문장 snapshot 값을 locked=FALSE로 돌린다.
 WITH requested AS MATERIALIZED (
     SELECT key_no, room_id, kind, candidate
     FROM unnest($2::text[], $3::text[], $4::text[], $5::bigint[]) AS requested(room_id, kind, candidate, key_no)

@@ -22,8 +22,6 @@ func lockContentSubject(ctx context.Context, tx dbx.Tx, kind contract.Observatio
 	return nil
 }
 
-// loadContentState는 reducer가 이번 관측에 읽는 범위만 적재하고 잠근다. 관측된 영상과 clock 보유 영상,
-// 현재 slot과 이번 관측보다 늦은 slot이 그 범위이며, 나머지 이력은 결정에 영향을 주지 않는다.
 func loadContentState(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -122,7 +120,6 @@ func loadContentVideos(ctx context.Context, tx dbx.Tx, state *content.State, evi
 	return nil
 }
 
-// 이런 영상은 이 채널 목록에서 처음 보여도 새 업로드 근거가 아니므로 NEW_VIDEO 후보에서 뺍니다. 행을 잠그지 않으며 결과는 이번 관측 영상 수로 제한됩니다.
 func loadKnownElsewhere(ctx context.Context, tx dbx.Tx, state *content.State, evidenceIDs []string) error {
 	if len(evidenceIDs) == 0 {
 		return nil

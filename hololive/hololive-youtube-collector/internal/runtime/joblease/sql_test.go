@@ -11,7 +11,6 @@ var testSQLAssets embed.FS
 
 var mustTestSQL = sqlassets.MustReader(testSQLAssets, "testqueries")
 
-// 테스트 전용 SQL 자산도 패키지 초기화 때 한 번 읽는다.
 var (
 	activeLeaseCountSQL     = mustTestSQL("active_lease_count.sql")
 	candidateBaselineSQL    = mustTestSQL("candidate_baseline.sql")

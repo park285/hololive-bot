@@ -1,5 +1,3 @@
--- lease 소유 증명과 job별 membership 유효성을 함께 판정한다. 행이 없으면 소유를 잃은 것이다.
--- 호출자는 guard·lease 잠금을 먼저 얻은 뒤 별도 문장으로 실행해 잠금 이후의 새 snapshot에서 평가한다.
 SELECT EXISTS (
            SELECT 1
            FROM youtube_collection_projection_generations AS projection

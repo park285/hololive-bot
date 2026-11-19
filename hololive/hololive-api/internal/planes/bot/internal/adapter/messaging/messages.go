@@ -1,26 +1,5 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package messaging
 
-// SendError가 해석하는 message_strings(error ns) key이며, ErrorMessageKeys는 기동 시 검증한다.
 const (
 	ErrMemberProfileLoadFailed  = "member_profile_load_failed"
 	ErrMemberProfileBuildFailed = "member_profile_build_failed"
@@ -60,7 +39,6 @@ const (
 	ErrCommandProcessingFailed = "command_processing_failed"
 )
 
-// ErrorMessageKeys는 SendError로 보낼 수 있는 error namespace key 전체다. 상수를 추가하면 이 목록에도 넣는다.
 func ErrorMessageKeys() []string {
 	return []string{
 		ErrMemberProfileLoadFailed, ErrMemberProfileBuildFailed, ErrNoMemberInfoFound, ErrCannotDisplayMemberInfo,

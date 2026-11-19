@@ -10,7 +10,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
-// 실패한 전송도 지연 분포에 들어가야 timeout이 지연 꼬리로 드러난다.
 func TestInstrumentCountsStatusCodesAndTransportErrors(t *testing.T) {
 	t.Parallel()
 

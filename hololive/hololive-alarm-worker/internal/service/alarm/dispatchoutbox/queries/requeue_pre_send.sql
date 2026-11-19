@@ -1,5 +1,3 @@
--- 외부 호출 전에 멈춘 claim을 같은 attempt로 다시 대기시킨다. sending 진입 뒤 발송 전에 멈춘 경우도 포함하므로
--- leased·sending을 받고, 소유자가 스스로 돌려주는 전이라 lease 만료는 보지 않는다.
 WITH input AS MATERIALIZED (
     SELECT input.id, input.attempt_count, input.retry_after_ms, input.error, input.error_code
     FROM jsonb_to_recordset($1::jsonb) AS input(

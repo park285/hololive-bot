@@ -84,7 +84,6 @@ func TestRetentionPassesProtectedWindowAndContinuesLaterSteps(t *testing.T) {
 		require.EqualValues(t, 1, deleted, "later cleanup %s must run after the source traversal", table)
 	}
 
-	// 순회를 마친 다음 tick은 보호 창을 한 번만 다시 보고 멈춘다.
 	result, err = repo.RunRetentionTick(ctx, cfg, time.Now().UTC())
 	require.NoError(t, err)
 

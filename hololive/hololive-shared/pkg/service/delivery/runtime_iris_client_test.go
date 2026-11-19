@@ -562,7 +562,6 @@ func TestRuntimeIrisBaseURLResolverRejectsUncleanSymlinkTraversalInProductionStr
 		require.NoError(t, os.WriteFile(filepath.Join(target, "iris_base_url"), []byte(testIrisBaseURLWithSlash), 0o600))
 	}
 
-	// production은 stat 검사를 건너뛸 수 없어 정리되지 않은 symlink 경로를 항상 거절한다.
 	resolver, err := newRuntimeIrisBaseURLResolver(settings.IrisConfig{
 		BaseURLFile:             strings.Join([]string{linkParent, "..", "target", "iris_base_url"}, string(os.PathSeparator)),
 		H3ServerName:            testIrisHost,

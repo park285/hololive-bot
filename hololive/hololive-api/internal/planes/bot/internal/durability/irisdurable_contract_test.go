@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package durability
 
 import (
@@ -49,8 +29,6 @@ var (
 	contractCounter             atomic.Uint64
 )
 
-// NonceStore는 nil이다 — hololive의 HMAC nonce store는 iris-client-go의 Valkey
-// valkeydedup.NewNonceStore(internal/app/bootstrap/bot_webhook.go)라 PostgreSQL 원장이 아니다.
 func TestIrisDurableContract(t *testing.T) {
 	terminalRetention, automaticReplayHorizon := contractProfileRetention(t)
 
@@ -63,7 +41,7 @@ func TestIrisDurableContract(t *testing.T) {
 		ReplyOutbox: func(t *testing.T) contracttest.ReplyOutboxFixture {
 			t.Helper()
 
-			pool := newDurabilityPool(t)
+			pool := newReplyDelayPool(t)
 
 			return &contractReplyOutbox{pool: pool, repo: newTestReplyOutboxRepository(pool)}
 		},
@@ -86,8 +64,6 @@ func TestIrisDurableContract(t *testing.T) {
 	})
 }
 
-// contractProfileRetention은 API worker profile fixture에서 역할 소유 loader로 종단 보존과 자동 replay 지평을 읽는다.
-// Maintain은 inbox·command·reply outbox 종단 행을 같은 보존 기간으로 정리한다.
 func contractProfileRetention(t *testing.T) (terminalRetention, automaticReplayHorizon time.Duration) {
 	t.Helper()
 
@@ -118,8 +94,6 @@ type contractAdmitter struct {
 	inbox *InboxRepository
 }
 
-// Admit은 계약의 OrderingKey를 hololive의 room id로 보고, 실제 ordering key는 runtime과 같이
-// "room:"+roomID로 만든다.
 func (a contractAdmitter) Admit(ctx context.Context, input irisdurable.AdmissionInput) (workercontract.AdmissionResult, error) {
 	result, err := a.inbox.AdmitResult(ctx, InboxMessage{
 		MessageID:   MessageIdentity(input.MessageID),
@@ -185,8 +159,6 @@ func (o *contractReplyOutbox) Stage(ctx context.Context, record irisdurable.Repl
 	}
 }
 
-// BeginAttempt는 방 단위 FIFO를 지키는 Claim에 기댄다. Fixture마다 격리된 DB를 쓰므로 claim 가능한
-// 행은 요청한 identity뿐이고, 다른 행이 잡히면 상태를 조작하지 않고 오류로 돌려준다.
 func (o *contractReplyOutbox) BeginAttempt(ctx context.Context, identity irisdurable.ReplyIdentity) (irisdurable.ReplyAttempt, error) {
 	ordinal, err := contractOrdinal(identity.Ordinal)
 	if err != nil {
@@ -253,29 +225,7 @@ func (o *contractReplyOutbox) Settle(ctx context.Context, attempt irisdurable.Re
 	}
 
 	if outcome.Status.Resendable() {
-		return o.waitUntilAvailable(ctx, id)
-	}
-
-	return nil
-}
-
-// hololive의 Settle은 재발송 가능 상태에 available_at = now + max(RetryAfter, 1ms)를 기록하고
-// (replyOutboxRetryMilliseconds) Claim은 available_at <= clock_timestamp()만 후보로 본다. 계약
-// 스위트는 outcome_unknown 정산 직후 다시 BeginAttempt하므로, 상태를 건드리지 않고 DB 시계 기준으로
-// 그 durable backoff가 지나갈 때까지만 기다린다.
-func (o *contractReplyOutbox) waitUntilAvailable(ctx context.Context, id int64) error {
-	var remainingSeconds float64
-
-	err := o.pool.QueryRow(ctx,
-		"SELECT GREATEST(EXTRACT(EPOCH FROM (available_at - clock_timestamp())), 0)::float8 FROM bot_reply_outbox WHERE id = $1",
-		id,
-	).Scan(&remainingSeconds)
-	if err != nil {
-		return fmt.Errorf("read reply outbox available_at: %w", err)
-	}
-
-	if remainingSeconds > 0 {
-		time.Sleep(time.Duration(remainingSeconds*float64(time.Second)) + time.Millisecond)
+		return makeReplyRetryDue(ctx, o.pool, id, max(outcome.RetryAfter.Truncate(time.Millisecond), time.Millisecond))
 	}
 
 	return nil

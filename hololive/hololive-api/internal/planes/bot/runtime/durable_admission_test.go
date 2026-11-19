@@ -33,7 +33,6 @@ const (
 	testOrderingKey = "room:" + testRoomID
 )
 
-// 구 v3 binary가 저장한 Message JSON 형식은 claim에서 복원할 수 없으므로 전환 전 active inbox 드레인이 필요하다.
 func TestStoredWebhookPayloadV4RequiresRawBodyAndActiveInboxDrain(t *testing.T) {
 	legacy := []byte(`{"msg":"!help","room":"room-1","json":{"message_id":"m-1"}}`)
 	if _, err := webhook.DecodeMessage(legacy); err == nil {
@@ -555,7 +554,9 @@ func TestDuplicateActiveCommandDefersInboxUntilOutcomeIsKnown(t *testing.T) {
 		t.Fatalf("command claim = %v, err = %v", claimed, err)
 	}
 
-	time.Sleep(20 * time.Millisecond)
+	if _, err = pool.Exec(ctx, `UPDATE bot_webhook_inbox SET lease_until = lease_until - interval '1 millisecond' WHERE message_id = $1`, first.MessageID); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err = inbox.ReclaimExpired(ctx, testDurableProfile(t).BotReplyOutbox.MaxAttempts, durableBatchSize); err != nil {
 		t.Fatal(err)

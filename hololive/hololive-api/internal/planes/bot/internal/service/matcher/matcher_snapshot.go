@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package matcher
 
 import (
@@ -43,7 +23,6 @@ func (mm *Matcher) getSnapshot(ctx context.Context) (*matcherSnapshot, error) {
 		return snapshot, nil
 	}
 
-	// 첫 요청의 취소는 공유 적재에 전파하지 않는다. 각 대기자는 자기 예산으로 빠지고 적재 자체는 유한 예산을 갖는다.
 	sharedCtx := context.WithoutCancel(ctx)
 	results := mm.snapshotGroup.DoChan("member-snapshot", func() (any, error) {
 		loadCtx, cancel := context.WithTimeout(sharedCtx, matcherSnapshotLoadTimeout)
@@ -209,7 +188,6 @@ func (mm *Matcher) storeSnapshotEntry(
 		entriesByChannel[entry.candidate.channelID] = entry
 	}
 
-	// 채널 대표와 달리 이름·별칭 색인은 그 이름을 소유한 멤버를 가리킨다.
 	snapshot.entries = append(snapshot.entries, entry)
 	appendSnapshotEntry(snapshot.exactNames, entry.nameNorm, entry)
 

@@ -27,7 +27,6 @@ export function createFetchTransport(options) {
   const maxResponseBodyBytes = validateResponseBodyLimit(options.maxResponseBodyBytes);
   return {
     fetch: effectiveFetch(options.currentSignal, retryOptions, maxResponseBodyBytes),
-    // 라이브 확인 RPC는 물리 요청 상한을 지키도록 같은 요청 취소 신호를 쓰되 재시도하지 않습니다.
     singleAttemptFetch: effectiveFetch(options.currentSignal, null, maxResponseBodyBytes),
   };
 }
@@ -44,7 +43,6 @@ function effectiveFetch(currentSignal, retryOptions, maxResponseBodyBytes) {
     let effective;
     try {
       effective = new globalThis.Request(input, init);
-      // 자동 redirect도 추가 물리 요청이므로 새 확인의 단일 시도 경로에서는 허용하지 않습니다.
       if (retryOptions == null) effective = new globalThis.Request(effective, { redirect: "error" });
     } catch (error) {
       throw new FetchTransportError(
@@ -224,7 +222,6 @@ async function classifyUpstreamResponse(response, maxResponseBodyBytes) {
   if (response.status !== 429 && (response.status < 500 || response.status > 599)) {
     return await limitUpstreamResponse(response, maxResponseBodyBytes);
   }
-  // youtubei.js가 HTTP status 없는 InnertubeError로 바꾸기 전에 기존 실패 계약을 보존합니다.
   await discardUpstreamResponse(response);
   const code = upstreamHTTPFailureCode(response.status);
   throw new FetchTransportError(code, failureTuples[code].class, `upstream request failed with status code ${response.status}`);
@@ -320,7 +317,6 @@ async function discardUpstreamResponse(response) {
     await response.body?.cancel();
   } catch (error) {
     if (isTransientNetworkError(error)) {
-      // 이미 오류가 난 본문의 cancel도 같은 소켓 오류를 던집니다. 확인한 HTTP 분류를 보존하고 재시도는 중단합니다.
       const code = upstreamHTTPFailureCode(response.status);
       throw new FetchTransportError(code, failureTuples[code].class, "upstream response cleanup failed", { cause: error });
     }

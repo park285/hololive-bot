@@ -154,7 +154,6 @@ func validateEnvelopeContract(job collection.JobContract, envelope *collection.O
 	return nil
 }
 
-// 입력 lease의 job key·kind 결합은 target snapshot 적재와 실행 입력 생성이 이미 검증했습니다.
 func validateEnvelopeLease(lease *contract.LeaseProof, envelope *collection.ObservationMetadata) error {
 	if envelope.Lease != *lease {
 		return invariantError("observation lease or contract binding is invalid")

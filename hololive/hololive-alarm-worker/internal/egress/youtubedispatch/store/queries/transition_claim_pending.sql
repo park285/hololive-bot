@@ -1,7 +1,3 @@
--- 만료·신선도·due 판정과 새 locked_at은 문장 첫머리에서 한 번 채취한 DB 시계(clock)로 정한다. 스칼라 하위
--- 질의로 참조해 InitPlan 값이 되므로 PENDING 부분 인덱스 조건으로 쓰인다. clock은 행을 잠그기 전에 채취하므로
--- lease 만료·due 판정은 실제 잠금 시점보다 보수적이고, 새 lease도 그만큼 일찍 끝난다.
--- $1 상태, $2 lease ms, $3 신선도 ms, $4 batch 크기, $5 claim 소유자.
 WITH clock AS MATERIALIZED (
     SELECT sampled.at,
            sampled.at - $2::bigint * INTERVAL '1 millisecond' AS lock_cutoff,
@@ -14,7 +10,7 @@ WITH clock AS MATERIALIZED (
     FROM youtube_notification_delivery delivery
     JOIN youtube_notification_outbox outbox ON outbox.id = delivery.outbox_id
     LEFT JOIN youtube_notification_send_request request ON request.base_id = delivery.send_request_id
-    WHERE /* ready_predicate */
+    WHERE /* fragment:ready_predicate */
       AND (request.base_id IS NULL OR
            delivery.id = (SELECT min(id) FROM unnest(request.member_ids) AS ids(id)))
     ORDER BY delivery.next_attempt_at, delivery.created_at, delivery.id

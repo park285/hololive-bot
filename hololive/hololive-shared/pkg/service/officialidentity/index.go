@@ -14,8 +14,6 @@ import (
 
 type Index map[string][]string
 
-// Build는 멤버 데이터에서 공식 표기명→채널 색인을 만든다. 멤버 적재 실패는 빈 색인으로 바꾸지 않고 오류로 돌려준다.
-// 멤버 데이터 없이 구성한 호출자(membersData nil)는 빈 색인이다.
 func Build(ctx context.Context, membersData domain.MemberDataProvider) (Index, error) {
 	if membersData == nil {
 		return Index{}, nil
@@ -29,7 +27,6 @@ func Build(ctx context.Context, membersData domain.MemberDataProvider) (Index, e
 	return New(members), nil
 }
 
-// New는 이미 읽은 멤버 목록으로 공식 표기명→채널 색인을 만든다.
 func New(members []*domain.Member) Index {
 	candidates := make(map[string]map[string]struct{})
 
@@ -61,8 +58,6 @@ func (index Index) Resolve(name string) string {
 	return channelIDs[0]
 }
 
-// DisplayNames는 이미 만든 색인으로 공식 표기명 목록을 표시명으로 바꾼다. 색인의 채널이 멤버 조회에서 없다고 확인되면
-// 공식 표기명을 그대로 쓰지만, 조회 실패는 표시명을 추측하지 않고 오류로 돌려준다.
 func (index Index) DisplayNames(ctx context.Context, membersData domain.MemberDataProvider, officialNames []string, hostChannelID string) ([]string, error) {
 	hostChannelID = strings.TrimSpace(hostChannelID)
 

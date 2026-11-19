@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package alarmhttp
 
 import (
@@ -148,7 +128,6 @@ func (c *Client) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, err
 	return entries, nil
 }
 
-// CountAlarmEntries는 목록 본문과 표시명 조회 없이 방·채널 쌍의 개수를 읽는다.
 func (c *Client) CountAlarmEntries(ctx context.Context) (int, error) {
 	result, err := c.getJSON[contractsalarm.EntryCount](ctx, contractsalarm.CountPath)
 	if err != nil {
@@ -162,7 +141,6 @@ func (c *Client) CountAlarmEntries(ctx context.Context) (int, error) {
 	return *result.Count, nil
 }
 
-// 입력이 nil이면 nil로 두어 직렬화 결과를 바꾸지 않는다.
 func alarmTypeStrings(types domain.AlarmTypes) []string {
 	if types == nil {
 		return nil

@@ -46,7 +46,6 @@ func TestGetAllAlarmKeysListsDistinctRoomChannelsFromRepository(t *testing.T) {
 		require.True(t, added)
 	}
 
-	// 관리 목록은 Valkey 방 index가 아니라 PG에서 만든다. subscriber cache를 비워도 목록은 그대로다.
 	err := as.cache.ScanKeyPages(ctx, "*", 100, func(keys []string) error {
 		if _, err := as.cache.DelMany(ctx, keys); err != nil {
 			return fmt.Errorf("clear subscriber cache page: %w", err)
@@ -68,7 +67,6 @@ func TestGetAllAlarmKeysListsDistinctRoomChannelsFromRepository(t *testing.T) {
 		got = append(got, domain.AlarmEntry{RoomID: entry.RoomID, RoomName: entry.RoomName, ChannelID: entry.ChannelID})
 	}
 
-	// 같은 채널의 UNIT B 멤버 구독 두 행은 (방, 채널) 한 항목이다. Kakao 방 이름이 없는 방은 방 ID로 표시한다.
 	assert.ElementsMatch(t, []domain.AlarmEntry{
 		{RoomID: testRoomID, RoomName: "카카오방", ChannelID: testAlphaChannelID},
 		{RoomID: testRoomID, RoomName: "카카오방", ChannelID: memberSubscriptionChannel},
@@ -92,7 +90,6 @@ func TestSetRoomNamePrefersAdminNameAcrossRebuildAndReregistrationUntilCleared(t
 	require.NoError(t, as.WarmCacheFromDB(ctx))
 	assert.Equal(t, map[string]string{testRoomID: "관리 이름"}, roomNamesByRoom(t, as))
 
-	// 전체 해지 뒤 Kakao가 새 방 이름으로 재등록해도 관리자 이름이 이긴다.
 	cleared, err := as.ClearRoomAlarms(ctx, testRoomID)
 	require.NoError(t, err)
 	require.Equal(t, 1, cleared)
@@ -102,7 +99,6 @@ func TestSetRoomNamePrefersAdminNameAcrossRebuildAndReregistrationUntilCleared(t
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{testRoomID: "관리 이름"}, roomNamesByRoom(t, as))
 
-	// 공백 이름은 관리자 지정을 해제해 Kakao 방 이름으로 돌아간다. 이미 해제된 방의 해제도 성공한다.
 	require.NoError(t, as.SetRoomName(ctx, testRoomID, " "))
 	assert.Equal(t, map[string]string{testRoomID: "새 카카오 이름"}, roomNamesByRoom(t, as))
 	require.NoError(t, as.SetRoomName(ctx, testRoomID, ""))

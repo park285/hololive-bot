@@ -128,7 +128,7 @@ func TestAlarmDispatchClaimTakesWholeUnitAcrossMemberDueSkew(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	repository := newOutboxRepository(t, fixedNowPool(t, pool, at))
+	repository := newOutboxRepository(t, dispatchoutbox.FixedNowPool(t, pool, at))
 	result, err := repository.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{
 		Envelopes: []dispatchoutbox.AlarmQueueEnvelope{
 			sendUnitTestEnvelope("room-skew", "stream-skew-a"),
@@ -212,31 +212,6 @@ func TestAlarmDispatchClaimLeavesTerminalUnitMembers(t *testing.T) {
 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT status FROM alarm_dispatch_deliveries WHERE id = $1`, dlqID).Scan(&status))
 	require.Equal(t, "dlq", status)
-}
-
-// 검색 경로에서 pg_catalog보다 앞선 schema의 함수가 내장 함수를 가리므로 claim의 ready 판정과 fence 시각을 µs 단위로 결정할 수 있다.
-func fixedNowPool(t *testing.T, pool *pgxpool.Pool, at time.Time) *pgxpool.Pool {
-	t.Helper()
-
-	_, err := pool.Exec(t.Context(), `
-		CREATE SCHEMA fixed_clock;
-		CREATE TABLE fixed_clock.instant (at TIMESTAMPTZ NOT NULL);
-		CREATE FUNCTION fixed_clock.now() RETURNS TIMESTAMPTZ LANGUAGE sql STABLE AS 'SELECT at FROM fixed_clock.instant';
-		CREATE FUNCTION fixed_clock.clock_timestamp() RETURNS TIMESTAMPTZ LANGUAGE sql VOLATILE AS 'SELECT at FROM fixed_clock.instant'`)
-	require.NoError(t, err)
-
-	_, err = pool.Exec(t.Context(), `INSERT INTO fixed_clock.instant (at) VALUES ($1)`, at)
-	require.NoError(t, err)
-
-	config := pool.Config()
-
-	config.ConnConfig.RuntimeParams["search_path"] = "fixed_clock, public, pg_catalog"
-
-	clocked, err := pgxpool.NewWithConfig(t.Context(), config)
-	require.NoError(t, err)
-	t.Cleanup(clocked.Close)
-
-	return clocked
 }
 
 func TestAlarmDispatchDeliveryStatusRejectsShadowed(t *testing.T) {

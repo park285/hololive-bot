@@ -14,7 +14,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-// 운영 풀은 prepared statement를 쓰므로 같은 연결에서 반복되면 generic plan으로 바뀔 수 있다.
 var planCacheModes = []string{"force_custom_plan", "force_generic_plan"}
 
 type queueRetentionPlanNode struct {
@@ -50,12 +49,10 @@ func (s *queueRetentionPlanStats) collect(node *queueRetentionPlanNode) {
 	}
 }
 
-// 후보 CTE와 바깥 DELETE가 만료 행을 한 번씩 읽으므로 상한은 만료 행의 두 배다.
 func TestQueueRetentionDeleteReadsOnlyExpiredRows(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 
-	// 이력 2만 행 중 1%는 만료된 PROCESSED, 2%는 DEAD_LETTER이고 그 절반이 만료됐다.
 	seedClaimBacklogRows(t, pool, 0, 20000)
 
 	_, err := pool.Exec(ctx, `

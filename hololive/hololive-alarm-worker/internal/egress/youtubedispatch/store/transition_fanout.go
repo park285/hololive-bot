@@ -34,7 +34,6 @@ type fanoutOutboxState struct {
 	errorText     string
 }
 
-// ClaimOutboxesForFanout은 fanout 대기 outbox를 잠그며, lease 만료·due·신선도 판정과 새 locked_at을 DB 시계로 정한다.
 func (s *TransitionStore) ClaimOutboxesForFanout(ctx context.Context, batchSize int) ([]domain.YouTubeNotificationOutbox, error) {
 	if batchSize <= 0 {
 		return nil, errors.New("claim outboxes for fanout: batch size must be positive")
@@ -169,7 +168,6 @@ func adjudicateFanoutPre(applyErr error, prior CommitAdjudication, attempt int) 
 	return fanoutAdjudication{result: FanoutResult{ApplyResult: result}, err: applyErr, prior: prior}
 }
 
-// 신선도·lease 만료 판정과 새 next_attempt_at은 DB 시계로 정한다.
 func (s *TransitionStore) ReviveFailedFanoutOutboxes(
 	ctx context.Context,
 	freshnessWindow time.Duration,
@@ -201,7 +199,6 @@ func (s *TransitionStore) ReviveFailedFanoutOutboxes(
 	return newApplyResult(ApplyApplied, ids), len(ids), nil
 }
 
-// 다음 시도는 outbox 행을 잠근 뒤의 DB 시계에서 RetryBackoff × 다음 시도 횟수 뒤이고, 종결 실패의 terminal_at도 같은 DB 시계다.
 func (s *TransitionStore) ApplyFanoutFailure(
 	ctx context.Context,
 	outbox domain.YouTubeNotificationOutbox,
@@ -262,7 +259,6 @@ func (s *TransitionStore) ApplyFanoutFailure(
 	return newApplyResult(ApplyIndeterminate, nil), errors.New("apply fanout failure: retry loop exhausted")
 }
 
-// fanoutFailureState는 fanout 실패 전이의 다음 상태다. 시각 열은 DB 시계가 정하므로 지연과 종결 여부만 담는다.
 type fanoutFailureState struct {
 	status   domain.OutboxStatus
 	attempt  int
@@ -338,7 +334,6 @@ func adjudicateFanoutFailure(
 	}
 }
 
-// 자식의 첫 시도 시각과 대상 없음 완료 시각은 DB 시계로 기록한다.
 func (s *TransitionStore) materializeFanoutOnce(
 	ctx context.Context,
 	outbox domain.YouTubeNotificationOutbox,
@@ -509,7 +504,6 @@ func loadFanoutState(
 	return state, children, true, nil
 }
 
-// 시각 열은 DB 시계가 정해 호출자가 미리 알 수 없으므로 종결 여부(terminal_at 유무)만 비교한다.
 func classifyFanoutFailureEnvelope(
 	state fanoutOutboxState,
 	children []string,

@@ -17,7 +17,6 @@ const tupleFixture = JSON.parse(
   readFileSync(new URL("../testdata/pagination-tuples.json", import.meta.url), "utf8"),
 );
 
-// continuation이 있는 페이지는 본문 ContinuationItem 토큰을 가진 실제 SDK Feed입니다. items는 테스트 mapper가 읽는 행입니다.
 function page(id, continuation) {
   const items = [{ id }];
   if (continuation === undefined) {
@@ -125,7 +124,6 @@ test("PAG-003 later recognized transient preserves prefix", async () => {
   }));
   assert.equal(unavailable.termination_reason, "continuation_transient");
 
-  // SDK가 본문을 읽다 연결이 끊기면 runUpstream이 TypeError를 감싸지만 원인은 네트워크 실패입니다.
   const terminated = Object.assign(new TypeError("terminated"), { cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }) });
   const bodyCut = await paginate(options({
     firstPage: page("a", "cursor-b"),
@@ -137,7 +135,6 @@ test("PAG-003 later recognized transient preserves prefix", async () => {
 });
 
 test("PAG-014 continuation SDK exceptions are parser drift instead of a transient gap", async () => {
-  // 바뀐 continuation 응답 형상에서 SDK가 던지는 TypeError는 runUpstream을 거쳐도 일시 장애가 아닙니다.
   await assert.rejects(
     () => paginate(options({
       firstPage: page("a", "cursor-b"),
@@ -147,7 +144,6 @@ test("PAG-014 continuation SDK exceptions are parser drift instead of a transien
     })),
     (error) => error.code === "parser_drift",
   );
-  // transport가 만들지 않은 HTTP 4xx는 앞 페이지만의 성공으로 바꾸지 않고 기존 분류로 실패합니다.
   const notFound = new Error("upstream returned not found");
   notFound.status = 404;
   await assert.rejects(

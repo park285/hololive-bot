@@ -266,7 +266,6 @@ func TestLiveAbsenceEvidenceCanonicalRowsSurviveEvidenceRetention(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	// 관측 하나는 subject 하나의 최신값만 증명한다.
 	requireSQLState(t, insertChannelLiveCheck(ctx, pool, "UCretention2", base, channelRow), sqlStateUniqueViolation)
 	requireSQLState(t, insertVideoAvailability(ctx, pool, "vretention2", base, videoRow), sqlStateUniqueViolation)
 

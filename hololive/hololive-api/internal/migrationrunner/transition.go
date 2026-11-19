@@ -12,8 +12,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 )
 
-// 삭제된 SQL을 다시 실행하지 않고 372 head의 완전한 적용 기록만 인정합니다.
-//
 //go:embed epoch2_head.sha256
 var epoch2HeadSeal string
 

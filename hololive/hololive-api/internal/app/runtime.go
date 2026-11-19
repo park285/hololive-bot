@@ -26,12 +26,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
-// processStopTimeout은 drain과 자원 회수를 합친 process stop 상한이다. Compose의 45초 grace 안에서
-// 뒤이은 telemetry flush(5초)와 logger close까지 끝나도록 30초로 둔다.
 const processStopTimeout = 30 * time.Second
 
-// Runtime은 bot ingress, admin API, YouTube plane을 하나의 Go
-// 프로세스에서 호스팅하되, 컴포넌트별 lifecycle 경계는 명시적으로 유지한다.
 type Runtime struct {
 	Config *apiconfig.RuntimeConfig
 	Logger *slog.Logger
@@ -79,7 +75,6 @@ type apiPlanes struct {
 }
 
 func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, logger *slog.Logger) (planes apiPlanes, retErr error) {
-	// 성공한 plane은 즉시 같은 owner에 등록하고, 후속 생성 실패에서 모두 회수한다.
 	defer func() {
 		if retErr == nil {
 			return
@@ -99,9 +94,6 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 		return planes, fmt.Errorf("build process infrastructure: %w", err)
 	}
 
-	// plane 사이 호출은 같은 프로세스의 인스턴스를 직접 주입한다. admin은
-	// bot이 소유한 Iris client를 빌린다. 빌린 자원은 모든 plane drain이 끝난 뒤 소유 plane의 CloseContext가 닫으므로
-	// planeGroup의 plane 정지 순서에 의존하지 않는다.
 	planes.bot, err = botruntime2.BuildRuntime(ctx, appConfig.Bot, planes.infra.bot, botPlaneDependencies(planes.infra),
 		logger.With(slog.String("plane", "bot")))
 	if err != nil {
@@ -114,7 +106,6 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 		return planes, fmt.Errorf("build admin plane: %w", err)
 	}
 
-	// 비활성 executor도 영속 큐 관측과 profile 진단의 수명을 소유한다.
 	planes.youtube, err = youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, planes.infra.bot.Cache, logger.With(slog.String("plane", "youtube")))
 	if err != nil {
 		return planes, fmt.Errorf("build youtube plane: %w", err)
@@ -127,7 +118,6 @@ func buildAPIPlanes(ctx context.Context, appConfig *apiconfig.RuntimeConfig, log
 	return planes, nil
 }
 
-// Holodex를 plane마다 따로 만들면 Holodex 호출·공식 일정 캐시가 process 안에서 두 벌이 된다.
 func botPlaneDependencies(infra *apiInfrastructure) botruntime2.Dependencies {
 	return botruntime2.Dependencies{
 		ACL:     infra.acl,
@@ -206,8 +196,6 @@ func (r *Runtime) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// Run은 production 경로의 유일한 process signal owner다. 종료 원인 요약은 반환값으로 전달하고,
-// bootstrap이 반환 오류를 ERROR로 기록한 뒤 exit 1로 바꾼다.
 func (r *Runtime) Run() error {
 	if err := lifecycle.Run(context.Background(), r.lifecycleOptions()); err != nil {
 		return fmt.Errorf("run aggregate runtime: %w", err)
@@ -226,7 +214,6 @@ func (r *Runtime) lifecycleOptions() lifecycle.Options {
 				slog.String("signal", sig.String()),
 			)
 		},
-		// 종료 처리가 끝나기 전에 원인을 남겨야 drain이 시한까지 막혀도 fatal 원인을 잃지 않는다.
 		OnError: func(err error) {
 			r.Logger.Error("hololive-api runtime error", slog.String("error", sharedlogging.RedactDiagnostic(err.Error())))
 		},
@@ -237,8 +224,6 @@ func (r *Runtime) lifecycleOptions() lifecycle.Options {
 	}
 }
 
-// lifecycle.Run은 Shutdown hook을 동기로 기다리므로 ctx를 따르지 않는 plane이 있으면 시한을 넘긴다.
-// 시한에서 hook을 끊어 processStopTimeout을 강제하고, 남은 drain·회수는 프로세스 종료와 함께 버린다.
 func (r *Runtime) shutdownAndClose(ctx context.Context) error {
 	r.stopOwnsCleanup.Store(true)
 
@@ -250,19 +235,16 @@ func (r *Runtime) shutdownAndClose(ctx context.Context) error {
 	case err := <-done:
 		return err
 	case <-ctx.Done():
-		// 시한까지 쌓인 회수 오류는 버려지는 goroutine에만 남고 Close도 다시 보고하지 않으므로 함께 반환한다.
 		return errors.Join(fmt.Errorf("stop aggregate runtime: %w", ctx.Err()), r.closeError())
 	}
 }
 
-// plane drain은 AppTimeout.Shutdown 안에서 끝내고, 자원 회수는 processStopTimeout의 남은 예산을 쓴다.
 func (r *Runtime) drainAndClose(ctx context.Context) error {
 	drainCtx, cancel := context.WithTimeout(ctx, constants.AppTimeout.Shutdown)
 	shutdownErr := r.Shutdown(drainCtx)
 
 	cancel()
 
-	// stop 시한 뒤에 끝난 drain은 프로세스 종료와 겹치므로 자원 회수를 새로 시작하지 않는다.
 	if ctx.Err() != nil {
 		return shutdownErr
 	}
@@ -270,14 +252,11 @@ func (r *Runtime) drainAndClose(ctx context.Context) error {
 	return errors.Join(shutdownErr, r.CloseContext(ctx))
 }
 
-// Close는 기동 rollback 등 context가 없는 호출에서도 제한된 시간으로 plane 자원을 회수한다.
 func (r *Runtime) Close() {
 	if r == nil {
 		return
 	}
 
-	// Run의 종료 hook이 process stop 예산 안에서 회수와 오류 보고를 이미 소유했다. 다시 합류하면
-	// Compose grace를 넘길 수 있고 같은 오류를 두 번 기록한다.
 	if r.stopOwnsCleanup.Load() {
 		return
 	}
@@ -291,8 +270,6 @@ func (r *Runtime) Close() {
 	}
 }
 
-// CloseContext는 호출자 대기 예산과 자원 소유자의 join 수명을 분리한다.
-// 한 번 시작한 정리는 모든 borrower가 끝난 뒤 backing pool과 Valkey를 닫는다.
 func (r *Runtime) CloseContext(ctx context.Context) error {
 	if r == nil {
 		return nil
@@ -340,18 +317,11 @@ func (r *Runtime) closeError() error {
 	return r.closeErr
 }
 
-// apiInfrastructure는 bot pool을 멤버 정본과 ACL의 backing pool로 소유한다.
-// Plane에 전달한 모듈에는 종료 권한이 없고 모든 plane join 후 한 번만 정리한다.
 type apiInfrastructure struct {
 	bot, admin *sharedmodules.InfraModule
-	// acl은 process 하나에 하나뿐인 ACL Service다. admin 변경과 bot 판정이 같은 메모리 snapshot을 쓴다.
-	acl *acl.Service
-	// holodex는 bot(!예정·!일정)과 admin(/streams/*)이 빌려 쓰는 process 하나의 Holodex·공식 일정 서비스다.
-	// 두 plane이 같은 Valkey cache를 쓰면서 retry scheduler·circuit breaker·cache-fill 조정을 따로 두면 장애 때
-	// 원천을 따로 다시 조회하고 breaker 상태도 나뉘므로 하나만 만든다.
-	holodex *holodexprovider.Service
+	acl        *acl.Service
+	holodex    *holodexprovider.Service
 
-	// 회수는 공유 Holodex 서비스와 member cache를 먼저 join한 뒤 admin pool, 마지막에 bot pool과 Valkey를 닫는다.
 	stopHolodex, stopMemberCache, closeAdmin, closeBot func()
 	closeOnce                                          sync.Once
 }
@@ -374,8 +344,6 @@ func (r *apiInfrastructure) close() {
 	})
 }
 
-// buildAPIInfrastructure는 process 자원을 만든다. 대상은 bot pool, Valkey client, bot pool을 backing으로 쓰는 member cache,
-// admin pool과 bot·admin plane이 빌려 쓰는 ACL·Holodex 서비스다.
 func buildAPIInfrastructure(ctx context.Context, config *apiconfig.RuntimeConfig, logger *slog.Logger) (_ *apiInfrastructure, retErr error) {
 	if config == nil || config.Bot == nil || config.Admin == nil {
 		return nil, errors.New("bot and admin configs must not be nil")
@@ -440,8 +408,6 @@ func buildSharedPlaneServices(
 	return aclService, holodex, nil
 }
 
-// buildHolodexService는 bot plane 설정의 HOLODEX_*와 공식 일정 설정으로 Holodex 서비스와 그 일정 폴백을 만든다.
-// 공식 일정 식별 색인은 member cache를 ctx 안에서 적재한다.
 func buildHolodexService(
 	ctx context.Context,
 	botConfig *apiconfig.BotPlaneConfig,

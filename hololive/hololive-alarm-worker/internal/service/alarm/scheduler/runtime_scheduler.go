@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package scheduler
 
 import (
@@ -52,13 +32,11 @@ type targetMinutesSource interface {
 	GetTargetMinutes() []int
 }
 
-// recoveryCache는 scheduler의 subscriber cache 복구 판단이 요구하는 작업이다(marker Exists, 연결 WaitUntilReady).
 type recoveryCache interface {
 	Exists(ctx context.Context, key string) (bool, error)
 	WaitUntilReady(ctx context.Context, timeout time.Duration) error
 }
 
-// RuntimeScheduler는 런타임 알람 체크 루프를 관리한다.
 type RuntimeScheduler struct {
 	youtubeChecker checking.Runner
 	notifier       checking.Sender
@@ -74,16 +52,11 @@ type RuntimeScheduler struct {
 	logger *slog.Logger
 }
 
-// Dependencies는 모듈 내부 스케줄러 조립에 필요한 서비스와 실행 설정입니다.
-// AlarmState는 설정 갱신과 HTTP 경로에서 사용하는 동일 서비스여야 합니다.
-// AlarmState는 scheduler가 사용하는 target 조회와 캐시 재구성 포트입니다.
 type AlarmState interface {
 	targetMinutesSource
 	alarmCacheWarmer
 }
 
-// Cache는 scheduler가 조립하는 dedup·queue publisher·YouTube checker와 cache 복구가 함께 요구하는 cache 작업이다.
-// ScriptCache와 Close·IsConnected는 쓰지 않는다.
 type Cache interface {
 	cache.DataCache
 	cache.LowLevelCache
@@ -101,7 +74,6 @@ type Dependencies struct {
 	Logger         *slog.Logger
 }
 
-// NewRuntimeScheduler는 의존성을 검증하고 루프를 구성하며 실행은 시작하지 않습니다.
 func NewRuntimeScheduler(deps Dependencies) (*RuntimeScheduler, error) {
 	if err := validateRuntimeSchedulerDeps(deps.Cache, deps.HolodexService, deps.AlarmState); err != nil {
 		return nil, fmt.Errorf("validate runtime scheduler deps: %w", err)

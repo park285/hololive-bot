@@ -50,7 +50,6 @@ func commandExecutionStatus(commandErr error) string {
 }
 
 func (r *durableRuntime) releaseInbox(ctx context.Context, claim *durability.InboxClaim, token string, cause error) {
-	// 취소된 claim도 유한한 독립 예산으로 정산하고 소유권 token으로 변경을 제한한다.
 	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), r.settlementTimeout)
 	defer cancel()
 

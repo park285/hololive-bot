@@ -42,7 +42,6 @@ func TestScheduleReportsConflictWithConcurrentLiveInsertion(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			// Schedule 조회 때 없던 영상을 다른 writer가 먼저 생성하고 아직 커밋하지 않았다.
 			liveTx, err := pool.Begin(ctx)
 			require.NoError(t, err)
 
@@ -153,7 +152,6 @@ func TestScheduleStateKeepsSessionLockedUntilPersistence(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, state.Sessions, 1)
 
-	// 다른 writer가 잠금을 가져갈 수 없어야 조회부터 저장까지 같은 상태를 보호한다.
 	var unlocked int
 
 	require.NoError(t, pool.QueryRow(ctx, `

@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package alarm
 
 import (
@@ -184,7 +164,6 @@ func (c *AlarmCommand) handleAlarmMutation(ctx context.Context, cmdCtx *botcomma
 
 	alarmTypes := c.parseAlarmTypes(params)
 
-	// 운영 기본 레벨(info)에서 알람 변경 명령마다 room 가명을 계산해 버리지 않게 먼저 확인한다.
 	if logger := c.Deps().Logger; logger.Enabled(ctx, slog.LevelDebug) {
 		logger.Debug(mutation.requestedLog,
 			sharedprivacylog.RoomIDAttr(cmdCtx.Room),
@@ -275,13 +254,11 @@ func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *botcommand.
 	return nil
 }
 
-// 사용자-facing 응답을 이미 보낸 경우 handlercore.ErrMemberLookupHandled를 반환한다. 구독 전용 host를 matcher보다 먼저 찾는다.
 func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room, memberName string) (*alarmTarget, error) {
 	if channelID, host, ok := mekparkhost.FindSubscriptionMember(memberName); ok {
 		return &alarmTarget{ChannelID: channelID, HostID: host.ID, Name: host.Name}, nil
 	}
 
-	// 동명이인 안내 예시는 삭제 명령에서도 "알람 추가"다.
 	channel, err := handlercore.FindMemberWithCandidatesOrError(ctx, c.Deps(), room, memberName, "알람 추가")
 	if err != nil {
 		return nil, fmt.Errorf("find alarm member: %w", err)

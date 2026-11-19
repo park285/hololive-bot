@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package settings
 
 import (
@@ -34,7 +14,6 @@ import (
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
-// ReadWriter는 settings 조회와 저장이 모두 필요한 admin handler가 쓰는 interface다.
 type ReadWriter interface {
 	Get() settingssvc.Settings
 	Update(newSettings settingssvc.Settings) error
@@ -42,16 +21,12 @@ type ReadWriter interface {
 
 var _ ReadWriter = (*Service)(nil)
 
-// Service는 admin plane이 소유하는 settings.json 정본이다. 디스크에는 settingssvc.Settings를 그대로 기록하므로
-// alarm-worker가 기동 때 쓰는 settingssvc.ReadFile과 형식이 갈라지지 않는다.
 type Service struct {
 	filePath string
 	mu       sync.RWMutex
 	cache    *settingssvc.Settings
 }
 
-// BuildSettingsService는 admin plane이 쓰는 settings 서비스를 만든다. 파일 정본은 admin plane이 소유하므로 기동 검증도 admin plane 하나가 맡는다. 저장 파일을 읽지 못하거나 계약에 맞지
-// 않으면 기동을 실패시킨다.
 func BuildSettingsService(settingsPath string, targetMinutes []int, logger *slog.Logger) (ReadWriter, error) {
 	if logger != nil {
 		logger.Info("Using settings file path", slog.String("path", settingsPath))
@@ -91,9 +66,6 @@ func ensureParentDir(filePath string) error {
 	return nil
 }
 
-// NewSettingsService는 저장된 settings 파일이 있으면 그 값을, 없으면 기본값을 쓴다. 읽기·decode 실패나 계약에 맞지 않는
-// 파일은 기본값으로 대신하지 않고 오류로 돌려 기동을 멈춘다(settingssvc.ReadFile). 디렉터리를 만들지 않으며 Update가
-// 저장 직전에 만든다.
 func NewSettingsService(filePath string, defaults settingssvc.Settings) (*Service, error) {
 	s := &Service{
 		filePath: filePath,
@@ -148,14 +120,11 @@ func (s *Service) Update(newSettings settingssvc.Settings) error {
 		return fmt.Errorf("persist cache: %w", err)
 	}
 
-	// 저장이 성공한 값만 공개하여 실패 응답 뒤 Get과 파일 값이 갈라지지 않게 한다.
 	s.cache = &candidate
 
 	return nil
 }
 
-// 같은 디렉터리의 temp 파일에 전량 기록한 뒤 rename으로 교체한다. 제자리 truncate+write는
-// 중간에 실패하면 잘린 settings 파일을 남겨 다음 기동의 읽기 계약을 깨뜨린다.
 func (s *Service) persistSettings(candidate settingssvc.Settings) (err error) {
 	tempPath, writeErr := s.writeSettingsTempFile(candidate)
 

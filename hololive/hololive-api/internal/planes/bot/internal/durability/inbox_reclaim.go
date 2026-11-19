@@ -13,8 +13,6 @@ type InboxReclaim struct {
 	Abandoned int64
 }
 
-// 만료 lease를 되돌리면서 claim_token을 비우므로, lease를 잃은 워커의 Complete/Release는 token 대조에서
-// 0 rows가 된다 — 전이 쿼리에 lease_until 술어를 따로 두지 않는 이유다.
 func (r *InboxRepository) ReclaimExpired(ctx context.Context, maxAttempts, batchSize int32) (reclaim InboxReclaim, err error) {
 	if poolErr := ensurePool(r.pool); poolErr != nil {
 		return InboxReclaim{}, poolErr

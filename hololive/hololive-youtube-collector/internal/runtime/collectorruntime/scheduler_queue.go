@@ -16,8 +16,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
-// queuedJob은 admission 시점의 종류별 실행 예산과 큐 만료 정책을 값으로 고정한다.
-// 큐 대기는 maxAge까지만 허용하고, 그 안에 시작한 작업에는 전체 실행 예산을 보장한다.
 type queuedJob struct {
 	joblease.JobSpec
 
@@ -38,8 +36,6 @@ func (e *collectionExecutor) admit(spec *joblease.JobSpec, now time.Time, maxAge
 		return queuedJob{}, false
 	}
 
-	// acquire와 두 input 조회는 각각 기존 DB 단계 예산을 보존한다.
-	// terminal은 publish 또는 empty-complete 중 하나이며 cleanup은 별도 bounded context다.
 	cfg := &e.collector
 	if cfg.DBTimeout <= 0 || cfg.ProviderAdmissionTimeout <= 0 || cfg.PublishTimeout <= 0 {
 		return queuedJob{}, false
@@ -187,7 +183,6 @@ func (s *leaseScheduler) runQueued(ctx context.Context, spec *queuedJob) {
 	}
 }
 
-// 반환값 false는 취소 또는 불변식 위반으로 worker가 종료됨을 뜻합니다.
 func (s *leaseScheduler) nextSpec(ctx context.Context) (queuedJob, bool) {
 	for {
 		if ctx.Err() != nil {

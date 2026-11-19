@@ -1,4 +1,3 @@
-// Package xspaces는 무료 X 웹 API 관측을 기존 알림 발송 원장으로 연결한다.
 package xspaces
 
 import (
@@ -14,23 +13,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Target은 X 개설자와 기존 방송 구독 채널 사이의 명시적 연결이다.
 type Target struct {
 	UserID    string `json:"user_id"`
 	ChannelID string `json:"channel_id"`
 }
 
-// Config는 설정된 경우에만 외부 조회를 활성화한다. 파일에는 인증 값을 넣지 않는다.
 type Config struct {
 	Targets     []Target `json:"targets"`
 	PollSeconds int      `json:"poll_seconds"`
 }
 
-// ErrDisabled는 감시 설정을 지정하지 않아 수집이 꺼져 있음을 나타낸다.
 var ErrDisabled = errors.New("x spaces collection disabled")
 
-// LoadConfig는 runtime 설정 로더가 X_SPACES_CONFIG_FILE에서 읽은 설정 파일 경로 path가 비어 있으면 ErrDisabled를
-// 돌려주고 잘못된 설정은 거부한다.
 func LoadConfig(path string) (result *Config, retErr error) {
 	if path == "" {
 		return nil, ErrDisabled

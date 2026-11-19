@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# 중앙 Quadlet이 쓰는 production image를 Podman으로 빌드하고 revision label을 검증한다.
-# 배포는 하지 않는다. 중앙 배포는 docs/current/runbooks/release.md의 전송·Quadlet 기동 절차가 소유한다.
 
 set -Eeuo pipefail
 
@@ -25,18 +23,19 @@ read_version() {
     printf '%s\n' "${lines[0]}"
 }
 
-# 이미지 이름은 Quadlet unit의 기본 Image=와 같다. 중앙 unit은 배포 때 sha256 identity로 고정한다.
 declare -A IMAGE_BY_SERVICE=(
     [hololive-api]=localhost/hololive-api:prod
     [hololive-alarm-worker]=localhost/hololive-alarm-worker:prod
     [youtube-collector]=localhost/hololive-youtube-collector:prod
     [youtube-po-c]=localhost/hololive-youtube-po-sandbox:prod
     [holo-postgres]=localhost/hololive-postgres:prod
+    [holo-pgbouncer]=localhost/iris-stack-pgbouncer:1.26.1-guc1
     [valkey-cache]=localhost/iris-stack-valkey:9.1.3-zlib1.4-r0
     [admin-dashboard-ingress]=localhost/iris-stack-nginx:1.31.8-zlib1.4-r0
 )
 declare -A CONTEXT_BY_SERVICE=(
     [holo-postgres]=deploy/images/postgres
+    [holo-pgbouncer]=deploy/images/pgbouncer
     [valkey-cache]=deploy/images/valkey
     [admin-dashboard-ingress]=deploy/images/nginx
 )
@@ -69,7 +68,7 @@ Environment:
 EOF
     echo
     echo "Build targets:"
-    printf '  %s\n' "${!DOCKERFILE_BY_SERVICE[@]}" | LC_ALL=C sort
+    printf '  %s\n' "${!IMAGE_BY_SERVICE[@]}" | LC_ALL=C sort
 }
 
 NO_BUMP=false
@@ -91,7 +90,7 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            if [[ -z "${DOCKERFILE_BY_SERVICE[$1]:-}" ]]; then
+            if [[ -z "${IMAGE_BY_SERVICE[$1]:-}" ]]; then
                 echo "[ERROR] Unknown build target: $1" >&2
                 usage >&2
                 exit 1
@@ -108,8 +107,6 @@ if [[ "${BUILD_ONLY}" == false && ${#TARGET_SERVICES[@]} -eq 0 ]]; then
     exit 2
 fi
 
-# arm64 image의 RUN은 x86_64 build host에서 binfmt 등록이 있어야 실행된다. 자동 설치는 host 변경이므로
-# 하지 않고 등록이 없으면 빌드 전에 멈춘다.
 BUILD_PLATFORM="${HOLOLIVE_BUILD_PLATFORM:-}"
 platform_args=()
 if [[ -n "${BUILD_PLATFORM}" ]]; then
@@ -180,19 +177,16 @@ fi
 
 if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
     BUILD_SERVICES=("${TARGET_SERVICES[@]}")
-    # collector와 PO issuer는 같은 source revision으로 짝지어 배포한다.
     if [[ " ${BUILD_SERVICES[*]} " == *" youtube-collector "* && " ${BUILD_SERVICES[*]} " != *" youtube-po-c "* ]]; then
         BUILD_SERVICES+=(youtube-po-c)
     fi
 else
-    BUILD_SERVICES=(hololive-api hololive-alarm-worker youtube-collector youtube-po-c holo-postgres valkey-cache admin-dashboard-ingress)
+    BUILD_SERVICES=(hololive-api hololive-alarm-worker youtube-collector youtube-po-c holo-postgres holo-pgbouncer valkey-cache admin-dashboard-ingress)
 fi
 
 build_service() {
     local service="$1"
     local image="${IMAGE_BY_SERVICE[$service]}"
-    # HEALTHCHECK 등 docker 형식 메타데이터를 보존하고 docker-archive 저장 전후 config digest(identity)가 같도록
-    # docker 형식으로 만든다.
     local -a args=(build "${platform_args[@]}" --format docker --tag "${image}"
         --build-arg "REVISION=${REVISION}" --label "org.opencontainers.image.revision=${REVISION}")
 

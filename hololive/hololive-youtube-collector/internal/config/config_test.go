@@ -139,7 +139,6 @@ func TestYouTubeCollectorConfigRejectsInvalidBudgets(t *testing.T) {
 	}
 }
 
-// 같은 함수가 검사하는 다른 필드로 원인을 오인하지 않도록 필드마다 고유한 이름이 오류에 남는지 확인한다.
 func TestYouTubeCollectorConfigPhaseTimeoutErrorsNameField(t *testing.T) {
 	base := fixtureCollectorConfig(t)
 

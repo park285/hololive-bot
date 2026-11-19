@@ -5,8 +5,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// 도움말·달력 이미지 응답의 텍스트 대체 예외 계약(docs/current/services/hololive-api.md)의 telemetry다.
-// 사유 render_failed·send_failed는 텍스트를 보낸 경우이고, outcome_unknown은 이미지가 이미 전달됐을 수 있어 텍스트를 보내지 않은 경우다.
 const (
 	imageTextFallbackReasonRenderFailed   = "render_failed"
 	imageTextFallbackReasonSendFailed     = "send_failed"

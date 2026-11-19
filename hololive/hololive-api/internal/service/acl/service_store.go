@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package acl
 
 import (
@@ -31,20 +11,14 @@ import (
 )
 
 type aclSettingStore interface {
-	// GetSetting은 key에 해당하는 설정 값을 반환한다. 없으면 found=false.
 	GetSetting(ctx context.Context, key string) (value string, found bool, err error)
-	// CreateSetting은 새 설정 행을 삽입한다.
 	CreateSetting(ctx context.Context, key, value string) error
-	// UpsertSetting은 key 기준으로 값을 삽입하거나 갱신한다.
 	UpsertSetting(ctx context.Context, key, value string) error
 }
 
 type aclRoomStore interface {
-	// ListRooms는 모든 ACL 방 행을 반환한다.
 	ListRooms(ctx context.Context) ([]Room, error)
-	// CreateRoom은 (roomID, listType) 방 행을 삽입한다. 이미 있으면 쓰지 않고 created=false를 돌려준다.
 	CreateRoom(ctx context.Context, roomID, listType string) (created bool, err error)
-	// DeleteRoom은 (roomID, listType) 방 행을 삭제한다. 삭제한 행이 없으면 deleted=false를 돌려준다.
 	DeleteRoom(ctx context.Context, roomID, listType string) (deleted bool, err error)
 }
 

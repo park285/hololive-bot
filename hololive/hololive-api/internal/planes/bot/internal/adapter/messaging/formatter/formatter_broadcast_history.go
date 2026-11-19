@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package formatter
 
 import (
@@ -47,8 +27,6 @@ type BroadcastHistoryFilter struct {
 	Truncated  bool
 }
 
-// BroadcastHistoryEntry의 EndedAt은 provider 시각이거나 종료 오차가 확인된 경우에만 채워 길이를 표시한다.
-// StartedAt이 없으면 Time을 TimeLabel과 함께 표시하고, 아카이브 확인 실패는 시각 뒤에 안내한다.
 type BroadcastHistoryEntry struct {
 	VideoID            string
 	MemberName         string
@@ -93,7 +71,6 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 		b.WriteByte('\n')
 	}
 
-	// 머리 문단 뒤에만 빈 줄을 두고, 항목 사이는 구분선 한 줄로 경계를 표시한다.
 	b.WriteByte('\n')
 
 	for i := range entries {

@@ -134,4 +134,4 @@ collector 경계 작업과의 실행 순서와 의존은 [통합 계획](2026-10
 
 - [원본 보존 함수와 커서](../../../hololive/hololive-api/scripts/migrations/315_source_retention_bounded_scan.sql), [보호 판정](../../../hololive/hololive-api/scripts/migrations/321_source_application_vocab_cutover.sql)
 - [원본 정리 caller](../../../hololive/hololive-api/internal/youtube/sourceobservation/repository_retention.go), [tick·DB 예산](../../../hololive/hololive-api/internal/planes/youtube/runtime/supervisor_retention.go), [적체 측정](../../../hololive/hololive-api/internal/youtube/sourceobservation/queries/repository_retention_backlog_evidence.sql)
-- [migration 규약](../../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md), [10월 3일 projection 처리량 보완](2026-10-03-projection-retention-capacity.md), [10월 15일 DB 리뷰](2026-10-15-sql-db-review-handoff.md), [10월 16일 압축 적용 기록](2026-10-16-main-integration-handoff.md)
+- [migration 규약](../../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md), [10월 16일 압축 적용 기록](2026-10-16-main-integration-handoff.md)

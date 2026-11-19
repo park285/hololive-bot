@@ -119,13 +119,10 @@ func (c *Consumer) moveRecordToDLQ(ctx context.Context, record *Record, terminal
 		return fmt.Errorf("drain outbox batch: %s: %w", action, err)
 	}
 
-	// 이후 키 해제가 실패해도 확정된 terminal 행을 lease 반환 대상에서 제외합니다.
 	record.Status = StatusDLQ
 
 	observePGDLQ(1)
 
-	// rows-affected를 포함한 worker fence 검증이 성공한 뒤에만 방별 dedup을 해제합니다.
-	// Payload 복원에 실패해도 claim metadata는 PostgreSQL delivery row에 남아 있습니다.
 	if err := c.ReleaseClaimKeys(ctx, record.ClaimKeys); err != nil {
 		return fmt.Errorf("release rejected delivery claim keys: %w", err)
 	}

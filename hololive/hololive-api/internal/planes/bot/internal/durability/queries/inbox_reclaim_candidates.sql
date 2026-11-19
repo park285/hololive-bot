@@ -1,4 +1,3 @@
--- ordering key 잠금을 획득한 뒤의 snapshot으로 만료된 현재 head만 선택한다.
 SELECT inbox.id, inbox.attempts
 FROM bot_webhook_heads AS head
 JOIN bot_webhook_inbox AS inbox ON inbox.message_id = head.message_id

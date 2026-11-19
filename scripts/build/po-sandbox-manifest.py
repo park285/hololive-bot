@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""격리 발급자 rootfs의 모든 배포 파일을 심볼릭 링크 우회 없이 열거한다."""
 import hashlib
 import json
 import os
@@ -47,8 +46,6 @@ def verify_socket_owner(archive):
 
 
 def image_ids(archive, image_id):
-    # kapu는 Podman으로 빌드해 `podman save --format docker-archive`로 내보낸다. identity는 sha256:와
-    # Podman .Id(접두어 없는 config digest)를 이은 값이며 archive의 config blob digest와 같아야 한다.
     if re.fullmatch(r"sha256:[0-9a-f]{64}", image_id) is None:
         raise ValueError("full image digest required")
     with tarfile.open(archive) as payload:
@@ -59,8 +56,6 @@ def image_ids(archive, image_id):
     config_id = "sha256:" + hashlib.sha256(config).hexdigest()
     if image_id != config_id:
         raise ValueError("archive config digest differs from the built image identity")
-    # 적재 호스트가 config digest를 .Id로 보고할 때만 이 값과 대조된다: 중앙 Podman과 Seoul AP의
-    # classic overlay2 Docker. containerd image store의 manifest digest는 kapu에서 알 수 없다.
     return [config_id]
 
 

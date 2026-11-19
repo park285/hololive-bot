@@ -16,8 +16,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
-// wireFixture는 youtubejs/testdata/wire-contract.json입니다. JS 검증기 테스트와 같은 본문을 읽어
-// Go decode·오류 매핑과 실제 helper 왕복이 같은 계약을 따르는지 확인합니다.
 type wireFixture struct {
 	FailureTuples map[RPCErrorCode]struct {
 		Class      RPCFailureClass `json:"class"`
@@ -166,7 +164,6 @@ func TestWireSuccessBodiesMatchFixture(t *testing.T) {
 					t.Errorf("%s %s: error = %v, want protocol mismatch", path, invalid.Name, err)
 				}
 			case "envelope", "classification":
-				// 수집기 envelope·분류 단계의 거부는 youtubejscollector 테스트가 같은 본문으로 확인한다.
 				if err != nil {
 					t.Errorf("%s %s: decode error = %v, want envelope-stage rejection", path, invalid.Name, err)
 				}
@@ -177,7 +174,6 @@ func TestWireSuccessBodiesMatchFixture(t *testing.T) {
 	}
 }
 
-// Go의 사전 거부 하한이 helper 하한보다 크면 helper가 처리할 수 있는 요청을 Go가 먼저 버린다.
 func TestWireMinimumSuccessBytesDoNotExceedHelperMinimum(t *testing.T) {
 	t.Parallel()
 
@@ -199,13 +195,11 @@ func TestWireMinimumSuccessBytesDoNotExceedHelperMinimum(t *testing.T) {
 	}
 }
 
-// 테스트 이름은 t.TempDir 아래 UDS 경로가 100 byte를 넘지 않게 짧게 둔다.
 func TestWireRPC(t *testing.T) {
 	fixture := loadWireFixture(t)
 
 	cfg := liveHelperConfig(t, shortRuntimeBase(t))
 
-	// limiter 예약 수로 helper가 보고한 예정 영상 조회의 지불을 확인한다.
 	limiter := NewRateLimiter(time.Microsecond)
 
 	cfg.Limiter = limiter
@@ -256,7 +250,6 @@ func TestWireRPC(t *testing.T) {
 	assertWireRoundtripFailures(ctx, t, rpc, limiter, &fixture)
 }
 
-// 왕복 helper는 subject로 실패를 고르므로 모든 사례를 조회 수를 보고할 수 있는 /v1/channel live로 보낸다.
 func assertWireRoundtripFailures(ctx context.Context, t *testing.T, rpc *RPC, limiter *RateLimiter, fixture *wireFixture) {
 	t.Helper()
 
@@ -287,7 +280,6 @@ func limiterReservations(limiter *RateLimiter) uint64 {
 	return limiter.seq
 }
 
-// wireMinimalSubject는 왕복 helper가 fixture의 최소 본문을 돌려주는 요청 subject입니다.
 const wireMinimalSubject = "UCminimal"
 
 func fetchWire(ctx context.Context, rpc *RPC, path, subject, kind string, limit int) (any, error) {
@@ -297,7 +289,6 @@ func fetchWire(ctx context.Context, rpc *RPC, path, subject, kind string, limit 
 	case "/v1/content":
 		return wireResult(rpc.FetchContent(ctx, ContentRequest{ChannelID: subject, Kind: "videos", MaxResults: 10, MaxPages: 1, MaxSuccessResponseBytes: limit}))
 	case "/v1/channel":
-		// 실제 helper 요청 검증기가 Go의 RFC3339Nano lease 슬롯 시각을 받는지도 함께 확인합니다.
 		slot := time.Date(2026, time.August, 14, 1, 0, 0, 123456789, time.UTC)
 
 		return wireResult(rpc.FetchChannel(ctx, ChannelRequest{ChannelID: subject, Kind: kind, MaxSuccessResponseBytes: limit, ScheduledFor: new(slot)}))

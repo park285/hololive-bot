@@ -14,8 +14,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-// privacylog.RedactCacheKey는 등록되지 않은 접두를 원문 그대로 남긴다. 그 fail-open을 감당할 수 있는
-// 근거가 이 테스트다: room 인자를 받는 Build*가 새로 생기면 여기서 먼저 깨진다.
 const (
 	redactionRoomID    = "공지: 상대방닉네임 님과의 대화"
 	redactionStreamID  = "dQw4w9WgXcQ"

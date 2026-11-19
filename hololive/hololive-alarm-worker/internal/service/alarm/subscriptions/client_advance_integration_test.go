@@ -105,7 +105,6 @@ func TestClientAdvanceAppliedThenResponseLostIsUnknown(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 
-		// 실제 worker를 실행해 target을 적용한 뒤 응답을 전송하지 않고 연결을 끊는다.
 		rec := httptest.NewRecorder()
 		worker.ServeHTTP(rec, r)
 

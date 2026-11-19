@@ -1,23 +1,3 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package apiclient
 
 import (
@@ -145,7 +125,6 @@ func newHolodexTestClient(apiKey string) *APIClient {
 type nilResponseTransport struct{}
 
 func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	// nil 응답과 nil 오류를 함께 돌려주는 비정상 RoundTripper를 재현하는 것이 이 테스트의 목적이다.
 	//nolint:nilnil // 재현 대상 자체가 (nil, nil) 반환이라 sentinel 오류로 바꾸면 테스트가 무의미해진다.
 	return nil, nil
 }
@@ -180,17 +159,14 @@ func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 func TestAPIClient_CircuitBreakerOpens(t *testing.T) {
 	client := newHolodexTestClient("k1")
 
-	// 초기 상태: 서킷 닫힘
 	if client.IsCircuitOpen() {
 		t.Fatal("expected circuit to be closed initially")
 	}
 
-	// threshold 횟수만큼 실패 → 서킷 열기
 	for range circuitFailureThreshold {
 		client.openCircuit(t.Context())
 	}
 
-	// 서킷 열린 상태 확인
 	if !client.IsCircuitOpen() {
 		t.Fatal("expected circuit to be open after openCircuit()")
 	}
@@ -205,7 +181,6 @@ func TestAPIClient_CircuitBreakerOpens(t *testing.T) {
 func TestAPIClient_FailureCountIncrement(t *testing.T) {
 	client := newHolodexTestClient("k1")
 
-	// threshold 횟수(3회) 미만에서는 circuit이 열리지 않아야 함
 	for i := 1; i < circuitFailureThreshold; i++ {
 		client.openCircuit(t.Context())
 
@@ -214,7 +189,6 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 		}
 	}
 
-	// threshold 도달 시 circuit이 열려야 함
 	client.openCircuit(t.Context())
 
 	if !client.IsCircuitOpen() {
@@ -223,11 +197,9 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 }
 
 func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
-	// 대상 endpoint의 실패가 threshold에 도달하면 추가 재시도 없이 중단해야 한다.
 	var requestCount atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// loopback 탐색 요청을 실제 API 시도로 계상하지 않는다.
 		if r.URL.Path != "/test" {
 			http.NotFound(w, r)
 
@@ -262,9 +234,6 @@ func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
-	// threshold(3)회 요청 후 circuit이 열려 즉시 중단해야 합니다.
-	// maxAttempts = 1 + RetryConfig.MaxAttempts(3) = 4이지만
-	// threshold(3) 도달 시 4번째 시도 전에 중단해야 합니다.
 	if got := requestCount.Load(); got != circuitFailureThreshold {
 		t.Errorf("expected exactly %d requests (threshold), got %d",
 			circuitFailureThreshold, got)
@@ -276,7 +245,6 @@ func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
 }
 
 func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
-	// M3: timeout 경과 후 reset → 단 1회 실패로는 즉시 재open 없음
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -297,7 +265,6 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 		),
 	}
 
-	// threshold 도달 → circuit open
 	for range circuitFailureThreshold {
 		client.openCircuit(t.Context())
 	}
@@ -350,8 +317,6 @@ func TestPerAttemptTimeout(t *testing.T) {
 		t.Fatal("timeout 에러가 발생해야 한다")
 	}
 
-	// 각 시도가 200ms timeout이므로, 전체 소요 시간이 http.Client.Timeout(기본 0)보다 훨씬 짧아야 한다
-	// 3회 timeout + backoff = ~1s 이내
 	if elapsed > 5*time.Second {
 		t.Errorf("per-attempt timeout이 동작하지 않음: elapsed=%v", elapsed)
 	}
@@ -361,7 +326,6 @@ func TestTimeoutMaxRetries(t *testing.T) {
 	var requestCount atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// loopback 포트를 탐색하는 호스트 프로세스의 요청을 붙잡거나 재시도로 세지 않게 대상 경로만 처리한다.
 		if r.URL.Path != "/test" {
 			http.NotFound(w, r)
 
@@ -394,12 +358,10 @@ func TestTimeoutMaxRetries(t *testing.T) {
 		t.Fatal("timeout 에러가 발생해야 한다")
 	}
 
-	// maxTimeoutRetries(3)회에서 중단되어야 함
 	if got := requestCount.Load(); got > 3 {
 		t.Errorf("timeout 재시도 제한 미동작: requests=%d, want <= 3", got)
 	}
 
-	// 3회 × 100ms + backoff ≈ 2s 이내
 	if elapsed > 5*time.Second {
 		t.Errorf("조기 종료 미동작: elapsed=%v", elapsed)
 	}
@@ -610,7 +572,6 @@ func TestParentContextCancel(t *testing.T) {
 		t.Fatal("context 취소로 에러가 발생해야 한다")
 	}
 
-	// 부모 ctx 200ms 이후 즉시 종료
 	if elapsed > 2*time.Second {
 		t.Errorf("부모 context 취소 후 즉시 종료되지 않음: elapsed=%v", elapsed)
 	}

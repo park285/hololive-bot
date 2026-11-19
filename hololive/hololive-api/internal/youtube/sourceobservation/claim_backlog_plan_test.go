@@ -18,36 +18,27 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-// claimBacklogCandidateVisitLimit은 LIMIT 4 claim의 후보 잠금 CTE가 읽을 수 있는 행 상한이다.
-// 기존 보존 이력 plan test와 같은 128을 쓴다. OR 한 덩어리 후보 CTE는 활성 backlog 전체(약 5만 행)를 정렬한 뒤
-// 잘랐고, 같은 fixture에서 claim 1회가 1.2~2.0초(JIT 포함) 걸렸다. 대기열(queue) 순서로 걸으며 차단된 후속 목록을
-// 건너뛰는 방식도 채널·종류 선두가 드물게 섞인 이 fixture에서 상한을 넘었다.
 const claimBacklogCandidateVisitLimit = 128
 
 var claimBacklogCandidateCTEs = map[string]bool{
 	"CTE candidates": true,
 }
 
-// claimBacklogActiveCTEs는 채널·종류 선두 판정에 필요한 활성 backlog 단일 pass다. 선두를 정하려면 차단된 후속 목록까지
-// 봐야 하므로 backlog에 선형이며, 행마다 backlog를 다시 훑지 않도록 테이블마다 한 번 읽는 선형 상한을 고정한다.
 var claimBacklogActiveCTEs = map[string]bool{
 	"CTE active_backlog": true,
 }
 
-// 시도 소진 분류(exhausted_candidates)는 materialized 활성 backlog에서 due 행을 골라 queue PK로만 잠그므로 queue를 따로 읽지 않는다. 활성 epoch가 없으면
-// replay_expired_candidates도 행을 읽지 않는다. 그래서 두 CTE에 후보 잠금 상한을 적용한다.
 var claimBacklogDeadLetterCTEs = map[string]bool{
 	"CTE exhausted_candidates":      true,
 	"CTE replay_expired_candidates": true,
 }
 
 type claimBacklogPlanNode struct {
-	Relation string  `json:"Relation Name"`
-	Subplan  string  `json:"Subplan Name"`
-	CTE      string  `json:"CTE Name"`
-	Rows     float64 `json:"Actual Rows"`
-	Loops    float64 `json:"Actual Loops"`
-	// 필터와 lossy bitmap 재검사가 버린 행도 heap에서 읽은 행이다. EXPLAIN은 Actual Rows처럼 loop당 평균으로 보고한다.
+	Relation         string                 `json:"Relation Name"`
+	Subplan          string                 `json:"Subplan Name"`
+	CTE              string                 `json:"CTE Name"`
+	Rows             float64                `json:"Actual Rows"`
+	Loops            float64                `json:"Actual Loops"`
 	RemovedByFilter  float64                `json:"Rows Removed by Filter"`
 	RemovedByRecheck float64                `json:"Rows Removed by Index Recheck"`
 	Plans            []claimBacklogPlanNode `json:"Plans"`
@@ -75,7 +66,6 @@ func seedClaimBacklog(t *testing.T, pool *pgxpool.Pool) {
 	seedClaimBacklogRows(t, pool, 50000, 0)
 }
 
-// 이력은 같은 kind·채널의 과거 관측이라 kind 조건으로는 걸러지지 않는다.
 func seedClaimBacklogRows(tb testing.TB, pool *pgxpool.Pool, active, history int) {
 	tb.Helper()
 
@@ -101,7 +91,6 @@ func seedClaimBacklogRows(tb testing.TB, pool *pgxpool.Pool, active, history int
 	`, first, active, history)
 	require.NoError(tb, err)
 
-	// 기준 관측보다 active분 이상 과거로 예약된 행은 처리 끝난 이력이다.
 	_, err = pool.Exec(ctx, `
 		INSERT INTO source_observation_queue (observation_id, available_at, status, processed_at, attempt_count)
 		SELECT id, NOW() - INTERVAL '1 hour' + (id % 1000) * INTERVAL '1 second',
@@ -121,11 +110,6 @@ func seedClaimBacklogRows(tb testing.TB, pool *pgxpool.Pool, active, history int
 	require.NoError(tb, err)
 }
 
-// explainClaimBacklog는 PREPARE/EXECUTE로 plan_cache_mode가 실제 generic plan에도 적용되게 한다.
-// 준비된 statement는 세션 객체라 롤백으로 사라지지 않고, statement_timeout 등으로 트랜잭션이 중단되면
-// 같은 트랜잭션 안에서 DEALLOCATE할 수도 없다(25P02). 그래서 전용 연결에서 롤백한 뒤 트랜잭션 밖에서 해제하고,
-// 해제에 실패한 연결은 pool에 돌려주지 않고 닫아 다음 subtest가 같은 이름을 물려받지 않게 한다.
-// 원래 오류와 정리 오류는 모두 보존한다.
 func explainClaimBacklog(ctx context.Context, pool *pgxpool.Pool, mode, budget string, kinds []string) (raw []byte, err error) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
@@ -136,7 +120,6 @@ func explainClaimBacklog(ctx context.Context, pool *pgxpool.Pool, mode, budget s
 
 	prepared := false
 
-	// 측정 취소와 분리된 유한 예산에서 롤백한 뒤 세션의 statement를 해제한다.
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 
@@ -201,7 +184,6 @@ func TestClaimCandidateSelectionIsBoundedUnderActiveBacklog(t *testing.T) {
 
 	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM source_observation_queue").Scan(&activeRows))
 
-	// 두 목록 kind의 채널별 선두 선택을 함께 검증한다. 실제 plane은 다른 kind도 같은 claim에 포함한다.
 	kinds := []string{"video_list", "shorts_list"}
 
 	for _, mode := range planCacheModes {
@@ -227,8 +209,6 @@ func TestClaimCandidateSelectionIsBoundedUnderActiveBacklog(t *testing.T) {
 		})
 	}
 
-	// 실제 claim은 queue 순서에서 앞서는 채널·종류 선두 4개여야 한다. 기대값은 claim SQL의 선두 계산과 독립적으로
-	// "더 앞선 활성 같은 채널·종류 목록이 없음"을 직접 판정해 구한다.
 	rows, err := pool.Query(ctx, `
 		SELECT queue.observation_id
 		FROM source_observation_queue AS queue

@@ -10,8 +10,6 @@ import (
 
 const youtubejsLiveContractGenerationMigration = "008_youtubejs_live_contract_generation.sql"
 
-// 새 DB도 수동 cutover 없이 현행 collector가 발행하는 YouTube.js live 세대를 받아야 하고, 이미 전환된 DB에
-// 다시 적용해도 세대 기록을 바꾸지 않아야 한다.
 func TestYoutubejsLiveContractGenerationMigration(t *testing.T) {
 	t.Parallel()
 
