@@ -61,8 +61,17 @@ native_cutover_signal() {
 native_cutover_unknown() {
   # shellcheck disable=SC2034 # 연결된 remote apply가 복원 허용 여부를 읽습니다.
   native_outcome_unknown=true
-  sudo -n sh -c 'umask 077; printf "outcome_unknown\n" > "$1/outcome"' sh "$native_recovery_dir" || \
-    echo 'failed to write native outcome record; recovery guard retained' >&2
+  sudo -n sh -ec '
+    test ! -L "$1"
+    cd "$1"
+    test -n "$2" && test "$(cat claim)" = "$2" || exit 1
+    test ! -L outcome
+    if test -e outcome; then
+      test -f outcome && test "$(cat outcome)" = outcome_unknown
+    else
+      umask 077; set -C; printf "outcome_unknown\n" > outcome
+    fi
+  ' sh "$native_recovery_dir" "$native_claim_nonce" || echo 'could not record outcome on owned native guard; retained' >&2
   echo "native cutover outcome_unknown; recovery guard, release and rollback records retained: $native_recovery_dir" >&2
 }
 
@@ -171,4 +180,128 @@ native_cutover_run() {
   native_phase_active=false
   (( ${native_signal_status:-0} == 0 )) || return "$native_signal_status"
   return "$worker_status"
+}
+
+native_logrotate_body() {
+  cat <<'LOGROTATE'
+/var/log/hololive-bot/*.log {
+    size 10M
+    rotate 14
+    missingok
+    notifempty
+    olddir /var/log/hololive-bot/archive
+    compress
+    delaycompress
+    copytruncate
+}
+LOGROTATE
+}
+
+native_udp_body() { printf 'net.core.rmem_max = %s\nnet.core.wmem_max = %s\n' "$1" "$1"; }
+native_swap_body() { printf 'vm.swappiness = 10\n'; }
+
+native_existing_host_check() {
+  local buffer="$1" mib="$2"
+  native_logrotate_body | sudo -n cmp -s - /etc/logrotate.d/hololive-bot || return 1
+  native_udp_body "$buffer" | sudo -n cmp -s - /etc/sysctl.d/99-hololive-quic-udp-buffer.conf || return 1
+  native_swap_body | sudo -n cmp -s - /etc/sysctl.d/99-hololive-swap.conf || return 1
+  local live swap
+  live="$(sysctl -n net.core.rmem_max net.core.wmem_max vm.swappiness)" || return 1
+  [[ "$live" == "$buffer"$'\n'"$buffer"$'\n10' ]] || return 1
+  swap="$(swapon --noheadings --raw --show=NAME)" || return 1
+  grep -Fxq "$swapfile" <<< "$swap" || return 1
+  sudo -n file -b "$swapfile" | grep -F 'swap file' >/dev/null || return 1
+  sudo -n python3 -I -B - "$mib" "$swapfile" "$releases_root" "$host_env" "$unit_file" "$po_unit_file" "$po_socket_file" <<'PY'
+import grp, os, pwd, stat, sys
+from pathlib import Path
+mib, swap, releases, env, *units = sys.argv[1:]
+user, group = pwd.getpwnam('hololive'), grp.getgrnam('opc')
+assert user.pw_uid != 0 and group.gr_gid != 0 and user.pw_gid == group.gr_gid
+assert user.pw_dir == '/nonexistent' and user.pw_shell == '/usr/sbin/nologin'
+def check(path, kind, uid=0, gid=0, mode=None):
+    s = os.lstat(path)
+    assert kind(s.st_mode) and (s.st_uid, s.st_gid) == (uid, gid)
+    assert (s.st_mode & 0o022 == 0) if mode is None else (stat.S_IMODE(s.st_mode) == mode)
+    return s
+for d in (releases, '/var/lib/hololive-bot', '/etc/sysctl.d'):
+    check(d, stat.S_ISDIR, mode=0o755)
+check('/etc/hololive-bot', stat.S_ISDIR, mode=0o750)
+for d in ('/var/log/hololive-bot', '/var/log/hololive-bot/archive'):
+    check(d, stat.S_ISDIR, user.pw_uid, group.gr_gid, 0o750)
+for f in ('/etc/logrotate.d/hololive-bot', '/etc/sysctl.d/99-hololive-quic-udp-buffer.conf',
+          '/etc/sysctl.d/99-hololive-swap.conf', '/etc/fstab'):
+    check(f, stat.S_ISREG)
+assert check(swap, stat.S_ISREG, mode=0o600).st_size == int(mib)*1048576
+rows = [line.partition(b'#')[0].split() for line in Path('/etc/fstab').read_bytes().splitlines()]
+assert [r for r in rows if r[:1] == [os.fsencode(swap)]] == [[os.fsencode(swap), b'none', b'swap', b'sw', b'0', b'0']]
+check(env, stat.S_ISREG, mode=0o640)
+for f in units:
+    check(f, stat.S_ISREG, mode=0o644)
+PY
+}
+
+native_release_pin() {
+  sudo -n python3 -I -B - "$@" <<'PY'
+import hashlib, os, stat, sys, tempfile
+from pathlib import Path
+action, kind, live, old, new, expected = sys.argv[1:]
+live, old, new = map(Path, (live, old, new))
+key, suffix = {'profile': (b'STACK_WORKER_PROFILE_FILE=', 'worker-profile.json'),
+               'issuer': (b'RootDirectory=', 'po-sandbox/rootfs')}[kind]
+def line(release):
+    return key + os.fsencode(release / suffix) + b'\n'
+original = (old / live.name).read_bytes()
+lines = original.splitlines(keepends=True)
+assert [s for s in lines if s.startswith(key)] == [line(old)]
+lines[lines.index(line(old))] = line(new)
+candidate = b''.join(lines)
+assert hashlib.sha256(candidate).hexdigest() == expected
+s = live.lstat()
+assert stat.S_ISREG(s.st_mode) and s.st_nlink == 1 and (s.st_uid, s.st_gid) == (os.geteuid(), os.getegid())
+assert stat.S_IMODE(s.st_mode) == (0o640 if kind == 'profile' else 0o644)
+current = live.read_bytes()
+if action == 'check':
+    sys.exit(0 if current == original else 1)
+assert action in ('apply', 'restore', 'recoverable') and (new / live.name).read_bytes() == candidate
+if action != 'apply':
+    assert current in (original, candidate)
+    if current == original or action == 'recoverable':
+        sys.exit(0)
+else:
+    assert current == original
+with tempfile.NamedTemporaryFile(dir=live.parent, delete=False) as tmp:
+    name = tmp.name
+    try:
+        tmp.write(candidate if action == 'apply' else original)
+        tmp.flush()
+        os.fchown(tmp.fileno(), s.st_uid, s.st_gid)
+        os.fchmod(tmp.fileno(), stat.S_IMODE(s.st_mode))
+        attrs = set(os.listxattr(live))
+        for attr in set(os.listxattr(name)) - attrs:
+            os.removexattr(name, attr)
+        for attr in attrs:
+            value = os.getxattr(live, attr)
+            if attr not in os.listxattr(name) or os.getxattr(name, attr) != value:
+                os.setxattr(name, attr, value)
+        assert stat.S_IMODE(os.fstat(tmp.fileno()).st_mode) == stat.S_IMODE(s.st_mode)
+        os.utime(tmp.fileno(), ns=(s.st_atime_ns, s.st_mtime_ns))
+        os.fsync(tmp.fileno())
+        observed = live.lstat()
+        assert (observed.st_dev, observed.st_ino, observed.st_ctime_ns) == (s.st_dev, s.st_ino, s.st_ctime_ns)
+        os.replace(name, live)
+        d = os.open(live.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(d)
+        finally:
+            os.close(d)
+    finally:
+        if os.path.lexists(name):
+            os.unlink(name)
+PY
+}
+
+native_file_digest() {
+  local sum
+  sum="$(sha256sum -- "$1")" || return 1
+  printf '%s\n' "${sum%% *}"
 }

@@ -5,6 +5,7 @@ test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
 python3 - "$ROOT_DIR" "$test_dir" <<'CUTOVER_TEST_PY'
 from pathlib import Path
+import hashlib
 import os
 import signal
 import subprocess
@@ -250,6 +251,121 @@ for kind, mutate in (
     result = subprocess.run(['bash', '-c', prefix + f'native_cutover_claim first; {mutate}; {action}'], capture_output=True)
     assert result.returncode != 0 and (guard/'claim').exists() and (guard/'release').read_text().strip() == 'first'
 
+host_case = work/'existing-host'
+host_case.mkdir()
+host_check = r'''
+set -Eeuo pipefail
+. "$1"
+cd "$2"
+swapfile=/swapfile releases_root=/releases host_env=/host.env
+unit_file=/collector po_unit_file=/issuer po_socket_file=/socket
+sysctl() {
+  [[ "$*" == '-n net.core.rmem_max net.core.wmem_max vm.swappiness' ]]
+  if [[ "$FAULT" == runtime ]]; then echo 4096; else printf '7500000\n7500000\n10\n'; fi
+}
+swapon() { [[ "$*" == '--noheadings --raw --show=NAME' ]]; [[ "$FAULT" == inactive ]] || echo /swapfile; }
+sudo() {
+  [[ "$1" == -n ]]; shift
+  case "$1" in
+    cmp) command cmp -s - "${4##*/}" ;;
+    file) [[ "$*" == 'file -b /swapfile' && "$FAULT" != signature ]] && echo 'Linux swap file' ;;
+    python3) shift 4; python3 -I -B verify.py "$@" ;;
+    *) printf '%s\n' "$1" >> unexpected-command; return 99 ;;
+  esac
+}
+native_existing_host_check 7500000 2048
+'''
+(host_case/'verify.py').write_text('''
+import os, stat, sys
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+code = sys.stdin.read()
+fault = os.environ['FAULT']
+def metadata(path):
+    uid, gid, mode, kind = 0, 0, 0o644, stat.S_IFREG
+    if path in ('/releases','/var/lib/hololive-bot','/etc/sysctl.d','/etc/hololive-bot','/var/log/hololive-bot','/var/log/hololive-bot/archive'):
+        kind, mode = stat.S_IFDIR, 0o755
+        if path == '/etc/hololive-bot' or path.startswith('/var/log/'):
+            mode = 0o750
+        if path.startswith('/var/log/'):
+            uid, gid = 99, 77
+        if fault == 'directory' and path == '/var/log/hololive-bot/archive':
+            mode = 0o775
+    elif path == '/host.env':
+        mode = 0o640
+    elif path == '/swapfile':
+        mode = 0o640 if fault == 'swap-mode' else 0o600
+    if path == '/collector' and fault == 'unit-owner':
+        uid = 99
+    if path == '/etc/fstab' and fault == 'fstab-link':
+        kind = stat.S_IFLNK
+    return SimpleNamespace(st_mode=kind|mode, st_gid=gid, st_uid=uid, st_size=(2048 - int(fault == 'swap-size'))*1048576)
+fstab = b'/swapfile none swap sw 0 0\\\\n'
+if fault == 'fstab-duplicate': fstab *= 2
+if fault == 'fstab-options': fstab = fstab.replace(b'sw ', b'noauto ')
+user = SimpleNamespace(pw_uid=99, pw_gid=78 if fault=='user' else 77, pw_dir='/nonexistent', pw_shell='/usr/sbin/nologin')
+with patch('pwd.getpwnam', return_value=user), patch('grp.getgrnam', return_value=SimpleNamespace(gr_gid=77)), patch('os.lstat', metadata), patch.object(Path,'read_bytes',return_value=fstab):
+    exec(compile(code,'host-baseline','exec'))
+''')
+for file, body in (('hololive-bot', 'native_logrotate_body'), ('99-hololive-quic-udp-buffer.conf', 'native_udp_body 7500000'),
+                   ('99-hololive-swap.conf', 'native_swap_body')):
+    (host_case/file).write_bytes(subprocess.check_output(['bash', '-c', f'. "{helper}"; {body}']))
+def check_host(fault):
+    return subprocess.run(['bash', '-c', host_check, '_', helper, host_case], env=dict(os.environ, FAULT=fault),
+                          capture_output=True)
+baseline = check_host('normal')
+assert baseline.returncode == 0, baseline.stderr
+for file in ('hololive-bot','99-hololive-quic-udp-buffer.conf','99-hololive-swap.conf'):
+    fixture = host_case/file
+    saved = fixture.read_bytes()
+    fixture.write_bytes(saved + b'\n')
+    assert check_host('normal').returncode != 0 and fixture.read_bytes() == saved + b'\n'
+    fixture.write_bytes(saved)
+for fault in ('runtime','inactive','signature','directory','swap-mode','swap-size','fstab-link','fstab-duplicate','fstab-options','unit-owner','user'):
+    assert check_host(fault).returncode != 0, fault
+assert not (host_case/'unexpected-command').exists()
+
+pin_case = work/'pin'
+pin_case.mkdir()
+for field, name, key, tail in (
+    ('profile', 'youtube-collector-host.env', 'STACK_WORKER_PROFILE_FILE=', '/worker-profile.json'),
+    ('issuer', 'issuer.service', 'RootDirectory=', '/po-sandbox/rootfs'),
+):
+    old, new = pin_case/'old', pin_case/'new-longer-id'
+    old.mkdir(exist_ok=True)
+    new.mkdir(exist_ok=True)
+    live = pin_case/name
+    prior = f'BEFORE=yes\n{key}{old}{tail}\nAFTER=no'.encode()
+    candidate = prior.replace(os.fsencode(old), os.fsencode(new))
+    (old/name).write_bytes(prior)
+    (new/name).write_bytes(candidate)
+    live.write_bytes(prior)
+    live.chmod(0o640 if field == 'profile' else 0o644)
+    os.setxattr(live, 'user.native-fixture', b'kept')
+    def pin(action, expected=candidate):
+        return subprocess.run(['bash', '-c', f'. "{helper}"; sudo() {{ shift; "$@"; }}; native_release_pin "$@"',
+                               '_', action, field, live, old, new, hashlib.sha256(expected).hexdigest()],
+                              capture_output=True).returncode
+    s = live.stat()
+    assert pin('check') == 0 and live.stat().st_ctime_ns == s.st_ctime_ns
+    for bad in (candidate + b'\n', candidate + b'\n' + key.encode() + b'other', candidate.replace(b'BEFORE=yes', b'BEFORE=no')):
+        (new/name).write_bytes(bad)
+        assert pin('apply', bad) != 0 and pin('apply') != 0
+        assert live.stat().st_ctime_ns == s.st_ctime_ns and live.read_bytes() == prior
+    (new/name).write_bytes(candidate)
+    live.write_bytes(prior + b'\n')
+    assert pin('check') != 0 and pin('apply') != 0 and pin('restore') != 0
+    live.write_bytes(prior)
+    s = live.stat()
+    for action, want in [('apply', candidate), ('restore', prior)]:
+        assert pin(action) == 0 and live.read_bytes() == want
+        actual = live.stat()
+        assert (actual.st_mode, actual.st_uid, actual.st_gid, actual.st_mtime_ns) == (s.st_mode, s.st_uid, s.st_gid, s.st_mtime_ns)
+        assert os.getxattr(live, 'user.native-fixture') == b'kept'
+    unchanged = live.stat()
+    assert pin('restore') == 0 and live.stat().st_ctime_ns == unchanged.st_ctime_ns
+
 gate = source[source.index('native_pool_check_pending=true\n'):source.index('\nsudo -n systemd-analyze verify "$unit_file"\n', source.index('native_pool_check_pending=true\n'))]
 case, actual = run_case('failed-database-proof', '''
 sudo() {
@@ -335,7 +451,7 @@ def window_case(name, args, scenario):
     case = work / name
     case.mkdir(mode=0o700)
     readiness = root / 'scripts/deploy/lib/ap-collector-readiness.sh'
-    script = f'. "{helper}"\n. "{release_lib}"\n. "{window_lib}"\n. "{readiness}"\n' + endpoint_libs + r'''
+    script = f'. "{helper}"\n. "{release_lib}"\n. "{window_lib}"\n. "{readiness}"\n' + endpoint_libs + functions + r'''
 set -Eeuo pipefail
 umask 077
 cd "$CASE"
@@ -403,7 +519,7 @@ sudo() {
     esac ;;
     install) mkdir -p -- "${!#}" ;;
     sync) return 0 ;;
-    awk|python3|systemd-run|journalctl|systemctl|bash|sh|mkdir|tee|touch|sha256sum|ln|cmp|cat|grep|readlink|rm|mv) "$@" ;;
+    awk|sed|grep|python3|systemd-run|journalctl|systemctl|bash|sh|mkdir|tee|touch|sha256sum|ln|cmp|cat|readlink|rm|mv) "$@" ;;
     *) return 91 ;;
   esac
 }
@@ -432,16 +548,28 @@ systemctl() {
     show) printf 'InvocationID=%s\n' "$gen" ;;
     daemon-reload) touch reload ;;
     enable)
-      [[ "$2" == --now && "$3" == "$po_socket" ]]
+      if [[ "$2" != --now ]]; then rm "disabled-$2"; return; fi
+      [[ "$3" == "$po_socket" ]]
       rm "down-$po_socket"; printf '%032d\n' 101 >"live-$po_socket" ;;
-    stop) shift; printf '%s\n' "$*" >> calls; for n in "$@"; do touch "down-$n"; rm -f "live-$n"; done ;;
+    disable) touch "disabled-$2" ;;
+    start)
+      printf '%s\n' "$2" >> starts
+      rm "down-$2"
+      printf '%032d\n' 104 >"live-$2"
+      [[ "$fault" != restore_lost || "$2" != "$po_socket" ]] ;;
+    stop)
+      shift; printf '%s\n' "$*" >> calls
+      for n in "$@"; do touch "down-$n"; rm -f "live-$n"; done
+      [[ "$fault" != stop_client_error || "$1" != "$po_socket" ]] ;;
     *) return 92 ;;
   esac
 }
 native_window_prop() {
   case "$2" in
     InvocationID) if [[ -e "live-$1" ]]; then cat "live-$1"; elif [[ "$fault" == replaced && -e reload ]]; then printf '%032d\n' 2; else echo "$gen"; fi ;;
-    Job) if [[ -e job-pending && "$1" == "$unit" ]]; then echo 42; fi ;;
+    Job)
+      if [[ -e job-pending && "$1" == "$unit" ]] || [[ -e "down-$1" && "$fault" == "queued-$1" ]]; then echo 42; fi
+      [[ "$fault" != "query-$1" || ! -e "down-$1" ]] ;;
     RestartForceExitStatus|SuccessExitStatus) echo ;;
     NRestarts) echo 0 ;;
     ActiveEnterTimestampMonotonic) python3 -I -B -c 'import time; print(time.monotonic_ns()//1000)' ;;
@@ -460,13 +588,28 @@ native_window_prop() {
       printf '%s/%s.d/90-native-window-%s.conf\n' "${unit_file%/*}" "$1" "$native_claim_nonce" ;;
     MainPID) if [[ -f "live-$1" && ! -f "down-$1" ]]; then echo "$BASHPID"; else echo 0; fi ;;
     ControlPID) echo 0 ;;
-    UnitFileState) echo enabled ;;
+    LoadState) echo loaded ;;
+    NeedDaemonReload) echo no ;;
+    UnitFileState) if [[ -f "disabled-$1" ]]; then echo disabled; else echo enabled; fi ;;
     Result) echo success ;;
     *) return 93 ;;
   esac
 }
 busctl() {
-  if [[ "$2" == call ]]; then echo 'o "/org/freedesktop/systemd1/unit/fixture"'; return; fi
+  local object="/org/freedesktop/systemd1/unit/${n//./_2e}"
+  if [[ "$2" == call ]]; then
+    [[ $# == 8 && "$1" == --system && "$3" == org.freedesktop.systemd1 && "$4" == /org/freedesktop/systemd1 &&
+       "$5" == org.freedesktop.systemd1.Manager && "$7" == s && "$8" == "$n" ]] || return 1
+    case "$8" in "$po_socket"|"$po_service"|"$unit") ;; *) return 1 ;; esac
+    case "$6" in
+      GetUnit) [[ ! -e "down-$8" ]] || return 1 ;;
+      LoadUnit) [[ "$fault" != load_failure ]] || return 1 ;;
+      *) return 1 ;;
+    esac
+    printf 'o "%s"\n' "$object"
+    return
+  fi
+  [[ "$3" == get-property && "$4" == org.freedesktop.systemd1 && "$5" == "$object" ]] || return 1
   if [[ "${!#}" == ExecConditionEx ]]; then
     python3 -I -B - "$current_link/native-window" "$native_recovery_dir/accepting" "$([[ -d "$PWD/w1-adoption" ]] && echo 2 || echo 1)" <<'PY_CONDITION'
 import json,sys
@@ -512,8 +655,10 @@ journalctl() {
   fi
   if [[ "$*" == *--grep=* ]]; then
     [[ "$fault" != no_drain ]] || return 0
-    printf '{"_SYSTEMD_INVOCATION_ID":"%s"}\n' "$gen"
+    local invocation="${!#}"
+    printf '{"_SYSTEMD_INVOCATION_ID":"%s"}\n' "${invocation#_SYSTEMD_INVOCATION_ID=}"
   elif [[ "$*" == *JOB_RESULT=done* && "$*" == *MESSAGE_ID=9d1aaa27d60140bd96365438aad20286* && "$fault" != started_only ]]; then
+    if [[ -n "$fault" && " $* " == *" UNIT=${fault#missing-receipt-} "* ]]; then return 0; fi
     local selected
     for selected in "$@"; do
       if [[ "$selected" == INVOCATION_ID=* ]]; then
@@ -605,7 +750,7 @@ mkdir -p w1-adoption/permanent w1-adoption/original-guard
 printf 'outcome_unknown\\n' >w1-adoption/original-guard/outcome
 ln -s permanent w1-adoption/policy
 for n in "$po_socket" "$po_service" "$unit"; do
-  mkdir -p "$PWD/system/$n.d"
+  mkdir -p -m 0755 "$PWD/system/$n.d"
   {
     printf '[Unit]\\nConditionPathExists=!%s/native-window\\nConditionPathExists=!%s/accepting\\n' "$current_link" "$native_recovery_dir"
     if [[ "$n" != "$po_socket" ]]; then
@@ -692,6 +837,53 @@ if [[ -e "$old_target/accepted-window" ]]; then rm -r "$old_target/seed-guard" "
     allowed = (origin == 'direct') == (release_window == 'W1')
     assert (result.returncode == 0) == allowed and (case/'calls').exists() == allowed, (origin, result.stderr)
 
+origin_dispatch = source[source.index('native_same_window_baseline()'):source.index('\nnormalize_runtime_payload_permissions()')]
+ordinary_origin = '''
+rm -r "$old_target/seed-guard" "$old_target/accepted-window"
+seed_accepted "$native_release_window"
+release_dir="$releases_root/$release_id" window_action=apply-origin
+window_units=("$po_socket" "$po_service" "$unit")
+payload="$PWD/unused-stage" required_udp_buffer=7500000 swapfile_size_mib=2048
+worker_profile="$PWD/desired"; touch "$worker_profile" "$old_target/worker-profile.json"
+po_unit_file="$PWD/system/$po_service"; po_socket_file="$PWD/system/$po_socket"
+touch "$unit_file" "$po_socket_file"
+printf 'STACK_WORKER_PROFILE_FILE=%s/worker-profile.json\\n' "$old_target" >> "$host_env"
+printf 'RootDirectory=%s/po-sandbox/rootfs\\n' "$old_target" > "$po_unit_file"
+chmod 0640 "$host_env"; chmod 0644 "$po_unit_file"
+for f in "$host_env" "$po_unit_file"; do cp "$f" "$old_target/${f##*/}"; done
+pin_digest() { sed "s|$old_target|$release_dir|" "$1" | sha256sum | cut -d' ' -f1; }
+set -- stage new a 30005 started 7500000 2048 "$EXPECTED_REVISION" apply-origin \
+  "$(pin_digest "$host_env")" "$(native_file_digest "$unit_file")" "$(pin_digest "$po_unit_file")" "$(native_file_digest "$po_socket_file")"
+native_existing_host_check() { [[ "$fault" != infra ]]; }
+native_deployment_inputs() { [[ "$fault" != inputs ]]; }
+native_window_prop() {
+  case "$2" in
+    DropInPaths|Job) : ;; ActiveState) echo active ;; InvocationID) echo "$gen" ;;
+    ControlPID) echo 0 ;; UnitFileState) echo enabled ;; NeedDaemonReload) echo no ;;
+    *) return 99 ;;
+  esac
+}
+case "$fault" in
+  env) echo OTHER=value >> "$host_env" ;;
+  collector) echo drift >> "$unit_file" ;;
+  issuer) echo drift >> "$po_unit_file" ;;
+  socket) echo drift >> "$po_socket_file" ;;
+  profile) echo drift >> "$worker_profile" ;;
+  used-stage) mkdir "$payload" ;;
+  used-release) mkdir "$release_dir" ;;
+  drop-dir) mkdir -m 0777 "$PWD/system/$po_service.d" ;;
+  prior-guard) mkdir "$native_recovery_dir"; echo preserved > "$native_recovery_dir/claim" ;;
+esac
+'''
+for fault in ('normal','env','collector','issuer','socket','profile','infra','inputs','used-stage','used-release','drop-dir','prior-guard'):
+    case, result = window_case('ordinary-origin-' + fault, [release_window, '6433', fault], ordinary_origin + origin_dispatch)
+    assert (result.returncode == 0) == (fault == 'normal'), (fault, result)
+    if fault == 'prior-guard':
+        assert list((case/'recovery').iterdir()) == [case/'recovery/claim'] and (case/'recovery/claim').read_text() == 'preserved\n'
+    else:
+        assert not (case/'recovery').exists()
+    assert (case/'current').resolve() == case/'releases/old' and not (case/'calls').exists()
+
 apply_origin = '''
 if [[ -e "$old_target/accepted-window" ]]; then rm -r "$old_target/seed-guard" "$old_target/accepted-window"; fi
 seed_accepted "$native_release_window"
@@ -710,6 +902,70 @@ for name, mutation in (
     case, result = window_case('apply-stop-' + name, [release_window,'6433','normal'], apply_origin + mutation +
                                '\nnative_apply_before_stop\ntouch stopped\n')
     assert result.returncode != 0 and not (case/'stopped').exists(), (name, result.stderr)
+
+ordinary = apply_origin + '''
+same_window=true
+window="$release_dir/native-observation"
+mkdir -p "$window" "$old_target/rollback-contract"
+native_window_boot > "$window/boot"
+printf '%s\\n' "$apply_origin_pin" "$release_dir" "$window_digest" "$native_claim_nonce" > "$window/pins"
+mv "$host_env" "$PWD/youtube-collector-host.env"; host_env="$PWD/youtube-collector-host.env"
+chmod 0640 "$host_env"
+printf 'STACK_WORKER_PROFILE_FILE=%s/worker-profile.json\\n' "$old_target" >> "$host_env"
+cp "$host_env" "$old_target/${host_env##*/}"
+cp "$host_env" "$old_target/rollback-contract/youtube-collector-host.env"
+sed "s|$old_target/worker-profile.json|$release_dir/worker-profile.json|" "$host_env" > "$release_dir/${host_env##*/}"
+profile_digest="$(native_file_digest "$release_dir/${host_env##*/}")"
+touch "$unit_file"; cp "$unit_file" "$old_target/${unit_file##*/}"
+po_unit_file="$PWD/system/$po_service"
+printf 'RootDirectory=%s/po-sandbox/rootfs\\n' "$old_target" > "$po_unit_file"
+chmod 0644 "$po_unit_file"
+cp "$po_unit_file" "$old_target/$po_service"
+sed "s|$old_target|$release_dir|" "$po_unit_file" > "$release_dir/$po_service"
+issuer_digest="$(native_file_digest "$release_dir/$po_service")"
+printf 'absent\\n' > "$old_target/rollback-contract/previous-before-cutover"
+sha256sum "$host_env" > "$old_target/rollback-contract/SHA256SUMS"
+sha256sum "$old_target/rollback-contract/SHA256SUMS" > "$window/inputs.sha256"
+native_rollback_validate() { test -d "$old_target/rollback-contract"; }
+po_wait_ready() { test -f "live-$po_service"; }
+arm_native_cutover_restore
+native_same_window_stop_phase
+'''
+for fault in ('stop_client_error', 'no_drain', *(prefix + name for name in ('issuer.socket','issuer.service','collector.service')
+                                    for prefix in ('queued-', 'query-', 'missing-receipt-'))):
+    case, result = window_case('ordinary-stop-' + fault, [release_window, '6433', fault], ordinary)
+    assert result.returncode != 0 and (case/'recovery/outcome').read_text() == 'outcome_unknown\n', (fault, result)
+    assert (case/'recovery/step').read_text() == 'stop\n' and not (case/'starts').exists()
+    assert (case/'current').resolve() == case/'releases/old' and not (case/'previous').exists()
+    assert not (case/'releases/new/native-observation/original-stops').exists()
+
+ordinary_stopped = ordinary + '''
+ln -s "$old_target" "$previous_link"
+native_release_pin apply profile "$host_env" "$old_target" "$release_dir" "$profile_digest"
+native_release_pin apply issuer "$po_unit_file" "$old_target" "$release_dir" "$issuer_digest"
+ln -sfn "$release_dir" "$current_link"
+'''
+for name, mutation, fault, starts in (
+    ('verified', '', 'normal', ['issuer.socket','issuer.service','collector.service']),
+    ('failed-first-restore-start', '', 'restore_lost', ['issuer.socket']),
+    ('post-stop-job', 'touch job-pending', 'normal', []),
+    ('replaced-origin', 'rm "$old_target/accepted-window"', 'normal', []),
+    ('tampered-stop', 'echo changed > "$window/$po_service.stopped"', 'normal', []),
+    ('candidate-request', 'mkdir "$window/$po_socket.requesting"', 'normal', []),
+    ('changed-config', 'echo foreign >> "$host_env"', 'normal', []),
+):
+    case, result = window_case('ordinary-restore-' + name, [release_window, '6433', fault],
+                               ordinary_stopped + mutation + '\nnative_cutover_run failure bash -c "exit 7"\n')
+    assert result.returncode == 7, (name, result)
+    actual = (case/'starts').read_text().splitlines() if (case/'starts').exists() else []
+    assert actual == starts, (name, actual, result.stderr)
+    if name == 'verified':
+        assert not (case/'recovery').exists() and (case/'current').resolve() == case/'releases/old'
+        assert (case/'youtube-collector-host.env').read_bytes() == (case/'releases/old/youtube-collector-host.env').read_bytes()
+    else:
+        assert (case/'recovery/outcome').read_text() == 'outcome_unknown\n'
+        if not starts:
+            assert (case/'recovery/step').read_text() == 'failure\n' and (case/'current').resolve() == case/'releases/new'
 
 apply_stage = apply_origin + '''
 native_apply_before_stop
@@ -737,6 +993,7 @@ for name, mutation, fault, accepted in (
     ('different-family', 'if [[ "$native_release_window" == W1 ]]; then native_release_window=W2; else native_release_window=W1; fi', 'normal', False),
     ('missing-start', 'rm "$window/$unit.started"', 'normal', False),
     ('missing-journal', '', 'nojournal', False),
+    ('issuer-load-failure', '', 'load_failure', False),
     ('competing-start', '', 'competing_start', False),
     ('foreign-start', '', 'foreign_start', False),
 ):
@@ -744,6 +1001,9 @@ for name, mutation, fault, accepted in (
                                '\nnative_apply_close_observation\nnative_apply_preflight new\n')
     assert (result.returncode == 0) == accepted, (name, result.stderr)
     assert (case/'current/accepted-window').is_file() == accepted and (case/'recovery').exists() != accepted
+    if fault == 'load_failure':
+        assert not (case/'releases/new/native-observation/issuer.socket.requesting').exists()
+        assert all((case/f'down-{target}').exists() for target in ('issuer.socket', 'issuer.service', 'collector.service'))
 
 print('[PASS] native cutover owner/child/group/restore signals, first install, bounded unknown, supervisor errors, apply guards and grep errors')
 CUTOVER_TEST_PY

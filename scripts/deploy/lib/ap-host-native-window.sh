@@ -232,7 +232,15 @@ native_window_barriers() {
     file="$window/policy/$n.conf"
     link="$directory/90-native-window-$native_claim_nonce.conf"
     if [[ "$action" == arm ]]; then
-      sudo -n install -d -m 0755 -o root -g root "$directory"
+      sudo -n sh -ec '
+        test ! -L "$1"
+        test "$(readlink -e -- "${1%/*}")" = "${1%/*}"
+        if test -e "$1"; then
+          test -d "$1" && test "$(stat -c "%u:%g:%a" "$1")" = "$(id -u):$(id -g):755"
+        else
+          mkdir -m 0755 -- "$1"
+        fi
+      ' sh "$directory"
       native_window_barrier_body "$n" held | sudo -n tee "$window/held/$n.conf" >/dev/null
       native_window_barrier_body "$n" observing | sudo -n tee "$window/observing/$n.conf" >/dev/null
       native_window_barrier_body "$n" permanent | sudo -n tee "$window/permanent/$n.conf" >/dev/null
@@ -251,7 +259,7 @@ native_window_barriers() {
           native_window_barrier_body "$n" permanent | sudo -n cmp -s - "$drop"
         fi
       done
-      object="$(busctl --system call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager GetUnit s "$n")"
+      object="$(busctl --system call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager LoadUnit s "$n")"
       [[ "$object" =~ ^o\ \"(/org/freedesktop/systemd1/unit/[a-zA-Z0-9_]+)\"$ ]]
       local object_path="${BASH_REMATCH[1]}" permit=''
       if [[ "$action" != permanent ]]; then
