@@ -25,6 +25,7 @@ const (
 	maxGlossaryRunes       = 80
 	maxThumbnailVideos     = 5
 	hydrogenModel          = "gemini-4-hydrogen"
+	neonModel              = "gemini-4-neon"
 	defaultRowsTimeout     = 180
 	carbonModel            = "gemini-4-carbon"
 	defaultExtractTimeout  = 900
@@ -84,7 +85,7 @@ type RowStageConfig struct {
 func defaultRowsConfig() RowsConfig {
 	return RowsConfig{
 		Extract:   RowStageConfig{Model: carbonModel, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: defaultExtractTimeout},
-		Translate: RowStageConfig{Model: hydrogenModel, ThinkingLevel: genai.ThinkingLevelMedium, TimeoutSeconds: defaultRowsTimeout},
+		Translate: RowStageConfig{Model: neonModel, ThinkingLevel: genai.ThinkingLevelMedium, TimeoutSeconds: defaultRowsTimeout},
 		Match:     RowStageConfig{Model: hydrogenModel, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: defaultRowsTimeout},
 		Decide:    DecideConfig{ScheduleInfoMin: defaultScheduleInfoMin},
 	}

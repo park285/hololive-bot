@@ -135,6 +135,7 @@ func rowsService(store *fakeRowStore, model *fakeRowModel, members ...*domain.Me
 const (
 	slotDay         = "2026-11-10"
 	hydrogen        = "gemini-4-hydrogen"
+	neon            = "gemini-4-neon"
 	carbon          = "gemini-4-carbon"
 	basisTranslated = "translated"
 )
@@ -926,7 +927,7 @@ func TestLoadConfigUsesStageDefaultsForRows(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RowsConfig{
 		Extract:   RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 900},
-		Translate: RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelMedium, TimeoutSeconds: 180},
+		Translate: RowStageConfig{Model: neon, ThinkingLevel: genai.ThinkingLevelMedium, TimeoutSeconds: 180},
 		Match:     RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
 		Decide:    DecideConfig{ScheduleInfoMin: 0.7},
 	}, config.Translation.Rows)
@@ -939,7 +940,7 @@ func TestLoadConfigKeepsDefaultsForOmittedRowKeys(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RowsConfig{
 		Extract:   RowStageConfig{Model: carbon, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 900},
-		Translate: RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelMedium, Temperature: new(float32(0.5)), TimeoutSeconds: 300},
+		Translate: RowStageConfig{Model: neon, ThinkingLevel: genai.ThinkingLevelMedium, Temperature: new(float32(0.5)), TimeoutSeconds: 300},
 		Match:     RowStageConfig{Model: hydrogen, ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 180},
 		Decide:    DecideConfig{ScheduleInfoMin: 0.7},
 	}, config.Translation.Rows)
