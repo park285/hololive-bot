@@ -150,7 +150,7 @@ sealed_single_job() {
   dependencies="$(systemctl show "$unit" -p Requires -p Wants -p Requisite -p BindsTo --value)" || return 1
   [[ -n "$dependencies" ]] || die "$unit dependency inventory missing"
   for dep in $dependencies; do
-    systemctl is-active --quiet "$dep" || die "required existing dependency is inactive: $dep"
+    systemctl is-active --quiet -- "$dep" || die "required existing dependency is inactive: $dep"
   done
   sealed_assert_peer
   mkdir -m0700 -- "$record" || die "prior job intent exists: $record; do not retry"

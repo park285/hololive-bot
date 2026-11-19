@@ -117,12 +117,14 @@ case "$*" in
  daemon-reload) fresh="$(mktemp -d)"; QUADLET_UNIT_DIRS="$FAKE_QUADLET_DIR" /usr/libexec/podman/quadlet "$fresh"; cp -a "$fresh"/. /run/systemd/generator; rm -rf "$fresh"; exit ;;
  'show --all hololive-db-migrate.service -p LoadState -p ActiveState -p SubState -p Job') printf 'LoadState=loaded\nActiveState=inactive\nSubState=dead\nJob=\n'; exit ;;
  'show '*.service' --property=FragmentPath --value') echo "/run/systemd/generator/$2"; exit ;;
- 'show '*.service' -p Requires -p Wants -p Requisite -p BindsTo --value') echo holo-pgbouncer.service; exit ;;
+ 'show '*.service' -p Requires -p Wants -p Requisite -p BindsTo --value') printf '%s\n' 'holo-pgbouncer.service -.mount'; exit ;;
  'show hololive-api.service -p Job --value')
    [[ ! -e /state/job-query-failed ]] || exit 3
    if [[ -e /state/job-pending ]]; then echo 84; fi
    exit 0 ;;
  'is-active --quiet holo-pgbouncer.service'|'is-active --quiet admin-dashboard-ingress-firewall.service') exit 0 ;;
+ 'is-active --quiet -- holo-pgbouncer.service') exit 0 ;;
+ 'is-active --quiet -- -.mount') [[ ! -e /state/inactive-root-mount ]]; exit ;;
  'show admin-dashboard-ingress-firewall.service -p InvocationID --value') printf '%032d\n' 25; exit ;;
  '--job-mode=ignore-dependencies start hololive-db-migrate.service')
    grep -q '^ExecStart=.* --check$' /run/systemd/generator/hololive-db-migrate.service
@@ -259,6 +261,11 @@ worker_before="$(stat -c '%d:%i:%Z' "$worker_overlay") $(sha256sum "$worker_over
 "$rollback" "$releases/hololive-alarm-worker-v2-legacy" --check
 if "$helper" hololive-alarm-worker "$WORKER" "$API"; then exit 1; fi
 ! grep -q '^checked ' /state/calls
+touch /state/inactive-root-mount
+if "$helper" hololive-api "$API"; then exit 1; fi
+[[ -z "$(find "$releases" -path '*/schema-job/request' -print -quit)" &&
+  "$(cat /state/hololive-api/cid)" == "$(printf '%064d' 7)" ]]
+rm /state/inactive-root-mount
 touch /state/interrupt-pointer
 if "$helper" hololive-api "$API"; then exit 1; fi
 rm /state/interrupt-pointer
