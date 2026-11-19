@@ -5,13 +5,9 @@ import (
 	"database/sql"
 	jsonv2 "encoding/json/v2"
 	"fmt"
-	"io/fs"
 	"net"
-	"os"
-	"path/filepath"
-	"runtime"
+	"os/exec"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -20,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/postgres/pgxdb"
-	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -236,72 +231,19 @@ func newCandidateTrafficFleet(t *testing.T, pool *pgxpool.Pool, count int, legac
 func candidateBaselinePool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("이전 schema migration 위치를 확인하지 못했습니다")
-	}
+	const epoch3Baseline = "efafcf4005878f53ff239f8e8a1b6255e3b59b75:hololive/hololive-api/scripts/migrations/001_schema_epoch3_baseline.sql"
 
-	source := filepath.Join(filepath.Dir(file), "../../../../hololive-api/scripts/migrations")
-
-	if configured := os.Getenv("HOLOLIVE_MIGRATIONS_DIR"); configured != "" {
-		source = configured
-	}
-
-	sourceRoot, err := os.OpenRoot(source)
+	sqlBytes, err := exec.CommandContext(t.Context(), "git", "cat-file", "blob", epoch3Baseline).Output()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("read v19.2.1 epoch-3 baseline from Git: %v", err)
 	}
 
-	t.Cleanup(func() {
-		if closeErr := sourceRoot.Close(); closeErr != nil {
-			t.Errorf("원본 migration root 닫기: %v", closeErr)
-		}
-	})
-
-	entries, err := dbmigrate.Manifest(sourceRoot.FS())
-	if err != nil {
-		t.Fatal(err)
+	pool := dbtest.NewBlankPool(t)
+	if _, err := pool.Exec(t.Context(), string(sqlBytes)); err != nil {
+		t.Fatalf("install epoch-3 baseline in blank comparison database: %v", err)
 	}
 
-	if len(entries) == 0 {
-		t.Fatal("baseline migration이 없습니다")
-	}
-
-	dir := t.TempDir()
-
-	targetRoot, err := os.OpenRoot(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Cleanup(func() {
-		if closeErr := targetRoot.Close(); closeErr != nil {
-			t.Errorf("이전 migration root 닫기: %v", closeErr)
-		}
-	})
-
-	var selected strings.Builder
-
-	for i, filename := range entries[:1] {
-		body, readErr := fs.ReadFile(sourceRoot.FS(), filename)
-		if readErr != nil {
-			t.Fatal(readErr)
-		}
-
-		if writeErr := targetRoot.WriteFile(filename, body, 0o600); writeErr != nil {
-			t.Fatal(writeErr)
-		}
-
-		_, _ = fmt.Fprintf(&selected, "%03d %s\n", i+1, filename)
-	}
-
-	if err := targetRoot.WriteFile(dbmigrate.ManifestName, []byte(selected.String()), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Setenv("HOLOLIVE_MIGRATIONS_DIR", dir)
-
-	return dbtest.NewPool(t)
+	return pool
 }
 
 func (f *candidateTrafficFleet) cycle(t *testing.T) [4]CandidatePage {
