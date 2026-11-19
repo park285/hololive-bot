@@ -1,20 +1,19 @@
 package migrationrunner
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
-	"github.com/kapu/hololive-shared/pkg/sqlsplit"
+	"github.com/kapu/hololive-shared/pkg/migrationsource"
 )
 
 const AdvisoryLockKey int64 = 0x484F4C4F41504901
@@ -28,12 +27,11 @@ const (
 )
 
 type Config struct {
-	BaselineThrough        string
-	LockKey                int64
-	AllowBlockingIndexDrop bool
-	CardWindow             bool
-	StatementTimeout       time.Duration
-	Logf                   func(format string, args ...any)
+	CardWindow       bool
+	VerifyOnly       bool
+	InitializeOnly   bool
+	StatementTimeout time.Duration
+	BeforeInitialize func(context.Context) error
 }
 
 type Result struct {
@@ -42,23 +40,22 @@ type Result struct {
 	Total   int
 }
 
-func (c Config) logf(format string, args ...any) {
-	if c.Logf != nil {
-		c.Logf(format, args...)
-	}
-}
-
-func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Result, error) {
+func Run(ctx context.Context, pool *pgxpool.Pool, source fs.FS, cfg Config) (Result, error) {
 	if pool == nil {
 		return Result{}, errors.New("postgres pool is nil")
 	}
 
-	if fsys == nil {
-		return Result{}, errors.New("migration fs is nil")
+	if source == nil {
+		return Result{}, errors.New("migration source is nil")
 	}
 
 	if cfg.StatementTimeout < 0 || cfg.StatementTimeout > MaxStatementTimeout {
 		return Result{}, fmt.Errorf("statement timeout must be between 0 and %s", MaxStatementTimeout)
+	}
+
+	files, err := migrationsource.Load(source)
+	if err != nil {
+		return Result{}, fmt.Errorf("load migrations: %w", err)
 	}
 
 	conn, err := pool.Acquire(ctx)
@@ -67,13 +64,16 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 	}
 	defer conn.Release()
 
-	exec := &guardedExecer{conn: conn}
+	exec := func(ctx context.Context, query string, args ...any) error {
+		_, execErr := conn.Exec(ctx, query, args...)
+		return execErr
+	}
 	sessionCfg := dbmigrate.SessionConfig{
 		LockTimeout:      sessionLockTimeout,
 		StatementTimeout: cmp.Or(cfg.StatementTimeout, sessionStatementTimeout),
 	}
 
-	if configureErr := sessionCfg.Configure(ctx, exec.Exec); configureErr != nil {
+	if configureErr := sessionCfg.Configure(ctx, exec); configureErr != nil {
 		return Result{}, fmt.Errorf("configure migration session: %w", configureErr)
 	}
 
@@ -81,10 +81,10 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 
 	var result Result
 
-	err = dbmigrate.WithAdvisoryLock(ctx, lockSession, dbmigrate.LockConfig{Key: lockKey(cfg), Release: advisoryUnlockTimeout}, func(lockCtx context.Context) error {
+	err = dbmigrate.WithAdvisoryLock(ctx, lockSession, dbmigrate.LockConfig{Key: AdvisoryLockKey, Release: advisoryUnlockTimeout}, func(lockCtx context.Context) error {
 		var applyErr error
 
-		result, applyErr = applyLocked(lockCtx, conn, fsys, exec, cfg)
+		result, applyErr = applyLocked(lockCtx, conn, files, cfg)
 		if applyErr != nil {
 			return fmt.Errorf("apply locked: %w", applyErr)
 		}
@@ -98,319 +98,220 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 	return result, nil
 }
 
-func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, cfg Config) (Result, error) {
-	ledger := dbmigrate.Ledger{}
+func applyLocked(ctx context.Context, conn *pgxpool.Conn, files []migrationsource.File, cfg Config) (Result, error) {
+	var result Result
 
-	if cfg.CardWindow {
-		return applyCardWindow(ctx, conn, fsys, exec, ledger, cfg)
+	opts := pgx.TxOptions{}
+
+	if cfg.VerifyOnly {
+		opts.AccessMode = pgx.ReadOnly
 	}
 
-	if err := ledger.Ensure(ctx, exec.Exec); err != nil {
-		return Result{}, fmt.Errorf("ensure: %w", err)
-	}
+	err := pgx.BeginTxFunc(ctx, conn, opts, func(tx pgx.Tx) error {
+		if _, pathErr := tx.Exec(ctx, "SET LOCAL search_path = pg_catalog, public, pg_temp"); pathErr != nil {
+			return fmt.Errorf("select migration namespace: %w", pathErr)
+		}
 
-	if err := ensureChecksumTable(ctx, exec.Exec); err != nil {
-		return Result{}, fmt.Errorf("ensure checksum table: %w", err)
-	}
+		var migrations, checksums bool
 
-	entries, err := dbmigrate.Manifest(fsys)
+		if err := tx.QueryRow(ctx, `SELECT to_regclass('public.schema_migrations') IS NOT NULL,
+			to_regclass('public.schema_migration_checksums') IS NOT NULL`).Scan(&migrations, &checksums); err != nil {
+			return fmt.Errorf("inspect migration ledgers: %w", err)
+		}
+
+		if migrations != checksums {
+			return errors.New("incomplete migration ledger pair")
+		}
+
+		var applyErr error
+
+		if migrations {
+			result, applyErr = advance(ctx, tx, files, cfg)
+		} else {
+			result, applyErr = bootstrap(ctx, tx, files, cfg)
+		}
+
+		return applyErr
+	})
 	if err != nil {
-		return Result{}, fmt.Errorf("dbmigrate: %w", err)
-	}
-
-	if reconcileErr := reconcileBaseline(ctx, conn, fsys, ledger, entries, cfg); reconcileErr != nil {
-		return Result{}, fmt.Errorf("reconcile baseline: %w", reconcileErr)
-	}
-
-	if transitionErr := transitionEpoch2(ctx, conn, fsys, ledger, entries); transitionErr != nil {
-		return Result{}, fmt.Errorf("transition epoch-2: %w", transitionErr)
-	}
-
-	if guardErr := guardEpochResidue(ctx, conn, entries); guardErr != nil {
-		return Result{}, fmt.Errorf("guard epoch residue: %w", guardErr)
-	}
-
-	if configureBlockingErr := configureBlockingIndexDropPolicy(ctx, conn, exec, cfg); configureBlockingErr != nil {
-		return Result{}, fmt.Errorf("configure blocking index drop policy: %w", configureBlockingErr)
-	}
-
-	result, err := applyManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
-	if err != nil {
-		return Result{}, fmt.Errorf("apply manifest: %w", err)
-	}
-
-	if err := assertNoInvalidIndexes(ctx, conn); err != nil {
-		return Result{}, fmt.Errorf("assert no invalid indexes: %w", err)
+		return Result{}, fmt.Errorf("resolve migration lineage: %w", err)
 	}
 
 	return result, nil
 }
 
-func applyCardWindow(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, cfg Config) (Result, error) {
-	entries, err := dbmigrate.Manifest(fsys)
+func advance(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg Config) (Result, error) {
+	epoch, applied, err := verifyHead(ctx, tx, files, cfg.CardWindow)
 	if err != nil {
-		return Result{}, fmt.Errorf("load card manifest: %w", err)
+		return Result{}, err
 	}
 
-	if len(entries) != 32 || entries[30] != "031_retire_holodex_channel_profile.sql" || entries[31] != "032_schedule_poster_template.sql" {
-		return Result{}, errors.New("card window requires the reviewed 031/032 manifest")
+	pending := files[1+applied:]
+	if (cfg.VerifyOnly || cfg.InitializeOnly) && len(pending) != 0 {
+		return Result{}, fmt.Errorf("migration pending: %s", pending[0].Name)
 	}
 
-	var admitted, pending bool
-
-	if checkErr := conn.QueryRow(ctx, mustSQL("card_window_state.sql"), entries).Scan(&admitted, &pending); checkErr != nil {
-		return Result{}, fmt.Errorf("inspect card window: %w", checkErr)
+	if err := applyFiles(ctx, tx, pending); err != nil {
+		return Result{}, err
 	}
 
-	if !admitted {
-		return Result{}, errors.New("card window refused: pool authentication, writer drain, schema or ledger not confirmed")
+	skipped := 1 + applied
+
+	if epoch == 3 {
+		skipped += 31
 	}
 
-	if !pending {
-		return verifyCardManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
-	}
-
-	return migrateDrainedCard(ctx, conn, fsys, exec, ledger, entries, cfg)
+	return Result{Skipped: skipped, Applied: len(pending), Total: skipped + len(pending)}, nil
 }
 
-func requireCardGuard(ctx context.Context, conn *pgxpool.Conn) error {
-	var guarded bool
-
-	if err := conn.QueryRow(ctx, mustSQL("card_window_guard.sql")).Scan(&guarded); err != nil {
-		return fmt.Errorf("read pool admission guard: %w", err)
+func bootstrap(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg Config) (Result, error) {
+	if cfg.CardWindow || cfg.VerifyOnly {
+		return Result{}, errors.New("an initialized migration lineage is required; hold writers")
 	}
 
-	if !guarded {
-		return errors.New("card migration requires the live administrator who drained pool frontends")
+	var empty bool
+
+	if err := tx.QueryRow(ctx, mustSQL("empty_database.sql")).Scan(&empty); err != nil {
+		return Result{}, fmt.Errorf("inspect empty database: %w", err)
 	}
 
-	return nil
-}
-
-func migrateDrainedCard(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (result Result, err error) {
-	if guardErr := requireCardGuard(ctx, conn); guardErr != nil {
-		return Result{}, guardErr
+	if !empty {
+		return Result{}, errors.New("untracked database objects; refusing initialization")
 	}
 
-	previous := conn.Conn().PgConn().ParameterStatus("application_name")
-	if _, markErr := conn.Exec(ctx, "SET application_name = 'hololive-pool-migrating'"); markErr != nil {
-		return Result{}, fmt.Errorf("hold pool admission during migration: %w", markErr)
-	}
-
-	defer func() {
-		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), advisoryUnlockTimeout)
-		defer cancel()
-
-		if _, restoreErr := conn.Exec(cleanup, "SELECT pg_catalog.set_config('application_name',$1,false)", previous); restoreErr != nil {
-			closeErr := conn.Conn().Close(cleanup)
-
-			err = errors.Join(err, fmt.Errorf("release migration admission: %w", restoreErr), closeErr)
+	if cfg.BeforeInitialize != nil {
+		if err := cfg.BeforeInitialize(ctx); err != nil {
+			return Result{}, fmt.Errorf("prepare login roles: %w", err)
 		}
-	}()
-
-	if guardErr := requireCardGuard(ctx, conn); guardErr != nil {
-		return Result{}, guardErr
 	}
 
-	return verifyCardManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
-}
+	if cfg.InitializeOnly {
+		var ready bool
 
-func verifyCardManifest(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (Result, error) {
-	if indexErr := assertNoInvalidIndexes(ctx, conn); indexErr != nil {
-		return Result{}, fmt.Errorf("check indexes before card migration: %w", indexErr)
-	}
-
-	result, err := applyManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
-	if err != nil {
-		return Result{}, fmt.Errorf("apply card manifest: %w", err)
-	}
-
-	if err := assertNoInvalidIndexes(ctx, conn); err != nil {
-		return Result{}, fmt.Errorf("check card schema indexes: %w", err)
-	}
-
-	return result, nil
-}
-
-func lockKey(cfg Config) int64 {
-	if cfg.LockKey != 0 {
-		return cfg.LockKey
-	}
-
-	return AdvisoryLockKey
-}
-
-type guardedExecer struct {
-	conn                   *pgxpool.Conn
-	allowBlockingIndexDrop bool
-}
-
-func (e *guardedExecer) Exec(ctx context.Context, query string, args ...any) error {
-	if _, err := e.conn.Exec(ctx, query, args...); err != nil {
-		return fmt.Errorf("exec: %w", err)
-	}
-
-	return nil
-}
-
-func txExecer(tx pgx.Tx) dbmigrate.Execer {
-	return func(ctx context.Context, query string, args ...any) error {
-		if _, err := tx.Exec(ctx, query, args...); err != nil {
-			return fmt.Errorf("exec: %w", err)
+		if err := tx.QueryRow(ctx, mustSQL("initialization_roles.sql")).Scan(&ready); err != nil {
+			return Result{}, fmt.Errorf("inspect application initialization prerequisites: %w", err)
 		}
 
-		return nil
+		if !ready {
+			return Result{}, errors.New("initialize requires the provisioned migrator, application roles, default privileges and pg_stat_statements")
+		}
 	}
+
+	if err := initialize(ctx, tx, files); err != nil {
+		return Result{}, err
+	}
+
+	return Result{Applied: len(files), Total: len(files)}, nil
 }
 
-func (e *guardedExecer) execSegment(ctx context.Context, name string, segment sqlsplit.Segment) error {
-	if segment.Transactional {
-		if err := e.execTxSegment(ctx, name, segment.Statements); err != nil {
-			return fmt.Errorf("exec tx segment: %w", err)
+func verifyHead(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cardWindow bool) (int, int, error) {
+	var epoch, applied, pending int
+
+	if err := tx.QueryRow(ctx, mustSQL("lineage_head.sql"), migrationsource.Receipts(files)).Scan(&epoch, &applied, &pending); err != nil {
+		return 0, 0, fmt.Errorf("inspect migration head and card schema (partial cutovers must stay held): %w", err)
+	}
+
+	if epoch == 0 {
+		return 0, 0, errors.New("unrecognized or incomplete migration head; use the matching historical release and preserve the maintenance hold")
+	}
+
+	if err := files[applied].Verify(ctx, tx); err != nil {
+		return 0, 0, fmt.Errorf("verify applied schema: %w", err)
+	}
+
+	if cardWindow {
+		var admitted bool
+
+		if err := tx.QueryRow(ctx, mustSQL("card_window_state.sql")).Scan(&admitted); err != nil {
+			return 0, 0, fmt.Errorf("inspect protected migration endpoint: %w", err)
 		}
 
+		if !admitted {
+			return 0, 0, errors.New("schema-only requires the reviewed pool authentication and private migrator connection")
+		}
+	}
+
+	return epoch, applied, nil
+}
+
+func initialize(ctx context.Context, tx pgx.Tx, files []migrationsource.File) error {
+	exec := func(ctx context.Context, query string, args ...any) error {
+		_, execErr := tx.Exec(ctx, query, args...)
+		return execErr
+	}
+	ledger := dbmigrate.Ledger{Table: "public.schema_migrations"}
+
+	if err := ledger.Ensure(ctx, exec); err != nil {
+		return fmt.Errorf("create migration ledger: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, mustSQL("ensure_migration_checksums.sql")); err != nil {
+		return fmt.Errorf("create checksum ledger: %w", err)
+	}
+
+	return applyFiles(ctx, tx, files)
+}
+
+func applyFiles(ctx context.Context, tx pgx.Tx, files []migrationsource.File) error {
+	if len(files) == 0 {
 		return nil
 	}
 
-	for _, stmt := range segment.Statements {
-		if _, err := e.conn.Exec(ctx, stmt); err != nil {
-			return fmt.Errorf("exec %s: %w", name, err)
+	if _, err := tx.Exec(ctx, `LOCK TABLE public.schema_migrations, public.schema_migration_checksums IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+		return fmt.Errorf("protect migration ledgers: %w", err)
+	}
+
+	for _, file := range files {
+		before, err := receiptState(ctx, tx, "", "")
+		if err != nil {
+			return err
+		}
+
+		if applyErr := applyFile(ctx, tx, file); applyErr != nil {
+			return applyErr
+		}
+
+		after, err := receiptState(ctx, tx, file.Name, file.Checksum)
+		if err != nil {
+			return err
+		}
+
+		if !bytes.Equal(before, after) {
+			return fmt.Errorf("%s modified a ledger definition or an earlier receipt", file.Name)
 		}
 	}
 
 	return nil
 }
 
-func (e *guardedExecer) execTxSegment(ctx context.Context, name string, statements []string) error {
-	tx, err := e.conn.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("exec %s: begin: %w", name, err)
+func receiptState(ctx context.Context, tx pgx.Tx, except, checksum string) ([]byte, error) {
+	var digest []byte
+
+	if err := tx.QueryRow(ctx, mustSQL("ledger_snapshot.sql"), except, checksum).Scan(&digest); err != nil {
+		return nil, fmt.Errorf("inspect ledger definitions and preserved receipts: %w", err)
 	}
 
-	if err := execTxStatements(ctx, tx, name, statements); err != nil {
-		if rollbackTxErr := rollbackTxSegmentOnError(ctx, tx, err); rollbackTxErr != nil {
-			return fmt.Errorf("rollback tx segment on error: %w", rollbackTxErr)
-		}
+	return digest, nil
+}
 
-		return nil
+func applyFile(ctx context.Context, tx pgx.Tx, file migrationsource.File) error {
+	if err := file.Apply(ctx, tx); err != nil {
+		return fmt.Errorf("execute pending migration: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("exec %s: commit: %w", name, err)
+	if err := file.Verify(ctx, tx); err != nil {
+		return fmt.Errorf("verify migrated schema: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, mustSQL("record_migration_checksum.sql"), file.Name, file.Checksum); err != nil {
+		return fmt.Errorf("record checksum for %s: %w", file.Name, err)
+	}
+
+	if _, err := tx.Exec(ctx, `INSERT INTO public.schema_migrations(filename) VALUES($1)`, file.Name); err != nil {
+		return fmt.Errorf("record application of %s: %w", file.Name, err)
 	}
 
 	return nil
-}
-
-func execTxStatements(ctx context.Context, tx pgx.Tx, name string, statements []string) error {
-	for _, stmt := range statements {
-		if _, err := tx.Exec(ctx, stmt); err != nil {
-			return fmt.Errorf("exec %s: %w", name, err)
-		}
-	}
-
-	return nil
-}
-
-func rollbackTxSegmentOnError(ctx context.Context, tx pgx.Tx, err error) error {
-	if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
-		return errors.Join(err, fmt.Errorf("rollback tx segment: %w", rollbackErr))
-	}
-
-	return err
-}
-
-func assertNoInvalidIndexes(ctx context.Context, conn *pgxpool.Conn) error {
-	indexes, err := invalidIndexes(ctx, conn, nil)
-	if err != nil {
-		return fmt.Errorf("invalid indexes: %w", err)
-	}
-
-	if len(indexes) > 0 {
-		return fmt.Errorf("invalid PostgreSQL indexes remain: %s", strings.Join(indexes, ", "))
-	}
-
-	return nil
-}
-
-func dropInvalidIndexes(ctx context.Context, conn *pgxpool.Conn, targets []concurrentIndexTarget) error {
-	if len(targets) == 0 {
-		return nil
-	}
-
-	indexes, err := invalidIndexes(ctx, conn, targets)
-	if err != nil {
-		return fmt.Errorf("invalid indexes: %w", err)
-	}
-
-	if len(indexes) == 0 {
-		return nil
-	}
-
-	errs := make([]error, 0, len(indexes))
-	for _, name := range indexes {
-		if _, dropErr := conn.Exec(ctx, fmt.Sprintf(mustSQL("drop_invalid_index.sql.tpl"), name)); dropErr != nil {
-			errs = append(errs, fmt.Errorf("drop invalid index %s: %w", name, dropErr))
-		}
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("invalid index cleanup: %w", errors.Join(errs...))
-	}
-
-	return fmt.Errorf("invalid PostgreSQL indexes dropped: %s", strings.Join(indexes, ", "))
-}
-
-func invalidIndexes(ctx context.Context, conn *pgxpool.Conn, targets []concurrentIndexTarget) ([]string, error) {
-	query := mustSQL("invalid_indexes.sql")
-
-	var args []any
-
-	if len(targets) > 0 {
-		query = mustSQL("invalid_named_indexes.sql")
-
-		indexNames := make([]string, 0, len(targets))
-		tableRelations := make([]string, 0, len(targets))
-
-		for _, target := range targets {
-			indexNames = append(indexNames, target.indexName)
-			tableRelations = append(tableRelations, target.tableRelation)
-		}
-
-		args = append(args, indexNames, tableRelations)
-	}
-
-	rows, err := conn.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query invalid indexes: %w", err)
-	}
-	defer rows.Close()
-
-	var indexes []string
-
-	for rows.Next() {
-		var name string
-
-		if scanErr := rows.Scan(&name); scanErr != nil {
-			return nil, fmt.Errorf("scan invalid index: %w", scanErr)
-		}
-
-		indexes = append(indexes, name)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read invalid indexes: %w", err)
-	}
-
-	return indexes, nil
-}
-
-type pgxRowQuerier struct {
-	conn *pgxpool.Conn
-}
-
-func (q pgxRowQuerier) QueryRow(ctx context.Context, query string, args ...any) dbmigrate.Row {
-	return q.conn.QueryRow(ctx, query, args...)
 }
 
 type pgxAdvisoryLockSession struct {

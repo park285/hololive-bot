@@ -138,10 +138,22 @@ const (
 )
 
 func classifyTxControl(stmt string) (txControl, error) {
-	words := strings.Fields(strings.ToUpper(stripLeadingSQLComments(stmt)))
-	if len(words) == 0 {
+	code := stripLeadingSQLComments(stmt)
+	end := 0
+
+	for end < len(code) && (code[end] >= 'a' && code[end] <= 'z' || code[end] >= 'A' && code[end] <= 'Z') {
+		end++
+	}
+
+	switch strings.ToUpper(code[:end]) {
+	case "PREPARE":
+		return txControlNone, errors.New("top-level PREPARE is not supported in a migration")
+	case "BEGIN", "START", "COMMIT", "END", "ROLLBACK", "SAVEPOINT", "RELEASE", "ABORT":
+	default:
 		return txControlNone, nil
 	}
+
+	words := strings.Fields(strings.ToUpper(StripComments(code)))
 
 	out, err := classifyTxWords(words)
 	if err != nil {

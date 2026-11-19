@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -38,23 +37,15 @@ func main() {
 }
 
 func run() error {
-	if deploymentOnly != "" && (len(os.Args) != 2 || os.Args[1] != "--schema-only") {
-		return errors.New("card release requires --schema-only")
+	if deploymentOnly != "" && (len(os.Args) != 2 || (os.Args[1] != "--schema-only" && os.Args[1] != "--initialize" && os.Args[1] != "--check")) {
+		return errors.New("specify --schema-only, --check, or --initialize")
 	}
 
-	allowBlockingIndexDropDefault, err := envBool("MIGRATION_ALLOW_BLOCKING_INDEX_DROP")
-	if err != nil {
-		return fmt.Errorf("env bool: %w", err)
-	}
-
-	schemaOnly := flag.Bool("schema-only", false, "apply business migrations without changing login roles or pooler authentication")
-	baselineThrough := flag.String("baseline-through", os.Getenv("MIGRATION_BASELINE_THROUGH"), "baseline watermark")
-	statementTimeout := flag.Duration("statement-timeout", 0, "per-statement maintenance limit (0 uses 4m; maximum 10m; command limit remains 15m)")
-	allowBlockingIndexDrop := flag.Bool(
-		"allow-blocking-index-drop",
-		allowBlockingIndexDropDefault,
-		"allow plain index drops on an existing database during a dedicated maintenance window",
-	)
+	schemaOnly := flag.Bool("schema-only", false, "apply pending transactional migrations to a verified lineage using the protected endpoint")
+	check := flag.Bool("check", false, "read-only verification of the complete migration head; fail when a migration is pending")
+	configureRoles := flag.Bool("configure-login-roles", false, "configure login roles on a verified, already initialized database")
+	initialize := flag.Bool("initialize", false, "initialize an empty database")
+	statementTimeout := flag.Duration("statement-timeout", 0, "per-statement maintenance limit (default 4m, maximum 10m)")
 
 	flag.Parse()
 
@@ -62,8 +53,8 @@ func run() error {
 		return errors.New("unexpected positional argument")
 	}
 
-	if *schemaOnly && (*baselineThrough != "" || *allowBlockingIndexDrop) {
-		return errors.New("schema-only does not accept baseline or blocking maintenance overrides")
+	if multipleModes(*check, *configureRoles, *initialize, *schemaOnly) {
+		return errors.New("select a single migration or login-role operation")
 	}
 
 	if *statementTimeout < 0 || *statementTimeout > migrationrunner.MaxStatementTimeout {
@@ -77,14 +68,40 @@ func run() error {
 	defer cancel()
 
 	cfg := migrationrunner.Config{
-		BaselineThrough:        *baselineThrough,
-		CardWindow:             *schemaOnly,
-		AllowBlockingIndexDrop: *allowBlockingIndexDrop,
-		StatementTimeout:       *statementTimeout,
-		Logf:                   log.New(os.Stdout, "", 0).Printf,
+		CardWindow:       *schemaOnly || *configureRoles,
+		VerifyOnly:       *check || *configureRoles,
+		InitializeOnly:   *initialize,
+		StatementTimeout: *statementTimeout,
+		BeforeInitialize: bootstrapLoginRoles,
 	}
 
-	return runMigrations(ctx, cfg)
+	if *configureRoles && strings.TrimSpace(os.Getenv("POSTGRES_ADMIN_PASSWORD")) == "" {
+		return errors.New("configure-login-roles requires POSTGRES_ADMIN_PASSWORD")
+	}
+
+	if err := runMigrations(ctx, cfg); err != nil {
+		return err
+	}
+
+	if *configureRoles {
+		return bootstrapLoginRoles(ctx)
+	}
+
+	return nil
+}
+
+func multipleModes(modes ...bool) bool {
+	selected := false
+
+	for _, mode := range modes {
+		if mode && selected {
+			return true
+		}
+
+		selected = selected || mode
+	}
+
+	return false
 }
 
 func runMigrations(ctx context.Context, cfg migrationrunner.Config) error {
@@ -96,12 +113,6 @@ func runMigrations(ctx context.Context, cfg migrationrunner.Config) error {
 	options := migrationPoolOptions()
 	if preflightErr := pgxdb.PreflightDSN(connString, options); preflightErr != nil {
 		return fmt.Errorf("preflight postgres pool: %w", preflightErr)
-	}
-
-	if !cfg.CardWindow {
-		if bootstrapErr := bootstrapLoginRoles(ctx); bootstrapErr != nil {
-			return fmt.Errorf("bootstrap login roles: %w", bootstrapErr)
-		}
 	}
 
 	pool, err := pgxdb.OpenPoolDSN(ctx, connString, options)
@@ -175,20 +186,6 @@ func envDefault(key, fallback string) string {
 	}
 
 	return fallback
-}
-
-func envBool(key string) (bool, error) {
-	raw := strings.TrimSpace(os.Getenv(key))
-	if raw == "" {
-		return false, nil
-	}
-
-	value, err := strconv.ParseBool(raw)
-	if err != nil {
-		return false, fmt.Errorf("%s must be a boolean: %w", key, err)
-	}
-
-	return value, nil
 }
 
 func validatePrivilegedTransport() error {
