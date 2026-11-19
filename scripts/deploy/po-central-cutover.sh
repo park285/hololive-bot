@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-. "$root/scripts/deploy/lib/source-revision.sh"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 [[ "$(hostname -s)" == kapu ]] || { echo 'image build/export is restricted to kapu' >&2; exit 1; }
-usage() { echo "Usage: $0 <c|b> deploy|quiesce | <c|b> quiesce-verified <local-pair-dir> <trusted-transport-sha256> | <c|b> resume|rollback|check <remote-root>/backups/card-po-<slot>-TIMESTAMP" >&2; exit 2; }
-[[ $# -ge 2 && $# -le 4 ]] || usage
+usage() { echo "Usage: $0 <c|b> deploy | c quiesce | <c|b> quiesce-verified <local-pair-dir> <trusted-transport-sha256> | b quiesce|resume|check|rollback <clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir> | <c|b> resume|rollback|check <card-backup>" >&2; exit 2; }
+[[ $# -ge 2 && $# -le 7 ]] || usage
 slot="$1"
 shift
 case "$slot" in
@@ -15,8 +14,122 @@ esac
 slot_upper="${slot^^}"
 ssh_var="PO_${slot_upper}_SSH_TARGET" deploy_var="APPROVE_PO_${slot_upper}_DEPLOY" rollback_var="APPROVE_PO_${slot_upper}_ROLLBACK"
 mode="$1"
-verified_pair=
+verified_pair='' backup_prefix="card-po-$slot"
 remote_mode="$mode" seal=-
+if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollback)$ && $# != 2 ) ) ]]; then
+  [[ $# == 6 && "$4" =~ ^[0-9]{8}T[0-9]{6}Z$ && "$5" =~ ^[0-9a-f]{32}$ ]] || usage
+  [[ "${!ssh_var:-}" == iris-seoul ]]
+  case "$mode" in
+    rollback) [[ "${!rollback_var:-}" == true ]] || exit 2 ;;
+    quiesce|resume) [[ "${!deploy_var:-}" == true ]] || exit 2 ;;
+  esac
+  [[ "$root" == "$(git -C "$root" rev-parse --show-toplevel)" &&
+     "$(realpath -e -- "${BASH_SOURCE[0]}")" == "$root/scripts/deploy/po-central-cutover.sh" ]]
+  tool_revision="$(git -C "$root" rev-parse --verify 'HEAD^{commit}')"
+  for script in scripts/deploy/po-central-cutover.sh scripts/deploy/lib/source-revision.sh scripts/deploy/lib/po-central-remote.sh; do
+    git -C "$root" cat-file blob "$tool_revision:$script" | cmp -s -- - "$root/$script"
+  done
+  . "$root/scripts/deploy/lib/source-revision.sh"
+  [[ "$(deploy_source_revision "$root")" == "$tool_revision" ]]
+  source_root="$(realpath -e -- "$2")"
+  [[ "$source_root" == "$(git -C "$source_root" rev-parse --show-toplevel)" ]]
+  revision="$(deploy_source_revision "$source_root")"
+  receipt_dir="$(realpath -e -- "$3")"
+  [[ "$receipt_dir" == "$3" && "$(stat -c '%u:%a' "$receipt_dir")" == "$EUID:700" ]]
+  change_id="$4" window="$5"
+  w2_pair="$(realpath -e -- "$6")"
+  grant_name=b.current-grant
+  grant_phase="$mode"
+  if [[ "$mode" == check ]]; then grant_name="b.quiesce.$change_id.requested" grant_phase=quiesce; fi
+  for receipt in c.accepted "b.stage.$change_id.finished" "$grant_name"; do
+    [[ -f "$receipt_dir/$receipt" && ! -L "$receipt_dir/$receipt" &&
+       "$(stat -c '%u:%a' "$receipt_dir/$receipt")" == "$EUID:600" ]] || { echo "missing or untrusted $receipt" >&2; exit 1; }
+  done
+  read -r accepted_revision seal extra < "$receipt_dir/c.accepted"
+  [[ "$accepted_revision" == "$revision" && "$seal" =~ ^[0-9a-f]{64}$ && -z "$extra" ]]
+  cmp -s -- "$receipt_dir/c.accepted" <(printf '%s %s\n' "$revision" "$seal")
+  cmp -s -- "$receipt_dir/b.stage.$change_id.finished" <(printf '%s %s %s\n' "$revision" "$seal" "$change_id")
+  grant="$receipt_dir/$grant_name"
+  if [[ "$mode" != check ]]; then [[ "$(stat -c '%h' "$grant")" == 1 ]]; fi
+  read -r -a fields < "$grant"
+  [[ "${#fields[@]}" == 13 ]]
+  w2_revision="${fields[8]}" w2_collector="${fields[9]}" w2_issuer="${fields[10]}" origin_digest="${fields[11]}" expires="${fields[12]}"
+  [[ "$w2_revision" =~ ^[0-9a-f]{40}$ && "$w2_collector" =~ ^sha256:[0-9a-f]{64}$ &&
+     "$w2_issuer" =~ ^sha256:[0-9a-f]{64}$ && "$origin_digest" =~ ^[0-9a-f]{64}$ ]]
+  [[ "$expires" =~ ^[1-9][0-9]{0,11}$ ]]
+  if [[ "$mode" != check ]]; then (( EPOCHSECONDS < expires )); fi
+  for receipt in collector-image-id image-id collector-manifest.json rootfs-manifest.json; do
+    [[ -f "$w2_pair/$receipt" && ! -L "$w2_pair/$receipt" ]]
+  done
+  cmp -s -- "$w2_pair/collector-image-id" <(printf '%s\n' "$w2_collector")
+  cmp -s -- "$w2_pair/image-id" <(printf '%s\n' "$w2_issuer")
+  jq -e --arg r "$w2_revision" '.source_revision==$r and .go.goarch=="arm64"' "$w2_pair/collector-manifest.json" >/dev/null
+  jq -e --arg r "$w2_revision" '.source_revision==$r and .architecture=="arm64"' "$w2_pair/rootfs-manifest.json" >/dev/null
+  grant_pair="$change_id $tool_revision $revision $seal $w2_revision $w2_collector $w2_issuer $origin_digest"
+  expected_grant="PO_B_PAIR_V1 iris-seoul $window $grant_phase $grant_pair $expires"
+  cmp -s -- "$grant" <(printf '%s\n' "$expected_grant")
+  if [[ "$mode" == resume ]]; then
+    quiesced="$receipt_dir/b.$window.quiesce"
+    [[ -f "$quiesced.used" && ! -L "$quiesced.used" && ! -L "$quiesced.finished" && "$quiesced.used" -ef "$quiesced.finished" ]]
+    cmp -s -- "$quiesced.used" <(printf '%s\n' "${expected_grant/ resume / quiesce }")
+  elif [[ "$mode" == rollback ]]; then
+    previous="$receipt_dir/b.quiesce.$change_id.requested"
+    [[ -f "$previous" && ! -L "$previous" ]]
+    read -r -a origin < "$previous"
+    [[ "${#origin[@]}" == 13 && "${origin[2]}" =~ ^[0-9a-f]{32}$ && "${origin[12]}" =~ ^[1-9][0-9]{0,11}$ ]]
+    finished="$receipt_dir/b.${origin[2]}.quiesce.finished"
+    [[ ! -L "$finished" && "$previous" -ef "$finished" ]]
+    cmp -s -- "$previous" <(printf 'PO_B_PAIR_V1 iris-seoul %s quiesce %s %s\n' "${origin[2]}" "$grant_pair" "${origin[12]}")
+  fi
+  archive="$receipt_dir/arm64"
+  (
+    cd -- "$archive"
+    printf '%s  transport-files.sha256\n' "$seal" | sha256sum --check --strict --status -
+    sha256sum source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id \
+      image.tar.sha256 collector-image.tar.sha256 | cmp -s -- - transport-files.sha256
+    sha256sum --check --strict --status image.tar.sha256 collector-image.tar.sha256
+  )
+  files=scripts/deploy/po-central-files.txt
+  version_file=hololive/hololive-api/VERSION
+  for file in "$files" "$version_file"; do
+    git -C "$source_root" cat-file blob "$revision:$file" | cmp -s -- - "$source_root/$file"
+  done
+  sources="$(git -C "$source_root" cat-file blob "$revision:$files")"
+  (
+    cd -- "$source_root"
+    while IFS= read -r file; do
+      git cat-file blob "$revision:$file" | cmp -s -- - "$file" || exit 1
+      sha256sum -- "$file" || exit 1
+    done <<< "$sources"
+  ) | cmp -s -- - "$archive/source-files.sha256"
+  version="$(git -C "$source_root" cat-file blob "$revision:$version_file")"
+  [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]]
+  backup="$remote_root/backups/staged-po-b-$change_id"
+  staging="$remote_root/po-staging-$change_id"
+  remote_body="$(git -C "$root" cat-file blob "$tool_revision:scripts/deploy/lib/po-central-remote.sh")"
+  if [[ "$mode" != check ]]; then
+    used="$receipt_dir/b.$window.$mode.used"
+    (( EPOCHSECONDS < expires ))
+    ln -T -- "$grant" "$receipt_dir/b.$mode.$change_id.requested"
+    ln -T -- "$grant" "$used"
+    cmp -s -- "$used" <(printf '%s\n' "$expected_grant")
+    sync -- "$used" "$receipt_dir"
+    [[ "$used" -ef "$grant" && ! -L "$grant" ]] || { echo 'window grant withdrawn or replaced' >&2; exit 1; }
+    rm -- "$grant"
+    sync -- "$receipt_dir"
+    (( EPOCHSECONDS < expires ))
+  fi
+  ssh "${!ssh_var}" sudo -n bash -s -- b "$mode" "$staging" "$backup" "$revision" "$version" "$seal" \
+    "$window" "$w2_revision" "$w2_collector" "$w2_issuer" "$origin_digest" "$expires" "$tool_revision" \
+    <<< "$remote_body"
+  if [[ "$mode" != check ]]; then
+    ln -T -- "$used" "$receipt_dir/b.$window.$mode.finished"
+    sync -- "$receipt_dir"
+  fi
+  printf 'collector b %s: source=%s backup=%s staging=%s\n' "$mode" "$revision" "$backup" "$staging"
+  exit 0
+fi
+. "$root/scripts/deploy/lib/source-revision.sh"
 if [[ "$mode" == quiesce-verified ]]; then
   [[ $# == 3 && "$3" =~ ^[0-9a-f]{64}$ ]] || usage
   verified_pair="$(realpath -e -- "$2")"
@@ -85,7 +198,7 @@ if [[ "$mode" == deploy || "$mode" == quiesce ]]; then
   payload_files="$(source_payload_files)"
   revision="$(deploy_source_revision "$root")"
   change_id="$(date -u +%Y%m%dT%H%M%SZ)"
-  backup="$remote_root/backups/card-po-$slot-$change_id"
+  backup="$remote_root/backups/$backup_prefix-$change_id"
   staging="$remote_root/po-staging-$change_id"
   if [[ -n "$verified_pair" ]]; then
     local_stage="$verified_pair"
@@ -120,7 +233,7 @@ if [[ "$mode" == deploy || "$mode" == quiesce ]]; then
   ssh "$ssh_target" "sudo -n chown -R root:root '$staging' && sudo -n chmod -R go-w '$staging'"
 else
   backup="$2"
-  [[ "$backup" =~ ^$remote_root/backups/card-po-$slot-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
+  [[ "$backup" =~ ^$remote_root/backups/$backup_prefix-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
   change_id="${backup##*-}"
   staging="$remote_root/po-staging-$change_id"
   revision="$(ssh "$ssh_target" "sudo -n cat '$backup/candidate.revision'")"

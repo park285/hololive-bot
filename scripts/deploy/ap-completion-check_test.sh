@@ -25,6 +25,8 @@ trap cleanup EXIT
 fixture_root="$tmp/repo"
 fakebin="$tmp/bin"
 mkdir -p "$fixture_root/scripts/deploy/lib" "$fixture_root/scripts/deploy/ap-hosts" "$fakebin"
+completion="$fixture_root/scripts/deploy/ap-completion-check.sh"
+cp "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" "$completion"
 cp "$ROOT_DIR/scripts/deploy/lib/ap-host.sh" "$fixture_root/scripts/deploy/lib/ap-host.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/youtubejs-node-version.sh" "$fixture_root/scripts/deploy/lib/youtubejs-node-version.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/ap-collector-readiness.sh" "$fixture_root/scripts/deploy/lib/ap-collector-readiness.sh"
@@ -176,38 +178,38 @@ chmod +x "$fakebin/journalctl"
 
 if ! PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
   CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
-  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka > "$tmp/completion.out" 2>&1; then
+  "$completion" osaka > "$tmp/completion.out" 2>&1; then
   cat "$tmp/completion.out" >&2
   fail 'a ready collector with a recorded issuer-absent rollback must pass completion'
 fi
 
 if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
   PO_EXPECTED_PRESENCE=present CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
-  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka > "$tmp/missing-issuer.out" 2>&1; then
+  "$completion" osaka > "$tmp/missing-issuer.out" 2>&1; then
   fail 'collector readiness must not substitute for a missing expected issuer release'
 fi
 
 if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
   MOCK_FIRST_SUCCESS=false CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
-  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka >/dev/null 2>&1; then
+  "$completion" osaka >/dev/null 2>&1; then
   fail "native completion check must reject first_success=false"
 fi
 if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
   MOCK_HANDOFF_STATUS=PENDING CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
-  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka >/dev/null 2>&1; then
+  "$completion" osaka >/dev/null 2>&1; then
   fail "native completion check must reject an incomplete API handoff"
 fi
 if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
   MOCK_ENVIRONMENT_FILES='/etc/stack-secrets/hololive-bot/ap-compose.env /etc/stack-secrets/hololive-bot/youtube-collector.env /etc/hololive-bot/youtube-collector-host.env' \
   CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
-  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka >/dev/null 2>&1; then
+  "$completion" osaka >/dev/null 2>&1; then
   fail "native completion check must reject a unit that still loads ap-compose.env"
 fi
 pass "native completion check rejects shared Compose env exposure"
 
 if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
   MOCK_JOURNAL_FAILURE=true CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
-  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka >/dev/null 2>&1; then
+  "$completion" osaka >/dev/null 2>&1; then
   fail "native completion check must reject an unreadable system journal"
 fi
 pass "native completion check fails closed when post-cutover logs cannot be read"

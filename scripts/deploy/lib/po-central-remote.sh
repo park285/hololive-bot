@@ -1,14 +1,28 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-[[ $# -eq 7 ]] || exit 2
+[[ $# == 7 || $# == 14 ]] || exit 2
 slot="$1" mode="$2" staging="$3" backup="$4" revision="$5" version="$6"
 seal="$7"
-if [[ "$mode" == quiesce-verified ]]; then
-  [[ "$seal" =~ ^[0-9a-f]{64}$ ]] || exit 2
-  mode=quiesce
+staged_pair=false card_transition=false backup_prefix="card-po-$slot"
+if [[ "${backup##*/}" == staged-po-b-* ]]; then
+  [[ "$slot" == b && ( "$mode" == quiesce || "$mode" == resume || "$mode" == rollback || "$mode" == check ) ]] || exit 2
+  staged_pair=true backup_prefix=staged-po-b
+  [[ $# == 14 ]] || exit 2
+  window="$8" w2_revision="$9" w2_collector="${10}" w2_issuer="${11}" origin_digest="${12}" expires="${13}" tool_revision="${14}"
+  [[ "$window" =~ ^[0-9a-f]{32}$ && "$w2_revision" =~ ^[0-9a-f]{40}$ &&
+     "$w2_collector" =~ ^sha256:[0-9a-f]{64}$ && "$w2_issuer" =~ ^sha256:[0-9a-f]{64}$ &&
+     "$origin_digest" =~ ^[0-9a-f]{64}$ && "$tool_revision" =~ ^[0-9a-f]{40}$ && "$expires" =~ ^[1-9][0-9]{0,11}$ ]] || exit 2
+  if [[ "$mode" != check ]]; then (( EPOCHSECONDS < expires )) || exit 2; fi
 else
-  [[ "$seal" == - ]] || exit 2
+  [[ $# == 7 ]] || exit 2
 fi
+case "$mode" in
+  quiesce|resume|rollback|check)
+    if [[ "$staged_pair" == true ]]; then [[ "$seal" =~ ^[0-9a-f]{64}$ ]] || exit 2
+    else [[ "$seal" == - ]] || exit 2; fi ;;
+  quiesce-verified) [[ "$seal" =~ ^[0-9a-f]{64}$ ]] || exit 2; card_transition=true mode=quiesce ;;
+  *) [[ "$seal" == - ]] || exit 2 ;;
+esac
 case "$slot" in
   c) remote_root=/opt/hololive-bot/compose service=youtube-collector port=30025 host_label=central ;;
   b) remote_root=/opt/hololive-bot/collector-b service=youtube-collector-b port=30015 host_label=iris-seoul ;;
@@ -16,7 +30,7 @@ case "$slot" in
 esac
 [[ "$mode" == deploy || "$mode" == quiesce || "$mode" == resume || "$mode" == rollback || "$mode" == check ]] || exit 2
 [[ "$staging" == "$remote_root/po-staging-${backup##*-}" ]] || exit 2
-[[ "$backup" =~ ^$remote_root/backups/card-po-$slot-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
+[[ "$backup" =~ ^$remote_root/backups/$backup_prefix-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
 [[ "$revision" =~ ^[0-9a-f]{40}$ && "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 2
 install -d -m 0755 /run/lock
 lock_name=hololive-quadlet-redeploy
@@ -47,13 +61,54 @@ hold_owned=false
 declare -A release_attempted=() launched_inv=() launched_gen=() failed_start_job=() failed_start_since=()
 [[ "$(stat -c '%u:%g %a' "$staging")" == '0:0 700' ]] || { echo "$host_label staged artifacts are not root-private" >&2; exit 1; }
 cd "$current"
+if [[ "$slot" == b && "$staged_pair" == false && -e "$staging/transport-files.sha256" &&
+      ( "$mode" == deploy || ( "$mode" == quiesce && -f "$card_active" ) ) ]]; then
+  echo 'sealed b staging with an admitted publisher requires the staged quiesce grant' >&2; exit 1
+fi
+if [[ "$staged_pair" == true ]]; then
+  [[ "$(realpath -e -- "$staging")" == "$staging" && "$(realpath -e -- "${backup%/*}")" == "${backup%/*}" ]]
+  unsafe="$(find "$staging" \( \( ! -type f ! -type d \) -o ! -uid 0 -o ! -gid 0 -o -perm /022 \) -print -quit)"
+  [[ -z "$unsafe" ]] || { echo 'untrusted staged file type, ownership or permissions' >&2; exit 1; }
+  (
+    cd -- "$staging"
+    sha256sum source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id \
+      image.tar.sha256 collector-image.tar.sha256 | cmp -s -- - transport-files.sha256
+    for archive in image.tar collector-image.tar; do
+      read -r digest name extra < "$archive.sha256"
+      [[ "$digest" =~ ^[0-9a-f]{64}$ && "$name" == "$archive" && -z "$extra" ]]
+      cmp -s -- "$archive.sha256" <(printf '%s  %s\n' "$digest" "$archive")
+    done
+  )
+  if [[ "$mode" == quiesce ]]; then
+    legacy_backup="${backup%/*}/card-po-b-$change_id"
+    [[ ! -e "$legacy_backup" && ! -L "$legacy_backup" && ! -e "$backup" && ! -L "$backup" ]] || exit 1
+  else
+    [[ ! -L "$backup" && "$(stat -c '%u:%g %a' "$backup")" == '0:0 700' ]] || exit 1
+  fi
+fi
 if [[ "$mode" == resume || "$mode" == rollback || "$mode" == check ]]; then
   if [[ "$mode" == check ]]; then cmp -s -- "$backup/card-candidate" "$card_active" || exit 1; fi
-  if [[ -f "$backup/transport.sha256" ]]; then
+  if [[ "$staged_pair" == true ]]; then
+    [[ -f "$backup/card-origin" && -f "$backup/transport.sha256" ]] || exit 1
+    if [[ "$mode" != check ]]; then cmp -s -- "$backup/owner-boot" /proc/sys/kernel/random/boot_id || exit 1; fi
+    cmp -s -- "$backup/owner-tool" <(printf '%s\n' "$tool_revision") || exit 1
+    cmp -s -- "$backup/candidate.revision" <(printf '%s\n' "$revision") || exit 1
+    cmp -s -- "$backup/candidate.version" <(printf '%s\n' "$version") || exit 1
+    cmp -s -- "$backup/transport.sha256" <(printf '%s\n' "$seal") || exit 1
+    printf '%s  %s\n' "$origin_digest" "$backup/owner-origin" | sha256sum --check --strict --status -
+    cmp -s -- "$backup/card-origin" <(head -n 1 -- "$backup/owner-origin")
+    if [[ "$mode" != rollback ]]; then
+      cmp -s -- "$backup/owner-window" <(printf '%s %s\n' "$window" "$expires") || exit 1
+    fi
+  elif [[ -f "$backup/transport.sha256" ]]; then
+    card_transition=true
     [[ "$mode" != rollback ]] || { echo 'card transition cannot restore the pre-card publisher' >&2; exit 1; }
+  fi
+  if [[ -f "$backup/transport.sha256" ]]; then
     seal="$(<"$backup/transport.sha256")"
     [[ "$seal" =~ ^[0-9a-f]{64}$ ]] || exit 1
-  elif [[ "$mode" == resume ]]; then
+  fi
+  if [[ "$card_transition" == false && "$mode" == resume ]]; then
     cmp -s -- "$backup/card-origin" "$card_active" || exit 1
   fi
   (cd "$staging" && sha256sum --check --strict "$backup/candidate-inputs.sha256")
@@ -61,10 +116,11 @@ fi
 if [[ "$seal" != - ]]; then
   (cd "$staging" && printf '%s  transport-files.sha256\n' "$seal" | sha256sum --check --strict --status - &&
     sha256sum --check --strict transport-files.sha256)
-elif [[ "$mode" == deploy || "$mode" == quiesce ]]; then
+fi
+if [[ "$card_transition" == false && ( "$mode" == deploy || "$mode" == quiesce ) ]]; then
   [[ -f "$card_active" ]] || { echo 'first card cutover requires quiesce-verified and a new hold' >&2; exit 1; }
 fi
-if [[ "$mode" == quiesce || "$mode" == deploy ]]; then
+if [[ "$mode" == quiesce || "$mode" == deploy || ( "$staged_pair" == true && "$mode" != resume ) ]]; then
   (cd "$staging" && sha256sum --check --strict image.tar.sha256 collector-image.tar.sha256)
 fi
 (cd "$staging" && sha256sum --check --strict source-files.sha256)
@@ -93,7 +149,9 @@ claim_slot() {
     }
     hold_owned=true
   else
-    [[ "$mode" != resume ]] || { echo "$host_label resume requires an owned hold" >&2; return 1; }
+    [[ "$mode" != resume && ( "$staged_pair" != true || "$mode" != rollback ) ]] || {
+      echo "$host_label $mode requires an owned hold" >&2; return 1;
+    }
   fi
 }
 
@@ -131,9 +189,21 @@ container_generation() {
   printf '%s\n' "$generation"
 }
 
+require_writer_window() {
+  if [[ "$staged_pair" == true ]] && (( EPOCHSECONDS >= expires )); then
+    echo "owner window expired; no new writer action submitted" >&2
+    return 1
+  fi
+}
+
+writer_change() {
+  require_writer_window || return 1
+  "$@"
+}
+
 stop_manager_invocation() {
   local LC_ALL=C since="$3" record journal_status=0
-  systemctl stop "$1" || return 1
+  writer_change systemctl stop "$1" || return 1
   record="$(journalctl --boot --quiet --no-pager -n 1 -o json --output-fields=INVOCATION_ID --since="$since" \
     _PID=1 "UNIT=$1" "INVOCATION_ID=$2" JOB_TYPE=stop MESSAGE_ID=de5b426a63be47a7b6ac3eaac82e2f6f)" || journal_status=$?
   if (( journal_status != 0 )) || [[ -z "$record" ]] ||
@@ -160,7 +230,12 @@ stop_guard() {
   local op="$1" unit="$2" anchor
   anchor="$(mask_anchor "$unit")" || return
   require_mask_inode "$unit" "$anchor" || return 1
-  python3 -I -B "$staging/scripts/deploy/lib/systemd-stop-guard.py" "$op" "$unit" "$anchor" "$(<"$hold/$unit")"
+  local -a command=(python3 -I -B "$staging/scripts/deploy/lib/systemd-stop-guard.py" "$op" "$unit" "$anchor" "$(<"$hold/$unit")")
+  case "$op" in
+    arm|seal|undo-unmask) writer_change "${command[@]}" ;;
+    check|start-budget) "${command[@]}" ;;
+    *) return 1 ;;
+  esac
 }
 
 container_absent() {
@@ -224,7 +299,7 @@ create_hold() {
   hold_owned=true
   for unit in "$issuer_unit" "$collector_unit"; do
     anchor="$(mask_anchor "$unit")" || return
-    ln -sT -- /dev/null "$anchor" || return
+    writer_change ln -sT -- /dev/null "$anchor" || return
     stat -c '%d:%i' "$anchor" > "$hold/$unit" || return
   done
   sync -- "$backup/card-candidate" "$backup" "$hold/card-candidate" "$hold/backup" \
@@ -271,7 +346,7 @@ stop_guarded_unit() {
     exit_status="$(python3 -I -B "$staging/scripts/deploy/lib/systemd-stop-guard.py" \
       exit-status "$unit" "${generation%% *}" "$since")" || exit_status=unknown
   fi
-  record_stop_evidence "$unit" "stop=$managed invocation=$invocation since=$since exit_status=$exit_status" "$snapshot" || return 1
+  record_stop_evidence "$unit" "stop=$managed invocation=$invocation since=$since exit_status=$exit_status cid=${generation%% *}" "$snapshot" || return 1
   while IFS='=' read -r key value; do
     [[ -n "$key" ]] || return 1
     observed[$key]="$value"
@@ -346,10 +421,13 @@ hold_units() {
     done
   fi
   for unit in "${armed[@]}"; do
+    if [[ "$phase" == rehold && -v 'failed_start_job[$unit]' ]]; then status=1; fi
     if [[ "$phase" == rehold && ! -v 'launched_gen[$unit]' ]]; then
       status=1
-      if [[ ! -v 'failed_start_job[$unit]' ]] || ! identity="$(started_slot_generation "$unit" \
-        "${failed_start_since[$unit]}" "${failed_start_job[$unit]}" true)"; then continue; fi
+      if [[ "$staged_pair" == true || ! -v 'failed_start_job[$unit]' ]]; then continue; fi
+      local budget
+      budget="$(stop_guard start-budget "$unit")" && [[ "$budget" =~ ^[1-9][0-9]*$ ]] || continue
+      if ! identity="$(started_slot_generation "$unit" "${failed_start_since[$unit]}" "${failed_start_job[$unit]}" "$((SECONDS + budget + 1))")"; then continue; fi
       inv[$unit]="${identity%% *}"
       gen[$unit]="${identity#* }"
     fi
@@ -371,12 +449,13 @@ release_unit() {
   local unit="$1"
   require_owned_hold || return 1
   require_held_unit "$unit" || return 1
+  require_writer_window || return 1
   if (( ${#release_attempted[@]} == 0 )); then
     release_attempted[$unit]=invalidating
     rm -- "$hold/quiesced" && sync -- "$hold" || return 1
   fi
   release_attempted[$unit]=opening
-  systemctl unmask "$unit" || return
+  writer_change systemctl unmask "$unit" || return
   release_attempted[$unit]=opened
 }
 
@@ -384,7 +463,7 @@ request_slot_start() {
   local LC_ALL=C unit="$1" since transaction line job='' client=0
   since="@$EPOCHREALTIME"
   transaction="$(LC_ALL=C SYSTEMD_LOG_COLOR=0 SYSTEMD_LOG_LEVEL=info SYSTEMD_LOG_TARGET=console \
-    systemctl --show-transaction start "$unit" 2>&1)" || client=$?
+    writer_change systemctl --show-transaction start "$unit" 2>&1)" || client=$?
   while IFS= read -r line; do
     if [[ "$line" =~ ^Enqueued\ anchor\ job\ ([1-9][0-9]*)\ (.*)/start\.$ && "${BASH_REMATCH[2]}" == "$unit" ]]; then
       [[ -z "$job" ]] || return 1
@@ -395,11 +474,22 @@ request_slot_start() {
   printf '%s %s %s\n' "$since" "$job" "$client"
 }
 
+manager_start_budget() {
+  local bus=org.freedesktop.systemd1 object="${1//-/_2d}"
+  object="${object//./_2e}"
+  busctl --system --timeout=45s --json=short get-property "$bus" "/org/freedesktop/systemd1/unit/$object" \
+    "$bus.Service" TimeoutStartUSec | python3 -c '
+import json, sys
+p = json.load(sys.stdin)
+n = p["data"]
+if p["type"] != "t" or type(n) is not int or not 0 < n < (1 << 64) - 1:
+    sys.exit("finite manager start timeout required")
+print((n + 999999) // 1000000)'
+}
+
 started_slot_generation() {
-  local unit="$1" since="$2" job="$3" wait_for_job="${4:-false}" current budget limit record invocation generation
-  if [[ "$wait_for_job" == true ]]; then
-    budget="$(stop_guard start-budget "$unit")" && [[ "$budget" =~ ^[1-9][0-9]*$ ]] || return 1
-    limit=$((SECONDS + budget + 1))
+  local unit="$1" since="$2" job="$3" limit="${4:-0}" current record invocation generation
+  if (( limit != 0 )); then
     while :; do
       current="$(systemctl show -p Job --value "$unit")" || return 1
       [[ -n "$current" ]] || break
@@ -413,22 +503,48 @@ started_slot_generation() {
   [[ "$invocation" =~ ^[0-9a-f]{32}$ && "$(active_invocation "$unit")" == "$invocation" &&
      "$(systemctl show -p NRestarts --value "$unit")" == 0 ]] || return 1
   generation="$(container_generation "${unit%.service}")" || return 1
+  if [[ "$staged_pair" == true ]]; then
+    local kind=collector expected="$staging/collector-image-id" old_inv old_cid cid raw_image rest
+    if [[ "$unit" == "$issuer_unit" ]]; then kind=issuer expected="$staging/image-id"; fi
+    if [[ "$mode" == rollback ]]; then
+      if [[ "$kind" == issuer ]]; then expected="$backup/po-prechange.image-id"; else expected="$backup/collector-prechange.image-id"; fi
+    fi
+    read -r old_inv old_cid < <(awk -v kind="$kind" '$1 == kind {print $2, $3}' "$backup/owner-origin") || return 1
+    read -r cid raw_image rest <<<"$generation"
+    [[ "$old_inv" != "$invocation" && "$old_cid" != "$cid" && -n "$rest" && "sha256:$raw_image" == "$(<"$expected")" ]] || return 1
+  fi
   require_stop_generation "$unit" "$invocation" "$generation" rehold || return 1
   printf '%s %s\n' "$invocation" "$generation"
 }
 
 start_slot_unit() {
-  local unit="$1" defer_signal=true pending_signal=0 status=0 request since job identity
-  if [[ "$hold_owned" != true ]]; then systemctl restart "$unit" || return $?; return 0; fi
+  local unit="$1" defer_signal=true pending_signal=0 status=0 request since job identity budget deadline=0 wait_until=0 receipt_status=0
+  if [[ "$hold_owned" != true ]]; then writer_change systemctl restart "$unit" || return $?; return 0; fi
+  if [[ "$staged_pair" == true ]]; then
+    budget="$(manager_start_budget "$unit")" && [[ "$budget" =~ ^[1-9][0-9]*$ ]] || return 1
+    deadline=$((SECONDS + budget + 1))
+  fi
   if (( pending_signal == 0 )); then
     if request="$(trap '' INT TERM HUP; request_slot_start "$unit")"; then
       read -r since job status <<<"$request"
+      if [[ "$staged_pair" == true ]]; then
+        (set -C; printf '%s %s %s\n' "$since" "$job" "$status" > "$backup/$mode-$unit.start-request") &&
+          sync -- "$backup/$mode-$unit.start-request" "$backup" || receipt_status=1
+      fi
       if (( status != 0 )); then
         failed_start_job[$unit]="$job" failed_start_since[$unit]="$since"
-      elif identity="$(trap '' INT TERM HUP; started_slot_generation "$unit" "$since" "$job")"; then
-        launched_inv[$unit]="${identity%% *}" launched_gen[$unit]="${identity#* }"
-      else
-        status=1
+        wait_until="$deadline"
+      fi
+      if (( status == 0 )) || [[ "$staged_pair" == true ]]; then
+        if identity="$(trap '' INT TERM HUP; started_slot_generation "$unit" "$since" "$job" "$wait_until")"; then
+          launched_inv[$unit]="${identity%% *}" launched_gen[$unit]="${identity#* }"
+          if [[ "$staged_pair" == true ]]; then
+            (set -C; printf '%s %s %s\n' "$since" "$job" "$identity" > "$backup/$mode-$unit.start") &&
+              sync -- "$backup/$mode-$unit.start" "$backup" || receipt_status=1
+          fi
+        elif (( status == 0 )); then
+          status=1
+        fi
       fi
     else
       status=$?
@@ -436,6 +552,7 @@ start_slot_unit() {
   fi
   defer_signal=false
   if (( pending_signal != 0 )); then maintenance_failed "$pending_signal"; fi
+  if (( status == 0 && receipt_status != 0 )); then return "$receipt_status"; fi
   return "$status"
 }
 
@@ -453,7 +570,7 @@ clear_hold() {
   done
   retired="$(mktemp -d -- "$remote_root/.po-$slot-released.XXXXXX")" || return
   trap '' INT TERM HUP
-  mv -T -- "$hold" "$retired/hold" || return
+  writer_change mv -T -- "$hold" "$retired/hold" || return
   hold="$retired/hold"
   hold_owned=false
   trap 'echo "activation verified; retired hold cleanup incomplete" >&2' ERR
@@ -461,7 +578,7 @@ clear_hold() {
   for unit in "$issuer_unit" "$collector_unit"; do
     anchor="$(mask_anchor "$unit")"
     require_mask_inode "$unit" "$anchor" || return 1
-    rm -- "$anchor" || return 1
+    writer_change rm -- "$anchor" || return 1
   done
   rm -- "$hold/$issuer_unit" "$hold/$collector_unit" "$hold/backup" "$hold/card-candidate"
   rm -f -- "$hold/issuer-stop.invocation" "$hold/$issuer_unit.stop-cid" "$hold/$collector_unit.stop-cid" "$hold/quiesced"
@@ -527,7 +644,8 @@ prepare_candidate_pair() {
     require_card_candidate || return 1
   fi
   if [[ ! -e "$profile_release/candidate" ]]; then
-    python3 "$pair_tool" candidate "$service" "$profile_release/candidate" "$candidate_image" \
+    [[ "$staged_pair" != true || "$mode" != resume ]] || { echo 'preflighted candidate profile is missing' >&2; return 1; }
+    writer_change python3 "$pair_tool" candidate "$service" "$profile_release/candidate" "$candidate_image" \
       < "$unit_dir/$collector_container.container"
   fi
   python3 "$pair_tool" verify "$service" "$profile_release/candidate" "$candidate_image"
@@ -535,6 +653,11 @@ prepare_candidate_pair() {
   cmp -- "$profile_release/candidate/unit.container" "$unit_dir/$collector_container.container"
   python3 "$pair_tool" check "$service" "$profile_release/candidate"
   python3 "$pair_tool" verify-source "$service" "$profile_release/candidate"
+}
+
+validate_candidate_pair() {
+  prepare_candidate_pair
+  python3 "$pair_tool" check-pooled "$service" "$profile_release/candidate"
 }
 
 image_id() {
@@ -618,7 +741,7 @@ restore_collector_base_unit() {
   ! cmp -s -- "$recorded" "$installed" || return 0
   cp -p -- "$installed" "$profile_release/rollback-replaced-$collector_container.container" || return
   tmp="$(mktemp "$unit_dir/.$collector_container.container.XXXXXX")" || return
-  if ! install -m 0644 -- "$recorded" "$tmp" || ! mv -f -- "$tmp" "$installed"; then
+  if ! install -m 0644 -- "$recorded" "$tmp" || ! writer_change mv -f -- "$tmp" "$installed"; then
     rm -f -- "$tmp"
     return 1
   fi
@@ -667,17 +790,27 @@ card_pair() {
 require_card_origin() {
   local release inode recorded_revision recorded_collector recorded_issuer extra
   read -r release inode recorded_revision recorded_collector recorded_issuer extra < "$1" || return 1
-  [[ "${release%/*}" == "${backup%/*}" && "${release##*/}" =~ ^card-po-$slot-[0-9]{8}T[0-9]{6}Z$ &&
+  local prefix="card-po-$slot"
+  if [[ "$slot" == b && "${release##*/}" == staged-po-b-* ]]; then prefix=staged-po-b; fi
+  [[ "${release%/*}" == "${backup%/*}" && "${release##*/}" =~ ^$prefix-[0-9]{8}T[0-9]{6}Z$ &&
      "$inode" =~ ^[0-9]+:[0-9]+$ && -z "$extra" && "$recorded_revision" == "$2" && "$recorded_collector" == "$3" &&
-     "$recorded_issuer" =~ ^sha256:[0-9a-f]{64}$ && ( "$4" == absent || "$recorded_issuer" == "$4" ) ]]
+     "$recorded_issuer" =~ ^sha256:[0-9a-f]{64}$ && ( "$4" == absent || "$recorded_issuer" == "$4" ) ]] || return 1
+  if [[ "$staged_pair" == true ]]; then
+    [[ -f "$1" && ! -L "$1" && -d "$release" && ! -L "$release" && ! -L "$release/card-candidate" && "$(stat -c '%d:%i' "$release")" == "$inode" ]] &&
+      cmp -s -- "$1" <(printf '%s %s %s %s %s\n' "$release" "$inode" "$recorded_revision" "$recorded_collector" "$recorded_issuer") &&
+      cmp -s -- "$1" "$release/card-candidate" || return 1
+  fi
 }
 
 require_card_candidate() {
   cmp -s -- "$backup/card-candidate" <(card_pair "$revision" "$(<"$staging/collector-image-id")" "$(<"$staging/image-id")") || return 1
-  if [[ "$seal" != - ]]; then
+  if [[ "$card_transition" == true ]]; then
     [[ "$(<"$backup/collector.revision")" != "$revision" &&
        "$(<"$backup/collector-prechange.image-id")" != "$(<"$staging/collector-image-id")" &&
        "$(<"$backup/po-prechange.image-id")" != "$(<"$staging/image-id")" ]] || return 1
+  elif [[ "$staged_pair" == true ]]; then
+    require_card_origin "$backup/card-origin" "$(<"$backup/collector.revision")" \
+      "$(<"$backup/collector-prechange.image-id")" "$(<"$backup/po-prechange.image-id")" || return 1
   fi
   if [[ "$mode" == resume ]]; then
     local expected='holo-pgbouncer|6432'
@@ -686,10 +819,14 @@ require_card_candidate() {
   fi
 }
 
+claim_staged_attempt() {
+  (set -C; printf '%s\n' "$seal" > "$backup/$mode-requested") && sync -- "$backup/$mode-requested" "$backup"
+}
+
 publish_card_pair() {
   local tmp
   tmp="$(mktemp -- "$remote_root/.po-$slot.card-active.XXXXXX")" || return 1
-  cp -- "$1" "$tmp" && sync -- "$tmp" && mv -fT -- "$tmp" "$card_active" && sync -- "$remote_root"
+  cp -- "$1" "$tmp" && sync -- "$tmp" && writer_change mv -fT -- "$tmp" "$card_active" && sync -- "$remote_root"
 }
 
 restore() {
@@ -699,7 +836,7 @@ restore() {
   if [[ "$mode" == rollback && "$hold_owned" != true ]] && ! cmp -s -- "$backup/card-candidate" "$card_active"; then
     echo 'rollback does not own the active card release' >&2; return 1
   fi
-  [[ ! -e "$backup/transport.sha256" && -f "$backup/card-origin" ]] &&
+  [[ "$card_transition" == false && -f "$backup/card-origin" ]] &&
     { cmp -s -- "$backup/card-origin" "$card_active" || cmp -s -- "$backup/card-candidate" "$card_active"; } || {
     echo 'rollback is not owned by an admitted card pair' >&2; return 1;
   }
@@ -739,14 +876,15 @@ restore() {
     postgres_capacity_assert_service "$staging" "$compose_env" "$unit_dir" "$collector_container" "$previous_unit" || return
   fi
   if [[ "$hold_owned" == true ]]; then require_held_units || return; fi
-  python3 "$pair_tool" activate "$service" "$profile_release/previous" "$current" || return
+  if [[ "$staged_pair" == true ]]; then claim_staged_attempt || return 1; fi
+  writer_change python3 "$pair_tool" activate "$service" "$profile_release/previous" "$current" || return
   restore_collector_base_unit || return
-  podman tag "$collector_rollback" "$collector"
-  systemctl daemon-reload
+  writer_change podman tag "$collector_rollback" "$collector" || return
+  writer_change systemctl daemon-reload || return
   if [[ "$state" == present ]]; then
-    podman tag "$issuer_rollback" "$issuer"
-    install -D -m 0644 "$backup/po-prechange-manifest.json" "$current/$manifest"
-    install -D -m 0644 "$backup/po-prechange.image-id" "$current/$image_id_file"
+    writer_change podman tag "$issuer_rollback" "$issuer" || return
+    writer_change install -D -m 0644 "$backup/po-prechange-manifest.json" "$current/$manifest" || return
+    writer_change install -D -m 0644 "$backup/po-prechange.image-id" "$current/$image_id_file" || return
     if [[ "$hold_owned" == true ]]; then
       release_unit "$issuer_unit"
     fi
@@ -833,6 +971,9 @@ require_collector_lease_migration() {
 
 {
 claim_slot
+if [[ "$staged_pair" == true && "$mode" != quiesce ]]; then
+  require_card_origin "$backup/card-origin" "$w2_revision" "$w2_collector" "$w2_issuer"
+fi
 if [[ "$mode" == rollback || "$mode" == check ]]; then require_card_candidate; fi
 if [[ "$mode" == rollback ]]; then
   if [[ "$hold_owned" == true ]]; then
@@ -858,6 +999,11 @@ if [[ "$mode" == check ]]; then
   for container in "$issuer_container" "$collector_container"; do
     started_since "$since_epoch" "$container"
     require_post_cutover_logs "$since" "$container"
+    if [[ "$staged_pair" == true ]]; then
+      read -r requested job identity < "$backup/resume-$container.service.start"
+      [[ "$requested" =~ ^@[0-9]+\.[0-9]{6}$ && "$job" =~ ^[1-9][0-9]*$ &&
+         "$(started_slot_generation "$container.service" "$requested" "$job")" == "$identity" && -n "$identity" ]]
+    fi
   done
   echo "$host_label collector/issuer completion verified revision=$revision backup=$backup"
   exit 0
@@ -891,14 +1037,54 @@ if [[ "$issuer_state" == present ]] && [[ ! -r "$current/$manifest" || ! -r "$cu
   exit 1
 fi
 [[ ! -e "$backup" ]] || { echo "$host_label backup path already exists" >&2; exit 1; }
-if [[ "$seal" == - ]]; then
+if [[ "$card_transition" == false ]]; then
   previous_issuer=absent
   if [[ "$issuer_state" == present ]]; then previous_issuer="$(container_image_id "$issuer_container")"; fi
   require_card_origin "$card_active" "$(image_label "$collector" revision)" "$(container_image_id "$collector_container")" "$previous_issuer" || {
     echo 'running pair does not own the active card release' >&2; exit 1;
   }
+  if [[ "$staged_pair" == true ]]; then
+    require_card_origin "$card_active" "$w2_revision" "$w2_collector" "$w2_issuer"
+    collector_invocation="$(active_invocation "$collector_unit")"
+    captured_generation="$(container_generation "$collector_container")"
+    issuer_invocation="$(active_invocation "$issuer_unit")"
+    captured_issuer="$(container_generation "$issuer_container")"
+    origin_snapshot="$(cat -- "$card_active" && printf 'collector %s %s\nissuer %s %s\n' \
+      "$collector_invocation" "$captured_generation" "$issuer_invocation" "$captured_issuer")"
+    observed_origin="$(printf '%s\n' "$origin_snapshot" | sha256sum)"
+    [[ "${observed_origin%% *}" == "$origin_digest" ]] || { echo 'approved W2 publisher generation changed' >&2; exit 1; }
+    verify_collector_runtime "$w2_revision" "$w2_collector"
+    verify_issuer_runtime "$w2_revision" "$w2_issuer"
+    for tag in "$collector_rollback" "$issuer_rollback"; do
+      status=0; podman image exists "$tag" || status=$?
+      [[ "$status" == 1 ]] || { echo 'rollback image name already exists or inventory unavailable' >&2; exit 1; }
+    done
+    archives=()
+    for prefix in '' collector-; do
+      if [[ -n "$prefix" ]]; then tag="$collector_candidate" origin="$w2_collector"; else tag="$issuer_candidate" origin="$w2_issuer"; fi
+      status=0; podman image exists "$tag" || status=$?
+      case "$status" in
+        0)
+          tagged="$(image_id "$tag")"
+          if [[ "$tagged" == "$(<"$staging/${prefix}image-id")" ]]; then continue; fi
+          [[ "$tagged" == "$origin" ]] || { echo 'unexpected candidate tag owner' >&2; exit 1; } ;;
+        1) ;;
+        *) exit 1 ;;
+      esac
+      archives+=("$staging/${prefix}image.tar")
+    done
+    [[ ! -e "$profile_release" && ! -L "$profile_release" ]]
+    cmp -- "$staging/deploy/podman/iris-seoul/$collector_container.container" "$unit_dir/$collector_container.container"
+  fi
 fi
+if [[ "$staged_pair" == true ]]; then (( EPOCHSECONDS < expires )); fi
 install -d -m 0700 -o root -g root "$backup"
+if [[ "$staged_pair" == true ]]; then
+  cp -- /proc/sys/kernel/random/boot_id "$backup/owner-boot"
+  printf '%s\n' "$tool_revision" > "$backup/owner-tool"
+  printf '%s %s\n' "$window" "$expires" > "$backup/owner-window"
+  printf '%s\n' "$origin_snapshot" > "$backup/owner-origin"
+fi
 old_image_id="$(image_id "$collector")"
 running_image_id="$(container_image_id "$collector_container")"
 [[ "$running_image_id" == "$old_image_id" ]] || exit 1
@@ -910,7 +1096,7 @@ import json, sys
 json.dump({'schema_version': 1, 'source_revision': sys.argv[1], 'go': {'goarch': 'arm64'}, 'image_id': sys.argv[2], 'version': sys.argv[3]}, open(sys.argv[4], 'w'))
 PY
 verify_collector "$collector" "$backup/collector-prechange-manifest.json" "$old_revision" "$backup/collector-prechange.image-id"
-if [[ "$mode" == quiesce ]]; then
+if [[ "$mode" == quiesce && "$staged_pair" == false ]]; then
   collector_invocation="$(active_invocation "$collector_unit")"
   issuer_invocation="$(active_invocation "$issuer_unit")"
   captured_issuer="$(container_generation "$issuer_container")"
@@ -922,6 +1108,7 @@ if [[ "$mode" == quiesce ]]; then
 fi
 captured_collector="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["container_id"])' "$profile_release/previous/pair.json")"
 [[ "$captured_collector" =~ ^[0-9a-f]{64}$ ]]
+if [[ "$staged_pair" == true ]]; then [[ "$captured_collector" == "${captured_generation%% *}" ]]; fi
 collector_database_endpoint "$captured_collector" > "$backup/collector.endpoint"
 if [[ "$mode" == quiesce ]]; then
   expected='holo-pgbouncer|6432'
@@ -930,13 +1117,14 @@ if [[ "$mode" == quiesce ]]; then
 fi
 if [[ "$seal" != - ]]; then
   printf '%s\n' "$seal" > "$backup/transport.sha256"
-else
+fi
+if [[ "$card_transition" == false ]]; then
   cp -- "$card_active" "$backup/card-origin"
 fi
-python3 "$pair_tool" rollback "$service" "$profile_release/previous"
+writer_change python3 "$pair_tool" rollback "$service" "$profile_release/previous"
 python3 "$pair_tool" check "$service" "$profile_release/previous"
 printf '%s\n' "$old_revision" > "$backup/collector.revision"
-podman tag "$old_image_id" "$collector_rollback"
+writer_change podman tag "$old_image_id" "$collector_rollback"
 if [[ "$issuer_state" == present ]]; then
   running_issuer_id="$(container_image_id "$issuer_container")"
   issuer_image_id="$(image_id "$issuer")"
@@ -950,7 +1138,7 @@ if [[ "$issuer_state" == present ]]; then
   [[ -n "$old_version" && "$old_po_version" == "$old_version" ]]
   cp "$current/$manifest" "$backup/po-prechange-manifest.json"
   cp "$current/$image_id_file" "$backup/po-prechange.image-id"
-  podman tag "$issuer_image_id" "$issuer_rollback"
+  writer_change podman tag "$issuer_image_id" "$issuer_rollback"
   printf 'present\n' > "$backup/issuer.state"
 else
   [[ ! -e "$current/$manifest" && ! -e "$current/$image_id_file" ]]
@@ -960,12 +1148,13 @@ printf '%s\n' "$revision" > "$backup/candidate.revision"
 printf '%s\n' "$version" > "$backup/candidate.version"
 card_pair "$revision" "$(<"$staging/collector-image-id")" "$(<"$staging/image-id")" > "$backup/card-candidate"
 require_card_candidate
-if [[ "$seal" == - ]]; then
+if [[ "$card_transition" == false ]]; then
   require_card_origin "$backup/card-origin" "$old_revision" "$old_image_id" "${issuer_image_id:-absent}"
 fi
 (cd "$staging" && sha256sum image-id collector-image-id rootfs-manifest.json collector-manifest.json \
   image.tar.sha256 collector-image.tar.sha256 source-files.sha256) > "$backup/candidate-inputs.sha256"
 : > "$backup/snapshot-complete"
+if [[ "$staged_pair" == true ]]; then sync -- "$backup"/* "$backup" "${backup%/*}"; fi
 fi
 restore_after_failed_cutover() {
   local status="${1:-1}" restore_status
@@ -986,16 +1175,29 @@ restore_after_failed_cutover() {
   exit "$status"
 }
 if [[ "$mode" != resume ]]; then
-  cutover_restore_owner_pid="$BASHPID"
-  trap 'restore_after_failed_cutover $?' ERR
-  trap 'restore_after_failed_cutover 130' INT
-  trap 'restore_after_failed_cutover 143' TERM
-  trap 'restore_after_failed_cutover 129' HUP
-podman load --input "$staging/image.tar"
-podman load --input "$staging/collector-image.tar"
+  if [[ "$staged_pair" == true ]]; then
+    (( EPOCHSECONDS < expires ))
+  else
+    cutover_restore_owner_pid="$BASHPID"
+    trap 'restore_after_failed_cutover $?' ERR
+    trap 'restore_after_failed_cutover 130' INT
+    trap 'restore_after_failed_cutover 143' TERM
+    trap 'restore_after_failed_cutover 129' HUP
+    archives=("$staging/image.tar" "$staging/collector-image.tar")
+  fi
+  for archive in "${archives[@]}"; do writer_change podman load --input "$archive"; done
   verify_candidate_images
 fi
 if [[ "$mode" == quiesce ]]; then
+  if [[ "$staged_pair" == true ]]; then
+    validate_candidate_pair
+    (cd -- "$profile_release/candidate" && sha256sum profile.json unit.container 50-worker-profile.conf) > "$backup/candidate-runtime.sha256"
+    sync -- "$profile_release/candidate"/* "$profile_release/candidate" "$backup/candidate-runtime.sha256" "$backup"
+    cmp -s -- "$card_active" "$backup/card-origin"
+    cmp -s -- "$card_active" <(head -n 1 -- "$backup/owner-origin")
+    require_card_origin "$card_active" "$w2_revision" "$w2_collector" "$w2_issuer"
+    [[ "$(container_generation "$collector_container")" == "$captured_generation" ]]
+  fi
   require_unmasked_units
   verify_issuer_runtime "$old_po_revision" "$issuer_image_id" || {
     echo 'captured issuer is no longer healthy on its reviewed image and socket; no hold created' >&2; exit 1;
@@ -1005,8 +1207,9 @@ if [[ "$mode" == quiesce ]]; then
      "$(active_invocation "$collector_unit")" == "$collector_invocation" ]] || {
     echo 'captured writer generation changed during image loading; no hold created' >&2; exit 1;
   }
-  captured_generation="$(container_generation "$collector_container")"
+  if [[ "$staged_pair" == false ]]; then captured_generation="$(container_generation "$collector_container")"; fi
   python3 "$pair_tool" verify-captured "$service" "$profile_release/previous" "$collector_container"
+  if [[ "$staged_pair" == true ]]; then (( EPOCHSECONDS < expires )); fi
   arm_maintenance_failure
   create_hold
   hold_units initial
@@ -1017,23 +1220,27 @@ fi
 if [[ "$mode" == resume ]]; then
   require_confirmed_hold
   arm_maintenance_failure
+  if [[ "$staged_pair" == true ]]; then
+    claim_staged_attempt
+    (cd -- "$profile_release/candidate" && sha256sum --check --strict "$backup/candidate-runtime.sha256")
+  fi
   (cd "$staging" && sha256sum --check --strict image.tar.sha256 collector-image.tar.sha256)
   verify_candidate_images
 fi
-prepare_candidate_pair
-python3 "$pair_tool" check-pooled "$service" "$profile_release/candidate"
+validate_candidate_pair
 if [[ "$slot" == c ]]; then require_collector_lease_migration target; fi
+if [[ "$staged_pair" == true ]]; then (( EPOCHSECONDS < expires )); fi
 cutover_started=true
-python3 "$pair_tool" activate "$service" "$profile_release/candidate" "$current"
-podman tag "$issuer_candidate" "$issuer"
-podman tag "$collector_candidate" "$collector"
+writer_change python3 "$pair_tool" activate "$service" "$profile_release/candidate" "$current"
+writer_change podman tag "$issuer_candidate" "$issuer"
+writer_change podman tag "$collector_candidate" "$collector"
 if [[ "$mode" == resume ]]; then
-  install -D -m 0644 "$staging/rootfs-manifest.json" "$current/$manifest"
-  install -D -m 0644 "$staging/image-id" "$current/$image_id_file"
+  writer_change install -D -m 0644 "$staging/rootfs-manifest.json" "$current/$manifest"
+  writer_change install -D -m 0644 "$staging/image-id" "$current/$image_id_file"
 fi
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '%s\n' "$started_at" > "$backup/change-started-at"
-systemctl daemon-reload
+writer_change systemctl daemon-reload
 if [[ "$mode" == resume ]]; then
   require_held_units
   python3 "$pair_tool" verify-source "$service" "$profile_release/candidate"
@@ -1042,8 +1249,10 @@ if [[ "$mode" == resume ]]; then
 fi
 start_slot_unit "$issuer_unit"
 verify_issuer_runtime "$revision" "$(<"$staging/image-id")"
-install -D -m 0644 "$staging/rootfs-manifest.json" "$current/$manifest"
-install -D -m 0644 "$staging/image-id" "$current/$image_id_file"
+if [[ "$mode" != resume ]]; then
+  writer_change install -D -m 0644 "$staging/rootfs-manifest.json" "$current/$manifest"
+  writer_change install -D -m 0644 "$staging/image-id" "$current/$image_id_file"
+fi
 if [[ "$mode" == resume ]]; then require_launched_unit "$issuer_unit"; release_unit "$collector_unit"; fi
 start_slot_unit "$collector_unit"
 verify_collector_runtime "$revision" "$(<"$staging/collector-image-id")"
@@ -1054,6 +1263,11 @@ for container in "$issuer_container" "$collector_container"; do
   started_since "$since_epoch" "$container"
   require_post_cutover_logs "$started_at" "$container"
 done
+if [[ "$staged_pair" == true ]]; then
+  require_launched_unit "$issuer_unit"
+  require_launched_unit "$collector_unit"
+  cmp -s -- "$backup/card-origin" "$card_active"
+fi
 publish_card_pair "$backup/card-candidate"
 if [[ "$mode" == resume ]]; then clear_hold; fi
 trap - ERR INT TERM HUP

@@ -2,10 +2,59 @@
 set -euo pipefail
 [[ "$(hostname -s)" == kapu ]] || { echo 'native issuer artifact builds are restricted to kapu' >&2; exit 1; }
 
-REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+tool_script="$(realpath -e -- "${BASH_SOURCE[0]}")"
+tool_root="$(cd "${tool_script%/*}/../.." && pwd -P)"
+REPO_ROOT="$(realpath -e -- "${REPO_ROOT:-$tool_root}")"
 MODE="${2:---dry-run}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 AP_SWAPFILE_SIZE_MIB="${AP_SWAPFILE_SIZE_MIB:-2048}"
+AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-6433}"
+if [[ "$AP_POSTGRES_PORT" != 6433 ]]; then
+  echo "AP_POSTGRES_PORT must be the collector pooler port (6433)" >&2
+  exit 2
+fi
+for checkout in "$tool_root" "$REPO_ROOT"; do
+  [[ "$(git -C "$checkout" rev-parse --show-toplevel)" == "$checkout" ]] || {
+    echo 'native tool and product paths must be checkout top-level directories' >&2
+    exit 1
+  }
+done
+
+. "$tool_root/scripts/deploy/lib/source-revision.sh"
+tool_revision="$(deploy_source_revision "$tool_root")"
+native_revision="$tool_revision"
+if [[ "$REPO_ROOT" != "$tool_root" ]]; then native_revision="$(deploy_source_revision "$REPO_ROOT")"; fi
+native_tool_blob() { git -C "$tool_root" cat-file blob "$tool_revision:$1"; }
+native_product_blob() { git -C "$REPO_ROOT" cat-file blob "$native_revision:$1"; }
+
+host_env_template() {
+  awk '/^write_host_env\(\) \{$/ { body=1; count++ } body { print } /^}$/ { body=0 }
+       END { if (body || count != 1) exit 1 }'
+}
+
+if [[ "$REPO_ROOT" != "$tool_root" || -v AP_NATIVE_TOOL_REVISION || -v AP_NATIVE_PRODUCT_REVISION ]]; then
+  [[ "$tool_revision" == "${AP_NATIVE_TOOL_REVISION:-}" && "$native_revision" == "${AP_NATIVE_PRODUCT_REVISION:-}" ]] || {
+    echo 'native tool/product checkout does not match the two approved full revisions' >&2
+    exit 1
+  }
+  deploy_entry=scripts/deploy/ap-host-native-deploy.sh
+  native_tool_blob "$deploy_entry" | cmp -s - "$tool_script" || {
+    echo 'native deploy caller bytes do not match the approved tool' >&2
+    exit 1
+  }
+  native_product_blob "$deploy_entry" | host_env_template | cmp -s - <(host_env_template < "$tool_script") || {
+    echo 'host env template differs from the approved product source' >&2
+    exit 1
+  }
+fi
+printf 'native deploy source: tool=%s product=%s\n' "$tool_revision" "$native_revision" >&2
+
+
+. "$tool_root/scripts/deploy/lib/ap-host-native-window.sh"
+if [[ "$REPO_ROOT" != "$tool_root" ]]; then
+  product_window="$(unset native_release_window; . "$REPO_ROOT/scripts/deploy/lib/ap-host-native-window.sh"; printf '%s' "${native_release_window:?}")"
+  [[ "$product_window" == "$native_release_window" ]] || { echo 'native tool/product release window mismatch' >&2; exit 1; }
+fi
 AP_POSTGRES_HOST=""
 while IFS='=' read -r host_name host_address; do
   if [[ "$host_name" == central ]]; then AP_POSTGRES_HOST="$host_address"; fi
@@ -16,13 +65,6 @@ while IFS='|' read -r owner _service _key _source _instances maximum _role; do
   if [[ "$owner" == youtube-collector-a ]]; then AP_POSTGRES_POOL_MAX_CONNS="$maximum"; fi
 done < "$REPO_ROOT/scripts/ci/postgres-capacity-policy.tsv"
 [[ "$AP_POSTGRES_POOL_MAX_CONNS" =~ ^[1-9][0-9]*$ ]] || { echo 'collector capacity policy missing' >&2; exit 1; }
-AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-6433}"
-if [[ "$AP_POSTGRES_PORT" != 6433 ]]; then
-  echo "AP_POSTGRES_PORT must be the collector pooler port (6433)" >&2
-  exit 2
-fi
-
-. "$REPO_ROOT/scripts/deploy/lib/ap-host-native-window.sh"
 case "$MODE" in
   --dry-run|--apply|--prepare-profile) [[ $# -le 2 ]] || exit 2 ;;
   --quiesce|--resume)
@@ -36,14 +78,12 @@ case "$MODE" in
     ;;
 esac
 
-. "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
-. "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
-. "$REPO_ROOT/scripts/deploy/lib/source-revision.sh"
+. "$tool_root/scripts/deploy/lib/ap-host.sh"
+. "$tool_root/scripts/deploy/lib/ap-host-native-release-path.sh"
 
-NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
-REMOTE_APPLY_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-remote-apply.sh"
+CUTOVER_LIBS=(compose-env postgres-endpoint ap-host-native-release-path ap-host-native-po ap-host-native-cutover ap-host-native-window
+  ap-host-native-rollback-check youtubejs-node-version ap-collector-readiness ap-host-native-remote-apply)
 COLLECTOR_WRAPPER_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-collector-wrapper.sh"
-READINESS_LIB="$REPO_ROOT/scripts/deploy/lib/ap-collector-readiness.sh"
 UNIT_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-collector.service"
 PO_UNIT_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-po.service"
 PO_SOCKET_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-po.socket"
@@ -69,12 +109,12 @@ if [[ "$MODE" != "--dry-run" && "${!AP_APPROVE_DEPLOY_VAR:-}" != "true" ]]; then
 fi
 if [[ "$MODE" == --prepare-profile ]]; then
   service="${AP_SERVICES[0]}"
-  "${AP_SSH[@]}" "sudo -n python3 - prepare-native '$service' /opt/hololive-bot/youtube-collector/current /etc/hololive-bot/youtube-collector-host.env 'hololive-youtube-collector@$service.service'" \
-    < "$REPO_ROOT/scripts/deploy/lib/worker-profile-pair.py"
+  native_tool_blob scripts/deploy/lib/worker-profile-pair.py |
+    "${AP_SSH[@]}" "sudo -n python3 - prepare-native '$service' /opt/hololive-bot/youtube-collector/current /etc/hololive-bot/youtube-collector-host.env 'hololive-youtube-collector@$service.service'"
   exit 0
 fi
 
-release_id="${RELEASE_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)-$AP_NAME}"
+release_id="${RELEASE_ID:-$(date -u +%Y%m%dT%H%M%SZ)-${native_revision:0:12}-$AP_NAME}"
 artifact_dir="${ARTIFACT_DIR:-$REPO_ROOT/artifacts/ap-host-native/$release_id}"
 native_release_id_validate "$release_id"
 if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then
@@ -98,7 +138,7 @@ fi
 service="${AP_SERVICES[0]}"
 port="${AP_PORTS[0]}"
 payload_name=".hololive-host-native-${AP_NAME}-${release_id}"
-version="${HOLO_BOT_VERSION:-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)}"
+version="${HOLO_BOT_VERSION:-${native_revision:0:12}}"
 
 write_host_env() {
   local dest="$1"
@@ -146,7 +186,9 @@ write_wrapper() {
   chmod 0755 "$dest"
 }
 
-native_revision="$(deploy_source_revision "$REPO_ROOT")"
+render_po_unit() { sed "s/@RELEASE_ID@/$release_id/g" "$PO_UNIT_TEMPLATE"; }
+stream_sha256() { sha256sum | cut -d' ' -f1; }
+
 build_native_payload() {
   mkdir -p "$artifact_dir/bin"
   artifact_dir="$(cd "$artifact_dir" && pwd)"
@@ -179,7 +221,7 @@ build_native_payload() {
   )
   write_host_env "$artifact_dir/youtube-collector-host.env"
   cp "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"
-  sed "s/@RELEASE_ID@/$release_id/g" "$PO_UNIT_TEMPLATE" > "$artifact_dir/hololive-youtube-po.service"
+  render_po_unit > "$artifact_dir/hololive-youtube-po.service"
   cp "$PO_SOCKET_TEMPLATE" "$artifact_dir/hololive-youtube-po.socket"
 }
 
@@ -202,28 +244,34 @@ apply_remote() {
       printf 'set -euo pipefail\nsudo -n bash -s --'
       printf ' %q' "${custody[@]}"
       printf " <<'NATIVE_CUSTODY'\n"
-      cat "$REPO_ROOT/scripts/deploy/verify-exec-tree-ownership.sh" || return
+      native_tool_blob scripts/deploy/verify-exec-tree-ownership.sh || return
       printf '\nNATIVE_CUSTODY\n'
     fi
-    cat "$REPO_ROOT/scripts/deploy/lib/"{compose-env,postgres-endpoint,ap-host-native-release-path,ap-host-native-po,ap-host-native-cutover,ap-host-native-window,ap-host-native-rollback-check}.sh \
-      "$NODE_VERSION_LIB" "$READINESS_LIB" "$REMOTE_APPLY_LIB"
+    local fragment
+    for fragment in "${CUTOVER_LIBS[@]}"; do native_tool_blob "scripts/deploy/lib/$fragment.sh" || return; done
   } |
     ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "${change_started_at:-}" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" "$native_revision" "$1" "${window_args[@]}"
 }
 
 window_args=()
 if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
+  window_args+=("$(write_host_env /dev/stdout | stream_sha256)")
+  window_args+=("$(stream_sha256 < "$UNIT_TEMPLATE")")
+  window_args+=("$(render_po_unit | stream_sha256)")
+  window_args+=("$(stream_sha256 < "$PO_SOCKET_TEMPLATE")")
   origin="$(apply_remote apply-origin)"
   native_release_id_validate "${origin%% *}"
   [[ "${origin#* }" =~ ^[0-9a-f]{40}\ [0-9]+:[0-9]+:[0-9]+$ ]]
   window_args=("$origin")
+  mkdir -p -- "$(dirname -- "$artifact_dir")"
+  mkdir -- "$artifact_dir"
 fi
 if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then
   verify_native_collector
   cmp -s "$COLLECTOR_WRAPPER_LIB" "$artifact_dir/bin/youtube-collector-wrapper"
   cmp -s "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"
   cmp -s "$PO_SOCKET_TEMPLATE" "$artifact_dir/hololive-youtube-po.socket"
-  sed "s/@RELEASE_ID@/$release_id/g" "$PO_UNIT_TEMPLATE" | cmp -s - "$artifact_dir/hololive-youtube-po.service"
+  render_po_unit | cmp -s - "$artifact_dir/hololive-youtube-po.service"
   write_host_env /dev/stdout | cmp -s - "$artifact_dir/youtube-collector-host.env"
   [[ "$(<"$artifact_dir/po-sandbox/revision")" == "$native_revision" &&
      "$(<"$artifact_dir/po-sandbox/version")" == "$version" && "$(<"$artifact_dir/po-sandbox/architecture")" == amd64 ]]
@@ -234,6 +282,7 @@ else
   if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
     digest="$(native_payload_digest "$artifact_dir")"
     window_args+=("$digest")
+    printf 'native attempt: release=%s payload_sha256=%s\n' "$release_id" "$digest" >&2
   fi
 fi
 
@@ -281,8 +330,8 @@ apply_cutover || {
 }
 if [[ "$MODE" == --quiesce ]]; then exit 0; fi
 
-for observer in "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh"; do
-  CHANGE_STARTED_AT="$change_started_at" "$observer" "$AP_NAME" || {
+for observer in "$tool_root/scripts/logs/ap-host-native-status.sh" "$tool_root/scripts/deploy/ap-completion-check.sh"; do
+  REPO_ROOT="$REPO_ROOT" CHANGE_STARTED_AT="$change_started_at" "$observer" "$AP_NAME" || {
     status=$?
     if [[ "$MODE" == --resume && "$status" != 255 ]]; then
       apply_remote observation-failed
