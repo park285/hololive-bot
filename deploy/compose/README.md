@@ -161,8 +161,10 @@ release pair, not as extra keys or aliases in the new profile.
 
 - 다섯 소비자는 각 `go.mod`가 고정한 shared-go 판본과 공식 checksum을 씁니다.
   api·alarm-worker·shared는 `github.com/park285/iris-client-go/v5`를 직접,
-  collector는 간접 의존성으로 고정합니다. 두 정식 tag와 공식 Go 도구로 생성한 checksum이
-  운영 빌드 전에 있어야 하며, 미게시 외부 replace나 가짜 tag·checksum은 운영 입력이 아닙니다.
+  collector는 간접 의존성으로 고정합니다. `hololive-api`만 webhook nonce 저장에 독립 모듈
+  `github.com/park285/iris-client-go/adapters/valkeydedup v1.0.0`을 요구합니다.
+  루트 SDK pin은 `v5.2.1`입니다. 운영 빌드에는 각 모듈의 정식 tag(어댑터는
+  `adapters/valkeydedup/v1.0.0`)와 공식 Go checksum이 필요하며, 로컬 `go.work`의 형제 소스로 대체하지 않습니다.
   SDK v5는 H3 `GET /auth/epoch`를 지원하는 Iris와 같은 배포 창에서 교체하며,
   롤백도 인증 호환 조합으로 수행합니다. webhook v3와 inbox 저장 형식은 바꾸지 않습니다.
 - On kapu, run the owning release/pre-push gates and independent `GOWORK=off`

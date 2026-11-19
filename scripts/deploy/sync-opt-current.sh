@@ -13,11 +13,15 @@ die() { printf '[sync-opt-current] ERROR: %s\n' "$*" >&2; exit 1; }
 
 preserve_runtime=false
 application_only=false
+source_base=
 case "$#:${1:-}" in
   0:) ;;
   1:--preserve-runtime) preserve_runtime=true ;;
   1:--application-only) application_only=true; preserve_runtime=true ;;
-  *) die "usage: $0 [--preserve-runtime | --application-only]" ;;
+  2:--source-only)
+    [[ "$2" =~ ^[0-9a-f]{40}$ ]] || die "source-only requires the full installed commit"
+    source_base="$2"; application_only=true; preserve_runtime=true ;;
+  *) die "usage: $0 [--preserve-runtime | --application-only | --source-only <installed-commit>]" ;;
 esac
 
 [[ "$(id -u)" -eq 0 ]] || die "must run as root (sudo)"
@@ -43,6 +47,17 @@ assert_clean "$REPO_ROOT" "repo"
 HEAD_REVISION="$(git -C "$REPO_ROOT" rev-parse --verify 'HEAD^{commit}')"
 HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse --short "$HEAD_REVISION")"
 log "repo=$REPO_ROOT HEAD=$HEAD_SHA -> $OPT_CURRENT"
+if [[ -n "$source_base" ]]; then
+  [[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=all)" ]] || die "source-only requires a clean checkout"
+  [[ -f "$OPT_CURRENT/.source-revision" && ! -L "$OPT_CURRENT/.source-revision" ]] &&
+    cmp -s "$OPT_CURRENT/.source-revision" <(printf '%s\n' "$source_base") || die "source-only installed revision mismatch"
+  [[ "$source_base" != "$HEAD_REVISION" ]] && git -C "$REPO_ROOT" merge-base --is-ancestor "$source_base" "$HEAD_REVISION" ||
+    die "source-only requires a descendant of the installed revision"
+  reserved="$(git -C "$REPO_ROOT" ls-tree "$source_base" -- .source-revision)$(git -C "$REPO_ROOT" ls-tree "$HEAD_REVISION" -- .source-revision)"
+  [[ -z "$reserved" ]] || die "reserved source-revision path in Git tree"
+  [[ "$(git -C "$REPO_ROOT" hash-object --stdin <"${BASH_SOURCE[0]}")" == "$(git -C "$REPO_ROOT" rev-parse "$HEAD_REVISION:scripts/deploy/sync-opt-current.sh")" ]] ||
+    die "source-only bootstrap must be the reviewed coordinator"
+fi
 
 if [[ "$preserve_runtime" == true ]]; then
   for d in data logs backups runtime-config; do
@@ -51,12 +66,13 @@ if [[ "$preserve_runtime" == true ]]; then
 fi
 
 backup_current() {
-  local backup
+  local destination
   local -a exclusions=(--exclude=/data --exclude=/logs --exclude=/backups --exclude=/artifacts/worker-profile)
   [[ -d "$OPT_CURRENT" ]] || return 0
-  backup="$(mktemp -d "${OPT_CURRENT}.bak-${HEAD_SHA}-XXXXXX")"
+  destination="$(mktemp -d "${OPT_CURRENT}.bak-${HEAD_SHA}-XXXXXX")"
   [[ "$preserve_runtime" != true ]] || exclusions+=(--exclude=/runtime-config)
-  rsync -a "${exclusions[@]}" "$OPT_CURRENT/" "$backup/"
+  rsync -a "${exclusions[@]}" "$OPT_CURRENT/" "$destination/"
+  backup="$destination"
   log "backup -> $backup (previous recovery points retained)"
 }
 
@@ -70,6 +86,53 @@ STAGING="$(mktemp -d "${OPT_ROOT}/.staging-current.XXXXXX")"
 QUADLET_CHECK="$(mktemp -d "${OPT_ROOT}/.quadlet-check.XXXXXX")"
 cleanup() { rm -rf "$STAGING" "$QUADLET_CHECK"; }
 trap cleanup EXIT
+if [[ -n "$source_base" ]]; then
+  changes="$QUADLET_CHECK/changes"
+  git -C "$REPO_ROOT" diff --no-renames --no-ext-diff --raw --no-abbrev -z "$source_base" "$HEAD_REVISION" >"$changes"
+  replacements=()
+  while IFS= read -r -d '' header && IFS= read -r -d '' path; do
+    read -r old_mode new_mode old_blob new_blob status <<<"${header#:}"
+    [[ "$status" == M && "$old_mode" == "$new_mode" && "$old_mode" =~ ^100(644|755)$ ]] || die "source-only requires regular-file modifications"
+    case "$path" in
+      hololive/*/scripts/*|hololive/*/internal/migrationrunner/*|scripts/ci/postgres-capacity-policy.tsv) die "protected source path: $path" ;;
+      README.md|CHANGELOG.md|VERSION|go.work|go.work.sum|.github/workflows/*.yml|docs/*|deploy/compose/README.md|hololive/*|scripts/README.md|scripts/ci/*|scripts/deploy/sync-opt-current.sh|scripts/deploy/sync-opt-current_test.sh) ;;
+      *) die "unapproved source-only path: $path" ;;
+    esac
+    live="$OPT_CURRENT/$path"
+    [[ -f "$live" && ! -L "$live" && "$(realpath -e "$live")" == "$live" && "$(stat -c %h "$live")" == 1 &&
+      "$(git hash-object --no-filters "$live")" == "$old_blob" && "$(git hash-object --no-filters "$REPO_ROOT/$path")" == "$new_blob" ]] ||
+      die "source-only content or path mismatch: $path"
+    replacements+=("$path")
+  done <"$changes"
+  (( ${#replacements[@]} > 0 )) || die "source-only has no replacements"
+  python3 -I -S - "$OPT_CURRENT" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+programs = [
+    "scripts/deploy/quadlet-redeploy-service.sh", "scripts/deploy/quadlet-rollback-service.sh",
+    "scripts/deploy/quadlet-prestart.sh", "scripts/ci/postgres-capacity-policy.tsv",
+    *("scripts/deploy/lib/" + name for name in (
+        "worker-profile-pair.py", "systemd-stop-guard.py", "card-migration-guard.py", "admin-bind.sh",
+        "public-bind-mounts.sh", "postgres-capacity.sh", "compose-env.sh", "postgres-endpoint.sh")),
+]
+files = {root / path for path in programs}
+installed = Path("/usr/local/libexec/hololive-bot")
+files.add(installed / "quadlet-prestart")
+files.update(installed / "lib" / name for name in (
+    "admin-bind.sh", "public-bind-mounts.sh", "postgres-capacity.sh", "compose-env.sh", "postgres-endpoint.sh"))
+directories = {parent for path in files for parent in path.parents}
+for path in sorted(directories | files):
+    info = path.lstat()
+    kind_ok = stat.S_ISDIR(info.st_mode) if path in directories else stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+    if (not kind_ok or info.st_uid != 0 or info.st_mode & 0o022 or
+            any(name.startswith("system.posix_acl_") for name in os.listxattr(path, follow_symlinks=False))):
+        sys.exit(f"unsafe installed coordinator authority: {path}")
+PY
+fi
 git -C "$REPO_ROOT" archive "$HEAD_REVISION" | tar -x -C "$STAGING"
 printf '%s\n' "$HEAD_REVISION" >"$STAGING/.source-revision"
 log "staged tracked tree ($(find "$STAGING" -type f | wc -l) files)"
@@ -222,8 +285,13 @@ for feature in "${OPTIONAL_FEATURES[@]}"; do
 done
 if [[ "$application_only" == true ]]; then
   assert_same_tree "$quadlet_check_dir" "$QUADLET_DIR" "--exclude=/$migrator"
-  [[ "$(awk -F= '/^\[/{s=$0} s=="[Container]" && $1=="Exec"{print substr($0,6)}' "$QUADLET_DIR/$migrator")" == --pool-only=auth ]] ||
-    die "application-only requires the accepted pool-only migrator"
+  required_exec=--pool-only=auth
+  if [[ -n "$source_base" ]]; then
+    required_exec=--schema-only
+    assert_same_file "$STAGING/$migrator_path" "$QUADLET_DIR/$migrator"
+  fi
+  [[ "$(awk -F= '/^\[/{s=$0} s=="[Container]" && $1=="Exec"{print substr($0,6)}' "$QUADLET_DIR/$migrator")" == "$required_exec" ]] ||
+    die "installed migrator must use $required_exec"
   generated="$QUADLET_CHECK/generated"
   mkdir "$generated"
   QUADLET_UNIT_DIRS="$quadlet_check_dir" /usr/libexec/podman/quadlet "$generated" ||
@@ -238,6 +306,46 @@ else
     || die "staged Quadlet units do not generate; nothing was installed"
 fi
 log "staged Quadlet units generate ($feature_summary)"
+
+if [[ -n "$source_base" ]]; then
+  previous="$QUADLET_CHECK/previous"
+  mkdir "$previous"
+  git -C "$REPO_ROOT" archive "$source_base" | tar -x -C "$previous"
+  tree_filters=(--exclude=/.source-revision --exclude=/data --exclude=/logs --exclude=/backups --exclude=/runtime-config --exclude=/artifacts/worker-profile)
+  if [[ -d "$OPT_CURRENT/artifacts/worker-profile" ]]; then
+    mkdir -p "$previous/artifacts" "$STAGING/artifacts"
+  fi
+  assert_same_tree "$previous" "$OPT_CURRENT" "${tree_filters[@]}"
+  replacements+=(.source-revision)
+  prepared="$QUADLET_CHECK/replacements"
+  mkdir "$prepared"
+  verify_paths=()
+  for path in "${replacements[@]}"; do
+    verify_paths+=("$OPT_CURRENT/$path")
+    mkdir -p "$prepared/$(dirname "$path")"
+    cp --preserve=all "$OPT_CURRENT/$path" "$prepared/$path"
+    cat "$STAGING/$path" >"$prepared/$path"
+  done
+  bash "$STAGING/scripts/deploy/verify-exec-tree-ownership.sh" "${verify_paths[@]}"
+  backup_current
+  cmp -s "$backup/.source-revision" "$OPT_CURRENT/.source-revision" || die "source-only backup stamp mismatch"
+  assert_same_tree "$previous" "$backup" "${tree_filters[@]}"
+  cp --preserve=all "$OPT_CURRENT/.source-revision" "$QUADLET_CHECK/incomplete"
+  printf 'incomplete %s -> %s\n' "$source_base" "$HEAD_REVISION" >"$QUADLET_CHECK/incomplete"
+  sync -f "$OPT_ROOT"
+  mv -T --no-copy "$QUADLET_CHECK/incomplete" "$OPT_CURRENT/.source-revision"
+  sync -f "$OPT_ROOT"
+  for path in "${replacements[@]}"; do
+    if [[ "$path" == .source-revision ]]; then
+      assert_same_tree "$STAGING" "$OPT_CURRENT" "${tree_filters[@]}"
+      sync -f "$OPT_CURRENT"
+    fi
+    mv -T --no-copy "$prepared/$path" "$OPT_CURRENT/$path"
+  done
+  sync -f "$OPT_CURRENT"
+  log "source-only published $source_base -> $HEAD_REVISION; host definitions and runtime untouched"
+  exit 0
+fi
 
 if [[ "$application_only" == true ]]; then
   backup_current

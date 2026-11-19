@@ -15,6 +15,9 @@ self-hosted runner를 다시 붙인다면 이미 신뢰된 코드를 checkout하
 - `ci.yml`은 비밀을 쓰지 않는 PR fast gate입니다.
 - `security.yml`은 신뢰된 non-PR 이벤트(`main` push, `schedule`, `workflow_dispatch`)에서만 실행하며
   현재는 비밀을 쓰지 않으며, 비공개 모듈 자격 증명이 필요해지면 이 non-PR workflow에만 둡니다.
+  Go 검사에는 고정 SHA의 형제 SDK를 사용합니다. API의 독립 Valkey 어댑터는 공개 프록시에서 `go.mod`의
+  판본으로 별도 다운로드해 `go.sum` 변경이 없는지 확인한 뒤 workspace에 넣습니다. SDK 루트 checkout의
+  판본을 바꾸거나 개발자 checkout을 운영 이미지로 복사하지 않습니다.
 - 무거운 전체 검증은 로컬 pre-push gate(`scripts/ci/pre-push-gate.sh` -> `scripts/ci/local-ci.sh`)가 맡습니다.
 
 ## 차단 게이트
