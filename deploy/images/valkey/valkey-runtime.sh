@@ -34,24 +34,24 @@ case "$mode" in
         info="$("$@" info persistence)"
         enabled="" write_status="" rewrite_status=""
         carriage_return="$(printf '\r')"
-        while IFS=: read -r key value; do
-            value="${value%"$carriage_return"}"
-            case "$key" in
-                aof_enabled) enabled="$value" ;;
-                aof_last_write_status) write_status="$value" ;;
-                aof_last_bgrewrite_status) rewrite_status="$value" ;;
-            esac
-        done <<EOF
-$info
-EOF
-        case "$enabled" in 0|1) ;; *) exit 1 ;; esac
-        case "$write_status" in ok|err) ;; *) exit 1 ;; esac
-        case "$rewrite_status" in ok|err) ;; *) exit 1 ;; esac
-        healthy=0
-        if [ "$enabled" = 1 ] && [ "$write_status" = ok ] && [ "$rewrite_status" = ok ]; then
-            healthy=1
-        fi
-        printf '%s %s\n' "$enabled" "$healthy"
+        printf '%s\n' "$info" | {
+            while IFS=: read -r key value; do
+                value="${value%"$carriage_return"}"
+                case "$key" in
+                    aof_enabled) enabled="$value" ;;
+                    aof_last_write_status) write_status="$value" ;;
+                    aof_last_bgrewrite_status) rewrite_status="$value" ;;
+                esac
+            done
+            case "$enabled" in 0|1) ;; *) exit 1 ;; esac
+            case "$write_status" in ok|err) ;; *) exit 1 ;; esac
+            case "$rewrite_status" in ok|err) ;; *) exit 1 ;; esac
+            healthy=0
+            if [ "$enabled" = 1 ] && [ "$write_status" = ok ] && [ "$rewrite_status" = ok ]; then
+                healthy=1
+            fi
+            printf '%s %s\n' "$enabled" "$healthy"
+        }
         ;;
     *)
         echo 'valkey-runtime: expected server, sentinel or health' >&2

@@ -173,7 +173,6 @@ EOF
 cat >"${fakebin}/systemctl" <<'EOF'
 #!/usr/bin/env bash
 state="${FAKE_STATE:?}"
-# 읽기 전용 manager 조회는 아래의 배포 변경 이벤트와 분리한다.
 case "$*" in
   show-environment)
     [[ ! -f "${state}/manager-environment" ]] || cat "${state}/manager-environment"
@@ -254,7 +253,6 @@ restart_unit() {
         printf '1\n' >"$current/nrestarts" ;;
       client_failed_done|client_failed_no_anchor) return 1 ;;
       client_failed_foreign_cid)
-        # 관리자 job·invocation은 원본 그대로인데 현재 Podman 이름만 다른 살아 있는 conmon을 가리킨다.
         printf '%064d\n' 5 >"$current/cid"
         printf '1005\n' >"$current/conmonpid"
         return 1 ;;
@@ -283,7 +281,6 @@ case "$1" in
         if [[ -L "$HOLOLIVE_QUADLET_TEST_ROOT/etc/systemd/system/$service.service" ]]; then
           printf 'masked\n' >"$state/$service/loadstate"
           printf 'masked\n' >"$state/$service/mask_scope"
-          # mask를 읽은 관리자가 원래의 비정상 종료 결과를 잃어버리는 상황을 재현한다.
           rm -f "$state/$service/exit" "$state/$service/failed"
         fi
       done
@@ -347,7 +344,6 @@ case "$1" in
       elif [[ "$FAKE_CASE" == abnormal_success_result ]]; then
         printf '1 143\n' >"$current/exit"
       else
-        # 참조하지 않는 정상 종료 unit을 수거하면 서비스 필드는 기본값으로 돌아간다.
         : >"$current/invocation"
         rm -f "$current/exit"
       fi
@@ -477,7 +473,6 @@ case "${action}" in
     if [[ "${FAKE_COORDINATED:-false}" == true ]]; then cid="$(<"$current/cid")"; fi
     printf '{"container_id":"%s","image":"sha256:%064d"}\n' "$cid" 8 >"${dir}/pair.json"
     printf 'profile\n' >"${dir}/profile.json"
-    # 실제 도구는 이전 pair가 기록한 기본 unit(그 image가 돌던 정의)을 이어받는다.
     if [[ -f "${state}/previous-unit" ]]; then
       cp "${state}/previous-unit" "${dir}/unit.container"
     else

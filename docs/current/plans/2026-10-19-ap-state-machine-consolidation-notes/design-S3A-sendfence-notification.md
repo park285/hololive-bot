@@ -23,7 +23,7 @@
 
 ## 1. alarm-dispatch 현재 fence 전수 (dispatchoutbox + egress/alarmdispatch)
 
-### 1.1 행 상태·컬럼 (schema snapshot `hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql:66-114, 162-182`)
+### 1.1 행 상태·컬럼 (schema snapshot `hololive/hololive-dbtest/testdata/schema_snapshot.golden:66-114, 162-182`)
 
 - 상태 8종: `pending, retry, leased, sending, sent, dlq, quarantined, cancelled` (`:96`, Go 상수는 `internal/service/alarm/dispatchoutbox/model.go:12-21`).
 - shape CHECK `chk_alarm_dispatch_deliveries_state_shape` (`:98`)
@@ -224,7 +224,7 @@ var ErrGenerationExhausted = errors.New("send request generations exhausted")
 
 ## 3. notification-delivery 조사와 흡수안 비교
 
-### 3.1 데이터 모델 (`schema_snapshot.golden.sql:485-509`)
+### 3.1 데이터 모델 (`schema_snapshot.golden:485-509`)
 
 - `notification_delivery_outbox` 컬럼: `kind`(4종 CHECK), `period_key varchar(20)`, `room_id`, `content_id`(=`period_key:room_id`, `hololive/hololive-shared/pkg/service/delivery/outbox_repository.go:104`), `payload jsonb{message, request?}`, `status`(PENDING·SENDING·SENT·FAILED·QUARANTINED CHECK), `attempt_count bigint`, `next_attempt_at`, `locked_at/locked_by/lock_expires_at`, `sending_started_at`, `sent_at`, `error`.
 - 유일성은 `idx_ndo_kind_content (kind, content_id)`이다.
@@ -347,7 +347,7 @@ S4가 이 기반 위에 쓰는 것:
    - 지평 `sent_at + horizon_ms < clock.now`
    - Go 시각은 쓰지 않는다.
 3. **Reason 추가 여지**: reconciler 미스는 `status_changed`(admin settle·retention이 먼저 처리)와 `request_changed`로 충분하다. 새 Reason은 필요 없다.
-4. **shape CHECK**: sent→retry 시 `sent_at`을 NULL로 할지는 S4가 결정한다. `chk_alarm_dispatch_deliveries_state_shape`는 retry에 sent_at을 요구하지도 금지하지도 않는다(`schema_snapshot.golden.sql:98`). 대신 sent retention SQL이 `status='sent'`만 보므로 어느 쪽도 안전하다.
+4. **shape CHECK**: sent→retry 시 `sent_at`을 NULL로 할지는 S4가 결정한다. `chk_alarm_dispatch_deliveries_state_shape`는 retry에 sent_at을 요구하지도 금지하지도 않는다(`schema_snapshot.golden:98`). 대신 sent retention SQL이 `status='sent'`만 보므로 어느 쪽도 안전하다.
 5. **(i) 선택의 비용**: notification은 별도 표라 reconciler SQL 한 벌(claim·checked·reissue·quarantine)과 `handoff_checked_at` 열 migration이 더 필요하다. reconciler Go 루프는 원장별 4메서드 인터페이스(ClaimUnchecked, MarkChecked, RequeueFailed, QuarantineUnknown)로 alarm·notification(·youtube) 구현을 받는다. 구현이 셋이라 인터페이스는 정당하다.
 6. **quarantine 임계 3배 규칙**(`consumer.go:103-111`) 제거는 S4 소관이다. 3b는 threshold를 ms로만 바꾸고 값 규칙은 건드리지 않는다.
 

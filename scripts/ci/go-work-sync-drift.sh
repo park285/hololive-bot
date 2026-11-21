@@ -14,11 +14,11 @@ prepare_offline_sync() {
     version="$(jq -r --arg m "${module}" '.Require[]? | select(.Path == $m) | .Version' <<<"${manifest}")"
     work="$(go work edit -print=false -json)"
     if [[ "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ && ! -f "${cache}/cache/download/${module}/@v/${version}.mod" ]] &&
-        jq -e --arg m "${module}" --arg d "${dir}" --arg v "${version}" '
+        printf '%s\n' "${work}" | jq -e --arg m "${module}" --arg d "${dir}" --arg v "${version}" '
             any(.Use[]?; .DiskPath == $d) and
             any(.Replace[]?; .Old.Path == $m and .Old.Version == $v and .New.Path == $d and .New.Version == null)
-        ' >/dev/null <<<"${work}"; then
-        if ! jq -e --arg m "${module}" 'all(.Replace[]?; .Old.Path != $m)' >/dev/null <<<"${manifest}"; then
+        ' >/dev/null; then
+        if ! printf '%s\n' "${manifest}" | jq -e --arg m "${module}" 'all(.Replace[]?; .Old.Path != $m)' >/dev/null; then
             echo "unexpected ${module} replacement in ${api}/go.mod" >&2
             return 1
         fi

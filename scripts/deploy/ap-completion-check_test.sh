@@ -75,7 +75,6 @@ cat > "$fakebin/ssh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 remote_cmd="${@: -1}"
-# 페어 식별·인증은 별도 검증하며 이 테스트는 준비 상태·발급자 상태만 다룬다.
 if [[ "$remote_cmd" == sudo\ -n\ python3\ -\ verify-native\ * ]]; then
   cat >/dev/null
   exit 0

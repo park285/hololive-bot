@@ -103,7 +103,7 @@ CREATE OR REPLACE TRIGGER youtube_live_runtime_guard
     BEFORE DELETE OR TRUNCATE ON public.source_observations
     FOR EACH STATEMENT EXECUTE FUNCTION public.guard_youtube_live_runtime_state();
 ```
-golden 확인: `dbt/testdata/schema_snapshot.golden.sql:797,1266-1270,1305-1309,1321-1325,1346-1349,1607-…`.
+golden 확인: `dbt/testdata/schema_snapshot.golden:797,1266-1270,1305-1309,1321-1325,1346-1349,1607-…`.
 
 **수동 영수증 함수 재정의** (`:183-218`) `record_youtube_live_review(...)`: `current_setting('transaction_isolation') <> 'serializable'`이면 거부 → 입력 검증 → `PERFORM lock_youtube_live_runtime_state()` → session/head/pending/availability `FOR UPDATE` → `youtube_live_review_snapshot` CAS → receipts INSERT(row trigger `store_youtube_live_review_receipt_facts`가 facts INSERT, `mig/279...:50-54`).
 

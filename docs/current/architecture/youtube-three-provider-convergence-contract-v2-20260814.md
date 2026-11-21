@@ -1954,7 +1954,7 @@ payload, message body, token, secret와 전체 description을 log하지 않는�
 hololive/hololive-api/scripts/migrations/001_schema_epoch3_baseline.sql
 hololive/hololive-api/scripts/migrations/manifest.txt
 hololive/hololive-dbtest/migrations_p1_test.go
-hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql
+hololive/hololive-dbtest/testdata/schema_snapshot.golden
 hololive/hololive-shared/pkg/contracts/sourceobservation/*
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/*
 ```

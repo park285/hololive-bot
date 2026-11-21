@@ -219,7 +219,6 @@ func credentialRejected(pgErr *pgconn.PgError) bool {
 	case "28000", "28P01":
 		return true
 	case "08P01":
-		// PgBouncer는 자원 오류에도 08P01을 쓰므로 인증 메시지만 인정한다.
 		switch pgErr.Message {
 		case "SASL authentication failed", "password authentication failed", "no such user":
 			return true

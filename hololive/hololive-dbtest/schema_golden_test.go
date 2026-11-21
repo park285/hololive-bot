@@ -12,7 +12,7 @@ import (
 
 const (
 	schemaGoldenDir  = "testdata"
-	schemaGoldenFile = "schema_snapshot.golden.sql"
+	schemaGoldenFile = "schema_snapshot.golden"
 	schemaUpdateEnv  = "SCHEMA_SNAPSHOT_UPDATE"
 )
 
