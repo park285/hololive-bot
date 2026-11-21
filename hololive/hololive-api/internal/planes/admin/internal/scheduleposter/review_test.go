@@ -3,8 +3,7 @@ package scheduleposter
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
-	jsonv2 "encoding/json/v2"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"io"
@@ -16,7 +15,9 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/netguard"
@@ -398,6 +399,8 @@ func blame(err error) string {
 	}
 }
 
+const geminiAPIHost = "generativelanguage.googleapis.com"
+
 func TestPeriodFailureBlame(t *testing.T) {
 	t.Parallel()
 
@@ -421,14 +424,69 @@ func TestPeriodFailureBlame(t *testing.T) {
 	}
 }
 
-func TestDecodeDecision(t *testing.T) {
+func TestGeminiSuspendedConsumerErrorsAndLogsExcludeCredentials(t *testing.T) {
+	t.Parallel()
+
+	const echo = "Consumer 'api_key:" + decisionTestKey + "' is suspended"
+
+	judge, calls := decisionServer(t, http.StatusForbidden, `{"error":{"code":403,"status":"PERMISSION_DENIED","message":"`+echo+
+		`","details":[{"reason":"CONSUMER_SUSPENDED","metadata":{"consumer":"api_key:`+decisionTestKey+`"}}]}}`)
+
+	_, _, reviewErr := judge.judge(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
+	require.ErrorIs(t, reviewErr, errReviewUnavailable)
+
+	_, _, postErr := judge.classifyPost(t.Context(), "本文")
+	require.ErrorIs(t, postErr, errChangeServiceFailed)
+	require.EqualValues(t, 2, calls.Load())
+
+	var logged bytes.Buffer
+
+	service := &Service{logger: slog.New(slog.NewJSONHandler(&logged, nil))}
+	service.logReview(t.Context(), 1, outcomeRequested, posterScores{}, reviewErr)
+	service.logPostFailure(&posterstore.Post{}, &posterstore.PublishedSchedule{}, posterstore.PostJudgeFailed, reasonUnavailable, postErr)
+	require.Contains(t, logged.String(), `"reason":"schedule poster auto review is unavailable`)
+	require.Contains(t, logged.String(), `"error":"`+errChangeServiceFailed.Error())
+
+	periodErr := periodFailure(genai.APIError{Code: http.StatusForbidden, Message: echo})
+	require.ErrorIs(t, periodErr, errReviewUnavailable)
+
+	for _, output := range []string{reviewErr.Error(), postErr.Error(), periodErr.Error(), logged.String()} {
+		require.NotContains(t, output, decisionTestKey)
+		require.NotContains(t, output, "api_key:")
+	}
+}
+
+func TestGeminiModelDiagnosticsExcludeResponseText(t *testing.T) {
+	t.Parallel()
+
+	const echo = "api_key:" + decisionTestKey
+
+	judge, _ := decisionServer(t, http.StatusOK, `{"prompt_feedback":{"block_reason":"`+echo+`","block_reason_message":"`+echo+`"}}`)
+	_, _, reviewErr := judge.judge(t.Context(), source{})
+	require.ErrorIs(t, reviewErr, errUnjudgeable)
+
+	_, _, postErr := judge.classifyPost(t.Context(), "本文")
+	fault, ok := errors.AsType[*postFaultError](postErr)
+	require.True(t, ok)
+	require.Equal(t, reasonBlocked, fault.reason)
+
+	_, periodErr := parsePeriod(`{"` + echo + `":0}`)
+	require.ErrorIs(t, periodErr, errUnjudgeable)
+
+	for _, err := range []error{reviewErr, postErr, periodErr} {
+		require.NotContains(t, err.Error(), echo)
+	}
+}
+
+func TestGeminiJudgeDecodesResponses(t *testing.T) {
 	t.Parallel()
 
 	const answered = `{"answers":{"is_schedule":{"type":"noul","noul":0.93,"confidence":0.93},
 		"one_week":{"type":"noul","noul":0.91,"confidence":0.91},"one_streamer":{"type":"noul","noul":0.92,"confidence":0.92}},
 		"usage":{"total_tokens":1533,"total_input_tokens":1533,"total_output_tokens":0}}`
 
-	scores, spent, err := decodeDecision(http.StatusOK, []byte(answered))
+	judge, _ := decisionServer(t, http.StatusOK, answered)
+	scores, spent, err := judge.judge(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
 	require.NoError(t, err)
 	require.Equal(t, posterScores{schedule: 0.93, oneWeek: 0.91, oneStreamer: 0.92}, scores)
 	require.Equal(t, usage{model: decisionModel, prompt: 1533}, spent)
@@ -453,8 +511,10 @@ func TestDecodeDecision(t *testing.T) {
 			http.StatusBadRequest,
 			`{"error":{"code":400,"message":"User location is not supported for the API use.","status":"FAILED_PRECONDITION"}}`, blameService,
 		},
+		"precondition before malformed details": {http.StatusBadRequest, `{"error":{"status":"FAILED_PRECONDITION","details":42}}`, blameService},
 	} {
-		_, _, err := decodeDecision(tc.status, []byte(tc.body))
+		judge, _ := decisionServer(t, tc.status, tc.body)
+		_, _, err := judge.judge(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
 		require.Error(t, err, name)
 		require.Equal(t, tc.want, blame(err), "%s: %v", name, err)
 	}
@@ -473,92 +533,174 @@ func (r stubResolver) LookupIP(context.Context, string, string) ([]net.IP, error
 	return []net.IP{r.ip}, nil
 }
 
+func guardedDecisionHTTPClient(client *http.Client, resolver netguard.Resolver) *http.Client {
+	return netguard.GuardedClient(client, netguard.Policy{
+		Resolver: resolver, AllowedHosts: []string{geminiAPIHost}, AllowedPorts: []string{"443"}, Schemes: []string{"https"},
+	})
+}
+
 func TestGeminiJudgeBlamesTheServiceOnlyWhenItCannotConnect(t *testing.T) {
 	t.Parallel()
 
 	release := make(chan struct{})
-	hang := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
-	t.Cleanup(hang.Close)
+	hang := httptest.NewTestServer(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
 	t.Cleanup(func() { close(release) })
 
-	closed := httptest.NewServer(http.NotFoundHandler())
-	closed.Close()
+	plain := hang.Client()
 
-	plain := &http.Client{Timeout: 100 * time.Millisecond}
+	plain.Timeout = 100 * time.Millisecond
+
 	guarded := func(resolver netguard.Resolver, dial func(context.Context, string, string) (net.Conn, error)) *http.Client {
-		return netguard.GuardedClient(&http.Client{Timeout: time.Second, Transport: &http.Transport{DialContext: dial}},
-			netguard.Policy{Resolver: resolver, AllowedHosts: []string{geminiAPIHost}, AllowedPorts: []string{"443"}, Schemes: []string{"https"}})
+		return guardedDecisionHTTPClient(&http.Client{Timeout: time.Second, Transport: &http.Transport{DialContext: dial}}, resolver)
 	}
 	dialTimeout := func(context.Context, string, string) (net.Conn, error) {
 		return nil, &net.OpError{Op: "dial", Net: "tcp", Err: os.ErrDeadlineExceeded}
 	}
 
 	for name, tc := range map[string]struct {
-		client   *http.Client
-		endpoint string
-		want     string
+		client *http.Client
+		want   string
 	}{
-		"no response":     {plain, hang.URL, blameNobody},
-		"refused connect": {plain, closed.URL, blameService},
+		"no response":     {plain, blameNobody},
+		"refused connect": {refusedDecisionClient(), blameService},
 		"lookup timeout": {
 			guarded(stubResolver{err: &net.DNSError{Err: "i/o timeout", Name: geminiAPIHost, IsTimeout: true}}, dialTimeout),
-			decisionEndpoint, blameService,
+			blameService,
 		},
-		"dial timeout": {guarded(stubResolver{ip: net.IPv4(142, 250, 196, 106)}, dialTimeout), decisionEndpoint, blameService},
+		"dial timeout":      {guarded(stubResolver{ip: net.IPv4(142, 250, 196, 106)}, dialTimeout), blameService},
+		"resolver deadline": {guarded(stubResolver{err: context.DeadlineExceeded}, dialTimeout), blameService},
 	} {
-		judge := &geminiJudge{http: tc.client, endpoint: tc.endpoint, key: "test-key-0123456789abcdef"}
+		judge := testDecisionJudge(tc.client)
 
 		_, _, err := judge.judge(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
 		require.Error(t, err, name)
 		require.Equal(t, tc.want, blame(err), "%s: %v", name, err)
+
+		_, _, err = judge.classifyPost(t.Context(), "本文")
+
+		if tc.want == blameService {
+			require.ErrorIs(t, err, errChangeServiceFailed, name)
+		} else {
+			require.ErrorIs(t, err, errChangeOutcomeUnknown, name)
+		}
 	}
+}
+
+func TestDecisionDeadlineWhileWaitingForHeaders(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		var received atomic.Int32
+
+		release := make(chan struct{})
+		defer close(release)
+
+		server := httptest.NewTestServer(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			received.Add(1)
+			<-release
+		}))
+		client := server.Client()
+
+		client.Timeout = 3 * time.Minute
+
+		guarded := guardedDecisionHTTPClient(client, stubResolver{ip: net.IPv4(142, 250, 196, 106)})
+		judge := testDecisionJudge(guarded)
+
+		start := time.Now()
+		_, _, err := judge.judge(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
+		require.EqualValues(t, 1, received.Load())
+		require.Equal(t, 2*time.Minute, time.Since(start))
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.Equal(t, blameNobody, blame(err))
+
+		start = time.Now()
+		_, _, err = judge.classifyPost(t.Context(), "本文")
+		require.EqualValues(t, 2, received.Load())
+		require.Equal(t, 2*time.Minute, time.Since(start))
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorIs(t, err, errChangeOutcomeUnknown)
+		require.NotErrorIs(t, err, errChangeServiceFailed)
+	})
+}
+
+func TestDecisionDeadlineDuringDial(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		defer close(release)
+
+		var dials atomic.Int32
+
+		client := &http.Client{Timeout: 3 * time.Minute, Transport: &http.Transport{
+			DialContext: func(context.Context, string, string) (net.Conn, error) {
+				dials.Add(1)
+				<-release
+
+				return nil, net.ErrClosed
+			},
+		}}
+		guarded := guardedDecisionHTTPClient(client, stubResolver{ip: net.IPv4(142, 250, 196, 106)})
+		judge := testDecisionJudge(guarded)
+
+		_, _, err := judge.judge(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
+		require.Positive(t, dials.Load())
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorIs(t, err, errReviewUnavailable)
+
+		_, _, err = judge.classifyPost(t.Context(), "本文")
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorIs(t, err, errChangeServiceFailed)
+	})
 }
 
 func TestGeminiJudgeSendsTheDecisionRequest(t *testing.T) {
 	t.Parallel()
 
-	const key = "test-key-0123456789abcdef"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request struct {
-			Model string `json:"model"`
-			Input []struct {
-				Type     string `json:"type"`
-				MIMEType string `json:"mime_type"`
-				Data     string `json:"data"`
-			} `json:"input"`
-			Questions map[string]decisionQuestion `json:"questions"`
-		}
-
-		if r.Method != http.MethodPost || r.Header.Get("x-goog-api-key") != key || jsonv2.UnmarshalRead(r.Body, &request) != nil ||
-			request.Model != decisionModel || len(request.Input) != 1 || request.Input[0].Type != "image" ||
-			request.Input[0].MIMEType != mimeJPEG || request.Input[0].Data != base64.StdEncoding.EncodeToString([]byte("jpeg")) ||
-			len(request.Questions) != 3 {
+	bodies := make(chan []byte, 1)
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1beta/decisions" || r.Method != http.MethodPost || r.Header.Get("x-goog-api-key") != decisionTestKey {
 			w.WriteHeader(http.StatusTeapot)
 
 			return
 		}
 
-		for _, question := range request.Questions {
-			if question.Type != "noul" || question.Instructions == "" || question.Criteria.TrueDescription == "" || question.Criteria.FalseDescription == "" {
-				w.WriteHeader(http.StatusTeapot)
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
 
-				return
-			}
+			return
 		}
+
+		bodies <- raw
+
+		w.Header().Set("Content-Type", "application/json")
 
 		if _, err := w.Write([]byte(`{"answers":{"is_schedule":{"noul":0.9},"one_week":{"noul":0.8},"one_streamer":{"noul":0.7}},"usage":{"total_input_tokens":1500}}`)); err != nil {
 			t.Error(err)
 		}
 	}))
-	t.Cleanup(server.Close)
 
-	judge := &geminiJudge{http: server.Client(), endpoint: server.URL, key: key}
+	judge := testDecisionJudge(server.Client())
 
 	scores, spent, err := judge.judge(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
 	require.NoError(t, err)
 	require.Equal(t, posterScores{schedule: 0.9, oneWeek: 0.8, oneStreamer: 0.7}, scores)
 	require.EqualValues(t, 1500, spent.prompt)
+	requirePosterDecisionRequest(t, <-bodies)
+}
+
+func requirePosterDecisionRequest(t *testing.T, got jsontext.Value) {
+	t.Helper()
+
+	raw, err := os.ReadFile("testdata/poster_decision_request.json")
+	require.NoError(t, err)
+
+	want := jsontext.Value(raw)
+	require.NoError(t, want.Compact())
+	require.NoError(t, got.Compact())
+	require.Equal(t, want, got)
 }
 
 func TestGeminiJudgeSendsTheSameBytesForTheSameCandidate(t *testing.T) {
@@ -566,7 +708,7 @@ func TestGeminiJudgeSendsTheSameBytesForTheSameCandidate(t *testing.T) {
 
 	var bodies []string
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Error(err)
@@ -574,13 +716,14 @@ func TestGeminiJudgeSendsTheSameBytesForTheSameCandidate(t *testing.T) {
 
 		bodies = append(bodies, string(raw))
 
+		w.Header().Set("Content-Type", "application/json")
+
 		if _, err := w.Write([]byte(`{"answers":{"is_schedule":{"noul":0.9},"one_week":{"noul":0.8},"one_streamer":{"noul":0.7}}}`)); err != nil {
 			t.Error(err)
 		}
 	}))
-	t.Cleanup(server.Close)
 
-	judge := &geminiJudge{http: server.Client(), endpoint: server.URL, key: "test-key-0123456789abcdef"}
+	judge := testDecisionJudge(server.Client())
 
 	for range 20 {
 		_, _, err := judge.judge(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
