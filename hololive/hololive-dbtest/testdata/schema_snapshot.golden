@@ -5,6 +5,7 @@ ENUM alarm_type
   SHORTS
   BIRTHDAY
   ANNIVERSARY
+  EVENT_GRADE
 
 TABLE acl_rooms
   COLUMN id integer NOT NULL DEFAULT nextval('acl_rooms_id_seq'::regclass)
@@ -379,6 +380,154 @@ TABLE bot_webhook_inbox
   INDEX CREATE INDEX idx_bot_webhook_inbox_lease_expiry ON public.bot_webhook_inbox USING btree (lease_until, id) WHERE (status = 'processing'::text)
   INDEX CREATE INDEX idx_bot_webhook_inbox_ordering_partition ON public.bot_webhook_inbox USING btree (ordering_key, id) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]))
   INDEX CREATE INDEX idx_bot_webhook_inbox_terminal_updated ON public.bot_webhook_inbox USING btree (updated_at, id) WHERE (status = ANY (ARRAY['dead'::text, 'succeeded'::text]))
+
+TABLE event_grade_borders
+  COLUMN region text NOT NULL
+  COLUMN event_id character varying(96) NOT NULL
+  COLUMN chapter_id character varying(96) NOT NULL
+  COLUMN board_kind text NOT NULL
+  COLUMN rank integer NOT NULL
+  COLUMN score bigint NOT NULL
+  COLUMN started_at timestamp with time zone NOT NULL
+  COLUMN observed_at timestamp with time zone NOT NULL
+  COLUMN is_final boolean NOT NULL
+  CONSTRAINT event_grade_borders_board_kind_check CHECK ((board_kind = 'marathon_score'::text))
+  CONSTRAINT event_grade_borders_rank_check CHECK ((rank > 0))
+  CONSTRAINT event_grade_borders_score_check CHECK ((score >= 0))
+  CONSTRAINT event_grade_borders_region_event_id_chapter_id_fkey FOREIGN KEY (region, event_id, chapter_id) REFERENCES event_grade_chapters(region, event_id, chapter_id)
+  CONSTRAINT event_grade_borders_pkey PRIMARY KEY (region, event_id, chapter_id, board_kind, is_final, rank)
+
+TABLE event_grade_catalogs
+  COLUMN region text NOT NULL
+  COLUMN observed_at timestamp with time zone NOT NULL
+  CONSTRAINT event_grade_catalogs_region_check CHECK ((region = ANY (ARRAY['jp'::text, 'us'::text, 'as'::text])))
+  CONSTRAINT event_grade_catalogs_pkey PRIMARY KEY (region)
+
+TABLE event_grade_chapters
+  COLUMN region text NOT NULL
+  COLUMN event_id character varying(96) NOT NULL
+  COLUMN chapter_id character varying(96) NOT NULL
+  COLUMN event_type text NOT NULL
+  COLUMN starts_at timestamp with time zone NOT NULL
+  COLUMN ends_at timestamp with time zone NOT NULL
+  COLUMN event_ends_at timestamp with time zone NOT NULL
+  COLUMN reveals_at timestamp with time zone NOT NULL
+  COLUMN observed_at timestamp with time zone NOT NULL
+  COLUMN binding_conflicted boolean NOT NULL DEFAULT false
+  CONSTRAINT event_grade_chapters_chapter_id_check CHECK (((chapter_id)::text ~ '^[A-Za-z0-9_-]+$'::text))
+  CONSTRAINT event_grade_chapters_check CHECK (((starts_at < ends_at) AND (ends_at <= event_ends_at) AND (ends_at <= reveals_at)))
+  CONSTRAINT event_grade_chapters_event_id_check CHECK (((event_id)::text ~ '^[A-Za-z0-9_-]+$'::text))
+  CONSTRAINT event_grade_chapters_event_type_check CHECK ((event_type = ANY (ARRAY['normal'::text, 'relay'::text])))
+  CONSTRAINT event_grade_chapters_region_fkey FOREIGN KEY (region) REFERENCES event_grade_catalogs(region)
+  CONSTRAINT event_grade_chapters_pkey PRIMARY KEY (region, event_id, chapter_id)
+  CONSTRAINT event_grade_chapters_region_chapter_id_key UNIQUE (region, chapter_id)
+  INDEX CREATE INDEX event_grade_chapters_due ON public.event_grade_chapters USING btree (region, GREATEST(event_ends_at, reveals_at))
+
+TABLE event_grade_collection_leases
+  COLUMN job_key text NOT NULL
+  COLUMN region text NOT NULL
+  COLUMN kind text NOT NULL
+  COLUMN event_id character varying(96)
+  COLUMN chapter_id character varying(96)
+  COLUMN target_generation bigint
+  COLUMN fence_epoch bigint NOT NULL DEFAULT 0
+  COLUMN owner_instance text
+  COLUMN claimed_at timestamp with time zone
+  COLUMN lease_expires_at timestamp with time zone
+  COLUMN catalog_interrupted boolean NOT NULL DEFAULT false
+  COLUMN last_completed_at timestamp with time zone
+  CONSTRAINT event_grade_collection_leases_check CHECK (((kind = 'catalog'::text) = ((event_id IS NULL) AND (chapter_id IS NULL) AND (target_generation IS NULL))))
+  CONSTRAINT event_grade_collection_leases_check1 CHECK ((((owner_instance IS NULL) = (lease_expires_at IS NULL)) AND ((owner_instance IS NULL) = (claimed_at IS NULL))))
+  CONSTRAINT event_grade_collection_leases_fence_epoch_check CHECK ((fence_epoch >= 0))
+  CONSTRAINT event_grade_collection_leases_job_key_check CHECK (((length(job_key) >= 1) AND (length(job_key) <= 256)))
+  CONSTRAINT event_grade_collection_leases_kind_check CHECK ((kind = ANY (ARRAY['catalog'::text, 'cutoff'::text])))
+  CONSTRAINT event_grade_collection_leases_owner_instance_check CHECK (((owner_instance IS NULL) OR ((length(owner_instance) >= 1) AND (length(owner_instance) <= 128))))
+  CONSTRAINT event_grade_collection_leases_region_event_id_chapter_id_fkey FOREIGN KEY (region, event_id, chapter_id) REFERENCES event_grade_collection_targets(region, event_id, chapter_id)
+  CONSTRAINT event_grade_collection_leases_region_fkey FOREIGN KEY (region) REFERENCES event_grade_regions(region)
+  CONSTRAINT event_grade_collection_leases_pkey PRIMARY KEY (job_key)
+
+TABLE event_grade_collection_targets
+  COLUMN region text NOT NULL
+  COLUMN event_id character varying(96) NOT NULL
+  COLUMN chapter_id character varying(96) NOT NULL
+  COLUMN starts_at timestamp with time zone NOT NULL
+  COLUMN ends_at timestamp with time zone NOT NULL
+  COLUMN final_after timestamp with time zone NOT NULL
+  COLUMN generation bigint NOT NULL DEFAULT 1
+  COLUMN conflicted boolean NOT NULL DEFAULT false
+  COLUMN final_published boolean NOT NULL DEFAULT false
+  CONSTRAINT event_grade_collection_targets_chapter_id_check CHECK (((chapter_id)::text ~ '^[A-Za-z0-9_-]+$'::text))
+  CONSTRAINT event_grade_collection_targets_check CHECK (((starts_at < ends_at) AND (ends_at <= final_after)))
+  CONSTRAINT event_grade_collection_targets_event_id_check CHECK (((event_id)::text ~ '^[A-Za-z0-9_-]+$'::text))
+  CONSTRAINT event_grade_collection_targets_generation_check CHECK ((generation > 0))
+  CONSTRAINT event_grade_collection_targets_region_fkey FOREIGN KEY (region) REFERENCES event_grade_regions(region)
+  CONSTRAINT event_grade_collection_targets_pkey PRIMARY KEY (region, event_id, chapter_id)
+  INDEX CREATE INDEX event_grade_collection_targets_chapter ON public.event_grade_collection_targets USING btree (region, chapter_id)
+
+TABLE event_grade_consumer_offsets
+  COLUMN region text NOT NULL
+  COLUMN applied_seq bigint NOT NULL DEFAULT 0
+  CONSTRAINT event_grade_consumer_offsets_applied_seq_check CHECK ((applied_seq >= 0))
+  CONSTRAINT event_grade_consumer_offsets_region_fkey FOREIGN KEY (region) REFERENCES event_grade_regions(region)
+  CONSTRAINT event_grade_consumer_offsets_pkey PRIMARY KEY (region)
+
+TABLE event_grade_observations
+  COLUMN region text NOT NULL
+  COLUMN seq bigint NOT NULL
+  COLUMN schema_version smallint NOT NULL
+  COLUMN kind text NOT NULL
+  COLUMN job_key text NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN owner_instance text NOT NULL
+  COLUMN fence_epoch bigint NOT NULL
+  COLUMN target_generation bigint
+  COLUMN started_at timestamp with time zone NOT NULL
+  COLUMN observed_at timestamp with time zone NOT NULL
+  COLUMN published_at timestamp with time zone NOT NULL
+  COLUMN payload jsonb NOT NULL
+  CONSTRAINT event_grade_observations_check CHECK (((started_at <= observed_at) AND (observed_at <= published_at)))
+  CONSTRAINT event_grade_observations_check1 CHECK (((kind = 'cutoff'::text) = (target_generation IS NOT NULL)))
+  CONSTRAINT event_grade_observations_fence_epoch_check CHECK ((fence_epoch > 0))
+  CONSTRAINT event_grade_observations_kind_check CHECK ((kind = ANY (ARRAY['catalog'::text, 'cutoff'::text])))
+  CONSTRAINT event_grade_observations_payload_check CHECK (((jsonb_typeof(payload) = 'object'::text) AND (octet_length((payload)::text) <= 65536)))
+  CONSTRAINT event_grade_observations_schema_version_check CHECK ((schema_version = 1))
+  CONSTRAINT event_grade_observations_seq_check CHECK ((seq > 0))
+  CONSTRAINT event_grade_observations_region_fkey FOREIGN KEY (region) REFERENCES event_grade_regions(region)
+  CONSTRAINT event_grade_observations_pkey PRIMARY KEY (region, seq)
+  CONSTRAINT event_grade_observations_job_key_owner_instance_fence_epoch_key UNIQUE (job_key, owner_instance, fence_epoch)
+
+TABLE event_grade_regions
+  COLUMN region text NOT NULL
+  COLUMN published_seq bigint NOT NULL DEFAULT 0
+  COLUMN catalog_observed_at timestamp with time zone
+  COLUMN catalog_attempt_started_at timestamp with time zone
+  CONSTRAINT event_grade_regions_published_seq_check CHECK ((published_seq >= 0))
+  CONSTRAINT event_grade_regions_region_check CHECK ((region = ANY (ARRAY['jp'::text, 'us'::text, 'as'::text])))
+  CONSTRAINT event_grade_regions_pkey PRIMARY KEY (region)
+
+TABLE event_grade_requests
+  COLUMN id bigint NOT NULL GENERATED ALWAYS AS IDENTITY
+  COLUMN room_id character varying(100) NOT NULL
+  COLUMN user_id character varying(100) NOT NULL
+  COLUMN region text NOT NULL
+  COLUMN event_id character varying(96) NOT NULL
+  COLUMN chapter_id character varying(96) NOT NULL
+  COLUMN board_kind text NOT NULL
+  COLUMN score bigint NOT NULL
+  COLUMN outcome text
+  COLUMN published_at timestamp with time zone
+  COLUMN dispatch_rejection text
+  CONSTRAINT event_grade_requests_board_kind_check CHECK ((board_kind = 'marathon_score'::text))
+  CONSTRAINT event_grade_requests_check CHECK (((published_at IS NULL) OR (outcome IS NOT NULL)))
+  CONSTRAINT event_grade_requests_check1 CHECK (((dispatch_rejection IS NULL) OR ((outcome IS NOT NULL) AND (published_at IS NULL))))
+  CONSTRAINT event_grade_requests_dispatch_rejection_check CHECK ((dispatch_rejection = ANY (ARRAY['rejected_collision'::text, 'rejected_terminal'::text])))
+  CONSTRAINT event_grade_requests_outcome_check CHECK (((outcome = ANY (ARRAY['outside'::text, 'boundary'::text, 'unavailable'::text])) OR (outcome ~ '^top[1-9][0-9]{0,9}$'::text)))
+  CONSTRAINT event_grade_requests_score_check CHECK ((score > 0))
+  CONSTRAINT event_grade_requests_region_event_id_chapter_id_fkey FOREIGN KEY (region, event_id, chapter_id) REFERENCES event_grade_chapters(region, event_id, chapter_id)
+  CONSTRAINT event_grade_requests_pkey PRIMARY KEY (id)
+  CONSTRAINT event_grade_requests_room_id_user_id_region_event_id_chapte_key UNIQUE (room_id, user_id, region, event_id, chapter_id, board_kind)
+  INDEX CREATE INDEX event_grade_requests_due ON public.event_grade_requests USING btree (region, event_id, chapter_id, id) WHERE (outcome IS NULL)
+  INDEX CREATE INDEX event_grade_requests_pending ON public.event_grade_requests USING btree (id) WHERE ((outcome IS NOT NULL) AND (published_at IS NULL) AND (dispatch_rejection IS NULL))
 
 TABLE kakao_rooms
   COLUMN room_id character varying(100) NOT NULL
@@ -1696,6 +1845,8 @@ SEQUENCE bot_reply_outbox_resolution_audit_id_seq AS bigint START 1 INCREMENT 1 
 
 SEQUENCE bot_webhook_inbox_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY bot_webhook_inbox.id
 
+SEQUENCE event_grade_requests_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY event_grade_requests.id
+
 SEQUENCE members_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY members.id
 
 SEQUENCE message_strings_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY message_strings.id
@@ -1769,6 +1920,18 @@ FUNCTION enforce_source_observation_provenance_collector_identity() RETURNS trig
 FUNCTION enforce_source_observation_queue_collector_fence() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    session_instance text := public.youtube_collector_session_instance();\nBEGIN\n    IF session_instance IS NULL THEN\n        RETURN NEW;\n    END IF;\n\n    IF NOT EXISTS (\n        SELECT 1\n        FROM public.source_observations AS observation\n        JOIN public.source_observation_provenances AS provenance\n          ON provenance.id = observation.provenance_id\n        JOIN public.youtube_collection_job_leases AS lease\n          ON lease.job_key = provenance.job_key\n        WHERE observation.id = NEW.observation_id\n          AND lease.owner_instance = provenance.collector_instance\n          AND pg_catalog.split_part(lease.owner_instance, ':', 1) = session_instance\n          AND lease.fence_epoch = observation.fence_epoch\n          AND lease.slot_state = 'ACTIVE'\n          AND lease.lease_expires_at > pg_catalog.transaction_timestamp()\n    ) THEN\n        RAISE EXCEPTION 'observation queue insert is not fenced by an active lease of the database identity'\n            USING ERRCODE = '42501';\n    END IF;\n\n    RETURN NEW;\nEND\n"
 
 FUNCTION enforce_youtube_collection_job_lease_collector_identity() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    session_instance text := public.youtube_collector_session_instance();\nBEGIN\n    IF session_instance IS NULL THEN\n        RETURN NEW;\n    END IF;\n\n    IF (TG_OP = 'INSERT' OR NEW.owner_instance IS NOT NULL)\n       AND (pg_catalog.split_part(NEW.owner_instance, ':', 1) = session_instance) IS NOT TRUE THEN\n        RAISE EXCEPTION 'collector lease owner does not match the database identity'\n            USING ERRCODE = '42501';\n    END IF;\n\n    IF TG_OP = 'INSERT' THEN\n        RETURN NEW;\n    END IF;\n\n    IF ROW(NEW.job_key, NEW.provider, NEW.job_class, NEW.collection_job_kind, NEW.subject_key)\n       IS DISTINCT FROM ROW(OLD.job_key, OLD.provider, OLD.job_class, OLD.collection_job_kind, OLD.subject_key) THEN\n        RAISE EXCEPTION 'collector lease identity is immutable'\n            USING ERRCODE = '42501';\n    END IF;\n\n    IF NEW.fence_epoch < OLD.fence_epoch THEN\n        RAISE EXCEPTION 'collector lease fence cannot move backwards'\n            USING ERRCODE = '42501';\n    END IF;\n\n    IF OLD.owner_instance IS NOT NULL\n       AND pg_catalog.split_part(OLD.owner_instance, ':', 1) <> session_instance\n       AND OLD.slot_state = 'ACTIVE'\n       AND OLD.lease_expires_at > pg_catalog.clock_timestamp() THEN\n        RAISE EXCEPTION 'collector cannot change an active lease of another collector'\n            USING ERRCODE = '42501';\n    END IF;\n\n    IF NEW.owner_instance IS NOT NULL\n       AND NEW.owner_instance IS DISTINCT FROM OLD.owner_instance\n       AND NEW.fence_epoch <= OLD.fence_epoch THEN\n        RAISE EXCEPTION 'collector lease takeover must advance the fence'\n            USING ERRCODE = '42501';\n    END IF;\n\n    RETURN NEW;\nEND\n"
+
+FUNCTION event_grade_apply_catalog_targets(p_region text, p_body jsonb) RETURNS void LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    v_chapter jsonb;\nBEGIN\n    IF (p_body->>'quarantine_missing')::boolean THEN\n        UPDATE public.event_grade_collection_targets t\n        SET conflicted = true, generation = t.generation + 1\n        WHERE t.region = p_region AND NOT t.conflicted\n          AND t.chapter_id NOT IN (SELECT value->>'chapter_id' FROM jsonb_array_elements(p_body->'bindings'));\n    END IF;\n    UPDATE public.event_grade_collection_targets t\n    SET conflicted = true, generation = t.generation + 1\n    WHERE t.region = p_region AND NOT t.conflicted\n      AND t.chapter_id IN (SELECT value #>> '{}' FROM jsonb_array_elements(p_body->'conflicts'));\n    UPDATE public.event_grade_collection_targets t\n    SET conflicted = true, generation = t.generation + 1\n    FROM jsonb_array_elements(p_body->'bindings') b\n    WHERE t.region = p_region AND NOT t.conflicted\n      AND t.chapter_id = b.value->>'chapter_id' AND t.event_id <> b.value->>'event_id';\n    FOR v_chapter IN SELECT value FROM jsonb_array_elements(p_body->'chapters') LOOP\n        CONTINUE WHEN EXISTS (\n            SELECT 1 FROM public.event_grade_collection_targets t\n            WHERE t.region = p_region AND t.chapter_id = v_chapter->>'chapter_id' AND t.event_id <> v_chapter->>'event_id');\n        INSERT INTO public.event_grade_collection_targets AS t (region, event_id, chapter_id, starts_at, ends_at, final_after)\n        VALUES (p_region, v_chapter->>'event_id', v_chapter->>'chapter_id', (v_chapter->>'starts_at')::timestamptz,\n                (v_chapter->>'ends_at')::timestamptz,\n                greatest((v_chapter->>'event_ends_at')::timestamptz, (v_chapter->>'reveals_at')::timestamptz))\n        ON CONFLICT ON CONSTRAINT event_grade_collection_targets_pkey DO UPDATE\n        SET starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, final_after = EXCLUDED.final_after,\n            conflicted = false,\n            final_published = t.final_published AND t.final_after = EXCLUDED.final_after AND NOT t.conflicted,\n            generation = t.generation + CASE WHEN t.final_after = EXCLUDED.final_after AND NOT t.conflicted THEN 0 ELSE 1 END;\n    END LOOP;\nEND\n"
+
+FUNCTION event_grade_claim_catalog(p_region text, p_owner text, p_ttl_ms integer) RETURNS TABLE(job_key text, fence_epoch bigint, claimed_at timestamp with time zone, interrupted boolean) LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    v_owner text := public.event_grade_collector_owner(p_owner);\n    v_attempt_started timestamptz;\n    v_key text := 'catalog:' || p_region;\nBEGIN\n    IF p_ttl_ms NOT BETWEEN 1000 AND 300000 THEN\n        RAISE EXCEPTION 'event grade lease TTL is outside bounds' USING ERRCODE = '22023';\n    END IF;\n    SELECT r.catalog_attempt_started_at INTO v_attempt_started FROM public.event_grade_regions r WHERE r.region = p_region FOR UPDATE;\n    IF NOT FOUND THEN\n        RAISE EXCEPTION 'unknown event grade region' USING ERRCODE = '22023';\n    END IF;\n    INSERT INTO public.event_grade_collection_leases AS l (job_key, region, kind)\n    VALUES (v_key, p_region, 'catalog') ON CONFLICT ON CONSTRAINT event_grade_collection_leases_pkey DO NOTHING;\n    RETURN QUERY\n    UPDATE public.event_grade_collection_leases AS l\n    SET fence_epoch = l.fence_epoch + 1, owner_instance = v_owner,\n        claimed_at = pg_catalog.statement_timestamp(),\n        lease_expires_at = pg_catalog.statement_timestamp() + p_ttl_ms * interval '1 millisecond',\n        catalog_interrupted = v_attempt_started IS NOT NULL\n    WHERE l.job_key = v_key\n      AND (l.owner_instance IS NULL OR l.lease_expires_at <= pg_catalog.statement_timestamp())\n      AND (l.last_completed_at IS NULL OR l.last_completed_at <= pg_catalog.statement_timestamp() - interval '50 seconds')\n    RETURNING l.job_key, l.fence_epoch, l.claimed_at, l.catalog_interrupted;\n    IF FOUND THEN\n        UPDATE public.event_grade_regions r SET catalog_attempt_started_at = pg_catalog.statement_timestamp() WHERE r.region = p_region;\n    END IF;\nEND\n"
+
+FUNCTION event_grade_claim_cutoffs(p_region text, p_owner text, p_ttl_ms integer, p_limit integer) RETURNS TABLE(job_key text, event_id text, chapter_id text, final_after timestamp with time zone, binding_observed_at timestamp with time zone, fence_epoch bigint, target_generation bigint, claimed_at timestamp with time zone) LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    v_owner text := public.event_grade_collector_owner(p_owner);\n    v_catalog_observed timestamptz;\nBEGIN\n    IF p_ttl_ms NOT BETWEEN 1000 AND 300000 OR p_limit NOT BETWEEN 1 AND 3 THEN\n        RAISE EXCEPTION 'event grade cutoff claim is outside bounds' USING ERRCODE = '22023';\n    END IF;\n    SELECT r.catalog_observed_at INTO v_catalog_observed FROM public.event_grade_regions r WHERE r.region = p_region FOR UPDATE;\n    IF NOT FOUND THEN\n        RAISE EXCEPTION 'unknown event grade region' USING ERRCODE = '22023';\n    END IF;\n    INSERT INTO public.event_grade_collection_leases AS l (job_key, region, kind, event_id, chapter_id, target_generation)\n    SELECT 'cutoff:' || t.region || ':' || t.event_id || ':' || t.chapter_id, t.region, 'cutoff', t.event_id, t.chapter_id, t.generation\n    FROM public.event_grade_collection_targets t\n    WHERE t.region = p_region\n    ON CONFLICT ON CONSTRAINT event_grade_collection_leases_pkey DO NOTHING;\n    RETURN QUERY\n    WITH candidates AS (\n        SELECT l.job_key, t.generation\n        FROM public.event_grade_collection_targets t\n        JOIN public.event_grade_collection_leases l\n          ON (l.region, l.event_id, l.chapter_id) = (t.region, t.event_id, t.chapter_id)\n        WHERE t.region = p_region AND NOT t.conflicted AND NOT t.final_published\n          AND (l.owner_instance IS NULL OR l.lease_expires_at <= pg_catalog.statement_timestamp())\n          AND (\n              (t.starts_at <= pg_catalog.statement_timestamp() AND t.ends_at > pg_catalog.statement_timestamp()\n               AND v_catalog_observed >= pg_catalog.statement_timestamp() - interval '2 minutes')\n              OR (t.final_after <= pg_catalog.statement_timestamp()\n                  AND t.final_after + interval '24 hours' >= pg_catalog.statement_timestamp())\n          )\n        ORDER BY l.last_completed_at NULLS FIRST, t.final_after, t.event_id, t.chapter_id\n        LIMIT p_limit\n        FOR UPDATE OF l\n    )\n    UPDATE public.event_grade_collection_leases AS l\n    SET fence_epoch = l.fence_epoch + 1, owner_instance = v_owner, target_generation = c.generation,\n        claimed_at = pg_catalog.statement_timestamp(),\n        lease_expires_at = pg_catalog.statement_timestamp() + p_ttl_ms * interval '1 millisecond'\n    FROM candidates c, public.event_grade_collection_targets t\n    WHERE l.job_key = c.job_key AND (t.region, t.event_id, t.chapter_id) = (l.region, l.event_id, l.chapter_id)\n    RETURNING l.job_key, l.event_id::text, l.chapter_id::text, t.final_after, v_catalog_observed, l.fence_epoch, l.target_generation, l.claimed_at;\nEND\n"
+
+FUNCTION event_grade_collector_owner(p_owner text) RETURNS text LANGUAGE plpgsql VOLATILITY s SECURITY_DEFINER false LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    session_instance text;\nBEGIN\n    IF session_user <> 'hololive_collector_c' THEN\n        RAISE EXCEPTION 'event grade collection is reserved for collector c' USING ERRCODE = '42501';\n    END IF;\n    session_instance := public.youtube_collector_session_instance();\n    IF p_owner IS NULL OR length(p_owner) NOT BETWEEN 1 AND 128 OR session_instance IS NULL\n       OR pg_catalog.split_part(p_owner, ':', 1) <> session_instance\n       OR pg_catalog.split_part(p_owner, ':', 2) = '' THEN\n        RAISE EXCEPTION 'event grade lease owner does not match the database identity' USING ERRCODE = '42501';\n    END IF;\n    RETURN p_owner;\nEND\n"
+
+FUNCTION event_grade_publish(p_job_key text, p_owner text, p_epoch bigint, p_started_at timestamp with time zone, p_observed_at timestamp with time zone, p_payload jsonb) RETURNS bigint LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    v_owner text := public.event_grade_collector_owner(p_owner);\n    lease record;\n    target record;\n    existing record;\n    lease_region text;\n    next_seq bigint;\n    body jsonb := p_payload;\n    now_at timestamptz := pg_catalog.statement_timestamp();\nBEGIN\n    SELECT l.region INTO lease_region FROM public.event_grade_collection_leases l WHERE l.job_key = p_job_key;\n    IF NOT FOUND THEN\n        RAISE EXCEPTION 'event grade lease does not exist' USING ERRCODE = '42501';\n    END IF;\n    PERFORM pg_catalog.pg_advisory_xact_lock(20261121, CASE lease_region WHEN 'jp' THEN 1 WHEN 'us' THEN 2 ELSE 3 END);\n    PERFORM 1 FROM public.event_grade_regions r WHERE r.region = lease_region FOR UPDATE;\n    SELECT l.job_key, l.region, l.kind, l.event_id, l.chapter_id, l.target_generation, l.fence_epoch, l.owner_instance,\n           l.claimed_at, l.lease_expires_at, l.catalog_interrupted\n    INTO lease FROM public.event_grade_collection_leases l WHERE l.job_key = p_job_key FOR UPDATE;\n\n    SELECT o.seq, o.started_at, o.observed_at, o.payload INTO existing FROM public.event_grade_observations o\n    WHERE o.job_key = p_job_key AND o.owner_instance = v_owner AND o.fence_epoch = p_epoch;\n    IF FOUND THEN\n        IF existing.started_at = p_started_at AND existing.observed_at = p_observed_at\n           AND existing.payload - 'quarantine_missing' = p_payload - 'quarantine_missing' THEN\n            RETURN existing.seq;\n        END IF;\n        RAISE EXCEPTION 'event grade observation conflicts with the published execution' USING ERRCODE = '23505';\n    END IF;\n\n    IF lease.owner_instance IS DISTINCT FROM v_owner OR lease.fence_epoch <> p_epoch\n       OR lease.lease_expires_at <= now_at THEN\n        RAISE EXCEPTION 'event grade lease proof is not current' USING ERRCODE = '42501';\n    END IF;\n    IF p_started_at IS NULL OR p_observed_at IS NULL OR p_started_at < pg_catalog.date_trunc('milliseconds', lease.claimed_at) - interval '2 seconds'\n       OR p_started_at > p_observed_at OR p_observed_at > now_at + interval '2 seconds'\n       OR jsonb_typeof(p_payload) IS DISTINCT FROM 'object' THEN\n        RAISE EXCEPTION 'event grade observation timing or payload is invalid' USING ERRCODE = '22023';\n    END IF;\n\n    IF lease.kind = 'cutoff' THEN\n        SELECT t.generation, t.conflicted, t.final_published, t.final_after INTO target FROM public.event_grade_collection_targets t\n        WHERE (t.region, t.event_id, t.chapter_id) = (lease.region, lease.event_id, lease.chapter_id) FOR UPDATE;\n        IF target.generation <> lease.target_generation OR target.conflicted OR target.final_published THEN\n            RAISE EXCEPTION 'event grade cutoff target changed after claim' USING ERRCODE = '40001';\n        END IF;\n        IF jsonb_typeof(p_payload->'final') IS DISTINCT FROM 'boolean' OR jsonb_typeof(p_payload->'ranks') IS DISTINCT FROM 'array'\n           OR p_payload->>'event_id' IS DISTINCT FROM lease.event_id\n           OR p_payload->>'chapter_id' IS DISTINCT FROM lease.chapter_id THEN\n            RAISE EXCEPTION 'event grade cutoff payload does not match the claimed target' USING ERRCODE = '22023';\n        END IF;\n        IF (p_payload->>'final')::boolean THEN\n            IF p_started_at < target.final_after OR p_observed_at > target.final_after + interval '24 hours' THEN\n                RAISE EXCEPTION 'event grade final cutoff is outside its window' USING ERRCODE = '22023';\n            END IF;\n            UPDATE public.event_grade_collection_targets t SET final_published = true\n            WHERE (t.region, t.event_id, t.chapter_id) = (lease.region, lease.event_id, lease.chapter_id);\n        END IF;\n    ELSE\n        IF jsonb_typeof(p_payload->'chapters') IS DISTINCT FROM 'array' OR jsonb_typeof(p_payload->'bindings') IS DISTINCT FROM 'array'\n           OR jsonb_typeof(p_payload->'conflicts') IS DISTINCT FROM 'array'\n           OR jsonb_typeof(p_payload->'quarantine_missing') IS DISTINCT FROM 'boolean' THEN\n            RAISE EXCEPTION 'event grade catalog payload is invalid' USING ERRCODE = '22023';\n        END IF;\n        body := p_payload || jsonb_build_object('quarantine_missing', (p_payload->>'quarantine_missing')::boolean OR lease.catalog_interrupted);\n        PERFORM public.event_grade_apply_catalog_targets(lease.region, body);\n        UPDATE public.event_grade_regions r\n        SET catalog_observed_at = greatest(r.catalog_observed_at, p_observed_at), catalog_attempt_started_at = NULL\n        WHERE r.region = lease.region;\n    END IF;\n\n    UPDATE public.event_grade_regions r SET published_seq = r.published_seq + 1\n    WHERE r.region = lease.region RETURNING r.published_seq INTO next_seq;\n    INSERT INTO public.event_grade_observations(region, seq, schema_version, kind, job_key, scheduled_for, owner_instance,\n        fence_epoch, target_generation, started_at, observed_at, published_at, payload)\n    VALUES (lease.region, next_seq, 1, lease.kind, lease.job_key, lease.claimed_at, v_owner, lease.fence_epoch,\n        lease.target_generation, p_started_at, p_observed_at, now_at, body);\n    UPDATE public.event_grade_collection_leases l\n    SET owner_instance = NULL, claimed_at = NULL, lease_expires_at = NULL, catalog_interrupted = false, last_completed_at = now_at\n    WHERE l.job_key = lease.job_key;\n    RETURN next_seq;\nEND\n"
+
+FUNCTION event_grade_release(p_job_key text, p_owner text, p_epoch bigint) RETURNS boolean LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    v_owner text := public.event_grade_collector_owner(p_owner);\nBEGIN\n    UPDATE public.event_grade_collection_leases AS l\n    SET owner_instance = NULL, claimed_at = NULL, lease_expires_at = NULL\n    WHERE l.job_key = p_job_key AND l.owner_instance = v_owner AND l.fence_epoch = p_epoch;\n    RETURN FOUND;\nEND\n"
 
 FUNCTION grant_bot_reply_outbox_manual_replay(requested_outbox_id bigint, operator_actor text, operator_reason text) RETURNS text LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    granted_at TIMESTAMPTZ;\n    normalized_actor TEXT := btrim(operator_actor);\n    normalized_reason TEXT := btrim(operator_reason);\n    target_id BIGINT;\n    target_status TEXT;\n    target_created_at TIMESTAMPTZ;\n    target_replay_grants INTEGER;\n    next_grant_number INTEGER;\nBEGIN\n    SELECT id, status, created_at, operator_replay_grants\n    INTO target_id, target_status, target_created_at, target_replay_grants\n    FROM public.bot_reply_outbox\n    WHERE id = requested_outbox_id\n    FOR UPDATE;\n\n    IF NOT FOUND THEN\n        RETURN 'not_found';\n    END IF;\n    IF target_status <> 'manual_review' THEN\n        RETURN 'not_manual_review';\n    END IF;\n    granted_at := clock_timestamp();\n    IF granted_at >= target_created_at + interval '144 hours' THEN\n        RETURN 'cutoff_expired';\n    END IF;\n    IF normalized_actor !~ '^[A-Za-z0-9._:@-]{1,64}$'\n        OR octet_length(normalized_reason) NOT BETWEEN 1 AND 256\n        OR normalized_reason ~ '[[:cntrl:]]'\n    THEN\n        RETURN 'invalid_operator_metadata';\n    END IF;\n\n    next_grant_number := target_replay_grants + 1;\n    INSERT INTO public.bot_reply_outbox_replay_audit (\n        outbox_id, grant_number, event_type, actor, reason, recorded_at\n    ) VALUES (\n        target_id, next_grant_number, 'granted', normalized_actor, normalized_reason, granted_at\n    );\n\n    UPDATE public.bot_reply_outbox\n    SET status = 'pending',\n        claim_token = NULL,\n        lease_until = NULL,\n        last_error = '',\n        operator_replay_grants = next_grant_number,\n        available_at = granted_at,\n        updated_at = granted_at\n    WHERE id = target_id;\n\n    RETURN 'replayed';\nEND\n"
 

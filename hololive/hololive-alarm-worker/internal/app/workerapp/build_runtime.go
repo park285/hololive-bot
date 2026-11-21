@@ -17,6 +17,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	alarmscheduler "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/subscriptions"
+	"github.com/kapu/hololive-alarm-worker/internal/service/eventgrade"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 	holodexproviders "github.com/kapu/hololive-shared/pkg/providers/holodex"
@@ -32,6 +33,7 @@ type alarmFoundation struct {
 	HolodexService *holodexprovider.Service
 	AlarmService   *subscriptions.AlarmService
 	Outbox         dispatchoutbox.Writer
+	EventGrades    *eventgrade.Repository
 }
 
 func failAlarmWorkerBuild(infra *sharedmodules.InfraModule, stage string, err error) error {
@@ -98,6 +100,8 @@ func buildAlarmWorkerRuntimeFromInfra(
 		return nil, failAlarmWorkerBuild(infra, stage, err)
 	}
 
+	foundation.EventGrades = eventgrade.NewRepository(infra.Postgres.GetPool())
+
 	servers, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, logger)
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, stage, err)
@@ -107,6 +111,11 @@ func buildAlarmWorkerRuntimeFromInfra(
 		servers.Metrics = sharedserver.NewMetricsServer(ctx, metricsAddr, appConfig.Server.APIKey, workerState.registry)
 	}
 
+	gradeRunner, err := buildEventGradeRunner(infra, foundation, publishConfig, logger)
+	if err != nil {
+		return nil, failAlarmWorkerBuild(infra, "event grade runner", err)
+	}
+
 	runtime = newAlarmWorkerRuntime(appConfig, logger, infra, foundation, alarmWorkerRuntimeParts{
 		scheduler:          schedulerResult.scheduler,
 		notificationEgress: notificationEgress,
@@ -114,8 +123,23 @@ func buildAlarmWorkerRuntimeFromInfra(
 		backgroundRunners:  backgroundRunners,
 		workerState:        workerState,
 	})
+	runtime.EventGradeRunner = gradeRunner
 
 	return runtime, nil
+}
+
+func buildEventGradeRunner(
+	infra *sharedmodules.InfraModule,
+	foundation *alarmFoundation,
+	publishConfig queue.PublishConfig,
+	logger *slog.Logger,
+) (*eventgrade.Runner, error) {
+	publisher, err := queue.NewPublisher(infra.Cache, foundation.Outbox, publishConfig, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build event grade publisher: %w", err)
+	}
+
+	return eventgrade.NewRunner(foundation.EventGrades, publisher, logger), nil
 }
 
 type alarmWorkerRuntimeParts struct {
@@ -200,9 +224,10 @@ func buildAlarmWorkerHTTPRuntime(
 		APIKey:                 appConfig.Server.APIKey,
 		ReadyResponder:         publicReadyHandler(ctx, readyProbe),
 		InternalReadyResponder: internalReadyHandler(ctx, readyProbe),
-		RegisterRoutes: httpapi.NewInternalRouteRegistrar(
+		RegisterRoutes: httpapi.NewInternalRouteRegistrar( //nolint:contextcheck // 설치된 Gin handler는 build context가 아니라 각 HTTP request context를 전달한다.
 			appConfig.Server.APIKey,
 			foundation.AlarmService,
+			foundation.EventGrades,
 			logger,
 		),
 	})

@@ -85,6 +85,8 @@ func buildBotInfrastructureServices(
 		appConfig, infra, planeDeps.Holodex, alarmClient, integrationServices, messageAdapter, formatter, messageStrings, irisClient, logger,
 	)
 
+	deps.EventGrades = alarmClient
+
 	return &BotInfrastructure{
 		Deps:           deps,
 		IrisRoomLister: irisClient,

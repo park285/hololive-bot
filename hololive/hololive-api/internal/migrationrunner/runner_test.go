@@ -65,8 +65,8 @@ func TestEpoch4BaselineLateFailureRollsBackAllObjectsLedgerAndPrivileges(t *test
 		t.Fatalf("rerun baseline after rollback: %v", err)
 	}
 
-	if result.Applied != 1 || result.Skipped != 0 || result.Total != 1 {
-		t.Fatalf("rerun result = %+v, want applied=1 skipped=0 total=1", result)
+	if result.Applied != len(files) || result.Skipped != 0 || result.Total != len(files) {
+		t.Fatalf("rerun result = %+v, want applied=%d skipped=0 total=%d", result, len(files), len(files))
 	}
 
 	assertReplayAuditSealed(t, pool, runtimeRole)
@@ -194,7 +194,10 @@ func TestCurrentSchemaRejectsTerminalPayloadRetention(t *testing.T) {
 func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 
-	const entries = 1
+	files, err := migrationsource.Load(migrations.FS)
+	require.NoError(t, err)
+
+	entries := len(files)
 
 	result, err := Run(t.Context(), pool, migrations.FS, Config{})
 	if err != nil {

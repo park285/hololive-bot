@@ -1,0 +1,1 @@
+ALTER TABLE event_grade_observations DROP CONSTRAINT event_grade_observations_schema_version_check

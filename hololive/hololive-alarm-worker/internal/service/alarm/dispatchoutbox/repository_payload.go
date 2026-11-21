@@ -16,6 +16,7 @@ type eventPayloadEnvelope struct {
 	SourceKind   domain.AlarmDispatchSourceKind     `json:"source_kind,omitempty"`
 	Celebration  *domain.CelebrationDispatchPayload `json:"celebration,omitempty"`
 	XSpace       *domain.XSpaceDispatchPayload      `json:"x_space,omitempty"`
+	EventGrade   *domain.EventGradeDispatchPayload  `json:"event_grade,omitempty"`
 	Version      uint8                              `json:"version"`
 }
 
@@ -115,6 +116,7 @@ func marshalEventPayload(envelope *AlarmQueueEnvelope) ([]byte, error) {
 		SourceKind:  envelope.SourceKind,
 		Celebration: envelope.Celebration,
 		XSpace:      envelope.XSpace,
+		EventGrade:  envelope.EventGrade,
 		Version:     envelope.Version,
 	}
 

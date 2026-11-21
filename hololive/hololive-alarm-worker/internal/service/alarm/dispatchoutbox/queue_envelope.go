@@ -17,6 +17,7 @@ type AlarmQueueEnvelope struct {
 	SourceKind       domain.AlarmDispatchSourceKind     `json:"source_kind,omitempty"`
 	Celebration      *domain.CelebrationDispatchPayload `json:"celebration,omitempty"`
 	XSpace           *domain.XSpaceDispatchPayload      `json:"x_space,omitempty"`
+	EventGrade       *domain.EventGradeDispatchPayload  `json:"event_grade,omitempty"`
 	ClaimKeys        []string                           `json:"claim_keys"`
 	EnqueuedAt       string                             `json:"enqueued_at"`
 	Version          uint8                              `json:"version"`
@@ -38,6 +39,7 @@ type alarmQueueEnvelopeWire struct {
 	SourceKind       domain.AlarmDispatchSourceKind     `json:"source_kind,omitempty"`
 	Celebration      *domain.CelebrationDispatchPayload `json:"celebration,omitempty"`
 	XSpace           *domain.XSpaceDispatchPayload      `json:"x_space,omitempty"`
+	EventGrade       *domain.EventGradeDispatchPayload  `json:"event_grade,omitempty"`
 	ClaimKeys        []string                           `json:"claim_keys"`
 	EnqueuedAt       string                             `json:"enqueued_at"`
 	Version          uint8                              `json:"version"`
@@ -48,6 +50,7 @@ type alarmQueueEnvelopeWire struct {
 var canonicalDispatchValidators = map[domain.AlarmDispatchSourceKind]func(*AlarmQueueEnvelope) error{
 	domain.AlarmDispatchSourceKindCelebration: (*AlarmQueueEnvelope).validateCelebrationDispatch,
 	domain.AlarmDispatchSourceKindXSpace:      (*AlarmQueueEnvelope).validateXSpaceDispatch,
+	domain.AlarmDispatchSourceKindEventGrade:  (*AlarmQueueEnvelope).validateEventGrade,
 }
 
 func (e *AlarmQueueEnvelope) SourcePayload() string {
@@ -75,6 +78,7 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		SourceKind:       wire.SourceKind,
 		Celebration:      wire.Celebration,
 		XSpace:           wire.XSpace,
+		EventGrade:       wire.EventGrade,
 		ClaimKeys:        wire.ClaimKeys,
 		EnqueuedAt:       wire.EnqueuedAt,
 		Version:          wire.Version,

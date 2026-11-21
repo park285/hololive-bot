@@ -27,6 +27,7 @@ type AlarmWorkerRuntime struct {
 	NotificationEgress  Scheduler
 	CelebrationRunner   Scheduler
 	XSpacesRunner       Scheduler
+	EventGradeRunner    Scheduler
 	ServerAddr          string
 	HTTPServers         *sharedserver.RuntimeHTTPServers
 	WorkerObservability Scheduler

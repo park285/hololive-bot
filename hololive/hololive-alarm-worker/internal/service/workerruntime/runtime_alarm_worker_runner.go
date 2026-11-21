@@ -51,6 +51,7 @@ func (r *AlarmWorkerRuntime) startBackgroundSchedulers(ctx context.Context) erro
 		{Name: "notification-egress", Scheduler: r.NotificationEgress},
 		{Name: "celebration", Scheduler: r.CelebrationRunner},
 		{Name: "x-spaces", Scheduler: r.XSpacesRunner},
+		{Name: "event-grade", Scheduler: r.EventGradeRunner},
 	}
 
 	return runNamedSchedulers(ctx, r.Logger, "alarm-worker-", runners)

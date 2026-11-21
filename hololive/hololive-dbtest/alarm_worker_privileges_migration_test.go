@@ -10,27 +10,38 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const readWriteDeleteACL = "arwd"
+const (
+	readWriteDeleteACL = "arwd"
+	insertReadWriteACL = "arw"
+)
 
 var alarmWorkerTableACL = map[string]string{
 	"public.alarm_dispatch_closeout_receipts":        "r",
 	"public.alarm_dispatch_deliveries":               readWriteDeleteACL,
-	"public.alarm_dispatch_event_collisions":         "arw",
+	"public.alarm_dispatch_event_collisions":         insertReadWriteACL,
 	"public.alarm_dispatch_events":                   readWriteDeleteACL,
 	"public.alarm_dispatch_send_units":               readWriteDeleteACL,
 	"public.alarm_room_display_names":                readWriteDeleteACL,
 	"public.alarm_upcoming_candidates":               readWriteDeleteACL,
 	"public.alarms":                                  readWriteDeleteACL,
-	"public.kakao_rooms":                             "arw",
+	"public.event_grade_borders":                     "ard",
+	"public.event_grade_catalogs":                    insertReadWriteACL,
+	"public.event_grade_chapters":                    insertReadWriteACL,
+	"public.event_grade_collection_leases":           "r",
+	"public.event_grade_consumer_offsets":            "rw",
+	"public.event_grade_observations":                "r",
+	"public.event_grade_regions":                     "r",
+	"public.event_grade_requests":                    insertReadWriteACL,
+	"public.kakao_rooms":                             insertReadWriteACL,
 	"public.members":                                 "r",
 	"public.message_strings":                         "r",
 	"public.notification_templates":                  "r",
 	"public.x_space_session":                         "rw",
 	"public.x_space_starts":                          "ard",
-	"public.youtube_community_shorts_alarm_states":   "arw",
+	"public.youtube_community_shorts_alarm_states":   insertReadWriteACL,
 	"public.youtube_content_alarm_tracking":          "rw",
 	"public.youtube_live_sessions":                   "r",
-	"public.youtube_notification_delivery":           "arw",
+	"public.youtube_notification_delivery":           insertReadWriteACL,
 	"public.youtube_notification_delivery_ledger":    readWriteDeleteACL,
 	"public.youtube_notification_delivery_telemetry": readWriteDeleteACL,
 	"public.youtube_notification_outbox":             "rwd",
@@ -44,6 +55,7 @@ var alarmWorkerSequenceACL = map[string]string{
 	"public.alarm_dispatch_events_id_seq":                   "U",
 	"public.alarm_dispatch_send_units_id_seq":               "U",
 	"public.alarms_id_seq":                                  "U",
+	"public.event_grade_requests_id_seq":                    "U",
 	"public.youtube_notification_delivery_id_seq":           "U",
 	"public.youtube_notification_delivery_telemetry_id_seq": "U",
 }

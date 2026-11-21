@@ -29,6 +29,7 @@ var alarmTypeDisplayNames = map[AlarmType]string{
 	AlarmTypeShorts:      "쇼츠",
 	AlarmTypeBirthday:    "생일",
 	AlarmTypeAnniversary: "주년",
+	AlarmTypeEventGrade:  "이벤트 등급",
 }
 
 func (t AlarmType) IsValid() bool {
@@ -36,6 +37,8 @@ func (t AlarmType) IsValid() bool {
 	case AlarmTypeLive, AlarmTypeCommunity, AlarmTypeShorts,
 		AlarmTypeBirthday, AlarmTypeAnniversary:
 		return true
+	case AlarmTypeEventGrade:
+		return false
 	default:
 		return false
 	}

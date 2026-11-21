@@ -23,6 +23,7 @@ type commandInitView struct {
 	pool                  *pgxpool.Pool
 	schedulePosters       handlercore.SchedulePosterReader
 	alarm                 handlercore.AlarmService
+	eventGrades           handlers.EventGradeRegistrar
 	matcher               *matcher.Matcher
 	membersData           domain.MemberDataProvider
 	formatter             *formatter.ResponseFormatter
@@ -43,6 +44,7 @@ func (b *Bot) commandInitView(deps *Dependencies, calendarFinder handlercore.Cel
 		pool:                  b.postgres.GetPool(),
 		schedulePosters:       schedulePosters,
 		alarm:                 deps.Alarm,
+		eventGrades:           deps.EventGrades,
 		matcher:               deps.Matcher,
 		membersData:           deps.MembersData,
 		formatter:             b.formatter,
@@ -93,6 +95,7 @@ func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []checke
 		handlers.NewUpcomingCommand(deps),
 		handlers.NewScheduleCommand(deps),
 		handlers.NewSchedulePosterCommand(deps),
+		handlers.NewEventGradeCommand(deps, v.eventGrades),
 		alarmcmd.NewAlarmCommand(deps),
 		info.NewMemberInfoCommand(deps),
 		handlers.NewBroadcastHistoryCommand(deps),

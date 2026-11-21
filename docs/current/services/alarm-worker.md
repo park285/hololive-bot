@@ -16,6 +16,16 @@
 
 Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/consumption, YouTube outbox dispatch, proactive notification egress를 담당합니다.
 
+## 이벤트 등급 알림
+
+`!이벤트등급 <점수> [jp|us|global]`은 서버를 지정하지 않으면 JP, global을 지정하면 AS를 씁니다. 명령은 게임 서버를 호출하지 않습니다. 최근 2분 안에 적용한 catalog에서 활성 상태인 일반·릴레이 마라톤 챕터가 하나일 때만 방·사용자별 점수를 등록하며, 다시 등록하면 같은 요청의 점수만 바뀝니다. 릴레이는 해당 챕터의 종료 시각을 안내합니다.
+
+worker는 게임 서버를 직접 호출하지 않고 collector c가 `event_grade_publish`로 발행한 관측(`event_grade_observations`, append-only)을 읽습니다. 지역마다 10초 주기로 `event_grade_consumer_offsets.applied_seq` 다음 순번부터 최대 50건을 적용하며, 관측 적용과 offset 전진은 한 트랜잭션입니다. 의미상 거부(알 수 없는 챕터, 잘못된 순위표, 오류 클래스 22·23)는 그 관측만 건너뛰고 offset을 전진합니다. 그 밖의 오류와 `schema_version`이 1이 아닌 관측은 해당 지역의 소비를 멈춥니다.
+
+판정은 이벤트 종료와 랭킹 공개 가운데 늦은 시각 이후에 관측한, 등록한 서버·이벤트·챕터의 마라톤 점수판 최종 컷만 씁니다. 컷과 같은 점수는 경계 동점이며, 공개 후 24시간 안에 관측한 최종 자료가 없으면 실패 결과를 보냅니다. 지역에 아직 적용하지 않은 발행(`published_seq > applied_seq`)이나 진행 중인 cutoff 수집 lease가 있으면 그 지역의 만료와 판정을 미룹니다. 그래서 기한 안에 수집했지만 기한 뒤에 적용한 최종 컷도 판정에 씁니다. 판정은 지역 advisory 공유 잠금 아래에서 하고 collector c의 발행은 같은 키의 배타 잠금을 잡으므로, 판정 도중 새 발행이 끼어들지 않습니다. 결과는 먼저 고정한 뒤 같은 요청 ID로 기존 dispatch outbox에 넣고, 문구는 worker 코드가 만듭니다.
+
+worker의 DB 권한은 이벤트 등급 canonical 테이블 쓰기, 관측·지역 상태·수집 lease 읽기, 소비 offset 갱신입니다. 관측을 쓰거나 발행 함수를 실행할 수 없습니다. 이 기능을 만드는 `002_epoch4_event_grade`는 후속 DB 변경이므로 포함한 배포는 승인된 정비 창에서 진행합니다.
+
 ## Owns
 
 - Alarm HTTP provider route registration for `/internal/alarm/*` (`internal/service/alarm/httpapi`: handler with required-field checks, route registrar; the request/response wire types are shared `pkg/contracts/alarm`)

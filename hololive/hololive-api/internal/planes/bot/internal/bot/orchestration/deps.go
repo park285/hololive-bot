@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-api/internal/service/acl"
@@ -48,6 +49,7 @@ type Dependencies struct {
 	MemberRepository      *member.Repository
 	Holodex               domain.StreamProvider
 	Alarm                 handlercore.AlarmService
+	EventGrades           handlers.EventGradeRegistrar
 	Matcher               *matcher.Matcher
 	MembersData           domain.MemberDataProvider
 	ACL                   *acl.Service
