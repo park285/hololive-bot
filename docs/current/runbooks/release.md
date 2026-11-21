@@ -23,14 +23,22 @@ image label로 합니다.
 
 1. 루트 `VERSION`을 변경하고 각 runtime artifact를 함께 릴리즈한다면 해당 runtime의
    `VERSION`도 변경합니다.
-2. `CHANGELOG.md`의 `미출시` 항목을 `## v<version> - YYYY-MM-DD` 구간으로 옮깁니다.
-3. `bash scripts/check-release-version.sh`와 전체 pre-push gate를 통과시킵니다.
-4. 검증된 commit을 `main`에 반영한 뒤 annotated tag `v<version>`을 별도 승인된 publish
-   절차로 push합니다.
+2. `CHANGELOG.md`의 `미출시` 항목을 `## v<version> - YYYY-MM-DD` 구간으로 옮기고, 이 버전과 tag가
+   붙은 최근 두 버전까지 남기고 그보다 오래된 구간은 지웁니다. 그 사이에 tag 없이 준비만 된 구간은 세지 않고 남깁니다.
+3. `bash scripts/check-release-version.sh`와 pre-push gate를 `FULL_PRE_PUSH=true`로 통과시킵니다.
+4. 검증된 릴리즈 commit을 `main`에 반영하고 반영된 `main` commit의 SHA를 기록합니다. squash 병합은 SHA가
+   달라지므로 그 commit의 tree가 검증한 tree와 같은지 확인하고, 다르면 그 commit에서 2단계부터 다시 진행합니다.
+5. 4단계에서 기록한 `main` commit에 annotated tag `v<version>`을 만들어 별도 승인된 publish 절차로 push합니다.
 
-`MAJOR`는 호환되지 않는 공개·운영·데이터 계약 변경, `MINOR`는 하위 호환 기능 추가,
-`PATCH`는 하위 호환 수정과 보안·운영 안정화에 사용합니다. 버전 관리 도입 전 이력은
-`CHANGELOG.md`의 실제 날짜·commit SHA 기준점을 유지하며 추정 버전을 소급하지 않습니다.
+버전과 tag는 실제로 배포하거나 게시할 artifact를 만들 때만 올리며 PR을 병합할 때마다 올리지 않습니다.
+병합한 변경은 `미출시`에 누적하고, 배포할 때 직전 릴리즈 이후의 변경 전체를 한 버전으로 묶습니다.
+같은 배포에서 버전을 연달아 만들지 않으며, tag 전 검증에서 찾은 결함은 같은 버전 안에서 고칩니다.
+배포 artifact가 달라지지 않는 변경(문서, 시험, CI, 개발 도구)은 버전을 올리지 않습니다.
+
+`MAJOR`는 스택 밖 사용자나 운영자가 직접 조치해야 하는 비호환 변경(공개 명령·API의 제거·의미 변경,
+되돌릴 수 없는 데이터 migration)에만 씁니다. `MINOR`는 기능 추가와 배포 순서로 맞출 수 있는 스택 내부
+계약 변경, `PATCH`는 하위 호환 수정·보안·운영 안정화·의존성 갱신에 씁니다. 단계 판단이 갈리면 낮은
+단계를 고릅니다. 지운 `CHANGELOG.md` 구간은 Git 이력과 tag에 남으며 추정 버전을 소급하지 않습니다.
 
 ### 19.2.1 의존성 수용 기준
 

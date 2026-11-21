@@ -116,7 +116,7 @@ built image needs no separate CA derivation. The PostgreSQL and Valkey runtimes 
 zlib, musl and CA bundle pins; PostgreSQL adds `brotli-libs=1.2.1-r0`, `libcurl=8.23.0-r0` and
 `nghttp2-libs=1.70.0-r0`.
 
-`./build-all.sh --build-only` builds it with `podman build` together with the other central
+`./build-all.sh --no-bump --build-only` builds it with `podman build` together with the other central
 images. For isolated local builds without runtime env inputs:
 
 ```bash
@@ -130,7 +130,7 @@ image rather than maintain a second recipe or pull the unpatched official tag.
 
 `valkey-cache` also uses a local-only owned image:
 `localhost/iris-stack-valkey:9.1.3-zlib1.4-r0` applies the same zlib, musl and CA bundle pins to the pinned official
-Valkey base. Its context is `deploy/images/valkey` and it is included in `build-all.sh --build-only`.
+Valkey base. Its context is `deploy/images/valkey` and it is included in `build-all.sh --no-bump --build-only`.
 ChatBotGo must load the same owned Valkey image for its host architecture. No official-image
 fallback or live-data mutation is performed by building these candidates.
 
