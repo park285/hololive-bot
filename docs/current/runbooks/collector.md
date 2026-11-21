@@ -1,0 +1,441 @@
+# Runbook: collector
+
+## Role
+
+`collector`는 AP fleet(`a`/`b`/`c`/`d`)의 외부 수집 런타임입니다. Holodex / Official / YouTube.js fetch, collection lease, checkpoint, observation Publish만 소유합니다. Canonical persist와 notification intent는 `hololive-api` YouTube plane이 담당합니다. `members.photo`는 hololive-api admin PhotoSync가 담당합니다.
+
+## Deploy completion contract
+
+| Host | Service | Runtime | Port | Ready | Env | DB role |
+|---|---|---|---:|---|---|---|
+| Osaka `a` | `collector-a` | host-native `hololive-collector@collector-a.service` | 30005 | `https://127.0.0.1:30005/ready` | `/etc/stack-secrets/hololive-bot/collector.env` + `collector-host.env` | `hololive_collector_a` |
+| Seoul `b` | `collector-b` | iris-seoul Podman Quadlet `hololive-collector-b.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/collector.env` | `hololive_collector_b` |
+| Central `c` | `collector` | Podman Quadlet `hololive-collector-c.service` | 30025 | `https://127.0.0.1:30025/ready` | `/etc/stack-secrets/hololive-bot/collector.env` | `hololive_collector_c` |
+| kapu `d` | `collector-d` | kapu Podman Quadlet `hololive-collector-d.service` | 30015 | `https://127.0.0.1:30015/ready` | `/etc/stack-secrets/hololive-bot/collector-d/collector.env` | `hololive_collector_d` |
+
+Completion is `scripts/deploy/ap-completion-check.sh <host>` for host-native APs and `po-central-cutover.sh <c|b> check <backup>` (issuer·collector runtime, `/ready`, post-cutover logs) for Quadlet `c`·`b`. kapu `d` is a manually installed Quadlet ([deploy/podman/kapu](../../../deploy/podman/kapu/README.md)); check `hololive-collector-d.service` health and `/ready`.
+
+## 후보 next due 힌트 전환
+
+`*_youtube_collection_candidate_next_due.sql`은 API 이미지의 `cmd/db-migrate`가 적용합니다. 중앙 `scripts/deploy/quadlet-redeploy-service.sh`는 앱 활성화 전에 해당 API 이미지로 `hololive-db-migrate.service`를 실행합니다([Quadlet 배포 계약](../../../deploy/quadlet/README.md)). collector a/b/c/d는 별도로 전환하므로 동시 교체를 전제하지 않습니다.
+
+1. 이 migration을 담은 API 이미지의 승인된 migrator를 먼저 실행하고 적용 완료를 확인합니다. 두 함수의 DROP·재정의·scraper EXECUTE 부여는 한 트랜잭션입니다. 구 collector는 `SELECT is_current, subject_key, min_interval_ms, max_interval_ms`를 명시하므로 추가된 `next_due_at`을 읽지 않으며, 기존 prepared statement도 같은 네 열을 반환합니다. 이 성질은 실제 migration 전후 같은 연결의 prepared reader 시험으로 고정합니다.
+2. 그 뒤 새 collector를 a/b/c/d에 순차 반영합니다. 새 collector를 migration보다 먼저 시작하면 `next_due_at` 열이 없어 조회가 실패하므로 순서를 뒤집지 않습니다. 기존 cadence 1000ms·profile 값은 바꾸지 않습니다.
+3. CURRENT generation 조회는 계속 수행하고, candidate 함수 호출 수와 runner별 due backlog·freshness를 비교합니다. 힌트 기반 대기는 최대 10초이고 작업 종료·generation 교체는 즉시 무효화합니다. 실제 due 발견에는 다음 1초 tick 정렬과 실행 지연이 더해질 수 있습니다.
+
+이 개정만 되돌릴 때는 collector 바이너리부터 이전판으로 복원할 수 있고 migration은 되돌리지 않습니다. 같은 이름의 정본 함수만 남기므로 새 이름·영구 호환 shim·자동 fallback·추가 retry가 없습니다. 다른 migration의 별도 drain·동시 전환 조건은 이 절차로 면제되지 않습니다. 운영 적용·배포는 별도 승인 대상입니다.
+
+## Normal status
+
+| Check | Expected |
+|---|---|
+| Health | `https://127.0.0.1:<port>/health` returns success over H3 |
+| Ready | `https://127.0.0.1:<port>/ready` returns `status=ready`, `instance_id`, helper/DB/scheduler, `first_success=true`, and processed handoff. It does not prove provider freshness. `due_jobs` is a bounded cycle count (`due_jobs_exact=false`). |
+| Logs | startup markers include PostgreSQL connection success |
+| Observation store | enabled projection target과 collection lease가 유효하면 `source_observations` / `source_observation_queue` insert |
+| Canonical tables | collector 프로세스가 canonical/notification tables를 쓰지 않음 |
+| Metrics | `:30096` on the host metrics bind |
+
+## Dependencies
+
+| Dependency | Required | Failure impact |
+|---|---|---|
+| PostgreSQL | yes; `verify-full` TLS with postgres CA | Publish fails |
+| Cache topology | no | collector startup and `/ready` do not require a cache service |
+| `hololive-api` YouTube plane | consumer persist에 필요 | collector만 기동하면 observation이 PENDING으로 남음 |
+| Iris | no | final proactive egress is owned by `alarm-worker` |
+| YouTube.js helper | yes; unique `0700` runtime dir + private UDS | `/ready` stays `not_ready` (`dependency=youtubejs`) |
+
+Helper process는 Go가 runtime directory/socket/bootstrap/shutdown을 소유하고 Node는 socket을 unlink하지 않습니다. 기동 시에는 기존 startup budget 안에서 소켓 권한과 listen 준비를 확인한 뒤 bootstrap을 한 번만 전송합니다. 정상 종료는 SIGTERM 후 drain이며 timeout에만 SIGKILL을 사용합니다. `CLEANUP_TIMED_OUT`은 fatal shutdown입니다. `/ready`는 helper health(READY), PostgreSQL queue, scheduler RUNNING, 첫 collection terminal, processed handoff를 증명하며 ongoing freshness는 `youtube_collection_freshness_seconds`가 소유합니다.
+
+Helper bootstrap은 `protocol_version`과 `limits`만 받고 upstream proxy 설정은 없습니다(`proxy` 필드는 unknown field로 거절). Collection request는 `protocol_version`과 `max_success_response_bytes`를 사용하고, success/error schema 및 HTTP status/error tuple을 strict하게 검증합니다. Unknown field, trailing JSON value, removed `proxy_url`/`max_aggregate_bytes`, 또는 불가능한 tuple은 compatibility fallback 없이 protocol mismatch입니다. RPC client disconnect는 해당 request의 upstream fetch만 취소합니다.
+
+Holodex/Official HTTP는 collector-owned `providerhttp` transport입니다. Redirect follow는 없습니다. Holodex는 path prefix, Official은 origin-only입니다. `HOLODEX_TIMEOUT_SECONDS`와 `OFFICIAL_SCHEDULE_TIMEOUT_SECONDS`가 request ceiling이며 0/음수는 기동 실패입니다. 401/403은 `CONFIGURATION`, 429와 Retry-After가 있는 503은 `COOLDOWN`입니다.
+
+Scheduler는 `COMPLETE` output을 `PublishBatch`로 terminal complete하고, `PARTIAL` output은 `PublishBatchAndDefer`로 observation publish와 same-slot defer를 한 PostgreSQL transaction에서 커밋합니다. 성공한 callback은 추가 defer/release를 실행하지 않습니다. Supervisor가 callback 반환과 동시에 cancel/renew 실패를 처리하면 join 전에 release를 시도할 수 있지만, `ACTIVE` 및 owner/fence 조건이 terminal 상태의 재변경을 거부합니다. Release API는 shutdown/renew-fail/superseded reason별 state를 제공하고 durable `last_failure_*`는 유지합니다. migration 177/189의 `legacy_collector` backfill trigger는 migration 218이 지웠으므로(2026-09-26, 트리거 이전 collector rollback 이미지 없음 확인) release transaction은 복원 단계 없이 `last_failure_*`를 건드리지 않습니다. 218은 이 collector를 배포하기 전에 중앙 `db-migrate`로 먼저 적용해야 합니다.
+
+`youtube_collection_last_success_timestamp_seconds`와 readiness의 첫 성공은 durable terminal commit을 기록하고, `youtube_collection_attempts_total`은 callback과 lease supervision을 포함한 실행 결과를 기록합니다. 따라서 commit 직후 종료·갱신 실패가 겹치면 마지막 성공 시각이 갱신된 실행도 canceled/failed attempt로 집계될 수 있습니다. 이것만으로 terminal commit의 실패나 observation 유실을 판단하지 않습니다. Renew fence loss보다 먼저 buffered callback 결과가 도착한 경우에는 기존 callback 결과 우선 계약을 적용합니다.
+
+Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 경우에만 candidate가 되며 매 cycle 무조건 enqueue하지 않습니다. Local queue FULL은 성공이 아니라 explicit `EnqueueFull`이며 해당 discovery cycle의 남은 admission을 중단합니다. Scheduler instance는 single-use입니다. Start는 NEW에서만 성공하고 Stop 또는 fatal 이후 STOPPED instance는 재사용하지 않습니다. fatal은 first-wins이며 명시적으로 분류된 INTERNAL/PROTOCOL 오류와 runner panic·result invariant·불가능한 queue 상태가 대상입니다. Ordinary provider failure, timeout, cooldown, parser drift는 fatal이 아닙니다. 호출 코드가 durable 계약 밖 code/class tuple을 만들면 code 기본 class로 수리하지 않고 미분류 `collection_internal_invariant`/`INTERNAL`로 지연 처리하며, 원래 tuple은 진단 detail에 남고 `youtube_collection_invalid_failure_tuple_total{provider,kind}`가 위반을 셉니다(stack-audit 2026-09-26 T11). 이 counter가 0이 아니면 collector 코드 결함입니다.
+
+Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 못했다는 뜻입니다. 종료한 callback의 자체 deadline은 해당 cancel/renew/fence 결과의 원인으로 남으며 join timeout으로 분류하지 않습니다. Lease supervision timeout만으로 process fatal을 보고하지 않는 기존 정책을 유지하지만, 함께 보존된 classified fatal 오류는 보고합니다. 위의 helper process `CLEANUP_TIMED_OUT`과 같은 종료 정책으로 해석하지 않습니다.
+
+## Live metadata contract
+
+현재 `live_snapshot` producer 계약은 Holodex generation `2`, YouTube.js generation `3`입니다. generation `2`는 identity/status/time에 optional `title`, `topic_id`, `thumbnail_url`을 더하며, YouTube.js generation `3`는 query별 관측 근거를 추가합니다. 2026-10-06 구형 YouTube.js generation `2` 저장 관측의 안전한 폐기를 완료했으며 API는 이 세대를 더 이상 지원하지 않습니다. 공유 generation `2` decoder는 현행 Holodex 계약에 사용합니다.
+
+- API는 generation `1` 관측을 unsupported contract로 거부합니다. generation `1` 제거 조건은 2026-09-26 T18에서 당시 current generation `2`와 미처리 generation `1` 관측 0건으로 확인했습니다.
+- collector는 DB current generation이 Holodex `2` 또는 YouTube.js `3`이라는 provider별 계약과 다르면 `configuration_error/CONFIGURATION`으로 수집을 끝내고 다른 형식을 내보내지 않습니다.
+- 새 generation을 도입할 때는 API-first(API가 두 generation을 모두 지원) → DB generation 전환(별도 운영 승인) → collector 배포 순서를 지킵니다.
+
+## Live absence evidence activation
+
+방송 부재 근거 수집을 위한 로컬 준비 산출물은 migration 218(새 kind·가용성/채널 확인 저장소), 219(구 LIVE coverage 부분 인덱스 제거), 220(표준 Count 0 문구)입니다. 아직 운영 적용·배포·fleet 활성화 승인이 아닙니다.
+
+1. 승인된 릴리스 계획에서 기존 API reader와 collector의 drain/교체 창을 정합니다. 218의 저장소와 두 새 kind decoder/claim/target을 갖춘 API를 collector보다 먼저 준비합니다. `live_snapshot` 기존 generation은 변경하지 않고 새 kind만 generation 1로 시작합니다.
+2. 219는 구 LiveQuery가 더 이상 211 인덱스를 쓰지 않는 전환 시점에 적용합니다. 전체 manifest를 한 번에 적용하려면 구 API reader를 중단한 승인된 교체 창에서 migration → 새 API 순서를 지킵니다. 실행 중 구 API에서 인덱스를 먼저 지워 1초 예산을 훼손하지 않습니다. 212의 scheduled_for 인덱스는 유지합니다.
+3. API의 두 kind consume, 5초 target refresh, stale LIVE 영상 target과 freshness clock을 확인한 뒤 새 Go binary와 helper를 같은 bundle로 collector fleet에 반영합니다. `channel_live_check` target이 없는 상태에서 새 channel job을 먼저 활성화하면 exact-subject acquisition이 실패합니다.
+4. 새 evidence retention 기본값은 각 7일입니다. `YOUTUBE_PLANE_RETENTION_CHANNEL_LIVE_CHECK_DAYS`, `YOUTUBE_PLANE_RETENTION_VIDEO_LIVE_CHECK_DAYS`는 API 설정이며 기존 production positive-age/승인 검증을 따릅니다. 74채널·2분이면 채널 확인은 하루 53,280건입니다. 운영 storage/WAL·재수집 부하와 generation 전환으로 폐기되는 in-flight를 비교합니다.
+
+분리 job 계약은 공유-job collector와 혼합 실행하지 않습니다. 기존 공유-job collector를 먼저 drain/중지하고 API의 snapshot-only `youtubejs_channel_live` 및 check-only `youtubejs_channel_live_check` 계약을 반영한 뒤 새 collector를 시작합니다. 미배포 로컬 준비물에는 추가 schema migration이 필요하지 않습니다. 이미 공유-job 버전을 사용한 환경이라면 마지막 채널 확인 슬롯과 겹치는 최초 독립 슬롯의 duplicate/collision 가능성을 전환 계획에서 확인하고, 다음 독립 cadence의 새 관측까지 coverage를 검증합니다. 기존 관측·lease·pending을 임의 삭제하지 않습니다. 롤백도 양쪽 collector를 동시에 발행시키지 않도록 같은 drain 경계를 지킵니다.
+
+롤백은 새 collector의 발행을 먼저 멈추고 새 kind 큐·재처리 요구를 확인합니다. 새 decoder가 필요한 backlog가 있으면 해당 API decoder를 유지하며, 새 canonical/evidence/pending을 삭제하지 않습니다. 219 적용 뒤 구 API로 돌아가려면 구 query의 인덱스 재준비까지 승인된 롤백 절차에 포함해야 합니다. 220은 사용자 지정 본문과 채널 override, 멤버 지정 안내를 건드리지 않습니다.
+
+운영 비교 관측은 별도 승인 뒤 수행합니다: 멤버 한정 LIVE와 음성 /live의 공존, 동시 방송·최초공개 표시, 로봇/비공개/삭제 UNKNOWN 수와 stale LIVE 차단, 유효 endTimestamp와 canonical ended_at 일치, 가용성 만료·재확인 실패 뒤 차단 복원, target 생성/제거 지연과 1초 query 예산. `isPrivate=true`를 포함하는 익명 응답과 실제 로봇 응답은 로컬 실측을 완료했다고 간주하지 않습니다.
+
+
+## Collection membership·video novelty cutover
+
+이 개정은 migration 259/260과 API·collector/helper의 로컬 준비물입니다. 운영 DB 적용·배포·관측 설정 활성화 승인을 대신하지 않습니다. worker `1942a78af`와 API retention `43a5c57a1`의 변경을 보존합니다.
+
+1. 승인된 중단 창에서 기존 collector 전체와 YouTube consumer/target refresh를 drain합니다. 259는 구 generation-lock 함수를 제거하며 260은 video-list current generation을 2로 전환하므로 구 runtime을 실행한 채 전체 manifest를 적용하지 않습니다. 다른 세션의 migration 258은 이 변경에 임의로 포함하지 않습니다.
+2. DB 복구점과 실제 manifest 상태를 확인한 뒤 승인된 migration을 적용하고 새 API를 시작합니다. CURRENT guard·연속 membership·`not_before`가 포함된 유효 projection과 generation 1/2 reader를 먼저 확인합니다. 기존 lease의 fail-closed 기본 scope는 새 취득 때 갱신합니다. 과거 관측·pending·canonical·발송 이력을 삭제하거나 replay epoch를 변경하지 않습니다.
+3. 새 collector와 helper를 같은 bundle로 a/b/c/d에 반영합니다. 무관한 projection 교체 중 수락 유지, 자기 대상 변경 거부, 실제 checkpoint 전진·consumer 처리·신규성 억제를 확인합니다. 첫 기준 목록과 근거 부족 영상은 알리지 않으며 보존 이력의 자동 backfill은 하지 않습니다.
+4. 새 metric 수집 뒤 비활성 observability worktree의 규칙과 alert-log를 별도 승인으로 반영합니다. 실제 rule 발화·Alertmanager 전달·휴대전화 수신을 구분합니다. 격리 Grafana/Prometheus 검증은 휴대전화 도달 증거가 아닙니다.
+
+이 경계에서는 이전 image만 복원하는 일반 rollback을 사용하지 않습니다. 새 발행을 멈춘 뒤 generation 2 backlog/replay가 남아 있으면 해당 API decoder를 유지해야 합니다. 구 lock 함수·계약 세대 복원은 별도 검증·승인된 DB 절차가 필요하며 관측 데이터를 버리는 방법으로 맞추지 않습니다. 중간 호환 artifact를 실제로 준비·검증하지 않은 상태에서 무중단 단계적 전환을 보장하지 않습니다.
+
+## Collector DB 계정 분리 컷오버
+
+수집기는 slot마다 `hololive_collector_a`~`d`로 접속하고, `hololive_scraper`는 migration grant를 담는 NOLOGIN 그룹으로만 남습니다. migration 028·030의 trigger는 수집기 세션(`session_user`)을 `collector-<slot>`에 묶습니다. 수집기가 lease owner와 provenance·collision에 쓰는 값은 `<instance>:<token>`이며 `:` 앞부분으로 instance를 판정합니다. 다음을 SQLSTATE `42501`로 거부합니다: 만료 전인 다른 slot lease의 변경·인수, 다른 instance 이름의 lease·provenance·collision 기록, 자기 ACTIVE lease의 fence·projection generation과 맞지 않는 관측·queue 기록. `hololive_scraper` 로그인과 그 그룹에 속하지만 slot에 매핑되지 않은 로그인도 같은 표에 쓰지 못합니다. runtime·migrator·superuser 세션은 검사하지 않습니다.
+
+이 경계가 막지 않는 것도 있습니다. 한 slot의 계정을 가진 쪽은 자기 이름으로 새 lease 행(다른 `job_key`, 같은 subject 포함)을 만들고 그 lease로 target 관측을 쓸 수 있습니다. 관측의 subject·kind가 lease membership에 드는지는 앱만 확인합니다. owner가 없는 다른 lease(IDLE·DEFERRED)의 일정 열 변경, checkpoint와 payload 기록도 slot에 묶이지 않습니다.
+
+0. 운영 DB에서 `SELECT member::regrole FROM pg_auth_members WHERE roleid = 'hololive_scraper'::regrole`로 그룹 멤버를 확인합니다. 수집기 네 계정 말고 superuser가 아닌 멤버가 있으면, 그 계정은 028 이후 lease·관측 표에 쓰지 못하므로 먼저 정리합니다.
+1. stack-platform-ops로 `HOLOLIVE_COLLECTOR_A_PASSWORD`~`HOLOLIVE_COLLECTOR_D_PASSWORD`, `HOLOLIVE_ALARM_WORKER_PASSWORD`, 새 `HOLOLIVE_DB_PASSWORD`를 준비합니다. 모두 서로 다르고 `DB_PASSWORD`와도 달라야 하며, 하나라도 겹치면 db-migrate가 역할을 바꾸기 전에 실패합니다. 중앙 `quadlet-prestart`는 `holo-postgres`·`hololive-db-migrate`에 이 값 모두를, collector c에 `C`를, alarm-worker에 worker 값을 필수로 요구합니다. 값 없이 새 unit을 설치하면 `holo-postgres` 재시작도 실패합니다. AP는 a(Osaka host-native), b(iris-seoul), d(kapu)에 자기 slot 값만 둡니다.
+2. 계정 분리는 현재 [transaction pooler 최초 전환 절차](../../../deploy/quadlet/README.md#최초-운영-전환)와 함께 수행합니다. 같은 release의 HBA·CA mount·방화벽·앱 endpoint를 정합화하고 필요한 DB 재시작은 별도 승인받습니다. 공용 `hololive_scraper`의 새 로그인은 거부합니다. AP a·b·d는 `100.100.1.8:6433`의 frontend에서 자기 tailnet source로 판정되고, PostgreSQL에는 pooler의 `172.23.255.254`가 보입니다. 운영에서는 frontend source와 backend 역할을 각각 확인하며 PostgreSQL의 `client_addr`가 AP 주소여야 한다고 요구하지 않습니다.
+3. migrator image를 포함한 중앙 재배포로 `hololive-db-migrate`를 실행합니다. db-migrate는 migration 전에 `hololive_scraper`를 `NOLOGIN CONNECTION LIMIT 0 PASSWORD NULL`로 바꾸고 남은 `hololive_scraper` 세션을 모두 끊은 뒤, 네 collector 계정(연결 한도 7·그룹 멤버십), `hololive_alarm_worker`(한도 8), `hololive_runtime`(한도 17, 마지막) 순서로 LOGIN·SCRAM 비밀번호를 맞춥니다. 비밀번호가 하나라도 없거나 겹치면 역할을 바꾸기 전에 실패합니다. 그다음 migration 028·029·030을 적용합니다. 같은 재배포로 `hololive-api`가 새 비밀번호로 올라오면 바로 alarm-worker를 재배포합니다([alarm-worker runbook](alarm-worker.md)).
+4. 이 시점부터 새 계정으로 다시 배포하기 전까지 모든 collector의 수집이 멈춥니다. c는 `po-central-cutover.sh c`, b는 같은 release의 c 다음, a는 host-native 배포, d는 kapu Quadlet 절차로 반영합니다.
+5. `SELECT usename, count(*) FROM pg_stat_activity WHERE usename IN ('hololive_scraper','hololive_collector_a','hololive_collector_b','hololive_collector_c','hololive_collector_d','hololive_alarm_worker','hololive_runtime') GROUP BY 1`에서 `hololive_scraper`가 없고 반영한 slot과 worker마다 연결이 있는지, 각 `/ready`와 lease `owner_instance` 분포를 확인합니다.
+
+bootstrap은 migration보다 먼저 실행됩니다. 028 적용이 실패하면 공용 계정은 이미 막혔고 trigger는 없는 상태로 남으므로, 원인을 고쳐 db-migrate를 다시 실행합니다. 되돌리기는 fix-forward만 가능합니다. 이전 revision의 collector는 `hololive_scraper`로 접속하며, 028이 있는 DB에서는 그 세션이 lease와 관측을 쓰지 못합니다. 028은 되돌리지 않습니다.
+
+## Key environment variables
+
+| Env | Purpose | Required |
+|---|---|---|
+| `SERVER_PORT` | per-host H3 port | yes |
+| `METRICS_API_KEY` | H3 internal routes and non-loopback `/metrics` authentication | production yes |
+| `STACK_WORKER_PROFILE_FILE` | slot-specific strict `hololive/collector` profile; `collection.executor.enabled` owns worker enablement | yes |
+| `COLLECTOR_RUNTIME_ALLOWED=true` | must be true only on collector hosts | yes |
+| `COLLECTOR_INSTANCE_ID` | fleet identity `collector-a/b/c/d` | yes |
+| `POSTGRES_USER=hololive_collector_<slot>` | slot-bound lease/observation identity | yes |
+| `POSTGRES_SSLMODE=verify-full` | required client verification | yes |
+| `HOLODEX_TIMEOUT_SECONDS` | Holodex request ceiling; must be positive | yes |
+| `OFFICIAL_SCHEDULE_TIMEOUT_SECONDS` | Official Schedule request ceiling; must be positive | yes |
+| `COLLECTOR_READINESS_TIMEOUT_SECONDS` | `/ready` total probe budget; default 2s stays below the 5s healthprobe ceiling | yes |
+| `COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS` | helper health probe inside the readiness budget; default 1s | yes |
+| `COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES` | successful provider response ceiling | yes |
+| `COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS` | per-request YouTube.js ceiling; default 30s | yes |
+
+Worker count, local queue capacity and fixed `queue.max_age`, acquisition cadence/batch, lease/renew/cleanup/publish budgets, retry/jitter, and provider in-flight limits are required fields of the `collection` profile. The runtime rejects their retired environment-variable forms instead of translating them.
+
+로컬 대기 시간이 `collection.queue.max_age.milliseconds`를 넘으면 lease 취득 전에 해당 항목을 버리고 다음 항목을 처리합니다. 경고와 stale discard를 기록하고 중복 방지 표식을 해제하므로 다음 discovery에서 다시 후보가 될 수 있습니다. 아직 lease를 취득하지 않았으므로 DB complete/defer/release는 수행하지 않습니다. `--check-worker-profile`은 runtime과 같은 profile 수치 정책(TTL 최대 30분 등)·환경 관계·DB 옵션을 검사하므로 runtime 환경 파일과 로컬 CA를 제공해야 합니다. 연결·listener·worker는 만들지 않으며 성공이 원격 TLS·권한·pooler 호환성을 증명하지는 않습니다.
+
+### 수집 처리량과 대상 신선도
+
+`iris_stack_worker_in_flight / iris_stack_worker_configured_workers`는 작업 슬롯 점유율입니다. CPU 사용률이 아니며, provider admission과 YouTube.js 호출 제한 대기도 포함합니다. AP별 `COLLECTOR_REQUEST_INTERVAL_SECONDS`는 **helper RPC 전체가 공유하는 간격**입니다. 정본은 코드 기본값 1초(`internal/config/config.go`, AP 한 대 초당 1 RPC, fleet 명목 상한 초당 4 RPC)이며 운영 AP 4대는 override하지 않습니다. 바꿀 때는 기본값을 고치고, 한 AP만 달라야 할 때에만 그 AP의 env에 키를 둡니다. 119채널 roster와 job cadence는 이 override로 바뀌지 않습니다. 워커 수만 늘려 이 상한을 늘릴 수 없습니다. 한 RPC가 외부 HTTP 요청 여러 번을 수행할 수 있으므로 외부 API 호출량과 동일시하지 않습니다. 단, live 채널 RPC는 helper가 보고한 예정 영상 player 조회 수만큼 RPC 뒤에 같은 limiter 슬롯을 하나씩 지불하므로, 슬롯 소비와 `operation="channel"`의 `rate_limit` phase count는 RPC 수가 아니라 RPC와 조회 지불의 합입니다.
+
+- `youtubejs_rpc_phase_duration_seconds{operation,phase,outcome}`: `rate_limit` 대기와 `helper` 수행·응답 해석을 분리한 histogram. helper 내부의 외부 응답·파싱 시간은 합산입니다. operation은 community/content/channel/unknown, outcome은 success/timeout/canceled/error입니다.
+- `youtubejs_rpc_phase_in_flight{operation,phase}`와 `youtubejs_rpc_request_interval_seconds`: 현재 기다리는 호출, 수행 중인 호출과 설정된 호출 간격입니다. helper phase count는 제한을 통과한 RPC 시도 수입니다.
+- `hololive_db_pool_*{pool="collector"}`: collector DB pool의 획득 횟수·대기·빈 pool 대기와 상태별 연결 수, 최대 연결 수입니다. 이름과 해석은 [hololive-api runbook](hololive-api.md#db-poolyoutube-plane-db-슬롯-지표)과 같습니다.
+- `hololive_http_client_requests_total{client="holodex"|"hololive_official",code,method}`, `hololive_http_client_request_duration_seconds{client,method}`: provider HTTP 요청의 상태 코드별 수(응답 없음은 `code="error"`)와 응답 헤더까지의 지연입니다. `youtube_collection_attempts_total`이 job 단위라면 이 지표는 HTTP 요청 단위입니다. youtube.js helper 호출은 포함하지 않습니다. 해석은 [hololive-api runbook](hololive-api.md#외부-http-호출-지표)과 같습니다.
+- `youtube_collection_duration_seconds`: 15/30/60/120/300초 버킷까지 포함합니다. 기존 10초 상한을 넘는 content job의 p95를 10초로 해석하지 않습니다. 롤링 배포 중에는 AP별 histogram을 확인하고 모든 AP가 같은 버킷으로 전환되기 전 fleet 합산 quantile을 해석하지 않습니다.
+- API가 노출하는 `hololive_youtube_collection_*`: 현재 유효한 projection의 enabled target을 community/content/channel-live/channel-live-check/channel-metadata/video-live 여섯 작업으로 묶어 집계합니다. `targets`, `stale_targets`, `never_completed_targets`, `due_targets`, `oldest_completion_age_seconds`, `oldest_due_age_seconds`, `required_rpc_rate`를 함께 확인합니다. `not_before`가 미래인 영상 확인은 잠든 membership이며 stale/due 수요로 세지 않습니다. due는 lease와 eligibility 중 늦은 시각을 따르고, lease가 없으면 세대가 바뀌어도 보존한 논리 target 생성 시각을 사용합니다. baseline RPC 수요는 retry·publication enrichment를 포함하지 않습니다. 퇴역 viewer 작업의 과거 lease·지표는 현재 수요에 포함하지 않습니다.
+- `hololive_youtube_collection_live_states{state}`와 `live_state_review_targets{reason}`는 현재 유효한 `live_snapshot` 채널 대상에 속한 서로 다른 영상 중 head 또는 서비스 상태가 LIVE/UPCOMING인 집합을 진단합니다. 상태는 head 기준이며 missing/그 밖의 상태는 other입니다. 양방향 상태 불일치를 포함하고, 채널 식별자가 없는 head-only 항목과 양쪽 모두 종료된 이력은 제외합니다. state_mismatch, scheduled_before_now, scheduled_overdue_7d는 겹칠 수 있으며 종료 증거가 아닙니다.
+
+API 집계는 claim 전달과 독립적인 관측 loop에서 최대 30초마다, DB admission을 포함해 1초 예산으로 실행합니다. 실패·유효 projection 부재는 `hololive_youtube_collection_snapshot_success=0`이며 이전 숫자와 마지막 성공 시각을 보존합니다. 성공 지표가 1이고 마지막 성공이 120초 이내일 때만 대상 숫자를 현재값으로 사용합니다. 기존 `youtube_collection_freshness_seconds`는 해당 provider/kind 중 마지막 성공 하나의 경과이며 전체 대상의 신선도를 보장하지 않습니다.
+
+Bot Drilldown의 수집 처리량 섹션과 `HololiveCollectionSnapshotUnavailable`, `HololiveCollectionTargetsStale`, `HololiveCollectionCallBudgetPressure`, `HololiveCollectionLiveStateMismatch`를 확인합니다. 명목 수요가 가동 AP 상한의 85%를 10분 넘게 사용하면 대상·주기·장애 시 여유를 검토합니다. 이 경계값은 초기 운영 기준이며 수집 정책을 자동 변경하지 않습니다. 관측 배포는 API와 AP 계측을 먼저 검증하고 Grafana 생성물·경보를 반영합니다.
+
+`youtube_observation_accept_interval_seconds`는 실제 checkpoint가 전진한 수락 간격이며 첫 표본·중복·collision·정상 empty completion과 구분합니다. 마지막 수락 gauge만으로 탭 부재를 장애로 판정하지 않습니다. publish superseded 비율은 empty를 제외한 전체 publish 결과를 분모로 하며 publish 이전 폐기는 포함하지 않는 하한입니다. 여섯 작업의 due/stale·필수 metric 부재와 실제 RPC admission pressure를 함께 확인합니다. 85% admission은 여유 부족 신호이지 완전 포화나 재시도 포함 총 수요의 측정값이 아닙니다.
+
+Collector loader와 Quadlet·native 정의는 canonical env만 읽습니다. `COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS`와 `COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES`가 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
+
+### Viewer 저장소 완전 제거
+
+시청자 표본의 생산·소비·재처리와 payload 계약은 제거되었습니다. Migration 306은 승인된 다섯 제품 테이블(`youtube_live_viewer_samples`, `youtube_live_viewer_sample_heads`, `youtube_live_viewer_sample_evidence`, `youtube_stream_stats`, `youtube_channel_latest_stats`)을 영구 삭제합니다. 구형 reader·consumer를 위한 호환 경로는 없습니다.
+
+검증된 동일 revision의 중앙 이미지와 모든 AP bundle을 준비한 뒤 API·alarm-worker·모든 collector를 완전히 정지하고 in-flight 작업의 종료를 확인합니다. 그 상태에서 `db-migrate`로 migration을 적용하고 동일 새 revision으로 fleet을 재시작합니다. 구형 API나 AP를 먼저/부분적으로 복원하는 롤백은 허용하지 않습니다. 삭제된 제품 이력 복원이 필요하면 별도 승인된 DB 복구와 대응 revision이 필요합니다.
+
+Migration은 예상 밖 `viewer_sample` 원본·payload·replay·충돌·projection/subject-head 이력, 활성 전용 lease 또는 공유 lease의 구 viewer membership을 발견하면 삭제 전에 실패합니다. 큐나 재처리를 완료한 것처럼 표시하지 말고 잔여 의무를 검토합니다. guard를 통과하면 퇴역 kind의 checkpoint·consumer offset과 비활성 전용 lease 및 contract 등록행만 정리합니다. 다른 kind의 `CURRENT`/`STAGING`, 활성 lease, queue/replay와 수집 주기는 유지합니다.
+
+검증은 migration의 비어 있지 않은 승인 테이블 삭제·재적용, 잔여 의무에서 원자적 실패, 남길 방송 수집·queue/replay 보호, schema snapshot 및 collector/API/공유 계약 회귀를 포함합니다. 별도 Holodex Go Stream API의 `viewer_count`와 Twitch/Chzzk 데이터는 제거 대상이 아닙니다. Fallback delta: none.
+
+## YouTube.js transient recovery
+
+HTTP `429`는 fetch transport에서 응답 body를 폐기한 뒤 기존 `cooldown/COOLDOWN` RPC로 전달합니다. youtubei.js가 status 없는 `InnertubeError`로 바꾸어 내부 치명 오류로 오분류하지 않도록 합니다. 즉시 재전송은 없으며 기존 collection profile의 default same-slot defer를 사용합니다. 응답 body나 URL을 오류 메시지에 넣지 않습니다. Provider rate limit 자체의 해소나 성공 관측을 뜻하지 않습니다.
+
+기존 feed의 YouTube.js transport는 `https://www.youtube.com/youtubei/v1/{browse,next,player}`의 `POST`만 읽기 전용 재전송 대상으로 봅니다. 알려진 transient network code 또는 HTTP `500`, `503`이 발생하면 `100`~`300ms` jitter 뒤 정확히 한 번 재시도하므로 총 시도 수는 최대 2회입니다. 재생할 수 없는 request body, 다른 host/path/method, HTTP `429`, `501`, `502`, `504`와 그 밖의 status, parser/protocol failure에는 transport retry를 적용하지 않습니다. 새 channel/video live check RPC는 이 정책을 사용하지 않고 단일 시도·redirect 거부 transport를 사용합니다. 기존 feed의 두 번째 시도 실패는 typed failure와 scheduler defer 계약을 유지합니다.
+
+각 추가 시도는 `youtubejs_upstream_retry_scheduled` INFO event에 endpoint, trigger, delay, attempt를 기록합니다. 같은 시간대의 `YouTube collection job failed` WARN이 없으면 transport 안에서 복구된 것이며, WARN이 이어지면 bounded retry가 소진된 것입니다. 배포 후 24시간 동안 exhausted `collection_failed` 비율이 감소하지 않거나 `429`, request timeout, upstream request volume이 증가하면 이 정책을 재검토합니다.
+
+## YouTube.js live schedule metadata
+
+Channel RPC의 필수 `kind=live|metadata`가 수집 범위를 지정합니다. live 작업은 streams/player만, metadata 작업은 about과 채널 정보만 조회하므로 일정 접근 제한이 통계·프로필·사진 수집을 중단시키지 않습니다. 변경된 Go binary와 Node helper는 같은 bundle로 교체합니다.
+
+Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 helper가 같은 video ID의 raw `/player`를 순차 조회합니다. 목록 시각이 있으면 상세 조회는 0회이며, 누락된 고유 UPCOMING video ID당 1회, 한 channel collection당 최대 32회입니다. `LIVE`, `ENDED`는 schedule 보강 대상이 아닙니다. streams 목록에는 취소를 나타내는 구조화된 표시가 없어 helper는 `CANCELLED` 행을 만들지 않습니다. 이 횟수는 transport의 transient 재시도 전 논리 요청 수이며, `/player`의 총 transport 시도는 위 정책에 따라 각 요청당 최대 2회입니다.
+
+helper는 같은 채널·video ID의 player 예정 시각을 프로세스 메모리(`schedule-cache.mjs`, 최대 512건)에서 재사용합니다. Go는 live 요청에 lease 슬롯 시각 `scheduled_for`를 싣고, helper는 확인한 슬롯을 함께 기록합니다. 재사용한 행에는 그 슬롯 시각을 `schedule_observed_at`으로 싣습니다. API reducer는 이 시각으로 저장된 `schedule_observed_at`과 비교하므로, 다른 AP나 provider가 그 뒤에 관측한 새 일정을 옛 일정으로 되돌리지 않습니다. 재사용 행이 더 늦은 슬롯으로 상태 시계를 먼저 올린 뒤 앞 슬롯의 실제 확인이 늦게 도착해도, reducer는 그 관측의 상태는 버리되 일정은 확인 시각으로 비교해 반영합니다.
+
+재사용 조건은 다음과 같습니다.
+- 목록이 그 영상을 여전히 시각 없는 `UPCOMING`으로 보이고, 더 앞선 슬롯에서 확인한 값만 재사용합니다.
+- 재사용 기간은 남은 시간의 1/6(5~10분)이고 시작 30분 전에 끝납니다. 따라서 시작까지 30~35분 남은 영상은 5분보다 짧게 재사용합니다.
+- 시작 30분 이내·시작 시각 경과·player `LIVE` 판정·접근 제한·오류는 재사용하지 않아 매 poll 다시 조회합니다. 같은 슬롯 재시도의 조회가 실패해도 이후 슬롯은 다시 조회합니다. 단, 같은 슬롯의 다른 요청이 성공해 기록한 결과는 재사용합니다.
+- 목록이 시각이나 다른 상태를 직접 보이면 해당 항목을 무효화합니다.
+- helper는 채널마다 시작한 가장 늦은 슬롯을 기록하고, 그보다 앞 슬롯의 조회 결과는 저장하지 않습니다. 그래서 겹친 요청에서 늦게 끝난 앞 슬롯의 조회가 그 뒤 슬롯의 무효화나 임박·`LIVE` 재확인을 되돌리지 못합니다. 이 기록은 채널당 하나이며, 상한 512개를 넘으면 오래된 채널부터 지웁니다. 기록이 지워진 채널은 다음 슬롯이 시작될 때까지 조회 결과를 저장하지 않습니다.
+
+재사용 중에는 canonical `schedule_observed_at`이 나아가지 않습니다. 상한 10분은 알람 checker(UPCOMING 관측 15분 이내)의 최신성 창 안에 fleet의 마지막 실제 확인을 남기기 위한 값입니다. 늘리려면 이 창을 함께 검토합니다. 먼 예정 영상의 일정 변경은 이 AP에서 최대 10분 늦게 보일 수 있습니다.
+
+재사용한 행은 `schedule_lookups`에 세지 않으므로 limiter slot을 지불하지 않습니다. 캐시는 AP·helper 재시작마다 비어 시작합니다. 32건 후보 상한은 재사용 여부와 무관하게 후보 전체에 적용합니다.
+
+**배포·롤백 순서:** `schedule_observed_at`을 모르는 API는 이 필드가 있는 live snapshot을 claim 단계에서 `invalid_payload`로 dead letter 처리합니다.
+- 배포는 hololive-api(shared 계약 포함)를 먼저 하고, collector를 나중에 합니다.
+- 롤백은 collector를 먼저 되돌린 뒤 API를 되돌립니다. API를 되돌리기 전에, 새 collector가 발행한 live snapshot이 모두 claim되어 처리됐는지(미처리 0) 확인합니다. 남은 관측은 옛 API가 dead letter 처리합니다.
+
+로컬 adapter는 응답 성공 상태, 요청과 정확히 같은 `videoDetails.videoId`, 존재하는 live/upcoming boolean을 검증합니다. 예정 시각은 RFC3339 `microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp`를 우선 사용하고, 이 값이 없으면 동일 video ID의 `playabilityStatus.liveStreamability.liveStreamabilityRenderer.offlineSlate.liveStreamOfflineSlateRenderer.scheduledStartTime` epoch seconds를 사용합니다. 두 값이 모두 있으면 같은 시각이어야 합니다. 표시 문자열은 사용하지 않습니다. Content 목록은 helper 내부에서 player를 추가 호출하지 않습니다. Go content runner가 별도로 제한된 video-live-check RPC를 호출하여 `isUpcoming=true`, `isLiveContent=false`와 검증된 예정 시각을 신규 최초공개 근거로 사용합니다.
+
+접근 제한 예외는 `UNPLAYABLE`과 `errorScreen.playerLegacyDesktopYpcOfferRenderer`, 정확한 video ID, `isUpcoming=true`, `isLiveContent=true`가 확인되며 두 예정 시각이 모두 없는 경우에만 적용합니다. 해당 행은 `unavailable_live_sessions`의 ID·채널·`access_restricted` 사유로 분리하고 helper가 `youtubejs_live_schedule_unavailable` WARN에 공개 식별자와 사유를 기록합니다. 번역된 가입 안내문으로 분류하지 않습니다. 멤버십 영상에도 기계가독 시각이 있으면 정상 수집합니다.
+
+제한 목록은 중복·정상 sessions와의 중첩·다른 채널·미지 사유를 거부하며 최대 32개입니다. Go adapter는 유효 sessions만 `PARTIAL` live observation으로 발행하고 해당 poll을 완료합니다. 제한 행만 남은 빈 sessions도 PARTIAL입니다. 다음 기존 poll에서 다시 관측하며 추가 재시도·별도 provider·과거 시각 재사용을 하지 않습니다. 제한 영상의 canonical 상태와 마지막 확인 시각은 갱신하지 않습니다. PARTIAL의 부재는 종료·취소 근거가 아니며 개별 영상의 명시적 종료는 기존 consumer 규칙으로 처리합니다.
+
+`youtube_collection_completeness_total{provider="youtubejs",kind="live_snapshot",completeness="PARTIAL"}`와 위 WARN을 함께 확인합니다. poll 성공·readiness·freshness는 모든 영상의 일정 확보를 뜻하지 않습니다. helper WARN은 원천 관측 기록이며 실제 발행 여부는 observation publish 결과로 확인합니다. Collector 팀이 이 예외를 소유하며 renderer 변경 또는 다른 접근 제한의 독립 재현 근거가 생기면 범위를 재검토합니다.
+
+32개 후보 초과, identity/schema/time drift, 미지의 UNPLAYABLE 또는 위 접근 제한에 해당하지 않는 시각 부재는 terminal `parser_drift`입니다. 해당 collection은 observation과 checkpoint를 저장하지 않습니다. `youtube_collection_attempts_total`과 bounded `YouTube collection job failed` 로그로 판정합니다. 목록과 player 사이에 `LIVE`가 확인되거나 처음부터 `LIVE`로 발견된 방송은 예정 시각을 만들지 않고 정상 live catch-up 경로를 유지합니다.
+
+`youtubei.js@18.3.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, `src/live-check.test.mjs`, 전체 helper test와 typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 원시 Actions 접근 제거로 장애 수정이 막히거나 어댑터 밖의 상위 파서 지연이 독립적으로 두 번 확인될 때만 전체 포크나 벤더링을 재검토합니다.
+
+## Isolated PO Token lifecycle
+
+정상 PO Token 발급은 trusted helper의 네트워크 controller와 별도 격리 issuer로 나눕니다. `bgutils-js 4.0.3` / `jsdom 31.0.1` interpreter는 collector/helper 안에서 실행하지 않습니다. native issuer는 `RootDirectory`·`DynamicUser`·`PrivateNetwork`·`AF_UNIX`로, Quadlet(b·c·d) issuer는 별도 non-root/read-only/network-none 컨테이너로 실행합니다. 상한은 512MiB, PID 32, CPU 1 core이며 앱 비밀·DB·helper socket을 공유하지 않습니다.
+
+- issuer는 요청을 받기 전에 같은 격리 worker에서 신뢰된 SDK import를 완료하고 `loaded` 확인을 기다립니다. 기본 기동 준비 상한은 30초이며 CLI `--startup-timeout`은 양수·최대 90초만 허용합니다. 페이지 I/O 지연으로 실제 30초 deadline을 넘긴 native AP는 unit에서 90초를 명시합니다. helper의 기존 `COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS`도 native host env에서 90초로 두고, collector 전체 `BuildTimeout`은 native unit의 `collector --startup-timeout 90s`로 맞춥니다. 다른 실행 방식의 기본값은 바꾸지 않습니다. 실패하면 worker와 listener를 종료하며 HTTP health는 loaded 뒤에만 성공합니다. native 배포/복원은 45회/2초 간격의 bounded health 관측 뒤 collector를 시작합니다. 완료 검사에서 collector는 `NRestarts=0`, issuer는 정상 종료와 현재 세대의 health를 확인합니다. 관측은 PO 발급이나 upstream 요청을 만들지 않으며 sandbox·자원 제한을 완화하지 않습니다.
+- PostgreSQL 최초 pool Ping은 기존 5초입니다. 현재 shared-go는 이 값을 초기 연결뿐 아니라 pool 수명 동안의 연결 제한에도 반영하므로 이 값 자체를 늘리지 않습니다. native unit의 `--wait-for-database`는 초기 pool Ping의 context deadline만 실패 pool 정리 후 5초 간격으로 재시도합니다. 전체 Build 기한은 helper 준비까지 합해 최대 90초이며 DB가 이를 소진해도 별도 시간을 더 주지 않습니다. 인증·TLS·설정 오류와 취소는 즉시 실패하고, 기한 안에 DB가 준비되지 않으면 기존 실패·재시작 경로로 종료합니다. 인자를 주지 않는 실행 방식은 단일 시도이며 업무 획득·쿼리·운영 재접속·업무 재시도·접속 수·역할·TLS 검증은 변하지 않습니다. `collector_database_startup_wait` 로그는 고정된 `reason=connection_deadline`만 추가하며 원본 오류·DSN·credential은 추가하지 않습니다.
+- IPC는 `/run/hololive-youtube-po/worker.sock`만 사용합니다. private protocol 1의 순서는 `session`(UA/JSDOM prepare) → WAA Create → `challenge`(snapshot) → GenerateIT → `activate` → 영상별 `mint`입니다. worker 초기화 완료 전에 challenge를 요청하지 않습니다. collector와 issuer는 반드시 같은 full source SHA로 전환합니다.
+- helper는 최초·교체 세대의 IDLE/SDK 준비를 최대 40초 기다립니다. 이는 개별 발급 cycle의 준비 관측 예산이며 native 서비스의 90초 기동 한도를 대체하지 않습니다. 준비 완료 뒤 `session/prepare`부터 발급 전체에 15초를 적용합니다. 외부 요청은 Create/GenerateIT와 필요한 interpreter GET을 합해 최대 3회, 응답별 decoded 512KiB입니다. helper마다 single-flight이며 준비를 포함한 시도 시작 간격은 최소 300초입니다. 개별 broker 연산은 admission·IO를 합해 8초로 제한합니다. 이 업무 경계와 준비 실패 처리는 native 기동 예산 변경으로 늘리지 않습니다.
+- IPC 요청은 JSON escaping과 envelope를 포함한 **전체 1MiB** 상한을 별도로 적용합니다. 개별 upstream 응답이 512KiB 이내여도 합친 직렬화 값이 이 상한을 넘으면 `broker_request_size`로 발급을 중단합니다. 한도를 늘리거나 해당 cycle을 재시도하지 않습니다.
+- nonempty 정상 integrity token과 양의 provider TTL만 허용합니다. monotonic 유효 시간은 provider TTL과 12시간 중 작은 값에서 30초를 뺀 값입니다. 갱신 여유는 최대 5분 또는 TTL의 20%이며 최소 발급 간격을 유지합니다. 각 player에 해당 video ID로 새로 mint하고 header·WEB context·sandbox navigator·GenerateIT의 UA를 일치시킵니다.
+- 준비 실패·만료·worker 장애에는 stale/cold-start/fallback token을 쓰지 않습니다. 기존 단일 무토큰 player를 그대로 수행하며 재시도나 UNKNOWN의 음성 확정은 추가하지 않습니다. 채널 확인의 resolve 1회+player 최대 1회, 영상 확인의 player 1회 상한도 유지합니다.
+- helper UDS의 `GET /health`에서 `proof.state`, `bootstrap_attempts`, `bootstrap_successes`, `upstream_requests`, `minted_total`, `attached_total`을 확인합니다. `last_error`는 최초 발급·mint 실패를 보존하고(collector RPC 취소로 중단된 mint는 `mint_aborted`이며, broker가 그 세대를 퇴역시키므로 helper도 세대를 버리고 다음 발급을 기다립니다), 후속 정리 실패는 별도의 `cleanup_error`에 안전한 오류 코드로 남깁니다. 새 발급 cycle은 두 오류를 초기화합니다. 같은 값은 collector metrics의 `youtubejs_po_proof_state{state}`, `youtubejs_po_proof_last_error{code}`, `youtubejs_po_proof_*_total`로 scrape 시점에 노출되며, helper `/health`를 읽지 못하면 `youtubejs_helper_health_scrape_success`가 0입니다. 앱 `/ready` 성공은 PO 준비 완료나 provider 가용성 보장이 아닙니다. token/program/snapshot/visitor data나 원시 worker stderr는 로그·파일에 남기지 않습니다.
+
+빌드·검증은 kapu에서만 수행합니다. native a는 `ap-host-native-deploy.sh`가 동일 revision의 collector와 issuer rootfs를 묶고, kapu Quadlet d는 [kapu README](../../../deploy/podman/kapu/README.md)의 수동 설치 절차를 따르며, Quadlet b·c의 일반 교체는 `PO_<B|C>_SSH_TARGET=<승인된 SSH 대상> APPROVE_PO_<B|C>_DEPLOY=true scripts/deploy/po-central-cutover.sh <b|c> deploy`를 사용합니다. kapu에서 만든 arm64 collector·issuer archive를 대상 호스트에서 `podman load`(`:candidate` tag)하고 identity·full revision·architecture·version을 대조한 뒤 candidate pair와 drop-in을 준비하여 issuer부터 재시작합니다. `:prod` tag는 cutover에서만 옮깁니다. 일반 `deploy`는 실행 중 이전 collector가 필요하며, `build-all.sh --build-only --no-bump`는 로컬 빌드 전용입니다.
+
+DB/HBA 같은 선행 변경 때문에 writer를 먼저 정지해야 하면 같은 승인 변수로 `<slot> quiesce`를 실행합니다. unit 교체 전에 실제 이전 pair를 보존하고 issuer→collector 순으로 영속 mask·정지하며 backup 경로를 출력합니다. 준비된 새 unit·DB·endpoint를 정합화한 뒤 같은 source에서 `<slot> resume <backup>`을 실행합니다. 재개는 보존 image/source, 실제 설치된 후보 unit/profile과 drop-in을 대조하고 issuer부터 시작합니다. 실패·중단은 hold와 복구 입력을 남기며 이전 direct writer를 자동 복원하지 않습니다. `check`는 시작하거나 mask를 해제하지 않습니다. 다른 작업의 hold/mask는 인수하지 않으며, 명시적 rollback도 endpoint/HBA 조정 뒤에만 이번 작업의 mask를 해제합니다.
+
+Quadlet b·c의 새 배포와 실패 복원은 issuer·collector의 systemd `Job`이 비어 있고 `ActiveState`가 `active`·`inactive`·`failed`일 때만 진행합니다. `systemctl` client가 끝나도 manager job이 진행 중이거나 상태 조회가 실패하면 자동 복원을 시작하지 않고 백업의 `cutover-outcome`에 `outcome_unknown`을 남깁니다. candidate pair·tag·영수증과 백업을 보존한 채 두 unit의 job 및 실행 상태를 확인하고, 정산된 뒤 호환성을 검토하여 승인된 paired rollback을 실행합니다. 완료가 확인된 변경 실패의 기존 자동 복원은 유지합니다.
+
+native a 산출물(collector binary와 issuer rootfs의 `po-broker --version`·`po-sandbox/version`)의 version은 `HOLO_BOT_VERSION`입니다. 값이 없으면 `ap-host-native-deploy.sh`가 12자리 short SHA를 씁니다. 릴리스 배포는 `HOLO_BOT_VERSION="$(xargs <hololive/hololive-api/VERSION)" scripts/deploy/ap-host-native-deploy.sh <ap-host> --apply`처럼 Quadlet image와 같은 version을 명시합니다.
+
+**기존 Osaka a에서 제품은 유지하고 배포 도구만 교체할 때:** kapu에서 검증한 도구의 승인 기록과 공식 제품의 승인 기록을 별도로 사용합니다. `TOOL_CHECKOUT`과 `PRODUCT_CHECKOUT`은 각각 깨끗한 전용 Git checkout의 실제 최상위 절대 경로여야 합니다. 추출한 하위 트리(`artifacts/` 등 Git 제외 경로 포함)는 checkout이 아닙니다. 아래는 공식 v19.2.1 제품으로 같은 창의 기존 설치를 교체하는 호출입니다. `APPROVED_TOOL_SHA`에는 검토·게시·검증된 도구의 승인된 40자리 **commit SHA**를 넣습니다. helper 파일의 해시나 실행 시 읽은 HEAD로 대체하지 않습니다.
+
+```bash
+set -euo pipefail
+umask 022
+product_sha=efafcf4005878f53ff239f8e8a1b6255e3b59b75
+release_id="${FRESH_OSAKA_RELEASE_ID:?새 시도에 배정한 미사용 release ID가 필요합니다}"
+artifact_dir="$(mktemp -d)/$release_id"
+REPO_ROOT="${PRODUCT_CHECKOUT:?}" AP_NATIVE_PRODUCT_REVISION="$product_sha" \
+  AP_NATIVE_TOOL_REVISION="${APPROVED_TOOL_SHA:?}" RELEASE_ID="$release_id" ARTIFACT_DIR="$artifact_dir" \
+  HOLO_BOT_VERSION=19.2.1 I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true \
+  "${TOOL_CHECKOUT:?}/scripts/deploy/ap-host-native-deploy.sh" osaka --apply
+```
+
+호출자는 제품과 도구의 full SHA 및 release window를 대조합니다. 원격 cutover 본문은 도구 commit의 blob이며, 제품 checkout에서 collector·issuer를 빌드하고 unit·wrapper·보존 helper를 가져옵니다. host env는 **실행 중인 도구**의 `write_host_env`가 생성합니다. 그 함수의 바이트가 승인된 제품 commit의 동일 함수와 일치해야 하며, 경로·endpoint·용량·서비스 값은 제품 설정에서 읽습니다.
+
+`--apply`는 **최초 설치나 W1→W2 전환이 아닙니다**. 전송 전 `apply-origin`에서 같은 창에 수용된 기존 release의 ID·제품 SHA·inode 영수증과 설치된 설정을 읽어 대조합니다. 후보 host env의 `STACK_WORKER_PROFILE_FILE` 한 줄 및 issuer unit의 불변 `RootDirectory` 경로 외에 차이가 있으면 중단합니다. 계정·로그 설정·sysctl·swap·fstab의 차이를 고치거나 이전 host env를 통째로 덮어쓰지 않습니다. 실제 전환은 출처·네 개의 사전 대조 digest를 확인한 같은 호출자가 `same-window`로만 요청합니다. 기존 `current`나 수용 영수증이 없으면 최초 설치 분기로 우회하지 않습니다.
+
+새 시도의 `native deploy source` 두 SHA, 새 release ID와 `native attempt`의 payload SHA-256을 함께 보존합니다. 원격 비교 위치는 로그인 사용자의 `~/.hololive-host-native-osaka-<ID>`가 아니라 `/opt/hololive-bot/collector/releases/<ID>`입니다. root 소유로 복사한 직후(권한 정규화·rootfs 해제·profile 추가 전)의 전체 트리 digest가 kapu의 값과 같아야 합니다. 그 뒤 로그인 사용자와 `hololive:opc` 실행 역할의 실제 접근권, 세 unit의 Job·실행 세대, readiness 및 `apply-accepted`까지 별도로 확인합니다. 출처·전송 성공만으로 수용한 것이 아닙니다.
+
+기존 guard, 실패 후보, staging·rollback 자료 또는 이전 ID는 인수·삭제·재사용하지 않습니다. guard가 남아 있으면 **새 ID만으로도 진행할 수 없습니다**. 전송 단절·미정산 Job·관측 실패에서는 원래 시도의 guard·후보·영수증을 보존하고 hold합니다. 기존 시도의 종료와 소유권을 확인하고 별도 권한이 정해지기 전에는 재전송·재시작·임의 복원을 하지 않습니다.
+
+중앙 paired deploy는 실행 중인 collector c가 로컬 primary DB `hololive`를 가리키는지 먼저 확인합니다. 최초 전환의 선행 증명에만 기존 `holo-postgres:5432`를 인정하고, 후보 활성화·완료 검사는 `holo-pgbouncer:6432`만 인정합니다. 외부 DB override는 로컬 socket의 원장으로 대신 증명하지 않습니다. `hololive-db-migrate.container`와 같은 migrator 역할·관리 socket volume(`hololive-bot_holo-pg-admin-socket`, 읽기 전용)을 쓰는 일회성 client(network none)로 032의 원본 32쌍 또는 epoch-4의 기준선 1쌍과 후속 실적용 prefix, 그 위치의 물리·권한 계약 및 read-only guard `on`을 확인합니다. client image는 실행 중인 `holo-postgres`에서 선택하고 자신이 만든 임시 container만 정리합니다. 원장 부재·checksum 불일치·조회 실패는 변경 전에 거부하며 이 helper는 migration을 실행하지 않습니다. b는 중앙 관리 socket이 없으므로 같은 release의 c 수용 뒤 전환하고 `100.100.1.8:6433`을 확인합니다.
+
+issuer 기준 영수증(중앙 `/opt/hololive-bot/compose/po-current-c/`, iris-seoul `/opt/hololive-bot/collector-b/po-current-b/`; `rootfs-manifest.json`, `image-id`)은 `current` 밖의 호스트 상태입니다. 중앙 paired cutover는 실행 중인 issuer의 이 영수증으로 이전 pair의 rollback 기준점을 만들므로, issuer 이미지가 있는데 영수증이 없으면 백업·rollback 태그를 만들기 전에 `central issuer receipt missing`으로 거절합니다. 중앙 호스트를 교체할 때는 `current`와 함께 이 디렉터리를 root 소유 0644 그대로 옮깁니다. 이미 유실했다면 같은 issuer 산출물의 kapu 검토 영수증(Compose AP 배포 백업의 `po-sandbox-candidate-manifest.json`·`po-sandbox-candidate.image-id` 등)을 찾습니다. kapu에 남은 같은 issuer image의 `podman save --format docker-archive` 아카이브와 `sha256:` + `podman image inspect --format '{{.Id}}'`로 `scripts/build/po-sandbox-manifest.py image-ids`를 계산해 그 config digest가 영수증의 `image-id` 한 줄과 같을 때만, 같은 경로에 root 0644로 설치하고 `po_verify_image`로 대조한 뒤 cutover를 다시 실행합니다. 일치하는 검토 영수증이 없으면 실행 이미지에서 영수증을 새로 만들지 않습니다. 검토 근거가 실행 이미지 자신이 되기 때문이며, 이때는 cutover를 멈추고 복구 방법을 별도로 승인받습니다. 2026-10-08 v7.2.10 배포에서는 같은 날 중앙 VM 교체 때 영수증이 누락되었고, Seoul `b`의 10-07 배포 백업에 남은 같은 7.2.3 산출물의 영수증으로 이 절차를 거쳐 복원했습니다.
+
+issuer를 먼저 기동·검증한 뒤 collector만 `systemctl restart`로 교체합니다. b·c는 이미지를 빌드하지 않고 kapu가 빌드한 collector·issuer 이미지 아카이브와 `scripts/deploy/po-central-files.txt`의 원격 lib만 받습니다. 2026-11-06 전환 뒤 Seoul Docker 배포 트리 `~/hololive-bot`과 Docker 쪽 b 컨테이너·image·volume은 지웠습니다. rollback은 이전 collector+issuer image와 drop-in·영수증을 함께 복원하고, 최초 설치였던 issuer는 이전의 부재 상태로 돌립니다. 승인된 rollback artifact는 인수 완료 전 임의 삭제하지 않습니다.
+
+native issuer의 `RootDirectory`는 패키징 때 불변 release 경로로 확정합니다. systemd 249에서는 같은 rootfs라도 symlink 경유 시 226/NAMESPACE가 발생하고 실제 경로는 기동되는 것을 관측했으므로 `current` symlink를 쓰지 않습니다. 설치 unit은 변경 없이 보존하며, `systemd-analyze verify`가 RootDirectory를 고려하지 않는 실행 파일 검사에는 실제 rootfs 실행 경로로 해석한 임시 검사용 사본을 사용합니다. 실제 실행 파일 부재·unit 오류는 계속 차단합니다. verifier가 RootDirectory를 직접 해석하도록 바뀌면 이 검사용 경로 변환을 제거합니다.
+
+b·c의 `image-id` 근거는 kapu가 `podman build --format docker`로 만들고 `podman save --format docker-archive`로 내보낸 단일 이미지 archive의 config digest 한 줄(`sha256:` + Podman `.Id`)입니다. `po-sandbox-manifest.py image-ids`는 archive의 config blob digest가 이 값과 다르면 거절합니다. b·c의 Podman은 `sha256:` + `.Id`로 같은 값을 보고합니다. rollback snapshot은 실제 ID 한 줄을 기록하고, Docker buildx 시절 영수증(manifest·config 두 줄)도 rollback 대조에 그대로 받습니다. 수신측은 이 집합에 없는 ID를 거부하며 full SHA·architecture·version·archive hash와 실행 중 image 일치 검사를 계속 적용합니다. 임의 image 대체나 검증 생략은 없습니다.
+
+비정상 generation/늦은 응답/취소는 해당 연산의 실제 admission 단계에 따라 처리합니다. 작업 시작 전 취소는 다른 호출의 준비된 세대를 폐기하지 않으며, 실제 worker 연산 중 실패는 전체 VM을 종료합니다. provider TTL 필드, 고정 시계 경계 시험, 실제 장시간 만료·갱신 관측은 서로 다른 증거입니다.
+
+### Issuer generation 교체와 재시작 카운트
+
+`po-broker` 프로세스는 generation 하나만 소유합니다. 그 generation이 다음 사유로 퇴역하면 프로세스는 exit 0으로 종료합니다.
+
+- client의 `DELETE /v1/session`: collector 종료 시 소유 generation 반납, bootstrap 실패 뒤 정리, 약 12시간 주기 갱신의 이전 generation 교체
+- lease 만료
+- worker 실패나 연산 timeout
+
+native의 `Restart=always`(`RestartSec=1s`), Quadlet b·c의 `Restart=always`(`RestartSec=5s`)가 exit 0 뒤 새 generation으로 다시 기동합니다. 따라서 systemd `NRestarts`는 generation 교체 횟수이며 실패 횟수가 아닙니다. 0이 아니라는 이유만으로 incident로 판정하지 않고, 카운터를 지우려고 container를 재생성하지 않습니다. 비 0 exit와 OOM은 계속 실패입니다.
+
+v6.0.1 collector·PO 산출물부터 `po-broker`는 종료할 때 `po-broker exit reason=<reason> generation=<id>` 한 줄을 남깁니다(b·c는 `journalctl -u hololive-youtube-po-<b|c>.service`, native는 `journalctl -u hololive-youtube-po.service`). Quadlet은 image version 6.0.1 이상, native는 `HOLO_BOT_VERSION` 6.0.1 이상이거나 short SHA 산출물이면 revision `12d78df8a` 이후인지로 판별합니다. `reason`은 퇴역·종료 사유의 고정 어휘이며 정확한 목록은 `po-broker` 코드가 소유합니다. `worker_failed`는 요청이 직렬 슬롯을 쥔 동안의 worker 종료(worker IO 전후의 검증·상태 응답 중 포함), `worker_exited`는 직렬 슬롯이 비어 있을 때의 종료입니다. 이 줄에는 token·payload·worker stderr가 없습니다. 기록 대상은 SIGTERM·SIGINT 종료, 퇴역, listener·기동 실패뿐입니다. SIGHUP·SIGQUIT·panic·SIGKILL 종료와 signal 감시 설치 전(기동 직후 수 µs)의 종료는 줄이 없으므로 exit 상태로 판정합니다. v6.0.2부터 기동 때 상속한 무시(SIG_IGN) signal은 감시하지 않아 계속 무시됩니다. v6.0.0 이하 issuer는 종료 사유를 남기지 않으므로 exit 상태와 collector 종료 시각을 대조합니다.
+
+issuer rollout 수용 기준은 `RestartCount=0`/`NRestarts=0`이 아니라 아래 항목을 모두 만족하는 것입니다.
+
+| Runtime | 확인 | 기대값 |
+|---|---|---|
+| Quadlet `hololive-youtube-po-<b|c>.service` | `systemctl show hololive-youtube-po-<b|c>.service -p Result -p ExecMainStatus -p ActiveState`와 `sudo podman inspect hololive-youtube-po-<b|c> --format '{{.State.Health.Status}}'` | `Result=success`, `ExecMainStatus=0`, `ActiveState=active`, `healthy` |
+| Quadlet, 재시작한 경우 | `journalctl -u hololive-youtube-po-<b|c>.service --since <change_started_at>` | 모든 종료가 exit 0이고 `Failed with result`가 없음 |
+| native `hololive-youtube-po.service` | `systemctl show hololive-youtube-po.service -p Result -p ExecMainStatus -p ActiveState` | `Result=success`, `ExecMainStatus=0`, `ActiveState=active` |
+| native, 재시작한 경우 | `journalctl -u hololive-youtube-po.service --since <change_started_at>` | 모든 종료가 `Deactivated successfully`이고 `Failed with result`가 없음 |
+| 공통 | broker socket `GET /health` | `state`가 `IDLE` 또는 `READY` |
+| 공통 | helper UDS `GET /health`의 `proof.generation` | 값이 있으면 broker `/health`의 `generation`과 같음 |
+
+systemd는 새 기동에서 `Result`와 `ExecMainStatus`를 다시 씁니다. 그래서 재시작이 있었다면 그 사이의 종료는 journal로 확인합니다.
+
+b·c의 paired cutover(`po-central-remote.sh`)는 issuer를 먼저 `systemctl restart`로 교체하고 healthy를 확인한 뒤 collector를 교체합니다. issuer가 실패하면 이전 collector를 그대로 두기 위한 순서이므로 유지합니다. 그 사이 이전 collector가 새 issuer의 generation을 잡으면 SIGTERM 종료에서 그 generation을 퇴역시키므로, 새 issuer는 이전 collector 종료 시각에 exit 0과 재시작 1회를 보일 수 있습니다. 이 1회는 예상된 교체입니다. 이 밖의 교체는 exit reason 줄로 사유를 확인합니다.
+
+native a cutover·실패 복원(`ap-host-native-remote-apply.sh`)과 수동 rollback(`ap-host-native-rollback.sh`)은 issuer socket·service를 collector보다 먼저 멈춥니다. collector 종료의 generation 반납은 `broker_unavailable`로 끝나며 collector는 재전송 없이 무시합니다. 그 짧은 창의 mint·반납 실패는 helper `/health`의 `proof.last_error`에만 남고 로그 줄을 만들지 않으므로 cutover의 journal 오류 검사와 겹치지 않습니다. 이후 issuer health를 확인하고 collector를 기동합니다. 실패 복원은 복원 단계가 하나라도 실패하면 거기서 멈추고 `could not be restored` 경고를 남기며, 배포는 원래 실패 상태로 끝납니다. 이 경고 뒤에는 issuer가 멈춰 있고 collector unit이 disabled일 수 있으므로, 아래 절차로 실행 중 변경과 guard를 확인·해소한 뒤 `scripts/deploy/ap-host-native-rollback.sh <ap> --apply`로 `previous` release와 그 issuer를 다시 적용하고 완료 검사를 확인합니다.
+
+native 배포는 root 소유 `/opt/hololive-bot/collector/cutover-recovery` guard를 원자적으로 선점하고 단계명·release·소유 shell/worker PID·종료 상태만 기록합니다. HUP/INT/TERM이 배포 shell에만 도착하면 실행 중 변경의 완료를 최대 5초 관찰합니다. worker의 정상 종료 상태와 완료 기록이 일치한 경계에서는 이전 runtime을 한 번 복원하고 129/130/143으로 끝납니다. 변경 명령이나 worker가 신호로 종료되거나 기록을 확인하지 못하면 `outcome_unknown`이며 자동 복원을 시작하지 않습니다. 복원 중 신호도 완료를 확인할 수 없으면 guard를 남깁니다. 최종 journal 조회·grep 실행 오류도 배포 실패이며 grep의 불일치 상태 1만 정상입니다.
+
+guard가 남으면 새 배포와 수동 rollback `--apply` 모두 거절합니다. 준비 중 실패와 복원 실패도 guard를 보존하며 rollback `--dry-run`은 기존 payload 진단에 사용할 수 있습니다. 운영 변경 승인을 받은 뒤 기록의 worker와 자식 process group, 잔존 systemd job 및 collector/issuer 상태를 확인하고 변경 완료 여부를 확정하십시오. PID는 재사용될 수 있으므로 PID 숫자만으로 다른 프로세스를 종료하지 않습니다. 5초 뒤 worker group에 TERM을 전달해도 신호를 무시하는 클라이언트나 daemon 작업의 종료를 보장하지 않습니다. 복구가 확정된 뒤에만 guard를 해제하고 필요한 rollback/fix-forward를 적용합니다. 새 release와 `previous`의 rollback 자료는 이 확인이 끝날 때까지 보존합니다.
+
+### Osaka a: W1·W2 분리 정지 창
+
+Osaka의 일반 `--apply`는 최초 설치나 창 전환 명령이 아닙니다. kapu 빌드·staging 전송 전에 osaka1의 실제 `current/accepted-window`가 이 소스의 창과 같은지 확인합니다. 이 root 전용 파일은 창 이름, release ID, 설치된 `po-sandbox/revision`의 전체 SHA와 release 디렉터리 식별자를 묶습니다. 다른 release에 복사한 파일, 남은 복구 guard 또는 수용 기록이 없는 6433 endpoint는 증거가 아닙니다. 원격에서도 guard 선점 뒤, 이전 writer를 정지하기 전에 같은 원점과 실행 파일·DB endpoint를 다시 확인합니다.
+
+일반 배포도 새 socket·issuer·collector의 이번 부팅 및 기동 완료 job·invocation 영수증을 남깁니다. 두 외부 관찰이 성공한 뒤 같은 nonce·current·revision·실행 세대를 재확인한 경우에만 새 release에 `accepted-window`를 게시합니다. 관찰 실패나 인계 중단 시에는 새 창 수용을 추정하거나 marker를 복사·작성하지 않습니다. 전용 W1 정지는 수용 기록이 없는 실제 direct 원점만, 전용 W2 정지는 W1 또는 W2에서 수용된 실제 pool 원점만 대상으로 합니다.
+
+원격 staging에서 root 소유 후보로 복사한 직후에도 전체 payload를 확인합니다. 일반 배포는 kapu에서 방금 빌드한 digest, 전용 창은 별도 승인 기록의 digest와 같아야 합니다. `accepted-window`가 먼저 생겨도 복구 guard가 남으면 미수용입니다. 실제 영수증과 남은 허가 시간을 확인한 뒤 guard를 `accepted-guard`로 넘깁니다. 인계 중단 시 남은 영수증과 후보를 보존하고 자동으로 다시 시도하지 않습니다.
+
+아래는 **별도 운영 승인을 받은 뒤** kapu에서 실행할 절차입니다. 이 release의 `WINDOW=W2`만 허용합니다. 일반 `--apply`의 자동 복원을 쓰지 않습니다. `RELEASE_ID`(새 ID), `HOLO_BOT_VERSION`, `ARTIFACT_DIR`, `I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true`를 명시합니다. `OLD`는 osaka1의 실제 `current`가 가리키는 `releases/` 바로 아래 릴리스 이름입니다. 원 프로세스의 endpoint는 `100.100.1.8:6433`이며 이전 창의 OLD·nonce는 재사용할 수 없습니다.
+
+각 창에서 깨끗한 source의 `osaka --dry-run`은 빌드한 **전체** 디렉터리의 `HOLO_NATIVE_PAYLOAD_SHA256`을 출력합니다. qualification 완료 시 같은 `source scripts/deploy/lib/ap-host-native-window.sh; native_payload_digest "$ARTIFACT_DIR"`로 일치하는 값을 확인해 산출물 밖의 승인 기록에 revision·release ID와 함께 보존하십시오. `--quiesce`와 `--resume` 둘 다 그 **기록의 값**을 `export HOLO_NATIVE_PAYLOAD_SHA256=…`로 요구합니다. 실행 직전 디렉터리를 다시 해시해 입력을 대체하지 않습니다.
+
+1. `scripts/deploy/ap-host-native-deploy.sh osaka --quiesce "$WINDOW" "$OLD"` — 빌드하지 않고 검증 payload를 새 staging에 전송합니다. 기존 rollback 입력을 덮어쓰지 않습니다. 실행 binary·profile, 실제 프로세스 DB endpoint, issuer rootfs와 unit, 원 `current`/`previous`를 대조합니다. socket·issuer·collector의 고유 invocation을 기록하고, root 소유 guard/drop-in으로 부팅·의존·명시적 start를 차단합니다. 서비스의 `Restart=no`도 manager에서 확인한 다음 socket+issuer, collector 순으로 정지합니다. 각 원 invocation의 이번 stop job journal과 PID·job 없는 정상 비활성 상태, 원본 checksum까지 확인한 `quiesced`와 출력 nonce 없이는 다음 단계로 가지 않습니다. `disable`이나 `inactive` 출력만으로 대체할 수 없습니다.
+2. 세 writer가 정지한 뒤에만 해당 창의 다른 서비스·DB 절차로 진행합니다. W1은 030·pool 수용, W2는 **모든** 구 publisher 차단과 031 적용 등 각 창의 승인된 공통 관문이 선행합니다. native 영수증은 타 슬롯 정지나 DB 원장을 증명하지 않습니다.
+3. `scripts/deploy/ap-host-native-deploy.sh osaka --resume "$WINDOW" "$OLD" "$NONCE"` — 같은 kapu payload·source로 한 번만 실행합니다. 재빌드·재전송하지 않습니다. `quiesced`와 원본 checksum·guard 소유권, 세 unit에 적용된 차단을 확인합니다. root 소유 사본의 전체 payload digest, 새 binary/profile, 후보 endpoint `100.100.1.8:6433`, `--check-pooled-database`와 설치한 세 unit을 확인한 뒤 후보 issuer·collector만 엽니다. `/ready`·실행 profile·journal과 기존 외부 완료 관찰까지 성공해야 임시 재시작 차단과 cutover guard를 해제합니다.
+   - `quiesced`는 세 unit의 원 `.before`·`.stopped`, boot와 동결 입력을 묶습니다. 첫 기동은 unit별 임시 `/run` 허가와 이번 manager start job·boot·invocation을 확인합니다. socket과 collector의 최초 세대는 수용까지 유지합니다. issuer도 관찰 중 `Restart=no`를 유지합니다. PID 1이 관리하는 root 소유 `/run` 허가는 최대 15분이며 재부팅하면 사라집니다.
+   - issuer의 최초 영수증은 덮어쓰지 않습니다. 정상 종료(`success/exited/0`) 직후 host 정리 훅이 PID 1에 다음 start job을 요청하고, 기동 훅은 같은 job ID만 한 번 허용합니다. 취소된 job의 허가는 다른 job에서 쓸 수 없고, socket 접속만으로 다음 세대를 열 수 없습니다. 같은 boot의 정상 종료·다음 완료 job·새 invocation에 더해 실제 실행 파일·rootfs·broker health와 collector의 `PROCESSED`를 수용 직전에 확인합니다. 허가가 만료되거나 교체 세대를 입증하지 못하면 수용하지 않습니다.
+   - 방금 교체된 issuer의 health가 아직 응답하지 않으면, 같은 기동의 SDK 초기화 한도(최대 90초)와 남은 관찰 허가 안에서만 기다립니다. guard 인계 중에는 서비스의 host `ExecCondition`이 자동 재시작에서도 본 프로세스의 기동을 막습니다.
+4. 실패하면 원 `release/native-window`, `rollback-contract`, 후보 release, staging, `cutover-recovery`를 보존합니다. 판정 가능한 실패는 후보만 보호 정지하며 재개 권리를 다시 발급하지 않습니다. 전송 단절·신호·불명확한 manager job은 `outcome_unknown` 취급하고 경쟁하는 stop/start나 자동 재시도를 하지 않습니다. 어떤 경우에도 이전 release의 marker와 이를 참조하는 systemd drop-in을 삭제하지 않습니다. 완료 뒤에도 `current/native-window`가 있는 퇴역 release의 기동과 수동 rollback을 거절합니다. **W2 후 구 publisher는 같은 6433이어도 복구 대상이 아닙니다.** 승인된 호환 후보로만 fix-forward합니다.
+
+### 일반 native 배포
+
+native 배포·수동 rollback·profile preparation은 기존 SSH와 `sudo -n` 경로를 사용합니다. env·인증서·profile 소비 경로와 immutable release의 current/previous 계약은 유지하며 별도 암호화 저장소 helper를 요구하지 않습니다.
+
+전송 staging은 SSH 사용자 홈의 `.hololive-host-native-<AP_NAME>-<release_id>`입니다. 배포는 기존 `/swapfile`을 유지하고, 없으면 `AP_SWAPFILE_SIZE_MIB` 크기(기본 2048MiB)의 파일을 준비하여 활성화하고 `/etc/fstab`에 등록합니다. 값은 양수여야 합니다. 이전 release·staging·원본 데이터 삭제는 별도 승인 대상입니다.
+일반 `--apply`와 `--quiesce`는 rsync 전에 staging을 독점 생성합니다. 동명 staging이 있으면 덮어쓰거나 이어서 전송하지 않습니다.
+
+### Native AP 배포 산출물 보존
+
+수용 검사 뒤에는 stack의 [배포 산출물 보존 절차](../../../../docs/ops/release-artifact-retention.md)를
+배포 완료 기록에 포함합니다. `tools/ops/prune-release-artifacts.py --profile native-ap --ap-name <AP_NAME>`으로
+current·previous와 previous의 `rollback-contract/previous-before-cutover`가 가리키는 이전 release, 실행 중인 참조를 보존하는 후보를 산출합니다.
+전송 staging도 보존 release와 연결된 것은 남기며 `.incoming-*`와 소유 불명 파일은 삭제하지 않습니다.
+이전 staging/release 삭제는 수용을 통과한 배포 승인에 포함되며, 검토한 exact 경로만 `--apply`로 실행하고 배포와 동시에 실행하지 않습니다.
+후보 출력·수용 성공만으로 정리가 완료됐다고 표시하지 않습니다.
+
+## 이름 전환
+
+`youtube-collector`에서 `collector`로 바뀐 release를 처음 배포할 때만 쓰는 절차입니다. 승인된 정비 창에서 slot마다 진행하고, 003 DB 변경은 중앙 migration 경로가 적용합니다.
+
+1. 비밀 env 파일 `youtube-collector.env`를 `collector.env`로, native a의 `youtube-collector-host.env`를 `collector-host.env`로 옮기고 키의 `YOUTUBE_COLLECTOR_` 접두사를 `COLLECTOR_`로 바꿉니다. 중앙 `compose.env`의 `HOLOLIVE_YOUTUBE_COLLECTOR_*`와 `HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR`도 새 이름으로 바꿉니다. 구 키가 남으면 compose env 검사와 collector 기동이 거부합니다.
+2. worker profile 파일을 `collector-<slot>.json`으로 옮기고 role을 `collector`, 인스턴스 ID를 `collector-<slot>`으로 바꿉니다.
+3. 구 unit을 멈추고 지웁니다. 중앙 c는 `sync-opt-current.sh`가 staging에 없는 `hololive-youtube-collector-c.container`를 지웁니다. iris-seoul b와 kapu d는 `hololive-youtube-collector-<slot>.container`를 직접 지운 뒤 새 `hololive-collector-<slot>.container`를 설치합니다. native a는 `hololive-youtube-collector@collector-a.service`를 disable한 뒤 unit 파일과 drop-in을 지우고, 새 배포가 `hololive-collector@.service`와 `/opt/hololive-bot/collector`를 만듭니다.
+4. 새 unit을 시작하고 readiness의 `instance_id`가 `collector-<slot>`인지 확인합니다. 이전 이름이 잡고 있던 수집 lease는 만료된 뒤 새 세션이 넘겨받으므로 첫 수집은 lease TTL만큼 늦을 수 있습니다.
+5. 메타 저장소의 SELinux MCS 설정(`deploy/rhel-host-security`)과 host 보존 도구는 새 container·경로 이름을 씁니다. 같은 정비 창에서 함께 적용합니다.
+
+## Logs
+
+```bash
+sudo journalctl -u hololive-collector-c.service -f
+```
+
+## Common failure modes
+
+### 1. Metrics authentication rejection
+
+Symptoms:
+- startup rejects a missing `METRICS_API_KEY`
+
+Diagnosis:
+- `collector.env`의 key 이름만 확인하고 raw value를 출력하지 않습니다.
+- `METRICS_API_KEY`를 stack-secrets master에서 수정한 뒤 승인된 sync 절차를 사용합니다.
+
+Mitigation:
+- static secret sync와 collector restart/deploy를 같은 승인된 변경으로 수행하고 `/metrics` target을 재검증합니다.
+
+### 2. Projection/lease load failure
+
+Symptoms:
+- collector logs contain `YouTube collection candidate discovery failed`(`phase=candidate_load`) or lease acquire failures
+- `youtube_collection_discovery_cycles_total{result="candidate_load_failed"}` increases
+- no new `source_observations` / `source_observation_queue` rows
+
+Diagnosis:
+- 후보 탐색 실패 WARN은 같은 대상(projection 조회 또는 runner)의 연속 실패 동안 첫 건과 1분 간격 요약(`since`, `suppressed_cycles`)만 남습니다. cycle별 실패 빈도는 `youtube_collection_discovery_cycles_total`과 `/diagnostics/workers`로 보고, 복구는 `YouTube collection candidate discovery recovered` INFO(`failed_for`, `failed_cycles`)로 확인합니다.
+- DB 연결 거부·경로 없음과 PostgreSQL SQLSTATE class `08`·`57P01`~`57P03`은 `error_class=TRANSIENT`, 연결 dial 타임아웃은 `TIMEOUT`입니다. 인증 실패(`28P01`) 같은 다른 연결 오류는 `INTERNAL`로 남으므로 계정·grant 설정을 먼저 봅니다.
+- SSOT manifest의 migration `144`–`174` 적용 여부와 collection projection/target/lease 상태를 확인합니다.
+- instance와 같은 suffix의 `POSTGRES_USER=hololive_collector_<slot>` grant를 확인합니다.
+
+Mitigation:
+- fail-closed가 맞습니다. projection이나 lease 검증을 우회하지 않습니다.
+
+### 3. Outbox insert permission denied
+
+Symptoms:
+- Publish errors
+- collector uses `hololive_runtime`, `hololive_scraper`, or another slot's collector role
+
+Diagnosis:
+- rendered `POSTGRES_USER` and the matching `HOLOLIVE_COLLECTOR_<slot>_PASSWORD`를 확인합니다.
+
+### 4. Kernel Oops in `unix_fs_perm` on docker-default arm64 hosts
+
+과거 운영 커널에서 발생한 결함입니다. Ubuntu `linux-oracle` 6.17.0-1020과 당시 후보였던 7.0.0-1011에는 upstream AppArmor 수정 `b1aea2c19607` "apparmor: fix race in unix socket mediation when peer_path is used"가 없었습니다. 이 수정은 mainline v7.2-rc1, stable v6.18.40와 v7.1.5부터 들어 있습니다. 미수정 커널에서는 AppArmor가 AF_UNIX 연결의 첫 read에서 peer 소켓 경로를 lock 없이 복사하므로, 같은 시점에 peer가 close되면 NULL `mnt`를 역참조할 수 있습니다.
+
+당시 영향 범위는 collector helper와 PO issuer가 `docker-default (enforce)`로 돌던 arm64 호스트인 hololive-osaka의 collector-c와 iris-seoul의 collector-b였습니다. x86 osaka1/osaka2(a/d)는 6.8 커널에서 unconfined로 실행되어 이 경로에 해당하지 않았습니다.
+
+2026-10-02 확인: 두 arm64 호스트 모두 `7.0.0-1013-oracle`로 재부팅했습니다. 설치 패키지 `7.0.0-1013.13~24.04.1`의 changelog와 [공식 소스 패치](https://packages.ubuntu.com/noble-updates/linux-image-unsigned-7.0.0-1013-oracle)에서 `peer_path`를 `unix_state_lock` 아래 복사하고 `path_get`/`path_put`으로 참조를 보존하는 수정을 확인했습니다. 해당 부팅 이후 관련 Oops는 관측되지 않았고 kernel taint는 두 호스트 모두 `0`이었습니다. collector·PO의 `docker-default` 격리는 유지했습니다. 이는 확인 시점의 상태이며, 이후 커널 교체·롤백 시에는 다시 확인합니다.
+
+Symptoms:
+- `journalctl -k`에 `Unable to handle kernel NULL pointer dereference`, `Internal error: Oops`, `pc : unix_fs_perm`, `lr : aa_unix_file_perm`, `vfs_read` call trace가 남습니다. `Comm`은 helper의 `MainThread`입니다.
+- `/proc/sys/kernel/tainted`에 TAINT_DIE(128)가 설정됩니다.
+
+Diagnosis:
+- `uname -r`와 `journalctl -k`로 커널 버전과 Oops 위치를 확인합니다.
+- `sudo docker top <container>`와 `/proc/<pid>/attr/current`로 helper·issuer의 AppArmor label을 확인합니다.
+
+Retained connection policy and unpatched-kernel history:
+- v6.0.1부터 broker HTTP 연결은 keep-alive를 쓰고, client가 유휴 연결을 약 1초 뒤 먼저 닫습니다. v6.0.2부터 broker `IdleTimeout`은 30초이며 `po-broker --healthcheck`도 응답을 읽은 뒤 client가 연결을 정리합니다. 커널 수정 후에도 연결 재사용과 유휴 socket의 재사용 경쟁(`EPIPE`) 완화를 위해 이 설정을 유지합니다. 커널 결함 때문에 필요한 임시 완화책으로 취급하지 않으며, 종료 원인 기록과 퇴역 시 `server.Close`도 유지합니다.
+- 미수정 커널에서는 이 정책만으로 Oops를 막을 수 없었습니다. 새 연결의 첫 응답이 퇴역·오류 응답이고 곧바로 `server.Close`가 따르는 경우 경쟁 창이 남았습니다. worker가 이미 죽은 경로(`worker_failed`, watchdog)는 응답과 close 간격이 µs 수준이고, `session_closed`·`lease_expired`·`worker_timeout`은 worker SIGKILL부터 reap까지 수 ms(측정: 30MB 약 6ms, 300MB 약 22ms)였습니다. 대표 트리거는 bootstrap 실패 뒤 helper `retireOwned`의 `DELETE /v1/session`이었습니다.
+- 커널을 교체하거나 롤백할 때는 `apt-get changelog linux-modules-<version>-oracle | grep -F 'apparmor: fix race in unix socket mediation when peer_path is used'`와 해당 소스 패치로 수정 포함 여부를 확인하고, 재부팅 후 `uname -r`로 실행 커널을 대조합니다. 7.0.0-1011은 이 수정이 없으므로 결함 복구용 교체 대상이 아닙니다.
+- AppArmor profile을 완화하거나 unconfined로 바꾸지 않습니다. 중앙 호스트 `hololive-seoul` 재부팅은 중앙 DB·API를 함께 멈추므로 승인된 유지보수 창에서 수행합니다.
+
+## Smoke test
+
+```bash
+sudo podman exec hololive-collector-c ./bin/healthcheck https://127.0.0.1:30025/health
+sudo podman exec hololive-collector-c ./bin/healthcheck https://127.0.0.1:30025/ready
+```
+
+## Rollback
+
+Config and topology rollback is an exact repository revision. Restore the following artifacts together. Binary-only rollback is forbidden. Schema/data rollback is none. Mixed-version boundaries and the collector cache-topology unit are in [`rollback.md`](rollback.md#runtime-rollback). Production canary was not executed.
+
+단, migration 259/260 적용 뒤에는 위 [membership·novelty 전환 경계](#collection-membershipvideo-novelty-cutover)가 우선합니다. 구 image만의 자동 복원은 새 lock/contract와 호환되지 않습니다.
+
+```text
+collector Go binary/image
+bundled Node helper/package-lock
+Quadlet units (central c, iris-seoul b)
+host-native env generator/wrapper
+service and runbook contract
+```
+
+- Quadlet b·c는 paired cutover 백업으로 `PO_<B|C>_SSH_TARGET=<승인된 SSH 대상> APPROVE_PO_<B|C>_ROLLBACK=true scripts/deploy/po-central-cutover.sh <b|c> rollback <backup>`을 실행합니다. 이전 pair의 drop-in(`50-worker-profile.conf`)·rollback tag·issuer 영수증을 함께 되돌리고 issuer부터 재시작합니다. 그 밖에 이전 `hololive-collector:rollback-<UTC timestamp>` tag가 있으면 [`rollback.md`](rollback.md#runtime-rollback)의 revision 확인·`prod` 재승격 절차를 사용한 뒤 collector만 무빌드로 다시 시작합니다. Quadlet unit과 host-native generator는 같은 revision tree를 써야 합니다.
+- kapu Quadlet d는 [kapu README](../../../deploy/podman/kapu/README.md)의 `SHA256SUMS` release profile과 `runtime-before-<날짜>` image tag로 되돌립니다. `po-central-cutover.sh`와 `ap-host-native-*`는 d를 다루지 않습니다.
+- 일반 host-native AP 배포의 복구 기준점은 `previous`와 그 issuer입니다. 기준점이 없거나 해당 release에 `native-window`가 있으면 수동·자동 rollback을 거절합니다. [W1·W2 분리 창](#osaka-a-w1w2-분리-정지-창)의 `--resume` 실패에는 일반 복원을 사용하지 않습니다.
+- Quadlet b·c는 collector를 정지한 채 교체하는 점검 모드를 지원하지 않습니다(정지한 unit의 container가 없어 이전 profile을 증명할 수 없음). schema 점검 창에서는 배포 전에 실행 중인 collector로 이전 pair를 확보합니다. host-native a 배포는 별도 값 없이 변경 전 collector unit의 실행·활성화 상태를 기록하고, 실패 복원은 실행 중이던 unit만 `previous` release로 다시 시작합니다. 점검 창에서 멈춰 둔 unit과 변경 전에 실패(`failed`)해 있던 unit은 `previous` release로 되돌리고 변경 전 활성화 상태만 복원하며 시작하지 않습니다(`ActiveState=…`를 포함한 `restored … without starting it` 안내). schema가 복원한 release와 맞는지 확인한 뒤 시작합니다. 수동 `ap-host-native-rollback.sh`는 이 기록을 쓰지 않고 collector를 시작하므로, 점검 창에서는 schema가 이전 release와 맞을 때만 실행합니다.
+
+```bash
+sudo systemctl restart hololive-collector-c.service
+```
+
+- 승인된 stack-secrets 변경 절차로 중앙 host의 `compose.env`에 `HOLOLIVE_DISABLE_COLLECTOR=1`을 설정하면 unit의 `ExecCondition`(`quadlet-prestart collector-enabled`)이 collector c 기동을 건너뜁니다. 실행 중인 collector는 `sudo systemctl stop hololive-collector-c.service`로 멈춥니다.
+
+20.0.0 이후 c의 `quiesce-verified`는 정지할 writer의 실제 primary 경로 및 그 시점까지 적용된 head를 검증한다. 후보가 추가할 열이나 권한이 아직 없는 것은 정지 거부 사유가 아니다. 반대로 `deploy`·`resume`에서 후보의 pooled DB 검증 후, candidate pair 활성화 전에는 최종 head까지 pending 0과 대상 실물·권한 계약이 필요하다. 이 검증 실패 시 issuer·collector를 열지 않는다.

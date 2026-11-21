@@ -41,7 +41,7 @@ def require(condition, message, result):
 
 proof_setup = r'''
 set -euo pipefail
-fixture_root="$1" fixture_case="$2" staging="$3" collector_container=youtube-collector
+fixture_root="$1" fixture_case="$2" staging="$3" collector_container=collector
 . "$staging/scripts/deploy/lib/postgres-endpoint.sh"
 awk() {
   if [[ "${@: -1}" == /etc/stack-secrets/hololive-bot/compose.env ]]; then
@@ -199,14 +199,14 @@ for case in ('success', 'journal_failure', 'error_log', 'grep_failure', 'ordinar
             (state / 'releases' / name).mkdir(parents=True)
         contract = state / 'releases/old/rollback-contract'
         contract.mkdir()
-        for name in ('youtube-collector-host.env', 'hololive-youtube-collector@.service'):
+        for name in ('collector-host.env', 'hololive-collector@.service'):
             (contract / name).write_text('old')
         old_env = 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=' + ('5433' if case == 'endpoint_change' else '6433') + '\n'
         new_env = 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n'
-        (contract / 'youtube-collector-host.env').write_text(old_env)
+        (contract / 'collector-host.env').write_text(old_env)
         (state / 'payload').mkdir()
-        (state / 'payload/youtube-collector-host.env').write_text(new_env)
-        (state / 'releases/new/youtube-collector-host.env').write_text(new_env)
+        (state / 'payload/collector-host.env').write_text(new_env)
+        (state / 'releases/new/collector-host.env').write_text(new_env)
         (contract / 'previous-before-cutover').write_text(str(state / 'releases/older') + '\n')
         (state / 'current').symlink_to(state / 'releases/new')
         (state / 'previous').symlink_to(state / 'releases/old')
@@ -226,7 +226,7 @@ for case in ('success', 'journal_failure', 'error_log', 'grep_failure', 'ordinar
         require((state / 'runtime').read_text().strip() == expected_runtime, f'native {case}: runtime restored', result)
         if case == 'endpoint_change':
             require((state / 'host.env').read_text() == new_env, 'cross-endpoint rollback leaves candidate env intact', result)
-            require((state / 'recovery').exists() and (contract / 'youtube-collector-host.env').read_text() == old_env,
+            require((state / 'recovery').exists() and (contract / 'collector-host.env').read_text() == old_env,
                     'cross-endpoint rollback preserves recovery guard and previous env', result)
             require(not any(call.startswith('systemctl enable') for call in calls), 'cross-endpoint rollback never restarts', result)
         elif case != 'success':
@@ -407,11 +407,11 @@ python3() {
   fi
 }
 busctl() {
-  local bus=org.freedesktop.systemd1 base=/org/freedesktop/systemd1/unit/hololive_2dyoutube_2d
+  local bus=org.freedesktop.systemd1 base=/org/freedesktop/systemd1/unit/hololive_2d
   [[ "$*" == "--system --timeout=45s --json=short get-property $bus $6 $bus.Service TimeoutStartUSec" ]] || return 2
   case "$6" in
     "${base}collector_2db_2eservice") printf '{"type":"t","data":300000000}\n' ;;
-    "${base}po_2db_2eservice") printf '{"type":"t","data":120000000}\n' ;;
+    "${base}youtube_2dpo_2db_2eservice") printf '{"type":"t","data":120000000}\n' ;;
     *) return 2 ;;
   esac
 }
@@ -499,7 +499,9 @@ podman() {
         for kind in collector issuer; do
           cid=3; [[ "$kind" != issuer ]] || cid=4
           if [[ -f "$fixture_root/$kind.cid" ]]; then cid="$(<"$fixture_root/$kind.cid")"; fi
-          if [[ "$3" == "hololive-youtube-${kind/issuer/po}-$slot" || "$3" == "$(printf '%064d' "$cid")" ]]; then
+          local name="hololive-collector-$slot"
+          [[ "$kind" != issuer ]] || name="hololive-youtube-po-$slot"
+          if [[ "$3" == "$name" || "$3" == "$(printf '%064d' "$cid")" ]]; then
             [[ "$(<"$fixture_root/$kind.running")" == true ]]; return
           fi
         done
@@ -519,7 +521,9 @@ podman() {
     'load --input')
       kind=po-sandbox
       [[ "$3" != */collector-image.tar ]] || kind=collector
-      printf new > "$(ref_file "localhost/hololive-youtube-$kind:candidate")"
+      local image=localhost/hololive-youtube-po-sandbox
+      [[ "$kind" != collector ]] || image=localhost/hololive-collector
+      printf new > "$(ref_file "$image:candidate")"
       if [[ "$kind" == collector ]]; then
         case "$fixture_case" in
           *load_collector_replaced) printf '{"container_id":"%064d","pid":42}\n' 2 > "$fixture_root/collector.generation" ;;
@@ -579,8 +583,8 @@ podman() {
         if [[ "$fixture_case" == maintenance_resume_expire_after_issuer ]]; then unset EPOCHSECONDS; EPOCHSECONDS=$expires; fi
       else
         [[ "$2" == "$collector_container" && "$4" == --body ]] || return 2
-        local instance="youtube-collector-$slot" handoff=PROCESSED processed=true
-        if [[ "$fixture_case" == check_wrong_instance ]]; then instance=youtube-collector-a; fi
+        local instance="collector-$slot" handoff=PROCESSED processed=true
+        if [[ "$fixture_case" == check_wrong_instance ]]; then instance=collector-a; fi
         if [[ "$fixture_case" == check_waiting_handoff ]]; then handoff=PENDING; processed=false; fi
         printf '{"status":"ready","instance_id":"%s","helper":"ok","first_success":true,"handoff_status":"%s","handoff_processed":%s,"pending_queue":0}\n' \
           "$instance" "$handoff" "$processed"
@@ -992,8 +996,8 @@ def image_file(state, ref):
     return state / 'images' / ref.replace('/', '_').replace(':', '_')
 
 
-collector_prod, issuer_prod = 'localhost/hololive-youtube-collector:prod', 'localhost/hololive-youtube-po-sandbox:prod'
-collector_rollback = f'localhost/hololive-youtube-collector:rollback-{change}'
+collector_prod, issuer_prod = 'localhost/hololive-collector:prod', 'localhost/hololive-youtube-po-sandbox:prod'
+collector_rollback = f'localhost/hololive-collector:rollback-{change}'
 issuer_rollback = f'localhost/hololive-youtube-po-sandbox:rollback-{change}'
 held_start = 'systemctl --show-transaction start '
 mutations = ('podman tag ', 'podman load ', 'podman image rm ', 'systemctl restart ', held_start, 'systemctl stop ', 'mask link ', 'guard arm ', 'guard seal ', 'guard undo-unmask ', 'systemctl unmask ', 'systemctl daemon-reload', 'pair activate ')
@@ -1017,8 +1021,8 @@ central_cases = {
     'unlisted_source_authority': (1, False),
 }
 slots = {
-    'c': ('youtube-collector', 30025, 'central'),
-    'b': ('youtube-collector-b', 30015, 'iris-seoul'),
+    'c': ('collector-c', 30025, 'central'),
+    'b': ('collector-b', 30015, 'iris-seoul'),
 }
 runs = [('c', case) for case in central_cases] + [('b', case) for case in (
     'success', 'rollback', 'check_success', 'check_wrong_profile', 'pooled_query_failure', 'transition_success',
@@ -1061,7 +1065,7 @@ for slot, case in runs:
     expected_status, restored = central_cases.get(case, (0, False))
     service, port, host_label = slots[slot]
     slot_vars = f'slot={slot} service={service} port={port} host_label={host_label}\n'
-    collector_unit, issuer_unit = f'hololive-youtube-collector-{slot}.service', f'hololive-youtube-po-{slot}.service'
+    collector_unit, issuer_unit = f'hololive-collector-{slot}.service', f'hololive-youtube-po-{slot}.service'
     label = f'{slot} {case}'
     with tempfile.TemporaryDirectory(prefix='central-cutover-test-') as raw:
         state = Path(raw)
@@ -1080,13 +1084,13 @@ for slot, case in runs:
             (state / 'direct-origin').touch()
         installed_definition = f'[Container]\nEnvironment=POSTGRES_HOST={host}\nEnvironment=POSTGRES_PORT={db_port}\n'
         if slot == 'c':
-            installed_definition += 'Environment=POSTGRES_POOL_MAX_CONNS=${YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS}\n[Service]\nEnvironment=YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=7\nEnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env\n'
+            installed_definition += 'Environment=POSTGRES_POOL_MAX_CONNS=${COLLECTOR_POSTGRES_POOL_MAX_CONNS}\n[Service]\nEnvironment=COLLECTOR_POSTGRES_POOL_MAX_CONNS=7\nEnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env\n'
         else:
-            installed_definition = (root / 'deploy/podman/iris-seoul/hololive-youtube-collector-b.container').read_text().replace(
+            installed_definition = (root / 'deploy/podman/iris-seoul/hololive-collector-b.container').read_text().replace(
                 'Environment=POSTGRES_PORT=6433', f'Environment=POSTGRES_PORT={db_port}')
         previous_host, previous_port = (('holo-postgres', 5432) if slot == 'c' else ('100.100.1.8', 5433)) if case == 'rollback_cross' else (host, db_port)
         previous_definition = installed_definition.replace(f'POSTGRES_HOST={host}', f'POSTGRES_HOST={previous_host}').replace(f'POSTGRES_PORT={db_port}', f'POSTGRES_PORT={previous_port}') + '# previous revision\n'
-        (state / f'units/hololive-youtube-collector-{slot}.container').write_text(installed_definition)
+        (state / f'units/hololive-collector-{slot}.container').write_text(installed_definition)
         (state / 'compose.env').write_text('APP_ENV=production\n')
         for name in ('hololive-api', 'hololive-alarm-worker', 'holo-pgbouncer'):
             shutil.copyfile(root / f'deploy/quadlet/hololive-bot/{name}.container', state / f'units/{name}.container')
@@ -1101,7 +1105,7 @@ for slot, case in runs:
         subprocess.run(['bash', '-c', '. "$1/scripts/deploy/lib/postgres-capacity.sh"; postgres_capacity_write_pgbouncer_config "$1/scripts/ci/postgres-capacity-policy.tsv" "$2/compose.env" "$2/live-pgbouncer.ini"',
                         '_', str(root), str(state)], check=True, capture_output=True)
         if case in ('capacity_drift', 'rollback_capacity_drift'):
-            (state / 'compose.env').write_text('YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=6\n')
+            (state / 'compose.env').write_text('COLLECTOR_POSTGRES_POOL_MAX_CONNS=6\n')
         elif case == 'capacity_missing':
             (state / 'live-pgbouncer.ini').unlink()
         elif case == 'capacity_query_failed':
@@ -1517,7 +1521,7 @@ for slot, case in runs:
                 assert_held(result)
             pool_host, pool_port = ('holo-pgbouncer', 6432) if slot == 'c' else ('100.100.1.8', 6433)
             candidate_definition = installed_definition.replace(f'POSTGRES_HOST={host}', f'POSTGRES_HOST={pool_host}').replace(f'POSTGRES_PORT={db_port}', f'POSTGRES_PORT={pool_port}')
-            unit_path = state / f'units/hololive-youtube-collector-{slot}.container'
+            unit_path = state / f'units/hololive-collector-{slot}.container'
             unit_path.write_text(candidate_definition)
             if slot == 'c':
                 if scenario in ('success', 'source_changed'):
@@ -1535,7 +1539,7 @@ for slot, case in runs:
                 else:
                     (current / '.source-revision').write_text(new_revision)
             else:
-                shutil.copyfile(staging / 'deploy/podman/iris-seoul/hololive-youtube-collector-b.container', unit_path)
+                shutil.copyfile(staging / 'deploy/podman/iris-seoul/hololive-collector-b.container', unit_path)
                 require(unit_path.read_text() == candidate_definition and not (current / '.source-revision').exists(),
                         'b: actual staged candidate installed without source marker', result)
             (state / 'db.stopped').unlink()
@@ -1556,7 +1560,7 @@ for slot, case in runs:
             elif scenario == 'inventory_unavailable':
                 (state / 'inventory-unavailable').touch()
             if scenario == 'capacity_drift':
-                (state / 'compose.env').write_text('YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=6\n')
+                (state / 'compose.env').write_text('COLLECTOR_POSTGRES_POOL_MAX_CONNS=6\n')
             elif scenario == 'capacity_missing':
                 (state / 'live-pgbouncer.ini').unlink()
             elif scenario == 'capacity_query_failed':
@@ -1576,7 +1580,7 @@ for slot, case in runs:
                 if slot == 'c':
                     (current / '.source-revision').write_text(new_revision)
                 else:
-                    staged_unit = staging / 'deploy/podman/iris-seoul/hololive-youtube-collector-b.container'
+                    staged_unit = staging / 'deploy/podman/iris-seoul/hololive-collector-b.container'
                     staged_unit.write_text(staged_unit.read_text() + '# unreviewed source\n')
             elif scenario == 'installed_unit_changed':
                 unit_path.write_text(candidate_definition + 'Environment=EXTRA=changed\n')
@@ -1587,9 +1591,9 @@ for slot, case in runs:
                 (staging / 'hololive/hololive-api/scripts/migrations/001_schema_epoch4_baseline.sql').write_text('-- changed\n')
             elif scenario == 'source_manifest_changed':
                 (staging / 'source-files.sha256').write_text(
-                    f'{hashlib.sha256(unit_path.read_bytes()).hexdigest()}  deploy/podman/iris-seoul/hololive-youtube-collector-b.container\n')
+                    f'{hashlib.sha256(unit_path.read_bytes()).hexdigest()}  deploy/podman/iris-seoul/hololive-collector-b.container\n')
             elif scenario == 'identity_changed':
-                image_file(state, 'localhost/hololive-youtube-collector:candidate').write_text('old')
+                image_file(state, 'localhost/hololive-collector:candidate').write_text('old')
             elif scenario == 'inputs_changed':
                 (staging / 'collector-image-id').write_text(old_id)
             elif scenario == 'foreign_hold':
@@ -1815,7 +1819,7 @@ for slot, case in runs:
             require(not changed, f'{label}: capacity rejection has no runtime mutations', result)
             if is_rollback:
                 require((previous_pair / 'profile.json').exists() and
-                        (state / f'units/hololive-youtube-collector-{slot}.container').read_text() == installed_definition,
+                        (state / f'units/hololive-collector-{slot}.container').read_text() == installed_definition,
                         f'{label}: rollback recovery and installed unit retained', result)
             else:
                 require(not backup.exists(), f'{label}: capacity rejected before snapshot', result)
@@ -1839,7 +1843,7 @@ for slot, case in runs:
             require(image_file(state, collector_prod).read_text() == 'old', f'{label}: collector tag baseline', result)
             require((image_file(state, issuer_prod).exists()) != issuer_absent, f'{label}: issuer tag baseline', result)
             require((state / 'dropin').read_text() == 'initial', f'{label}: drop-in unchanged', result)
-            require(image_file(state, 'localhost/hololive-youtube-collector:candidate').read_text() == 'new', f'{label}: candidate retained for inspection', result)
+            require(image_file(state, 'localhost/hololive-collector:candidate').read_text() == 'new', f'{label}: candidate retained for inspection', result)
         if case in ('success', 'absent_success', 'transition_success'):
             require(restarts == [f'systemctl restart {unit}' for unit in (issuer_unit, collector_unit)], f'{label}: issuer-first restart order', result)
             require(('lease-proof target' in calls) == (slot == 'c'), f'{label}: lease proof only on central', result)
@@ -1854,8 +1858,8 @@ for slot, case in runs:
             require((state / 'collector.runtime').read_text() == 'old', f'{label}: failed restore leaves the unrestarted collector', result)
         if case == 'rollback':
             release_dir = current / 'artifacts/worker-profile/releases' / backup.name / service
-            require((state / f'units/hololive-youtube-collector-{slot}.container').read_text() == previous_definition, f'{label}: previous base unit restored', result)
-            require((release_dir / f'rollback-replaced-hololive-youtube-collector-{slot}.container').read_text() == installed_definition, f'{label}: replaced base unit retained', result)
+            require((state / f'units/hololive-collector-{slot}.container').read_text() == previous_definition, f'{label}: previous base unit restored', result)
+            require((release_dir / f'rollback-replaced-hololive-collector-{slot}.container').read_text() == installed_definition, f'{label}: replaced base unit retained', result)
             require(calls.index('systemctl daemon-reload') > -1, f'{label}: units reloaded', result)
         expected_runtime = 'absent' if endpoint_blocked else 'new' if is_check or is_rollback and not restored or case in (
             'success', 'absent_success', 'transition_success') else 'old'

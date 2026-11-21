@@ -1,0 +1,260 @@
+package collectorruntime
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/kapu/hololive-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-collector/internal/runtime/collection"
+	"github.com/kapu/hololive-collector/internal/runtime/joblease"
+	"github.com/kapu/hololive-collector/internal/runtime/sourceobservation"
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+)
+
+func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output collection.RunOutput, err error) {
+	if supersededError(err) {
+		e.observePublishOutcome(spec.Provider, output, outcomeSuperseded)
+
+		return
+	}
+
+	e.observePublishOutcome(spec.Provider, output, outcomeRejected)
+}
+
+func (e *collectionExecutor) acquireProvider(ctx context.Context, provider contract.Provider) (resultErr error) {
+	gate := e.gates[provider]
+	if gate == nil {
+		return collecterr.New(contract.ErrorConfiguration, contract.ClassConfiguration, "provider gate is not configured")
+	}
+
+	select {
+	case gate <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("await provider admission slot: %w", err)
+		}
+
+		return nil
+	}
+}
+
+func (e *collectionExecutor) releaseProvider(provider contract.Provider) {
+	gate := e.gates[provider]
+	if gate == nil {
+		return
+	}
+
+	select {
+	case <-gate:
+	default:
+	}
+}
+
+func (e *collectionExecutor) observePublished(output collection.RunOutput, result sourceobservation.PublishBatchResult) {
+	committedAt := time.Now().UTC()
+
+	for i := range output.ObservationCount() {
+		envelope := output.ObservationMetadata(i)
+		outcome, ok := publishedOutcome(result, i)
+
+		if !ok {
+			continue
+		}
+
+		e.metrics.ObservePublish(envelope.Provider, string(envelope.ObservationKind), outcome)
+		e.metrics.ObserveCompleteness(envelope.Provider, string(envelope.ObservationKind), envelope.Completeness, envelope.Continuity)
+
+		if outcome == outcomeCollision {
+			continue
+		}
+
+		published := result.Results[i]
+		e.metrics.ObserveAccepted(envelope.Provider, envelope.ObservationKind, committedAt, published.AcceptedInterval, published.HasAcceptedInterval)
+	}
+}
+
+func (e *collectionExecutor) recordTerminalSuccess(published *sourceobservation.PublishBatchResult) {
+	if e == nil || e.readiness == nil {
+		return
+	}
+
+	e.readiness.ObserveCollectionSuccess()
+
+	if published == nil {
+		return
+	}
+
+	e.readiness.AddHandoffCandidates(handoffCandidateIDs(*published)...)
+}
+
+func handoffCandidateIDs(result sourceobservation.PublishBatchResult) []int64 {
+	ids := make([]int64, 0, len(result.Results))
+	for i := range result.Results {
+		outcome, ok := publishedOutcome(result, i)
+		if !ok || outcome == outcomeCollision {
+			continue
+		}
+
+		id := result.Results[i].ObservationID
+		if id <= 0 {
+			continue
+		}
+
+		ids = append(ids, id)
+	}
+
+	return ids
+}
+
+func publishedOutcome(result sourceobservation.PublishBatchResult, index int) (string, bool) {
+	if index < 0 || index >= len(result.Results) {
+		return "", false
+	}
+
+	return publishOutcomeLabel(result.Results[index].Outcome)
+}
+
+func publishOutcomeLabel(outcome sourceobservation.PublishOutcome) (string, bool) {
+	if outcome == sourceobservation.PublishInserted {
+		return outcomeInserted, true
+	}
+
+	if outcome == sourceobservation.PublishDuplicate {
+		return outcomeDuplicate, true
+	}
+
+	if outcome == sourceobservation.PublishCollision {
+		return outcomeCollision, true
+	}
+
+	return "", false
+}
+
+func (e *collectionExecutor) observePublishOutcome(provider contract.Provider, output collection.RunOutput, outcome string) {
+	for i := range output.ObservationCount() {
+		envelope := output.ObservationMetadata(i)
+		e.metrics.ObservePublish(provider, string(envelope.ObservationKind), outcome)
+	}
+}
+
+func attemptResult(err error) string {
+	if err == nil {
+		return resultSuccess
+	}
+
+	if supersededError(err) {
+		return resultSuperseded
+	}
+
+	return attemptFailureResult(err)
+}
+
+func supersededError(err error) bool {
+	return errors.Is(err, collection.ErrProjectionStale) ||
+		errors.Is(err, collection.ErrTargetDisabled)
+}
+
+func attemptFailureResult(err error) string {
+	switch collecterr.CodeOf(err) {
+	case contract.ErrorCollectionTimeout:
+		return resultTimeout
+	case contract.ErrorCollectionCanceled:
+		return resultCanceled
+	case contract.ErrorParserDrift:
+		return resultParserDrift
+	case contract.ErrorCollectionFailed, contract.ErrorCooldown, contract.ErrorConfiguration, contract.ErrorResponseTooLarge,
+		contract.ErrorHelperBusy, contract.ErrorHelperProtocolMismatch, contract.ErrorInternalInvariant, contract.ErrorTargetRosterTooLarge,
+		contract.ErrorPublishRejected, contract.ErrorObservationCollision, contract.ErrorShutdownRelease,
+		contract.ErrorSupersededRelease, contract.ErrorRenewFailedRelease:
+		return resultFailed
+	default:
+		return resultFailed
+	}
+}
+
+func (e *collectionExecutor) retrySchedule(err error) (collection.RetrySchedule, error) {
+	if boundsErr := e.retryBounds.Validate(); boundsErr != nil {
+		return collection.RetrySchedule{}, fmt.Errorf("retry bounds: %w", boundsErr)
+	}
+
+	now := time.Now().UTC()
+	bounds := e.retryBounds
+	minAt := now.Add(bounds.Minimum)
+	maxAt := now.Add(bounds.Maximum)
+	hint := collecterr.RetryOf(err)
+
+	var retryAt time.Time
+
+	switch hint.Kind() {
+	case collecterr.RetryAt:
+		retryAt = hint.At()
+	case collecterr.RetryAfter:
+		retryAt = now.Add(hint.After())
+	case collecterr.RetryDefault:
+		retryAt = now.Add(bounds.Minimum + (bounds.Maximum-bounds.Minimum)/2)
+	}
+
+	if (hint.Kind() == collecterr.RetryAt || hint.Kind() == collecterr.RetryAfter) &&
+		collecterr.CodeOf(err) == contract.ErrorCooldown && collecterr.ClassOf(err) == contract.ClassCooldown {
+		if retryAt.Before(minAt) {
+			retryAt = minAt
+		}
+
+		schedule, scheduleErr := collection.NewRetryNotBeforeSchedule(retryAt)
+		if scheduleErr != nil {
+			return collection.RetrySchedule{}, fmt.Errorf("cooldown schedule: %w", scheduleErr)
+		}
+
+		return schedule, nil
+	}
+
+	schedule, scheduleErr := collection.NewRetryAtSchedule(clampRetryAt(retryAt, minAt, maxAt))
+	if scheduleErr != nil {
+		return collection.RetrySchedule{}, fmt.Errorf("bounded retry schedule: %w", scheduleErr)
+	}
+
+	return schedule, nil
+}
+
+func clampRetryAt(retryAt, minAt, maxAt time.Time) time.Time {
+	if retryAt.Before(minAt) {
+		return minAt
+	}
+
+	if retryAt.After(maxAt) {
+		return maxAt
+	}
+
+	return retryAt.UTC()
+}
+
+func (e *collectionExecutor) logFailure(ctx context.Context, phase, code, class, detail string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
+	if e.logger == nil {
+		return
+	}
+
+	attrs := []slog.Attr{
+		slog.String("job_key", spec.JobKey),
+		slog.String("provider", string(spec.Provider)),
+		slog.String("job_kind", spec.CollectionJobKind),
+		slog.String("subject_key", spec.SubjectKey),
+		slog.Int64("fence_epoch", proof.FenceEpoch),
+		slog.Int64("projection_generation", proof.ProjectionGeneration),
+		slog.String("error_code", code),
+		slog.String("error_class", class),
+		slog.String("error_detail", collecterr.SanitizeDetail(detail)),
+		slog.String("phase", phase),
+	}
+
+	if canceledByShutdown(ctx, class) {
+		e.logger.LogAttrs(ctx, slog.LevelInfo, "YouTube collection job canceled by shutdown", attrs...)
+
+		return
+	}
+
+	e.logger.LogAttrs(ctx, slog.LevelWarn, "YouTube collection job failed", attrs...)
+}

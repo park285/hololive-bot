@@ -50,8 +50,8 @@ canary_log_file_for_service() {
     alarm-worker|hololive-alarm-worker)
       printf '%s\n' "${REPO_ROOT}/logs/alarm-worker.log"
       ;;
-    youtube-collector|youtube-collector-c)
-      printf '%s\n' "${REPO_ROOT}/logs/youtube-collector-c.log"
+    collector-c)
+      printf '%s\n' "${REPO_ROOT}/logs/collector-c.log"
       ;;
     *)
       return 1

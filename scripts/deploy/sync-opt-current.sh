@@ -1038,7 +1038,7 @@ OPTIONAL_FEATURES=(
   "schedule-poster|HOLOLIVE_SCHEDULE_POSTER_ENABLED|41-schedule-poster.conf|hololive-api"
   "schedule-poster-review|HOLOLIVE_SCHEDULE_POSTER_REVIEW_ENABLED|42-schedule-poster-review.conf|hololive-api"
   "broadcast-type-decision|HOLOLIVE_BROADCAST_TYPE_DECISION_ENABLED|43-broadcast-type-decision.conf|hololive-api"
-  "event-grade|HOLOLIVE_EVENT_GRADE_ENABLED|44-event-grade.conf|hololive-youtube-collector-c"
+  "event-grade|HOLOLIVE_EVENT_GRADE_ENABLED|44-event-grade.conf|hololive-collector-c"
 )
 declare -A feature_enabled=()
 feature_summary=""

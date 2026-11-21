@@ -16,7 +16,7 @@
 
 - `services/hololive-api.md`
 - `services/alarm-worker.md`
-- `services/youtube-collector.md`
+- `services/collector.md`
 - `services/x-spaces.md`
 
 ## Contracts

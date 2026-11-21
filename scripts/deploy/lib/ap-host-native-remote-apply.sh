@@ -15,12 +15,12 @@ po_unit_file="${po_unit_file:?PO helper fragment must be loaded}"
 po_socket_file="${po_socket_file:?PO helper fragment must be loaded}"
 payload="$HOME/$payload_name"
 release_path_lib="$payload/bin/ap-host-native-release-path.sh"
-releases_root="/opt/hololive-bot/youtube-collector/releases"
-current_link="/opt/hololive-bot/youtube-collector/current"
-previous_link="/opt/hololive-bot/youtube-collector/previous"
-host_env="/etc/hololive-bot/youtube-collector-host.env"
-unit_file="/etc/systemd/system/hololive-youtube-collector@.service"
-unit="hololive-youtube-collector@${service}.service"
+releases_root="/opt/hololive-bot/collector/releases"
+current_link="/opt/hololive-bot/collector/current"
+previous_link="/opt/hololive-bot/collector/previous"
+host_env="/etc/hololive-bot/collector-host.env"
+unit_file="/etc/systemd/system/hololive-collector@.service"
+unit="hololive-collector@${service}.service"
 po_apply_lib="$payload/bin/ap-host-native-po.sh"
 worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
 swapfile="/swapfile"
@@ -29,7 +29,7 @@ window_action="${9:?native command required}"
 window_name="${10:-}" window_old="${11:-}" window_digest="${12:-}" window_nonce="${13:-}"
 same_window=false
 if [[ "$window_action" == same-window || "$window_action" == apply-origin || "$window_action" == apply-accepted ]]; then
-  [[ "$(hostname -s)" == osaka1 && "$service" == youtube-collector-a ]]
+  [[ "$(hostname -s)" == osaka1 && "$service" == collector-a ]]
   native_release_id_validate "$release_id"
   release_dir="$releases_root/$release_id" window="$releases_root/$release_id/native-observation"
   window_units=("$po_socket" "$po_service" "$unit")
@@ -42,9 +42,9 @@ collector_readiness_fetch() {
     "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
 }
 native_deployment_inputs() {
-  sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
+  sudo -n test -r /etc/stack-secrets/hololive-bot/collector.env
   sudo -n test -r "$worker_profile"
-  sudo -n awk '/^CACHE_(PASSWORD|HOST|PORT|DB|SOCKET_PATH)=/ {exit 1}' /etc/stack-secrets/hololive-bot/youtube-collector.env
+  sudo -n awk '/^CACHE_(PASSWORD|HOST|PORT|DB|SOCKET_PATH)=/ {exit 1}' /etc/stack-secrets/hololive-bot/collector.env
   sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
   sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
   sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
@@ -112,7 +112,7 @@ case "$window_action" in
     [[ "$(native_apply_preflight "$window_old")" == "$apply_origin_pin" ]]
     exec 3>&1 >&2
     [[ "$(native_payload_digest "$payload")" == "$window_digest" ]]
-    profile_digest="$(native_file_digest "$payload/youtube-collector-host.env")"
+    profile_digest="$(native_file_digest "$payload/collector-host.env")"
     issuer_digest="$(native_file_digest "$payload/$po_service")"
     native_same_window_baseline "$profile_digest" "$(native_file_digest "$payload/${unit_file##*/}")" "$issuer_digest" "$(native_file_digest "$payload/$po_socket")" >&2
     window_action=deploy same_window=true ;;
@@ -226,19 +226,19 @@ sudo -n mkdir -p "$po_install_root"
 sudo -n tar -xf "$release_dir/po-sandbox/rootfs.tar" -C "$po_install_root" --no-same-owner --same-permissions
 sudo -n chown -R -P root:root "$po_install_root"
 po_validate_release "$release_dir"
-sudo -n find -P "$release_dir" "$release_dir/bin" "$release_dir/bin/youtube-collector" "$release_dir/bin/healthcheck" \
-  "$release_dir/bin/youtube-collector-wrapper" -maxdepth 0 ! -perm 0755 -exec chmod 0755 -- {} +
+sudo -n find -P "$release_dir" "$release_dir/bin" "$release_dir/bin/hololive-collector" "$release_dir/bin/healthcheck" \
+  "$release_dir/bin/hololive-collector-wrapper" -maxdepth 0 ! -perm 0755 -exec chmod 0755 -- {} +
 sudo -n install -m 0444 -o root -g root "$worker_profile" "$release_dir/worker-profile.json"
 sudo -n systemd-run --quiet --wait --pipe --collect \
   --property=User=hololive --property=Group=opc --property=PrivateNetwork=yes \
   --property=NoNewPrivileges=yes --property=RuntimeMaxSec=30s \
   --property="WorkingDirectory=$release_dir" --property=ProtectHome=yes --property=ProtectSystem=strict \
   --property=PrivateTmp=yes \
-  --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env \
-  --property="EnvironmentFile=$release_dir/youtube-collector-host.env" \
+  --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/collector.env \
+  --property="EnvironmentFile=$release_dir/collector-host.env" \
   /usr/bin/env "STACK_WORKER_PROFILE_FILE=$release_dir/worker-profile.json" \
-  "$release_dir/bin/youtube-collector-wrapper" "$release_dir/bin/youtube-collector" --check-worker-profile
-sudo -n sh -c 'cd "$1" && sha256sum bin/youtube-collector worker-profile.json > SHA256SUMS && chmod 0444 SHA256SUMS' sh "$release_dir"
+  "$release_dir/bin/hololive-collector-wrapper" "$release_dir/bin/hololive-collector" --check-worker-profile
+sudo -n sh -c 'cd "$1" && sha256sum bin/hololive-collector worker-profile.json > SHA256SUMS && chmod 0444 SHA256SUMS' sh "$release_dir"
 
 if [[ "$window_action" == resume ]]; then
   native_window_pins
@@ -259,7 +259,7 @@ sudo -n cmp -s "$worker_profile" "$release_dir/worker-profile.json" || {
   echo 'candidate source changed during profile validation; writer unchanged' >&2
   exit 1
 }
-candidate_endpoint="$(native_root_endpoint "$release_dir/youtube-collector-host.env")"
+candidate_endpoint="$(native_root_endpoint "$release_dir/collector-host.env")"
 if [[ "$candidate_endpoint" != '100.100.1.8|6433' ]]; then
   echo 'candidate must use the native collector pooler endpoint; writer unchanged' >&2
   exit 1
@@ -363,7 +363,7 @@ native_same_window_stop() {
       [[ "$(native_window_live_generation "$n")" == "$id" ]]
       since="@$EPOCHREALTIME"
       sudo -n systemctl --job-mode=fail stop "$n"
-      sudo -n journalctl --boot --quiet --no-pager --grep='\byoutube_collector_stopped\b' -o json \
+      sudo -n journalctl --boot --quiet --no-pager --grep='\bcollector_stopped\b' -o json \
         --output-fields=_SYSTEMD_INVOCATION_ID --since="$since" "_SYSTEMD_UNIT=$n" "_SYSTEMD_INVOCATION_ID=$id" |
         python3 -I -B -c 'import json,sys; assert json.load(sys.stdin)["_SYSTEMD_INVOCATION_ID"] == sys.argv[1]' "$id"
     fi
@@ -420,7 +420,7 @@ native_same_window_restore() {
   native_same_window_recoverable
   native_rollback_validate "$old_target"
   native_rollback_endpoint_validate "$old_target" "$host_env"
-  native_rollback_endpoint_validate "$old_target" "$release_dir/youtube-collector-host.env"
+  native_rollback_endpoint_validate "$old_target" "$release_dir/collector-host.env"
   native_same_window_recoverable
   if sudo -n test -d "$window/held"; then native_apply_unarm_issuer; fi
   native_release_pin restore profile "$host_env" "$old_target" "$release_dir" "$profile_digest"
@@ -482,13 +482,13 @@ native_restore_recorded_runtime() {
   if [[ -n "$old_target" && -d "$old_target" ]]; then
     rollback_contract_dir="$old_target/rollback-contract"
     native_rollback_validate "$old_target"
-    native_rollback_endpoint_validate "$old_target" "$release_dir/youtube-collector-host.env" || {
+    native_rollback_endpoint_validate "$old_target" "$release_dir/collector-host.env" || {
       echo "automatic rollback blocked; collector and issuer stopped; retain $old_target and $release_dir; recovery guard retained: ${native_recovery_dir?}" >&2
       return 1
     }
     native_rollback_endpoint_validate "$old_target" "$host_env" || return
-    sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
-    sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"
+    sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/collector-host.env" "$host_env"
+    sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-collector@.service" "$unit_file"
     sudo -n ln -sfn "$old_target" "$current_link"
     native_previous_link_restore "$releases_root" "$previous_link" "$rollback_contract_dir/previous-before-cutover"
     po_restore_previous "$old_target"
@@ -580,8 +580,8 @@ if [[ "$same_window" == true ]]; then
   native_cutover_run host-env native_release_pin apply profile "$host_env" "$old_target" "$release_dir" "$profile_digest"
 else
   if [[ "$window_action" == deploy ]]; then native_cutover_run stop stop_native_units_and_require_inactive; fi
-  native_cutover_run host-env sudo -n install -m 0640 -o root -g root "$release_dir/youtube-collector-host.env" "$host_env"
-  native_cutover_run collector-unit sudo -n install -m 0644 -o root -g root "$release_dir/hololive-youtube-collector@.service" "$unit_file"
+  native_cutover_run host-env sudo -n install -m 0640 -o root -g root "$release_dir/collector-host.env" "$host_env"
+  native_cutover_run collector-unit sudo -n install -m 0644 -o root -g root "$release_dir/hololive-collector@.service" "$unit_file"
 fi
 native_cutover_run current-link sudo -n ln -sfn "$release_dir" "$current_link"
 
@@ -597,10 +597,10 @@ native_cutover_run pooled-database sudo -n systemd-run --quiet --wait --pipe --c
   --property=IPAddressDeny=any --property=IPAddressAllow=100.100.1.8/32 \
   --property=TemporaryFileSystem=/etc/stack-secrets:ro \
   --property=BindReadOnlyPaths=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem \
-  --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env \
+  --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/collector.env \
   --property="EnvironmentFile=$host_env" \
   /usr/bin/env "STACK_WORKER_PROFILE_FILE=$release_dir/worker-profile.json" \
-  "$release_dir/bin/youtube-collector-wrapper" "$release_dir/bin/youtube-collector" --check-pooled-database
+  "$release_dir/bin/hololive-collector-wrapper" "$release_dir/bin/hololive-collector" --check-pooled-database
 native_pool_check_pending=false
 
 if [[ "${same_window:-false}" == true ]]; then

@@ -13,7 +13,7 @@ import time
 
 
 UNITS = {'hololive-api.service', 'hololive-alarm-worker.service'} | {
-    f'hololive-youtube-{kind}-{slot}.service' for kind in ('po', 'collector') for slot in 'bcd'
+    f'{prefix}-{slot}.service' for prefix in ('hololive-youtube-po', 'hololive-collector') for slot in 'bcd'
 }
 BUS = 'org.freedesktop.systemd1'
 

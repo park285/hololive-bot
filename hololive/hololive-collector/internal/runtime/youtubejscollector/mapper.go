@@ -1,0 +1,211 @@
+package youtubejscollector
+
+import (
+	"github.com/kapu/hololive-collector/internal/runtime/youtubejs"
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+)
+
+func communityPayload(channelID string, posts []*youtubejs.CommunityPost, maxResults int, page *youtubejs.Pagination) contract.CommunityPayloadV1 {
+	mapped := make([]contract.CommunityPostV1, 0, len(posts))
+	for _, post := range posts {
+		mapped = append(mapped, contract.CommunityPostV1{
+			PostID:         post.PostID,
+			UpstreamPostID: post.UpstreamPostID,
+			ChannelID:      channelID,
+			AuthorID:       post.AuthorID,
+			AuthorName:     post.AuthorName,
+			AuthorPhoto:    thumbnails(post.AuthorPhoto),
+			ContentText:    post.ContentText,
+			PublishedText:  post.PublishedText,
+			PublishedAt:    post.PublishedAt,
+			LikeCount:      post.LikeCount,
+			CommentCount:   post.CommentCount,
+			Images:         thumbnails(post.Images),
+			VideoID:        post.VideoID,
+		})
+	}
+
+	return contract.CommunityPayloadV1{
+		ChannelID: channelID,
+		Posts:     mapped,
+		Coverage: contract.CommunityPageCoverageV1{
+			ChannelID:  channelID,
+			MaxResults: maxResults,
+			PageCount:  page.PageCount,
+			Exhausted:  page.Exhausted,
+		},
+	}
+}
+
+func videoListPayload(
+	channelID string,
+	items []youtubejs.ContentItem,
+	publications []*contract.VideoPublicationV1,
+	maxResults int,
+	page *youtubejs.Pagination,
+) contract.VideoListV1 {
+	videos := make([]contract.VideoListItemV1, 0, len(items))
+	for i := range items {
+		video := contract.VideoListItemV1{VideoID: items[i].VideoID, ChannelID: channelID, Title: items[i].Title}
+
+		if publication := publications[i]; publication != nil {
+			video.Publication = publication
+
+			switch publication.Status {
+			case contract.VideoPublicationPublished:
+				video.PublishedAt = publication.PublishedAt
+			case contract.VideoPublicationUpcomingPremiere:
+				video.ScheduledFor = publication.ScheduledFor
+				video.IsPremiere = new(true)
+			case contract.VideoPublicationUnresolved:
+			}
+		}
+
+		videos = append(videos, video)
+	}
+
+	return contract.VideoListV1{
+		ChannelID: channelID,
+		Videos:    videos,
+		Coverage: contract.ChannelListCoverageV1{
+			ChannelID:  channelID,
+			MaxResults: maxResults,
+			Exhausted:  page.Exhausted,
+		},
+	}
+}
+
+func shortsListPayload(channelID string, items []youtubejs.ContentItem, maxResults int, page *youtubejs.Pagination) contract.ShortsListV1 {
+	videos := make([]contract.VideoListItemV1, 0, len(items))
+	for i := range items {
+		videos = append(videos, contract.VideoListItemV1{
+			VideoID:   items[i].VideoID,
+			ChannelID: channelID,
+			Title:     items[i].Title,
+		})
+	}
+
+	return contract.ShortsListV1{
+		ChannelID: channelID,
+		Videos:    videos,
+		Coverage: contract.ShortsListCoverageV1{
+			ChannelID:  channelID,
+			MaxResults: maxResults,
+			Exhausted:  page.Exhausted,
+		},
+	}
+}
+
+func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem, query *contract.LiveSnapshotQueryV1) contract.LiveSnapshotV1 {
+	mapped := make([]contract.LiveSessionV1, 0, len(sessions))
+
+	for _, session := range sessions {
+		item := contract.LiveSessionV1{
+			VideoID:            session.VideoID,
+			ChannelID:          channelID,
+			Status:             session.Status,
+			ScheduledAt:        session.ScheduledAt,
+			ScheduleObservedAt: session.ScheduleObservedAt,
+			StartedAt:          session.StartedAt,
+			EndedAt:            session.EndedAt,
+			Title:              session.Title,
+			ThumbnailURL:       session.ThumbnailURL,
+		}
+
+		mapped = append(mapped, item)
+	}
+
+	return contract.LiveSnapshotV1{
+		Sessions: mapped,
+		Query:    query,
+		Coverage: contract.GlobalChannelCoverageV1{
+			RequestedChannelIDs: []string{channelID},
+			GroupKey:            channelID,
+			Filters:             contract.LiveFiltersV1{Statuses: query.Statuses},
+		},
+	}
+}
+
+func channelProfilePayload(channelID string, profile youtubejs.ChannelProfileItem) (contract.ChannelProfileV1, bool) {
+	payload := contract.ChannelProfileV1{ChannelID: channelID}
+	fields := make([]string, 0, 4)
+
+	if profile.Handle != nil {
+		payload.Handle = contract.FieldValue[string]{Present: true, Value: *profile.Handle}
+
+		fields = append(fields, "handle")
+	}
+
+	if profile.Description != nil {
+		payload.Description = contract.FieldValue[string]{Present: true, Value: *profile.Description}
+
+		fields = append(fields, "description")
+	}
+
+	if profile.Country != nil {
+		payload.Country = contract.FieldValue[string]{Present: true, Value: *profile.Country}
+
+		fields = append(fields, "country")
+	}
+
+	if profile.JoinedDate != nil {
+		payload.JoinedDate = contract.FieldValue[string]{Present: true, Value: *profile.JoinedDate}
+
+		fields = append(fields, "joined_date")
+	}
+
+	if len(fields) == 0 {
+		return contract.ChannelProfileV1{}, false
+	}
+
+	payload.Coverage = contract.ChannelProfileCoverageV1{ChannelID: channelID, Fields: fields}
+
+	return payload, true
+}
+
+func channelPhotoPayload(channelID string, variants []youtubejs.ChannelPhotoVariant) (contract.ChannelPhotoV1, bool) {
+	if len(variants) == 0 {
+		return contract.ChannelPhotoV1{}, false
+	}
+
+	mapped := make([]contract.PhotoVariantV1, 0, len(variants))
+	kinds := make([]string, 0, 2)
+	seen := make(map[string]struct{}, 2)
+
+	for _, variant := range variants {
+		mapped = append(mapped, contract.PhotoVariantV1{
+			Kind:   variant.Kind,
+			URL:    variant.URL,
+			Width:  variant.Width,
+			Height: variant.Height,
+		})
+		if _, ok := seen[variant.Kind]; ok {
+			continue
+		}
+
+		seen[variant.Kind] = struct{}{}
+		kinds = append(kinds, variant.Kind)
+	}
+
+	return contract.ChannelPhotoV1{
+		ChannelID: channelID,
+		Variants:  mapped,
+		Coverage: contract.ChannelPhotoCoverageV1{
+			ChannelID: channelID,
+			Variants:  kinds,
+		},
+	}, true
+}
+
+func thumbnails(values []youtubejs.CommunityThumbnail) []contract.Thumbnail {
+	if len(values) == 0 {
+		return nil
+	}
+
+	mapped := make([]contract.Thumbnail, 0, len(values))
+	for _, value := range values {
+		mapped = append(mapped, contract.Thumbnail{URL: value.URL, Width: value.Width, Height: value.Height})
+	}
+
+	return mapped
+}

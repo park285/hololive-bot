@@ -18,23 +18,23 @@ source "${ROOT_DIR}/scripts/logs/remote-sync-main-logs.sh" >/dev/null
 
 [[ "${CENTRAL_REMOTE_LOG_DIR}" == "/var/log/hololive-bot" ]] ||
   fail "central should default to the compose log dir"
-[[ "${CENTRAL_SERVICES}" == "hololive-api alarm-worker youtube-collector-c" ]] ||
+[[ "${CENTRAL_SERVICES}" == "hololive-api alarm-worker collector-c" ]] ||
   fail "central should mirror all application runtimes"
 [[ "${OSAKA_REMOTE_LOG_DIR}" == "/var/log/hololive-bot" ]] ||
   fail "osaka should default to host-native log dir"
-[[ "${OSAKA_SERVICES}" == "youtube-collector-a" ]] ||
-  fail "osaka should default to youtube-collector-a"
-[[ "$(remote_log_service_name osaka youtube-collector-a)" == "youtube-collector-a" ]] ||
-  fail "osaka collector-a should mirror youtube-collector-a.log"
-[[ "$(remote_log_service_name seoul youtube-collector-b)" == "youtube-collector-b" ]] ||
-  fail "seoul collector-b should mirror youtube-collector-b.log"
+[[ "${OSAKA_SERVICES}" == "collector-a" ]] ||
+  fail "osaka should default to collector-a"
+[[ "$(remote_log_service_name osaka collector-a)" == "collector-a" ]] ||
+  fail "osaka collector-a should mirror collector-a.log"
+[[ "$(remote_log_service_name seoul collector-b)" == "collector-b" ]] ||
+  fail "seoul collector-b should mirror collector-b.log"
 remote_log_include_patterns central hololive-api | grep -Fx "hololive-api.log.*" >/dev/null ||
   fail "central should include sibling logrotate files"
-remote_log_include_patterns central youtube-collector-c | grep -Fx "archive/youtube-collector-c*" >/dev/null ||
+remote_log_include_patterns central collector-c | grep -Fx "archive/collector-c*" >/dev/null ||
   fail "central should include archived collector files"
-remote_log_include_patterns osaka youtube-collector-a | grep -Fx "youtube-collector-a.log.*" >/dev/null ||
+remote_log_include_patterns osaka collector-a | grep -Fx "collector-a.log.*" >/dev/null ||
   fail "osaka should include sibling logrotate files"
-remote_log_include_patterns osaka youtube-collector-a | grep -Fx "archive/youtube-collector-a*" >/dev/null ||
+remote_log_include_patterns osaka collector-a | grep -Fx "archive/collector-a*" >/dev/null ||
   fail "osaka should include archived logrotate files"
 if declare -F ensure_main_links >/dev/null; then
   fail "remote sync must not create aliases in the live runtime log namespace"

@@ -28,7 +28,7 @@ secrets/*
 hololive/hololive-kakao-bot-go/bot
 hololive/hololive-kakao-bot-go/fetch_profiles
 hololive/hololive-kakao-bot-go/config.json
-hololive/hololive-youtube-collector/youtube-collector
+hololive/hololive-collector/collector
 
 # ============================================
 # Rust

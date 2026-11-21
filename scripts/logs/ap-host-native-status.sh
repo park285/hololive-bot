@@ -22,7 +22,7 @@ set -euo pipefail
 service="$1"
 port="$2"
 since="$3"
-unit="hololive-youtube-collector@${service}.service"
+unit="hololive-collector@${service}.service"
 
 echo "== systemd =="
 systemctl show "$unit" -p ActiveState -p SubState -p ExecMainPID -p MemoryCurrent -p NRestarts -p ActiveEnterTimestamp || true
@@ -35,19 +35,19 @@ sudo -n find /etc/stack-secrets/hololive-bot -maxdepth 3 -printf "%M %u %g %s %T
 
 echo
 echo "== env keys =="
-sudo -n sh -c 'for f in /etc/stack-secrets/hololive-bot/*.env /etc/hololive-bot/youtube-collector-host.env; do test -r "$f" && printf "%s\n" "$f" && cut -d= -f1 "$f" | sort; done' || true
+sudo -n sh -c 'for f in /etc/stack-secrets/hololive-bot/*.env /etc/hololive-bot/collector-host.env; do test -r "$f" && printf "%s\n" "$f" && cut -d= -f1 "$f" | sort; done' || true
 
 echo
 echo "== health =="
-if [[ -x /opt/hololive-bot/youtube-collector/current/bin/healthcheck ]]; then
+if [[ -x /opt/hololive-bot/collector/current/bin/healthcheck ]]; then
   sudo -n -u hololive env \
   HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
-    /opt/hololive-bot/youtube-collector/current/bin/healthcheck "https://127.0.0.1:${port}/health" || true
+    /opt/hololive-bot/collector/current/bin/healthcheck "https://127.0.0.1:${port}/health" || true
   sudo -n -u hololive env \
   HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
-    /opt/hololive-bot/youtube-collector/current/bin/healthcheck --body "https://127.0.0.1:${port}/ready" || true
+    /opt/hololive-bot/collector/current/bin/healthcheck --body "https://127.0.0.1:${port}/ready" || true
 else
   echo "(healthcheck binary missing)"
 fi

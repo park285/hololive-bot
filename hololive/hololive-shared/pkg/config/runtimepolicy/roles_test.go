@@ -6,10 +6,10 @@ func TestPostgresCollectorRoleUser(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]string{
-		"youtube-collector-a": PostgresCollectorARoleUser,
-		"youtube-collector-b": PostgresCollectorBRoleUser,
-		"youtube-collector-c": PostgresCollectorCRoleUser,
-		"youtube-collector-d": PostgresCollectorDRoleUser,
+		"collector-a": PostgresCollectorARoleUser,
+		"collector-b": PostgresCollectorBRoleUser,
+		"collector-c": PostgresCollectorCRoleUser,
+		"collector-d": PostgresCollectorDRoleUser,
 	}
 
 	for instanceID, want := range tests {
@@ -18,7 +18,7 @@ func TestPostgresCollectorRoleUser(t *testing.T) {
 		}
 	}
 
-	if got, ok := PostgresCollectorRoleUser("youtube-collector-e"); ok || got != "" {
+	if got, ok := PostgresCollectorRoleUser("collector-e"); ok || got != "" {
 		t.Fatalf("unsupported collector role = %q, %v; want empty, false", got, ok)
 	}
 }

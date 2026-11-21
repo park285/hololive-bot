@@ -7,7 +7,7 @@ REMOTE_APPLY="${ROOT_DIR}/scripts/deploy/lib/ap-host-native-remote-apply.sh"
 ROLLBACK="${ROOT_DIR}/scripts/deploy/ap-host-native-rollback.sh"
 RELEASE_PATH_LIB="${ROOT_DIR}/scripts/deploy/lib/ap-host-native-release-path.sh"
 ROLLBACK_CHECK_LIB="${ROOT_DIR}/scripts/deploy/lib/ap-host-native-rollback-check.sh"
-UNIT_TEMPLATE="${ROOT_DIR}/scripts/deploy/lib/hololive-youtube-collector.service"
+UNIT_TEMPLATE="${ROOT_DIR}/scripts/deploy/lib/hololive-collector.service"
 
 failures=0
 record_fail() { echo "[FAIL] $*" >&2; failures=$((failures + 1)); }
@@ -23,12 +23,12 @@ pass() { echo "[PASS] $*"; }
 
 write_host_env_fn="$(awk '/^write_host_env\(\) \{/,/^}$/' "${DEPLOY}")"
 cfg008_dir="$(mktemp -d)"
-generated_env="${cfg008_dir}/youtube-collector-host.env"
+generated_env="${cfg008_dir}/collector-host.env"
 if [[ -z "${write_host_env_fn}" ]]; then
   record_fail "ap-host-native write_host_env function is missing"
 elif (
   # shellcheck disable=SC2178
-  export service="youtube-collector-a"
+  export service="collector-a"
   export port="30005"
   export release_id="profile-pair-fixture"
   export REPO_ROOT="${ROOT_DIR}"
@@ -78,7 +78,7 @@ fi
   printf ': fixture-product-window\n' >>"$product/scripts/deploy/lib/ap-host-native-window.sh"
   cp "$ROOT_DIR/deploy/topology/hosts.conf" "$product/deploy/topology/"
   printf '%s\n' "$write_host_env_fn" >"$product/scripts/deploy/ap-host-native-deploy.sh"
-  cp "$ROOT_DIR"/scripts/deploy/lib/hololive-youtube-{collector.service,po.service,po.socket} "$product/scripts/deploy/lib/"
+  cp "$ROOT_DIR"/scripts/deploy/lib/{hololive-collector.service,hololive-youtube-po.service,hololive-youtube-po.socket} "$product/scripts/deploy/lib/"
   cp "$ROOT_DIR/scripts/ci/postgres-capacity-policy.tsv" "$product/scripts/ci/"
   sed -e 's/^AP_GOAMD64=.*/AP_GOAMD64=v1/' -e 's/^AP_SSH_HOST=.*/AP_SSH_HOST=fixture-ap/' \
     "$ROOT_DIR/scripts/deploy/ap-hosts/osaka.conf" >"$product/scripts/deploy/ap-hosts/osaka.conf"
@@ -111,7 +111,7 @@ fi
   request="$(tail -n1 "$fixture/request")"
   read -r _ _ _ _ requested_id _ <<<"$request"
   env_hash="$(sed -e "s/profile-pair-fixture/$requested_id/g" -e 's/100\.100\.1\.6:30096/fixture-ap:30096/' "$generated_env" | sha256sum)"
-  collector_hash="$(sha256sum "$product/scripts/deploy/lib/hololive-youtube-collector.service")"
+  collector_hash="$(sha256sum "$product/scripts/deploy/lib/hololive-collector.service")"
   issuer_hash="$(sed "s/@RELEASE_ID@/$requested_id/g" "$product/scripts/deploy/lib/hololive-youtube-po.service" | sha256sum)"
   socket_hash="$(sha256sum "$product/scripts/deploy/lib/hololive-youtube-po.socket")"
   [[ "$request" == *" $AP_NATIVE_PRODUCT_REVISION apply-origin ${env_hash%% *} ${collector_hash%% *} ${issuer_hash%% *} ${socket_hash%% *}" ]]
@@ -207,14 +207,14 @@ rm -rf "${permission_fixture}"
 
 unit_copy_dir="$(mktemp -d)"
 mkdir -p "${unit_copy_dir}/etc/systemd/system" \
-  "${unit_copy_dir}/opt/hololive-bot/youtube-collector/current/bin"
-cp "${UNIT_TEMPLATE}" "${unit_copy_dir}/etc/systemd/system/hololive-youtube-collector@.service"
-printf '#!/bin/sh\nexit 0\n' >"${unit_copy_dir}/opt/hololive-bot/youtube-collector/current/bin/youtube-collector-wrapper"
-chmod +x "${unit_copy_dir}/opt/hololive-bot/youtube-collector/current/bin/youtube-collector-wrapper"
+  "${unit_copy_dir}/opt/hololive-bot/collector/current/bin"
+cp "${UNIT_TEMPLATE}" "${unit_copy_dir}/etc/systemd/system/hololive-collector@.service"
+printf '#!/bin/sh\nexit 0\n' >"${unit_copy_dir}/opt/hololive-bot/collector/current/bin/hololive-collector-wrapper"
+chmod +x "${unit_copy_dir}/opt/hololive-bot/collector/current/bin/hololive-collector-wrapper"
 for fixture_target in sysinit.target basic.target network-online.target shutdown.target sockets.target paths.target; do
   printf '[Unit]\nDescription=fixture\n' >"${unit_copy_dir}/etc/systemd/system/${fixture_target}"
 done
-if systemd-analyze verify --root="${unit_copy_dir}" /etc/systemd/system/hololive-youtube-collector@.service; then
+if systemd-analyze verify --root="${unit_copy_dir}" /etc/systemd/system/hololive-collector@.service; then
   pass "canonical host-native systemd unit passes systemd-analyze verify"
 else
   record_fail "canonical host-native systemd unit must pass systemd-analyze verify"
@@ -240,7 +240,7 @@ run_native_units() (
   local state="$1" script="$2"
   po_service=hololive-youtube-po.service
   po_socket=hololive-youtube-po.socket
-  unit=hololive-youtube-collector@youtube-collector-a.service
+  unit=hololive-collector@collector-a.service
   # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 변경 전 실행 상태입니다.
   collector_prechange_running=true collector_prechange_enabled=true
   old_target="${state}/old-release"
@@ -251,9 +251,9 @@ run_native_units() (
   mkdir -p "${old_target}"
   release_dir="${state}/new-release"
   mkdir -p "${old_target}/rollback-contract" "${release_dir}"
-  printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n' > "${release_dir}/youtube-collector-host.env"
-  cp "${release_dir}/youtube-collector-host.env" "${old_target}/rollback-contract/youtube-collector-host.env"
-  cp "${release_dir}/youtube-collector-host.env" "${host_env}"
+  printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n' > "${release_dir}/collector-host.env"
+  cp "${release_dir}/collector-host.env" "${old_target}/rollback-contract/collector-host.env"
+  cp "${release_dir}/collector-host.env" "${host_env}"
   native_cutover_run() {
     shift
     # shellcheck disable=SC2034 # eval한 실제 복원 함수가 읽는 완료 상태입니다.
@@ -324,11 +324,11 @@ stop_case() {
   done
   printf '%s\n' "${state}"
 }
-running_units=(hololive-youtube-po.socket hololive-youtube-po.service hololive-youtube-collector@youtube-collector-a.service)
+running_units=(hololive-youtube-po.socket hololive-youtube-po.service hololive-collector@collector-a.service)
 stops_po_before_collector() {
   local po_stop_line collector_stop_line
   po_stop_line="$(grep -nEx '(stop|disable --now) hololive-youtube-po\.socket' "$1/calls" | head -1 | cut -d: -f1)"
-  collector_stop_line="$(grep -nFx 'disable --now hololive-youtube-collector@youtube-collector-a.service' "$1/calls" | head -1 | cut -d: -f1)"
+  collector_stop_line="$(grep -nFx 'disable --now hololive-collector@collector-a.service' "$1/calls" | head -1 | cut -d: -f1)"
   [[ -n "${po_stop_line}" && -n "${collector_stop_line}" ]] && (( po_stop_line < collector_stop_line ))
 }
 
@@ -352,7 +352,7 @@ else
   record_fail "ap-host-native cutover top-level step must stop the PO issuer before the collector"
 fi
 
-first_install_state="$(stop_case first-install hololive-youtube-collector@youtube-collector-a.service)"
+first_install_state="$(stop_case first-install hololive-collector@collector-a.service)"
 if run_native_stop "${first_install_state}" >/dev/null &&
    [[ -z "$(ls -A "${first_install_state}/active")" ]] &&
    ! grep -q '^stop ' "${first_install_state}/calls"; then
@@ -386,7 +386,7 @@ if (( native_rc == 1 )) &&
    ! grep -qF "${restore_warning}" "${restore_state}/stderr" &&
    [[ -z "$(ls -A "${restore_state}/active")" ]] &&
    stops_po_before_collector "${restore_state}" &&
-   grep -qFx 'enable --now hololive-youtube-collector@youtube-collector-a.service' "${restore_state}/calls"; then
+   grep -qFx 'enable --now hololive-collector@collector-a.service' "${restore_state}/calls"; then
   pass "ap-host-native failed-cutover restore stops the PO issuer before the collector"
 else
   record_fail "ap-host-native failed-cutover restore must stop the PO issuer before the collector and restore the previous release"
@@ -407,7 +407,7 @@ substitution_state="$(stop_case restore-substitution "${running_units[@]}")"
 run_native_case "${substitution_state}" 'set -Eeuo pipefail; arm_native_cutover_restore; ready="$(false)"; printf "%s\n" "${ready}"'
 if (( native_rc == 1 )) &&
    ! grep -qF "${restore_warning}" "${substitution_state}/stderr" &&
-   [[ "$(grep -cFx 'enable --now hololive-youtube-collector@youtube-collector-a.service' "${substitution_state}/calls")" == 1 ]] &&
+   [[ "$(grep -cFx 'enable --now hololive-collector@collector-a.service' "${substitution_state}/calls")" == 1 ]] &&
    [[ "$(grep -cFx 'po_restore_previous '"${substitution_state}/old-release" "${substitution_state}/calls")" == 1 ]]; then
   pass "ap-host-native failed-cutover restore runs once when a command substitution fails"
 else
@@ -456,7 +456,7 @@ if (
         . "$NATIVE_TEST_ROOT/scripts/deploy/lib/ap-host-native-window.sh"
         current_link="$NATIVE_TEST_BASE/current" releases_root="$NATIVE_TEST_BASE/releases"
         # shellcheck disable=SC2178
-        native_recovery_dir="$NATIVE_TEST_BASE/recovery" service=youtube-collector-a
+        native_recovery_dir="$NATIVE_TEST_BASE/recovery" service=collector-a
         touch "$NATIVE_TEST_BASE/checked"
         native_apply_preflight ;;
       *) return 91 ;;
@@ -577,30 +577,30 @@ EOF
 chmod +x "${tmp}/rollback-bin/sudo" "${tmp}/rollback-bin/systemd-analyze" "${tmp}/rollback-bin/systemd-run"
 
 rollback_fixture="${tmp}/rollback-fixture"
-printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/youtube-collector"
-printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/youtube-collector-wrapper"
+printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/hololive-collector"
+printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/hololive-collector-wrapper"
 printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/healthcheck"
 mkdir -p "${rollback_fixture}/youtubejs/src"
 printf 'export {}\n' > "${rollback_fixture}/youtubejs/src/server.mjs"
-chmod +x "${rollback_fixture}/bin/youtube-collector" \
-  "${rollback_fixture}/bin/youtube-collector-wrapper" \
+chmod +x "${rollback_fixture}/bin/hololive-collector" \
+  "${rollback_fixture}/bin/hololive-collector-wrapper" \
   "${rollback_fixture}/bin/healthcheck"
-printf 'APP_ENV=production\nSTACK_WORKER_PROFILE_FILE=%s/worker-profile.json\n' "$rollback_fixture" > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
-printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n' >> "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
+printf 'APP_ENV=production\nSTACK_WORKER_PROFILE_FILE=%s/worker-profile.json\n' "$rollback_fixture" > "${rollback_fixture}/rollback-contract/collector-host.env"
+printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n' >> "${rollback_fixture}/rollback-contract/collector-host.env"
 printf '{}\n' > "$rollback_fixture/worker-profile.json"
-(cd "$rollback_fixture" && sha256sum bin/youtube-collector worker-profile.json > SHA256SUMS)
-printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
+(cd "$rollback_fixture" && sha256sum bin/hololive-collector worker-profile.json > SHA256SUMS)
+printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-collector@.service"
 printf 'absent\n' > "${rollback_fixture}/rollback-contract/previous-before-cutover"
 printf 'absent\n' > "${rollback_fixture}/rollback-contract/po-unit-presence"
 (
   cd "${rollback_fixture}"
   sha256sum \
-    bin/youtube-collector \
-    bin/youtube-collector-wrapper \
+    bin/hololive-collector \
+    bin/hololive-collector-wrapper \
     bin/healthcheck \
     worker-profile.json SHA256SUMS \
-    rollback-contract/youtube-collector-host.env \
-    rollback-contract/hololive-youtube-collector@.service \
+    rollback-contract/collector-host.env \
+    rollback-contract/hololive-collector@.service \
     rollback-contract/previous-before-cutover \
     rollback-contract/po-unit-presence \
     > rollback-contract/SHA256SUMS
@@ -630,25 +630,25 @@ else
 fi
 mv "${rollback_fixture}/bin/healthcheck.missing" "${rollback_fixture}/bin/healthcheck"
 
-printf 'corrupt\n' >> "${rollback_fixture}/bin/youtube-collector"
+printf 'corrupt\n' >> "${rollback_fixture}/bin/hololive-collector"
 if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/corrupt.out" 2>"${tmp}/corrupt.err"; then
   record_fail "native rollback validation must reject a corrupt binary"
 else
   pass "native rollback validation rejects a corrupt binary"
 fi
-sed -i '$d' "${rollback_fixture}/bin/youtube-collector"
-chmod +x "${rollback_fixture}/bin/youtube-collector"
+sed -i '$d' "${rollback_fixture}/bin/hololive-collector"
+chmod +x "${rollback_fixture}/bin/hololive-collector"
 
-printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
+printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-collector@.service"
 (
   cd "${rollback_fixture}"
   sha256sum \
-    bin/youtube-collector \
-    bin/youtube-collector-wrapper \
+    bin/hololive-collector \
+    bin/hololive-collector-wrapper \
     bin/healthcheck \
     worker-profile.json SHA256SUMS \
-    rollback-contract/youtube-collector-host.env \
-    rollback-contract/hololive-youtube-collector@.service \
+    rollback-contract/collector-host.env \
+    rollback-contract/hololive-collector@.service \
     rollback-contract/previous-before-cutover \
     rollback-contract/po-unit-presence \
     > rollback-contract/SHA256SUMS

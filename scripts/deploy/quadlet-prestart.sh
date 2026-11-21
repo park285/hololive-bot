@@ -51,7 +51,7 @@ if [[ "$target" == --render-env ]]; then
     render_env=true
     target="$2"
     case "$target" in
-        hololive-api|hololive-alarm-worker|hololive-youtube-collector-c) ;;
+        hololive-api|hololive-alarm-worker|hololive-collector-c) ;;
         *) die "unsupported render-env unit" ;;
     esac
     if [[ "$#" -eq 5 ]]; then
@@ -86,8 +86,7 @@ validate_container_env_file() {
             key = substr(line, 1, eq - 1)
             value = substr(line, eq + 1)
             if (key !~ /^[A-Za-z_][A-Za-z0-9_]*$/) { print "[quadlet-prestart] invalid env key at line " NR > "/dev/stderr"; bad = 1; next }
-            if (seen[key]++) { print "[quadlet-prestart] duplicate env key: " key > "/dev/stderr"; bad = 1; next }
-        }
+            if (seen[key]++) { print "[quadlet-prestart] duplicate env key: " key > "/dev/stderr"; bad = 1; next }        }
         END { exit bad }
     ' "$file" || die "container env file is invalid: ${file}"
 }
@@ -166,7 +165,7 @@ api_release_version() {
 }
 
 case "$target" in
-    hololive-api|hololive-alarm-worker|hololive-youtube-collector-c)
+    hololive-api|hololive-alarm-worker|hololive-collector-c)
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         if [[ "$render_env" != true ]]; then
             postgres_capacity_assert_service "$source_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
@@ -175,10 +174,10 @@ case "$target" in
 esac
 case "$target" in
     collector-enabled)
-        case "${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}" in
+        case "${HOLOLIVE_DISABLE_COLLECTOR:-}" in
             ""|0) exit 0 ;;
-            1) echo "[quadlet-prestart] HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR=1; collector c stays stopped" >&2; exit 1 ;;
-            *) echo "[quadlet-prestart] HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR must be 0 or 1" >&2; exit 255 ;;
+            1) echo "[quadlet-prestart] HOLOLIVE_DISABLE_COLLECTOR=1; collector c stays stopped" >&2; exit 1 ;;
+            *) echo "[quadlet-prestart] HOLOLIVE_DISABLE_COLLECTOR must be 0 or 1" >&2; exit 255 ;;
         esac
         ;;
     holo-postgres)
@@ -261,13 +260,13 @@ case "$target" in
             'POSTGRES_PASSWORD=HOLOLIVE_DB_PASSWORD!' \
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
-    hololive-youtube-collector-c)
+    hololive-collector-c)
         require_values LIVE_LOGS_PATH
-        validate_container_env_file "${secrets_dir}/youtube-collector.env"
+        validate_container_env_file "${secrets_dir}/collector.env"
         if [[ "$render_env" == false ]]; then
             wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
         fi
-        write_secret_env hololive-youtube-collector-c \
+        write_secret_env hololive-collector-c \
             'POSTGRES_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;

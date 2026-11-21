@@ -24,8 +24,8 @@ case "$mode" in
   *) [[ "$seal" == - ]] || exit 2 ;;
 esac
 case "$slot" in
-  c) remote_root=/opt/hololive-bot/compose service=youtube-collector port=30025 host_label=central ;;
-  b) remote_root=/opt/hololive-bot/collector-b service=youtube-collector-b port=30015 host_label=iris-seoul ;;
+  c) remote_root=/opt/hololive-bot/compose service=collector-c port=30025 host_label=central ;;
+  b) remote_root=/opt/hololive-bot/collector-b service=collector-b port=30015 host_label=iris-seoul ;;
   *) exit 2 ;;
 esac
 [[ "$mode" == deploy || "$mode" == quiesce || "$mode" == resume || "$mode" == rollback || "$mode" == check ]] || exit 2
@@ -43,13 +43,13 @@ manifest="../po-current-$slot/rootfs-manifest.json"
 image_id_file="../po-current-$slot/image-id"
 change_id="${backup##*-}"
 profile_release="$current/artifacts/worker-profile/releases/${backup##*/}/$service"
-collector=localhost/hololive-youtube-collector:prod
+collector=localhost/hololive-collector:prod
 issuer=localhost/hololive-youtube-po-sandbox:prod
-collector_candidate=localhost/hololive-youtube-collector:candidate
+collector_candidate=localhost/hololive-collector:candidate
 issuer_candidate=localhost/hololive-youtube-po-sandbox:candidate
-collector_rollback="localhost/hololive-youtube-collector:rollback-$change_id"
+collector_rollback="localhost/hololive-collector:rollback-$change_id"
 issuer_rollback="localhost/hololive-youtube-po-sandbox:rollback-$change_id"
-collector_container="hololive-youtube-collector-$slot"
+collector_container="hololive-collector-$slot"
 issuer_container="hololive-youtube-po-$slot"
 collector_unit="$collector_container.service"
 issuer_unit="$issuer_container.service"
@@ -727,7 +727,7 @@ verify_collector_runtime() {
   po_image_id_matches "$running" "$reviewed" && [[ "$running" == "$tagged" ]] || return 1
   ready="$(podman exec "$collector_container" ./bin/healthcheck --body "https://127.0.0.1:$port/ready")" || return 1
   collector_readiness_validate "$ready" || return 1
-  collector_readiness_json_field "$ready" instance_id "\"youtube-collector-$slot\""
+  collector_readiness_json_field "$ready" instance_id "\"collector-$slot\""
 }
 started_since() {
   local since_epoch="$1" container_name="$2"

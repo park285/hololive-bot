@@ -46,7 +46,7 @@ Go module directories stay stable:
 - `hololive/hololive-shared/`
 - `hololive/hololive-api/`
 - `hololive/hololive-alarm-worker/`
-- `hololive/hololive-youtube-collector/`
+- `hololive/hololive-collector/`
 - `hololive/hololive-dbtest/`
 
 `go.work` also uses the sibling repositories `../shared-go` and `../iris-client-go`.

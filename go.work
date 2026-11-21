@@ -9,9 +9,9 @@ use (
 	../shared-go/transport
 	./hololive/hololive-alarm-worker
 	./hololive/hololive-api
+	./hololive/hololive-collector
 	./hololive/hololive-dbtest
 	./hololive/hololive-shared
-	./hololive/hololive-youtube-collector
 )
 
 replace github.com/park285/iris-client-go/adapters/valkeydedup v1.0.0 => ../iris-client-go/adapters/valkeydedup

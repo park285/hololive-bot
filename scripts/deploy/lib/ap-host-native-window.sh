@@ -62,14 +62,14 @@ PY
 }
 
 native_apply_preflight() {
-  [[ "$(hostname -s)" == osaka1 && "${service?}" == youtube-collector-a ]] || return 1
+  [[ "$(hostname -s)" == osaka1 && "${service?}" == collector-a ]] || return 1
   native_recovery_require_clear && sudo -n test ! -L "$native_recovery_dir" || return 1
   native_window_identity apply "${1:-}" ''
 }
 
 native_window_pins() {
   [[ "${window_name?}" == "$native_release_window" ]] || return 1
-  [[ "$(hostname -s)" == osaka1 && "$service" == youtube-collector-a && "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ &&
+  [[ "$(hostname -s)" == osaka1 && "$service" == collector-a && "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ &&
      "${window_digest?}" =~ ^[0-9a-f]{64}$ && "${window_old?}" != "${release_id?}" ]] || return 1
   native_release_id_validate "$window_old" && native_release_id_validate "$release_id" || return 1
   case "$window_name" in W1) original_port=5433 ;; W2) original_port=6433 ;; *) return 1 ;; esac
@@ -98,14 +98,14 @@ native_snapshot_before_cutover() {
   po_snapshot_previous "$old_target"
   printf '%s\n' "${old_previous_target:-absent}" | sudo -n tee "$contract/previous-before-cutover" >/dev/null
   sudo -n chmod 0644 "$contract/previous-before-cutover"
-  sudo -n install -m 0640 -o root -g root "$host_env" "$contract/youtube-collector-host.env"
-  sudo -n install -m 0644 -o root -g root "${unit_file?}" "$contract/hololive-youtube-collector@.service"
+  sudo -n install -m 0640 -o root -g root "$host_env" "$contract/collector-host.env"
+  sudo -n install -m 0644 -o root -g root "${unit_file?}" "$contract/hololive-collector@.service"
   sudo -n sh -ec '
     cd "$1"
-    for f in bin/youtube-collector bin/youtube-collector-wrapper bin/healthcheck; do test -x "$f"; done
+    for f in bin/hololive-collector bin/hololive-collector-wrapper bin/healthcheck; do test -x "$f"; done
     test -f youtubejs/src/server.mjs
-    sha256sum bin/youtube-collector bin/youtube-collector-wrapper bin/healthcheck worker-profile.json SHA256SUMS \
-      rollback-contract/youtube-collector-host.env rollback-contract/hololive-youtube-collector@.service \
+    sha256sum bin/hololive-collector bin/hololive-collector-wrapper bin/healthcheck worker-profile.json SHA256SUMS \
+      rollback-contract/collector-host.env rollback-contract/hololive-collector@.service \
       rollback-contract/po-unit-presence rollback-contract/previous-before-cutover > rollback-contract/SHA256SUMS
     LC_ALL=C find youtubejs/src -type f -exec sha256sum {} + >> rollback-contract/SHA256SUMS
     if test -f rollback-contract/hololive-youtube-po.service; then
@@ -298,7 +298,7 @@ native_window_inputs() {
   local contract="$old_target/rollback-contract" n
   native_rollback_validate "$old_target"
   [[ "$(native_window_previous)" == "$(sudo -n cat "$contract/previous-before-cutover")" ]]
-  sudo -n cmp -s "$host_env" "$contract/youtube-collector-host.env"
+  sudo -n cmp -s "$host_env" "$contract/collector-host.env"
   [[ "$(native_root_endpoint "$host_env")" == "100.100.1.8|$original_port" ]]
   for n in "$unit_file" "${po_unit_file?}" "${po_socket_file?}"; do sudo -n cmp -s "$n" "$contract/${n##*/}"; done
   sudo -n sha256sum --strict --check --status "$window/inputs.sha256"
@@ -321,7 +321,7 @@ PY
 native_window_verify_original() {
   local n pid root execfile
   pid="$(native_window_prop "$unit" MainPID)"; [[ "$pid" =~ ^[1-9][0-9]*$ ]]
-  sudo -n test "/proc/$pid/exe" -ef "$old_target/bin/youtube-collector"
+  sudo -n test "/proc/$pid/exe" -ef "$old_target/bin/hololive-collector"
   native_window_process_endpoint "$pid" "$original_port"
   sudo -n python3 -I -B "$old_target/bin/worker-profile-pair.py" verify-native "$service" "$old_target" "$unit"
   pid="$(native_window_prop "$po_service" MainPID)"; [[ "$pid" =~ ^[1-9][0-9]*$ ]]
@@ -370,7 +370,7 @@ native_window_stop_original() {
     fi
     before="$(native_window_stop_receipt "$n" "${generation[$n]}" "$since")"
     if [[ "$n" == "$unit" ]]; then
-      sudo -n journalctl --boot --quiet --no-pager --grep='\byoutube_collector_stopped\b' -o json \
+      sudo -n journalctl --boot --quiet --no-pager --grep='\bcollector_stopped\b' -o json \
         --output-fields=_SYSTEMD_INVOCATION_ID --since="$since" "_SYSTEMD_UNIT=$n" "_SYSTEMD_INVOCATION_ID=${generation[$n]}" |
         python3 -I -B -c 'import json,sys; assert json.load(sys.stdin)["_SYSTEMD_INVOCATION_ID"] == sys.argv[1]' "${generation[$n]}"
     fi
@@ -436,7 +436,7 @@ native_window_admit_candidate() {
   local n
   [[ "$(realpath -e "$current_link")" == "$release_dir" ]]
   for n in "$unit_file" "$po_unit_file" "$po_socket_file"; do sudo -n cmp -s "$n" "$release_dir/${n##*/}"; done
-  sudo -n cmp -s "$host_env" "$release_dir/youtube-collector-host.env"
+  sudo -n cmp -s "$host_env" "$release_dir/collector-host.env"
   native_window_barriers check
   [[ "$(native_window_prop "$po_service" RootDirectory)" == "$release_dir/po-sandbox/rootfs" &&
      "$(native_window_prop "$po_service" FragmentPath)" == "$po_unit_file" &&
@@ -643,7 +643,7 @@ native_window_candidate_runtime() {
     sudo -n test "/proc/$pid/root" -ef "$release_dir/po-sandbox/rootfs" || return 1
     exe="$release_dir/po-sandbox/rootfs/app/bin/po-broker"
   else
-    exe="$release_dir/bin/youtube-collector"
+    exe="$release_dir/bin/hololive-collector"
   fi
   sudo -n test "/proc/$pid/exe" -ef "$exe"
 }
@@ -831,7 +831,7 @@ native_apply_await_observation() {
 
 native_apply_close_observation() {
   local owner="$BASHPID"
-  [[ "$(hostname -s)" == osaka1 && "$service" == youtube-collector-a && "$window_nonce" =~ ^[0-9a-f-]{36}$ &&
+  [[ "$(hostname -s)" == osaka1 && "$service" == collector-a && "$window_nonce" =~ ^[0-9a-f-]{36}$ &&
      "$(realpath -e "$current_link")" == "$release_dir" && "$(sudo -n cat "$native_recovery_dir/claim")" == "$window_nonce" &&
      "$(sudo -n cat "$native_recovery_dir/release")" == "$release_dir" && "$(sudo -n cat "$native_recovery_dir/step")" == collector-restart &&
      "$(sudo -n cat "$native_recovery_dir/terminal")" == 0 ]]

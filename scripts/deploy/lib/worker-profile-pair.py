@@ -16,15 +16,15 @@ SOURCE = "/etc/stack-secrets/hololive-bot/worker-profiles"
 PROFILES = {
     "hololive-api": "hololive-api.json",
     "hololive-alarm-worker": "alarm-worker.json",
-    "youtube-collector": "youtube-collector-c.json",
-    "youtube-collector-b": "youtube-collector-b.json",
+    "collector-c": "collector-c.json",
+    "collector-b": "collector-b.json",
 }
 CLI = "podman"
 QUADLET_UNITS = {
     "hololive-api": "hololive-api.container",
     "hololive-alarm-worker": "hololive-alarm-worker.container",
-    "youtube-collector": "hololive-youtube-collector-c.container",
-    "youtube-collector-b": "hololive-youtube-collector-b.container",
+    "collector-c": "hololive-collector-c.container",
+    "collector-b": "hololive-collector-b.container",
 }
 QUADLET_DIR = Path(os.environ.get("HOLOLIVE_QUADLET_TEST_ROOT", "") + "/etc/containers/systemd/hololive-bot")
 DROPIN = "50-worker-profile.conf"
@@ -59,8 +59,8 @@ def container_profile_hash(service, data):
     credential = {
         "hololive-api": "API_SECRET_KEY",
         "hololive-alarm-worker": "API_SECRET_KEY",
-        "youtube-collector": "METRICS_API_KEY",
-        "youtube-collector-b": "METRICS_API_KEY",
+        "collector-c": "METRICS_API_KEY",
+        "collector-b": "METRICS_API_KEY",
     }[service]
     return loaded_hash(run(CLI, "exec", data["Id"], "/app/bin/healthcheck",
                            "--body-api-key-env", credential,
@@ -253,8 +253,8 @@ def validate_container_pair(before, directory):
 
 
 def collector_probe_network(directory, pair, values):
-    networks = {"youtube-collector": ("hololive-net.network", "hololive-bot_hololive-net"),
-                "youtube-collector-b": ("hololive-collector-b.network", "hololive-collector-b")}
+    networks = {"collector-c": ("hololive-net.network", "hololive-bot_hololive-net"),
+                "collector-b": ("hololive-collector-b.network", "hololive-collector-b")}
     service = pair["service"]
     if (service not in networks or directory.name != "candidate" or directory.parent.name != service or
             "container_id" in pair):
@@ -264,7 +264,7 @@ def collector_probe_network(directory, pair, values):
         raise ValueError("pooled database check requires the installed candidate unit")
     name = Path(definition).stem
     network_unit, network = networks[service]
-    for key, expected in (("ContainerName", name), ("Entrypoint", "./bin/youtube-collector"),
+    for key, expected in (("ContainerName", name), ("Entrypoint", "./bin/hololive-collector"),
                           ("Network", network_unit + ":alias=" + name.removeprefix("hololive-"))):
         if [v for k, v in values if k == key] != [expected]:
             raise ValueError("unexpected collector probe unit or network")
@@ -364,7 +364,7 @@ def check_resolved_pair(directory, pair, *, pooled=False):
                "--read-only-tmpfs=false", "--log-driver=none", "--no-healthcheck", "--image-volume=ignore",
                "--cap-drop", "all", "--security-opt", "no-new-privileges"]
     if pooled:
-        command.extend(("--entrypoint=./bin/youtube-collector", "--http-proxy=false", "--timeout=45"))
+        command.extend(("--entrypoint=./bin/hololive-collector", "--http-proxy=false", "--timeout=45"))
     unit = Path(QUADLET_UNITS[pair["service"]]).stem
     generated_env = "/run/hololive-bot/quadlet-env/" + unit + ".env"
     user, group = "", ""
@@ -419,15 +419,15 @@ def check_resolved_pair(directory, pair, *, pooled=False):
 
 
 def prepare_native(service, release, host_env, unit):
-    if service != "youtube-collector-a":
+    if service != "collector-a":
         raise ValueError("unsupported native slot")
-    if release.parent != Path("/opt/hololive-bot/youtube-collector/releases"):
+    if release.parent != Path("/opt/hololive-bot/collector/releases"):
         raise ValueError("native release must be release-owned")
     pid = run("systemctl", "show", unit, "-p", "MainPID", "--value")
     if not pid.isdigit() or int(pid) == 0:
         raise ValueError("prepare native profile before stopping the collector")
     process = Path("/proc") / pid
-    if not os.path.samefile(process / "exe", release / "bin/youtube-collector"):
+    if not os.path.samefile(process / "exe", release / "bin/hololive-collector"):
         raise ValueError("native process does not execute this release")
     start = (process / "stat").read_text().split(")", 1)[1].split()[19]
     environment = dict(item.decode().split("=", 1) for item in (process / "environ").read_bytes().split(b"\0") if item)
@@ -450,11 +450,11 @@ def prepare_native(service, release, host_env, unit):
                     "--property=NoNewPrivileges=yes", "--property=RuntimeMaxSec=30s",
                     "--property=WorkingDirectory=" + str(release), "--property=ProtectHome=yes",
                     "--property=ProtectSystem=strict", "--property=PrivateTmp=yes",
-                    "--property=EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env",
+                    "--property=EnvironmentFile=/etc/stack-secrets/hololive-bot/collector.env",
                     "--property=EnvironmentFile=" + str(host_env),
                     "/usr/bin/env", "STACK_WORKER_PROFILE_FILE=" + str(temporary),
-                    str(release / "bin/youtube-collector-wrapper"),
-                    str(release / "bin/youtube-collector"), "--check-worker-profile"], check=True, timeout=35)
+                    str(release / "bin/hololive-collector-wrapper"),
+                    str(release / "bin/hololive-collector"), "--check-worker-profile"], check=True, timeout=35)
     if run("systemctl", "show", unit, "-p", "MainPID", "--value") != pid or (process / "stat").read_text().split(")", 1)[1].split()[19] != start:
         raise ValueError("native process changed during preparation")
     final = release / "worker-profile.json"
@@ -462,8 +462,8 @@ def prepare_native(service, release, host_env, unit):
         raise ValueError("native release already has profile artifacts")
     temporary.rename(final)
     sums = release / "SHA256SUMS"
-    binary_hash = hashlib.sha256((release / "bin/youtube-collector").read_bytes()).hexdigest()
-    sums.write_text(f'{binary_hash}  bin/youtube-collector\n{digest(final)}  worker-profile.json\n')
+    binary_hash = hashlib.sha256((release / "bin/hololive-collector").read_bytes()).hexdigest()
+    sums.write_text(f'{binary_hash}  bin/hololive-collector\n{digest(final)}  worker-profile.json\n')
     sums.chmod(0o444)
     lines = host_env.read_text().splitlines()
     if sum(line.startswith("STACK_WORKER_PROFILE_FILE=") for line in lines) != 1:
@@ -479,9 +479,9 @@ def prepare_native(service, release, host_env, unit):
 
 
 def verify_native(service, release, unit):
-    if service != "youtube-collector-a":
+    if service != "collector-a":
         raise ValueError("unsupported native slot")
-    if release.parent != Path("/opt/hololive-bot/youtube-collector/releases"):
+    if release.parent != Path("/opt/hololive-bot/collector/releases"):
         raise ValueError("native release must be release-owned")
     subprocess.run(["sha256sum", "--check", "--strict", "SHA256SUMS"], cwd=release,
                    check=True, stdout=subprocess.DEVNULL, timeout=10)
@@ -489,7 +489,7 @@ def verify_native(service, release, unit):
     if not pid.isdigit() or int(pid) == 0:
         raise ValueError("native collector is not running")
     process = Path("/proc") / pid
-    if not os.path.samefile(process / "exe", release / "bin/youtube-collector"):
+    if not os.path.samefile(process / "exe", release / "bin/hololive-collector"):
         raise ValueError("native process does not execute this release")
     start = (process / "stat").read_text().split(")", 1)[1].split()[19]
     environment = dict(item.decode().split("=", 1) for item in (process / "environ").read_bytes().split(b"\0") if item)

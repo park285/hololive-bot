@@ -1,0 +1,182 @@
+package youtubejscollector
+
+import (
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/kapu/hololive-collector/internal/runtime/collecterr"
+	"github.com/kapu/hololive-collector/internal/runtime/collection"
+	"github.com/kapu/hololive-collector/internal/runtime/youtubejs"
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+)
+
+type wireEndpointFixture struct {
+	Valid []struct {
+		Name    string         `json:"name"`
+		Subject string         `json:"subject"`
+		Kind    string         `json:"kind"`
+		Body    jsontext.Value `json:"body"`
+	} `json:"valid"`
+	Invalid []struct {
+		Name        string         `json:"name"`
+		Subject     string         `json:"subject"`
+		GoRejectsAt string         `json:"go_rejects_at"`
+		Body        jsontext.Value `json:"body"`
+	} `json:"invalid"`
+}
+
+func loadWireEndpointFixture(t *testing.T, path string) wireEndpointFixture {
+	t.Helper()
+
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "youtubejs", "testdata", "wire-contract.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var fixture struct {
+		Endpoints map[string]wireEndpointFixture `json:"endpoints"`
+	}
+
+	if err := jsonv2.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+
+	return fixture.Endpoints[path]
+}
+
+func TestChannelLiveRunnerPublishesWireFixture(t *testing.T) {
+	t.Parallel()
+
+	for _, valid := range loadWireEndpointFixture(t, "/v1/channel").Valid {
+		if valid.Kind != channelKindLive {
+			continue
+		}
+
+		var body struct {
+			LiveSessions            []jsontext.Value `json:"live_sessions"`
+			UnavailableLiveSessions []jsontext.Value `json:"unavailable_live_sessions"`
+		}
+
+		if err := jsonv2.Unmarshal(valid.Body, &body); err != nil {
+			t.Fatal(err)
+		}
+
+		output, err := NewChannelLiveRunner(fixtureRPC(t, valid.Body)).Collect(t.Context(), channelLiveFixtureInput(t, valid.Subject))
+		if err != nil {
+			t.Fatalf("%s: %v", valid.Name, err)
+		}
+
+		observations := output.Output().Observations()
+		if len(observations) != 1 {
+			t.Fatalf("%s: observations = %d", valid.Name, len(observations))
+		}
+
+		var payload contract.LiveSnapshotV1
+
+		if err := jsonv2.Unmarshal(observations[0].Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+
+		if len(payload.Sessions) != len(body.LiveSessions) || payload.Query == nil ||
+			payload.Query.AccessRestricted != (len(body.UnavailableLiveSessions) > 0) {
+			t.Fatalf("%s: payload = %#v", valid.Name, payload)
+		}
+
+		for i := range body.LiveSessions {
+			var session struct {
+				ScheduleObservedAt *time.Time `json:"schedule_observed_at"`
+			}
+
+			if err := jsonv2.Unmarshal(body.LiveSessions[i], &session); err != nil {
+				t.Fatal(err)
+			}
+
+			got := payload.Sessions[i].ScheduleObservedAt
+			if (session.ScheduleObservedAt == nil) != (got == nil) ||
+				(got != nil && !got.Equal(*session.ScheduleObservedAt)) {
+				t.Fatalf("%s: session %d schedule observed at = %v, want %v", valid.Name, i, got, session.ScheduleObservedAt)
+			}
+		}
+	}
+}
+
+func TestChannelLiveRunnerRejectsWireFixtureContradictions(t *testing.T) {
+	t.Parallel()
+
+	for _, invalid := range loadWireEndpointFixture(t, "/v1/channel").Invalid {
+		if invalid.GoRejectsAt != "envelope" {
+			continue
+		}
+
+		output, err := NewChannelLiveRunner(fixtureRPC(t, invalid.Body)).Collect(t.Context(), channelLiveFixtureInput(t, invalid.Subject))
+		if collecterr.CodeOf(err) != contract.ErrorParserDrift || !output.IsZero() {
+			t.Fatalf("%s: error = %v output = %#v, want parser drift without output", invalid.Name, err, output)
+		}
+	}
+}
+
+func TestClassifyPublicationFollowsWireFixture(t *testing.T) {
+	t.Parallel()
+
+	fixture := loadWireEndpointFixture(t, "/v1/video_live_check")
+	checkedAt := time.Date(2026, time.October, 25, 12, 0, 0, 0, time.UTC)
+	cases := map[string]contract.VideoPublicationStatus{
+		"upcoming premiere in the waiting state":     contract.VideoPublicationUpcomingPremiere,
+		"schedule without a confirmed waiting state": contract.VideoPublicationUnresolved,
+	}
+	bodies := make(map[string]jsontext.Value, len(cases))
+
+	for _, valid := range fixture.Valid {
+		bodies[valid.Name] = valid.Body
+	}
+
+	for _, invalid := range fixture.Invalid {
+		if invalid.GoRejectsAt == "classification" {
+			bodies[invalid.Name] = invalid.Body
+		}
+	}
+
+	for name, want := range cases {
+		body, ok := bodies[name]
+		if !ok {
+			t.Fatalf("fixture %q is missing", name)
+		}
+
+		result, err := fixtureRPC(t, body).FetchVideoLiveCheck(t.Context(), youtubejs.VideoLiveCheckRequest{VideoID: "upcoming001"})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+
+		if got := classifyPublication(&result, "UCchannelLive", checkedAt); got.Status != want {
+			t.Fatalf("%s: classification = %#v, want %s", name, got, want)
+		}
+	}
+}
+
+func channelLiveFixtureInput(t *testing.T, subject string) *collection.RunInput {
+	t.Helper()
+
+	return youtubeInputWithLiveGeneration(t, subject, "youtubejs_channel_live",
+		contract.LiveSnapshotQueryContractGeneration, contract.KindLiveSnapshot)
+}
+
+func fixtureRPC(t *testing.T, body jsontext.Value) *youtubejs.RPC {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if _, err := w.Write(body); err != nil {
+			t.Error(err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	return youtubejs.NewRPC(server.Client(), server.URL, nil)
+}

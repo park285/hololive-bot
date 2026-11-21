@@ -89,7 +89,7 @@ run_database_steps() (
         run_step "Provision test PostgreSQL" provision_integration_test_database
     fi
     if [[ "${collector_in_scope}" == true ]]; then
-        run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
+        run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-collector test-prod
     fi
     run_step "YouTube plane performance budget" ./scripts/perf/check-youtube-plane-budget.sh
     if has_go_packages; then
@@ -105,7 +105,7 @@ run_local_ci() {
     if has_go_packages; then
         printf '[LOCAL CI]   %s\n' "${GO_PACKAGES[@]}"
         for package in "${GO_PACKAGES[@]}"; do
-            if [[ "${package}" == ./hololive/hololive-youtube-collector/... ]]; then
+            if [[ "${package}" == ./hololive/hololive-collector/... ]]; then
                 collector_in_scope=true
                 break
             fi
@@ -129,18 +129,18 @@ run_local_ci() {
         run_step "collector YouTube.js dependencies" bash scripts/ci/public-pr-collector-helper-install.sh
     fi
     if [[ "${test_collector_artifacts}" == true ]]; then
-        run_step "collector production build and artifact tests" bash scripts/build/build-youtube-collector-go_test.sh
+        run_step "collector production build and artifact tests" bash scripts/build/build-hololive-collector-go_test.sh
     else
-        run_step "collector production build" bash scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod
+        run_step "collector production build" bash scripts/ci/public-pr-go-gate.sh hololive/hololive-collector build-prod
     fi
     run_step "X Spaces helper tests" bash scripts/ci/public-pr-x-spaces-helper-gate.sh
     run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
     run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
     run_database_steps
     if [[ "${run_collector_js}" == true ]]; then
-        run_step "YouTube.js typecheck" npm --prefix hololive/hololive-youtube-collector/youtubejs run typecheck
-        run_step "YouTube.js tests" npm --prefix hololive/hololive-youtube-collector/youtubejs test
-        run_step "Event Grade helper tests" npm --prefix hololive/hololive-youtube-collector/eventgrade test
+        run_step "YouTube.js typecheck" npm --prefix hololive/hololive-collector/youtubejs run typecheck
+        run_step "YouTube.js tests" npm --prefix hololive/hololive-collector/youtubejs test
+        run_step "Event Grade helper tests" npm --prefix hololive/hololive-collector/eventgrade test
     fi
     echo "[LOCAL CI] Passed"
 }

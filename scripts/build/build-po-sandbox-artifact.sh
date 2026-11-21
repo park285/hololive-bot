@@ -32,7 +32,7 @@ trap cleanup EXIT
 
 podman build --platform "linux/$arch" --format docker \
   --tag "$image" \
-  --file "$root/hololive/hololive-youtube-collector/Dockerfile.po-sandbox" \
+  --file "$root/hololive/hololive-collector/Dockerfile.po-sandbox" \
   --build-arg "REVISION=$revision" --label "org.opencontainers.image.revision=$revision" \
   --build-arg "VERSION=$version" "$root"
 actual_revision="$(podman image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")"

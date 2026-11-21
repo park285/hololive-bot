@@ -18,7 +18,7 @@ UNITS = ROOT / "deploy/quadlet/hololive-bot"
 QUADLET = Path("/usr/libexec/podman/quadlet")
 IMAGE_HEX = "a" * 64
 IMAGE = "sha256:" + IMAGE_HEX
-SERVICE = "youtube-collector"
+SERVICE = "collector-c"
 
 
 def write_pair(directory, service=SERVICE, extra=None):
@@ -67,7 +67,7 @@ class PairToolTest(unittest.TestCase):
 
     def installed_dropin(self):
         return (self.quadlet_root / "etc/containers/systemd/hololive-bot"
-                / "hololive-youtube-collector-c.container.d/50-worker-profile.conf")
+                / "hololive-collector-c.container.d/50-worker-profile.conf")
 
 
     def test_backup_pair_is_refused_before_publication(self):
@@ -542,7 +542,7 @@ class ResolvedPairTest(unittest.TestCase):
         }
         (self.root / "logs").mkdir()
         (self.root / "secrets").mkdir()
-        for name in ("bot.env", "alarm-worker.env", "youtube-collector.env"):
+        for name in ("bot.env", "alarm-worker.env", "collector.env"):
             (self.root / "secrets" / name).write_text(
                 "POSTGRES_PASSWORD=obsolete-file-password\nHOLODEX_API_KEY=obsolete-file-key\n")
         version = self.root / "deploy/hololive/hololive-api/VERSION"
@@ -612,9 +612,9 @@ class ResolvedPairTest(unittest.TestCase):
                 self.assertIn(option, args)
             network = args[args.index("--network") + 1]
             if args[-1] == "--check-pooled-database":
-                self.assertEqual(network, {"youtube-collector": "hololive-bot_hololive-net",
-                                           "youtube-collector-b": "hololive-collector-b"}[self.pair["service"]])
-                self.assertIn("--entrypoint=./bin/youtube-collector", args)
+                self.assertEqual(network, {"collector-c": "hololive-bot_hololive-net",
+                                           "collector-b": "hololive-collector-b"}[self.pair["service"]])
+                self.assertIn("--entrypoint=./bin/hololive-collector", args)
             else:
                 self.assertEqual(args[-1], "--check-worker-profile")
                 self.assertEqual(network, "none")
@@ -655,8 +655,8 @@ class ResolvedPairTest(unittest.TestCase):
             self.module.check_resolved_pair(self.directory, self.pair, pooled=pooled)
 
     def test_pooled_probe_uses_only_its_candidate_network_and_slot_environment(self):
-        for service, volume, slot in (("youtube-collector", "hololive-bot_youtube-po-c-socket", "c"),
-                                      ("youtube-collector-b", "hololive-youtube-po-b-socket", "b")):
+        for service, volume, slot in (("collector-c", "hololive-bot_youtube-po-c-socket", "c"),
+                                      ("collector-b", "hololive-youtube-po-b-socket", "b")):
             with self.subTest(service=service):
                 fixture = ResolvedPairTest()
                 fixture.setUp()
@@ -682,10 +682,10 @@ class ResolvedPairTest(unittest.TestCase):
                     fixture.doCleanups()
 
     def test_pooled_probe_refuses_previous_or_unreviewed_network_before_podman(self):
-        self.case("youtube-collector-b")
+        self.case("collector-b")
         with self.assertRaisesRegex(ValueError, "installed candidate unit"):
             self.check(pooled=True)
-        (self.units / self.module.QUADLET_UNITS["youtube-collector-b"]).write_bytes(self.record.read_bytes())
+        (self.units / self.module.QUADLET_UNITS["collector-b"]).write_bytes(self.record.read_bytes())
         self.pair["container_id"] = "c" * 64
         with self.assertRaisesRegex(ValueError, "collector candidate"):
             self.check(pooled=True)
@@ -712,8 +712,8 @@ class ResolvedPairTest(unittest.TestCase):
     @unittest.skipUnless(QUADLET.exists(), "podman quadlet generator is not installed")
     def test_current_collector_volumes_match_native_quadlet_without_volume_lifecycle(self):
         for service, name, flags in (
-                ("youtube-collector", "hololive-bot_youtube-po-c-socket", "ro,idmap"),
-                ("youtube-collector-b", "hololive-youtube-po-b-socket", "ro")):
+                ("collector-c", "hololive-bot_youtube-po-c-socket", "ro,idmap"),
+                ("collector-b", "hololive-youtube-po-b-socket", "ro")):
             with self.subTest(service=service):
                 fixture = ResolvedPairTest()
                 fixture.setUp()
@@ -738,9 +738,9 @@ class ResolvedPairTest(unittest.TestCase):
                     self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:{flags.replace('ro', 'ro,bind')}", args)
                     level = next(value for value in shlex.split(runtime) if value.startswith("label=level:"))
                     self.assertIn(level, args)
-                    self.assertEqual(env["YOUTUBE_COLLECTOR_INSTANCE_ID"], unit.removeprefix("hololive-"))
-                    self.assertEqual("--userns" in args, service == "youtube-collector")
-                    if service == "youtube-collector":
+                    self.assertEqual(env["COLLECTOR_INSTANCE_ID"], unit.removeprefix("hololive-"))
+                    self.assertEqual("--userns" in args, service == "collector-c")
+                    if service == "collector-c":
                         self.assertIn("auto:size=65536,gidmapping=1002:1002:1", args)
                         self.assertEqual(env["POSTGRES_PASSWORD"], fixture.host["HOLOLIVE_COLLECTOR_C_PASSWORD"])
                     self.assertEqual((mountpoint / "socket-fixture").read_bytes(), b"unchanged")
@@ -771,7 +771,7 @@ class ResolvedPairTest(unittest.TestCase):
         self.assertEqual(self.fragment.readlink(), Path("/dev/null"))
 
     def test_ordinary_named_volume_uses_existing_storage_readonly(self):
-        self.case("youtube-collector-b")
+        self.case("collector-b")
         self.record.write_text(self.record.read_text().replace("hololive-youtube-po-b.volume:", "ordinary-volume:"))
         mountpoint = self.existing_volume("ordinary-volume")
         self.check()
@@ -782,21 +782,21 @@ class ResolvedPairTest(unittest.TestCase):
 
     @unittest.skipUnless(QUADLET.exists(), "podman quadlet generator is not installed")
     def test_default_volume_name_matches_native_quadlet(self):
-        self.case("youtube-collector-b")
+        self.case("collector-b")
         (self.units / "hololive-youtube-po-b.volume").write_text("[Volume]\n")
         name = "systemd-hololive-youtube-po-b"
         generated = self.real_run(
             [str(QUADLET), "-dryrun"], env=dict(os.environ, QUADLET_UNIT_DIRS=str(self.units)),
             capture_output=True, text=True, timeout=30, check=True).stdout
         runtime = next(line for line in generated.splitlines()
-                       if line.startswith("ExecStart=") and " --name hololive-youtube-collector-b " in line)
+                       if line.startswith("ExecStart=") and " --name hololive-collector-b " in line)
         self.assertIn(f"{name}:/run/hololive-youtube-po:ro", shlex.split(runtime))
         mountpoint = self.existing_volume(name)
         self.check()
         self.assertIn(f"{mountpoint}:/run/hololive-youtube-po:ro,bind", self.consumed[-1][0])
 
     def test_missing_volume_declaration_cannot_fall_back_to_a_named_volume(self):
-        self.case("youtube-collector-b")
+        self.case("collector-b")
         (self.units / "hololive-youtube-po-b.volume").unlink()
         self.existing_volume("hololive-youtube-po-b.volume")
         with self.assertRaises(FileNotFoundError):
@@ -805,7 +805,7 @@ class ResolvedPairTest(unittest.TestCase):
         self.assertEqual(self.consumed, [])
 
     def test_missing_named_volume_rejects_before_container_creation(self):
-        self.case("youtube-collector-b")
+        self.case("collector-b")
         with self.assertRaises(subprocess.CalledProcessError):
             self.check()
         self.assertEqual(self.consumed, [])

@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	RuntimeBot              = "bot"
-	RuntimeAlarmWorker      = "alarm-worker"
-	RuntimeAdminAPI         = "admin-api"
-	RuntimeYouTubeCollector = "youtube-collector"
+	RuntimeBot         = "bot"
+	RuntimeAlarmWorker = "alarm-worker"
+	RuntimeAdminAPI    = "admin-api"
+	RuntimeCollector   = "collector"
 
 	NotificationEgressRoleEnv       = "NOTIFICATION_EGRESS_ROLE"
 	NotificationSchedulerRoleEnv    = "NOTIFICATION_SCHEDULER_ROLE"
@@ -30,13 +30,13 @@ const (
 
 func PostgresCollectorRoleUser(instanceID string) (string, bool) {
 	switch instanceID {
-	case "youtube-collector-a":
+	case "collector-a":
 		return PostgresCollectorARoleUser, true
-	case "youtube-collector-b":
+	case "collector-b":
 		return PostgresCollectorBRoleUser, true
-	case "youtube-collector-c":
+	case "collector-c":
 		return PostgresCollectorCRoleUser, true
-	case "youtube-collector-d":
+	case "collector-d":
 		return PostgresCollectorDRoleUser, true
 	default:
 		return "", false

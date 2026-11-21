@@ -2,7 +2,7 @@
 
 ## Role
 
-중앙·iris-seoul(collector b)의 Podman Quadlet, Osaka·Osaka2 AP의 native systemd runtime rollback과 contract/document rollback 판단 기준입니다. Collector의 paired issuer 복원 절차는 [collector runbook](youtube-collector.md#rollback)을 따릅니다.
+중앙·iris-seoul(collector b)의 Podman Quadlet, Osaka·Osaka2 AP의 native systemd runtime rollback과 contract/document rollback 판단 기준입니다. Collector의 paired issuer 복원 절차는 [collector runbook](collector.md#rollback)을 따릅니다.
 
 ## Before Rollback
 
@@ -66,9 +66,9 @@ unit의 `NRestarts`(`systemctl show <SERVICE>.service -p NRestarts`)를 확인�
 `profile_file_changed`는 정상적인 차이 표시이며 reload/fallback 사유가 아닙니다.
 backup pair와 실패한 release는 원인 분석이 끝날 때까지 보존합니다.
 
-Collector Quadlet(c·b)·native(a)는 [collector runbook](youtube-collector.md#rollback)의
+Collector Quadlet(c·b)·native(a)는 [collector runbook](collector.md#rollback)의
 binary/image·Node helper·issuer·프로필 짝을 사용합니다. PO issuer는
-[`RestartCount`가 아닌 issuer 수용 기준](youtube-collector.md#issuer-generation-교체와-재시작-카운트)으로 판정합니다.
+[`RestartCount`가 아닌 issuer 수용 기준](collector.md#issuer-generation-교체와-재시작-카운트)으로 판정합니다.
 kapu Quadlet d는 [kapu README](../../../deploy/podman/kapu/README.md)의 `SHA256SUMS` release profile과
 `runtime-before-<날짜>` image tag로 되돌립니다.
 
@@ -81,9 +81,9 @@ Runtime service names:
 
 - `hololive-api`
 - `hololive-alarm-worker`
-- `youtube-collector`
+- `collector`
 
-`youtube-collector` rollback은 Go binary/image, bundled Node helper, worker profile, Quadlet drop-in(c·b) 또는 native release, paired issuer를 함께 보존한 revision 단위입니다. Binary-only rollback과 schema/data rollback은 허용하지 않습니다. migration 218 이후에는 typed `last_failure_*`를 쓰지 않는 pre-177 collector image가 rollback 대상이 아닙니다. 실제 fleet/DB 계약을 만족하는 pair만 사용하며, 이 문서의 로컬 준비가 운영 canary·rollback 실행을 뜻하지 않습니다.
+`collector` rollback은 Go binary/image, bundled Node helper, worker profile, Quadlet drop-in(c·b) 또는 native release, paired issuer를 함께 보존한 revision 단위입니다. Binary-only rollback과 schema/data rollback은 허용하지 않습니다. migration 218 이후에는 typed `last_failure_*`를 쓰지 않는 pre-177 collector image가 rollback 대상이 아닙니다. 실제 fleet/DB 계약을 만족하는 pair만 사용하며, 이 문서의 로컬 준비가 운영 canary·rollback 실행을 뜻하지 않습니다.
 
 `hololive-api`가 durable bot admission 스키마(epoch-4 baseline 포함)를 적용하고 traffic을 수락한 뒤에는 이전 image나 구 bot runtime이 `bot_webhook_inbox`/`bot_reply_outbox`를 소비하지 못합니다. 따라서 `docs/current/runbooks/hololive-api.md`의 rollback 절차가 우선하며, ingress quiescence와 zero-backlog preflight가 성공하지 않으면 image rollback 대신 현재 durable runtime을 fix-forward합니다.
 
@@ -126,8 +126,8 @@ routine rollback에 묶지 않습니다. 호환성이 입증되지 않으면 현
 ```bash
 # 중앙: 설치된 unit 정의가 생성되는지, unit이 active이고 container health가 healthy인지
 sudo /usr/libexec/podman/quadlet -dryrun >/dev/null
-systemctl is-active hololive-api.service hololive-alarm-worker.service hololive-youtube-collector-c.service
-for c in hololive-api hololive-alarm-worker hololive-youtube-collector-c; do
+systemctl is-active hololive-api.service hololive-alarm-worker.service hololive-collector-c.service
+for c in hololive-api hololive-alarm-worker hololive-collector-c; do
   sudo podman inspect "$c" --format '{{.Name}} {{.State.Health.Status}}'
 done
 ```

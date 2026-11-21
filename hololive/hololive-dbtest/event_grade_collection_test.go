@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	eventGradeOwner      = "youtube-collector-c:event-grade-test"
+	eventGradeOwner      = "collector-c:event-grade-test"
 	claimCatalogSQL      = "SELECT job_key, fence_epoch, claimed_at, interrupted FROM public.event_grade_claim_catalog($1, $2, 60000)"
 	claimCutoffsSQL      = "SELECT job_key, event_id, chapter_id, fence_epoch, claimed_at FROM public.event_grade_claim_cutoffs($1, $2, 60000, 3)"
 	publishSQL           = "SELECT public.event_grade_publish($1, $2, $3, $4, $5, $6::jsonb)"
@@ -106,13 +106,13 @@ func TestEventGradeCollectorCPublishesOnlyWithCurrentProof(t *testing.T) {
 	_, err = collector.Exec(ctx, publishSQL, cutoff.jobKey, eventGradeOwner, cutoff.epoch-1, cutoff.claimedAt, cutoff.claimedAt, ranks)
 	requireSQLState(t, err, "42501")
 
-	_, err = collector.Exec(ctx, publishSQL, cutoff.jobKey, "youtube-collector-c:other", cutoff.epoch, cutoff.claimedAt, cutoff.claimedAt, ranks)
+	_, err = collector.Exec(ctx, publishSQL, cutoff.jobKey, "collector-c:other", cutoff.epoch, cutoff.claimedAt, cutoff.claimedAt, ranks)
 	requireSQLState(t, err, "42501")
 
 	require.NoError(t, collector.QueryRow(ctx, publishSQL, cutoff.jobKey, eventGradeOwner, cutoff.epoch, cutoff.claimedAt, cutoff.claimedAt, ranks).Scan(&seq))
 	require.Equal(t, int64(2), seq)
 
-	_, err = collector.Exec(ctx, claimCatalogSQL, "jp", "youtube-collector-a:forged")
+	_, err = collector.Exec(ctx, claimCatalogSQL, "jp", "collector-a:forged")
 	requireSQLState(t, err, "42501")
 }
 
@@ -151,7 +151,7 @@ func TestEventGradeCollectionRejectsOtherDatabaseIdentities(t *testing.T) {
 	ctx := t.Context()
 
 	other := eventGradeSession(t, pool, "hololive_collector_d")
-	_, err := other.Exec(ctx, claimCatalogSQL, "jp", "youtube-collector-d:forged")
+	_, err := other.Exec(ctx, claimCatalogSQL, "jp", "collector-d:forged")
 	requireSQLState(t, err, "42501")
 
 	_, err = other.Exec(ctx, insertObservationSQL)
@@ -189,7 +189,7 @@ func TestEventGradeRejectsExpiredProofAfterReclaim(t *testing.T) {
 	_, err = pool.Exec(ctx, "UPDATE public.event_grade_collection_leases SET lease_expires_at = statement_timestamp() - interval '1 second' WHERE job_key = $1", stale.jobKey)
 	require.NoError(t, err)
 
-	const nextOwner = "youtube-collector-c:event-grade-next"
+	const nextOwner = "collector-c:event-grade-next"
 
 	var current eventGradeClaim
 

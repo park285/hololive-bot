@@ -14,7 +14,7 @@ FULL="${FULL:-0}"
 usage() {
   cat <<'USAGE'
 Usage:
-  ap-logs.sh <ap-host> [youtube-collector|<ap-service>|all]
+  ap-logs.sh <ap-host> [collector|<ap-service>|all]
 
 Reads the native AP file logs.
 
@@ -24,8 +24,8 @@ Environment:
   FULL=1                 print the whole log file; ignores TAIL
 
 Examples:
-  ap-logs.sh osaka youtube-collector
-  PATTERN='pre-send claim|ERR' ap-logs.sh osaka youtube-collector
+  ap-logs.sh osaka collector
+  PATTERN='pre-send claim|ERR' ap-logs.sh osaka collector
   FULL=1 ap-logs.sh osaka all
   TAIL=500 ap-logs.sh osaka all
 USAGE
@@ -41,7 +41,7 @@ ap_host_load "$REPO_ROOT" "$AP_HOST_ARG"
 
 services=()
 case "$SERVICE" in
-  youtube-collector|all)
+  collector|all)
     services=("${AP_SERVICES[@]}")
     ;;
   *)
@@ -53,7 +53,7 @@ case "$SERVICE" in
     done
     if [[ ${#services[@]} -eq 0 ]]; then
       echo "unknown service for $AP_NAME: $SERVICE" >&2
-      echo "Available: youtube-collector ${AP_SERVICES[*]} all" >&2
+      echo "Available: collector ${AP_SERVICES[*]} all" >&2
       usage >&2
       exit 2
     fi

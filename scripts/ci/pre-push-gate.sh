@@ -130,15 +130,15 @@ run_content_gates() {
   run_if_changed scripts/build/build-all_test.sh \
     build-all.sh scripts/deploy/lib/source-revision.sh
   run_if_changed scripts/build/image-runtime-tree-permissions_test.sh \
-    hololive/hololive-youtube-collector/{Dockerfile,Dockerfile.po-sandbox}{,.dockerignore} \
+    hololive/hololive-collector/{Dockerfile,Dockerfile.po-sandbox}{,.dockerignore} \
     hololive/hololive-alarm-worker/Dockerfile{,.dockerignore} \
-    hololive/hololive-youtube-collector/{po-sandbox,youtubejs}/{package.json,package-lock.json,src} \
-    hololive/hololive-youtube-collector/eventgrade/server.mjs \
+    hololive/hololive-collector/{po-sandbox,youtubejs}/{package.json,package-lock.json,src} \
+    hololive/hololive-collector/eventgrade/server.mjs \
     hololive/hololive-alarm-worker/xspaces/{package.json,package-lock.json,src}
   run_if_changed scripts/deploy/lib/youtubejs-node-version_test.sh scripts/deploy/lib/youtubejs-node-version.sh
   run_if_changed scripts/deploy/source-revision-provenance_test.sh scripts/deploy/lib/source-revision.sh
   run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py deploy/quadlet/hololive-bot
-  run_if_changed scripts/deploy/kapu-d-cutover_test.py scripts/deploy/kapu-d-cutover.py deploy/podman/kapu/hololive-youtube-collector-d.container deploy/podman/kapu/hololive-youtube-po-d.container
+  run_if_changed scripts/deploy/kapu-d-cutover_test.py scripts/deploy/kapu-d-cutover.py deploy/podman/kapu/hololive-collector-d.container deploy/podman/kapu/hololive-youtube-po-d.container
   run_if_changed scripts/build/po-sandbox-manifest_test.py \
     scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
   run_if_changed scripts/logs/daily-rollup-logs_test.sh scripts/logs/daily-rollup-logs.sh
@@ -159,10 +159,10 @@ run_content_gates() {
     hololive/hololive-api/scripts/bot.sh scripts/deploy/lib/compose-env.sh
 
   local run_collector_js=false test_collector_artifacts=false
-  if inputs_changed hololive/hololive-youtube-collector scripts/ci/public-pr-collector-helper-install.sh; then
+  if inputs_changed hololive/hololive-collector scripts/ci/public-pr-collector-helper-install.sh; then
     run_collector_js=true
   fi
-  if inputs_changed scripts/build/build-youtube-collector-go{,_test}.sh scripts/build/check-youtube-collector-go-artifact.sh \
+  if inputs_changed scripts/build/build-hololive-collector-go{,_test}.sh scripts/build/check-hololive-collector-go-artifact.sh \
     scripts/ci/public-pr-go-gate.sh scripts/ci/python-{runtime,runner}.sh .python-version; then
     test_collector_artifacts=true
   fi

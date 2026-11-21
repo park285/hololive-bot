@@ -2,7 +2,7 @@
 
 ## Scope
 
-현재 3개 app runtime(`hololive-api`, `alarm-worker`, `youtube-collector`)의 책임 경계와 금지 소유 범위를 정리합니다. `hololive-api`는 bot/admin/YouTube plane을 한 프로세스에서 호스팅합니다.
+현재 3개 app runtime(`hololive-api`, `alarm-worker`, `collector`)의 책임 경계와 금지 소유 범위를 정리합니다. `hololive-api`는 bot/admin/YouTube plane을 한 프로세스에서 호스팅합니다.
 
 ## Ownership Matrix
 
@@ -10,7 +10,7 @@
 |---|---|---|---|---|---|
 | `hololive-api` | Bot plane: Kakao/Iris webhook ingress, command routing, user-facing replies. Admin plane: dashboard-facing admin HTTP control plane + `members.photo` Holodex PhotoSync product path. YouTube plane: observation claim/finalize, canonical persist, notification intent, live-end finalizer, retention/replay | Kakao webhook/H3 ingress, Admin API, YouTube consume | PostgreSQL (`hololive_runtime`), Valkey, Iris, worker alarm HTTP API through bot/admin clients | alarm checking worker, alarm scheduling loops, proactive dispatch queue consumption, proactive notification egress, collector scrape/lease | `services/hololive-api.md` |
 | `alarm-worker` | Alarm HTTP provider, alarm checker, alarm scheduler, 이벤트 등급 관측 소비·판정, dispatch queue publishing/consumption, proactive notification egress | Alarm HTTP provider, alarm queue publisher/consumer, YouTube outbox dispatcher | PostgreSQL (`hololive_alarm_worker`), Valkey, `settings.json`, Iris | Kakao command routing, YouTube collection, YouTube canonical detection write, 게임 서버 호출·이벤트 등급 관측 발행 | `services/alarm-worker.md` |
-| `youtube-collector` | AP fleet (`a`/`b`/`c`/`d`) external clients, provider adapters, fixture-backed parsing, normalization, collection target read, DB job lease/fence, bounded scheduling, rate limit/retry/cooldown, checkpoint, observation publish, provider health, collector c 전용 이벤트 등급 게임 수집·관측 발행 | Community/content/live/stats/profile/photo/schedule observations for the `hololive-api` YouTube plane, 이벤트 등급 관측 for `alarm-worker` | PostgreSQL (`hololive_collector_a`/`b`/`c`/`d`) | canonical tables, live transition, domain watermark, notification intent/outbox, profile/photo 최종 선택, proactive egress | `services/youtube-collector.md` |
+| `collector` | AP fleet (`a`/`b`/`c`/`d`) external clients, provider adapters, fixture-backed parsing, normalization, collection target read, DB job lease/fence, bounded scheduling, rate limit/retry/cooldown, checkpoint, observation publish, provider health, collector c 전용 이벤트 등급 게임 수집·관측 발행 | Community/content/live/stats/profile/photo/schedule observations for the `hololive-api` YouTube plane, 이벤트 등급 관측 for `alarm-worker` | PostgreSQL (`hololive_collector_a`/`b`/`c`/`d`) | canonical tables, live transition, domain watermark, notification intent/outbox, profile/photo 최종 선택, proactive egress | `services/collector.md` |
 
 ## Split Rules
 
@@ -22,7 +22,7 @@
 - API `internal/app`이 process 자원을 만듭니다. `bot` pool, Valkey client 1개, `bot` pool을 backing으로 쓰는 member cache 1개, `admin` pool, 단일 ACL Service, 단일 Holodex·공식 일정 서비스입니다. YouTube plane은 `internal/planes/youtube/runtime`에서 자기 `youtube_plane` pool을 엽니다. bot/admin plane은 Valkey client와 member cache를 빌려 쓰며 독자적인 close 권한이 없습니다. 내부 H3 옵션은 적재한 설정에서 오고, 그 밖의 client timeout과 transport는 각 plane이 소유합니다.
 - API planes register acquired resources immediately for rollback. The process joins every borrower, including durable samplers, before closing the shared member cache and its backing bot PG pool, then Valkey. `CloseContext` receives the remaining process-stop budget; join timeout preserves live resources and the error instead of starting duplicate cleanup. A never-started admin plane is already quiescent and must not retain the process owner indefinitely.
 - Bot inbox settlement detaches from an already-canceled claim context only for the existing finite cleanup budget and fenced control-reserve operation. It persists a bounded reason code, not arbitrary cause text; stale tokens cannot release a new owner's claim.
-- Cross-module behavior tests use the narrow module-root testkit `hololive-youtube-collector/testkit/sourceobservation` so api tests run the actual publisher without importing a peer's `internal` package. Test dependencies follow the data flow one way (collector ← api); alarm-worker does not require the api or collector module. The api consumer pins the `youtube_live_sessions` facts that worker upcoming candidates read (`internal/youtube/sourceobservation/upcoming_candidate_facts_test.go`), and the worker pins its reading of those facts with SQL-seeded rows (`dispatchoutbox/upcoming_candidates*_test.go`); api tests drive the shared `alarmhttp` client against a stub that returns the worker `/internal/alarm/settings` envelope, and the actual worker handler/client roundtrip is tested in `hololive-alarm-worker/internal/service/alarm/{httpapi,subscriptions}`.
+- Cross-module behavior tests use the narrow module-root testkit `hololive-collector/testkit/sourceobservation` so api tests run the actual publisher without importing a peer's `internal` package. Test dependencies follow the data flow one way (collector ← api); alarm-worker does not require the api or collector module. The api consumer pins the `youtube_live_sessions` facts that worker upcoming candidates read (`internal/youtube/sourceobservation/upcoming_candidate_facts_test.go`), and the worker pins its reading of those facts with SQL-seeded rows (`dispatchoutbox/upcoming_candidates*_test.go`); api tests drive the shared `alarmhttp` client against a stub that returns the worker `/internal/alarm/settings` envelope, and the actual worker handler/client roundtrip is tested in `hololive-alarm-worker/internal/service/alarm/{httpapi,subscriptions}`.
 
 ## Shared Package Retention
 
@@ -38,14 +38,14 @@
 - Observation publisher와 consumer는 서로 import하지 않으며 같은 테이블을 각자의 DB role 권한으로 다룹니다. 실제 발행·소비 교차 시험은 collector module-root testkit을 사용합니다. 테스트 소비가 있다는 이유로 단일 runtime의 실행 구현을 shared에 남기지 않습니다.
 - YouTube outbox formatter의 `MemberNameSource`는 메시지마다 PostgreSQL 표시명 정본을 조회합니다. Valkey 이름 cache를 정본으로 사용하지 않으며, 조회 오류와 성공한 빈 결과는 [alarm 계약](contracts/alarm.md)의 서로 다른 경로를 따릅니다.
 
-YouTube dispatcher와 수집 실행처럼 단일 owner로 확정된 코드는 각각 `hololive-alarm-worker/internal/egress/youtubedispatch`와 `hololive-youtube-collector/internal/runtime/collectorruntime`이 소유합니다. public package 잔류는 구현 ownership을 공유한다는 뜻이 아니며, 새 single-owner 실행 구현을 `hololive-shared/pkg`에 추가할 근거로 사용할 수 없습니다.
+YouTube dispatcher와 수집 실행처럼 단일 owner로 확정된 코드는 각각 `hololive-alarm-worker/internal/egress/youtubedispatch`와 `hololive-collector/internal/runtime/collectorruntime`이 소유합니다. public package 잔류는 구현 ownership을 공유한다는 뜻이 아니며, 새 single-owner 실행 구현을 `hololive-shared/pkg`에 추가할 근거로 사용할 수 없습니다.
 
 ## Validation
 
 ```bash
 go test ./hololive/hololive-api/internal/config ./hololive/hololive-alarm-worker/internal/config \
-  ./hololive/hololive-youtube-collector/internal/config
+  ./hololive/hololive-collector/internal/config
 go test ./hololive/hololive-api/internal/youtube/sourceobservation \
-  ./hololive/hololive-youtube-collector/internal/runtime/sourceobservation \
+  ./hololive/hololive-collector/internal/runtime/sourceobservation \
   ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox
 ```

@@ -37,7 +37,7 @@ jobs:
           - hololive/hololive-alarm-worker
           - hololive/hololive-dbtest
           - hololive/hololive-shared
-          - hololive/hololive-youtube-collector
+          - hololive/hololive-collector
     defaults:
       run:
         shell: bash
@@ -46,7 +46,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
-          fetch-depth: ${{ matrix.module == 'hololive/hololive-youtube-collector' && '0' || '1' }}
+          fetch-depth: ${{ matrix.module == 'hololive/hololive-collector' && '0' || '1' }}
           persist-credentials: false
 
       - name: Setup Go
@@ -56,16 +56,16 @@ jobs:
           cache-dependency-path: ${{ format('{0}/go.sum', matrix.module) }}
 
       - name: Setup Node for collector helper integration tests
-        if: matrix.module == 'hololive/hololive-youtube-collector'
+        if: matrix.module == 'hololive/hololive-collector'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: "26.13.0"
           cache: npm
-          cache-dependency-path: hololive/hololive-youtube-collector/youtubejs/package-lock.json
+          cache-dependency-path: hololive/hololive-collector/youtubejs/package-lock.json
 
       - name: Install collector helper dependencies
         id: collector-install
-        if: matrix.module == 'hololive/hololive-youtube-collector'
+        if: matrix.module == 'hololive/hololive-collector'
         run: bash scripts/ci/public-pr-collector-helper-install.sh
 
       - name: Module tidy drift
@@ -80,15 +80,15 @@ jobs:
       - name: YouTube.js helper tests
         if: ${{ !cancelled() && steps.collector-install.outcome == 'success' }}
         timeout-minutes: 10
-        working-directory: hololive/hololive-youtube-collector/youtubejs
+        working-directory: hololive/hololive-collector/youtubejs
         run: |
           npm run typecheck
           npm test
 
       - name: Event Grade helper tests
-        if: matrix.module == 'hololive/hololive-youtube-collector'
+        if: matrix.module == 'hololive/hololive-collector'
         timeout-minutes: 5
-        working-directory: hololive/hololive-youtube-collector/eventgrade
+        working-directory: hololive/hololive-collector/eventgrade
         run: npm test
 
   fast-gate:

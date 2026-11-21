@@ -41,9 +41,9 @@ if [[ "$MODE" == "--dry-run" ]]; then
     cat <<'REMOTE'
 set -euo pipefail
 service="$1"
-unit="hololive-youtube-collector@${service}.service"
-current="/opt/hololive-bot/youtube-collector/current"
-previous="/opt/hololive-bot/youtube-collector/previous"
+unit="hololive-collector@${service}.service"
+current="/opt/hololive-bot/collector/current"
+previous="/opt/hololive-bot/collector/previous"
 previous_target="$(readlink -f "$previous" 2>/dev/null || true)"
 rollback_contract_dir="$previous_target/rollback-contract"
 echo "unit=$unit"
@@ -54,7 +54,7 @@ if [[ -z "$previous_target" || ! -d "$previous_target" ]]; then
   exit 1
 fi
 native_rollback_validate "$previous_target"
-native_rollback_endpoint_validate "$previous_target" /etc/hololive-bot/youtube-collector-host.env
+native_rollback_endpoint_validate "$previous_target" /etc/hololive-bot/collector-host.env
 echo "[DRY-RUN] Previous payload, host env, and systemd unit passed rollback validation."
 REMOTE
   } | ap_remote_bash "$service"
@@ -79,11 +79,11 @@ service="$1"
 rollback_started_at="$2"
 native_recovery_require_clear
 native_cutover_claim manual-rollback
-unit="hololive-youtube-collector@${service}.service"
-current="/opt/hololive-bot/youtube-collector/current"
-previous="/opt/hololive-bot/youtube-collector/previous"
-host_env="/etc/hololive-bot/youtube-collector-host.env"
-unit_file="/etc/systemd/system/hololive-youtube-collector@.service"
+unit="hololive-collector@${service}.service"
+current="/opt/hololive-bot/collector/current"
+previous="/opt/hololive-bot/collector/previous"
+host_env="/etc/hololive-bot/collector-host.env"
+unit_file="/etc/systemd/system/hololive-collector@.service"
 previous_target="$(readlink -f "$previous" 2>/dev/null || true)"
 rollback_contract_dir="$previous_target/rollback-contract"
 
@@ -106,10 +106,10 @@ if systemctl is-active --quiet "$unit" 2>/dev/null; then
   echo "collector unit still active: $unit" >&2
   exit 1
 fi
-sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
-sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"
+sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/collector-host.env" "$host_env"
+sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-collector@.service" "$unit_file"
 sudo -n ln -sfn "$previous_target" "$current"
-native_previous_link_restore /opt/hololive-bot/youtube-collector/releases "$previous" "$rollback_contract_dir/previous-before-cutover"
+native_previous_link_restore /opt/hololive-bot/collector/releases "$previous" "$rollback_contract_dir/previous-before-cutover"
 po_restore_previous "$previous_target"
 sudo -n systemd-analyze verify "$unit_file"
 sudo -n systemctl daemon-reload
@@ -121,7 +121,7 @@ REMOTE
 
 po_expected_presence="$(ap_remote_bash <<'REMOTE'
 set -euo pipefail
-sudo -n cat /opt/hololive-bot/youtube-collector/current/rollback-contract/po-unit-presence
+sudo -n cat /opt/hololive-bot/collector/current/rollback-contract/po-unit-presence
 REMOTE
 )"
 PO_EXPECTED_PRESENCE="$po_expected_presence" CHANGE_STARTED_AT="$rollback_started_at" \

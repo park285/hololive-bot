@@ -10,8 +10,8 @@ import (
 	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
+	publishkit "github.com/kapu/hololive-collector/testkit/sourceobservation"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
 func startUnobservedVideoLifecycle(t *testing.T, origin string) (*pgxpool.Pool, *Consumer, contract.LeaseProof) {

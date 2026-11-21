@@ -41,7 +41,7 @@ DDL_RE = re.compile(
 )
 SELECT_RE = re.compile(r"\bSELECT\b", re.IGNORECASE)
 
-COLLECTOR_LEASE_QUERIES = "hololive/hololive-youtube-collector/internal/runtime/joblease/queries"
+COLLECTOR_LEASE_QUERIES = "hololive/hololive-collector/internal/runtime/joblease/queries"
 ALARM_DISPATCH_QUERIES = "hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox/queries"
 YOUTUBE_RUNTIME_QUERIES = "hololive/hololive-api/internal/planes/youtube/runtime/queries"
 YOUTUBE_DELIVERY_QUERIES = "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries"

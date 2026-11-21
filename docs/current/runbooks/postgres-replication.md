@@ -64,7 +64,7 @@ containers. The recorded active primary has no physical replication slots.
 The central credential/config master owner is `hosts/hololive-seoul/hololive-bot/compose.env`.
 The iris-seoul collector b unit names `100.100.1.8:5433` (`deploy/podman/iris-seoul/`); native host.env is generated from
 the non-secret topology owner, with pool maximum from the capacity policy. Collector b reads only its scoped
-`youtube-collector.env`, not the central production file; verify the actual deployed layout at cutover.
+`collector.env`, not the central production file; verify the actual deployed layout at cutover.
 The workstation `.3` is not a PostgreSQL fallback. A route rollback needs explicit
 authorization and all affected consumers/certificates; binary rollback alone is not
 authorization to reinstate retired DNS routes.

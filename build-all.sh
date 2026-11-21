@@ -26,7 +26,7 @@ read_version() {
 declare -A IMAGE_BY_SERVICE=(
     [hololive-api]=localhost/hololive-api:prod
     [hololive-alarm-worker]=localhost/hololive-alarm-worker:prod
-    [youtube-collector]=localhost/hololive-youtube-collector:prod
+    [collector]=localhost/hololive-collector:prod
     [youtube-po-c]=localhost/hololive-youtube-po-sandbox:prod
     [holo-postgres]=localhost/hololive-postgres:prod
     [holo-pgbouncer]=localhost/iris-stack-pgbouncer:1.26.1-guc1
@@ -42,8 +42,8 @@ declare -A CONTEXT_BY_SERVICE=(
 declare -A DOCKERFILE_BY_SERVICE=(
     [hololive-api]=hololive/hololive-api/Dockerfile
     [hololive-alarm-worker]=hololive/hololive-alarm-worker/Dockerfile
-    [youtube-collector]=hololive/hololive-youtube-collector/Dockerfile
-    [youtube-po-c]=hololive/hololive-youtube-collector/Dockerfile.po-sandbox
+    [collector]=hololive/hololive-collector/Dockerfile
+    [youtube-po-c]=hololive/hololive-collector/Dockerfile.po-sandbox
 )
 VERSION_DIRS=(
     "hololive/hololive-api"
@@ -177,11 +177,11 @@ fi
 
 if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
     BUILD_SERVICES=("${TARGET_SERVICES[@]}")
-    if [[ " ${BUILD_SERVICES[*]} " == *" youtube-collector "* && " ${BUILD_SERVICES[*]} " != *" youtube-po-c "* ]]; then
+    if [[ " ${BUILD_SERVICES[*]} " == *" collector "* && " ${BUILD_SERVICES[*]} " != *" youtube-po-c "* ]]; then
         BUILD_SERVICES+=(youtube-po-c)
     fi
 else
-    BUILD_SERVICES=(hololive-api hololive-alarm-worker youtube-collector youtube-po-c holo-postgres holo-pgbouncer valkey-cache admin-dashboard-ingress)
+    BUILD_SERVICES=(hololive-api hololive-alarm-worker collector youtube-po-c holo-postgres holo-pgbouncer valkey-cache admin-dashboard-ingress)
 fi
 
 build_service() {

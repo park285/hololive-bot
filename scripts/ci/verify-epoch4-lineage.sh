@@ -29,7 +29,7 @@ for ((n=0; n<100; n++)); do
 done
 mkdir -p "$work/future/hololive"
 cp -a --reflink=auto "$root/hololive/hololive-api" "$work/future/hololive/"
-for module in hololive-shared hololive-dbtest hololive-youtube-collector; do ln -s "$root/hololive/$module" "$work/future/hololive/$module"; done
+for module in hololive-shared hololive-dbtest hololive-collector; do ln -s "$root/hololive/$module" "$work/future/hololive/$module"; done
 future="$work/future/hololive/hololive-api/scripts/migrations"
 build_future() { (cd "$work/future/hololive/hololive-api" && GOWORK=off CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$work/$1" ./cmd/db-migrate); }
 step1=002_epoch4_test_memo.sql

@@ -28,7 +28,7 @@ PR/릴리스 전 제품 결함 게이트와 운영 검증 기록 렌더링 도�
 - `scripts/deploy/quadlet-prestart.sh` - 중앙 unit의 ExecStartPre/ExecCondition helper
 - `sudo -n /opt/hololive-bot/compose/app-sources/<승인 SHA>/scripts/deploy/quadlet-redeploy-service.sh <hololive-api|hololive-alarm-worker> <image-id> [<api-image-id>]` - 봉인된 소스와 같은 후보의 읽기 전용 스키마 검사 후 해당 writer만 교체합니다. 이전 pair를 보존하며 자동 복구하지 않습니다.
 - 같은 세대의 `quadlet-rollback-service.sh <release> --check`로 캡처한 pair를 검사합니다. `--apply`에는 별도 승인이 필요합니다. 보호 세대 게시 전 일반 설치의 명령은 [릴리스 런북](../docs/current/runbooks/release.md)을 참조합니다.
-- 원격 AP(`youtube-collector` fleet) 호스트 운영: `scripts/deploy/ap-hosts/<host>.conf` 기반
+- 원격 AP(`collector` fleet) 호스트 운영: `scripts/deploy/ap-hosts/<host>.conf` 기반
   - Osaka native: `./scripts/deploy/ap-host-native-deploy.sh osaka [--dry-run|--apply]`
   - `./scripts/deploy/ap-completion-check.sh <host>`
   - Osaka native rollback: `./scripts/deploy/ap-host-native-rollback.sh osaka [--dry-run|--apply]`
@@ -45,7 +45,7 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/logs/logs.sh prune`
 - `./scripts/logs/logs.sh canary`
 - `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/logs.sh canary-cron`
-- `./scripts/logs/ap-logs.sh <host> [youtube-collector|all]`
+- `./scripts/logs/ap-logs.sh <host> [collector|all]`
 
 ## 5. review/
 리뷰 전달용 source/full bundle export와 사후 검증 스크립트입니다.

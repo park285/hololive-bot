@@ -51,14 +51,14 @@ service="$1"
 port="$2"
 change_started_at="$3"
 po_expected_presence="$4"
-unit="hololive-youtube-collector@${service}.service"
-current_link="/opt/hololive-bot/youtube-collector/current"
+unit="hololive-collector@${service}.service"
+current_link="/opt/hololive-bot/collector/current"
 
-sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/collector.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
-sudo -n test -r /etc/hololive-bot/youtube-collector-host.env
+sudo -n test -r /etc/hololive-bot/collector-host.env
 sudo -n test -x "$current_link/bin/healthcheck"
 sudo -n test -f "$current_link/youtubejs/src/server.mjs"
 require_node_version node
@@ -83,8 +83,8 @@ sub_state="$(systemctl show "$unit" -p SubState --value)"
 environment_files="$(systemctl show "$unit" -p EnvironmentFiles --value)"
 [[ "$active_state" == active ]]
 [[ "$sub_state" == running ]]
-[[ "$environment_files" == *'/etc/stack-secrets/hololive-bot/youtube-collector.env'* ]]
-[[ "$environment_files" == *'/etc/hololive-bot/youtube-collector-host.env'* ]]
+[[ "$environment_files" == *'/etc/stack-secrets/hololive-bot/collector.env'* ]]
+[[ "$environment_files" == *'/etc/hololive-bot/collector-host.env'* ]]
 [[ "$environment_files" != *'compose.env'* ]]
 
 if [[ -n "$change_started_at" ]]; then
@@ -94,8 +94,8 @@ if [[ -n "$change_started_at" ]]; then
   [[ "$active_epoch" -ge "$since_epoch" ]]
 fi
 
-sudo -n grep -qx 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true' /etc/hololive-bot/youtube-collector-host.env
-sudo -n grep -qx 'POSTGRES_USER=hololive_collector_a' /etc/hololive-bot/youtube-collector-host.env
+sudo -n grep -qx 'COLLECTOR_RUNTIME_ALLOWED=true' /etc/hololive-bot/collector-host.env
+sudo -n grep -qx 'POSTGRES_USER=hololive_collector_a' /etc/hololive-bot/collector-host.env
 
 collector_readiness_fetch() {
   systemctl is-active --quiet "$unit" || return 1
@@ -136,7 +136,7 @@ fi
 echo 'collector AP completion check passed'
 REMOTE
   } | ap_remote_bash "$service" "$port" "$CHANGE_STARTED_AT" "$PO_EXPECTED_PRESENCE"
-  "${AP_SSH[@]}" "sudo -n python3 - verify-native '$service' /opt/hololive-bot/youtube-collector/current 'hololive-youtube-collector@$service.service'" \
+  "${AP_SSH[@]}" "sudo -n python3 - verify-native '$service' /opt/hololive-bot/collector/current 'hololive-collector@$service.service'" \
     < "$tool_root/scripts/deploy/lib/worker-profile-pair.py"
 }
 

@@ -14,10 +14,10 @@ native_profile_pair_validate() {
     --property=NoNewPrivileges=yes --property=RuntimeMaxSec=30s \
     --property="WorkingDirectory=$release" --property=ProtectHome=yes --property=ProtectSystem=strict \
     --property=PrivateTmp=yes \
-    --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env \
+    --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/collector.env \
     --property="EnvironmentFile=$env_file" \
     /usr/bin/env "STACK_WORKER_PROFILE_FILE=$release/worker-profile.json" \
-    "$release/bin/youtube-collector-wrapper" "$release/bin/youtube-collector" --check-worker-profile
+    "$release/bin/hololive-collector-wrapper" "$release/bin/hololive-collector" --check-worker-profile
 }
 
 native_root_endpoint() {
@@ -30,7 +30,7 @@ native_rollback_endpoint_validate() {
     echo '정지 창이 퇴역시킨 native release는 endpoint가 같아도 복원할 수 없습니다.' >&2
     return 1
   }
-  previous_endpoint="$(native_root_endpoint "$previous_target/rollback-contract/youtube-collector-host.env")" || return
+  previous_endpoint="$(native_root_endpoint "$previous_target/rollback-contract/collector-host.env")" || return
   current_endpoint="$(native_root_endpoint "$current_env")" || return
   postgres_endpoint_require_same "$current_endpoint" "$previous_endpoint"
 }
@@ -44,7 +44,7 @@ native_rollback_validate() {
     echo "previous host-native release is unavailable; refusing partial rollback" >&2
     return 1
   fi
-  for rel in bin/youtube-collector bin/youtube-collector-wrapper bin/healthcheck; do
+  for rel in bin/hololive-collector bin/hololive-collector-wrapper bin/healthcheck; do
     if ! sudo -n test -x "$previous_target/$rel"; then
       echo "previous host-native executable is missing or not executable: $rel" >&2
       return 1
@@ -54,7 +54,7 @@ native_rollback_validate() {
     echo "previous host-native youtubejs helper is missing" >&2
     return 1
   fi
-  for rel in youtube-collector-host.env hololive-youtube-collector@.service SHA256SUMS previous-before-cutover; do
+  for rel in collector-host.env hololive-collector@.service SHA256SUMS previous-before-cutover; do
     if ! sudo -n test -r "$contract_dir/$rel"; then
       echo "previous host-native rollback contract is incomplete: $rel" >&2
       return 1
@@ -67,11 +67,11 @@ native_rollback_validate() {
   local earlier_previous
   earlier_previous="$(sudo -n cat "$contract_dir/previous-before-cutover")"
   if [[ "$earlier_previous" != absent ]]; then
-    [[ "$earlier_previous" =~ ^/opt/hololive-bot/youtube-collector/releases/[A-Za-z0-9._-]+$ ]] || return 1
+    [[ "$earlier_previous" =~ ^/opt/hololive-bot/collector/releases/[A-Za-z0-9._-]+$ ]] || return 1
     sudo -n test -d "$earlier_previous" && sudo -n test ! -L "$earlier_previous" || return 1
   fi
 
-  if ! sudo -n sh -n "$previous_target/bin/youtube-collector-wrapper"; then
+  if ! sudo -n sh -n "$previous_target/bin/hololive-collector-wrapper"; then
     echo "previous host-native wrapper failed syntax validation" >&2
     return 1
   fi
@@ -79,8 +79,8 @@ native_rollback_validate() {
     echo "previous host-native rollback payload failed checksum validation" >&2
     return 1
   fi
-  native_profile_pair_validate "$previous_target" "$contract_dir/youtube-collector-host.env" || return 1
-  if ! sudo -n systemd-analyze verify "$contract_dir/hololive-youtube-collector@.service"; then
+  native_profile_pair_validate "$previous_target" "$contract_dir/collector-host.env" || return 1
+  if ! sudo -n systemd-analyze verify "$contract_dir/hololive-collector@.service"; then
     echo "previous host-native systemd unit failed validation" >&2
     return 1
   fi

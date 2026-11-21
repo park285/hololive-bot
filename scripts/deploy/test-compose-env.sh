@@ -31,14 +31,14 @@ DB_PASSWORD=db-secret
 CACHE_PASSWORD=cache-secret
 ALARM_DISPATCH_RETENTION_LIMIT=1000
 ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH=1000
-YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=false
+COLLECTOR_RUNTIME_ALLOWED=false
 EOF
 
 compose_env_validate_file_format "$env_file"
 pass "valid env passes"
 
 mapfile -t keys < <(compose_env_list_keys_from_file "$env_file")
-[[ "${keys[*]}" == "ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH ALARM_DISPATCH_RETENTION_LIMIT CACHE_PASSWORD DB_PASSWORD YOUTUBE_COLLECTOR_RUNTIME_ALLOWED" ]] || fail "unexpected env keys: ${keys[*]}"
+[[ "${keys[*]}" == "ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH ALARM_DISPATCH_RETENTION_LIMIT CACHE_PASSWORD COLLECTOR_RUNTIME_ALLOWED DB_PASSWORD" ]] || fail "unexpected env keys: ${keys[*]}"
 pass "env keys are listed"
 
 
@@ -46,6 +46,13 @@ bad_export="$tmpdir/bad-export.env"
 echo 'export DB_PASSWORD=x' >"$bad_export"
 expect_fail compose_env_validate_file_format "$bad_export"
 pass "leading export fails"
+
+for retired in HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR=1 HOLOLIVE_YOUTUBE_COLLECTOR_IMAGE=x YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true; do
+  retired_env="$tmpdir/retired.env"
+  printf 'DB_PASSWORD=x\n%s\n' "$retired" >"$retired_env"
+  expect_fail compose_env_validate_file_format "$retired_env"
+done
+pass "retired collector keys fail"
 
 bad_sub="$tmpdir/bad-sub.env"
 echo 'DB_PASSWORD=$(cat /secret)' >"$bad_sub"

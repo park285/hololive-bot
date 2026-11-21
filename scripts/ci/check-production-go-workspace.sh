@@ -6,14 +6,14 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 dockerfiles=(
   "hololive/hololive-api/Dockerfile"
   "hololive/hololive-alarm-worker/Dockerfile"
-  "hololive/hololive-youtube-collector/Dockerfile"
-  "hololive/hololive-youtube-collector/Dockerfile.po-sandbox"
+  "hololive/hololive-collector/Dockerfile"
+  "hololive/hololive-collector/Dockerfile.po-sandbox"
 )
 
 module_dirs=(
   "hololive/hololive-api"
   "hololive/hololive-alarm-worker"
-  "hololive/hololive-youtube-collector"
+  "hololive/hololive-collector"
   "hololive/hololive-shared"
   "hololive/hololive-dbtest"
 )

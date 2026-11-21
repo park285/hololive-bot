@@ -8,7 +8,7 @@
 |---|---|
 | `hololive-api` | `hololive-api.md` |
 | `alarm-worker` | `alarm-worker.md` |
-| `youtube-collector` | `youtube-collector.md` |
+| `collector` | `collector.md` |
 
 Collector runbook은 중앙 `c`·iris-seoul `b`·kapu `d`의 Podman Quadlet과 Osaka `a`의 native systemd 절차를 함께 소유합니다.
 통합 관리자 웹은 iris-seoul의 `iris-console.service`가 소유하며, 이 저장소의 연결·shortlink 경계는

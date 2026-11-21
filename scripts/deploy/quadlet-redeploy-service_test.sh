@@ -867,7 +867,7 @@ pass "live capacity drift and failed inspection stop before deployment effects"
 for origin in \
   etc/containers/systemd/hololive-bot/container.d/60-pool.conf \
   etc/containers/systemd/hololive-bot/hololive-.container.d/60-pool.conf \
-  etc/containers/systemd/hololive-bot/hololive-youtube-.container.d/60-pool.conf \
+  etc/containers/systemd/hololive-bot/hololive-collector-.container.d/60-pool.conf \
   etc/containers/systemd/hololive-bot/holo-.container.d/60-pool.conf \
   etc/containers/systemd/container.d/60-pool.conf \
   run/containers/systemd/hololive-api.container.d/60-pool.conf \

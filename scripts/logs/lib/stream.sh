@@ -181,7 +181,7 @@ cmd_stream() {
   local name=""
   local pid=""
   local svc=""
-  local services=(hololive-api youtube-collector)
+  local services=(hololive-api collector)
 
   case "${command}" in
     start)

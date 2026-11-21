@@ -11,10 +11,10 @@ import (
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/content"
 	livereconcile "github.com/kapu/hololive-api/internal/youtube/reconcile/live"
+	publishkit "github.com/kapu/hololive-collector/testkit/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
 func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {

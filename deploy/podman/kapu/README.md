@@ -11,7 +11,7 @@ osaka 호스트를 다시 설치하는 동안에도 a를 kapu에 임시로 띄�
 **카드 창 입력 장착:** 검증을 마친 카드 릴리스 산출물에서 봉인한 오프라인 d custody tar의 출처와 무결성을 확인하고, 새 root 전용 디렉터리에 푼다. 아래 예에서 tar는 다음 경로들을 루트 기준으로 포함한다. 파일은 root 소유 일반 파일이어야 하며 부모 경로까지 root 외의 쓰기 권한이나 심볼릭 링크가 없어야 한다.
 
 - `.source-revision`: 검증된 카드 소스의 40자리 SHA 한 줄.
-- `d-card-candidate.json`: `revision`은 같은 SHA, `images`와 `units`의 키는 각각 `hololive-youtube-collector-d`와 `hololive-youtube-po-d`. 값은 해당 컨테이너의 검증된 `sha256:<64 hex>` 이미지 ID와 `.container` 원본의 SHA-256(접두사 없음)이다.
+- `d-card-candidate.json`: `revision`은 같은 SHA, `images`와 `units`의 키는 각각 `hololive-collector-d`와 `hololive-youtube-po-d`. 값은 해당 컨테이너의 검증된 `sha256:<64 hex>` 이미지 ID와 `.container` 원본의 SHA-256(접두사 없음)이다.
 - `scripts/deploy/kapu-d-cutover.py`, `scripts/deploy/lib/systemd-stop-guard.py`, `deploy/podman/kapu/`의 두 `.container`: 위 승인과 같은 소스 트리의 상대 경로를 유지한다.
 
 ```bash
@@ -46,7 +46,7 @@ sudo -n python3 -I -B "$release/scripts/deploy/kapu-d-cutover.py" resume --alrea
 
 ## 호스트 전제
 
-- 이미지: rootful 저장소에 검증된 linux/amd64 collector와 PO issuer가 모두 있어야 한다. 두 Quadlet이 실제 읽는 위치는 `docker.io/library/hololive-youtube-collector:prod`와 `docker.io/library/hololive-youtube-po-sandbox:prod`다. 실행 pair는 `localhost/<컨테이너명>:runtime-before-<hold명>`에 보존한다. `localhost/…:prod` 이동만으로 교체되지 않는다.
+- 이미지: rootful 저장소에 검증된 linux/amd64 collector와 PO issuer가 모두 있어야 한다. 두 Quadlet이 실제 읽는 위치는 `docker.io/library/hololive-collector:prod`와 `docker.io/library/hololive-youtube-po-sandbox:prod`다. 실행 pair는 `localhost/<컨테이너명>:runtime-before-<hold명>`에 보존한다. `localhost/…:prod` 이동만으로 교체되지 않는다.
 - 비밀: stack-secrets `hosts/kapu/hololive-bot/collector-d/` → `/etc/stack-secrets/hololive-bot/collector-d/`.
   compose 보간이 없어 env 파일에 `POSTGRES_PASSWORD`를 둔다.
 - 비밀이 아닌 release profile: `/etc/hololive-bot/collector-d/worker-profile-release/`(`SHA256SUMS` 검증).

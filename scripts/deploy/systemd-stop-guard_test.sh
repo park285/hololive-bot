@@ -23,11 +23,11 @@ export SYSTEMD_UNIT_PATH="$system:$r/units" SYSTEMD_GENERATOR_PATH=/dev/null SYS
 unset NOTIFY_SOCKET
 helper="${script%/*}/lib/systemd-stop-guard.py"
 po=hololive-youtube-po-d.service
-collector=hololive-youtube-collector-d.service
+collector=hololive-collector-d.service
 foreign=hololive-api.service
 reset=hololive-alarm-worker.service
 drift=hololive-youtube-po-b.service
-auto=hololive-youtube-collector-b.service
+auto=hololive-collector-b.service
 missing=hololive-youtube-po-c.service
 manager=''
 private_ctl() { DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/systemd/private" systemctl --user "$@"; }

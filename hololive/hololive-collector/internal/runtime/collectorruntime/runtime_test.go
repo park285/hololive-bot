@@ -1,0 +1,32 @@
+package collectorruntime
+
+import (
+	"log/slog"
+	"testing"
+
+	collectorconfig "github.com/kapu/hololive-collector/internal/config"
+)
+
+func TestBuildRequiresRuntimeAllowEnv(t *testing.T) {
+	runtime, err := Build(t.Context(), &collectorconfig.RuntimeConfig{
+		RuntimeOwnership: collectorconfig.RuntimeOwnershipConfig{},
+	}, testLogger(), false)
+	if err == nil || runtime != nil {
+		t.Fatalf("Build() = %#v, %v, want runtime disabled error", runtime, err)
+	}
+}
+
+func TestBuildRequiresWorkerProfile(t *testing.T) {
+	runtime, err := Build(t.Context(), &collectorconfig.RuntimeConfig{
+		RuntimeOwnership: collectorconfig.RuntimeOwnershipConfig{
+			RuntimeAllowed: true,
+		},
+	}, testLogger(), false)
+	if err == nil || runtime != nil {
+		t.Fatalf("Build() = %#v, %v, want worker profile error", runtime, err)
+	}
+}
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
+}

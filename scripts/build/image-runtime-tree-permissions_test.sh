@@ -27,7 +27,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-collector=hololive/hololive-youtube-collector
+collector=hololive/hololive-collector
 alarm=hololive/hololive-alarm-worker
 checkout="${TMP_DIR}/checkout"
 mkdir -p "${checkout}"

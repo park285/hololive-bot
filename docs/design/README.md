@@ -25,4 +25,4 @@
 ## Active Worklogs
 - `2026-05-15-repo-structure-refactor-worklog.md` — repo structure refactor 완료 범위, 검증, 다음 작업 기준
 
-현재 운영 경로는 `../current/runbooks/youtube-collector.md`가 소유합니다.
+현재 운영 경로는 `../current/runbooks/collector.md`가 소유합니다.

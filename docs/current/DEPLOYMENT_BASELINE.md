@@ -124,7 +124,7 @@ timer·service·apply drop-in과 Osaka의 `iris_seoul_standby` physical slot을 
 | `alarm-worker` | 중앙 Quadlet `hololive-alarm-worker.service` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, Valkey |
 | `youtube-collector` | 중앙 Quadlet `hololive-youtube-collector-c` (`c`), iris-seoul Quadlet `hololive-youtube-collector-b` (`b`), Osaka native `a`, kapu Quadlet `d` | `a` 30005, `b` 30015, `c` 30025, `d` 30015(kapu loopback) | app file log, PostgreSQL (`hololive_collector_a`/`b`/`c`/`d`) | 각 호스트의 logs/data, certs, worker profile, Go binary·Node helper, 격리 issuer socket | 중앙 DB 의존성과 별개로 모든 slot의 issuer를 먼저 기동·검증한 뒤 collector를 전환합니다. |
 
-`hololive-api`는 `hololive-net`만 사용하며 컨테이너 런타임 socket에 접근하지 않습니다. Collector와 issuer의 동일 source SHA 및 paired deploy/rollback 계약은 [collector runbook](runbooks/youtube-collector.md#isolated-po-token-lifecycle)을 따릅니다.
+`hololive-api`는 `hololive-net`만 사용하며 컨테이너 런타임 socket에 접근하지 않습니다. Collector와 issuer의 동일 source SHA 및 paired deploy/rollback 계약은 [collector runbook](runbooks/collector.md#isolated-po-token-lifecycle)을 따릅니다.
 
 ## Infra Services
 

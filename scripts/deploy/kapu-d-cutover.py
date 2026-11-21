@@ -16,10 +16,10 @@ import tempfile
 import time
 
 
-C = 'hololive-youtube-collector-d'
+C = 'hololive-collector-d'
 I = 'hololive-youtube-po-d'
 NAMES = (C, I)
-TITLE = {C: 'hololive-youtube-collector', I: 'hololive-youtube-po-sandbox'}
+TITLE = {C: 'hololive-collector', I: 'hololive-youtube-po-sandbox'}
 UNIT = Path('/etc/containers/systemd')
 SYSTEM = Path('/etc/systemd/system')
 GEN = Path('/run/systemd/generator')
@@ -32,17 +32,17 @@ D = Path('/etc/hololive-bot/collector-d/worker-profile-release')
 SECRETS = Path('/etc/stack-secrets/hololive-bot/collector-d')
 SRC = SECRETS / 'worker-profiles'
 CA = SECRETS / 'certs/postgres-ca.pem'
-ENVFILE = SECRETS / 'youtube-collector.env'
+ENVFILE = SECRETS / 'collector.env'
 DEST = '/run/hololive-bot/worker-profile-release'
 SOURCE = '/run/hololive-bot/worker-profiles'
 CERT = '/run/hololive-bot/certs/postgres-ca.pem'
 SOCK = '/run/hololive-youtube-po/worker.sock'
 DB = {'POSTGRES_HOST': '100.100.1.8', 'POSTGRES_DB': 'hololive', 'POSTGRES_USER': 'hololive_collector_d',
       'POSTGRES_SSLMODE': 'verify-full', 'POSTGRES_SSLROOTCERT': CERT, 'POSTGRES_SOCKET_PATH': '',
-      'POSTGRES_QUERY_EXEC_MODE': 'cache_statement', 'PGAPPNAME': 'youtube-collector-d',
-      'YOUTUBE_COLLECTOR_INSTANCE_ID': 'youtube-collector-d'}
+      'POSTGRES_QUERY_EXEC_MODE': 'cache_statement', 'PGAPPNAME': 'collector-d',
+      'COLLECTOR_INSTANCE_ID': 'collector-d'}
 PROFILE_ENV = {'STACK_WORKER_PROFILE_FILE': DEST + '/profile.json',
-               'STACK_WORKER_PROFILE_SOURCE_FILE': SOURCE + '/youtube-collector-d.json'}
+               'STACK_WORKER_PROFILE_SOURCE_FILE': SOURCE + '/collector-d.json'}
 HEX = r'[0-9a-f]{64}'
 LEVEL = r's0:c[0-9]+(?:,c[0-9]+)*'
 COMMAND_ENV = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C', 'HOME': '/root'}
@@ -214,7 +214,7 @@ def effective_ids(pid, uid, gid, extra):
 def profile():
     trusted(D, True)
     need({p.name for p in D.iterdir()} <= {'profile.json','SHA256SUMS','pair.json','compose.yml'}, '불명 d release 파일')
-    source = raw(SRC / 'youtube-collector-d.json')
+    source = raw(SRC / 'collector-d.json')
     released = raw(D / 'profile.json')
     need(released == source and isinstance(json.loads(released), dict), 'release/source profile drift')
     sums = {}
@@ -466,7 +466,7 @@ def held_one(h, state, name, stopped=None):
 
 def bindings():
     result = {}
-    for path in (ENVFILE, CA, SRC/'youtube-collector-d.json', D/'profile.json'):
+    for path in (ENVFILE, CA, SRC/'collector-d.json', D/'profile.json'):
         st = path.lstat()
         result[str(path)] = [st.st_dev,st.st_ino,st.st_uid,st.st_gid,st.st_mode,st.st_size,st.st_mtime_ns]
     return result
@@ -678,7 +678,7 @@ def acceptance(h, s, n, g):
     else:
         need(collector(g,'6433',s['level']) == raw(h / 'profile.json'), '후보 loaded profile drift')
         result = json.loads(run('podman','exec',g['cid'],'/app/bin/healthcheck','--body','https://127.0.0.1:30015/ready'))
-        need(result['status'] == 'ready' and result['instance_id'] == 'youtube-collector-d' and result['helper'] == 'ok' and
+        need(result['status'] == 'ready' and result['instance_id'] == 'collector-d' and result['helper'] == 'ok' and
              result['first_success'] is True and result['handoff_status'] == 'PROCESSED' and result['handoff_processed'] is True and
              prop(C,'NRestarts') == '0', 'collector handoff/NRestarts 불일치')
     healthy(n,g)
