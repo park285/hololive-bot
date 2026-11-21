@@ -13,6 +13,7 @@ Quadlet으로 운영합니다. iris-seoul collector b는 같은 방식의 별도
 | `optional/schedule-poster/` | `HOLOLIVE_SCHEDULE_POSTER_ENABLED=1`일 때만 설치하는 hololive-api drop-in(`41-schedule-poster.conf`) |
 | `optional/schedule-poster-review/` | `HOLOLIVE_SCHEDULE_POSTER_REVIEW_ENABLED=1`일 때만 설치하는 hololive-api drop-in(`42-schedule-poster-review.conf`, 후보 자동 검토용 Gemini API 키) |
 | `optional/broadcast-type-decision/` | `HOLOLIVE_BROADCAST_TYPE_DECISION_ENABLED=1`일 때만 설치하는 hololive-api drop-in(`43-broadcast-type-decision.conf`, 미분류 방송 유형 판정용 Gemini API 키) |
+| `optional/event-grade/` | `HOLOLIVE_EVENT_GRADE_ENABLED=1`일 때만 설치하는 collector c drop-in(`44-event-grade.conf`, 이벤트 등급 수집용 게임 인증 파일) |
 
 `optional/`은 설치 트리 밖에 둡니다. Quadlet은 같은 검색 루트 아래 형제 디렉터리의
 `<unit>.container.d/` drop-in도 적용하므로, 선택 drop-in을 `hololive-bot/` 옆에 두면 항상 적용됩니다.
@@ -223,7 +224,7 @@ kapu의 원래 `activation.reconcile`에는 다섯 영수증의 SHA-256, inode, 
 
 - hostname이 `kapu`이면 `HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1` 없이 거부합니다(두 번째 dispatcher 방지).
 - `compose.env`에 `HOLOLIVE_VALKEY_HA_ENABLED=1`과 비어 있지 않은 `VALKEY_SENTINEL_ADDRS`가 있어야 합니다.
-- `HOLOLIVE_X_SPACES_ENABLED`·`HOLOLIVE_SCHEDULE_POSTER_ENABLED`·`HOLOLIVE_SCHEDULE_POSTER_REVIEW_ENABLED`·`HOLOLIVE_BROADCAST_TYPE_DECISION_ENABLED`는 `0` 또는 `1`이며, 그 값에 따라 각 선택 기능 drop-in을 설치하거나 지웁니다.
+- `HOLOLIVE_X_SPACES_ENABLED`·`HOLOLIVE_SCHEDULE_POSTER_ENABLED`·`HOLOLIVE_SCHEDULE_POSTER_REVIEW_ENABLED`·`HOLOLIVE_BROADCAST_TYPE_DECISION_ENABLED`·`HOLOLIVE_EVENT_GRADE_ENABLED`는 `0` 또는 `1`이며, 그 값에 따라 각 선택 기능 drop-in을 설치하거나 지웁니다.
 - `compose.env`의 PostgreSQL pool 값이 연결 예산(`scripts/deploy/lib/postgres-capacity.sh`)을 넘으면 거부합니다.
 - 설치 전에 설치 뒤와 같은 구성(staged unit, 켜진 선택 기능 drop-in, 설치 도구가 건드리지 않는 기존 drop-in)이
   `quadlet -dryrun`을 통과해야 합니다. 실패하면 `/opt`·prestart·unit을 바꾸지 않습니다.

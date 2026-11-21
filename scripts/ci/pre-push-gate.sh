@@ -133,6 +133,7 @@ run_content_gates() {
     hololive/hololive-youtube-collector/{Dockerfile,Dockerfile.po-sandbox}{,.dockerignore} \
     hololive/hololive-alarm-worker/Dockerfile{,.dockerignore} \
     hololive/hololive-youtube-collector/{po-sandbox,youtubejs}/{package.json,package-lock.json,src} \
+    hololive/hololive-youtube-collector/eventgrade/server.mjs \
     hololive/hololive-alarm-worker/xspaces/{package.json,package-lock.json,src}
   run_if_changed scripts/deploy/lib/youtubejs-node-version_test.sh scripts/deploy/lib/youtubejs-node-version.sh
   run_if_changed scripts/deploy/source-revision-provenance_test.sh scripts/deploy/lib/source-revision.sh

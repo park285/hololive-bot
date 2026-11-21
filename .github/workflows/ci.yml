@@ -85,6 +85,12 @@ jobs:
           npm run typecheck
           npm test
 
+      - name: Event Grade helper tests
+        if: matrix.module == 'hololive/hololive-youtube-collector'
+        timeout-minutes: 5
+        working-directory: hololive/hololive-youtube-collector/eventgrade
+        run: npm test
+
   fast-gate:
     name: fast-gate
     if: always()

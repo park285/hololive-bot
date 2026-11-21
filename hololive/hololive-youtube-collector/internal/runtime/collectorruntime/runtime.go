@@ -17,6 +17,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/eventgrade"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
@@ -31,6 +32,8 @@ type Runtime struct {
 	scheduler       *leaseScheduler
 	servers         *sharedserver.RuntimeHTTPServers
 	helper          *youtubejs.Helper
+	eventGrade      *eventgrade.Runner
+	eventGradeDone  <-chan struct{}
 	infra           *collectorInfrastructure
 	workerRegistry  *workercontract.Registry
 	profileChecker  *workercontract.ProfileFileChecker
@@ -176,6 +179,11 @@ func assembleRuntime(
 		profileChecker: profileChecker,
 	}
 
+	if infra.eventGrade != nil {
+		runtime.eventGrade = eventgrade.NewRunner(infra.postgres.GetPool(), infra.eventGrade, appConfig.Collector.InstanceID, logger)
+		runtime.eventGradeDone = infra.eventGrade.Done()
+	}
+
 	return runtime, nil
 }
 
@@ -213,11 +221,24 @@ func (r *Runtime) start(ctx context.Context, errCh chan<- error) {
 
 	r.watchHelper(ctx, errCh)
 	r.startScheduler(ctx, errCh)
+	r.startEventGrade(ctx, errCh)
 	r.watchSchedulerFatal(ctx, errCh)
 	r.startServers(errCh)
 	sharedlog.Info(ctx, r.Logger, "youtube_collector_started", "youtube collector started",
 		sharedlog.Runtime(runtimeName),
 	)
+}
+
+func (r *Runtime) startEventGrade(ctx context.Context, errCh chan<- error) {
+	if r.eventGrade == nil {
+		return
+	}
+
+	go panicguard.Run(r.Logger, panicscope.BackgroundTask, "event-grade-runner", func() {
+		if err := r.eventGrade.Run(ctx, r.eventGradeDone); err != nil {
+			forwardRuntimeError(ctx, errCh, err)
+		}
+	})
 }
 
 func (r *Runtime) watchSchedulerFatal(ctx context.Context, errCh chan<- error) {

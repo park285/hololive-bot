@@ -140,6 +140,7 @@ run_local_ci() {
     if [[ "${run_collector_js}" == true ]]; then
         run_step "YouTube.js typecheck" npm --prefix hololive/hololive-youtube-collector/youtubejs run typecheck
         run_step "YouTube.js tests" npm --prefix hololive/hololive-youtube-collector/youtubejs test
+        run_step "Event Grade helper tests" npm --prefix hololive/hololive-youtube-collector/eventgrade test
     fi
     echo "[LOCAL CI] Passed"
 }

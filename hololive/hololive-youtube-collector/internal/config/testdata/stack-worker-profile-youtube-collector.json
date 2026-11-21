@@ -31,7 +31,8 @@
         "release_jitter_max_ms": 1000,
         "holodex_max_inflight": 4,
         "official_max_inflight": 4,
-        "youtubejs_max_inflight": 4
+        "youtubejs_max_inflight": 4,
+        "event_grade_enabled": false
       }
     }
   }

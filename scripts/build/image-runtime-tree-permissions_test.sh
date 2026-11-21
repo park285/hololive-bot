@@ -37,6 +37,7 @@ git -C "${ROOT_DIR}" ls-files -z -- \
   "${alarm}/Dockerfile" "${alarm}/Dockerfile.dockerignore" \
   "${collector}/po-sandbox/package.json" "${collector}/po-sandbox/package-lock.json" "${collector}/po-sandbox/src" \
   "${collector}/youtubejs/package.json" "${collector}/youtubejs/package-lock.json" "${collector}/youtubejs/src" \
+  "${collector}/eventgrade/server.mjs" \
   "${alarm}/xspaces/package.json" "${alarm}/xspaces/package-lock.json" "${alarm}/xspaces/src" |
   tar -C "${ROOT_DIR}" --null -T - -cf - |
   (umask 077 && tar -xf - --no-same-permissions -C "${checkout}")
@@ -80,4 +81,5 @@ check_stage() {
 
 check_stage "${collector}/Dockerfile.po-sandbox" package-build /app/po-sandbox 65532:1000
 check_stage "${collector}/Dockerfile" youtubejs-build /app/youtubejs 1000:1000
+check_stage "${collector}/Dockerfile" eventgrade-build /app/eventgrade 1000:1000
 check_stage "${alarm}/Dockerfile" xspaces-build /app/xspaces 1000:1000
