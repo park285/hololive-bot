@@ -122,11 +122,11 @@ migration 331은 `youtube_community_shorts_alarm_states`의 발송 전 선점 �
 
 | binary | `authorized_at` 참조 | 331 뒤 |
 |---|---|---|
-| post 단위 claim 제거 이전 API·worker | upsert 열 목록, claim 획득·해제, 발송 표시 | upsert·발송이 실패 |
-| claim 제거 릴리스(CHANGELOG "YouTube community·shorts 발송 전 post 단위 claim 제거")의 API·worker | 없음 | 정상 |
-| 331을 포함한 릴리스의 API·worker | 없음 | 정상 |
+| v12.0.0 이전(post 단위 claim 제거 이전) API·worker | upsert 열 목록, claim 획득·해제, 발송 표시 | upsert·발송이 실패 |
+| v12.0.0 이후 API·worker([CHANGELOG](https://github.com/park285/hololive-bot/blob/v12.0.0/CHANGELOG.md)의 "post 단위 claim 제거"와 "migration 331") | 없음 | 정상 |
 
-`db-migrate`는 앱 교체보다 먼저 돌기 때문에 331을 claim 제거와 같은 릴리스에 넣지 않습니다.
+v12.0.0은 claim 제거와 331을 같은 릴리스에 담았습니다. `db-migrate`는 앱 교체보다 먼저 돌기 때문에 331은 아래 적용 조건을
+만족할 때만 적용합니다.
 
 - 적용 조건: claim 제거 릴리스가 `hololive-api`와 `hololive-alarm-worker` 모두에 운영 반영되고, 그 이전 image로
   도는 컨테이너가 0개일 때만 별도 승인을 받아 적용합니다.
