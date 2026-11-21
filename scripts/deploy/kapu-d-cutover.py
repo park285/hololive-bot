@@ -16,20 +16,26 @@ import tempfile
 import time
 
 
-C = 'hololive-collector-d'
-I = 'hololive-youtube-po-d'
+RELEASE_ROOT = Path(__file__).resolve().parents[2]
+SLOTS_FILE = RELEASE_ROOT / 'scripts/deploy/lib/collector-slots.tsv'
+SLOT_HEADER, *SLOT_ROWS = (line.split('\t') for line in SLOTS_FILE.read_text().splitlines())
+SLOT = next(dict(zip(SLOT_HEADER, row)) for row in SLOT_ROWS if row[0] == 'd' and len(row) == len(SLOT_HEADER))
+SERVICE = SLOT['service']
+C = SLOT['collector_unit'].removesuffix('.service')
+I = SLOT['issuer_unit'].removesuffix('.service')
 NAMES = (C, I)
-TITLE = {C: 'hololive-collector', I: 'hololive-youtube-po-sandbox'}
+TITLE = {C: SLOT['collector_image'].rsplit('/', 1)[1], I: SLOT['issuer_image'].rsplit('/', 1)[1]}
+NETWORK_UNIT, NETWORK = SLOT['network_unit'], SLOT['network']
+PORT = SLOT['port']
 UNIT = Path('/etc/containers/systemd')
 SYSTEM = Path('/etc/systemd/system')
 GEN = Path('/run/systemd/generator')
-RELEASE_ROOT = Path(__file__).resolve().parents[2]
-INPUT = RELEASE_ROOT / 'deploy/podman/kapu'
+INPUT = RELEASE_ROOT / SLOT['unit_dir']
 GUARD = Path(__file__).resolve().with_name('lib') / 'systemd-stop-guard.py'
 QUIESCED = {'5433': b'kapu-d-guarded-stop-v2 direct\n', '6433': b'kapu-d-guarded-stop-v3 already-pooled\n'}
-STORE = Path('/var/lib/hololive-collector-d-cutover')
-D = Path('/etc/hololive-bot/collector-d/worker-profile-release')
-SECRETS = Path('/etc/stack-secrets/hololive-bot/collector-d')
+STORE = Path('/var/lib') / (C + '-cutover')
+D = Path('/etc/hololive-bot') / SERVICE / 'worker-profile-release'
+SECRETS = Path('/etc/stack-secrets/hololive-bot') / SERVICE
 SRC = SECRETS / 'worker-profiles'
 CA = SECRETS / 'certs/postgres-ca.pem'
 ENVFILE = SECRETS / 'collector.env'
@@ -39,10 +45,10 @@ CERT = '/run/hololive-bot/certs/postgres-ca.pem'
 SOCK = '/run/hololive-youtube-po/worker.sock'
 DB = {'POSTGRES_HOST': '100.100.1.8', 'POSTGRES_DB': 'hololive', 'POSTGRES_USER': 'hololive_collector_d',
       'POSTGRES_SSLMODE': 'verify-full', 'POSTGRES_SSLROOTCERT': CERT, 'POSTGRES_SOCKET_PATH': '',
-      'POSTGRES_QUERY_EXEC_MODE': 'cache_statement', 'PGAPPNAME': 'collector-d',
-      'COLLECTOR_INSTANCE_ID': 'collector-d'}
+      'POSTGRES_QUERY_EXEC_MODE': 'cache_statement', 'PGAPPNAME': SERVICE,
+      'COLLECTOR_INSTANCE_ID': SERVICE}
 PROFILE_ENV = {'STACK_WORKER_PROFILE_FILE': DEST + '/profile.json',
-               'STACK_WORKER_PROFILE_SOURCE_FILE': SOURCE + '/collector-d.json'}
+               'STACK_WORKER_PROFILE_SOURCE_FILE': SOURCE + '/' + SERVICE + '.json'}
 HEX = r'[0-9a-f]{64}'
 LEVEL = r's0:c[0-9]+(?:,c[0-9]+)*'
 COMMAND_ENV = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C', 'HOME': '/root'}
@@ -214,7 +220,7 @@ def effective_ids(pid, uid, gid, extra):
 def profile():
     trusted(D, True)
     need({p.name for p in D.iterdir()} <= {'profile.json','SHA256SUMS','pair.json','compose.yml'}, '불명 d release 파일')
-    source = raw(SRC / 'collector-d.json')
+    source = raw(SRC / (SERVICE + '.json'))
     released = raw(D / 'profile.json')
     need(released == source and isinstance(json.loads(released), dict), 'release/source profile drift')
     sums = {}
@@ -313,13 +319,13 @@ def origin(name, port, masked, guarded=False, allow_job=False):
                  for k,value in {**DB, **PROFILE_ENV}.items()) and
              expected['EnvironmentFile'] == [str(ENVFILE)] and expected['User'] == ['1000:1000'] and
              expected['GroupAdd'] == ['1002'] and expected['UserNS'] == ['auto:size=65536,gidmapping=1002:1002:1'] and
-             expected['Network'] == ['hololive-collector.network'] and expected['IP'] == ['10.89.15.14'] and
+             expected['Network'] == [NETWORK_UNIT] and expected['IP'] == ['10.89.15.14'] and
              str(CA) + ':' + CERT + ':ro' in expected['Volume'], '후보 probe/서비스 계약 불일치')
 
 
 def prereqs():
-    for obj, kind, service in [('hololive-collector', 'network', 'hololive-collector-network'),
-                              ('hololive-youtube-po-d-socket', 'volume', 'hololive-youtube-po-d-volume')]:
+    for obj, kind, service in [(NETWORK, 'network', NETWORK + '-network'),
+                              (I + '-socket', 'volume', I + '-volume')]:
         need(prop(service, 'ActiveState') == 'active' and run('podman', kind, 'exists', obj, status=True) == 0,
              '기존 인프라가 준비되지 않음: ' + obj)
     for key in ('QUADLET_UNIT_DIRS', 'SYSTEMD_UNIT_PATH'):
@@ -335,7 +341,7 @@ def collector(g, port, level):
     need(inspect('container', cid, '{{.Config.User}} {{.ProcessLabel}}') == '1000:1000 system_u:system_r:container_t:' + level,
          'collector user/MCS 불일치')
     net = json.loads(inspect('container', cid, '{{json .NetworkSettings.Networks}}'))
-    need(set(net) == {'hololive-collector'} and net['hololive-collector']['IPAddress'] == '10.89.15.14', 'collector network 불일치')
+    need(set(net) == {NETWORK} and net[NETWORK]['IPAddress'] == '10.89.15.14', 'collector network 불일치')
     expected = {**DB, **PROFILE_ENV, 'POSTGRES_PORT': port}
     checks = []
     for key, value in expected.items():
@@ -366,7 +372,7 @@ def issuer(g):
     effective_ids(g['pid'], 65532, 1000, None)
     mounts = json.loads(inspect('container', g['cid'], '{{json .Mounts}}'))
     selected = [m for m in mounts if m['Destination'] == str(Path(SOCK).parent)]
-    need(len(selected) == 1 and selected[0]['Type'] == 'volume' and selected[0]['Name'] == 'hololive-youtube-po-d-socket',
+    need(len(selected) == 1 and selected[0]['Type'] == 'volume' and selected[0]['Name'] == I + '-socket',
          'issuer socket volume 불일치')
     run('podman', 'exec', g['cid'], '/app/bin/po-broker', '--healthcheck', '--socket', SOCK)
 
@@ -466,7 +472,7 @@ def held_one(h, state, name, stopped=None):
 
 def bindings():
     result = {}
-    for path in (ENVFILE, CA, SRC/'collector-d.json', D/'profile.json'):
+    for path in (ENVFILE, CA, SRC / (SERVICE + '.json'), D/'profile.json'):
         st = path.lstat()
         result[str(path)] = [st.st_dev,st.st_ino,st.st_uid,st.st_gid,st.st_mode,st.st_size,st.st_mtime_ns]
     return result
@@ -562,6 +568,7 @@ def quiesce(h, source_port, target=None):
     need((source_port == '6433') == (target is not None), 'pooled quiesce에만 별도 후보 identity 필요')
     need(not os.path.lexists(h), '새 hold 필요')
     trusted(GUARD)
+    trusted(SLOTS_FILE)
     s = snapshot(h,source_port,target)
     for n in NAMES:
         need(generation(n) == s['old'][n], '정지 전 세대 교체')
@@ -615,7 +622,7 @@ def gate(image_id, level):
     run(*common, '--name=' + C + '-profile-check', '--network=none', envfile, ca,
         '--volume=' + str(D/'profile.json') + ':' + PROFILE_ENV['STACK_WORKER_PROFILE_FILE'] + ':ro',
         *('--env=' + item for item in runtime['Environment']), image_id, '--check-worker-profile', timeout=65)
-    args = [*common,'--name=' + C + '-database-check','--network=hololive-collector','--ip=10.89.15.14',envfile,ca]
+    args = [*common,'--name=' + C + '-database-check','--network=' + NETWORK,'--ip=10.89.15.14',envfile,ca]
     args.extend('--env=' + k + '=' + v for k,v in {**DB,'POSTGRES_PORT':'6433'}.items())
     run(*args, image_id, '--check-pooled-database', timeout=65)
 
@@ -677,8 +684,8 @@ def acceptance(h, s, n, g):
         issuer(g)
     else:
         need(collector(g,'6433',s['level']) == raw(h / 'profile.json'), '후보 loaded profile drift')
-        result = json.loads(run('podman','exec',g['cid'],'/app/bin/healthcheck','--body','https://127.0.0.1:30015/ready'))
-        need(result['status'] == 'ready' and result['instance_id'] == 'collector-d' and result['helper'] == 'ok' and
+        result = json.loads(run('podman','exec',g['cid'],'/app/bin/healthcheck','--body','https://127.0.0.1:' + PORT + '/ready'))
+        need(result['status'] == 'ready' and result['instance_id'] == SERVICE and result['helper'] == 'ok' and
              result['first_success'] is True and result['handoff_status'] == 'PROCESSED' and result['handoff_processed'] is True and
              prop(C,'NRestarts') == '0', 'collector handoff/NRestarts 불일치')
     healthy(n,g)
@@ -770,6 +777,7 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
 def resume(h, target, source_port):
     trusted(h,True)
     trusted(GUARD)
+    trusted(SLOTS_FILE)
     s = json.loads(raw(h/'previous.json'))
     need(stat.S_IMODE(h.stat().st_mode) == 0o700 and raw(h/'quiesced') == stop_receipt(source_port,s),
          '선택한 모드의 새 quiesce 영수증 필요')

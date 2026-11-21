@@ -42,5 +42,9 @@ expect_fail() {
 
 expect_eq "$(compose_service_resolve_log_target hololive-api)" "hololive-api" "log target hololive-api"
 expect_eq "$(compose_service_resolve_log_target hololive-alarm-worker)" "hololive-alarm-worker" "log target hololive-alarm-worker"
-expect_eq "$(compose_service_resolve_log_target collector-c)" "hololive-collector-c" "log target collector-c"
+slot_table="${ROOT_DIR}/scripts/deploy/lib/collector-slots.tsv"
+central_slot="$(collector_slots_where host central "$slot_table")"
+central_unit="$(collector_slot "$central_slot" collector_unit "$slot_table")"
+expect_eq "$(compose_service_resolve_log_target "$(collector_slot "$central_slot" service "$slot_table")")" "${central_unit%.service}" "log target central collector"
 expect_fail "log target rejects bare collector" compose_service_resolve_log_target collector
+expect_fail "log target rejects a non-central collector" compose_service_resolve_log_target "$(collector_slot b service "$slot_table")"

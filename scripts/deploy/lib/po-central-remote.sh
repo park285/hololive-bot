@@ -23,18 +23,16 @@ case "$mode" in
   quiesce-verified) [[ "$seal" =~ ^[0-9a-f]{64}$ ]] || exit 2; card_transition=true mode=quiesce ;;
   *) [[ "$seal" == - ]] || exit 2 ;;
 esac
-case "$slot" in
-  c) remote_root=/opt/hololive-bot/compose service=collector-c port=30025 host_label=central ;;
-  b) remote_root=/opt/hololive-bot/collector-b service=collector-b port=30015 host_label=iris-seoul ;;
-  *) exit 2 ;;
-esac
+[[ "${slot_slot:-}" == "$slot" && "${slot_deploy:-}" == pair && -n "${slot_root:-}" ]] || exit 2
+slot_root="${slot_root:?collector slot preamble required}" slot_service="${slot_service:?collector slot preamble required}" slot_port="${slot_port:?collector slot preamble required}" slot_host="${slot_host:?collector slot preamble required}" slot_collector_unit="${slot_collector_unit:?collector slot preamble required}" slot_issuer_unit="${slot_issuer_unit:?collector slot preamble required}" slot_collector_image="${slot_collector_image:?collector slot preamble required}" slot_issuer_image="${slot_issuer_image:?collector slot preamble required}" slot_unit_dir="${slot_unit_dir:?collector slot preamble required}"
+remote_root="$slot_root" service="$slot_service" port="$slot_port" host_label="$slot_host"
 [[ "$mode" == deploy || "$mode" == quiesce || "$mode" == resume || "$mode" == rollback || "$mode" == check ]] || exit 2
 [[ "$staging" == "$remote_root/po-staging-${backup##*-}" ]] || exit 2
 [[ "$backup" =~ ^$remote_root/backups/$backup_prefix-[0-9]{8}T[0-9]{6}Z$ ]] || exit 2
 [[ "$revision" =~ ^[0-9a-f]{40}$ && "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 2
 install -d -m 0755 /run/lock
 lock_name=hololive-quadlet-redeploy
-[[ "$slot" != b ]] || lock_name=hololive-collector-b-cutover
+[[ "$slot" != b ]] || lock_name="${slot_collector_unit%.service}-cutover"
 exec 9>"/run/lock/$lock_name.lock"
 flock -n 9 || { echo 'another Quadlet writer is running' >&2; exit 1; }
 current="$remote_root/current"
@@ -43,14 +41,14 @@ manifest="../po-current-$slot/rootfs-manifest.json"
 image_id_file="../po-current-$slot/image-id"
 change_id="${backup##*-}"
 profile_release="$current/artifacts/worker-profile/releases/${backup##*/}/$service"
-collector=localhost/hololive-collector:prod
-issuer=localhost/hololive-youtube-po-sandbox:prod
-collector_candidate=localhost/hololive-collector:candidate
-issuer_candidate=localhost/hololive-youtube-po-sandbox:candidate
-collector_rollback="localhost/hololive-collector:rollback-$change_id"
-issuer_rollback="localhost/hololive-youtube-po-sandbox:rollback-$change_id"
-collector_container="hololive-collector-$slot"
-issuer_container="hololive-youtube-po-$slot"
+collector="$slot_collector_image:prod"
+issuer="$slot_issuer_image:prod"
+collector_candidate="$slot_collector_image:candidate"
+issuer_candidate="$slot_issuer_image:candidate"
+collector_rollback="$slot_collector_image:rollback-$change_id"
+issuer_rollback="$slot_issuer_image:rollback-$change_id"
+collector_container="${slot_collector_unit%.service}"
+issuer_container="${slot_issuer_unit%.service}"
 collector_unit="$collector_container.service"
 issuer_unit="$issuer_container.service"
 hold="$remote_root/po-$slot.hold"
@@ -130,6 +128,9 @@ if [[ "$slot" == c && ( "$mode" == deploy || "$mode" == quiesce || "$mode" == re
     "$staging/source-files.sha256" || exit 1
 fi
 (cd "$staging" && sha256sum --check --strict source-files.sha256)
+. "$staging/scripts/deploy/lib/collector-slots.sh"
+collector_slot_matches "$slot" "$staging/scripts/deploy/lib/collector-slots.tsv" ||
+  { echo "$host_label staged collector slot table differs from the caller's slot values" >&2; exit 1; }
 . "$staging/scripts/deploy/lib/po-sandbox-image.sh"
 . "$staging/scripts/deploy/lib/compose-env.sh"
 . "$staging/scripts/deploy/lib/postgres-endpoint.sh"
@@ -480,10 +481,15 @@ request_slot_start() {
   printf '%s %s %s\n' "$since" "$job" "$client"
 }
 
+systemd_unit_object() {
+  local object="${1//-/_2d}"
+  printf '/org/freedesktop/systemd1/unit/%s\n' "${object//./_2e}"
+}
+
 manager_start_budget() {
-  local bus=org.freedesktop.systemd1 object="${1//-/_2d}"
-  object="${object//./_2e}"
-  busctl --system --timeout=45s --json=short get-property "$bus" "/org/freedesktop/systemd1/unit/$object" \
+  local bus=org.freedesktop.systemd1 object
+  object="$(systemd_unit_object "$1")" || return 1
+  busctl --system --timeout=45s --json=short get-property "$bus" "$object" \
     "$bus.Service" TimeoutStartUSec | python3 -c '
 import json, sys
 p = json.load(sys.stdin)
@@ -643,7 +649,7 @@ prepare_candidate_pair() {
   fi
   if [[ "$mode" == resume ]]; then
     if [[ "$slot" != c ]]; then
-      cmp -- "$staging/deploy/podman/iris-seoul/$collector_container.container" \
+      cmp -- "$staging/$slot_unit_dir/$collector_container.container" \
         "$unit_dir/$collector_container.container" || return
     fi
     [[ "$slot" != c ]] || env_file="${compose_env:-/etc/stack-secrets/hololive-bot/compose.env}"
@@ -727,7 +733,7 @@ verify_collector_runtime() {
   po_image_id_matches "$running" "$reviewed" && [[ "$running" == "$tagged" ]] || return 1
   ready="$(podman exec "$collector_container" ./bin/healthcheck --body "https://127.0.0.1:$port/ready")" || return 1
   collector_readiness_validate "$ready" || return 1
-  collector_readiness_json_field "$ready" instance_id "\"collector-$slot\""
+  collector_readiness_json_field "$ready" instance_id "\"$service\""
 }
 started_since() {
   local since_epoch="$1" container_name="$2"
@@ -967,7 +973,7 @@ require_collector_lease_migration() {
   observed="$(timeout 20 podman run -i --rm --label "$owner" --pull=never --read-only --cap-drop=all \
     --security-opt=no-new-privileges --network none \
     --env PGHOST=/var/run/postgresql --env PGPORT=5432 --env PGDATABASE=hololive --env "PGUSER=$migrator_user" \
-    --env PGSSLMODE=disable --env PGCONNECT_TIMEOUT=5 --env PGAPPNAME=hololive-collector-migration-proof \
+    --env PGSSLMODE=disable --env PGCONNECT_TIMEOUT=5 --env "PGAPPNAME=$collector_container-migration-proof" \
     --env 'PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=30s -c lock_timeout=3s' \
     --volume hololive-bot_holo-pg-admin-socket:/var/run/postgresql:ro \
     --entrypoint psql "$postgres_image" --no-psqlrc --quiet -v ON_ERROR_STOP=1 -At -f - <<<"$proof")" \
@@ -1087,7 +1093,7 @@ if [[ "$card_transition" == false ]]; then
       archives+=("$staging/${prefix}image.tar")
     done
     [[ ! -e "$profile_release" && ! -L "$profile_release" ]]
-    cmp -- "$staging/deploy/podman/iris-seoul/$collector_container.container" "$unit_dir/$collector_container.container"
+    cmp -- "$staging/$slot_unit_dir/$collector_container.container" "$unit_dir/$collector_container.container"
   fi
 fi
 if [[ "$staged_pair" == true ]]; then (( EPOCHSECONDS < expires )); fi

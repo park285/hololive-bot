@@ -50,11 +50,10 @@ canary_log_file_for_service() {
     alarm-worker|hololive-alarm-worker)
       printf '%s\n' "${REPO_ROOT}/logs/alarm-worker.log"
       ;;
-    collector-c)
-      printf '%s\n' "${REPO_ROOT}/logs/collector-c.log"
-      ;;
     *)
-      return 1
+      [[ -n "$(. "${REPO_ROOT}/scripts/deploy/lib/collector-slots.sh" &&
+        collector_slots_where service "${service}" "${REPO_ROOT}/scripts/deploy/lib/collector-slots.tsv")" ]] || return 1
+      printf '%s\n' "${REPO_ROOT}/logs/${service}.log"
       ;;
   esac
 }

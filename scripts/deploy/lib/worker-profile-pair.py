@@ -16,21 +16,38 @@ SOURCE = "/etc/stack-secrets/hololive-bot/worker-profiles"
 PROFILES = {
     "hololive-api": "hololive-api.json",
     "hololive-alarm-worker": "alarm-worker.json",
-    "collector-c": "collector-c.json",
-    "collector-b": "collector-b.json",
 }
 CLI = "podman"
 QUADLET_UNITS = {
     "hololive-api": "hololive-api.container",
     "hololive-alarm-worker": "hololive-alarm-worker.container",
-    "collector-c": "hololive-collector-c.container",
-    "collector-b": "hololive-collector-b.container",
 }
+CREDENTIALS = {
+    "hololive-api": "API_SECRET_KEY",
+    "hololive-alarm-worker": "API_SECRET_KEY",
+}
+COLLECTOR_NETWORKS = {}
 QUADLET_DIR = Path(os.environ.get("HOLOLIVE_QUADLET_TEST_ROOT", "") + "/etc/containers/systemd/hololive-bot")
 DROPIN = "50-worker-profile.conf"
 COMPOSE_ROOT = (Path(os.environ["HOLOLIVE_QUADLET_TEST_ROOT"]) if os.geteuid() and
                 os.environ.get("HOLOLIVE_QUADLET_TEST_ROOT") else Path("/")) / "opt/hololive-bot/compose"
 UNIT_RECORD = "unit.container"
+
+
+def load_collector_slots():
+    path = Path(__file__).resolve().with_name("collector-slots.tsv")
+    header, *rows = (line.split("\t") for line in path.read_text().splitlines())
+    for row in rows:
+        if len(row) != len(header):
+            raise ValueError("invalid collector slot table")
+        slot = dict(zip(header, row))
+        if slot["deploy"] != "pair":
+            continue
+        service = slot["service"]
+        PROFILES[service] = service + ".json"
+        QUADLET_UNITS[service] = slot["collector_unit"].removesuffix(".service") + ".container"
+        CREDENTIALS[service] = "METRICS_API_KEY"
+        COLLECTOR_NETWORKS[service] = (slot["network_unit"], slot["network"])
 
 
 def run(*args):
@@ -56,12 +73,7 @@ def container_profile_hash(service, data):
     port = environment["HOLOLIVE_METRICS_ADDR"].rsplit(":", 1)[1]
     if not port.isdigit():
         raise ValueError("invalid metrics port")
-    credential = {
-        "hololive-api": "API_SECRET_KEY",
-        "hololive-alarm-worker": "API_SECRET_KEY",
-        "collector-c": "METRICS_API_KEY",
-        "collector-b": "METRICS_API_KEY",
-    }[service]
+    credential = CREDENTIALS[service]
     return loaded_hash(run(CLI, "exec", data["Id"], "/app/bin/healthcheck",
                            "--body-api-key-env", credential,
                            "http://127.0.0.1:" + port + "/diagnostics/workers"))
@@ -253,19 +265,17 @@ def validate_container_pair(before, directory):
 
 
 def collector_probe_network(directory, pair, values):
-    networks = {"collector-c": ("hololive-net.network", "hololive-bot_hololive-net"),
-                "collector-b": ("hololive-collector-b.network", "hololive-collector-b")}
     service = pair["service"]
-    if (service not in networks or directory.name != "candidate" or directory.parent.name != service or
+    if (service not in COLLECTOR_NETWORKS or directory.name != "candidate" or directory.parent.name != service or
             "container_id" in pair):
         raise ValueError("pooled database check requires a collector candidate")
     definition = QUADLET_UNITS[service]
     if profile_bytes(directory / UNIT_RECORD) != profile_bytes(QUADLET_DIR / definition):
         raise ValueError("pooled database check requires the installed candidate unit")
     name = Path(definition).stem
-    network_unit, network = networks[service]
+    network_unit, network = COLLECTOR_NETWORKS[service]
     for key, expected in (("ContainerName", name), ("Entrypoint", "./bin/hololive-collector"),
-                          ("Network", network_unit + ":alias=" + name.removeprefix("hololive-"))):
+                          ("Network", network_unit + ":alias=" + service)):
         if [v for k, v in values if k == key] != [expected]:
             raise ValueError("unexpected collector probe unit or network")
     declared = unit_values(QUADLET_DIR / network_unit, ("Network",))["Network"]
@@ -418,11 +428,19 @@ def check_resolved_pair(directory, pair, *, pooled=False):
         subprocess.run(command, env=environment, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
 
 
-def prepare_native(service, release, host_env, unit):
-    if service != "collector-a":
+def native_release(service, path, unit):
+    if not unit.endswith("@" + service + ".service"):
         raise ValueError("unsupported native slot")
-    if release.parent != Path("/opt/hololive-bot/collector/releases"):
+    release = path.resolve()
+    releases = release.parent
+    if (not path.is_absolute() or releases.name != "releases" or
+            (releases.parent / "current").resolve().parent != releases):
         raise ValueError("native release must be release-owned")
+    return release
+
+
+def prepare_native(service, current, host_env, unit):
+    release = native_release(service, current, unit)
     pid = run("systemctl", "show", unit, "-p", "MainPID", "--value")
     if not pid.isdigit() or int(pid) == 0:
         raise ValueError("prepare native profile before stopping the collector")
@@ -478,11 +496,8 @@ def prepare_native(service, release, host_env, unit):
     staged_env.replace(host_env)
 
 
-def verify_native(service, release, unit):
-    if service != "collector-a":
-        raise ValueError("unsupported native slot")
-    if release.parent != Path("/opt/hololive-bot/collector/releases"):
-        raise ValueError("native release must be release-owned")
+def verify_native(service, current, unit):
+    release = native_release(service, current, unit)
     subprocess.run(["sha256sum", "--check", "--strict", "SHA256SUMS"], cwd=release,
                    check=True, stdout=subprocess.DEVNULL, timeout=10)
     pid = run("systemctl", "show", unit, "-p", "MainPID", "--value")
@@ -759,11 +774,12 @@ def verify_retained(directory, service, candidate, root):
 def main():
     action, service, raw_directory, *rest = sys.argv[1:]
     if action == "prepare-native":
-        prepare_native(service, Path(raw_directory).resolve(), Path(rest[0]), rest[1])
+        prepare_native(service, Path(raw_directory), Path(rest[0]), rest[1])
         return
     if action == "verify-native":
-        verify_native(service, Path(raw_directory).resolve(), rest[0])
+        verify_native(service, Path(raw_directory), rest[0])
         return
+    load_collector_slots()
     if service not in QUADLET_UNITS:
         raise ValueError("unsupported profile service")
     directory = Path(raw_directory).resolve()

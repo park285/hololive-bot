@@ -12,15 +12,27 @@ import sys
 import time
 
 
-UNITS = {'hololive-api.service', 'hololive-alarm-worker.service'} | {
-    f'{prefix}-{slot}.service' for prefix in ('hololive-youtube-po', 'hololive-collector') for slot in 'bcd'
-}
+COLLECTOR_SLOTS = Path(__file__).resolve().with_name('collector-slots.tsv')
 BUS = 'org.freedesktop.systemd1'
 
 
 def require(ok, message):
     if not ok:
         raise ValueError(message)
+
+
+def writer_units(path):
+    header, *rows = (line.split('\t') for line in path.read_text().splitlines())
+    units = {'hololive-api.service', 'hololive-alarm-worker.service'}
+    for row in rows:
+        require(len(row) == len(header), 'collector slot 표 형식 오류')
+        slot = dict(zip(header, row))
+        if slot['deploy'] in ('pair', 'kapu'):
+            units |= {slot['collector_unit'], slot['issuer_unit']}
+    return frozenset(units)
+
+
+UNITS = writer_units(COLLECTOR_SLOTS)
 
 
 def identity(st):

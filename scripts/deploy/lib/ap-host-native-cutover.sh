@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-native_recovery_dir=/opt/hololive-bot/collector/cutover-recovery
+native_recovery_dir="${slot_root:?collector slot preamble required}/cutover-recovery"
 native_claim_nonce=""
 
 native_capture_collector_state() {

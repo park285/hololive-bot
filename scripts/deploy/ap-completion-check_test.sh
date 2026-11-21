@@ -32,6 +32,8 @@ cp "$ROOT_DIR/scripts/deploy/lib/youtubejs-node-version.sh" "$fixture_root/scrip
 cp "$ROOT_DIR/scripts/deploy/lib/ap-collector-readiness.sh" "$fixture_root/scripts/deploy/lib/ap-collector-readiness.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/ap-host-native-po.sh" "$fixture_root/scripts/deploy/lib/ap-host-native-po.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py" "$fixture_root/scripts/deploy/lib/worker-profile-pair.py"
+cp "$ROOT_DIR/scripts/deploy/lib/collector-slots.sh" "$fixture_root/scripts/deploy/lib/collector-slots.sh"
+cp "$ROOT_DIR/scripts/deploy/lib/collector-slots.tsv" "$fixture_root/scripts/deploy/lib/collector-slots.tsv"
 export PO_EXPECTED_PRESENCE=absent
 export FAKE_DELAY_LOG="$tmp/delays"
 cat > "$fakebin/sleep" <<'EOF'
@@ -63,9 +65,6 @@ AP_NAME=osaka
 AP_SSH_HOST=mock-host
 AP_SSH_HOST_KEY_ALIAS=mock-host
 AP_RUNTIME_MODE=native
-AP_SERVICES=(collector-a)
-AP_CONTAINERS=(hololive-collector-a)
-AP_PORTS=(30005)
 AP_APPROVE_DEPLOY_VAR=I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY
 AP_APPROVE_ROLLBACK_VAR=I_APPROVE_OSAKA_ACTIVE_ACTIVE_ROLLBACK
 AP_BACKUP_PREFIX=osaka-active-active

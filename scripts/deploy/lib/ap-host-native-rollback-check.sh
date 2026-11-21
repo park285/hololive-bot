@@ -26,16 +26,18 @@ native_root_endpoint() {
 
 native_rollback_endpoint_validate() {
   local previous_target="$1" current_env="$2" previous_endpoint current_endpoint
+  : "${slot_host_env?}"
   sudo -n test ! -e "$previous_target/native-window" || {
     echo '정지 창이 퇴역시킨 native release는 endpoint가 같아도 복원할 수 없습니다.' >&2
     return 1
   }
-  previous_endpoint="$(native_root_endpoint "$previous_target/rollback-contract/collector-host.env")" || return
+  previous_endpoint="$(native_root_endpoint "$previous_target/rollback-contract/${slot_host_env##*/}")" || return
   current_endpoint="$(native_root_endpoint "$current_env")" || return
   postgres_endpoint_require_same "$current_endpoint" "$previous_endpoint"
 }
 
 native_rollback_validate() {
+  : "${slot_host_env?}" "${slot_collector_unit?}" "${slot_root?}" "${po_service?}" "${po_socket?}"
   local previous_target="$1"
   local contract_dir="$previous_target/rollback-contract"
   local rel
@@ -54,7 +56,7 @@ native_rollback_validate() {
     echo "previous host-native youtubejs helper is missing" >&2
     return 1
   fi
-  for rel in collector-host.env hololive-collector@.service SHA256SUMS previous-before-cutover; do
+  for rel in "${slot_host_env##*/}" "${slot_collector_unit%%@*}@.service" SHA256SUMS previous-before-cutover; do
     if ! sudo -n test -r "$contract_dir/$rel"; then
       echo "previous host-native rollback contract is incomplete: $rel" >&2
       return 1
@@ -67,7 +69,7 @@ native_rollback_validate() {
   local earlier_previous
   earlier_previous="$(sudo -n cat "$contract_dir/previous-before-cutover")"
   if [[ "$earlier_previous" != absent ]]; then
-    [[ "$earlier_previous" =~ ^/opt/hololive-bot/collector/releases/[A-Za-z0-9._-]+$ ]] || return 1
+    [[ "$earlier_previous" == "$slot_root/releases/"* && "${earlier_previous#"$slot_root/releases/"}" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
     sudo -n test -d "$earlier_previous" && sudo -n test ! -L "$earlier_previous" || return 1
   fi
 
@@ -79,8 +81,8 @@ native_rollback_validate() {
     echo "previous host-native rollback payload failed checksum validation" >&2
     return 1
   fi
-  native_profile_pair_validate "$previous_target" "$contract_dir/collector-host.env" || return 1
-  if ! sudo -n systemd-analyze verify "$contract_dir/hololive-collector@.service"; then
+  native_profile_pair_validate "$previous_target" "$contract_dir/${slot_host_env##*/}" || return 1
+  if ! sudo -n systemd-analyze verify "$contract_dir/${slot_collector_unit%%@*}@.service"; then
     echo "previous host-native systemd unit failed validation" >&2
     return 1
   fi
@@ -88,14 +90,14 @@ native_rollback_validate() {
   po_state="$(sudo -n cat "$contract_dir/po-unit-presence")"
   case "$po_state" in
     present)
-      sudo -n test -r "$contract_dir/hololive-youtube-po.service"
-      sudo -n test -r "$contract_dir/hololive-youtube-po.socket"
+      sudo -n test -r "$contract_dir/$po_service"
+      sudo -n test -r "$contract_dir/$po_socket"
       po_validate_release "$previous_target"
-      po_verify_units "$previous_target" "$contract_dir/hololive-youtube-po.service" "$contract_dir/hololive-youtube-po.socket"
+      po_verify_units "$previous_target" "$contract_dir/$po_service" "$contract_dir/$po_socket"
       ;;
     absent)
-      sudo -n test ! -e "$contract_dir/hololive-youtube-po.service"
-      sudo -n test ! -e "$contract_dir/hololive-youtube-po.socket"
+      sudo -n test ! -e "$contract_dir/$po_service"
+      sudo -n test ! -e "$contract_dir/$po_socket"
       ;;
     *) echo 'invalid previous issuer unit presence state' >&2; return 1 ;;
   esac

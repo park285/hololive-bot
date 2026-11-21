@@ -1,8 +1,8 @@
 # shellcheck shell=bash
-po_service=hololive-youtube-po.service
-po_socket=hololive-youtube-po.socket
-po_unit_file=/etc/systemd/system/hololive-youtube-po.service
-po_socket_file=/etc/systemd/system/hololive-youtube-po.socket
+po_service="${slot_issuer_unit:?collector slot preamble required}"
+po_socket="${po_service%.service}.socket"
+po_unit_file="/etc/systemd/system/$po_service"
+po_socket_file="/etc/systemd/system/$po_socket"
 
 po_health_ready() {
   sudo -n -u hololive "$1/po-sandbox/rootfs/app/bin/po-broker" --healthcheck --socket /run/hololive-youtube-po/worker.sock
@@ -64,7 +64,7 @@ po_verify_units() (
   local release="$1" service_file="$2" socket_file="$3" working
   working="$(mktemp -d)" || exit
   trap 'rm -rf "$working"' EXIT
-  python3 - "$service_file" "$working/hololive-youtube-po.service" "$release" <<'PY' || exit
+  python3 - "$service_file" "$working/$po_service" "$release" <<'PY' || exit
 from pathlib import Path
 import sys
 source, target, release = sys.argv[1:]
@@ -74,8 +74,8 @@ if text.count(command) != 1:
     raise SystemExit("unexpected issuer command; refusing unverifiable unit")
 Path(target).write_text(text.replace(command, f"ExecStart={release}/po-sandbox/rootfs/app/bin/po-broker ", 1))
 PY
-  cp "$socket_file" "$working/hololive-youtube-po.socket" || exit
-  sudo -n systemd-analyze verify "$working/hololive-youtube-po.service" "$working/hololive-youtube-po.socket"
+  cp "$socket_file" "$working/$po_socket" || exit
+  sudo -n systemd-analyze verify "$working/$po_service" "$working/$po_socket"
 )
 
 po_snapshot_previous() {
@@ -84,8 +84,8 @@ po_snapshot_previous() {
     sudo -n test -r "$po_unit_file" && sudo -n test -r "$po_socket_file" || return 1
     sudo -n test -d "$previous/po-sandbox/rootfs" || return 1
     state=present
-    sudo -n install -m 0644 -o root -g root "$po_unit_file" "$contract/hololive-youtube-po.service"
-    sudo -n install -m 0644 -o root -g root "$po_socket_file" "$contract/hololive-youtube-po.socket"
+    sudo -n install -m 0644 -o root -g root "$po_unit_file" "$contract/$po_service"
+    sudo -n install -m 0644 -o root -g root "$po_socket_file" "$contract/$po_socket"
     po_validate_release "$previous"
   else
     state=absent
@@ -107,8 +107,8 @@ po_restore_previous() {
   case "$state" in
     present)
       po_validate_release "$previous"
-      sudo -n install -m 0644 -o root -g root "$contract/hololive-youtube-po.service" "$po_unit_file"
-      sudo -n install -m 0644 -o root -g root "$contract/hololive-youtube-po.socket" "$po_socket_file"
+      sudo -n install -m 0644 -o root -g root "$contract/$po_service" "$po_unit_file"
+      sudo -n install -m 0644 -o root -g root "$contract/$po_socket" "$po_socket_file"
       sudo -n systemctl daemon-reload
       sudo -n systemctl enable --now "$po_socket"
       sudo -n systemctl start "$po_service"
@@ -132,8 +132,8 @@ po_install_release() {
   [[ "$revision" == "$2" ]] || return 1
   (cd "$release/po-sandbox" && sudo -n sha256sum --check --strict rootfs.tar.sha256)
   po_validate_release "$release"
-  sudo -n install -m 0644 -o root -g root "$release/hololive-youtube-po.service" "$po_unit_file"
-  sudo -n install -m 0644 -o root -g root "$release/hololive-youtube-po.socket" "$po_socket_file"
+  sudo -n install -m 0644 -o root -g root "$release/$po_service" "$po_unit_file"
+  sudo -n install -m 0644 -o root -g root "$release/$po_socket" "$po_socket_file"
   po_verify_units "$release" "$po_unit_file" "$po_socket_file"
   sudo -n systemctl daemon-reload
   if [[ "${window_action:-deploy}" == resume ]]; then

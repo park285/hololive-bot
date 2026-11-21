@@ -8,7 +8,6 @@ ap_host_usage_names() {
 ap_host_load() {
     local repo_root="$1"
     local host="${2:-}"
-    local service_count container_count port_count
 
     if [[ -z "$host" ]]; then
         echo "AP host name required. Available: $(ap_host_usage_names "$repo_root")" >&2
@@ -32,8 +31,8 @@ ap_host_load() {
     AP_SSH_HOST=""
     AP_SSH_HOST_KEY_ALIAS=""
     AP_RUNTIME_MODE=""
+    AP_SLOTS=()
     AP_SERVICES=()
-    AP_CONTAINERS=()
     AP_PORTS=()
     AP_APPROVE_DEPLOY_VAR=""
     AP_APPROVE_ROLLBACK_VAR=""
@@ -54,17 +53,6 @@ ap_host_load() {
         echo "AP_NAME '$AP_NAME' does not match conf name '$host'" >&2
         return 2
     fi
-    if [[ ${#AP_SERVICES[@]} -eq 0 || ${#AP_CONTAINERS[@]} -eq 0 || ${#AP_PORTS[@]} -eq 0 ]]; then
-        echo "AP_SERVICES/AP_CONTAINERS/AP_PORTS must be non-empty in $conf" >&2
-        return 2
-    fi
-    service_count=${#AP_SERVICES[@]}
-    container_count=${#AP_CONTAINERS[@]}
-    port_count=${#AP_PORTS[@]}
-    if ! (( service_count == container_count && service_count == port_count )); then
-        echo "AP_SERVICES/AP_CONTAINERS/AP_PORTS must have matching lengths in $conf" >&2
-        return 2
-    fi
     case "${AP_RUNTIME_MODE}" in
         native) ;;
         *)
@@ -80,6 +68,20 @@ ap_host_load() {
             return 2
             ;;
     esac
+    local slots_file="$repo_root/scripts/deploy/lib/collector-slots.tsv" slot
+    # shellcheck source=scripts/deploy/lib/collector-slots.sh
+    . "$(dirname "${BASH_SOURCE[0]}")/collector-slots.sh"
+    mapfile -t AP_SLOTS < <(collector_slots_where host "$AP_NAME" "$slots_file")
+    if [[ ${#AP_SLOTS[@]} -eq 0 ]]; then
+        echo "no collector slot for AP host $AP_NAME in $slots_file" >&2
+        return 2
+    fi
+    for slot in "${AP_SLOTS[@]}"; do
+        AP_SERVICES+=("$(collector_slot "$slot" service "$slots_file")") || return 2
+        AP_PORTS+=("$(collector_slot "$slot" port "$slots_file")") || return 2
+    done
+    AP_SLOT_PREAMBLE="$(collector_slot_preamble "${AP_SLOTS[0]}" "$slots_file")" || return 2
+    eval "$AP_SLOT_PREAMBLE"
     SSH_KEY="${SSH_KEY:-$HOME/.ssh/KR.key}"
     if [[ ! -r "$SSH_KEY" ]]; then
         echo "SSH key not readable: $SSH_KEY" >&2

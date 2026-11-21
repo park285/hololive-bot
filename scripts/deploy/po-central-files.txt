@@ -7,6 +7,8 @@ scripts/deploy/lib/app-source-authority.py
 hololive/hololive-api/internal/migrationrunner/queries/lineage_head.sql
 scripts/deploy/lib/worker-profile-pair.py
 scripts/deploy/lib/systemd-stop-guard.py
+scripts/deploy/lib/collector-slots.sh
+scripts/deploy/lib/collector-slots.tsv
 scripts/deploy/quadlet-prestart.sh
 scripts/deploy/lib/admin-bind.sh
 scripts/deploy/lib/public-bind-mounts.sh

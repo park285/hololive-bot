@@ -178,6 +178,7 @@ esac
 EOF
 chmod +x "${fakebin}"/*
 
+slot_table_files=(scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv)
 make_repo() {
   local repo="$1" path
   mkdir -p "${repo}"
@@ -192,7 +193,7 @@ make_repo() {
     scripts/deploy/lib/postgres-endpoint.sh scripts/deploy/lib/source-revision.sh \
     scripts/systemd/admin-dashboard-ingress-firewall.service scripts/systemd/admin-dashboard-ingress.nft \
     verification/tla/{AlarmDispatchClaim,CollectionJobLease}/COVERAGE.md \
-    hololive/hololive-api/scripts/init-db deploy; do
+    hololive/hololive-api/scripts/init-db deploy "${slot_table_files[@]}"; do
     mkdir -p "${repo}/$(dirname "${path}")"
     cp -R "${ROOT_DIR}/${path}" "${repo}/${path}"
   done
@@ -492,6 +493,7 @@ if [[ ${1:-} == --unstarted-source ]]; then
   fi
   grep -Fq 'original recovery child is not the approved supersession delta' "$tmp/misordered.log" || fail 'unrelated recovery child refused for another reason'
   ROOT_DIR="$tmp/recovery-checkout"
+  slot_table_files=()
 fi
 base_repo="${tmp}/repo-base"
 make_repo "${base_repo}"
@@ -768,7 +770,7 @@ print(json.dumps(dict(phase="source",identity=dict(old=e["OLD"],new=e["NEW"],run
     git init -q --template= "$follow_tool"
     git -C "$invoking_checkout" ls-files -z scripts/deploy | tar -C "$invoking_checkout" -cf - --null -T - | tar -xf - -C "$follow_tool"
     commit_repo "$follow_tool" invoking-publisher
-    for path in scripts/deploy/{quadlet-redeploy-service.sh,quadlet-rollback-service.sh,quadlet-prestart.sh,lib/{app-source-authority.py,sealed-app.sh,protected-binds.sh,worker-profile-pair.py}}; do
+    for path in scripts/deploy/{quadlet-redeploy-service.sh,quadlet-rollback-service.sh,quadlet-prestart.sh,lib/{app-source-authority.py,sealed-app.sh,protected-binds.sh,worker-profile-pair.py,collector-slots.sh,collector-slots.tsv}}; do
       cp -p "$follow_tool/$path" "$host/follow-source/$path"
     done
     printf '\nfollow-up fixture\n' >>"$host/follow-source/CHANGELOG.md"
@@ -875,7 +877,7 @@ for unit in hololive-api hololive-alarm-worker; do
     "${installed}/${unit}.container.d/40-x-spaces.conf" || fail "x-spaces drop-in not installed for ${unit}"
 done
 [[ -x "${host}/usr-local-libexec/hololive-bot/quadlet-prestart" ]] || fail "prestart helper not installed"
-for lib in admin-bind.sh public-bind-mounts.sh postgres-capacity.sh compose-env.sh postgres-endpoint.sh; do
+for lib in admin-bind.sh public-bind-mounts.sh postgres-capacity.sh compose-env.sh postgres-endpoint.sh collector-slots.sh collector-slots.tsv; do
   cmp -s "${base_repo}/scripts/deploy/lib/${lib}" "${host}/usr-local-libexec/hololive-bot/lib/${lib}" ||
     fail "prestart dependency not installed: ${lib}"
 done
@@ -1487,7 +1489,8 @@ assert_rejected_without_change "$host" "$base_repo" "card writer lock" "another 
 if unshare --user --map-root-user --mount bash -c '
   set -euo pipefail
   mount --bind "$1/run-lock" /run/lock
-  exec bash "$2/scripts/deploy/lib/po-central-remote.sh" c deploy \
+  { . "$2/scripts/deploy/lib/collector-slots.sh"; collector_slot_preamble c; cat "$2/scripts/deploy/lib/po-central-remote.sh"; } |
+    bash -s -- c deploy \
     /opt/hololive-bot/compose/po-staging-20261118T000000Z \
     /opt/hololive-bot/compose/backups/card-po-c-20261118T000000Z \
     0123456789abcdef0123456789abcdef01234567 1.0.0 -

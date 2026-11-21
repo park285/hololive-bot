@@ -13,14 +13,15 @@ po_service="${po_service:?PO helper fragment must be loaded}"
 po_socket="${po_socket:?PO helper fragment must be loaded}"
 po_unit_file="${po_unit_file:?PO helper fragment must be loaded}"
 po_socket_file="${po_socket_file:?PO helper fragment must be loaded}"
+slot_root="${slot_root:?collector slot preamble required}" slot_host_env="${slot_host_env:?collector slot preamble required}" slot_collector_unit="${slot_collector_unit:?collector slot preamble required}" slot_service="${slot_service:?collector slot preamble required}"
 payload="$HOME/$payload_name"
 release_path_lib="$payload/bin/ap-host-native-release-path.sh"
-releases_root="/opt/hololive-bot/collector/releases"
-current_link="/opt/hololive-bot/collector/current"
-previous_link="/opt/hololive-bot/collector/previous"
-host_env="/etc/hololive-bot/collector-host.env"
-unit_file="/etc/systemd/system/hololive-collector@.service"
-unit="hololive-collector@${service}.service"
+releases_root="$slot_root/releases"
+current_link="$slot_root/current"
+previous_link="$slot_root/previous"
+host_env="$slot_host_env"
+unit_file="/etc/systemd/system/${slot_collector_unit%%@*}@.service"
+unit="$slot_collector_unit"
 po_apply_lib="$payload/bin/ap-host-native-po.sh"
 worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
 swapfile="/swapfile"
@@ -29,7 +30,7 @@ window_action="${9:?native command required}"
 window_name="${10:-}" window_old="${11:-}" window_digest="${12:-}" window_nonce="${13:-}"
 same_window=false
 if [[ "$window_action" == same-window || "$window_action" == apply-origin || "$window_action" == apply-accepted ]]; then
-  [[ "$(hostname -s)" == osaka1 && "$service" == collector-a ]]
+  [[ "$(hostname -s)" == osaka1 && "$service" == "$slot_service" ]]
   native_release_id_validate "$release_id"
   release_dir="$releases_root/$release_id" window="$releases_root/$release_id/native-observation"
   window_units=("$po_socket" "$po_service" "$unit")
@@ -112,7 +113,7 @@ case "$window_action" in
     [[ "$(native_apply_preflight "$window_old")" == "$apply_origin_pin" ]]
     exec 3>&1 >&2
     [[ "$(native_payload_digest "$payload")" == "$window_digest" ]]
-    profile_digest="$(native_file_digest "$payload/collector-host.env")"
+    profile_digest="$(native_file_digest "$payload/${slot_host_env##*/}")"
     issuer_digest="$(native_file_digest "$payload/$po_service")"
     native_same_window_baseline "$profile_digest" "$(native_file_digest "$payload/${unit_file##*/}")" "$issuer_digest" "$(native_file_digest "$payload/$po_socket")" >&2
     window_action=deploy same_window=true ;;
@@ -235,7 +236,7 @@ sudo -n systemd-run --quiet --wait --pipe --collect \
   --property="WorkingDirectory=$release_dir" --property=ProtectHome=yes --property=ProtectSystem=strict \
   --property=PrivateTmp=yes \
   --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/collector.env \
-  --property="EnvironmentFile=$release_dir/collector-host.env" \
+  --property="EnvironmentFile=$release_dir/${slot_host_env##*/}" \
   /usr/bin/env "STACK_WORKER_PROFILE_FILE=$release_dir/worker-profile.json" \
   "$release_dir/bin/hololive-collector-wrapper" "$release_dir/bin/hololive-collector" --check-worker-profile
 sudo -n sh -c 'cd "$1" && sha256sum bin/hololive-collector worker-profile.json > SHA256SUMS && chmod 0444 SHA256SUMS' sh "$release_dir"
@@ -259,7 +260,7 @@ sudo -n cmp -s "$worker_profile" "$release_dir/worker-profile.json" || {
   echo 'candidate source changed during profile validation; writer unchanged' >&2
   exit 1
 }
-candidate_endpoint="$(native_root_endpoint "$release_dir/collector-host.env")"
+candidate_endpoint="$(native_root_endpoint "$release_dir/${slot_host_env##*/}")"
 if [[ "$candidate_endpoint" != '100.100.1.8|6433' ]]; then
   echo 'candidate must use the native collector pooler endpoint; writer unchanged' >&2
   exit 1
@@ -420,7 +421,7 @@ native_same_window_restore() {
   native_same_window_recoverable
   native_rollback_validate "$old_target"
   native_rollback_endpoint_validate "$old_target" "$host_env"
-  native_rollback_endpoint_validate "$old_target" "$release_dir/collector-host.env"
+  native_rollback_endpoint_validate "$old_target" "$release_dir/${slot_host_env##*/}"
   native_same_window_recoverable
   if sudo -n test -d "$window/held"; then native_apply_unarm_issuer; fi
   native_release_pin restore profile "$host_env" "$old_target" "$release_dir" "$profile_digest"
@@ -482,13 +483,13 @@ native_restore_recorded_runtime() {
   if [[ -n "$old_target" && -d "$old_target" ]]; then
     rollback_contract_dir="$old_target/rollback-contract"
     native_rollback_validate "$old_target"
-    native_rollback_endpoint_validate "$old_target" "$release_dir/collector-host.env" || {
+    native_rollback_endpoint_validate "$old_target" "$release_dir/${slot_host_env##*/}" || {
       echo "automatic rollback blocked; collector and issuer stopped; retain $old_target and $release_dir; recovery guard retained: ${native_recovery_dir?}" >&2
       return 1
     }
     native_rollback_endpoint_validate "$old_target" "$host_env" || return
-    sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/collector-host.env" "$host_env"
-    sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-collector@.service" "$unit_file"
+    sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/${slot_host_env##*/}" "$host_env"
+    sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/${slot_collector_unit%%@*}@.service" "$unit_file"
     sudo -n ln -sfn "$old_target" "$current_link"
     native_previous_link_restore "$releases_root" "$previous_link" "$rollback_contract_dir/previous-before-cutover"
     po_restore_previous "$old_target"
@@ -580,8 +581,8 @@ if [[ "$same_window" == true ]]; then
   native_cutover_run host-env native_release_pin apply profile "$host_env" "$old_target" "$release_dir" "$profile_digest"
 else
   if [[ "$window_action" == deploy ]]; then native_cutover_run stop stop_native_units_and_require_inactive; fi
-  native_cutover_run host-env sudo -n install -m 0640 -o root -g root "$release_dir/collector-host.env" "$host_env"
-  native_cutover_run collector-unit sudo -n install -m 0644 -o root -g root "$release_dir/hololive-collector@.service" "$unit_file"
+  native_cutover_run host-env sudo -n install -m 0640 -o root -g root "$release_dir/${slot_host_env##*/}" "$host_env"
+  native_cutover_run collector-unit sudo -n install -m 0644 -o root -g root "$release_dir/${unit_file##*/}" "$unit_file"
 fi
 native_cutover_run current-link sudo -n ln -sfn "$release_dir" "$current_link"
 

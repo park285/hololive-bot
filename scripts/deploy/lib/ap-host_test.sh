@@ -6,16 +6,14 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 fixture_root="$tmp/repo"
-mkdir -p "$fixture_root/scripts/deploy/ap-hosts" "$tmp/bin"
+mkdir -p "$fixture_root/scripts/deploy/ap-hosts" "$fixture_root/scripts/deploy/lib" "$tmp/bin"
+cp "$ROOT_DIR/scripts/deploy/lib/collector-slots.tsv" "$fixture_root/scripts/deploy/lib/collector-slots.tsv"
 touch "$fixture_root/KR.key"
 cat > "$fixture_root/scripts/deploy/ap-hosts/osaka.conf" <<'EOF'
 AP_NAME=osaka
 AP_SSH_HOST=unreachable.invalid
 AP_SSH_HOST_KEY_ALIAS=ap-osaka
 AP_RUNTIME_MODE=native
-AP_SERVICES=(collector-a)
-AP_CONTAINERS=(hololive-collector-a)
-AP_PORTS=(30005)
 AP_APPROVE_DEPLOY_VAR=I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY
 AP_APPROVE_ROLLBACK_VAR=I_APPROVE_OSAKA_ACTIVE_ACTIVE_ROLLBACK
 AP_BACKUP_PREFIX=osaka-active-active

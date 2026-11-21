@@ -11,6 +11,8 @@ self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=scripts/deploy/lib/compose-env.sh
 . "${self_dir}/lib/compose-env.sh"
+# shellcheck source=scripts/deploy/lib/collector-slots.sh
+. "${self_dir}/lib/collector-slots.sh"
 
 die() { echo "[quadlet-prestart] $*" >&2; exit 1; }
 
@@ -41,6 +43,10 @@ if [[ "$self_dir" == "$compose_root/app-sources/"* ]]; then
     [[ "$sha" =~ ^[0-9a-f]{40}$ && "$self_dir" == "$compose_root/app-sources/$sha/scripts/deploy" ]] &&
         cmp -s "$source_root/.source-revision" <(printf '%s\n' "$sha") || die "invalid pinned app prestart"
 fi
+central_slot="$(collector_slots_where host central)" && [[ "$central_slot" =~ ^[a-z]$ ]] ||
+    die "central collector slot is missing from $(collector_slots_file)"
+central_collector="$(collector_slot "$central_slot" collector_unit)" || die "central collector unit is missing"
+central_collector="${central_collector%.service}"
 
 render_env=false
 app_version_override=
@@ -51,7 +57,7 @@ if [[ "$target" == --render-env ]]; then
     render_env=true
     target="$2"
     case "$target" in
-        hololive-api|hololive-alarm-worker|hololive-collector-c) ;;
+        hololive-api|hololive-alarm-worker|"$central_collector") ;;
         *) die "unsupported render-env unit" ;;
     esac
     if [[ "$#" -eq 5 ]]; then
@@ -86,7 +92,8 @@ validate_container_env_file() {
             key = substr(line, 1, eq - 1)
             value = substr(line, eq + 1)
             if (key !~ /^[A-Za-z_][A-Za-z0-9_]*$/) { print "[quadlet-prestart] invalid env key at line " NR > "/dev/stderr"; bad = 1; next }
-            if (seen[key]++) { print "[quadlet-prestart] duplicate env key: " key > "/dev/stderr"; bad = 1; next }        }
+            if (seen[key]++) { print "[quadlet-prestart] duplicate env key: " key > "/dev/stderr"; bad = 1; next }
+        }
         END { exit bad }
     ' "$file" || die "container env file is invalid: ${file}"
 }
@@ -165,7 +172,7 @@ api_release_version() {
 }
 
 case "$target" in
-    hololive-api|hololive-alarm-worker|hololive-collector-c)
+    hololive-api|hololive-alarm-worker|"$central_collector")
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         if [[ "$render_env" != true ]]; then
             postgres_capacity_assert_service "$source_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
@@ -260,14 +267,14 @@ case "$target" in
             'POSTGRES_PASSWORD=HOLOLIVE_DB_PASSWORD!' \
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
-    hololive-collector-c)
+    "$central_collector")
         require_values LIVE_LOGS_PATH
         validate_container_env_file "${secrets_dir}/collector.env"
         if [[ "$render_env" == false ]]; then
             wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
         fi
-        write_secret_env hololive-collector-c \
-            'POSTGRES_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
+        write_secret_env "$central_collector" \
+            "POSTGRES_PASSWORD=HOLOLIVE_COLLECTOR_${central_slot^^}_PASSWORD!" \
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     admin-dashboard-ingress)
