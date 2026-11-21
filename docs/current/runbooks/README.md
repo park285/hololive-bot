@@ -22,6 +22,7 @@ Collector runbook은 중앙 `c`·iris-seoul `b`·kapu `d`의 Podman Quadlet과 O
 - `rollback.md` - rollback 기준
 - `postgres-replication.md` - 중앙 `hololive-seoul` single-primary 운영 기준과 physical standby/failover 재활성화 전제(지운 절차·자산은 커밋 `bb000290e`)
 - `postgres-observability.md` - 선택적 PostgreSQL CPU·대기 계측 확장의 검증·활성화·복구
+- `postgres-major-upgrade.md` - 중앙 PostgreSQL 18→19 dump/restore 전환과 실패 복구
 - [PostgreSQL transaction pooling](../../../deploy/quadlet/README.md#transaction-pooling) - 역할별 용량·인증·최초 quiesce/resume 전환과 endpoint/HBA 조정 복구
 - `integration-tests.md` - opt-in integration 테스트 주기 실행 경로
 - `member-cache-v2-rollout.md` - durable epoch 기반 member cache expand/rollback 절차

@@ -117,6 +117,9 @@ run_content_gates() {
   if inputs_changed deploy/quadlet; then
     QUADLET_UNIT_DIRS="${ROOT_DIR}/deploy/quadlet/hololive-bot" /usr/libexec/podman/quadlet -dryrun >/dev/null
   fi
+  run_if_changed scripts/deploy/pg-major-upgrade_test.sh scripts/deploy/pg-major-upgrade.sh scripts/deploy/quadlet-prestart.sh \
+    scripts/maintenance/pg-major-globals.sql scripts/maintenance/pg-major-fingerprint.sql scripts/maintenance/pg-major-clear-default-acl.sql \
+    scripts/deploy/lib/compose-env.sh scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv
   run_if_changed scripts/deploy/sync-opt-current_test.sh \
     scripts/deploy/sync-opt-current.sh scripts/deploy/quadlet-prestart.sh scripts/deploy/lib \
     scripts/ci/postgres-capacity-policy.tsv scripts/systemd deploy/postgres deploy/nginx deploy/quadlet
