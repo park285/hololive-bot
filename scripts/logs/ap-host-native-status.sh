@@ -17,12 +17,15 @@ fi
 service="${AP_SERVICES[0]}"
 port="${AP_PORTS[0]}"
 
-ap_remote_bash "$service" "$port" "$LOG_SINCE" <<'REMOTE'
+{
+  printf '%s\n' "$AP_SLOT_PREAMBLE"
+  cat <<'REMOTE'
 set -euo pipefail
 service="$1"
 port="$2"
 since="$3"
-unit="hololive-collector@${service}.service"
+unit="$slot_collector_unit"
+current_link="$slot_root/current"
 
 echo "== systemd =="
 systemctl show "$unit" -p ActiveState -p SubState -p ExecMainPID -p MemoryCurrent -p NRestarts -p ActiveEnterTimestamp || true
@@ -35,19 +38,19 @@ sudo -n find /etc/stack-secrets/hololive-bot -maxdepth 3 -printf "%M %u %g %s %T
 
 echo
 echo "== env keys =="
-sudo -n sh -c 'for f in /etc/stack-secrets/hololive-bot/*.env /etc/hololive-bot/collector-host.env; do test -r "$f" && printf "%s\n" "$f" && cut -d= -f1 "$f" | sort; done' || true
+sudo -n sh -c 'for f in /etc/stack-secrets/hololive-bot/*.env "$1"; do test -r "$f" && printf "%s\n" "$f" && cut -d= -f1 "$f" | sort; done' sh "$slot_host_env" || true
 
 echo
 echo "== health =="
-if [[ -x /opt/hololive-bot/collector/current/bin/healthcheck ]]; then
+if [[ -x "$current_link/bin/healthcheck" ]]; then
   sudo -n -u hololive env \
   HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
-    /opt/hololive-bot/collector/current/bin/healthcheck "https://127.0.0.1:${port}/health" || true
+    "$current_link/bin/healthcheck" "https://127.0.0.1:${port}/health" || true
   sudo -n -u hololive env \
   HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
-    /opt/hololive-bot/collector/current/bin/healthcheck --body "https://127.0.0.1:${port}/ready" || true
+    "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready" || true
 else
   echo "(healthcheck binary missing)"
 fi
@@ -57,3 +60,4 @@ echo "== recent signals =="
 journalctl -u "$unit" --since "$since" --no-pager 2>/dev/null |
   grep -E 'PostgreSQL|Valkey|active_active|job_claim|ERR|panic|permission denied|x509|no such file' || true
 REMOTE
+} | ap_remote_bash "$service" "$port" "$LOG_SINCE"

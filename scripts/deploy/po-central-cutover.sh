@@ -6,11 +6,10 @@ usage() { echo "Usage: $0 <c|b> deploy | c quiesce | <c|b> quiesce-verified <loc
 [[ $# -ge 2 && $# -le 7 ]] || usage
 slot="$1"
 shift
-case "$slot" in
-  c) remote_root=/opt/hololive-bot/compose ;;
-  b) remote_root=/opt/hololive-bot/collector-b ;;
-  *) usage ;;
-esac
+. "$root/scripts/deploy/lib/collector-slots.sh"
+[[ "$(collector_slot "$slot" deploy 2>/dev/null)" == pair ]] || usage
+remote_root="$(collector_slot "$slot" root)"
+slot_preamble="$(collector_slot_preamble "$slot")"
 slot_upper="${slot^^}"
 ssh_var="PO_${slot_upper}_SSH_TARGET" deploy_var="APPROVE_PO_${slot_upper}_DEPLOY" rollback_var="APPROVE_PO_${slot_upper}_ROLLBACK"
 mode="$1"
@@ -26,7 +25,8 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
   [[ "$root" == "$(git -C "$root" rev-parse --show-toplevel)" &&
      "$(realpath -e -- "${BASH_SOURCE[0]}")" == "$root/scripts/deploy/po-central-cutover.sh" ]]
   tool_revision="$(git -C "$root" rev-parse --verify 'HEAD^{commit}')"
-  for script in scripts/deploy/po-central-cutover.sh scripts/deploy/lib/source-revision.sh scripts/deploy/lib/po-central-remote.sh; do
+  for script in scripts/deploy/po-central-cutover.sh scripts/deploy/lib/source-revision.sh scripts/deploy/lib/po-central-remote.sh \
+    scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv; do
     git -C "$root" cat-file blob "$tool_revision:$script" | cmp -s -- - "$root/$script"
   done
   . "$root/scripts/deploy/lib/source-revision.sh"
@@ -106,7 +106,7 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
   [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]]
   backup="$remote_root/backups/staged-po-b-$change_id"
   staging="$remote_root/po-staging-$change_id"
-  remote_body="$(git -C "$root" cat-file blob "$tool_revision:scripts/deploy/lib/po-central-remote.sh")"
+  remote_body="$slot_preamble"$'\n'"$(git -C "$root" cat-file blob "$tool_revision:scripts/deploy/lib/po-central-remote.sh")"
   if [[ "$mode" != check ]]; then
     used="$receipt_dir/b.$window.$mode.used"
     (( EPOCHSECONDS < expires ))
@@ -168,7 +168,7 @@ build_local_pair() {
   local_stage="$(mktemp -d)"
   trap 'rm -rf "$local_stage"' EXIT
   "$root/scripts/build/build-po-sandbox-artifact.sh" arm64 "$revision" "$version" "$local_stage/issuer" podman
-  collector_image=localhost/hololive-collector:candidate
+  collector_image="$(collector_slot "$slot" collector_image):candidate"
   podman build --platform linux/arm64 --format docker \
     --tag "$collector_image" \
     --file "$root/hololive/hololive-collector/Dockerfile" \
@@ -243,6 +243,6 @@ else
     [[ "$(deploy_source_revision "$root")" == "$revision" ]] || { echo 'resume source differs from retained candidate' >&2; exit 1; }
   fi
 fi
-ssh "$ssh_target" sudo -n bash -s -- "$slot" "$remote_mode" "$staging" "$backup" "$revision" "$version" "$seal" \
-  < "$root/scripts/deploy/lib/po-central-remote.sh"
+printf '%s\n' "$slot_preamble" | cat - "$root/scripts/deploy/lib/po-central-remote.sh" |
+  ssh "$ssh_target" sudo -n bash -s -- "$slot" "$remote_mode" "$staging" "$backup" "$revision" "$version" "$seal"
 printf 'collector %s %s: source=%s backup=%s staging=%s\n' "$slot" "$remote_mode" "$revision" "$backup" "$staging"

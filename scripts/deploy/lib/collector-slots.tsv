@@ -1,0 +1,5 @@
+slot	service	deploy	host	root	port	host_env	unit_dir	collector_unit	issuer_unit	network_unit	network	collector_image	issuer_image
+a	collector-a	native	osaka	/opt/hololive-bot/collector	30005	/etc/hololive-bot/collector-host.env	scripts/deploy/lib	hololive-collector@collector-a.service	hololive-youtube-po.service	-	-	-	-
+b	collector-b	pair	seoul	/opt/hololive-bot/collector-b	30015	-	deploy/podman/iris-seoul	hololive-collector-b.service	hololive-youtube-po-b.service	hololive-collector-b.network	hololive-collector-b	localhost/hololive-collector	localhost/hololive-youtube-po-sandbox
+c	collector-c	pair	central	/opt/hololive-bot/compose	30025	-	deploy/quadlet/hololive-bot	hololive-collector-c.service	hololive-youtube-po-c.service	hololive-net.network	hololive-bot_hololive-net	localhost/hololive-collector	localhost/hololive-youtube-po-sandbox
+d	collector-d	kapu	workstation	-	30015	-	deploy/podman/kapu	hololive-collector-d.service	hololive-youtube-po-d.service	hololive-collector.network	hololive-collector	docker.io/library/hololive-collector	docker.io/library/hololive-youtube-po-sandbox

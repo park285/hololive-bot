@@ -99,6 +99,12 @@ not a parallel MQ configuration type.
   (`deploy/quadlet/*/*.container`), collector b·d Podman Quadlet unit (`deploy/podman/*/*.container`), Nginx, nftables,
   and PostgreSQL HBA consumers are checked by `scripts/architecture/check-topology-parity.sh`;
   update the owner and every affected consumer in one change.
+- Collector slot values (service key, deploy kind, host, root, port, host env, collector and issuer units, network,
+  images) are owned by `scripts/deploy/lib/collector-slots.tsv`, next to the scripts that read it, so every tool
+  revision carries its own table. Shell consumers read it through `scripts/deploy/lib/collector-slots.sh`, remote stdin
+  scripts receive the row as a `slot_*` preamble, the Python pair, stop-guard and kapu cutover tools parse the same
+  file, and central publication installs both files into libexec beside `quadlet-prestart`. Unit files, installed unit
+  templates and Dockerfiles stay declared artifacts; change a row together with its unit file.
 - Keep Go module entries aligned with `go.work`.
 - Keep runtime binary and central unit entries aligned with `deploy/quadlet/hololive-bot/`.
 - Keep service docs and runbook links valid for all 3 runtime rows.

@@ -13,6 +13,7 @@ PO_NATIVE_LIB="$tool_root/scripts/deploy/lib/ap-host-native-po.sh"
 
 . "$tool_root/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
+slot_collector_unit="${slot_collector_unit:?collector slot preamble required}" slot_host_env="${slot_host_env:?collector slot preamble required}" slot_root="${slot_root:?collector slot preamble required}"
 
 if [[ -n "$CHANGE_STARTED_AT" && ! "$CHANGE_STARTED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
   echo "CHANGE_STARTED_AT must be UTC RFC3339 seconds, for example 2026-05-19T18:28:03Z" >&2
@@ -42,6 +43,7 @@ run_native_completion_check() {
 
   ap_remote_bash "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_NAME" < "$tool_root/scripts/deploy/lib/require-quic-udp-buffer.sh"
   {
+    printf '%s\n' "$AP_SLOT_PREAMBLE"
     cat "$NODE_VERSION_LIB"
     cat "$READINESS_LIB"
     cat "$PO_NATIVE_LIB"
@@ -51,14 +53,15 @@ service="$1"
 port="$2"
 change_started_at="$3"
 po_expected_presence="$4"
-unit="hololive-collector@${service}.service"
-current_link="/opt/hololive-bot/collector/current"
+unit="$slot_collector_unit"
+current_link="$slot_root/current"
+host_env="$slot_host_env"
 
 sudo -n test -r /etc/stack-secrets/hololive-bot/collector.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
-sudo -n test -r /etc/hololive-bot/collector-host.env
+sudo -n test -r "$host_env"
 sudo -n test -x "$current_link/bin/healthcheck"
 sudo -n test -f "$current_link/youtubejs/src/server.mjs"
 require_node_version node
@@ -72,10 +75,10 @@ if [[ "$po_expected_presence" == present ]]; then
     "$current_link/manifest.json" "$current_link/po-sandbox/revision" "$current_link/po-sandbox/version"
 else
   [[ "$(sudo -n cat "$current_link/rollback-contract/po-unit-presence")" == absent ]]
-  sudo -n test ! -e /etc/systemd/system/hololive-youtube-po.service
-  sudo -n test ! -e /etc/systemd/system/hololive-youtube-po.socket
-  [[ "$(systemctl show hololive-youtube-po.service -p LoadState --value)" == not-found ]]
-  [[ "$(systemctl show hololive-youtube-po.socket -p LoadState --value)" == not-found ]]
+  sudo -n test ! -e "$po_unit_file"
+  sudo -n test ! -e "$po_socket_file"
+  [[ "$(systemctl show "$po_service" -p LoadState --value)" == not-found ]]
+  [[ "$(systemctl show "$po_socket" -p LoadState --value)" == not-found ]]
 fi
 systemctl is-active --quiet "$unit"
 active_state="$(systemctl show "$unit" -p ActiveState --value)"
@@ -84,7 +87,7 @@ environment_files="$(systemctl show "$unit" -p EnvironmentFiles --value)"
 [[ "$active_state" == active ]]
 [[ "$sub_state" == running ]]
 [[ "$environment_files" == *'/etc/stack-secrets/hololive-bot/collector.env'* ]]
-[[ "$environment_files" == *'/etc/hololive-bot/collector-host.env'* ]]
+[[ "$environment_files" == *"$host_env"* ]]
 [[ "$environment_files" != *'compose.env'* ]]
 
 if [[ -n "$change_started_at" ]]; then
@@ -94,8 +97,8 @@ if [[ -n "$change_started_at" ]]; then
   [[ "$active_epoch" -ge "$since_epoch" ]]
 fi
 
-sudo -n grep -qx 'COLLECTOR_RUNTIME_ALLOWED=true' /etc/hololive-bot/collector-host.env
-sudo -n grep -qx 'POSTGRES_USER=hololive_collector_a' /etc/hololive-bot/collector-host.env
+sudo -n grep -qx 'COLLECTOR_RUNTIME_ALLOWED=true' "$host_env"
+sudo -n grep -qx 'POSTGRES_USER=hololive_collector_a' "$host_env"
 
 collector_readiness_fetch() {
   systemctl is-active --quiet "$unit" || return 1
@@ -136,7 +139,7 @@ fi
 echo 'collector AP completion check passed'
 REMOTE
   } | ap_remote_bash "$service" "$port" "$CHANGE_STARTED_AT" "$PO_EXPECTED_PRESENCE"
-  "${AP_SSH[@]}" "sudo -n python3 - verify-native '$service' /opt/hololive-bot/collector/current 'hololive-collector@$service.service'" \
+  "${AP_SSH[@]}" "sudo -n python3 - verify-native '$service' '$slot_root/current' '$slot_collector_unit'" \
     < "$tool_root/scripts/deploy/lib/worker-profile-pair.py"
 }
 

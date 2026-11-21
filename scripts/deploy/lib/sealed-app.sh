@@ -438,6 +438,14 @@ sealed_recovery_prestart() {
       sealed_authority files "$original/lib/$lib.sh" "$script/lib/$lib.sh" &&
         cmp -s "$original/lib/$lib.sh" "$script/lib/$lib.sh" || return 1
     done
+    for lib in collector-slots.sh collector-slots.tsv; do
+      if [[ -e "$original/lib/$lib" || -L "$original/lib/$lib" ]]; then
+        sealed_authority files "$original/lib/$lib" "$script/lib/$lib" &&
+          cmp -s "$original/lib/$lib" "$script/lib/$lib" || return 1
+      else
+        [[ ! -e "$script/lib/$lib" && ! -L "$script/lib/$lib" ]] || return 1
+      fi
+    done
     printf 'installed\n'
   fi
 }

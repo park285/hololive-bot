@@ -13,11 +13,15 @@ import sys
 import time
 
 root, work = map(Path, sys.argv[1:])
-helper = root / 'scripts/deploy/lib/ap-host-native-cutover.sh'
-if not helper.is_file():
+cutover_lib = root / 'scripts/deploy/lib/ap-host-native-cutover.sh'
+if not cutover_lib.is_file():
     raise SystemExit('native cutover signal helper is missing')
+slot_preamble = subprocess.run(['bash', '-c', '. "$1/scripts/deploy/lib/collector-slots.sh"; collector_slot_preamble a', '_', str(root)],
+                               check=True, capture_output=True, text=True).stdout
+helper = work / 'slot-cutover.sh'
+helper.write_text(slot_preamble + f'. "{cutover_lib}"\n')
 source = (root / 'scripts/deploy/lib/ap-host-native-remote-apply.sh').read_text()
-endpoint_libs = ''.join(f'. "{root / "scripts/deploy/lib" / name}"\n' for name in (
+endpoint_libs = slot_preamble + ''.join(f'. "{root / "scripts/deploy/lib" / name}"\n' for name in (
     'compose-env.sh', 'postgres-endpoint.sh', 'ap-host-native-rollback-check.sh',
 ))
 function_start = source.index('stop_native_units_and_require_inactive()')
@@ -435,6 +439,7 @@ assert result.returncode == 9 and not (po_case/'activated').exists()
 assert (po_case/'recovery/terminal').read_text().strip() == '9'
 po_restore = f'''
 set -Eeuo pipefail
+{slot_preamble}
 . "{root}/scripts/deploy/lib/ap-host-native-po.sh"
 sudo() {{ if [[ "$2" == systemctl ]]; then return 143; fi; touch "{po_case}/restore-past-signal"; }}
 po_restore_previous ""

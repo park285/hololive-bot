@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+slot_table="$root/scripts/deploy/lib/collector-slots.tsv"
+# shellcheck source=scripts/deploy/lib/collector-slots.sh
+. "$root/scripts/deploy/lib/collector-slots.sh"
+central_slot="$(collector_slots_where host central "$slot_table")"
+central_collector="$(collector_slot "$central_slot" collector_unit "$slot_table")"
+central_collector="${central_collector%.service}"
+central_password_key="HOLOLIVE_COLLECTOR_${central_slot^^}_PASSWORD"
 if [[ "$EUID" -eq 0 ]]; then
     echo '이 fixture는 운영 경로를 쓰지 않도록 비root로만 실행한다.' >&2
     exit 1
@@ -162,8 +169,8 @@ echo 'prestart moves runtime secrets into a private container env file'
 
 printf 'FIXTURE=worker\n' > "$test_root/secrets/alarm-worker.env"
 printf 'FIXTURE=collector\n' > "$test_root/secrets/collector.env"
-printf 'HOLOLIVE_ALARM_WORKER_PASSWORD=alarm-secret\nHOLOLIVE_COLLECTOR_C_PASSWORD=collector-secret\n' >> "$test_root/compose.env"
-for service in hololive-api hololive-alarm-worker hololive-collector-c; do
+printf 'HOLOLIVE_ALARM_WORKER_PASSWORD=alarm-secret\n%s=collector-secret\n' "$central_password_key" >> "$test_root/compose.env"
+for service in hololive-api hololive-alarm-worker "$central_collector"; do
     for failure in drift missing query_failed; do
         rm -f "$test_root/run/quadlet-env/$service.env"
         case "$failure" in
@@ -221,7 +228,7 @@ write_origin_override() {
 }
 for origin in "${unsupported_origins[@]}"; do
     write_origin_override "$origin"
-    for service in hololive-api hololive-alarm-worker hololive-collector-c; do
+    for service in hololive-api hololive-alarm-worker "$central_collector"; do
         rm -f "$test_root/run/quadlet-env/$service.env"
         if run_prestart "$service" > "$fixture/rejected.log" 2>&1; then
             echo "prestart accepted unsupported origin: $origin ($service)" >&2
@@ -261,7 +268,7 @@ run_prestart
 rm "$test_root/units/hololive-api.container.d/60-pool.conf"
 grep -v '^ADMIN_API_POSTGRES_POOL_MAX_CONNS=' "$test_root/compose.env" > "$test_root/restored.env"
 mv "$test_root/restored.env" "$test_root/compose.env"
-for service in hololive-alarm-worker hololive-collector-c; do
+for service in hololive-alarm-worker "$central_collector"; do
     run_prestart "$service"
 done
 echo 'prestart rejects unknown effective override origins before writing secrets; exact drop-ins retain compose precedence'
@@ -321,7 +328,7 @@ echo 'prestart preserves neutral MCS drop-ins but rejects mixed content, unsuppo
 cp "$test_root/compose.env" "$test_root/pooled.env"
 printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres\nHOLOLIVE_CENTRAL_POSTGRES_PORT=5432\n' >> "$test_root/compose.env"
 mv "$test_root/live-pgbouncer.ini" "$test_root/stopped-pgbouncer.ini"
-for service in hololive-api hololive-alarm-worker hololive-collector-c; do
+for service in hololive-api hololive-alarm-worker "$central_collector"; do
     rm "$test_root/run/quadlet-env/$service.env"
     run_prestart "$service"
     [[ -s "$test_root/run/quadlet-env/$service.env" ]]
@@ -510,7 +517,7 @@ cmp -s "$fixture/offline.ini" "$fixture/offline-expected.ini"
     units="$fixture/before-pooler"
     cp -R "$offline_units" "$units"
     rm "$units/holo-pgbouncer.container"
-    service=hololive-collector-c
+    service="$central_collector"
     direct_env="$fixture/direct.env"
     printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres\nHOLOLIVE_CENTRAL_POSTGRES_PORT=5432\n' > "$direct_env"
     postgres_capacity_assert_service "$root" "$direct_env" "$units" "$service" "$units/$service.container"
@@ -545,7 +552,7 @@ cat >> "$test_root/compose.env" <<'ENV'
 HOLODEX_API_KEY=synthetic-holodex
 HOLOLIVE_METRICS_PORT_BIND_IP=100.100.1.8
 ENV
-units=(hololive-api hololive-alarm-worker hololive-collector-c)
+units=(hololive-api hololive-alarm-worker "$central_collector")
 for unit in "${units[@]}"; do
     run_prestart "$unit"
     mkdir -m 0700 "$fixture/normal-$unit"
@@ -619,8 +626,8 @@ for spec in \
     hololive-alarm-worker:HOLOLIVE_ALARM_WORKER_PASSWORD \
     hololive-alarm-worker:LIVE_LOGS_PATH \
     hololive-alarm-worker:VALKEY_SENTINEL_ADDRS \
-    hololive-collector-c:HOLOLIVE_COLLECTOR_C_PASSWORD \
-    hololive-collector-c:LIVE_LOGS_PATH; do
+    "$central_collector:$central_password_key" \
+    "$central_collector:LIVE_LOGS_PATH"; do
     unit="${spec%%:*}" key="${spec#*:}"
     directory="$fixture/required-$unit-$key"
     mkdir -m 0700 "$directory"
@@ -652,7 +659,7 @@ for invalid_line in 'INVALID' 'BAD KEY=value' 'LIVE_LOGS_PATH=duplicate' 'SPACE=
     grep -Fq 'compose env file is invalid' "$fixture/render.log"
 done
 cp "$fixture/valid-compose.env" "$test_root/compose.env"
-for spec in hololive-api:bot.env hololive-alarm-worker:alarm-worker.env hololive-collector-c:collector.env; do
+for spec in hololive-api:bot.env hololive-alarm-worker:alarm-worker.env "$central_collector:collector.env"; do
     unit="${spec%%:*}" secret_file="${spec#*:}"
     cp "$test_root/secrets/$secret_file" "$fixture/$secret_file"
     printf 'INVALID\n' > "$test_root/secrets/$secret_file"
@@ -678,7 +685,7 @@ for version in '' '13.2.0%unsafe' '13.2.0 unsafe' $'13.2.0\nOTHER=value'; do
     directory="$(mktemp -d "$fixture/invalid-version.XXXXXX")"
     assert_rejected_render "$directory" run_prestart --render-env hololive-api "$directory" --app-version "$version"
 done
-for unit in hololive-alarm-worker hololive-collector-c; do
+for unit in hololive-alarm-worker "$central_collector"; do
     directory="$fixture/non-api-version-$unit"
     mkdir -m 0700 "$directory"
     assert_rejected_render "$directory" run_prestart --render-env "$unit" "$directory" --app-version 13.2.0

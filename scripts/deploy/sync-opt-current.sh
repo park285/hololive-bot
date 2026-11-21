@@ -193,7 +193,7 @@ if [[ -n "$generation" ]]; then
   [[ "$(git -C "$tool_root" rev-parse --verify 'HEAD^{commit}')" == "$tool_revision" &&
     "$(git hash-object --stdin <"${BASH_SOURCE[0]}")" == "$(git -C "$tool_root" rev-parse "$tool_revision:scripts/deploy/sync-opt-current.sh")" ]] ||
     die "protected-source bootstrap is not the reviewed tool"
-  for lib in protected-binds sealed-app; do
+  for lib in protected-binds sealed-app collector-slots; do
     path="scripts/deploy/lib/$lib.sh"
     trusted_blob="$(git -C "$tool_root" rev-parse --verify "$tool_revision:$path")"
     [[ "$trusted_blob" =~ ^[0-9a-f]{40}$ && "$(git hash-object --no-filters "$tool_root/$path")" == "$trusted_blob" ]] ||
@@ -375,11 +375,14 @@ programs = [
         "worker-profile-pair.py", "systemd-stop-guard.py", "card-migration-guard.py", "admin-bind.sh",
         "public-bind-mounts.sh", "postgres-capacity.sh", "compose-env.sh", "postgres-endpoint.sh")),
 ]
+slot_table = ("collector-slots.sh", "collector-slots.tsv")
 files = {root / path for path in programs}
 installed = Path("/usr/local/libexec/hololive-bot")
 files.add(installed / "quadlet-prestart")
 files.update(installed / "lib" / name for name in (
     "admin-bind.sh", "public-bind-mounts.sh", "postgres-capacity.sh", "compose-env.sh", "postgres-endpoint.sh"))
+files.update(path for name in slot_table for path in (root / "scripts/deploy/lib" / name, installed / "lib" / name)
+             if os.path.lexists(path))
 directories = {parent for path in files for parent in path.parents}
 for path in sorted(directories | files):
     info = path.lstat()
@@ -657,9 +660,10 @@ host_assets=(
   "scripts/systemd/admin-dashboard-ingress-firewall.service|/etc/systemd/system/admin-dashboard-ingress-firewall.service|644"
   "scripts/systemd/admin-dashboard-ingress.nft|/etc/nftables.d/admin-dashboard-ingress.nft|644"
 )
-for lib in admin-bind public-bind-mounts postgres-capacity compose-env postgres-endpoint; do
+for lib in admin-bind public-bind-mounts postgres-capacity compose-env postgres-endpoint collector-slots; do
   host_assets+=("scripts/deploy/lib/$lib.sh|$LIBEXEC_DIR/lib/$lib.sh|644")
 done
+host_assets+=("scripts/deploy/lib/collector-slots.tsv|$LIBEXEC_DIR/lib/collector-slots.tsv|644")
 
 assert_same_file() {
   [[ -f "$1" && ! -L "$1" && -f "$2" && ! -L "$2" ]] && cmp -s -- "$1" "$2" ||
@@ -984,6 +988,17 @@ if [[ "$application_only" == true ]]; then
     [[ "$legacy" =~ ^[0-9a-f]{40}$ ]] || die "invalid protected host revision"
     git -C "$REPO_ROOT" merge-base --is-ancestor "$legacy" "$source_base" ||
       die "protected host libexec source is not an installed predecessor"
+    retained_assets=()
+    for asset in "${host_assets[@]}"; do
+      IFS='|' read -r path dest _ <<<"$asset"
+      listed="$(git -C "$REPO_ROOT" ls-tree --name-only "$legacy" -- "$path")"
+      if [[ "$dest" == "$LIBEXEC_DIR/"* && -z "$listed" ]]; then
+        [[ ! -e "$dest" && ! -L "$dest" ]] || die "installed libexec has no protected source: $path"
+        continue
+      fi
+      retained_assets+=("$asset")
+    done
+    host_assets=("${retained_assets[@]}")
   fi
   for asset in "${host_assets[@]}"; do
     IFS='|' read -r path dest mode <<<"$asset"
@@ -1025,7 +1040,14 @@ fi
 
 # shellcheck source=scripts/deploy/lib/compose-env.sh
 . "$STAGING/scripts/deploy/lib/compose-env.sh"
+slot_tool_root="$STAGING"
+[[ -z "$generation" ]] || slot_tool_root="$tool_root"
+# shellcheck source=scripts/deploy/lib/collector-slots.sh
+. "$slot_tool_root/scripts/deploy/lib/collector-slots.sh"
 compose_env_validate_file_format "$COMPOSE_ENV"
+central_collector="$(collector_slot "$(collector_slots_where host central)" collector_unit)" ||
+  die "central collector slot is missing"
+central_collector="${central_collector%.service}"
 env_value() {
   if compose_env_key_exists_in_file "$COMPOSE_ENV" "$1"; then
     compose_env_read_value_from_file "$COMPOSE_ENV" "$1"
@@ -1038,7 +1060,7 @@ OPTIONAL_FEATURES=(
   "schedule-poster|HOLOLIVE_SCHEDULE_POSTER_ENABLED|41-schedule-poster.conf|hololive-api"
   "schedule-poster-review|HOLOLIVE_SCHEDULE_POSTER_REVIEW_ENABLED|42-schedule-poster-review.conf|hololive-api"
   "broadcast-type-decision|HOLOLIVE_BROADCAST_TYPE_DECISION_ENABLED|43-broadcast-type-decision.conf|hololive-api"
-  "event-grade|HOLOLIVE_EVENT_GRADE_ENABLED|44-event-grade.conf|hololive-collector-c"
+  "event-grade|HOLOLIVE_EVENT_GRADE_ENABLED|44-event-grade.conf|$central_collector"
 )
 declare -A feature_enabled=()
 feature_summary=""
