@@ -6,6 +6,7 @@
 
 ## 미출시
 
+- 스택 공통 lint 자산(주석 금지 검사, `verify-tools.sh`, Go 린트 행렬·도구 resolver, 생성된 `.golangci.yml`)을 메타 정본과 맞췄습니다. 확장된 검사가 찾은 workflow YAML·셸 heredoc·JavaScript·Go 주석을 지웠고, 해석되지 않던 heredoc·here-string을 파이프나 변수로 바꿨습니다(Valkey 상태 점검, 풀러 SQL 확인, go.work 동기화 검사, 종료 live head 복구 시험). SQL이 아닌 스키마 카탈로그 직렬화 golden은 `hololive/hololive-dbtest/testdata/schema_snapshot.golden`으로 이름을 바꿨습니다. 동작은 바뀌지 않습니다.
 - 버전 번호를 다음 릴리즈부터 1.0.0으로 다시 시작하고 tag를 `r<version>`으로 씁니다. 배포 복구 도구는 원래 릴리스 tag로 `r<version>`과 이전 `v<version>`을 모두 받고, `scripts/publish-release.sh`는 새 Release를 `r<version>` tag로만 만들며, 릴리스 버전 검사는 `## r<version>`과 이전 `## v<version>` 절 제목을 모두 읽습니다.
 - **Gemini Decisions**의 공식 Go SDK 클라이언트를 방송 유형 분류와 일정 포스터·변경 게시글 검토가 공유합니다. 판정마다 요청은 한 번만 보내며, 응답 상한 64 KiB와 용도별 실패 처리를 유지합니다. HTTP 오류와 로그에는 상태 번호와 분류에 쓰는 코드만 남겨 Gemini가 응답에 포함한 API 키를 보호합니다.
 

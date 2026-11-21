@@ -83,7 +83,7 @@
 
 ### 3.1 코드베이스 조사에서 확인한 핵심 제약과 수정 지점
 - **마이그레이션 및 스키마 제약:**
-  - 최신 마이그레이션은 `hololive/hololive-api/scripts/migrations/015_schedule_poster_translation_inputs.sql`이므로 신규 마이그레이션은 **`016`**부터 작성하며 `hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql`을 함께 갱신한다(`CONVENTIONS.md`, `scripts/architecture/check-sql-ownership.py` 준수).
+  - 최신 마이그레이션은 `hololive/hololive-api/scripts/migrations/015_schedule_poster_translation_inputs.sql`이므로 신규 마이그레이션은 **`016`**부터 작성하며 `hololive/hololive-dbtest/testdata/schema_snapshot.golden`을 함께 갱신한다(`CONVENTIONS.md`, `scripts/architecture/check-sql-ownership.py` 준수).
   - `012_schedule_poster_keep_translation.sql`의 `chk_schedule_posters_translated_image`(`translation_status <> 'succeeded' OR translated_image IS NOT NULL`)가 남아 있으면 이미지 없이 `succeeded`를 저장할 때 CHECK 위반이 발생하므로 행 저장 전환 단계에서 이 제약을 완화·대체해야 한다.
 - **설정 파일 엄격 파싱:**
   - `hololive/hololive-api/internal/planes/admin/internal/scheduleposter/config.go`는 `jsonv2.RejectUnknownMembers()`를 사용하므로 `SCHEDULE_POSTER_CONFIG_FILE` 키 추가·제거는 컨테이너 이미지 교체와 순서를 맞춰야 한다.

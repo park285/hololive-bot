@@ -24,7 +24,7 @@
 
 | 대상 | 값 | 근거 |
 |---|---|---|
-| delivery 상태 | `PENDING`·`SENDING`·`SENT`·`FAILED`·`QUARANTINED` | `YD/lifecycle/types.go:14-20`, CHECK `chk_youtube_notification_delivery_status_vocab` (`hololive-dbtest/testdata/schema_snapshot.golden.sql:1448` 표) |
+| delivery 상태 | `PENDING`·`SENDING`·`SENT`·`FAILED`·`QUARANTINED` | `YD/lifecycle/types.go:14-20`, CHECK `chk_youtube_notification_delivery_status_vocab` (`hololive-dbtest/testdata/schema_snapshot.golden:1448` 표) |
 | ledger 상태 | `SENT`·`QUARANTINED` | `YD/lifecycle/types.go:34-37`, `chk_youtube_notification_delivery_ledger_status`·`_shape` (golden:1472 표) |
 | claim 표현 | 상태가 아니라 `PENDING + locked_at`(+`row_version+1`) | `ST/queries/transition_claim_pending.sql:33-36` |
 | 전송 중 | `SENDING + locked_at(=전송 시작)` | `ST/transition_begin.go:228-238` |
@@ -252,7 +252,7 @@ CLOCK_QUERY_POLICIES(`scripts/architecture/check-sql-ownership.py:54-65`)에 `YO
   DROP INDEX CONCURRENTLY IF EXISTS public.idx_ycsas_authorized_at;
   ALTER TABLE public.youtube_community_shorts_alarm_states DROP COLUMN IF EXISTS authorized_at;
   ```
-  재실행 멱등: UPDATE는 0행, DROP CONSTRAINT/ADD는 같은 결과, VALIDATE 재실행 무해, `IF EXISTS`. CONVENTIONS 규칙(`CONVENTIONS.md:15-24, 61-64`): CONCURRENTLY는 블록 밖, VALIDATE는 블록 밖. manifest.txt에 추가, `schema_snapshot.golden.sql` 재생성.
+  재실행 멱등: UPDATE는 0행, DROP CONSTRAINT/ADD는 같은 결과, VALIDATE 재실행 무해, `IF EXISTS`. CONVENTIONS 규칙(`CONVENTIONS.md:15-24, 61-64`): CONCURRENTLY는 블록 밖, VALIDATE는 블록 밖. manifest.txt에 추가, `schema_snapshot.golden` 재생성.
 - 배포 순서: migrate가 앱보다 먼저 돈다(`docs/current/DEPLOYMENT_BASELINE.md:128`). 그래서 열 삭제를 코드 변경과 같은 릴리스에 두면 migrate~재시작 사이 구 바이너리가 깨진다 → 반드시 다음 릴리스. 3c-1의 `ADD COLUMN locked_by`는 구 바이너리가 열 목록을 명시하므로(`transition_claim_pending.sql:40-50` 등) 같은 릴리스에서 안전.
 
 ---
@@ -348,7 +348,7 @@ python3 scripts/architecture/check-sql-ownership.py
 
 ### 3c-4 `authorized_at` 열 삭제 migration (다음 릴리스)
 
-변경: 4.3절 migration, manifest, golden(`schema_snapshot.golden.sql:1129,1131-1137` 부근), 3c-3 임시 시험 `TestMarkAlarmSentBatchClearsLegacyAuthorization`과 bulk SQL의 `authorized_at = NULL` 대입 삭제(열이 없으므로).
+변경: 4.3절 migration, manifest, golden(`schema_snapshot.golden:1129,1131-1137` 부근), 3c-3 임시 시험 `TestMarkAlarmSentBatchClearsLegacyAuthorization`과 bulk SQL의 `authorized_at = NULL` 대입 삭제(열이 없으므로).
 시험: `hololive-dbtest/youtube_alarm_state_authorization_drop_migration_test.go` — 미발송 ENQUEUED+authorized_at 행 → DETECTED, 발송된 행 불변, 열·인덱스 없음, CHECK가 `ENQUEUED` 거절, 재실행 무변경(선례 `hololive-dbtest/youtube_request_snapshot_drop_migration_test.go`).
 검증: `go test -run 'TestYouTubeAlarmStateAuthorizationDrop|TestSchemaSnapshotGolden' ./hololive/hololive-dbtest`, `scripts/architecture/check-migration-manifest.sh`, shared·worker·API 빌드.
 배포: 3c-3이 API·워커 모두 운영 반영된 뒤(구 바이너리 0) 별도 승인으로 migrate.

@@ -37,7 +37,7 @@ podman exec -e PGHOST=/var/run/postgresql -e PGPORT=5432 -e PGDATABASE=hololive 
   cat "$work/migration.log" >&2
   exit 1
 }
-psql_test <<'SQL'
+seed_sql=$(cat <<'SQL'
 INSERT INTO alarm_dispatch_events(event_key,payload_hash,alarm_type,payload)
 VALUES('repair-protected-event',repeat('a',64),'LIVE','{}');
 INSERT INTO alarm_dispatch_send_units(unit_key,dispatch_group_key,room_id,client_request_id)
@@ -57,17 +57,19 @@ VALUES('candidate','repair-channel','EXPLICIT_END',1,'2026-08-16','2026-08-16','
 UPDATE youtube_live_reconciliation_heads SET last_live_positive_at='2026-08-18' WHERE video_id='conflict';
 UPDATE youtube_live_reconciliation_heads SET updated_at='2026-09-01' WHERE video_id='recent';
 UPDATE youtube_live_reconciliation_heads SET end_candidate_kind='EXPLICIT_END',end_candidate_observation_id=1,next_end_check_at='2026-08-16' WHERE video_id='candidate';
--- fixture는 원본을 직접 썼으므로 writer처럼 바꾼 key로 수명 모델을 맞춘다.
 SELECT refresh_youtube_live_runtime_state(ARRAY(SELECT video_id FROM youtube_live_sessions));
 SQL
+)
+printf '%s\n' "$seed_sql" | psql_test
 psql_test <"$maintenance_dir/preview-terminal-live-heads.sql" >"$work/preview.json"
-read -r count digest < <(python3 - "$work/preview.json" <<'PY'
+preview_summary=$(python3 - "$work/preview.json" <<'PY'
 import json,sys
 d=json.load(open(sys.argv[1]));assert d['count']==2
 assert {x['head']['video_id'] for x in d['rows']}=={'a','b'}
 print(d['count'],d['digest'])
 PY
 )
+read -r count digest <<<"$preview_summary"
 baseline=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(h) ORDER BY video_id)::text) FROM youtube_live_reconciliation_heads h")
 runtime_baseline=$(psql_test -c "SELECT md5(jsonb_agg(to_jsonb(s) ORDER BY video_id)::text) FROM youtube_live_runtime_state s")
 test "$(psql_test -c "SELECT count(*) FROM youtube_live_runtime_state WHERE video_id IN('a','b')")" = 2

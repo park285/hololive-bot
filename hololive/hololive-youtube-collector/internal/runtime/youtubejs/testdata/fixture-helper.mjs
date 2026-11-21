@@ -6,8 +6,6 @@ const args = parseArgs(process.argv.slice(2));
 if (args.mode === "exit-now") {
   process.exit(1);
 }
-// collector가 준 V8 old space 상한이 실제 heap 한도에 반영되지 않으면 기동하지 않습니다.
-// 192MiB old space에 young 영역 예약을 더한 값보다 크면 기본(cgroup 기반) 한도로 본 것입니다.
 if (args.mode === "require-heap-limit" && getHeapStatistics().heap_size_limit > 320 * 1024 * 1024) {
   process.exit(1);
 }
@@ -88,7 +86,6 @@ function healthBody(state, maxInflight) {
   };
 }
 
-// 발급이 계속 실패하는 helper의 /health proof 진단입니다.
 const unavailableProof = {
   state: "UNAVAILABLE",
   last_error: "challenge_structure",

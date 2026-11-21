@@ -1,6 +1,5 @@
 name: security
 
-# PR 외 이벤트의 보안 검사다. 전체 검증은 scripts/ci/pre-push-gate.sh가 맡는다.
 on:
   push:
     branches: [main]
@@ -30,13 +29,13 @@ jobs:
         working-directory: hololive-bot
     steps:
       - name: Checkout hololive-bot
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           path: hololive-bot
           persist-credentials: false
 
       - name: Checkout shared-go at postgres/v1.0.3
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: park285/shared-go
           ref: e47dac354d493c2a633f52048188c0f5911b8810
@@ -44,10 +43,10 @@ jobs:
           persist-credentials: false
 
       - name: Checkout iris-client-go
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: park285/iris-client-go
-          ref: f46d4fc35e92aea675433e43fd1fcea2fd8136b8 # v5.2.1, 릴리스 provenance 검증 완료
+          ref: f46d4fc35e92aea675433e43fd1fcea2fd8136b8
           path: iris-client-go
           persist-credentials: false
 
@@ -108,7 +107,6 @@ jobs:
           GOMAXPROCS: "2"
         run: |
           read -ra pkgs <<< "${GO_PKG_PATTERNS}"
-          # 로컬과 같은 unitchecker로 의존성 분석을 재사용하고 동시 메모리 사용을 제한한다.
           go vet -p 1 -vettool="${NILAWAY_BIN}" -pretty-print \
             -include-errors-in-files="${PWD}" "${pkgs[@]}"
 
@@ -135,12 +133,10 @@ jobs:
           install -m 0755 "${extract_dir}/trivy" "${bin_dir}/trivy"
           echo "${bin_dir}" >>"${GITHUB_PATH}"
 
-      # 표준 runner에는 arm64 binfmt가 없어 arm64 최종 image의 RUN이 exec format error로 끝난다.
       - name: Register arm64 emulation
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: docker run --rm --privileged tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 --install arm64
 
-      # 운영 host와 같은 Podman 저장소에 빌드한다. binfmt 등록만 위 docker 단계가 맡는다.
       - name: Build final production images
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
@@ -149,7 +145,6 @@ jobs:
           bash scripts/ci/test-infra-images.sh
           ./build-all.sh --no-bump --build-only --skip-local-ci
 
-      # Trivy의 podman image source는 사용자 Podman API socket으로 image를 읽는다.
       - name: Start rootless Podman API for Trivy
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
@@ -169,13 +164,13 @@ jobs:
         working-directory: hololive-bot
     steps:
       - name: Checkout hololive-bot
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           path: hololive-bot
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: "26.13.0"
           cache: npm

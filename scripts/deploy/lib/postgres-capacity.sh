@@ -319,25 +319,13 @@ postgres_capacity_assert_live() (
 )
 
 postgres_pooler_assert_writer_sql() {
-    local role result
+    local role result sql
     case "$1" in
         hololive-api) role=hololive_runtime ;;
         hololive-alarm-worker) role=hololive_alarm_worker ;;
         *) echo '[pg-pooler] unknown central writer' >&2; return 1 ;;
     esac
-    result="$(podman exec -i holo-postgres timeout -k 2 38 sh -ec '
-        unset PGSERVICE PGSERVICEFILE PGHOSTADDR PGOPTIONS
-        export PGHOST=holo-pgbouncer PGPORT=6432 PGDATABASE=hololive PGUSER="$1"
-        export PGSSLMODE=verify-full PGSSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
-        export PGGSSENCMODE=disable PGREQUIREAUTH=scram-sha-256 PGCONNECT_TIMEOUT=5
-        export PGAPPNAME=hololive-pooler-cutover-check
-        case "$PGUSER" in
-            hololive_runtime) PGPASSWORD="${HOLOLIVE_DB_PASSWORD:?}" ;;
-            hololive_alarm_worker) PGPASSWORD="${HOLOLIVE_ALARM_WORKER_PASSWORD:?}" ;;
-        esac
-        export PGPASSWORD
-        exec psql -XqwAt -v ON_ERROR_STOP=1 -v role="$PGUSER"
-    ' sh "$role" <<'SQL'
+    sql="$(cat <<'SQL'
 BEGIN READ ONLY;
 SET LOCAL default_transaction_read_only = on;
 SET LOCAL statement_timeout = '30s';
@@ -349,7 +337,20 @@ SELECT current_database() = 'hololive' AND current_user = :'role' AND session_us
    AND EXISTS (SELECT 1 FROM pg_catalog.pg_stat_ssl WHERE pid = pg_backend_pid() AND ssl AND version IN ('TLSv1.2','TLSv1.3'));
 ROLLBACK;
 SQL
-    )" && [[ "$result" == t ]] || {
+)"
+    result="$(printf '%s\n' "$sql" | podman exec -i holo-postgres timeout -k 2 38 sh -ec '
+        unset PGSERVICE PGSERVICEFILE PGHOSTADDR PGOPTIONS
+        export PGHOST=holo-pgbouncer PGPORT=6432 PGDATABASE=hololive PGUSER="$1"
+        export PGSSLMODE=verify-full PGSSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
+        export PGGSSENCMODE=disable PGREQUIREAUTH=scram-sha-256 PGCONNECT_TIMEOUT=5
+        export PGAPPNAME=hololive-pooler-cutover-check
+        case "$PGUSER" in
+            hololive_runtime) PGPASSWORD="${HOLOLIVE_DB_PASSWORD:?}" ;;
+            hololive_alarm_worker) PGPASSWORD="${HOLOLIVE_ALARM_WORKER_PASSWORD:?}" ;;
+        esac
+        export PGPASSWORD
+        exec psql -XqwAt -v ON_ERROR_STOP=1 -v role="$PGUSER"
+    ' sh "$role")" && [[ "$result" == t ]] || {
         echo "[pg-pooler] pooled SQL verification failed for $role; activation refused" >&2
         return 1
     }
