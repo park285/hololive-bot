@@ -1,11 +1,12 @@
 # 변경 이력
 
-현재 릴리즈 버전은 루트 `VERSION`에서 관리하고 Git tag는 `v<version>` 형식을 사용합니다.
+현재 릴리즈 버전은 루트 `VERSION`에서 관리하고 Git tag는 `r<version>` 형식을 사용합니다. 다음 릴리즈부터 번호를 1.0.0으로 다시 시작하며, `v<version>` tag와 절은 이전 번호 체계의 기록입니다.
 버전은 배포하거나 게시할 때만 올리며, 절차는 [릴리즈 버전 관리](docs/current/runbooks/release.md)를 따릅니다.
 이 문서는 `미출시`와 최근 세 버전 구간(그 사이의 tag 없는 준비 구간은 세지 않음)만 유지하며, 이전 기록은 이 파일의 Git 이력과 tag에서 확인합니다.
 
 ## 미출시
 
+- 버전 번호를 다음 릴리즈부터 1.0.0으로 다시 시작하고 tag를 `r<version>`으로 씁니다. 배포 복구 도구는 원래 릴리스 tag로 `r<version>`과 이전 `v<version>`을 모두 받고, `scripts/publish-release.sh`는 새 Release를 `r<version>` tag로만 만들며, 릴리스 버전 검사는 `## r<version>`과 이전 `## v<version>` 절 제목을 모두 읽습니다.
 - **Gemini Decisions**의 공식 Go SDK 클라이언트를 방송 유형 분류와 일정 포스터·변경 게시글 검토가 공유합니다. 판정마다 요청은 한 번만 보내며, 응답 상한 64 KiB와 용도별 실패 처리를 유지합니다. HTTP 오류와 로그에는 상태 번호와 분류에 쓰는 코드만 남겨 Gemini가 응답에 포함한 API 키를 보호합니다.
 
 ## v20.0.4 - 2026-11-21

@@ -7,7 +7,7 @@ Runtime, document, and contract changes의 release checklist입니다.
 ## 버전 관리
 
 저장소 전체 app 릴리즈 버전의 단일 기준은 루트 `VERSION`입니다. 안정 SemVer
-`MAJOR.MINOR.PATCH` 형식으로 관리하고 Git tag에는 `v` 접두사를 붙입니다.
+`MAJOR.MINOR.PATCH` 형식으로 관리하고 Git tag에는 `r` 접두사를 붙입니다(`r<version>`).
 `hololive/hololive-api/VERSION`과 `hololive/hololive-alarm-worker/VERSION`은 각 container
 artifact 버전이며 독립 build가 필요하면 서로 달라질 수 있습니다. 저장소 tag는 root
 `VERSION`이 가리키는 전체 source snapshot에만 붙입니다.
@@ -19,16 +19,22 @@ collector·PO image도 `hololive/hololive-api/VERSION`을 쓰므로 API를 재�
 label은 이전 build를 가리킵니다. API source가 바뀌지 않은 릴리스에서만 생기는 식별자 차이이며, API 산출물 판정은
 image label로 합니다.
 
+스택 전체 결정으로 버전 번호를 1.0.0부터 다시 시작합니다. 다음 릴리즈에서 루트 `VERSION`과 두 runtime `VERSION`을
+모두 1.0.0으로 맞추고 tag `r1.0.0`을 만듭니다. 그때까지 `VERSION`은 직전 릴리즈 값을 그대로 둡니다. 기존 `v<version>`
+tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, 새 tag를 `v` 접두사로 만들지 않습니다. 두 체계의 번호는
+겹치므로 버전 숫자만으로 신구를 비교하지 않습니다. 배포 복구 도구는 원래 릴리스 tag로 `r<version>`과 이전 `v<version>`을 모두
+받고 tag 이름을 기록된 binding과 bundle의 tag ref로 검증하며, `scripts/publish-release.sh`는 새 Release를 `r<version>` tag로만 만들고, 기존 Release 수정과 비교 기준에는 이전 `v<version>`도 받습니다.
+
 릴리즈할 때는 다음 순서를 지킵니다.
 
 1. 루트 `VERSION`을 변경하고 각 runtime artifact를 함께 릴리즈한다면 해당 runtime의
    `VERSION`도 변경합니다.
-2. `CHANGELOG.md`의 `미출시` 항목을 `## v<version> - YYYY-MM-DD` 구간으로 옮기고, 이 버전과 tag가
+2. `CHANGELOG.md`의 `미출시` 항목을 `## r<version> - YYYY-MM-DD` 구간으로 옮기고, 이 버전과 tag가
    붙은 최근 두 버전까지 남기고 그보다 오래된 구간은 지웁니다. 그 사이에 tag 없이 준비만 된 구간은 세지 않고 남깁니다.
 3. `bash scripts/check-release-version.sh`와 pre-push gate를 `FULL_PRE_PUSH=true`로 통과시킵니다.
 4. 검증된 릴리즈 commit을 `main`에 반영하고 반영된 `main` commit의 SHA를 기록합니다. squash 병합은 SHA가
    달라지므로 그 commit의 tree가 검증한 tree와 같은지 확인하고, 다르면 그 commit에서 2단계부터 다시 진행합니다.
-5. 4단계에서 기록한 `main` commit에 annotated tag `v<version>`을 만들어 별도 승인된 publish 절차로 push합니다.
+5. 4단계에서 기록한 `main` commit에 annotated tag `r<version>`을 만들어 별도 승인된 publish 절차로 push합니다.
 
 버전과 tag는 실제로 배포하거나 게시할 artifact를 만들 때만 올리며 PR을 병합할 때마다 올리지 않습니다.
 병합한 변경은 `미출시`에 누적하고, 배포할 때 직전 릴리즈 이후의 변경 전체를 한 버전으로 묶습니다.
@@ -243,7 +249,7 @@ The stats window is fresh only when at least one `alarm_dispatch_deliveries` cla
 
 ## 릴리즈 노트
 
-GitHub Release 제목은 tag와 같은 `v<version>`으로 쓰고, 본문은
+GitHub Release 제목은 tag와 같은 `r<version>`으로 쓰고, 본문은
 [`v3.5.0`](https://github.com/park285/hololive-bot/releases/tag/v3.5.0)처럼 GitHub가
 생성한 `What's Changed`, PR 제목·작성자·링크, `Full Changelog` 형식을 사용합니다.
 수동 운영 요약이나 `CHANGELOG.md` 복사본으로 대체하지 않습니다.

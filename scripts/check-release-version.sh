@@ -24,17 +24,15 @@ read_semver_file() {
 version="$(read_semver_file "${ROOT_DIR}/VERSION" VERSION)"
 read_semver_file "${ROOT_DIR}/hololive/hololive-api/VERSION" hololive-api >/dev/null
 read_semver_file "${ROOT_DIR}/hololive/hololive-alarm-worker/VERSION" hololive-alarm-worker >/dev/null
-release_prefix="## v${version} - "
+release_heading_re="^## [rv]${version//./\\.} - [0-9]{4}-[0-9]{2}-[0-9]{2}$"
 release_heading_count=0
 
 grep -Fqx '## 미출시' "${ROOT_DIR}/CHANGELOG.md" || fail "CHANGELOG.md에 미출시 구간이 없습니다"
 while IFS= read -r line; do
-  if [[ "${line}" == "${release_prefix}"????-??-?? ]]; then
-    release_date="${line#"${release_prefix}"}"
-    [[ "${release_date}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || continue
+  if [[ "${line}" =~ ${release_heading_re} ]]; then
     ((release_heading_count += 1))
   fi
 done <"${ROOT_DIR}/CHANGELOG.md"
-[[ "${release_heading_count}" -eq 1 ]] || fail "CHANGELOG.md에 현재 버전 구간이 정확히 하나 있어야 합니다: v${version}"
+[[ "${release_heading_count}" -eq 1 ]] || fail "CHANGELOG.md에 현재 버전 구간이 정확히 하나 있어야 합니다: ${version}"
 
-echo "[release-version] v${version} 검증 통과"
+echo "[release-version] ${version} 검증 통과"
