@@ -50,7 +50,6 @@ case "${1:-}" in
     ;;
   *) usage ;;
 esac
-service="${services[0]:-}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
@@ -66,6 +65,7 @@ compose_env="$prefix/etc/stack-secrets/hololive-bot/compose.env"
 fence_dir="$prefix/var/lib/hololive-postgres-fence"
 store="${deploy_root%/*}/app-sources"
 sealed=false
+recovery_receipt=
 pair_tool="$ROOT_DIR/scripts/deploy/lib/worker-profile-pair.py"
 guard_tool="$ROOT_DIR/scripts/deploy/lib/systemd-stop-guard.py"
 releases="$deploy_root/artifacts/worker-profile/releases"
@@ -74,7 +74,12 @@ lock_dir="$prefix/run/lock"
 lock="$lock_dir/hololive-quadlet-redeploy.lock"
 if [[ -e "$store" || -L "$store" || "$ROOT_DIR" == "$store/"* ]]; then
   [[ "$(hostname -s)" == hololive-seoul && -f "$lock" && ! -L "$lock" ]] || die "sealed cut requires the installed central writer lock"
-  exec 9<"$lock"
+  if [[ -n ${HOLOLIVE_DEPLOY_FD:-} ]]; then
+    [[ "$HOLOLIVE_DEPLOY_FD" =~ ^[0-9]+$ && /proc/self/fd/$HOLOLIVE_DEPLOY_FD -ef "$lock" ]] || die "invalid inherited deploy lock"
+    exec 9<&"$HOLOLIVE_DEPLOY_FD"
+  else
+    exec 9<"$lock"
+  fi
 else
   install -d -m 0755 "$lock_dir"
   exec 9>"$lock"
@@ -116,6 +121,7 @@ fi
 . "$ROOT_DIR/scripts/deploy/lib/postgres-capacity.sh"
 . "$ROOT_DIR/scripts/deploy/lib/compose-env.sh"
 . "$ROOT_DIR/scripts/deploy/lib/postgres-endpoint.sh"
+service="${services[0]}"
 mask_dir="$prefix/etc/systemd/system"
 sync_paths() {
   python3 - "$@" <<'PY'
@@ -168,14 +174,14 @@ on_exit() {
     echo "[OUTCOME] outcome_unknown service=$service stage=$stage release=$release: retain intent and job evidence, inspect without retry" >&2
   elif [[ "$activation_started" == true ]]; then
     if [[ "$mode" == deploy ]]; then
-      echo "[OUTCOME] failed_after_activation service=${service[0]} stage=$stage release=$release: the candidate pair stays installed; roll back only after schema/admission compatibility is approved: scripts/deploy/quadlet-rollback-service.sh $release --check, then --apply" >&2
+      echo "[OUTCOME] failed_after_activation service=$service stage=$stage release=$release: the candidate pair stays installed; roll back only after schema/admission compatibility is approved: scripts/deploy/quadlet-rollback-service.sh $release --check, then --apply" >&2
     else
       echo "[OUTCOME] failed_after_activation services=${services[*]} stage=$stage releases=${release_paths[*]:-none}: retain all pairs and inspect unit state before an approved rollback" >&2
     fi
   elif [[ "$quiescence_started" == true ]]; then
     echo "[OUTCOME] quiescence_failed services=${services[*]} stage=$stage releases=${release_paths[*]:-none}: the hold may be partial; inspect both units and do not unmask automatically" >&2
   else
-    echo "[OUTCOME] not_activated service=${service[0]} stage=$stage release=${release:-none}: the candidate pair was not installed" >&2
+    echo "[OUTCOME] not_activated service=$service stage=$stage release=${release:-none}: the candidate pair was not installed" >&2
   fi
   exit "$status"
 }
@@ -573,7 +579,12 @@ for service in "${services[@]}"; do
 done
 migrator_id="$(resolve_image "$migrator_ref" hololive-api)"
 if [[ "$sealed" == true ]]; then
-  sealed_peer_admission || die 'running peer is not the approved predecessor worker or accepted same-generation API/worker'
+  sealed_peer_admission "${candidate_ids[$service]}" || die 'running peer is not the approved predecessor worker or accepted same-generation API/worker'
+  if [[ -n "$recovery_receipt" ]]; then
+    sealed_recovery_window
+    mkdir -m0700 -- "$recovery_receipt/attempt-$service" || die "복구 슬롯을 예약할 수 없음; 재시도 금지: $service"
+    sync -f "$recovery_receipt"
+  fi
 fi
 postgres_capacity_assert_target "$ROOT_DIR" "$compose_env"
 assert_writer_endpoint() {
@@ -620,6 +631,10 @@ prepare_slot() {
     mkdir -m 0755 -- "$releases"
   fi
   release="$(mktemp -d "$releases/$service-v2-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")"
+  if [[ -n "$recovery_receipt" ]]; then
+    printf '%s\n' "$release" >"$recovery_receipt/attempt-$service/release"
+    sync -f "$recovery_receipt"
+  fi
   release_paths[$service]="$release"
   chmod 0755 "$release"
   printf '%s\n' "$service" >"$release/service"
@@ -731,8 +746,21 @@ run_migration() {
     printf '[Container]\nImage=%s\n' "$migrator_id" >"$migrate_tmp"
   fi
   chmod 0644 "$migrate_tmp"
-  mv -f -- "$migrate_tmp" "$migrate_dropins/50-migrator-image.conf"
-  systemctl daemon-reload
+  if [[ -n "$recovery_receipt" ]]; then
+    local overlay="$migrate_dropins/50-migrator-image.conf" overlay_fd
+    exec {overlay_fd}<"$overlay"
+    sealed_recovery_check before-overlay || die "복구 이전 migrator 증거가 변경되었습니다"
+    sealed_recovery_writers
+    [[ ! -L "$overlay" && "$overlay" -ef "/proc/self/fd/$overlay_fd" ]] || die "검증한 migrator overlay가 교체되었습니다"
+    mv -T --exchange --no-copy -- "$migrate_tmp" "$overlay" || die "[OUTCOME] outcome_unknown: migrator overlay exchange failed"
+    [[ ! -L "$migrate_tmp" && "$migrate_tmp" -ef "/proc/self/fd/$overlay_fd" ]] && cmp -s -- "$migrate_tmp" "/proc/self/fd/$overlay_fd" ||
+      die "[OUTCOME] outcome_unknown: displaced migrator overlay is not the verified file"
+    exec {overlay_fd}<&-
+    rm -f -- "$migrate_tmp"
+  else
+    mv -f -- "$migrate_tmp" "$migrate_dropins/50-migrator-image.conf"
+  fi
+  if [[ "$sealed" == true ]]; then sealed_reload reload-schema; else systemctl daemon-reload; fi
   assert_no_fence_marker
   for service in "${services[@]}"; do assert_writer_endpoint "$service"; done
   if [[ "$mode" == resume ]]; then
@@ -800,12 +828,15 @@ for service in "${services[@]}"; do
     python3 "$pair_tool" verify-source "$service" "$release/candidate"
     assert_infrastructure
     [[ "$(sealed_generation "$service")" == "$original_target_generation" ]] || die 'selected writer changed before pair publication'
+    if [[ -n "$recovery_receipt" ]]; then sealed_recovery_check writer || die "unverified schema execution before pair publication"; fi
     sealed_write_intent
+    if [[ -n "$recovery_receipt" ]]; then sealed_recovery_writers; fi
   fi
   activation_started=true
   python3 "$pair_tool" activate "$service" "$release/candidate" "$deploy_root"
 done
-systemctl daemon-reload
+if [[ -n "$recovery_receipt" ]]; then sealed_recovery_writers; fi
+if [[ "$sealed" == true ]]; then sealed_reload reload-writer; else systemctl daemon-reload; fi
 for service in "${services[@]}"; do
   release="${release_paths[$service]}"
   stage=activation

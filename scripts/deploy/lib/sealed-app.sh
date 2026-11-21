@@ -107,32 +107,229 @@ sealed_assert_peer() {
     die 'ingress firewall generation changed'
 }
 
-sealed_peer_admission() {
-  : "${deploy_root:?}" "${store:?}" "${revision:?}" "${releases:?}" "${quadlet_dir:?}" "${pair_tool:?}"
-  local peer="$unchanged_peer" pointer="$deploy_root/artifacts/worker-profile/active/$unchanged_peer.pair" pair dir image sha old tool
-  local -a receipts=("$store"/transition-*-"$revision"/revisions)
-  [[ ${#receipts[@]} == 1 ]] && sealed_authority files "${receipts[0]}" "$pointer" || return 1
-  dir="${receipts[0]%/revisions}"; old="${dir##*/transition-}"; old="${old%-"$revision"}"
-  tool="$(sed -n 's/^tool=//p' "${receipts[0]}")"
-  [[ "$old" =~ ^[0-9a-f]{40}$ && "$tool" =~ ^[0-9a-f]{40}$ ]] &&
-    cmp -s "${receipts[0]}" <(printf 'installed=%s\ncandidate=%s\ntool=%s\n' "$old" "$revision" "$tool") || return 1
+sealed_admit_pair() {
+  : "${deploy_root:?}" "${releases:?}" "${revision:?}" "${quadlet_dir:?}" "${pair_tool:?}"
+  local slot="$1" live="$2" expected="$3" allow_accepted="$4"
+  local pointer="$deploy_root/artifacts/worker-profile/active/$slot.pair" pair dir image sha
+  sealed_authority files "$pointer" || return 1
   pair="$(<"$pointer")"; dir="${pair%/candidate}"
-  [[ "$pair" == "$dir/candidate" && "${dir%/*}" == "$releases" && "$(realpath -e -- "$pair")" == "$pair" ]] &&
+  [[ "$pair" == "$dir/candidate" && "${dir%/*}" == "$releases" && "${dir##*/}" == "$slot-v2-"* && "$(realpath -e -- "$pair")" == "$pair" ]] &&
     sealed_authority tree "$dir" || return 1
   image="$(<"$dir/candidate.image")"; sha="$(<"$dir/candidate.revision")"
-  [[ "$image" =~ ^sha256:[0-9a-f]{64}$ && "$peer_generation" == *" ${image#sha256:} holo-pgbouncer|6432" ]] &&
+  [[ "$image" =~ ^sha256:[0-9a-f]{64}$ && "$live" == "$slot "* && "$live" == *" ${image#sha256:} holo-pgbouncer|6432" ]] &&
     cmp -s "$dir/candidate.image" <(printf '%s\n' "$image") && cmp -s "$dir/candidate.revision" <(printf '%s\n' "$sha") &&
     [[ "$(podman image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")" == "$sha" &&
-       "$(podman image inspect --format '{{index .Config.Labels "org.opencontainers.image.title"}}' "$image")" == "$peer" ]] || return 1
+       "$(podman image inspect --format '{{index .Config.Labels "org.opencontainers.image.title"}}' "$image")" == "$slot" ]] || return 1
   if [[ "$sha" == "$revision" ]]; then
-    cmp -s "$dir/accepted-writer" <(printf '%s\n' "$peer_generation") || return 1
-    [[ "$peer" != hololive-api || "$image" == "${migrator_id:?}" ]] || return 1
+    [[ "$allow_accepted" == yes ]] && cmp -s "$dir/accepted-writer" <(printf '%s\n' "$live") || return 1
+    [[ "$slot" != hololive-api || "$image" == "${migrator_id:?}" ]] || return 1
   else
-    [[ "$peer" == hololive-alarm-worker && "$sha" == "$old" ]] || return 1
+    [[ -n "$expected" && "$sha" == "$expected" ]] || return 1
   fi
   cmp -s "$pointer" <(printf '%s\n' "$pair") &&
-    cmp -s "$pair/50-worker-profile.conf" "$quadlet_dir/$peer.container.d/50-worker-profile.conf" &&
-    python3 "$pair_tool" verify "$peer" "$pair" "$image" && python3 "$pair_tool" verify-live "$peer" "$pair" "$peer"
+    cmp -s "$pair/50-worker-profile.conf" "$quadlet_dir/$slot.container.d/50-worker-profile.conf" &&
+    python3 "$pair_tool" verify "$slot" "$pair" "$image" && python3 "$pair_tool" verify-live "$slot" "$pair" "$slot"
+}
+
+sealed_recovery_images() {
+  local dir="$1" candidate="$2" api worker
+  local -a images
+  sealed_authority files "$dir/images" "$dir/images.after" &&
+    cmp -s "$dir/images" "$dir/images.after" && mapfile -t images <"$dir/images" || return 1
+  [[ ${#images[@]} == 2 && ${images[0]} =~ ^hololive-api\ (sha256:[0-9a-f]{64})$ ]] || return 1
+  api="${BASH_REMATCH[1]}"
+  [[ ${images[1]} =~ ^hololive-alarm-worker\ (sha256:[0-9a-f]{64})$ ]] || return 1
+  worker="${BASH_REMATCH[1]}"
+  [[ "$api" != "$worker" && "$api" == "$migrator_id" ]] &&
+    cmp -s "$dir/images" <(printf '%s\n' "${images[@]}") || return 1
+  if [[ "$service" == hololive-api ]]; then
+    [[ "$candidate" == "$api" && "$(resolve_image "$worker" hololive-alarm-worker)" == "$worker" ]]
+  else
+    [[ "$candidate" == "$worker" && "$peer_generation" == *" ${api#sha256:} holo-pgbouncer|6432" ]]
+  fi
+}
+
+sealed_recovery_pair() {
+  local slot="$1" live="$2" predecessor="$3" installed="$quadlet_dir/$1.container.d/50-worker-profile.conf"
+  local pointer="$deploy_root/artifacts/worker-profile/active/$slot.pair" pair rows offset=0
+  sealed_authority files "$installed" "$quadlet_dir/$slot.container" || return 1
+  if [[ "$predecessor" == yes ]]; then
+    sealed_admit_pair "$slot" "$live" "$recovery_writer_revision" no || return 1
+    pair="$(<"$pointer")"
+    [[ "$slot" == hololive-api ]] || offset=3
+    local -a snapshot
+    sealed_authority files "$recovery_receipt/pairs.before" "$recovery_receipt/pairs.after" &&
+      cmp -s "$recovery_receipt/pairs.before" "$recovery_receipt/pairs.after" &&
+      mapfile -t snapshot <"$recovery_receipt/pairs.after" && [[ ${#snapshot[@]} == 6 ]] &&
+      cmp -s "$recovery_receipt/pairs.after" <(printf '%s\n' "${snapshot[@]}") || return 1
+    rows="$(sha256sum -- "$pair/pair.json" "$installed")" &&
+      [[ "${snapshot[offset]}" == "$slot $pair" && "$rows" == "${snapshot[offset+1]}"$'\n'"${snapshot[offset+2]}" ]] || return 1
+  else
+    sealed_admit_pair "$slot" "$live" '' yes || return 1
+    pair="$(<"$pointer")"
+    sealed_authority files "$recovery_receipt/attempt-$slot/release" &&
+      cmp -s "$recovery_receipt/attempt-$slot/release" <(printf '%s\n' "${pair%/candidate}") &&
+      grep -Fxq "ExecStartPre=/usr/bin/bash $ROOT_DIR/scripts/deploy/quadlet-prestart.sh $slot" "$installed" || return 1
+  fi
+  cmp -s "$pair/unit.container" "$quadlet_dir/$slot.container" &&
+    python3 -ISB "$pair_tool" verify-dropin "$slot" "$pair" "$installed"
+}
+
+sealed_recovery_window() {
+  python3 -ISB "$ROOT_DIR/scripts/deploy/lib/unstarted-source.py" --window "$service" "$recovery_source" "$revision" ||
+    die "현재 감독 프로세스의 복구 요청 권한을 확인할 수 없음: $service"
+}
+
+sealed_recovery_check() {
+  if [[ "$service" == hololive-api ]]; then
+    [[ ! -e "$recovery_receipt/attempt-hololive-alarm-worker" && ! -L "$recovery_receipt/attempt-hololive-alarm-worker" ]] &&
+      sealed_recovery_pair "$unchanged_peer" "$peer_generation" yes || return 1
+  else
+    sealed_recovery_pair "$unchanged_peer" "$peer_generation" no || return 1
+  fi
+  recovery_witness="$(python3 -ISB "$ROOT_DIR/scripts/deploy/lib/unstarted-source.py" --slot "$recovery_source" "$revision" "$service" "${1:-entry}")" ||
+    return 1
+  sealed_assert_peer
+  [[ "$(sealed_generation "$service")" == "$original_target_generation" ]]
+}
+
+sealed_ordinary_transition() {
+  python3 -ISB - "$1" "$2" <<'PY'
+from pathlib import Path
+import sys
+
+transition, window = map(Path, sys.argv[1:])
+stages, candidate = window.parent.parent, window.parent.name.removeprefix('dv-tool-')
+for path in (transition / 'predecessor.writers', transition / 'attempt-hololive-api',
+             transition / 'attempt-hololive-alarm-worker', window,
+             *(transition / (phase + '.requested') for phase in ('api', 'worker', 'receipt')),
+             *(stages / ('dv-holo-' + slot + '-' + candidate) / 'activation.window' for slot in ('api', 'worker')),
+             stages / ('source-' + transition.name.removeprefix('transition-') + '.requested')):
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        continue
+    sys.exit('ordinary predecessor has recovery evidence')
+PY
+}
+
+sealed_supersession_delta() {
+  python3 -ISB - "$1" "$2" <<'PYTHON'
+import subprocess
+import sys
+
+repo, candidate = sys.argv[1:]
+def git(*args):
+    return subprocess.check_output(['git', '-C', repo, *args])
+parents = git('show','-s','--format=%P',candidate).decode().split()
+parent, = parents
+inherited = 'scripts/deploy/sealed-app-case.sh'
+entry = b'100755 blob b71da946136468f108196dd66b55e208616a766b\t' + inherited.encode() + b'\n'
+if git('ls-tree',parent,'--',inherited) != entry or git('ls-tree',candidate,'--',inherited) != entry:
+    sys.exit('changed inherited sealed test')
+wanted = {}
+for mode, names in [
+    ('100644 100644 M', ['CHANGELOG.md','VERSION','deploy/quadlet/README.md','hololive/hololive-api/VERSION','hololive/hololive-alarm-worker/VERSION']),
+    ('100755 100755 M', ['scripts/deploy/' + n for n in ('lib/sealed-app.sh','quadlet-redeploy-service.sh','sync-opt-current.sh','sync-opt-current_test.sh')]),
+    ('000000 100755 A', ['scripts/deploy/lib/unstarted-source.py','scripts/deploy/unstarted-source-case-host.py']),
+    ('000000 100644 A', ['scripts/deploy/' + n for n in ('supersession-window.py','unstarted-source-case.sh','unstarted-source-case-pairs.py','unstarted-source-case-evidence.py')])
+]:
+    wanted.update(dict.fromkeys(names, mode))
+fields = git('diff','--no-renames','--raw','-z',parent,candidate).decode().split('\0')
+actual = {}
+for header, name in zip(fields[:-1:2],fields[1::2],strict=True):
+    old, new, _, _, change = header[1:].split()
+    actual[name] = ' '.join([old,new,change])
+if actual != wanted:
+    sys.exit('unapproved supersession paths or modes')
+PYTHON
+}
+
+sealed_supersession_path() {
+  local status=$1 new_mode=$2 path=$3
+  case "$path" in
+    scripts/deploy/lib/unstarted-source.py|scripts/deploy/unstarted-source-case-host.py)
+      [[ "$status:$new_mode" == A:100755 ]] || { echo "unexpected new supersession executable: $path"; return 1; } ;;
+    scripts/deploy/supersession-window.py|scripts/deploy/unstarted-source-case.sh|scripts/deploy/unstarted-source-case-pairs.py|scripts/deploy/unstarted-source-case-evidence.py)
+      [[ "$status:$new_mode" == A:100644 ]] || { echo "unexpected new supersession helper mode: $path"; return 1; } ;;
+    CHANGELOG.md|VERSION|hololive/hololive-api/VERSION|hololive/hololive-alarm-worker/VERSION|deploy/quadlet/README.md|scripts/deploy/lib/sealed-app.sh|scripts/deploy/quadlet-redeploy-service.sh|scripts/deploy/sealed-app-case.sh|scripts/deploy/sync-opt-current.sh|scripts/deploy/sync-opt-current_test.sh)
+      [[ "$status" == M ]] || { echo "supersession requires an existing reviewed path: $path"; return 1; } ;;
+    *) echo "unapproved supersession delta: $path"; return 1 ;;
+  esac
+}
+
+sealed_installed_pair() {
+  local service=$1 pair=$2 quadlet=$3
+  cmp -s "$pair/unit.container" "$quadlet/$service.container" &&
+    cmp -s "$pair/50-worker-profile.conf" "$quadlet/$service.container.d/50-worker-profile.conf" ||
+    return 1
+}
+
+sealed_manager_action() {
+  python3 -ISB "$ROOT_DIR/scripts/deploy/lib/unstarted-source.py" --relay "$1" "$recovery_witness"
+}
+
+sealed_reload() {
+  if [[ -n "$recovery_receipt" ]]; then
+    sealed_manager_action "$1"
+  else
+    systemctl daemon-reload
+  fi
+}
+
+sealed_recovery_writers() {
+  sealed_check_writer_states "$original_target_generation" "$peer_generation"
+}
+
+sealed_check_writer_states() {
+  local expected name invocation cid rest state helper
+  helper="${tool_root:-${ROOT_DIR:?}}/scripts/deploy/lib/unstarted-source.py"
+  for expected in "$@"; do
+    read -r name invocation cid rest <<<"$expected"
+    [[ -n "$rest" && "$(sealed_generation "$name")" == "$expected" ]] &&
+      [[ "$(podman container inspect --format '{{.Id}} {{.Image}} {{.State.Health.Status}}' "$name")" == "$cid ${rest%% *} healthy" ]] &&
+      state="$(systemctl show --all "$name.service" -p ActiveState -p InvocationID -p Job -p NRestarts)" &&
+      [[ "$(LC_ALL=C sort <<<"$state")" == $'ActiveState=active\nInvocationID='"$invocation"$'\nJob=\nNRestarts=0' ]] ||
+      die "복구 writer의 실행 상태가 바뀌었습니다: $name"
+  done
+  python3 -ISB "$helper" --idle-writers || die "복구 writer 검사 중 manager job이 추가됐습니다"
+}
+
+sealed_peer_admission() {
+  : "${store:?}" "${revision:?}"
+  local dir old tool running expected='' target peer
+  recovery_receipt=
+  local -a receipts=("$store"/transition-*-"$revision"/revisions) writers
+  [[ ${#receipts[@]} == 1 ]] && sealed_authority files "${receipts[0]}" || return 1
+  dir="${receipts[0]%/revisions}"; old="${dir##*/transition-}"; old="${old%-"$revision"}"
+  tool="$(sed -n 's/^tool=//p' "${receipts[0]}")"
+  [[ "$old" =~ ^[0-9a-f]{40}$ && "$tool" =~ ^[0-9a-f]{40}$ ]] || return 1
+  if cmp -s "${receipts[0]}" <(printf 'installed=%s\ncandidate=%s\ntool=%s\n' "$old" "$revision" "$tool"); then
+    sealed_ordinary_transition "$dir" "$prefix/opt/hololive-bot/release-sources/dv-tool-$revision/source.window" || return 1
+    if [[ "$unchanged_peer" == hololive-alarm-worker ]]; then expected="$old"; fi
+    sealed_admit_pair "$unchanged_peer" "$peer_generation" "$expected" yes
+    return
+  fi
+  running="$(sed -n 's/^running=//p' "${receipts[0]}")"
+  [[ "$running" =~ ^[0-9a-f]{40}$ && "$running" != "$old" && "$running" != "$revision" ]] &&
+    cmp -s "${receipts[0]}" <(printf 'installed=%s\ncandidate=%s\ntool=%s\nrunning=%s\n' "$old" "$revision" "$tool" "$running") &&
+    sealed_authority files "$dir/predecessor.writers" || return 1
+  mapfile -t writers <"$dir/predecessor.writers" || return 1
+  [[ ${#writers[@]} == 2 ]] && cmp -s "$dir/predecessor.writers" <(printf '%s\n' "${writers[@]}") || return 1
+  local shape=' [0-9a-f]{32} [0-9a-f]{64} [0-9a-f]{64} holo-pgbouncer\|6432$'
+  [[ "${writers[0]}" =~ ^hololive-api$shape && "${writers[1]}" =~ ^hololive-alarm-worker$shape ]] || return 1
+  recovery_receipt="$dir"
+  recovery_source="$old"
+  recovery_writer_revision="$running"
+  [[ ! -e "$dir/attempt-$service" && ! -L "$dir/attempt-$service" ]] || die "이미 사용된 복구 슬롯; 재시도 금지: $service"
+  if [[ "$service" == hololive-api ]]; then
+    target="${writers[0]}"; peer="${writers[1]}"
+    [[ "$peer_generation" == "$peer" ]] || return 1
+  else
+    target="${writers[1]}"
+  fi
+  [[ "$original_target_generation" == "$target" ]] && sealed_recovery_images "$dir" "$1" &&
+    sealed_recovery_pair "$service" "$target" yes && sealed_recovery_check
 }
 
 sealed_write_intent() {
@@ -140,6 +337,9 @@ sealed_write_intent() {
   local pointer="$deploy_root/artifacts/worker-profile/active/$service.pair" installed="$quadlet_dir/$service.container.d/50-worker-profile.conf"
   install -m0444 "$pointer" "$release/before.pair"
   install -m0444 "$installed" "$release/before.conf"
+  if [[ -n "${recovery_receipt:-}" ]]; then
+    python3 -ISB "$ROOT_DIR/scripts/deploy/lib/unstarted-source.py" --before-pair "$recovery_receipt/pairs.after" "$release" "$service" || return 1
+  fi
   printf '%s\n' "$original_target_generation" >"$release/before.generation"
   (cd "$release" && sha256sum before.pair before.conf before.generation previous/pair.json candidate/pair.json candidate/50-worker-profile.conf >activation.intent)
   sync -f "$release"
@@ -147,19 +347,35 @@ sealed_write_intent() {
 
 sealed_single_job() {
   local operation="$1" unit="$2" image="$3" record="$4" dependencies dep transaction line job='' type='' rc=0 completion
+  local step=writer state query
+  [[ "$operation" != start ]] || step=schema
+  if [[ -n "${recovery_receipt:-}" ]]; then
+    sealed_recovery_check "$step" || die "복구 승인 증거 또는 writer 세대가 변경됨: $unit"
+  fi
   dependencies="$(systemctl show "$unit" -p Requires -p Wants -p Requisite -p BindsTo --value)" || return 1
-  [[ -n "$dependencies" ]] || die "$unit dependency inventory missing"
+  [[ -n "${dependencies//[[:space:]]/}" ]] || die "$unit dependency inventory missing"
   for dep in $dependencies; do
-    systemctl is-active --quiet -- "$dep" || die "required existing dependency is inactive: $dep"
+    query=$dep
+    [[ $dep != -.mount ]] || query=/
+    if [[ $query == -* ]]; then state="$(systemctl show -p Job --value -- "$query")"; else state="$(systemctl show "$query" -p Job --value)"; fi &&
+      systemctl is-active --quiet -- "$dep" && [[ -z "$state" ]] ||
+      die "required existing dependency is inactive or has a pending job: $dep"
   done
   sealed_assert_peer
   mkdir -m0700 -- "$record" || die "prior job intent exists: $record; do not retry"
+  if [[ -n "${recovery_receipt:-}" && "$operation" == start ]]; then
+    python3 -ISB "$ROOT_DIR/scripts/deploy/lib/unstarted-source.py" --overlay >"$record/migrator-overlay"
+  fi
   job_since="$EPOCHREALTIME"
   printf '%s %s %s %s\n' "$operation" "$unit" "$image" "$job_since" >"$record/request"
   sync -f "$record"
   if [[ -n "${5:-}" ]]; then printf -v "$5" '%s' true; fi
-  transaction="$(LC_ALL=C SYSTEMD_LOG_COLOR=0 SYSTEMD_LOG_LEVEL=info SYSTEMD_LOG_TARGET=console \
-    systemctl --show-transaction --job-mode=ignore-dependencies "$operation" "$unit" 2>&1)" || rc=$?
+  if [[ -n "${recovery_receipt:-}" ]]; then
+    transaction="$(sealed_manager_action "$step")" || rc=$?
+  else
+    transaction="$(LC_ALL=C SYSTEMD_LOG_COLOR=0 SYSTEMD_LOG_LEVEL=info SYSTEMD_LOG_TARGET=console \
+      systemctl --show-transaction --job-mode=ignore-dependencies "$operation" "$unit" 2>&1)" || rc=$?
+  fi
   while IFS= read -r line; do
     [[ "$line" == 'Enqueued anchor job '* ]] || continue
     [[ -z "$job" && "$line" =~ ^Enqueued\ anchor\ job\ ([1-9][0-9]*)\ (.*)/(start|restart|try-restart)\.$ &&
@@ -179,6 +395,10 @@ if not re.fullmatch("[0-9a-f]{32}",i) or not int(i,16): sys.exit(1)
 print(i)' <<<"$completion")" || die "[OUTCOME] outcome_unknown: $unit manager completion missing"
   printf '%s\n' "$job_invocation" >"$record/invocation"
   sync -f "$record"
+  if [[ -n "${recovery_receipt:-}" && "$operation" == try-restart ]]; then
+    python3 -ISB "$ROOT_DIR/scripts/deploy/lib/unstarted-source.py" --slot "$recovery_source" "$revision" "$service" writer-complete ||
+      die "[OUTCOME] outcome_unknown: unconfirmed writer job history: $unit"
+  fi
 }
 
 sealed_intent_slot() {
@@ -259,8 +479,7 @@ sealed_check_units() {
         [[ -f "$current" && ! -L "$current" ]] || die 'missing retained active app pointer'
         match="$(<"$current")"
         [[ "$match" == "$releases/"* && "$(realpath -e -- "$match")" == "$match" ]] &&
-          cmp -s "$match/50-worker-profile.conf" "$path" || die 'unrecognized installed profile overlay'
-        sealed_authority tree "$match" || return 1
+          sealed_authority tree "$match" && cmp -s "$match/50-worker-profile.conf" "$path" || die 'unrecognized installed profile overlay'
         python3 "$pair_tool" verify-dropin "$service" "$match" "$path" || return 1
         if [[ "$mode" == deploy ]]; then python3 "$pair_tool" verify-live "$service" "$match" "$service" || return 1; fi
         ;;
@@ -287,13 +506,17 @@ sealed_accept() {
     [[ "$prior" == "$service" && -n "$rest" && "$invocation" != "$prior_id" && "$cid" != "$prior_cid" ]] ||
       die 'writer was not replaced'
   fi
-  if [[ "$service" == hololive-api ]]; then
-    podman exec "$cid" ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30001/internal/ready https://127.0.0.1:30006/health
-  else
-    podman exec "$cid" ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30007/internal/ready
-  fi
+  sealed_ready "$service" "$cid" || return 1
   [[ "$(sealed_generation "$service")" == "$live" ]] || die 'writer changed during H3 acceptance'
   if [[ -n "${3:-}" ]]; then printf -v "$3" '%s' "$live"; fi
+}
+
+sealed_ready() {
+  case "$1" in
+    hololive-api) podman exec "$2" ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30001/internal/ready https://127.0.0.1:30006/health ;;
+    hololive-alarm-worker) podman exec "$2" ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30007/internal/ready ;;
+    *) return 1 ;;
+  esac
 }
 
 sealed_loaded() {
@@ -336,19 +559,46 @@ if migrator:
 PY
 }
 
-sealed_check_result() {
-  local since="$1" proof cid event
+sealed_schema_evidence() {
+  local since=$1 invocation=$2 image=$3 proof cid event when started action format reference
+  [[ $invocation =~ ^[0-9a-f]{32}$ && $image =~ ^sha256:[0-9a-f]{64}$ && $since =~ ^[0-9]+\.[0-9]{6}$ ]] || return 1
   proof="$(journalctl --boot --quiet --no-pager -o json --since="@$since" \
-    --output-fields=CONTAINER_ID_FULL,IMAGE_NAME,MESSAGE --grep='^==> hololive migrations applied ' \
-    "_SYSTEMD_INVOCATION_ID=$job_invocation" CONTAINER_NAME=hololive-db-migrate)" || return 1
+    --output-fields=CONTAINER_ID_FULL,MESSAGE --grep='^==> hololive migrations applied ' \
+    "_SYSTEMD_INVOCATION_ID=$invocation" CONTAINER_NAME=hololive-db-migrate)" || return 1
   cid="$(python3 -ISB -c 'import json,re,sys
 row=json.load(sys.stdin)
-m=re.fullmatch(r"==> hololive migrations applied \(applied=0 skipped=([1-9][0-9]*) total=\1\)",row["MESSAGE"])
-if (not m or not re.fullmatch("[0-9a-f]{64}",row["CONTAINER_ID_FULL"])
-        or row.get("IMAGE_NAME","").removeprefix("sha256:") != sys.argv[1]): sys.exit(1)
-print(row["CONTAINER_ID_FULL"])' "${migrator_id#sha256:}" <<<"$proof")" || return 1
-  event="$(podman events --stream=false --since "${since%.*}" --filter type=container --filter "container=$cid" \
-    --filter event=died --format '{{.ID}}|{{.Name}}|{{.TimeNano}}|{{.ContainerExitCode}}')" || return 1
-  [[ "$event" =~ ^$cid\|hololive-db-migrate\|([1-9][0-9]{18})\|0$ ]] &&
-    (( ${BASH_REMATCH[1]} >= ${since/./}000 )) && printf '%s %s\n' "$cid" "$migrator_id"
+if (not re.fullmatch(r"==> hololive migrations applied \(applied=0 skipped=([1-9][0-9]*) total=\1\)",row["MESSAGE"])
+        or not re.fullmatch("[0-9a-f]{64}",row["CONTAINER_ID_FULL"])): sys.exit(1)
+print(row["CONTAINER_ID_FULL"])' <<<"$proof")" || return 1
+  for action in start died; do
+    if [[ $action == start ]]; then
+      format="{{if or (eq .Image \"$image\") (eq .Image \"${image#sha256:}\")}}{{.ID}}|{{.Name}}|{{.TimeNano}}|0{{else}}{{.ID}}|{{.Name}}|{{.TimeNano}}|image={{.Image}}{{end}}"
+    else
+      format='{{.ID}}|{{.Name}}|{{.TimeNano}}|{{.ContainerExitCode}}'
+    fi
+    event="$(podman events --stream=false --since "${since%.*}" --filter type=container --filter "container=$cid" \
+      --filter "event=$action" --format "$format")" || return 1
+    if [[ $action == start && "$event" =~ ^$cid\|hololive-db-migrate\|([1-9][0-9]{18})\|image=([^[:space:]\|]*)$ ]]; then
+      when=${BASH_REMATCH[1]} reference=${BASH_REMATCH[2]}
+      [[ ! $reference =~ ^(sha256:)?[0-9a-f]{64}$ ]] || return 1
+      proof="$(journalctl --boot --quiet --no-pager -o json --since="@$since" --output-fields=_CMDLINE \
+        _UID=0 _COMM=podman _SYSTEMD_UNIT=hololive-db-migrate.service "_SYSTEMD_INVOCATION_ID=$invocation" \
+        PODMAN_NAME=hololive-db-migrate PODMAN_EVENT=start "PODMAN_ID=$cid")" || return 1
+      python3 -ISB -c 'import json,shlex,sys
+argv=shlex.split(json.load(sys.stdin)["_CMDLINE"])
+if argv[:2] != ["/usr/bin/podman","run"] or argv[-2:] != [sys.argv[1],"--check"]: sys.exit(1)' "$image" <<<"$proof" || return 1
+      event="$cid|hololive-db-migrate|$when|0"
+    fi
+    [[ "$event" =~ ^$cid\|hololive-db-migrate\|([1-9][0-9]{18})\|0$ ]] || return 1
+    when=${BASH_REMATCH[1]}
+    (( when >= ${since/./}000 )) || return 1
+    if [[ $action == start ]]; then started=$when; else (( when >= started )) || return 1; fi
+  done
+  printf '%s %s\n' "$cid" "$when"
+}
+
+sealed_check_result() {
+  local evidence
+  evidence="$(sealed_schema_evidence "$1" "$job_invocation" "$migrator_id")" || return 1
+  printf '%s %s\n' "${evidence%% *}" "$migrator_id"
 }
