@@ -6,6 +6,7 @@
 
 ## 미출시
 
+- **이벤트 등급 수집(collector c):** collector c가 게임 helper로 JP·US·AS catalog와 cutoff를 수집해 이벤트 등급 관측으로 발행합니다. worker profile의 `collection.settings.event_grade_enabled`(모든 collector profile에 필요, a·b·d는 `false`)와 `YOUTUBE_COLLECTOR_EVENT_GRADE_SECRET_FILE`이 함께 있어야 하며, c가 아닌 slot이나 `hololive_collector_c`가 아닌 DB 로그인에서는 기동하지 않습니다. 중앙 배포는 `HOLOLIVE_EVENT_GRADE_ENABLED=1`일 때 인증 파일 drop-in을 설치합니다. 이 버전을 배포하기 전에 네 collector profile에 새 키를 넣어야 합니다.
 - **이벤트 등급(`!이벤트등급`):** 점수와 지역을 등록하면 공개된 최종 컷 기준 결과(최고 충족 등급, 경계 동점, 순위권 밖, 24시간 내 최종 컷 없음)를 기존 알림 발송 경로로 보냅니다. 후속 DB 변경 `002_epoch4_event_grade`가 canonical 테이블, append-only 관측 원장, 지역별 소비 offset, collector c 전용 수집 lease와 발행 함수를 만듭니다. alarm-worker는 관측을 지역별 순번대로 적용하고, 아직 적용하지 않은 발행이나 진행 중 수집이 있으면 판정을 미룹니다. 게임 수집은 collector c 소관이며 worker에는 게임 helper·인증 설정이 없습니다. 이 DB 변경을 포함한 배포는 승인된 정비 창에서 진행합니다.
 - 스택 공통 lint 자산(주석 금지 검사, `verify-tools.sh`, Go 린트 행렬·도구 resolver, 생성된 `.golangci.yml`)을 메타 정본과 맞췄습니다. 확장된 검사가 찾은 workflow YAML·셸 heredoc·JavaScript·Go 주석을 지웠고, 해석되지 않던 heredoc·here-string을 파이프나 변수로 바꿨습니다(Valkey 상태 점검, 풀러 SQL 확인, go.work 동기화 검사, 종료 live head 복구 시험). SQL이 아닌 스키마 카탈로그 직렬화 golden은 `hololive/hololive-dbtest/testdata/schema_snapshot.golden`으로 이름을 바꿨습니다. 동작은 바뀌지 않습니다.
 - 버전 번호를 다음 릴리즈부터 1.0.0으로 다시 시작하고 tag를 `r<version>`으로 씁니다. 배포 복구 도구는 원래 릴리스 tag로 `r<version>`과 이전 `v<version>`을 모두 받고, `scripts/publish-release.sh`는 새 Release를 `r<version>` tag로만 만듭니다.

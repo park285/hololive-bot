@@ -37,6 +37,7 @@ type CollectionWorkerSettings struct {
 	HolodexMaxInflight         int   `json:"holodex_max_inflight"`
 	OfficialMaxInflight        int   `json:"official_max_inflight"`
 	YouTubeJSMaxInflight       int   `json:"youtubejs_max_inflight"`
+	EventGradeEnabled          bool  `json:"event_grade_enabled"`
 }
 
 type WorkerProfile struct {
@@ -155,4 +156,5 @@ func (c *Config) applyWorkerProfile(profile *WorkerProfile) {
 	c.HolodexMaxInflight = collection.HolodexMaxInflight
 	c.OfficialMaxInflight = collection.OfficialMaxInflight
 	c.YouTubeJSMaxInflight = collection.YouTubeJSMaxInflight
+	c.EventGradeEnabled = collection.EventGradeEnabled
 }

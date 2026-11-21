@@ -12,6 +12,7 @@ import (
 	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	collectorconfig "github.com/kapu/hololive-youtube-collector/internal/config"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/eventgrade"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/providerhttp"
@@ -24,6 +25,7 @@ type collectorInfrastructure struct {
 	youtubejsRPC *youtubejs.RPC
 	holodex      *holodexcollector.Client
 	official     *officialcollector.Client
+	eventGrade   *eventgrade.Helper
 	cleanupDB    func()
 	closeOnce    sync.Once
 	closeErr     error
@@ -56,6 +58,12 @@ func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeC
 	}
 	if err := collectorInfra.buildProviderClients(appConfig, &collector); err != nil {
 		return nil, errors.Join(err, collectorInfra.Close(ctx))
+	}
+
+	if collector.EventGradeEnabled {
+		if err := collectorInfra.openEventGrade(ctx, &collector); err != nil {
+			return nil, errors.Join(err, collectorInfra.Close(ctx))
+		}
 	}
 
 	rpc.EnableMetrics(nil, collector.RequestInterval)
@@ -206,6 +214,10 @@ func (i *collectorInfrastructure) closeResources(ctx context.Context) error {
 		errs = append(errs, i.youtubejs.Close(ctx))
 	}
 
+	if i.eventGrade != nil {
+		errs = append(errs, i.eventGrade.Close())
+	}
+
 	if i.cleanupDB != nil {
 		i.cleanupDB()
 	}
@@ -235,4 +247,21 @@ func startYouTubeJSHelper(
 	}
 
 	return helper, rpc, nil
+}
+
+const eventGradeScript = "/app/eventgrade/server.mjs"
+
+func (i *collectorInfrastructure) openEventGrade(ctx context.Context, collector *collectorconfig.Config) error {
+	if err := eventgrade.VerifySession(ctx, i.postgres.GetPool()); err != nil {
+		return fmt.Errorf("verify event grade session: %w", err)
+	}
+
+	helper, err := eventgrade.OpenHelper(ctx, collector.YouTubeJSNodePath, eventGradeScript, collector.EventGradeSecretFile)
+	if err != nil {
+		return fmt.Errorf("open event grade helper: %w", err)
+	}
+
+	i.eventGrade = helper
+
+	return nil
 }

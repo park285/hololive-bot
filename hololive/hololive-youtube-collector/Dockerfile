@@ -27,6 +27,11 @@ RUN --mount=type=cache,target=/root/.npm chmod u=rwX,go=rX package.json package-
 COPY hololive/hololive-youtube-collector/youtubejs/src ./src
 RUN chmod -R u=rwX,go=rX ./src && rm -f ./src/*.test.mjs
 
+FROM --platform=$BUILDPLATFORM docker.io/library/node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS eventgrade-build
+WORKDIR /app/eventgrade
+COPY hololive/hololive-youtube-collector/eventgrade/server.mjs ./
+RUN chmod -R u=rwX,go=rX /app/eventgrade
+
 # npm은 빌드 호스트에서 실행하고 배포할 Node·라이브러리는 대상 플랫폼에서 가져온다.
 # 따라서 x86_64에서 빌드해도 linux/arm64 릴리스의 아키텍처가 일치한다.
 FROM --platform=$TARGETPLATFORM docker.io/library/node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS youtubejs-runtime
@@ -105,6 +110,7 @@ COPY --from=youtubejs-runtime --link /usr/local/bin/node /usr/local/bin/node
 COPY --from=youtubejs-runtime --link --chmod=1777 /tmp /tmp
 COPY --from=builder --link --chown=1000:1000 /dist ./
 COPY --from=youtubejs-build --chown=1000:1000 /app/youtubejs ./youtubejs
+COPY --from=eventgrade-build --chown=1000:1000 /app/eventgrade ./eventgrade
 
 ENV GOGC=100 \
     GOMEMLIMIT=320MiB \

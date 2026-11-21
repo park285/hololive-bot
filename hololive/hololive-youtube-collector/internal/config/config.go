@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
@@ -20,6 +21,8 @@ const (
 
 	minCollectorPhaseTimeout = 100 * time.Millisecond
 	maxYouTubeJSTimeout      = 10 * time.Minute
+
+	eventGradeInstanceID = "youtube-collector-c"
 )
 
 type Config struct {
@@ -55,6 +58,8 @@ type Config struct {
 	MaxSuccessResponseBytes  int
 	MaxTargetRosterRows      int
 	RequestInterval          time.Duration
+	EventGradeEnabled        bool
+	EventGradeSecretFile     string
 }
 
 func DefaultConfig() Config {
@@ -74,6 +79,10 @@ func DefaultConfig() Config {
 func (c *Config) Validate(holodexTimeout, officialTimeout time.Duration) error {
 	if err := c.validateInstanceID(); err != nil {
 		return fmt.Errorf("validate instance ID: %w", err)
+	}
+
+	if err := c.validateEventGrade(); err != nil {
+		return fmt.Errorf("validate event grade: %w", err)
 	}
 
 	if err := c.validateProfilePolicy(); err != nil {
@@ -138,6 +147,26 @@ func (c *Config) validateInstanceID() error {
 	default:
 		return errors.New("YOUTUBE_COLLECTOR_INSTANCE_ID must be one of youtube-collector-a, youtube-collector-b, youtube-collector-c, youtube-collector-d")
 	}
+}
+
+func (c *Config) validateEventGrade() error {
+	if !c.EventGradeEnabled {
+		if c.EventGradeSecretFile != "" {
+			return errors.New("YOUTUBE_COLLECTOR_EVENT_GRADE_SECRET_FILE requires collection.settings.event_grade_enabled")
+		}
+
+		return nil
+	}
+
+	if c.InstanceID != eventGradeInstanceID {
+		return errors.New("event grade collection is reserved for " + eventGradeInstanceID)
+	}
+
+	if !filepath.IsAbs(c.EventGradeSecretFile) {
+		return errors.New("YOUTUBE_COLLECTOR_EVENT_GRADE_SECRET_FILE must be an absolute path")
+	}
+
+	return nil
 }
 
 func (c *Config) validateLeaseTiming() error {

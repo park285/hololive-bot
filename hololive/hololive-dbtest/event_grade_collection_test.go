@@ -48,7 +48,7 @@ func eventGradeSession(t *testing.T, pool *pgxpool.Pool, role string) *pgxpool.P
 	return session
 }
 
-func claimEventGradeCatalog(t *testing.T, session *pgxpool.Pool, owner string) (eventGradeClaim, bool) {
+func claimEventGradeCatalog(t *testing.T, session *pgxpool.Pool) (eventGradeClaim, bool) {
 	t.Helper()
 
 	var (
@@ -56,7 +56,7 @@ func claimEventGradeCatalog(t *testing.T, session *pgxpool.Pool, owner string) (
 		interrupted bool
 	)
 
-	require.NoError(t, session.QueryRow(t.Context(), claimCatalogSQL, "jp", owner).Scan(&claim.jobKey, &claim.epoch, &claim.claimedAt, &interrupted))
+	require.NoError(t, session.QueryRow(t.Context(), claimCatalogSQL, "jp", eventGradeOwner).Scan(&claim.jobKey, &claim.epoch, &claim.claimedAt, &interrupted))
 
 	return claim, interrupted
 }
@@ -75,7 +75,7 @@ func TestEventGradeCollectorCPublishesOnlyWithCurrentProof(t *testing.T) {
 	collector := eventGradeSession(t, pool, "hololive_collector_c")
 	ctx := t.Context()
 
-	claim, interrupted := claimEventGradeCatalog(t, collector, eventGradeOwner)
+	claim, interrupted := claimEventGradeCatalog(t, collector)
 	require.False(t, interrupted)
 	require.Equal(t, int64(1), claim.epoch)
 
@@ -121,7 +121,7 @@ func TestEventGradeInterruptedCatalogQuarantinesMissingBindings(t *testing.T) {
 	collector := eventGradeSession(t, pool, "hololive_collector_c")
 	ctx := t.Context()
 
-	first, interrupted := claimEventGradeCatalog(t, collector, eventGradeOwner)
+	first, interrupted := claimEventGradeCatalog(t, collector)
 	require.False(t, interrupted)
 
 	var released bool
@@ -129,7 +129,7 @@ func TestEventGradeInterruptedCatalogQuarantinesMissingBindings(t *testing.T) {
 	require.NoError(t, collector.QueryRow(ctx, releaseSQL, first.jobKey, eventGradeOwner, first.epoch).Scan(&released))
 	require.True(t, released)
 
-	second, interrupted := claimEventGradeCatalog(t, collector, eventGradeOwner)
+	second, interrupted := claimEventGradeCatalog(t, collector)
 	require.True(t, interrupted)
 
 	var seq int64
@@ -169,4 +169,39 @@ func TestEventGradeCollectionRejectsOtherDatabaseIdentities(t *testing.T) {
 
 	require.NoError(t, worker.QueryRow(ctx, "SELECT count(*) FROM public.event_grade_consumer_offsets").Scan(&offsets))
 	require.Equal(t, 3, offsets)
+}
+
+func TestEventGradeRejectsExpiredProofAfterReclaim(t *testing.T) {
+	pool := NewPool(t)
+	collector := eventGradeSession(t, pool, "hololive_collector_c")
+	ctx := t.Context()
+
+	claim, _ := claimEventGradeCatalog(t, collector)
+	_, err := collector.Exec(ctx, publishSQL, claim.jobKey, eventGradeOwner, claim.epoch, claim.claimedAt, claim.claimedAt, eventGradeCatalogPayload(claim.claimedAt))
+	require.NoError(t, err)
+
+	const shortClaimSQL = "SELECT job_key, fence_epoch, claimed_at FROM public.event_grade_claim_cutoffs($1, $2, 1000, 1)"
+
+	var stale eventGradeClaim
+
+	require.NoError(t, collector.QueryRow(ctx, shortClaimSQL, "jp", eventGradeOwner).Scan(&stale.jobKey, &stale.epoch, &stale.claimedAt))
+
+	_, err = pool.Exec(ctx, "UPDATE public.event_grade_collection_leases SET lease_expires_at = statement_timestamp() - interval '1 second' WHERE job_key = $1", stale.jobKey)
+	require.NoError(t, err)
+
+	const nextOwner = "youtube-collector-c:event-grade-next"
+
+	var current eventGradeClaim
+
+	require.NoError(t, collector.QueryRow(ctx, shortClaimSQL, "jp", nextOwner).Scan(&current.jobKey, &current.epoch, &current.claimedAt))
+	require.Equal(t, stale.jobKey, current.jobKey)
+	require.Equal(t, stale.epoch+1, current.epoch)
+
+	ranks := `{"event_id":"ev1","chapter_id":"ch1","board_kind":"marathon_score","final":false,"ranks":[{"rank":1,"score":"10"}]}`
+
+	_, err = collector.Exec(ctx, publishSQL, stale.jobKey, eventGradeOwner, stale.epoch, stale.claimedAt, stale.claimedAt, ranks)
+	requireSQLState(t, err, "42501")
+
+	_, err = collector.Exec(ctx, publishSQL, current.jobKey, nextOwner, current.epoch, current.claimedAt, current.claimedAt, ranks)
+	require.NoError(t, err)
 }

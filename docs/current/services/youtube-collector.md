@@ -126,6 +126,18 @@ Official Schedule의 mixed-invalid 응답은 유효한 row를 COMPLETE로 발행
 
 player 근거가 부족하거나 허용된 lookup이 실패하면 목록 자체는 명시적 UNRESOLVED로 보존합니다. 취소·lease 상실·fatal 오류를 성공으로 바꾸지 않습니다. 알림 기준과 과거 영상 억제는 [API 정책](hololive-api.md#일반-영상최초공개-신규성)이 소유합니다.
 
+## 이벤트 등급 수집 (collector c 전용)
+
+collector c는 `!이벤트등급` 판정에 쓰는 게임 자료를 수집해 `event_grade_observations`에 발행합니다. 다른 slot은 이 기능을 켤 수 없습니다. worker profile의 `collection.settings.event_grade_enabled`가 `true`이고 `YOUTUBE_COLLECTOR_EVENT_GRADE_SECRET_FILE`(절대 경로)이 있을 때만 동작하며, 둘 중 하나만 있거나 `YOUTUBE_COLLECTOR_INSTANCE_ID`가 `youtube-collector-c`가 아니면 기동 오류입니다. 모든 collector profile의 `collection.settings`에는 이 키가 있어야 하고, a·b·d는 `false`입니다. 활성화하면 기동 시 DB 로그인이 `hololive_collector_c`인지 확인한 뒤 인증 파일을 읽고 helper를 시작합니다. 인증 파일 검증이나 helper 기동에 실패하면 collector가 시작하지 않습니다.
+
+helper(`eventgrade/server.mjs`)는 이미지의 `/app/eventgrade`에 들어가며, collector가 Unix socket으로 부르는 별도 Node 프로세스입니다. 고정된 JP·US·AS HTTPS origin만 호출하고 계정 발급 요청은 하지 않습니다. 지역 요청은 한 번에 하나씩 처리합니다. helper가 종료되면 collector도 종료되고 systemd가 다시 시작합니다.
+
+1분마다 지역별로 catalog 한 건과 cutoff 최대 3건을 수집합니다. 각 수집은 먼저 DB 함수(`event_grade_claim_catalog`·`event_grade_claim_cutoffs`)로 60초 lease를 잡고, helper 응답을 `event_grade_publish`로 발행합니다. 발행 함수는 lease 소유자(`<instance>:<process token>`), fence epoch, 만료, 대상 세대를 지역 잠금 아래에서 다시 검사합니다. 실패하면 lease를 바로 반납합니다. catalog 충돌 chapter의 helper 격리 해제는 발행이 커밋된 뒤에만 요청합니다. collector는 방·사용자·요청을 읽지 않으며, 판정과 알림은 alarm-worker가 맡습니다.
+
+인증 파일은 JSON(`app_version`, `api_secret`, `credentials.jp/us/as`, 세 값은 서로 달라야 함)이고 읽기 전용 일반 파일(0400 또는 0440)이어야 합니다. 중앙 배포는 `compose.env`의 `HOLOLIVE_EVENT_GRADE_ENABLED=1`일 때 `optional/event-grade` drop-in으로 `/etc/stack-secrets/hololive-bot/event-grade/secret.json`을 collector c에 mount합니다. 값은 환경 변수·로그·이미지·명령 인자에 넣지 않습니다. 앱 갱신 때는 기존 세 지역 인증 값을 유지한 채 승인된 출처의 `app_version`과 필요하면 `api_secret`을 새 읽기 전용 파일로 원자 교체하고 collector c를 재시작합니다.
+
+**운영 제한:** [게임 서비스 약관](https://www.hololive-dreams.com/en/terms/)은 자동화·역공학·접근 제한 우회를 제한합니다. helper는 Play Integrity 요구를 우회하지 않고 해당 지역 수집 실패로 남깁니다. 활성화 전에 수집·결과 재전송 권한과 인증 값 취득 경로를 공급자에게 확인해야 합니다.
+
 ## Provides
 
 | Contract | Type | Path/Event/Queue | Consumers |
