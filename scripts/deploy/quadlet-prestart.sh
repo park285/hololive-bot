@@ -42,8 +42,10 @@ if (( EUID != 0 )); then compose_root="$test_root/opt/hololive-bot/compose"; fi
 if [[ "$self_dir" == "$compose_root/app-sources/"* ]]; then
     source_root="${self_dir%/scripts/deploy}"
     sha="${source_root##*/}"
-    [[ "$sha" =~ ^[0-9a-f]{40}$ && "$self_dir" == "$compose_root/app-sources/$sha/scripts/deploy" ]] &&
-        cmp -s "$source_root/.source-revision" <(printf '%s\n' "$sha") || die "invalid pinned app prestart"
+    if ! [[ "$sha" =~ ^[0-9a-f]{40}$ && "$self_dir" == "$compose_root/app-sources/$sha/scripts/deploy" ]] ||
+        ! cmp -s "$source_root/.source-revision" <(printf '%s\n' "$sha"); then
+        die "invalid pinned app prestart"
+    fi
 fi
 central_slot="$(collector_slots_where host central)" && [[ "$central_slot" =~ ^[a-z]$ ]] ||
     die "central collector slot is missing from $(collector_slots_file)"
