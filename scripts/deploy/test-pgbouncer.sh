@@ -89,7 +89,7 @@ for _ in $(seq 1 60); do
 done
 [[ "$ready" == true ]] || { podman logs "$server" >&2; echo 'PostgreSQL fixture startup failed' >&2; exit 1; }
 podman exec "$server" psql -X -v ON_ERROR_STOP=1 -q -U postgres_admin -d hololive -f /fixture/setup.sql >"$fixture/setup.log" 2>&1 || {
-  echo 'isolated role fixture setup failed' >&2; exit 1;
+  tail -n 20 "$fixture/setup.log" >&2; echo 'isolated role fixture setup failed' >&2; exit 1;
 }
 client() {
   local network="$1" address="$2" mode="$3" argument="$4" name="${id}-client"
@@ -167,8 +167,8 @@ cat "$fixture/version"
 podman run --rm --pull=never --platform="linux/$architecture" --security-opt label=disable --network none \
   --mount "type=volume,src=$socket,dst=/var/run/postgresql" \
   --mount "type=bind,src=$fixture,dst=/fixture,readonly" \
-  --env-file "$fixture/bootstrap.env" --entrypoint /fixture/db-migrate "$pg_image" >"$fixture/bootstrap.log" 2>&1 || {
-    echo 'isolated application bootstrap/migrations failed' >&2; exit 1;
+  --env-file "$fixture/bootstrap.env" --entrypoint /fixture/db-migrate "$pg_image" --initialize >"$fixture/bootstrap.log" 2>&1 || {
+    tail -n 20 "$fixture/bootstrap.log" >&2; echo 'isolated application bootstrap/migrations failed' >&2; exit 1;
   }
 podman exec "$server" psql -X -v ON_ERROR_STOP=1 -q -U postgres_admin -d hololive -f /fixture/records.sql
 podman exec -i "$server" psql -X -v ON_ERROR_STOP=1 -q -U postgres_admin -d hololive <"$root/deploy/postgres/role-limits.sql"

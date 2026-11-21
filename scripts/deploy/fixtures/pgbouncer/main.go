@@ -141,6 +141,13 @@ func prepare(dir string) error {
 		fmt.Fprintf(&sql, "CREATE ROLE %s LOGIN PASSWORD '%s'; GRANT CONNECT ON DATABASE hololive TO %s;\n", pgx.Identifier{role}.Sanitize(), verifier, pgx.Identifier{role}.Sanitize())
 	}
 	sql.WriteString("ALTER DATABASE hololive OWNER TO hololive_migrator; GRANT USAGE,CREATE ON SCHEMA public TO hololive_migrator;\nGRANT hololive_scraper TO hololive_collector_a,hololive_collector_b,hololive_collector_c,hololive_collector_d;\n")
+	sql.WriteString("GRANT USAGE ON SCHEMA public TO hololive_runtime,hololive_scraper;\n")
+	for _, grant := range []string{
+		"REVOKE ALL ON TABLES FROM PUBLIC", "REVOKE ALL ON SEQUENCES FROM PUBLIC", "REVOKE ALL ON FUNCTIONS FROM PUBLIC",
+		"GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO hololive_runtime", "GRANT USAGE,SELECT ON SEQUENCES TO hololive_runtime", "GRANT EXECUTE ON FUNCTIONS TO hololive_runtime",
+	} {
+		fmt.Fprintf(&sql, "ALTER DEFAULT PRIVILEGES FOR ROLE hololive_migrator IN SCHEMA public %s;\n", grant)
+	}
 	if err := writePrivate(filepath.Join(dir, "setup.sql"), []byte(sql.String())); err != nil {
 		return err
 	}
