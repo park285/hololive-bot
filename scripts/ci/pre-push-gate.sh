@@ -123,7 +123,7 @@ run_content_gates() {
   run_if_changed scripts/deploy/quadlet-redeploy-service_test.sh \
     scripts/deploy/quadlet-redeploy-service.sh scripts/deploy/quadlet-rollback-service.sh \
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
-    scripts/deploy/lib/worker-profile-pair.py deploy/quadlet
+    scripts/deploy/lib/worker-profile-pair.py scripts/deploy/lib/collector-slots.tsv deploy/quadlet
   run_if_changed scripts/ci/check-recurring-security-scan-contract.sh \
     scripts/ci/final-image-scan-policy.sh scripts/ci/final-image-scan-manifest.txt deploy/quadlet
   echo "[pre-push] deploy/runtime script tests (run when the test or its target changed)"
@@ -137,8 +137,10 @@ run_content_gates() {
     hololive/hololive-alarm-worker/xspaces/{package.json,package-lock.json,src}
   run_if_changed scripts/deploy/lib/youtubejs-node-version_test.sh scripts/deploy/lib/youtubejs-node-version.sh
   run_if_changed scripts/deploy/source-revision-provenance_test.sh scripts/deploy/lib/source-revision.sh
-  run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py deploy/quadlet/hololive-bot
-  run_if_changed scripts/deploy/kapu-d-cutover_test.py scripts/deploy/kapu-d-cutover.py deploy/podman/kapu/hololive-collector-d.container deploy/podman/kapu/hololive-youtube-po-d.container
+  run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py scripts/deploy/lib/collector-slots.tsv \
+    deploy/quadlet/hololive-bot
+  run_if_changed scripts/deploy/kapu-d-cutover_test.py scripts/deploy/kapu-d-cutover.py scripts/deploy/lib/collector-slots.tsv \
+    deploy/podman/kapu/hololive-collector-d.container deploy/podman/kapu/hololive-youtube-po-d.container
   run_if_changed scripts/build/po-sandbox-manifest_test.py \
     scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
   run_if_changed scripts/logs/daily-rollup-logs_test.sh scripts/logs/daily-rollup-logs.sh
@@ -154,7 +156,8 @@ run_content_gates() {
     scripts/deploy/lib scripts/logs/ap-host-native-status.sh
   run_if_changed scripts/deploy/ap-completion-check_test.sh \
     scripts/deploy/ap-completion-check.sh scripts/deploy/ap-hosts scripts/deploy/lib
-  run_if_changed scripts/deploy/lib/ap-host_test.sh scripts/deploy/lib/ap-host.sh scripts/deploy/ap-hosts
+  run_if_changed scripts/deploy/lib/ap-host_test.sh scripts/deploy/lib/ap-host.sh scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv scripts/deploy/ap-hosts
+  run_if_changed scripts/deploy/test-compose-services.sh scripts/deploy/lib/compose-services.sh scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv
   run_if_changed hololive/hololive-api/scripts/test-bot-env-loader.sh \
     hololive/hololive-api/scripts/bot.sh scripts/deploy/lib/compose-env.sh
 

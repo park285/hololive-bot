@@ -20,7 +20,6 @@ build_previous() {
 }
 build_previous "$epoch2_head" epoch2
 build_previous "$previous" epoch3
-(cd "$root" && CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$work/epoch4" ./hololive/hololive-api/cmd/db-migrate)
 cid=$(podman run -d --pull=never --network=none --tmpfs /var/lib/postgresql:rw,size=1g --memory=1g --cpus=2 \
   -e POSTGRES_HOST_AUTH_METHOD=trust -e 'POSTGRES_INITDB_ARGS=--locale-provider=builtin --builtin-locale=C.UTF-8' "$image" -c listen_addresses='' -c shared_preload_libraries=pg_stat_statements)
 for ((n=0; n<100; n++)); do
@@ -32,6 +31,10 @@ cp -a --reflink=auto "$root/hololive/hololive-api" "$work/future/hololive/"
 for module in hololive-shared hololive-dbtest hololive-collector; do ln -s "$root/hololive/$module" "$work/future/hololive/$module"; done
 future="$work/future/hololive/hololive-api/scripts/migrations"
 build_future() { (cd "$work/future/hololive/hololive-api" && GOWORK=off CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$work/$1" ./cmd/db-migrate); }
+baseline=001_schema_epoch4_baseline.sql
+find "$future" "$future/contracts" -maxdepth 1 -name '*.sql' ! -name "$baseline" -delete
+printf '001 %s\n' "$baseline" >"$future/manifest.txt"
+build_future epoch4
 step1=002_epoch4_test_memo.sql
 step2=003_epoch4_test_revision.sql
 cat >"$future/$step1" <<'SQL'
@@ -164,7 +167,6 @@ clone hololive base
 clone fresh base
 run hololive epoch3
 run fresh epoch4 --initialize
-baseline=001_schema_epoch4_baseline.sql
 expected=$(sha256sum "$root/hololive/hololive-api/scripts/migrations/$baseline"); expected=${expected%% *}
 [[ $(sql fresh -c "SELECT filename || ' ' || checksum_sha256 FROM schema_migrations FULL JOIN schema_migration_checksums USING(filename)") == "$baseline $expected" ]]
 [[ $(sql hololive -c 'SELECT count(*) FROM schema_migrations JOIN schema_migration_checksums USING(filename)') == 32 ]]

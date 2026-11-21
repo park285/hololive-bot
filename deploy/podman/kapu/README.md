@@ -12,7 +12,7 @@ osaka 호스트를 다시 설치하는 동안에도 a를 kapu에 임시로 띄�
 
 - `.source-revision`: 검증된 카드 소스의 40자리 SHA 한 줄.
 - `d-card-candidate.json`: `revision`은 같은 SHA, `images`와 `units`의 키는 각각 `hololive-collector-d`와 `hololive-youtube-po-d`. 값은 해당 컨테이너의 검증된 `sha256:<64 hex>` 이미지 ID와 `.container` 원본의 SHA-256(접두사 없음)이다.
-- `scripts/deploy/kapu-d-cutover.py`, `scripts/deploy/lib/systemd-stop-guard.py`, `deploy/podman/kapu/`의 두 `.container`: 위 승인과 같은 소스 트리의 상대 경로를 유지한다.
+- `scripts/deploy/kapu-d-cutover.py`, `scripts/deploy/lib/systemd-stop-guard.py`, `scripts/deploy/lib/collector-slots.tsv`, `deploy/podman/kapu/`의 두 `.container`: 위 승인과 같은 소스 트리의 상대 경로를 유지한다.
 
 ```bash
 release="/root/d-card-${FULL_REVISION:?}"
