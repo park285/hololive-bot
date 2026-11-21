@@ -7,9 +7,9 @@ tag=$1
 previous=$2
 mode=${3:-preview}
 repo=park285/hololive-bot
-for value in "$tag" "$previous"; do
-  [[ "$value" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || fail "안정 SemVer tag가 아닙니다: $value"
-done
+semver='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
+[[ "$tag" =~ ^[rv]${semver}$ && "$previous" =~ ^[rv]${semver}$ ]] || fail "안정 SemVer tag가 아닙니다: $tag $previous"
+[[ "$tag" == r* || "${3:-preview}" != create ]] || fail "새 Release는 r 접두사 tag로만 만듭니다: $tag"
 [[ "$tag" != "$previous" ]] || fail '비교 기준과 대상 tag가 같습니다'
 case "$mode" in preview|create|edit) ;; *) fail "알 수 없는 mode: $mode" ;; esac
 for command in gh jq; do command -v "$command" >/dev/null || fail "$command 필요"; done

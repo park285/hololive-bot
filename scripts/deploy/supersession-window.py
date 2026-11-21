@@ -260,7 +260,7 @@ def inputs(old, new, running, seals, tool, stages):
              and (s['source_base'], s['running_base'], s['revision'], s['origin']) == (old, running, new, 'https://github.com/park285/hololive-bot.git')
              and (not manifests or s == manifests[0]['release_spec']) and oid(s['parent'], 40)
              and oid(s['tag_object'], 40) and s['tag_object'] == m['tag_object'] and oid(s['coordinator_blob'], 40)
-             and oid(s['publisher_sha256'], 64) and s['tag'] == 'v' + s['version'] and s['version'] == m['version']
+             and oid(s['publisher_sha256'], 64) and s['tag'] in ('r' + s['version'], 'v' + s['version']) and s['version'] == m['version']
              and re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', m['version'])
              and m['roundtrip_verified'] is True and re.fullmatch('sha256:[0-9a-f]{64}', m['image'])
              and oid(m['bundle'], 64) and oid(m['archive'], 64) and set(s['images']) == {'holo-api', 'holo-worker'}

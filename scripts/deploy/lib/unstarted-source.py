@@ -223,11 +223,16 @@ def manifest_pair(source, transition, base=None):
         exact(path, image)
         require(stat.S_IMODE(authority(path).st_mode) == 0o400, 'mutable original image binding')
     require(len(versions) == 1 and entries[0]['tag_object'] == entries[1]['tag_object'], 'split original release identity')
-    pair = dict(entries=entries, revision=source, tag='v' + versions.pop())
+    version = versions.pop()
+    bindings = {(json.dumps(candidate, sort_keys=True, separators=(',', ':')) + '\n').encode(): candidate
+                for candidate in (dict(entries=entries, revision=source, tag=prefix + version) for prefix in ('r', 'v'))}
+    recorded = set()
     for name in ('candidate-manifests.json', 'pair-binding.requested'):
         data, info = record(api / name)
-        require(stat.S_IMODE(info.st_mode) == 0o400 and
-                data == (json.dumps(pair, sort_keys=True, separators=(',', ':')) + '\n').encode(), 'original manifest binding changed')
+        require(stat.S_IMODE(info.st_mode) == 0o400 and data in bindings, 'original manifest binding changed')
+        recorded.add(data)
+    require(len(recorded) == 1, 'original manifest binding changed')
+    pair = bindings[recorded.pop()]
     require(len(set(images.values())) == 2, 'duplicate source image')
     exact(transition / 'images', '\n'.join(name + ' ' + image for name, image in images.items()))
     return pair, images, manifests
