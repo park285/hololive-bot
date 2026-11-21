@@ -31,7 +31,7 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
    `VERSION`도 변경합니다.
 2. `CHANGELOG.md`의 `미출시` 항목을 `## r<version> - YYYY-MM-DD` 구간으로 옮기고, 이 버전과 tag가
    붙은 최근 두 버전까지 남기고 그보다 오래된 구간은 지웁니다. 그 사이에 tag 없이 준비만 된 구간은 세지 않고 남깁니다.
-3. `bash scripts/check-release-version.sh`와 pre-push gate를 `FULL_PRE_PUSH=true`로 통과시킵니다.
+3. 통합할 commit의 전체 pre-push 게이트를 통과시킵니다. 그 commit을 먼저 **승인된 브랜치 push**로 검증한다면 `FULL_PRE_PUSH=true`를 그 push에 설정합니다. 훅이 세 `VERSION` 형식 검사까지 실행하므로 직전에 같은 게이트를 수동 실행하지 않습니다. 게시 없이 검증할 때는 `FULL_PRE_PUSH=true bash scripts/ci/pre-push-gate.sh`를 사용합니다. 별도 tag push의 훅은 생략하지 않습니다.
 4. 검증된 릴리즈 commit을 `main`에 반영하고 반영된 `main` commit의 SHA를 기록합니다. squash 병합은 SHA가
    달라지므로 그 commit의 tree가 검증한 tree와 같은지 확인하고, 다르면 그 commit에서 2단계부터 다시 진행합니다.
 5. 4단계에서 기록한 `main` commit에 annotated tag `r<version>`을 만들어 별도 승인된 publish 절차로 push합니다.

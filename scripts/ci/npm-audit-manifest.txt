@@ -1,3 +1,0 @@
-hololive/hololive-alarm-worker/xspaces/package-lock.json
-hololive/hololive-youtube-collector/po-sandbox/package-lock.json
-hololive/hololive-youtube-collector/youtubejs/package-lock.json

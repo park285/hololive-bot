@@ -8,18 +8,54 @@ manifest="${1:-$root_dir/scripts/ci/final-image-scan-manifest.txt}"
 . "$root_dir/scripts/ci/final-image-scan-policy.sh"
 govulncheck_bin="$(ensure_govulncheck)"
 report_dir="$(mktemp -d "${TMPDIR:-/tmp}/hololive-image-scan.XXXXXX")"
-container_id=
-trap 'if [[ -n "$container_id" ]]; then podman rm "$container_id" >/dev/null; fi' EXIT
 echo "final image scan evidence: $report_dir"
-image_index=0
 
 if [[ "$(trivy --version | sed -n 's/^Version: //p')" != "$FINAL_IMAGE_TRIVY_VERSION" ]]; then
   echo "final image scan requires Trivy $FINAL_IMAGE_TRIVY_VERSION" >&2
   exit 1
 fi
 
-while IFS='|' read -r source platform image; do
-  [[ -n "$source$platform$image" ]] || continue
+record_scan() {
+  local label="$1" status
+  shift
+  set +e
+  "$@" </dev/null
+  status=$?
+  set -e
+  if (( status != 0 )); then
+    echo "scan failed: $label (exit $status)" >&2
+    failed=1
+  fi
+}
+
+verify_go_target() (
+  set -e
+  [[ "$target" =~ ^[A-Za-z0-9_./-]+$ && "$target" != /* && "/$target/" != *"/../"* ]] || {
+    echo "unsafe Go target path: $report" >&2
+    exit 1
+  }
+  artifact="$report_dir/$image_index.$binary_index"
+  printf '%s\n' "$image" "$target" >"$artifact.identity"
+  podman cp "$container_id:/$target" "$artifact.bin"
+  [[ -f "$artifact.bin" && ! -L "$artifact.bin" ]]
+  sha256sum "$artifact.bin" >"$artifact.sha256"
+  "$govulncheck_bin" -mode=extract "$artifact.bin" >"$artifact.extract.json"
+  jq -se 'length == 2 and .[0].name == "govulncheck-extract" and .[0].version == "0.1.0"
+    and .[1].goos == "linux" and .[1].goarch == "arm64"
+    and (.[1].pkgSymbols | type == "array" and length > 0)' "$artifact.extract.json" >/dev/null
+  "$govulncheck_bin" -mode=binary -scan=package -format=openvex "$artifact.extract.json" >"$artifact.vex.json"
+  jq -e --slurpfile scan "$report" --arg target "$target" \
+    -f "$root_dir/scripts/ci/check-go-image-vex.jq" "$artifact.vex.json" >/dev/null || {
+    echo "Go finding lacks exact package-absence proof: $artifact.vex.json" >&2
+    exit 1
+  }
+  echo "Go finding verified: $target (raw findings retained in $report)"
+)
+
+scan_image() (
+  set -e
+  container_id=
+  trap 'if [[ -n "$container_id" ]]; then podman rm "$container_id" >/dev/null; fi' EXIT
   [[ -n "$source" && -n "$platform" && -n "$image" ]] || {
     echo "incomplete final image scan manifest entry" >&2
     exit 1
@@ -31,13 +67,14 @@ while IFS='|' read -r source platform image; do
   }
   case "$source" in
     local)
-      actual_platform="$(podman image inspect --format '{{.Os}}/{{.Architecture}}' "$image")"
-      [[ "$actual_platform" == "$platform" ]] || {
+      metadata="$(podman image inspect --format '{{.Os}}/{{.Architecture}} {{.Id}}' "$image")"
+      read -r actual_platform image_id <<< "$metadata"
+      [[ -n "$image_id" && "$actual_platform" == "$platform" ]] || {
         echo "final image platform mismatch: $image is $actual_platform, want $platform" >&2
         exit 1
       }
       scan_args+=(--image-src podman --platform "$platform")
-      image="$(podman image inspect --format '{{.Id}}' "$image")"
+      image="$image_id"
       ;;
     *)
       echo "unsupported final image scan source: $source" >&2
@@ -45,7 +82,6 @@ while IFS='|' read -r source platform image; do
       ;;
   esac
   echo "trivy image: $source $platform $image"
-  image_index=$((image_index + 1))
   report="$report_dir/$image_index.trivy.json"
   status=0
   trivy "${scan_args[@]}" --format json --output "$report" "$image" || status=$?
@@ -58,41 +94,33 @@ while IFS='|' read -r source platform image; do
     echo "inconsistent Trivy exit/report: $image" >&2
     exit 1
   fi
+  failed=0
   if ! jq -e 'all(.Results[]; .Type == "gobinary" or ((.Vulnerabilities // []) | length == 0))' "$report" >/dev/null; then
     echo "non-Go vulnerability finding: $report" >&2
-    exit 1
+    failed=1
   fi
   jq -r '.Results[] | select(.Type == "gobinary" and ((.Vulnerabilities // []) | length > 0)) | .Target' "$report" >"$report_dir/$image_index.targets"
+  if [[ -s "$report_dir/$image_index.targets" ]]; then
+    container_id="$(podman create --platform "$platform" "$image")"
+  fi
   binary_index=0
   while IFS= read -r target; do
-    [[ "$target" =~ ^[A-Za-z0-9_./-]+$ && "$target" != /* && "/$target/" != *"/../"* ]] || {
-      echo "unsafe Go target path: $report" >&2
-      exit 1
-    }
-    if [[ -z "$container_id" ]]; then
-      container_id="$(podman create --platform "$platform" "$image")"
-    fi
     binary_index=$((binary_index + 1))
-    artifact="$report_dir/$image_index.$binary_index"
-    printf '%s\n' "$image" "$target" >"$artifact.identity"
-    podman cp "$container_id:/$target" "$artifact.bin"
-    [[ -f "$artifact.bin" && ! -L "$artifact.bin" ]]
-    sha256sum "$artifact.bin" >"$artifact.sha256"
-    "$govulncheck_bin" -mode=extract "$artifact.bin" >"$artifact.extract.json"
-    jq -se 'length == 2 and .[0].name == "govulncheck-extract" and .[0].version == "0.1.0"
-      and .[1].goos == "linux" and .[1].goarch == "arm64"
-      and (.[1].pkgSymbols | type == "array" and length > 0)' "$artifact.extract.json" >/dev/null
-    "$govulncheck_bin" -mode=binary -scan=package -format=openvex "$artifact.bin" >"$artifact.vex.json"
-    jq -e --slurpfile scan "$report" --arg target "$target" \
-      -f "$root_dir/scripts/ci/check-go-image-vex.jq" "$artifact.vex.json" >/dev/null || {
-      echo "Go finding lacks exact package-absence proof: $artifact.vex.json" >&2
-      exit 1
-    }
-    echo "Go finding verified: $target (raw findings retained in $report)"
+    record_scan "$image:$target" verify_go_target
   done <"$report_dir/$image_index.targets"
   if [[ -n "$container_id" ]]; then
     podman rm "$container_id" >/dev/null
     container_id=
   fi
+  exit "$failed"
+)
+
+failed=0
+image_index=0
+while IFS='|' read -r source platform image || [[ -n "$source$platform$image" ]]; do
+  [[ -n "$source$platform$image" ]] || continue
+  image_index=$((image_index + 1))
+  record_scan "$image" scan_image
 done <"$manifest"
 [[ "$image_index" -gt 0 ]] || { echo "empty final image scan manifest" >&2; exit 1; }
+exit "$failed"

@@ -19,19 +19,17 @@ Go 파일·함수 크기는 golangci-lint의 `revive` `file-length-limit`(비테
 `funlen`(함수 120줄)이 검사합니다. 복잡도는 설정된 린터가 맡으며 별도 구조 예산 검사는 없습니다.
 staticcheck도 golangci-lint에 포함된 판본으로 한 번만 실행하며 별도 staticcheck 실행은 두지 않습니다.
 
-로컬 Go 검증과 PR matrix는 race 테스트를 실행합니다. `scripts/ci/go-test-nonrace.sh`가
-일반·race 빌드의 테스트 파일을 비교해 race 빌드에서 빠지는 테스트 함수만 추가 실행합니다.
-`scripts/ci/local-ci.sh`는 성능 예산 벤치마크와 Go 테스트가 rootless Podman 일회용 PostgreSQL 하나를 함께 씁니다.
+로컬 Go 검증과 PR matrix는 race 시험을 실행합니다. `go-test-nonrace.sh`는 일반 빌드에만 포함된 시험 파일이 있는 패키지에서 Go에 등록된 Test·Example·Fuzz를 비교합니다. 양쪽에 서로 다른 전용 파일이 있으면 같은 이름도 의미가 다를 수 있으므로 해당 패키지는 일반 모드로 전부 실행합니다.
+collector CGO 비활성 시험·성능 측정·Go 시험과 명시적으로 선택한 통합 시험은 일회용 PostgreSQL 서버를 공유합니다. dbtest는 시험별 DB를 복제하며 자동 생성한 서버만으로 통합 시험을 활성화하지 않습니다.
 NilAway는 고정 바이너리의 `go vet -vettool` unitchecker로 의존성 분석을 재사용하며,
 로컬 기본값과 security workflow는 `-p 1`로 분석 메모리 사용을 제한합니다.
 
-최종 이미지 스캔 인자는 `scripts/ci/final-image-scan-policy.sh`가 소유합니다.
-`scripts/ci/check-recurring-security-scan-contract.sh`는 보안 설정을 검사하고,
-실제 이미지 스캔은 빌드된 모든 운영 이미지를 검사합니다. 발견 결과는 숨기지 않습니다.
+`run-npm-audit.sh`는 추적된 모든 `package-lock.json`을 직접 감사합니다. 별도 등록 목록은 없지만 `packageManager`로 npm을 선언한 프로젝트에서 lockfile만 추적 해제하면 실패합니다. 한 프로젝트의 실패로 나머지 감사를 생략하지 않습니다.
+이미지는 중앙 Quadlet의 운영 이미지와 arm64 스캔 목록을 대조합니다. Trivy 억제 금지 설정과 실제 취약점 판정은 별도 검사입니다. 태그의 플랫폼과 불변 ID를 한 번에 읽고, Go finding은 같은 ELF에서 추출·검증한 심볼로 VEX를 판정합니다. 다른 이미지나 lockfile의 검사가 성공해도 앞선 실패를 덮지 않습니다.
 
 `security.yml`의 SDK·shared-go 체크아웃은 스택에서 검증·게시한 commit SHA로 고정합니다.
 과거 release tag를 그대로 쓰면 sibling을 단독으로 검사할 때 보안 패치 전 의존성이 선택될 수 있습니다.
-현재 입력은 Go 1.27.3·`x/net v0.62.0`을 사용하며 runtime `go.mod`와 릴리스 태그는 변경하지 않습니다.
+Go 판본은 `go.work`가, 외부 소스는 workflow의 checkout SHA가 정합니다.
 `govulncheck`는 기존대로 `go.work`의 모든 모듈을 검사하고, 도달 가능한 취약점이 있으면 실패합니다.
 
 ## 보존하는 제품 검사

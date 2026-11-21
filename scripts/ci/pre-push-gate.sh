@@ -21,34 +21,25 @@ if [[ -z "${PRE_PUSH_GATE_SCOPED:-}" ]] \
     "${SCRIPT_DIR}/pre-push-gate.sh"
 fi
 
-. "${SCRIPT_DIR}/python-runtime.sh"
-repo_python_init
-route_resolved=false
-route_exact=false
 cd "${ROOT_DIR}"
 
 export GOTOOLCHAIN="${GOTOOLCHAIN-auto}"
 
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
+source "${SCRIPT_DIR}/local-ci-packages.sh"
 
 resolve_route() {
-  if [[ "${route_resolved}" == "true" ]]; then
-    return 0
-  fi
-
+  local route_range
+  route_exact=false
+  changed_files=()
   if [[ -n "${BASE_SHA:-}" && -n "${HEAD_SHA:-}" ]]; then
     route_range="${BASE_SHA}..${HEAD_SHA}"
-    if ! changed_files="$(git diff --name-only "${route_range}")"; then
+    require_checkout_head "${HEAD_SHA}" || return 1
+    if ! load_changed_files "${route_range}"; then
       echo "failed to resolve exact pushed range ${route_range}" >&2
       return 1
     fi
     route_exact=true
-  elif git rev-parse --verify origin/main >/dev/null 2>&1; then
-    route_range="origin/main...HEAD"
-    changed_files="$(git diff --name-only "${route_range}" 2>/dev/null || true)"
-  else
-    route_range="HEAD~1..HEAD"
-    changed_files="$(git diff --name-only "${route_range}" 2>/dev/null || true)"
   fi
 
   if [[ "${FULL_PRE_PUSH:-false}" == "true" ]]; then
@@ -58,46 +49,38 @@ resolve_route() {
   fi
 
   case "${PRE_PUSH_MODE}" in
-    fast)
-      local_ci_go_scope="changed"
-      race_default="true"
-      ;;
-    full)
-      local_ci_go_scope="all"
-      race_default="true"
-      ;;
+    fast|full) ;;
     *)
       echo "unsupported PRE_PUSH_MODE=${PRE_PUSH_MODE}; expected fast or full" >&2
       return 1
       ;;
   esac
 
-  resolved_local_ci_go_scope="${LOCAL_CI_GO_SCOPE:-${local_ci_go_scope}}"
-  route_resolved=true
+  if [[ "${PRE_PUSH_MODE}" == full || "${route_exact}" != true ]]; then
+    LOCAL_CI_GO_SCOPE=all
+  else
+    LOCAL_CI_GO_SCOPE="${LOCAL_CI_GO_SCOPE:-changed}"
+  fi
 }
 
 is_metadata_only_route() {
-  local diff_status=0
-  resolve_route
-  [[ "${route_exact}" == "true" && "${PRE_PUSH_MODE}" != "full" ]] || return 1
-  git diff --quiet --no-ext-diff "${BASE_SHA}" "${HEAD_SHA}" -- . \
-    ':(exclude)*.md' ':(exclude)VERSION' \
-    ':(exclude)hololive/hololive-api/VERSION' ':(exclude)hololive/hololive-alarm-worker/VERSION' || diff_status=$?
-  case "${diff_status}" in
-    0|1) return "${diff_status}" ;;
-    *) exit "${diff_status}" ;;
-  esac
+  local file
+  [[ "${route_exact}" == true && "${PRE_PUSH_MODE}" != full ]] || return 1
+  for file in "${changed_files[@]}"; do
+    is_metadata_path "${file}" || return 1
+  done
+  return 0
 }
 
 inputs_changed() {
   local input file
+  [[ "${PRE_PUSH_MODE}" != full && "${route_exact}" == true ]] || return 0
   for input in "$@"; do
-    while IFS= read -r file; do
-      [[ -n "${file}" ]] || continue
+    for file in "${changed_files[@]}"; do
       case "${file}" in
         "${input}"|"${input}"/*) return 0 ;;
       esac
-    done <<<"${changed_files}"
+    done
   done
   return 1
 }
@@ -105,15 +88,13 @@ inputs_changed() {
 run_if_changed() {
   local test="$1" input inputs_valid=true
   shift
-  resolve_route
   for input in "${test}" "$@"; do
     if [[ ! -e "${input}" ]]; then
       echo "[pre-push] test input missing: ${input} (declared for ${test})" >&2
       inputs_valid=false
     fi
   done
-  if [[ "${PRE_PUSH_MODE}" != "full" && "${route_exact}" == "true" && "${inputs_valid}" == "true" ]] \
-    && ! inputs_changed "${test}" "$@"; then
+  if [[ "${inputs_valid}" == true ]] && ! inputs_changed "${test}" "$@"; then
     echo "[pre-push] test skipped (inputs unchanged): ${test}"
     return 0
   fi
@@ -125,57 +106,37 @@ run_if_changed() {
 }
 
 run_content_gates() {
-  bash scripts/check-release-version.sh
-  resolve_route
-  if is_metadata_only_route; then
-    local version_status=0 module
-    git diff --quiet --no-ext-diff "${BASE_SHA}" "${HEAD_SHA}" -- VERSION \
-      hololive/hololive-api/VERSION hololive/hololive-alarm-worker/VERSION || version_status=$?
-    if [[ "${version_status}" == 1 ]]; then
-      source "${SCRIPT_DIR}/go-workspace-modules.sh"
-      for module in "${GO_OWNED_MODULES[@]}"; do
-        echo "[pre-push] version-only build: ${module}"
-        (cd "${module}" && GOWORK=off go build -mod=readonly ./...)
-      done
-    elif [[ "${version_status}" != 0 ]]; then
-      exit "${version_status}"
-    fi
-    echo "[pre-push] documentation/version-only gate passed"
-    return 0
-  fi
-
   echo "[pre-push] stack lint rules and comment ban (ast-grep, SQL, TLA+, Lean)"
   bash scripts/ci/verify-tools.sh scan
   echo "[pre-push] formal verification (TLC, Lean)"
   bash scripts/ci/verify-tools.sh formal
 
   run_if_changed scripts/deploy/admin-bind_test.sh scripts/deploy/lib/admin-bind.sh scripts/deploy/quadlet-prestart.sh \
-    scripts/deploy/lib/public-bind-mounts.sh scripts/systemd/admin-dashboard-ingress.nft
-  if echo "$changed_files" | grep -q '^deploy/quadlet/'; then
+    scripts/deploy/lib/public-bind-mounts.sh scripts/deploy/lib/compose-env.sh \
+    scripts/systemd/admin-dashboard-ingress.nft deploy/topology/hosts.conf
+  if inputs_changed deploy/quadlet; then
     QUADLET_UNIT_DIRS="${ROOT_DIR}/deploy/quadlet/hololive-bot" /usr/libexec/podman/quadlet -dryrun >/dev/null
   fi
   run_if_changed scripts/deploy/sync-opt-current_test.sh \
-    scripts/deploy/sync-opt-current.sh scripts/deploy/lib/compose-env.sh deploy/quadlet \
-    scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv
+    scripts/deploy/sync-opt-current.sh scripts/deploy/quadlet-prestart.sh scripts/deploy/lib \
+    scripts/ci/postgres-capacity-policy.tsv scripts/systemd deploy/postgres deploy/nginx deploy/quadlet
   run_if_changed scripts/deploy/quadlet-redeploy-service_test.sh \
     scripts/deploy/quadlet-redeploy-service.sh scripts/deploy/quadlet-rollback-service.sh \
-    scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv deploy/quadlet
+    scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
+    scripts/deploy/lib/worker-profile-pair.py deploy/quadlet
   run_if_changed scripts/ci/check-recurring-security-scan-contract.sh \
-    scripts/ci/run-final-image-scan.sh scripts/ci/final-image-scan-policy.sh scripts/ci/final-image-scan-manifest.txt \
-    scripts/ci/npm-audit-manifest.txt scripts/ci/go-tooling.sh \
-    .github/workflows/security.yml deploy/quadlet
+    scripts/ci/final-image-scan-policy.sh scripts/ci/final-image-scan-manifest.txt deploy/quadlet
   echo "[pre-push] deploy/runtime script tests (run when the test or its target changed)"
-  run_if_changed scripts/build/build-youtube-collector-go_test.sh \
-    scripts/build/build-youtube-collector-go.sh scripts/build/check-youtube-collector-go-artifact.sh \
-    scripts/ci/public-pr-go-gate.sh scripts/ci/python-runtime.sh hololive/hololive-youtube-collector/Makefile
   run_if_changed scripts/build/build-all_test.sh \
     build-all.sh scripts/deploy/lib/source-revision.sh
   run_if_changed scripts/build/image-runtime-tree-permissions_test.sh \
-    hololive/hololive-youtube-collector/Dockerfile.po-sandbox hololive/hololive-youtube-collector/Dockerfile \
-    hololive/hololive-alarm-worker/Dockerfile
+    hololive/hololive-youtube-collector/{Dockerfile,Dockerfile.po-sandbox}{,.dockerignore} \
+    hololive/hololive-alarm-worker/Dockerfile{,.dockerignore} \
+    hololive/hololive-youtube-collector/{po-sandbox,youtubejs}/{package.json,package-lock.json,src} \
+    hololive/hololive-alarm-worker/xspaces/{package.json,package-lock.json,src}
   run_if_changed scripts/deploy/lib/youtubejs-node-version_test.sh scripts/deploy/lib/youtubejs-node-version.sh
   run_if_changed scripts/deploy/source-revision-provenance_test.sh scripts/deploy/lib/source-revision.sh
-  run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py
+  run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py deploy/quadlet/hololive-bot
   run_if_changed scripts/deploy/kapu-d-cutover_test.py scripts/deploy/kapu-d-cutover.py deploy/podman/kapu/hololive-youtube-collector-d.container deploy/podman/kapu/hololive-youtube-po-d.container
   run_if_changed scripts/build/po-sandbox-manifest_test.py \
     scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
@@ -186,6 +147,7 @@ run_content_gates() {
   run_if_changed scripts/runtime/set-iris-base-url_test.sh scripts/runtime/set-iris-base-url.sh
   run_if_changed scripts/deploy/ap-host-native-deploy_test.sh \
     scripts/deploy/ap-host-native-deploy.sh scripts/deploy/ap-host-native-rollback.sh \
+    scripts/deploy/ap-host-native-collector-wrapper_test.sh scripts/deploy/ap-host-native-cutover_test.sh \
     scripts/deploy/collector-cutover-failure_test.sh \
     scripts/deploy/ap-completion-check.sh \
     scripts/deploy/lib scripts/logs/ap-host-native-status.sh
@@ -195,32 +157,22 @@ run_content_gates() {
   run_if_changed hololive/hololive-api/scripts/test-bot-env-loader.sh \
     hololive/hololive-api/scripts/bot.sh scripts/deploy/lib/compose-env.sh
 
-  echo "[pre-push] mode=${PRE_PUSH_MODE} local_ci_go_scope=${resolved_local_ci_go_scope}"
-  LOCAL_CI_GO_SCOPE="${resolved_local_ci_go_scope}" \
-  BASE_REF="${BASE_SHA:-origin/main}" \
-  RUN_NILAWAY="${RUN_NILAWAY:-true}" \
-  RUN_RACE_TESTS="${RUN_RACE_TESTS:-${race_default}}" \
-    ./scripts/ci/local-ci.sh
-
-  if [[ "${PRE_PUSH_MODE}" == "full" ]] || echo "$changed_files" | grep -q '^hololive/hololive-youtube-collector/'; then
-    echo "[pre-push] youtube-collector YouTube.js helper 품질 게이트"
-    npm --prefix hololive/hololive-youtube-collector/youtubejs run typecheck
-    npm --prefix hololive/hololive-youtube-collector/youtubejs test
+  local run_collector_js=false test_collector_artifacts=false
+  if inputs_changed hololive/hololive-youtube-collector scripts/ci/public-pr-collector-helper-install.sh; then
+    run_collector_js=true
   fi
+  if inputs_changed scripts/build/build-youtube-collector-go{,_test}.sh scripts/build/check-youtube-collector-go-artifact.sh \
+    scripts/ci/public-pr-go-gate.sh scripts/ci/python-{runtime,runner}.sh .python-version; then
+    test_collector_artifacts=true
+  fi
+  echo "[pre-push] mode=${PRE_PUSH_MODE} local_ci_go_scope=${LOCAL_CI_GO_SCOPE}"
+  source "${SCRIPT_DIR}/local-ci.sh"
+  run_local_ci "${run_collector_js}" "${test_collector_artifacts}"
 }
 
 run_dependency_hygiene() {
   local module govulncheck_bin
-  resolve_route
-  if is_metadata_only_route; then
-    echo "[pre-push] documentation/version-only change; skipping dependency hygiene"
-    return 0
-  fi
 
-  # shellcheck source=go-tooling.sh
-  source "${SCRIPT_DIR}/go-tooling.sh"
-  # shellcheck source=go-workspace-modules.sh
-  source "${SCRIPT_DIR}/go-workspace-modules.sh"
   govulncheck_bin="$(ensure_govulncheck)"
   for module in "${GO_OWNED_MODULES[@]}"; do
     echo "[pre-push] dependency hygiene: ${module}"
@@ -231,8 +183,24 @@ run_dependency_hygiene() {
 echo "════════════════════════════════════════"
 echo "  pre-push quality gate"
 echo "════════════════════════════════════════"
-run_content_gates
-run_dependency_hygiene
+resolve_route
+run_if_changed scripts/check-release-version.sh VERSION hololive/hololive-api/VERSION \
+  hololive/hololive-alarm-worker/VERSION
+if is_metadata_only_route; then
+  if inputs_changed VERSION hololive/hololive-api/VERSION hololive/hololive-alarm-worker/VERSION; then
+    source "${SCRIPT_DIR}/go-workspace-modules.sh"
+    for module in "${GO_OWNED_MODULES[@]}"; do
+      echo "[pre-push] version-only build: ${module}"
+      (cd "${module}" && GOWORK=off go build -mod=readonly ./...)
+    done
+  fi
+  echo "[pre-push] documentation/version-only gate passed"
+else
+  . "${SCRIPT_DIR}/python-runtime.sh"
+  repo_python_init
+  run_content_gates
+  run_dependency_hygiene
+fi
 echo "════════════════════════════════════════"
 echo "  pre-push quality gate passed"
 echo "════════════════════════════════════════"

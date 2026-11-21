@@ -12,22 +12,15 @@ fail() {
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-git ls-files '*package-lock.json' | LC_ALL=C sort -u >"$tmp_dir/npm-locks"
-cmp -s scripts/ci/npm-audit-manifest.txt "$tmp_dir/npm-locks" ||
-  fail "npm audit manifest does not cover the exact tracked lockfile corpus"
-
 sed -n 's/^Environment=[A-Z0-9_]*_IMAGE=//p' deploy/quadlet/*/*.container | LC_ALL=C sort -u >"$tmp_dir/final-images"
+[[ -s "$tmp_dir/final-images" ]] || fail "no production Quadlet images found"
 cut -d'|' -f3 scripts/ci/final-image-scan-manifest.txt | LC_ALL=C sort >"$tmp_dir/manifest-images"
 cmp -s "$tmp_dir/manifest-images" "$tmp_dir/final-images" ||
   fail "final image manifest does not cover the exact current production Quadlet image corpus"
 
-if awk -F'|' '
+awk -F'|' '
   NF != 3 || $1 != "local" || $2 != "linux/arm64" || $3 == "" { exit 1 }
-' scripts/ci/final-image-scan-manifest.txt; then
-  :
-else
-  fail "final image manifest must list only arm64 local builds"
-fi
+' scripts/ci/final-image-scan-manifest.txt || fail "final image manifest must list only arm64 local builds"
 
 . scripts/ci/final-image-scan-policy.sh
 check_trivy_args() {
@@ -48,7 +41,7 @@ check_trivy_args() {
       value="${arg#*=}"
     else
       case "$key" in
-        --config | --ignorefile | --exit-code | --scanners | --severity | --format | --output | --image-src | --platform)
+        --config | --ignorefile | --exit-code | --scanners | --severity)
           (($#)) || fail "$label: $key has no value"
           value="$1"
           shift
@@ -57,7 +50,7 @@ check_trivy_args() {
       esac
     fi
     case "$key" in
-      --config | --ignorefile | --ignore-unfixed | --exit-code | --no-progress | --scanners | --severity | --format | --output | --image-src | --platform) ;;
+      --config | --ignorefile | --ignore-unfixed | --exit-code | --no-progress | --scanners | --severity) ;;
       *) fail "$label: flag outside the no-suppression allowlist: $arg" ;;
     esac
     count[$key]=$((${count[$key]:-0} + 1))
@@ -73,10 +66,8 @@ check_trivy_args() {
   [[ "${seen[--scanners]-}" == vuln ]] || fail "$label: --scanners vuln is required"
   [[ "${seen[--severity]-}" == UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL ]] ||
     fail "$label: every severity must be reported"
-  [[ "${positional[0]-}" == image ]] || fail "$label: trivy subcommand must be image"
-  scanned_positional=("${positional[@]:1}")
+  [[ "${#positional[@]}" == 1 && "${positional[0]-}" == image ]] || fail "$label: expected only the image subcommand"
 }
 check_trivy_args "final-image-scan-policy.sh" "${FINAL_IMAGE_TRIVY_ARGS[@]}"
-((${#scanned_positional[@]} == 0)) || fail "policy args must not name an image"
 
-echo "recurring npm and final-image security scan contract passed"
+echo "final image scan inventory and security policy passed"

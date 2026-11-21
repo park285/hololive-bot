@@ -6,22 +6,42 @@ if (( $# == 0 )); then
   exit 2
 fi
 
-template='{{range .TestGoFiles}}{{$.ImportPath}} {{$.Dir}}/{{.}}{{"\n"}}{{end}}{{range .XTestGoFiles}}{{$.ImportPath}} {{$.Dir}}/{{.}}{{"\n"}}{{end}}'
+template='{{range .TestGoFiles}}{{$.ImportPath}}{{"\t"}}{{.}}{{"\n"}}{{end}}{{range .XTestGoFiles}}{{$.ImportPath}}{{"\t"}}{{.}}{{"\n"}}{{end}}'
 nonrace_dir="$(mktemp -d)"
 trap 'rm -rf -- "$nonrace_dir"' EXIT
 
-go list -f "${template}" "$@" | LC_ALL=C sort -u >"${nonrace_dir}/normal"
-go list -race -f "${template}" "$@" | LC_ALL=C sort -u >"${nonrace_dir}/race"
-LC_ALL=C comm -23 "${nonrace_dir}/normal" "${nonrace_dir}/race" >"${nonrace_dir}/nonrace-only"
+go list -race -f "${template}" "$@" >"${nonrace_dir}/race"
+go list -f "${template}" "$@" >"${nonrace_dir}/normal"
+awk -F '\t' '
+  NF == 2 && FILENAME == ARGV[1] { race[$0] = 1; tested[$1] = 1; next }
+  NF == 2 { normal[$0] = 1; if (!($0 in race)) needed[$1] = 1 }
+  END {
+    for (file in race) if (!(file in normal)) {
+      split(file, fields, FS)
+      delete tested[fields[1]]
+    }
+    for (pkg in needed) print pkg, (pkg in tested ? "added" : "all")
+  }
+' "${nonrace_dir}/race" "${nonrace_dir}/normal" >"${nonrace_dir}/packages"
 
-declare -A tests_by_package=()
-while read -r package file; do
-  [[ -n "${package}" ]] || continue
-  while IFS= read -r name; do
-    tests_by_package["${package}"]+="${tests_by_package[${package}]:+|}${name}"
-  done < <(sed -nE 's/^func (Test[A-Za-z0-9_]*)\(.*/\1/p' "${file}")
-done <"${nonrace_dir}/nonrace-only"
+list_names() {
+  if ! go test -count=1 -list '^(Test|Example|Fuzz)' "$@" >"${nonrace_dir}/list"; then
+    cat "${nonrace_dir}/list" >&2
+    return 1
+  fi
+  sed -nE '/^(Test|Example|Fuzz)[^[:space:]]*$/p' "${nonrace_dir}/list" | LC_ALL=C sort
+}
 
-for package in "${!tests_by_package[@]}"; do
-  go test -count=1 -run "^(${tests_by_package[${package}]})\$" "${package}"
-done
+while read -r package selection; do
+  if [[ "${selection}" == "all" ]]; then
+    go test -count=1 "${package}"
+    continue
+  fi
+
+  list_names "${package}" >"${nonrace_dir}/normal-names"
+  list_names -race "${package}" >"${nonrace_dir}/race-names"
+  names="$(LC_ALL=C comm -23 "${nonrace_dir}/normal-names" "${nonrace_dir}/race-names" | paste -sd '|')"
+  if [[ -n "${names}" ]]; then
+    go test -count=1 -run "^(${names})\$" "${package}"
+  fi
+done <"${nonrace_dir}/packages"

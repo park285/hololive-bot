@@ -4,99 +4,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-source "${SCRIPT_DIR}/lib/git_guard.sh"
-require_git_checkout "${ROOT_DIR}"
-
-violations=()
-forbidden_patterns=(
-  '^logs/'
-  '^data/'
-  '^backups/'
-  '^\.review-bundles/'
-  '^runtime-config/'
-  '^\.env$'
-  '^\.env\.local$'
-  '^\.env\..*\.local$'
-  '(^|/)\.env\.(osaka|seoul|main-ap|prod|production|staging)$'
-  '^.*\.key$'
-  '^.*\.pem$'
-  '^.*\.tar\.gz$'
-)
-
-is_allowed_exception() {
-  local path="$1"
-  case "${path}" in
-    scripts/ci/nilaway-models/models.patch)
-      return 0
-      ;;
-    deploy/images/pgbouncer/unreported-startup-parameters.patch)
-      return 0
-      ;;
-    logs/.gitkeep|\
-    runtime-config/.gitkeep|\
-    runtime-config/README.md|\
-    runtime-config/*.example)
-      return 0
-      ;;
-  esac
-  return 1
-}
-
-while IFS= read -r path; do
-  [[ -z "${path}" ]] && continue
-  if is_allowed_exception "${path}"; then
-    continue
-  fi
-  if [[ -e "${ROOT_DIR}/${path}" ]]; then
-    missing_suffix=""
-  else
-    missing_suffix=" (missing from working tree)"
-  fi
-  for pattern in "${forbidden_patterns[@]}"; do
-    if [[ "${path}" =~ ${pattern} ]]; then
-      violations+=("${path}${missing_suffix}")
-      continue 2
-    fi
+git -C "${ROOT_DIR}" ls-files --cached -z | (
+  status=0
+  while IFS= read -r -d '' path; do
+    case "${path}" in
+      scripts/ci/nilaway-models/models.patch|deploy/images/pgbouncer/unreported-startup-parameters.patch|logs/.gitkeep|runtime-config/.gitkeep|runtime-config/README.md|runtime-config/*.example)
+        continue ;;
+      logs/*|data/*|backups/*|.review-bundles/*|runtime-config/*|.env|.env.local|.env.*.local|\
+      .env.osaka|.env.seoul|.env.main-ap|.env.prod|.env.production|.env.staging|\
+      */.env.osaka|*/.env.seoul|*/.env.main-ap|*/.env.prod|*/.env.production|*/.env.staging|\
+      *.key|*.pem|.worktrees/*|.tasklists/*|.runlogs/*|.codex/*|.claude/*|.serena/*|.gemini/*|\
+      .idea/*|*/.idea/*|.vscode/*|*/.vscode/*|.omc/*|*/.omc/*|\
+      BUNDLE_MANIFEST.txt|*.zip|*.tar|*.tar.gz|*.patch|*.diff|*_artifact.*|*.orig|*.rej)
+        printf 'FAIL: tracked local artifact: %q\n' "${path}" >&2
+        status=1 ;;
+    esac
   done
-  case "${path}" in
-    .worktrees/*|\
-    .tasklists/*|\
-    .runlogs/*|\
-    .codex/*|\
-    .claude/*|\
-    .serena/*|\
-    .gemini/*|\
-    BUNDLE_MANIFEST.txt|\
-    *.zip|\
-    *.tar|\
-    *.tar.gz|\
-    *.patch|\
-    *.diff|\
-    *_artifact.*|\
-    *.orig|\
-    *.rej|\
-    .idea/*|\
-    .vscode/*|\
-    .omc/*|\
-    */.idea/*|\
-    */.vscode/*|\
-    */.omc/*)
-      violations+=("${path}${missing_suffix}")
-      ;;
-  esac
-done < <(
-  {
-    git -C "${ROOT_DIR}" ls-files -s | sed -E $'s/^[0-9]+ [0-9a-f]+ [0-9]+\t//'
-    git -C "${ROOT_DIR}" diff --cached --name-only --no-renames --diff-filter=d
-  } | sort -u
+  exit "${status}"
 )
-
-if (( ${#violations[@]} > 0 )); then
-  echo "FAIL: tracked local artifacts detected" >&2
-  for path in "${violations[@]}"; do
-    echo " - ${path}" >&2
-  done
-  exit 1
-fi
 
 echo "OK: no tracked local artifacts"

@@ -44,6 +44,12 @@ func TestExtendTargetsCurrentRangeBufferBound(t *testing.T) {
 			_, err = tx.Exec(t.Context(), "PREPARE extend_target_plan(bigint,text[],text[],timestamptz[]) AS "+extendTargetsSQL)
 			require.NoError(t, err)
 
+			defer func() {
+				if err := tx.Conn().Deallocate(t.Context(), "extend_target_plan"); err != nil {
+					t.Error(err)
+				}
+			}()
+
 			before := targetPlanTuples(t, tx, first.Generation)
 
 			targets[0].NotBefore = projectionNow.Add(time.Minute)
@@ -68,9 +74,6 @@ func TestExtendTargetsCurrentRangeBufferBound(t *testing.T) {
 			require.Equal(t, after, targetPlanTuples(t, tx, first.Generation))
 
 			assertPreparedExtendPlanCounts(t, tx, mode)
-
-			_, err = tx.Exec(t.Context(), "DEALLOCATE extend_target_plan")
-			require.NoError(t, err)
 		})
 	}
 

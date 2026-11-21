@@ -123,7 +123,7 @@ go test ./hololive/hololive-dbtest/... \
   ./hololive/hololive-api/cmd/db-migrate/...
 ```
 
-배포 스크립트(`./build-all.sh`) 기동 시, Docker 이미지 빌드 단계 진입 전에 `local-ci.sh` 품질 게이트가 자동으로 선행 수행됩니다. 해당 품질 검사(golangci-lint, NilAway, 경합 테스트 등) 중 하나라도 실패하면 빌드 프로세스가 강제 차단됩니다. 의존성 취약점 진단(`govulncheck`)과 배포 스크립트 테스트는 `scripts/ci/pre-push-gate.sh`가 push 시점에 실행합니다.
+`./build-all.sh`는 이미지 빌드 전에 `local-ci.sh`를 실행합니다. 아키텍처 게이트도 그 안에 있으므로 두 명령을 사전 단계로 연달아 실행할 필요가 없습니다. 게시 전에는 스택 훅이 `scripts/ci/pre-push-gate.sh`를 호출해 해당 로컬 검사에 배포 스크립트 시험과 `govulncheck`를 더합니다. 개발 중에는 변경한 경로의 검사를 선택하고, 릴리스에서는 [전체 검증 절차](docs/current/runbooks/release.md#버전-관리)를 따릅니다.
 
 ---
 
