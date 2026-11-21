@@ -2,7 +2,7 @@
 
 YouTube 컬렉터의 구조, 성능, 컨벤션, 중복 구현과 불필요한 추상화를 분석하고 공유 코드의 개선 및 이관 방향을 제안합니다. 우선순위는 **upstream 오류 분류의 계약 복원 → 재시도 표현과 테스트 guard 정리 → 불필요한 복사와 중복 구현 정리 → 공유 코드의 소유권 분리**입니다.
 
-가장 먼저 해결할 대상은 helper가 인식하지 못한 upstream 오류를 모두 내부 불변식 위반(`INTERNAL`)으로 선언하는 기본 분기입니다. 이 분기 때문에 탭이 없는 채널, 응답 본문 연결 오류, YouTube의 400·403·404 응답처럼 일반적인 provider 실패가 컬렉터 전체 중단 경로로 연결됩니다. 이는 [youtube-collector 서비스 문서](../current/services/youtube-collector.md)의 "Ordinary provider failure … fatal이 아닙니다" 계약과 충돌하므로, 수정은 새 정책이 아니라 계약 복원입니다.
+가장 먼저 해결할 대상은 helper가 인식하지 못한 upstream 오류를 모두 내부 불변식 위반(`INTERNAL`)으로 선언하는 기본 분기입니다. 이 분기 때문에 탭이 없는 채널, 응답 본문 연결 오류, YouTube의 400·403·404 응답처럼 일반적인 provider 실패가 컬렉터 전체 중단 경로로 연결됩니다. 이는 [youtube-collector 서비스 문서](../current/services/collector.md)의 "Ordinary provider failure … fatal이 아닙니다" 계약과 충돌하므로, 수정은 새 정책이 아니라 계약 복원입니다.
 
 이 문서는 2026-10-02 코드 분석과 같은 날의 적대적 리뷰 결과를 문서화한 설계와 실행 기록입니다. 아래 분석은 수정 전 상태를 설명하며, 사용자 요청에 따른 구현·검증 진행은 **구현 진행 기록** 절에 구분합니다. 현재 런타임 소유권은 [PROJECT_MAP](../current/PROJECT_MAP.md), [SERVICE_OWNERSHIP](../current/SERVICE_OWNERSHIP.md), [CONTRACT_MAP](../current/CONTRACT_MAP.md)을 따릅니다. `sourceobservation`·설정 loader·`providers` 이관의 실행 계획은 [알람 워커와 API 공유 모듈 리팩토링안](2026-10-02-alarm-worker-api-shared-refactoring.md)이 소유하며, 이 문서는 해당 이관에서 collector가 보존해야 할 조건만 기록합니다.
 

@@ -62,7 +62,7 @@ done < "$REPO_ROOT/deploy/topology/hosts.conf"
 [[ -n "$AP_POSTGRES_HOST" ]] || { echo 'topology central address missing' >&2; exit 1; }
 AP_POSTGRES_POOL_MAX_CONNS=""
 while IFS='|' read -r owner _service _key _source _instances maximum _role; do
-  if [[ "$owner" == youtube-collector-a ]]; then AP_POSTGRES_POOL_MAX_CONNS="$maximum"; fi
+  if [[ "$owner" == collector-a ]]; then AP_POSTGRES_POOL_MAX_CONNS="$maximum"; fi
 done < "$REPO_ROOT/scripts/ci/postgres-capacity-policy.tsv"
 [[ "$AP_POSTGRES_POOL_MAX_CONNS" =~ ^[1-9][0-9]*$ ]] || { echo 'collector capacity policy missing' >&2; exit 1; }
 case "$MODE" in
@@ -84,7 +84,7 @@ esac
 CUTOVER_LIBS=(compose-env postgres-endpoint ap-host-native-release-path ap-host-native-po ap-host-native-cutover ap-host-native-window
   ap-host-native-rollback-check youtubejs-node-version ap-collector-readiness ap-host-native-remote-apply)
 COLLECTOR_WRAPPER_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-collector-wrapper.sh"
-UNIT_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-collector.service"
+UNIT_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-collector.service"
 PO_UNIT_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-po.service"
 PO_SOCKET_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-po.socket"
 ap_host_load "$REPO_ROOT" "${1:-}"
@@ -110,7 +110,7 @@ fi
 if [[ "$MODE" == --prepare-profile ]]; then
   service="${AP_SERVICES[0]}"
   native_tool_blob scripts/deploy/lib/worker-profile-pair.py |
-    "${AP_SSH[@]}" "sudo -n python3 - prepare-native '$service' /opt/hololive-bot/youtube-collector/current /etc/hololive-bot/youtube-collector-host.env 'hololive-youtube-collector@$service.service'"
+    "${AP_SSH[@]}" "sudo -n python3 - prepare-native '$service' /opt/hololive-bot/collector/current /etc/hololive-bot/collector-host.env 'hololive-collector@$service.service'"
   exit 0
 fi
 
@@ -145,11 +145,11 @@ write_host_env() {
   {
     printf 'APP_ENV=production\n'
     printf 'NOTIFICATION_EGRESS_ROLE=off\n'
-    printf 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true\n'
-    printf 'YOUTUBE_COLLECTOR_INSTANCE_ID=%s\n' "$service"
+    printf 'COLLECTOR_RUNTIME_ALLOWED=true\n'
+    printf 'COLLECTOR_INSTANCE_ID=%s\n' "$service"
     printf 'PGAPPNAME=%s\n' "$service"
-    printf 'YOUTUBE_COLLECTOR_LOG_FILE_NAME=%s.log\n' "$service"
-    printf 'STACK_WORKER_PROFILE_FILE=/opt/hololive-bot/youtube-collector/releases/%s/worker-profile.json\n' "$release_id"
+    printf 'COLLECTOR_LOG_FILE_NAME=%s.log\n' "$service"
+    printf 'STACK_WORKER_PROFILE_FILE=/opt/hololive-bot/collector/releases/%s/worker-profile.json\n' "$release_id"
     printf 'STACK_WORKER_PROFILE_SOURCE_FILE=/etc/stack-secrets/hololive-bot/worker-profiles/%s.json\n' "$service"
     printf 'SERVER_PORT=%s\n' "$port"
     printf 'HOLOLIVE_HTTP_TRANSPORTS=h3\n'
@@ -160,8 +160,8 @@ write_host_env() {
     printf 'HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HEALTHCHECK_SERVER_NAME=127.0.0.1\n'
     printf 'YOUTUBEJS_NODE=/usr/bin/node\n'
-    printf 'YOUTUBEJS_SCRIPT=/opt/hololive-bot/youtube-collector/current/youtubejs/src/server.mjs\n'
-    printf 'YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS=90\n'
+    printf 'YOUTUBEJS_SCRIPT=/opt/hololive-bot/collector/current/youtubejs/src/server.mjs\n'
+    printf 'COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS=90\n'
     printf 'POSTGRES_USER=hololive_collector_a\n'
     printf 'POSTGRES_HOST=%s\n' "$AP_POSTGRES_HOST"
     printf 'POSTGRES_PORT=%s\n' "$AP_POSTGRES_PORT"
@@ -196,7 +196,7 @@ build_native_payload() {
     compose-env.sh postgres-endpoint.sh worker-profile-pair.py; do
     cp "$REPO_ROOT/scripts/deploy/lib/$helper" "$artifact_dir/bin/"
   done
-  sh "$REPO_ROOT/scripts/build/build-youtube-collector-go.sh" \
+  sh "$REPO_ROOT/scripts/build/build-hololive-collector-go.sh" \
     --output-dir "$artifact_dir" --version "$version" --revision "$native_revision" \
     --goos linux --goarch amd64 --goamd64 "$AP_GOAMD64"
   verify_native_collector
@@ -208,38 +208,39 @@ build_native_payload() {
     "$issuer_artifact/architecture" "$issuer_artifact/version" "$artifact_dir/po-sandbox/"
   cp "$REPO_ROOT/scripts/build/po-sandbox-manifest.py" "$artifact_dir/bin/po-sandbox-manifest.py"
   rm -rf "$issuer_artifact"
-  write_wrapper "$artifact_dir/bin/youtube-collector-wrapper"
+  write_wrapper "$artifact_dir/bin/hololive-collector-wrapper"
   rm -rf "$artifact_dir/youtubejs"
   mkdir -p "$artifact_dir/youtubejs"
-  cp "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/package.json" \
-    "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/package-lock.json" "$artifact_dir/youtubejs/"
-  cp -R "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/src" "$artifact_dir/youtubejs/src"
+  cp "$REPO_ROOT/hololive/hololive-collector/youtubejs/package.json" \
+    "$REPO_ROOT/hololive/hololive-collector/youtubejs/package-lock.json" "$artifact_dir/youtubejs/"
+  cp -R "$REPO_ROOT/hololive/hololive-collector/youtubejs/src" "$artifact_dir/youtubejs/src"
   rm -f "$artifact_dir/youtubejs/src/"*.test.mjs
   (
     cd "$artifact_dir/youtubejs"
     npm_config_engine_strict=true npm exec --yes --package=corepack@0.36.0 -- corepack npm ci --omit=dev --no-audit --no-fund --ignore-scripts
   )
-  write_host_env "$artifact_dir/youtube-collector-host.env"
-  cp "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"
+  write_host_env "$artifact_dir/collector-host.env"
+  cp "$UNIT_TEMPLATE" "$artifact_dir/hololive-collector@.service"
   render_po_unit > "$artifact_dir/hololive-youtube-po.service"
   cp "$PO_SOCKET_TEMPLATE" "$artifact_dir/hololive-youtube-po.socket"
 }
 
 verify_native_collector() {
-  sh "$REPO_ROOT/scripts/build/check-youtube-collector-go-artifact.sh" "$artifact_dir" \
+  sh "$REPO_ROOT/scripts/build/check-hololive-collector-go-artifact.sh" "$artifact_dir" \
     --version "$version" --revision "$native_revision" --goos linux --goarch amd64 --goamd64 "$AP_GOAMD64"
 }
 
 apply_remote() {
   {
     if [[ "$AP_NAME" == osaka ]]; then
-      local base=/opt/hololive-bot/youtube-collector oldroot
+      local base=/opt/hololive-bot/collector oldroot
       local -a custody=("$base")
       if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then
         oldroot="$base/releases/${window_args[1]}"
         custody+=("$oldroot" "$oldroot/bin/"{po-sandbox-manifest,worker-profile-pair}.py \
           "$base/cutover-recovery" "$oldroot/native-window" "$base/releases/$release_id" \
-          /etc/systemd/system/hololive-youtube-{collector@youtube-collector-a.service,po.service,po.socket}.d)
+          /etc/systemd/system/hololive-collector@collector-a.service.d \
+          /etc/systemd/system/hololive-youtube-{po.service,po.socket}.d)
       fi
       printf 'set -euo pipefail\nsudo -n bash -s --'
       printf ' %q' "${custody[@]}"
@@ -268,11 +269,11 @@ if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
 fi
 if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then
   verify_native_collector
-  cmp -s "$COLLECTOR_WRAPPER_LIB" "$artifact_dir/bin/youtube-collector-wrapper"
-  cmp -s "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"
+  cmp -s "$COLLECTOR_WRAPPER_LIB" "$artifact_dir/bin/hololive-collector-wrapper"
+  cmp -s "$UNIT_TEMPLATE" "$artifact_dir/hololive-collector@.service"
   cmp -s "$PO_SOCKET_TEMPLATE" "$artifact_dir/hololive-youtube-po.socket"
   render_po_unit | cmp -s - "$artifact_dir/hololive-youtube-po.service"
-  write_host_env /dev/stdout | cmp -s - "$artifact_dir/youtube-collector-host.env"
+  write_host_env /dev/stdout | cmp -s - "$artifact_dir/collector-host.env"
   [[ "$(<"$artifact_dir/po-sandbox/revision")" == "$native_revision" &&
      "$(<"$artifact_dir/po-sandbox/version")" == "$version" && "$(<"$artifact_dir/po-sandbox/architecture")" == amd64 ]]
   (cd "$artifact_dir/po-sandbox" && sha256sum --strict --check rootfs.tar.sha256)

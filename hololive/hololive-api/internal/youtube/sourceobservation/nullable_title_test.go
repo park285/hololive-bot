@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	publishkit "github.com/kapu/hololive-collector/testkit/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
 const liveSessionForUpdateSQL = `SELECT video_id, channel_id, status, COALESCE(title, '') AS title, topic_id, thumbnail_url,

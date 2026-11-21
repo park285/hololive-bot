@@ -74,11 +74,11 @@ reviewed revision because that root holds no source tree):
 
 ```bash
 sudo python3 scripts/deploy/lib/worker-profile-pair.py prepare \
-  youtube-collector "$PWD/artifacts/worker-profile/releases/prepared-c-$(date -u +%Y%m%dT%H%M%SZ)" \
-  hololive-youtube-collector-c "$PWD"
+  collector-c "$PWD/artifacts/worker-profile/releases/prepared-c-$(date -u +%Y%m%dT%H%M%SZ)" \
+  hololive-collector-c "$PWD"
 ```
 
-Use `youtube-collector-b` / `hololive-youtube-collector-b` on iris-seoul, or `hololive-api` /
+Use `collector-b` / `hololive-collector-b` on iris-seoul, or `hololive-api` /
 `hololive-api` and `hololive-alarm-worker` / `hololive-alarm-worker`. Preparation preserves
 the original container identity in the receipt, retains its image, and does not restart it.
 The ordinary deployment can also perform this first capture while the original bytes are
@@ -88,7 +88,7 @@ Native a uses `ap-host-native-deploy.sh <host> --prepare-profile` from kapu with
 host's existing deploy approval variable. This does not build or stop a service. It proves
 the running executable and loaded hash, validates the old binary, then freezes
 `worker-profile.json` and `SHA256SUMS` inside that release and updates only the host-owned
-`youtube-collector-host.env` to its release path plus canonical source path. Normal native
+`collector-host.env` to its release path plus canonical source path. Normal native
 deployment freezes each candidate the same way; manual and automatic rollback validate
 the previous release's checksums and binary/profile pair before starting it.
 `worker-profile-pair.py` and the `ap-host-native-*` scripts handle only a. kapu d uses the
@@ -188,7 +188,7 @@ release pair, not as extra keys or aliases in the new profile.
    prepare its pair with the reviewed helper:
    `python3 scripts/deploy/lib/worker-profile-pair.py prepare SERVICE ABSOLUTE_PAIR_DIR CONTAINER ROOT`.
    Supported Quadlet services are `hololive-api`, `hololive-alarm-worker`,
-   `youtube-collector` (c), and `youtube-collector-b`. First adoption authenticates
+   `collector` (c), and `collector-b`. First adoption authenticates
    the bounded `/diagnostics/workers` v1 `profile.hash`, compares exact bytes, rechecks process identity and
    runs the old image CLI with no network. Missing/mutated bytes or an unpaired
    stopped process fail closed; do not reconstruct a profile from defaults.
@@ -274,30 +274,30 @@ Central Quadlet units read `/etc/stack-secrets/hololive-bot/compose.env` through
 `[Service] EnvironmentFile=`; `quadlet-prestart` rejects syntax that Compose and systemd
 would read differently and moves passwords/API keys into root-only `--env-file`s.
 The iris-seoul collector b unit has no interpolation file; its fixed values live in the unit and its
-secrets only in `youtube-collector.env`. The legacy monolithic `env` file is not a production env file.
+secrets only in `collector.env`. The legacy monolithic `env` file is not a production env file.
 
 Application-only env is scoped per service. Quadlet units use the fixed files below:
 
 ```text
 /etc/stack-secrets/hololive-bot/bot.env
 /etc/stack-secrets/hololive-bot/alarm-worker.env
-/etc/stack-secrets/hololive-bot/youtube-collector.env
+/etc/stack-secrets/hololive-bot/collector.env
 ```
 
 ### Central endpoint ownership
 
 Collector b on iris-seoul names the central primary in its unit (`POSTGRES_HOST=100.100.1.8`, `POSTGRES_PORT=5433`)
-and reads the dedicated scraper password from `youtube-collector.env` (`POSTGRES_PASSWORD`). It has no cache mounts
+and reads the dedicated scraper password from `collector.env` (`POSTGRES_PASSWORD`). It has no cache mounts
 or DB/cache dependencies. The non-secret primary address owner is `deploy/topology/hosts.conf`
 (`central=100.100.1.8`). Native generation reads that owner and `scripts/ci/postgres-capacity-policy.tsv`,
 not a second address/pool literal.
 
-Collectors use only `youtube-collector.env`, so Iris egress tokens stay out of collector containers.
-The central unsuffixed `youtube-collector` (`c`) also uses scoped
-`youtube-collector.env`; it still must not receive Iris egress tokens, and `compose.env`
+Collectors use only `collector.env`, so Iris egress tokens stay out of collector containers.
+The central unsuffixed `collector` (`c`) also uses scoped
+`collector.env`; it still must not receive Iris egress tokens, and `compose.env`
 is only a `[Service]` interpolation file, never a container env file.
 
-`youtube-collector.env` must provide a non-empty `METRICS_API_KEY` for every
+`collector.env` must provide a non-empty `METRICS_API_KEY` for every
 deployed slot. Host-native `a` binds metrics to its tailnet address and kapu `d` binds
 them to its unpublished container network address (`10.89.15.x`), so omitting
 `METRICS_API_KEY` is a startup configuration error rather than a keyless metrics mode.

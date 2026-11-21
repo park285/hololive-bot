@@ -5,11 +5,11 @@ compose_service_resolve_log_target() {
 
     case "${key}" in
         hololive-api|hololive-alarm-worker) printf '%s\n' "${key}" ;;
-        youtube-collector) printf '%s\n' "hololive-youtube-collector-c" ;;
+        collector-c) printf '%s\n' "hololive-collector-c" ;;
         *) return 1 ;;
     esac
 }
 
 compose_service_log_targets_text() {
-    printf '%s\n' "hololive-api hololive-alarm-worker youtube-collector"
+    printf '%s\n' "hololive-api hololive-alarm-worker collector-c"
 }

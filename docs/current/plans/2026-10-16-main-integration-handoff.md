@@ -16,7 +16,7 @@
 | branch / HEAD | `main` / `21e60d245` (원격 `f814da318`를 history 보존 merge한 로컬 commit) |
 | origin/main 대비 | ahead 4, 미push |
 | 스테이징 | 202파일, +11,811 / -2,821. 전체 pre-push gate 통과 대상 |
-| 미스테이징 | 문서 4개: `CHANGELOG.md`, `docs/current/plans/2026-10-16-sql-compaction-handoff.md`, `docs/current/services/hololive-api.md`, `docs/current/services/youtube-collector.md` |
+| 미스테이징 | 문서 4개: `CHANGELOG.md`, `docs/current/plans/2026-10-16-sql-compaction-handoff.md`, `docs/current/services/hololive-api.md`, `docs/current/services/collector.md` |
 | untracked | 이 문서 |
 | writer guard | push_lock·ref_transaction_lock 없음 |
 | 임시 자원 | 임시 probe 프로그램·디렉터리와 소유 PostgreSQL 컨테이너는 모두 제거했습니다 |
@@ -141,7 +141,7 @@
   - `AP_COLLECTOR_MAINTENANCE_STOPPED=true scripts/deploy/ap-deploy.sh seoul`이 정지한 b를 받습니다.
   - cutover가 실패하면 이전 image로 되돌리되 collector는 `up --no-start`로 만들기만 합니다.
   - 기준점 짝 검사와 읽기 전용 검증은 rollback을 걸기 전으로 옮겼습니다.
-  - 적대적 리뷰 2회의 중요 지적(핵심 경로 테스트 공백)을 반영했습니다. 사용 조건은 [youtube-collector runbook](../runbooks/youtube-collector.md)에 있습니다.
+  - 적대적 리뷰 2회의 중요 지적(핵심 경로 테스트 공백)을 반영했습니다. 사용 조건은 [youtube-collector runbook](../runbooks/collector.md)에 있습니다.
 - **중앙 issuer c 정렬:**
   - 정렬 전에는 issuer c가 `c98d54f2c`, collector c가 `848fb2792`였습니다. 이 상태에서는 다음 공식 paired 배포(`po-central-cutover.sh`)가 짝 검사에서 거부됩니다.
   - Seoul에서 운영 중인 것과 같은 848 issuer 산출물을 사용했습니다(image `4ddbe64b47a3`, `1914722e054a`).

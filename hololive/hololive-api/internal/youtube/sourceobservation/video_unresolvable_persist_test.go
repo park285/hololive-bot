@@ -6,8 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	publishkit "github.com/kapu/hololive-collector/testkit/sourceobservation"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
 func identityMissingVideoCheck(reason contract.LiveCheckUnknownReason) contract.VideoLiveCheckV1 {

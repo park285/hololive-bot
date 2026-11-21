@@ -4,7 +4,7 @@
 
 ## 한 줄 요약
 
-`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube collector AP fleet, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/YouTube plane), `alarm-worker`, `youtube-collector`가 소유합니다. 중앙은 rootful Podman Quadlet, Seoul collector `b`와 kapu collector `d`도 rootful Podman Quadlet, Osaka collector `a`는 native systemd로 운영합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다.
+`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, collector AP fleet, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/YouTube plane), `alarm-worker`, `collector`가 소유합니다. 중앙은 rootful Podman Quadlet, Seoul collector `b`와 kapu collector `d`도 rootful Podman Quadlet, Osaka collector `a`는 native systemd로 운영합니다. 관리자 웹은 iris-seoul의 `iris-console.service`가 제공합니다.
 
 ## 큰 구조
 
@@ -13,7 +13,7 @@
 ├── hololive/
 │   ├── hololive-api/               # Unified bot/admin/YouTube consume runtime
 │   ├── hololive-alarm-worker/      # Alarm checker, dispatch queue, proactive egress
-│   ├── hololive-youtube-collector/  # AP-fleet YouTube collector module
+│   ├── hololive-collector/  # AP-fleet collector module
 │   ├── hololive-shared/            # shared domain, config, providers, contracts, services
 │   └── hololive-dbtest/            # PostgreSQL test harness and migration replay
 ├── docs/current/                   # current architecture, service, contract, runbook docs
@@ -28,7 +28,7 @@
 └── deploy/compose/                 # shared runtime contracts (README only)
 ```
 
-`go.work` ties the Go runtime/shared/dbtest modules under `hololive/` to source modules in the sibling repositories `../shared-go` and `../iris-client-go`, including `../iris-client-go/adapters/valkeydedup` for API webhook ingress. Production builds use `GOWORK=off` and resolve external modules from the owning `go.mod` and `go.sum`. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.27.x. Web implementation, credentials, SSR and native deployment belong to sibling `../iris-console`.
+`go.work` ties the Go runtime/shared/dbtest modules under `hololive/` to source modules in the sibling repositories `../shared-go` and `../iris-client-go`, including `../iris-client-go/adapters/valkeydedup` for API webhook ingress. Production builds use `GOWORK=off` and resolve external modules from the owning `go.mod` and `go.sum`. The three production runtime binaries (`hololive-api`, `alarm-worker`, `collector`) are implemented in Go 1.27.x. Web implementation, credentials, SSR and native deployment belong to sibling `../iris-console`.
 
 ## Runtime Services
 
@@ -38,7 +38,7 @@ The current production runtime set is three Go binaries:
 |---|---|---|---:|
 | `hololive-api` | `hololive/hololive-api/` | Bot/admin planes plus YouTube consume/canonical persist | 30001/30006 |
 | `alarm-worker` | `hololive/hololive-alarm-worker/` | Alarm checks, queue consumption, proactive notification egress | 30007 |
-| `youtube-collector` | `hololive/hololive-youtube-collector/` | AP fleet fetch/normalize/lease/Publish (`a`/`b`/`c`/`d`) | 30005/30015/30025/30015(kapu) |
+| `collector` | `hololive/hololive-collector/` | AP fleet fetch/normalize/lease/Publish (`a`/`b`/`c`/`d`) | 30005/30015/30025/30015(kapu) |
 
 ## Shared Libraries
 
@@ -81,7 +81,7 @@ The `hololive-api` bot plane owns webhook ingress and user-facing command routin
 ### YouTube Collection Flow
 
 ```text
-youtube-collector AP fleet
+collector AP fleet
   -> Holodex / Official / YouTube.js fetch/normalize
   -> PostgreSQL source_observations Publish
 hololive-api YouTube plane
@@ -102,7 +102,7 @@ runtime services
   -> member epoch Pub/Sub / alarm wakeup / runtime cache
 ```
 
-`youtube-collector` scheduling uses PostgreSQL leases. It does not join this Valkey Pub/Sub or cache path.
+`collector` scheduling uses PostgreSQL leases. It does not join this Valkey Pub/Sub or cache path.
 
 내부 HTTP/H3 client에는 시작 시 적재한 옵션을 명시적으로 전달합니다. API bot·admin의 alarm client는
 worker HTTP provider를 사용합니다. `alarmAdvanceMinutes` 공개 입력 범위는 `1..1440`이며, 저장 실패 때
@@ -116,26 +116,26 @@ Queue and Pub/Sub behavior should be checked against `QUEUE_AND_PUBSUB_CONTRACTS
 
 | 대상 | 실행 방식·설정 | 배포·검증 절차 |
 |---|---|---|
-| 중앙 API·worker·collector `c`·infra | Podman Quadlet `deploy/quadlet/hololive-bot/` ([설치·운영](../../deploy/quadlet/README.md)) | [release runbook](runbooks/release.md); collector `c`와 issuer는 [paired cutover](runbooks/youtube-collector.md#isolated-po-token-lifecycle) |
-| Seoul collector `b` | iris-seoul Quadlet `deploy/podman/iris-seoul/`, issuer `hololive-youtube-po-b` | `scripts/deploy/po-central-cutover.sh b`; [collector runbook](runbooks/youtube-collector.md) |
-| Osaka collector `a` | native `hololive-youtube-collector@youtube-collector-a.service`와 `hololive-youtube-po.service` | `scripts/deploy/ap-host-native-deploy.sh`의 `osaka` 대상; [collector runbook](runbooks/youtube-collector.md) |
-| kapu collector `d` | rootful Podman Quadlet `hololive-youtube-collector-d.service`와 격리 issuer `hololive-youtube-po-d.service` | 수동 설치(`deploy/podman/kapu/README.md`). osaka2는 2026-11-04 공개 진입점으로 바뀌어 collector를 두지 않습니다. |
+| 중앙 API·worker·collector `c`·infra | Podman Quadlet `deploy/quadlet/hololive-bot/` ([설치·운영](../../deploy/quadlet/README.md)) | [release runbook](runbooks/release.md); collector `c`와 issuer는 [paired cutover](runbooks/collector.md#isolated-po-token-lifecycle) |
+| Seoul collector `b` | iris-seoul Quadlet `deploy/podman/iris-seoul/`, issuer `hololive-youtube-po-b` | `scripts/deploy/po-central-cutover.sh b`; [collector runbook](runbooks/collector.md) |
+| Osaka collector `a` | native `hololive-collector@collector-a.service`와 `hololive-youtube-po.service` | `scripts/deploy/ap-host-native-deploy.sh`의 `osaka` 대상; [collector runbook](runbooks/collector.md) |
+| kapu collector `d` | rootful Podman Quadlet `hololive-collector-d.service`와 격리 issuer `hololive-youtube-po-d.service` | 수동 설치(`deploy/podman/kapu/README.md`). osaka2는 2026-11-04 공개 진입점으로 바뀌어 collector를 두지 않습니다. |
 | 통합 관리자 웹 | iris-seoul의 `iris-console.service` | Iris Console 운영 절차; 이 저장소의 [연결 경계](runbooks/admin-dashboard.md) |
 
 `scripts/deploy/ap-hosts/*.conf`의 `AP_RUNTIME_MODE`는 Osaka에 `native`를 지정하며 다른 값은 받지 않습니다. iris-seoul `b`와 kapu `d`는 ap-hosts 대상이 아닙니다. 상태 확인은 `scripts/logs/`, host별 완료 판정은 `scripts/deploy/ap-completion-check.sh`와 collector runbook을 따릅니다.
 
 Live deploy, restart, rollback, secret writes, and production config mutation require explicit operator approval.
 
-## YouTube Collector Fleet Notes
+## Collector Fleet Notes
 
-`youtube-collector` is the four-member AP fleet: Osaka `a` (host-native, 30005), Seoul `b` (iris-seoul Podman Quadlet, 30015), central unsuffixed `youtube-collector` (`c`, Quadlet, 30025), kapu `d` (rootful Podman Quadlet, 30015 loopback·metrics `10.89.15.14:30096`). There is no extra central singleton beyond fleet member `c`. All four members share PostgreSQL collection leases through distinct `hololive_collector_a`/`b`/`c`/`d` logins over `verify-full` TLS. The important invariants are:
+`collector` is the four-member AP fleet: Osaka `a` (host-native, 30005), Seoul `b` (iris-seoul Podman Quadlet, 30015), central unsuffixed `collector` (`c`, Quadlet, 30025), kapu `d` (rootful Podman Quadlet, 30015 loopback·metrics `10.89.15.14:30096`). There is no extra central singleton beyond fleet member `c`. All four members share PostgreSQL collection leases through distinct `hololive_collector_a`/`b`/`c`/`d` logins over `verify-full` TLS. The important invariants are:
 
 - collector owns fetch/normalize/lease/checkpoint/`source_observations` Publish only;
 - `hololive-api` YouTube plane owns claim/finalize, canonical persist, notification intent, live-end finalizer, and retention;
 - `members.photo` stays on hololive-api admin PhotoSync; YouTube channel photos are the `channel_photo` reducer;
 - final notification delivery is owned by `alarm-worker`.
 
-현재 수집기 운영 절차는 `docs/current/services/youtube-collector.md`와 `docs/current/runbooks/youtube-collector.md`를 따릅니다. 날짜가 붙은 계획과 Git 이력은 운영 기준이 아닙니다.
+현재 수집기 운영 절차는 `docs/current/services/collector.md`와 `docs/current/runbooks/collector.md`를 따릅니다. 날짜가 붙은 계획과 Git 이력은 운영 기준이 아닙니다.
 
 ## Where To Start For Common Tasks
 
@@ -143,12 +143,12 @@ Live deploy, restart, rollback, secret writes, and production config mutation re
 |---|---|
 | Find runtime ownership | `docs/current/SERVICE_OWNERSHIP.md` |
 | Find module/service inventory | `docs/current/PROJECT_MAP.md` |
-| Change deploy shape | `docs/current/DEPLOYMENT_BASELINE.md`, `deploy/quadlet/`, `deploy/compose/`, `scripts/deploy/ap-hosts/`, `scripts/deploy/lib/hololive-youtube-collector.service` |
+| Change deploy shape | `docs/current/DEPLOYMENT_BASELINE.md`, `deploy/quadlet/`, `deploy/compose/`, `scripts/deploy/ap-hosts/`, `scripts/deploy/lib/hololive-collector.service` |
 | Release, rollback, or deploy | `docs/current/runbooks/release.md`, `docs/current/runbooks/rollback.md` |
 | Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/` |
 | Change runtime construction or cleanup | `hololive/hololive-api/internal/config/`, `internal/app/`, `cmd/hololive-api/`; each plane's `runtime/` |
-| Change YouTube collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
-| Change Community collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
+| Change YouTube collection | `hololive/hololive-collector/`, `docs/current/services/collector.md`, `docs/current/runbooks/collector.md` |
+| Change Community collection | `hololive/hololive-collector/`, `docs/current/services/collector.md`, `docs/current/runbooks/collector.md` |
 | Change final notification delivery | `docs/current/contracts/alarm.md`, `docs/current/QUEUE_AND_PUBSUB_CONTRACTS.md`, `docs/current/runbooks/alarm-worker.md`, `docs/current/runbooks/dlq-replay.md`, `hololive/hololive-alarm-worker/` |
 | Change command handling | `hololive/hololive-api/internal/planes/bot/` |
 | Change Hololive admin API / web | API: `hololive/hololive-api/internal/planes/admin/`; web: `../iris-console/`; operations: `docs/current/runbooks/admin-dashboard.md` |
@@ -161,8 +161,8 @@ Use the smallest command that matches the change. For broad Go runtime changes, 
 
 ```bash
 ./build-all.sh --no-bump --build-only
-go build ../shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/...
-go test ../shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/... ./hololive/hololive-dbtest/...
+go build ../shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-collector/...
+go test ../shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-collector/... ./hololive/hololive-dbtest/...
 ```
 
 `./build-all.sh --no-bump --build-only` only builds Podman images; it never deploys. Central rollout follows the release runbook with explicit operator approval.

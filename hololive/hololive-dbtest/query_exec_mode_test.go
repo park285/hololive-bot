@@ -24,7 +24,7 @@ func TestProductionComposePinsTheTestPoolQueryExecMode(t *testing.T) {
 		}
 	}()
 
-	for _, unit := range []string{"hololive-api", "hololive-alarm-worker", "hololive-youtube-collector-c"} {
+	for _, unit := range []string{"hololive-api", "hololive-alarm-worker", "hololive-collector-c"} {
 		raw, err := unitDir.ReadFile(unit + ".container")
 		if err != nil {
 			t.Fatalf("read production Quadlet unit %s: %v", unit, err)

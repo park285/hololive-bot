@@ -1,6 +1,6 @@
 # YouTube collector Go·JS 경계 구조 리뷰
 
-> 2026-10-25에 수행한 읽기 전용 구조 리뷰 기록입니다. 제품 코드 수정, 커밋, 배포를 수행하지 않았으며 아래 권장 사항은 승인된 작업이 아닙니다. 런타임 소유권은 [PROJECT_MAP](../current/PROJECT_MAP.md), collector 계약은 [youtube-collector 서비스 문서](../current/services/youtube-collector.md), PO issuer 절차는 [youtube-collector runbook](../current/runbooks/youtube-collector.md)을 따릅니다.
+> 2026-10-25에 수행한 읽기 전용 구조 리뷰 기록입니다. 제품 코드 수정, 커밋, 배포를 수행하지 않았으며 아래 권장 사항은 승인된 작업이 아닙니다. 런타임 소유권은 [PROJECT_MAP](../current/PROJECT_MAP.md), collector 계약은 [youtube-collector 서비스 문서](../current/services/collector.md), PO issuer 절차는 [youtube-collector runbook](../current/runbooks/collector.md)을 따릅니다.
 
 ## 결론과 범위
 

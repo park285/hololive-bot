@@ -63,8 +63,8 @@ AP_NAME=osaka
 AP_SSH_HOST=mock-host
 AP_SSH_HOST_KEY_ALIAS=mock-host
 AP_RUNTIME_MODE=native
-AP_SERVICES=(youtube-collector-a)
-AP_CONTAINERS=(hololive-youtube-collector-a)
+AP_SERVICES=(collector-a)
+AP_CONTAINERS=(hololive-collector-a)
 AP_PORTS=(30005)
 AP_APPROVE_DEPLOY_VAR=I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY
 AP_APPROVE_ROLLBACK_VAR=I_APPROVE_OSAKA_ACTIVE_ACTIVE_ROLLBACK
@@ -106,7 +106,7 @@ case "${1:-}" in
     exit 0
     ;;
   cat)
-    [[ "$2" == /opt/hololive-bot/youtube-collector/current/rollback-contract/po-unit-presence ]] || exit 1
+    [[ "$2" == /opt/hololive-bot/collector/current/rollback-contract/po-unit-presence ]] || exit 1
     printf 'absent\n'
     ;;
   env)
@@ -152,7 +152,7 @@ if [[ "${1:-}" == "show" ]]; then
     SubState) echo running ;;
     NRestarts) echo 0 ;;
     ActiveEnterTimestamp) echo "Tue 2026-06-30 08:14:12 UTC" ;;
-    EnvironmentFiles) echo "${MOCK_ENVIRONMENT_FILES:-/etc/stack-secrets/hololive-bot/youtube-collector.env /etc/hololive-bot/youtube-collector-host.env}" ;;
+    EnvironmentFiles) echo "${MOCK_ENVIRONMENT_FILES:-/etc/stack-secrets/hololive-bot/collector.env /etc/hololive-bot/collector-host.env}" ;;
     *) exit 1 ;;
   esac
   exit 0
@@ -168,9 +168,9 @@ if [[ "${MOCK_JOURNAL_FAILURE:-false}" == true ]]; then
   exit 1
 fi
 cat <<'LOG'
-Jun 30 08:14:13 host youtube-collector-wrapper[1]: 2026-06-30T08:14:13Z INF logging/log.go:44 ingestion runtime configured active_active_enabled=true
-Jun 30 08:14:13 host youtube-collector-wrapper[1]: 2026-06-30T08:14:13Z INF cache/service_connection.go:63 Cache store connected
-Jun 30 08:14:13 host youtube-collector-wrapper[1]: 2026-06-30T08:14:13Z INF dbx/client.go:199 postgres_pool_connected
+Jun 30 08:14:13 host collector-wrapper[1]: 2026-06-30T08:14:13Z INF logging/log.go:44 ingestion runtime configured active_active_enabled=true
+Jun 30 08:14:13 host collector-wrapper[1]: 2026-06-30T08:14:13Z INF cache/service_connection.go:63 Cache store connected
+Jun 30 08:14:13 host collector-wrapper[1]: 2026-06-30T08:14:13Z INF dbx/client.go:199 postgres_pool_connected
 LOG
 EOF
 chmod +x "$fakebin/journalctl"
@@ -199,7 +199,7 @@ if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
   fail "native completion check must reject an incomplete API handoff"
 fi
 if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
-  MOCK_ENVIRONMENT_FILES='/etc/stack-secrets/hololive-bot/ap-compose.env /etc/stack-secrets/hololive-bot/youtube-collector.env /etc/hololive-bot/youtube-collector-host.env' \
+  MOCK_ENVIRONMENT_FILES='/etc/stack-secrets/hololive-bot/ap-compose.env /etc/stack-secrets/hololive-bot/collector.env /etc/hololive-bot/collector-host.env' \
   CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
   "$completion" osaka >/dev/null 2>&1; then
   fail "native completion check must reject a unit that still loads ap-compose.env"

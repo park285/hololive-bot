@@ -43,7 +43,7 @@ func TestLoadRuntimeRejectsInvalidDispatchRetentionEnv(t *testing.T) {
 
 func TestLoadRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	setRuntimeEnv(t)
-	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
+	t.Setenv("COLLECTOR_INSTANCE_ID", "INVALID")
 
 	if _, err := LoadRuntime(); err != nil {
 		t.Fatalf("LoadRuntime() error = %v, want success when collector env is invalid", err)

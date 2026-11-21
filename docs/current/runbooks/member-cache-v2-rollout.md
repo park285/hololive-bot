@@ -34,7 +34,7 @@ Valkey 재시작 등으로 authority key가 사라지면 다음 reconcile이 `SE
 - `hololive-api`: bot plane infra가 만든 `member.Cache` 하나를 bot·admin plane이 함께 사용
 - `hololive-alarm-worker`: alarm target/member adapter
 
-`hololive-youtube-collector`는 더 이상 member cache를 만들지 않습니다(`collectorruntime` infrastructure가 `BuildInfraModule`/member cache를 쓰지 않음). 아래 Expand rollout과 Contraction 절의 collector `a`/`b`/`c`/`d` 언급은 2026-08-06 당시 기록입니다.
+`hololive-collector`는 더 이상 member cache를 만들지 않습니다(`collectorruntime` infrastructure가 `BuildInfraModule`/member cache를 쓰지 않음). 아래 Expand rollout과 Contraction 절의 collector `a`/`b`/`c`/`d` 언급은 2026-08-06 당시 기록입니다.
 
 조회 표면은 `*member.Cache`가 직접 구현하는 `domain.MemberDataProvider`(`LoadAllMembers`, `GetChannelIDs`, `FindMemberByChannelID`, `FindMemberByName`, `FindMemberByAlias`)입니다. Admin plane의 member mutation endpoint만 runtime mutation owner입니다.
 

@@ -35,7 +35,7 @@ X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한
 - `alarm_state` read consumer: `hololive-api` — `alarms` 테이블을 다음 경로로 직접 읽습니다.
   - YouTube plane: `internal/planes/youtube/runtime/queries/notification_channel_ids.sql`을 projection transaction 안에서 실행합니다. `members` JOIN으로 졸업 멤버를 제외하고 `MaxInputChannelCount+1`로 상한을 둡니다.
   - bot/admin plane은 `alarm.http`를 사용합니다. 통합 API의 `internal/config.RuntimeConfig.Validate`와 두 plane의 builder가 빈 `ALARM_INTERNAL_URL`을 거부합니다. URL 미설정 시 in-process service/repository를 주입하는 분기는 없습니다.
-  - `Add`/`Remove`/`ClearByRoom`을 함께 노출하는 alarms 저장소 `alarmstore.Repository`는 alarm-worker의 `internal/service/alarm/alarmstore`에 있으므로, Go `internal` 가시성 규칙에 따라 youtube-collector와 hololive-api는 import할 수 없습니다.
+  - `Add`/`Remove`/`ClearByRoom`을 함께 노출하는 alarms 저장소 `alarmstore.Repository`는 alarm-worker의 `internal/service/alarm/alarmstore`에 있으므로, Go `internal` 가시성 규칙에 따라 collector와 hololive-api는 import할 수 없습니다.
 - Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery
 
 ## Transport

@@ -11,7 +11,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 | `hololive-alarm-worker` | Go 1.27 | `hololive/hololive-alarm-worker/` | Alarm checker, dispatch queue consumer, and proactive egress worker | 30007 |
 | `hololive-api` | Go 1.27 | `hololive/hololive-api/` | Unified runtime hosting bot/admin planes and the YouTube consume plane | 30001/30006 |
 | `hololive-dbtest` | Go 1.27 | `hololive/hololive-dbtest/` | PostgreSQL testcontainers harness and production migration replay support | - |
-| `hololive-youtube-collector` | Go 1.27 + collector-owned YouTube.js helper | `hololive/hololive-youtube-collector/` | AP-fleet YouTube collector: Holodex / Official / YouTube.js fetch, normalize, collection lease, checkpoint, and observation Publish. No canonical tables, no notification outbox, no egress | 30005/30015/30025/30015(kapu) |
+| `hololive-collector` | Go 1.27 + collector-owned YouTube.js helper | `hololive/hololive-collector/` | AP-fleet collector: Holodex / Official / YouTube.js fetch, normalize, collection lease, checkpoint, and observation Publish. No canonical tables, no notification outbox, no egress | 30005/30015/30025/30015(kapu) |
 | `hololive-shared` | Go 1.27 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
 | `shared-go` | Go 1.27 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
 | `iris-console` | Go gateway + Android Kotlin | `../iris-console/` (iris-stack submodule) | Unified Iris/ChatBotGo/Hololive app source with account scopes; this technology inventory does not assert deployment completion. Host control API `iris-admin` belongs to Iris | 8878 (loopback) |
@@ -35,11 +35,11 @@ the recorded deployed layout until new rollout evidence replaces it.
 |---|---|---|---|---:|---|---|---|
 | `hololive-api` | `hololive-api` | `hololive-api` | Central Quadlet `hololive-api.service` | 30001/30006 | `https://127.0.0.1:30001/health` | `services/hololive-api.md` | `runbooks/hololive-api.md` |
 | `alarm-worker` | `hololive-alarm-worker` | `alarm-worker` | Central Quadlet `hololive-alarm-worker.service` | 30007 | `https://127.0.0.1:30007/health` | `services/alarm-worker.md` | `runbooks/alarm-worker.md` |
-| `youtube-collector` | `hololive-youtube-collector` | `youtube-collector` | Central Quadlet `hololive-youtube-collector-c.service` (`c`), iris-seoul Quadlet `hololive-youtube-collector-b.service` (`b`), Osaka native systemd `a`, kapu Quadlet `hololive-youtube-collector-d.service` (`d`) | 30005/30015/30025/30015(kapu) | `https://127.0.0.1:30025/ready` (central `c`; 원격 AP는 각 호스트 로컬 H3 `/ready`) | `services/youtube-collector.md` | `runbooks/youtube-collector.md` |
+| `collector` | `hololive-collector` | `collector` | Central Quadlet `hololive-collector-c.service` (`c`), iris-seoul Quadlet `hololive-collector-b.service` (`b`), Osaka native systemd `a`, kapu Quadlet `hololive-collector-d.service` (`d`) | 30005/30015/30025/30015(kapu) | `https://127.0.0.1:30025/ready` (central `c`; 원격 AP는 각 호스트 로컬 H3 `/ready`) | `services/collector.md` | `runbooks/collector.md` |
 
 AP execution mode is owned by `scripts/deploy/ap-hosts/*.conf`: `osaka=native` (the only AP host; iris-seoul `b` moved
 to Podman Quadlet on 2026-11-06 and is deployed with `po-central-cutover.sh b`). kapu `d` is a manually installed Quadlet (`deploy/podman/kapu/`), not an ap-hosts target. The native collector runs as
-`hololive-youtube-collector@youtube-collector-a.service` and has no Compose or Quadlet
+`hololive-collector@collector-a.service` and has no Compose or Quadlet
 definition. The management web runs separately on iris-seoul as
 `iris-console.service`; [its runbook](runbooks/admin-dashboard.md) documents the Hololive connection boundary.
 
@@ -66,7 +66,7 @@ deployment baseline for the terminated Osaka VM (its boot volume was deleted on
 - Service ownership: `SERVICE_OWNERSHIP.md`
 - Runtime runbook index: `runbooks/README.md`
 - Deployment baseline: `DEPLOYMENT_BASELINE.md`
-- YouTube notification split: `youtube-collector` AP fleet owns external fetch/normalize/collection lease/checkpoint/`source_observation` Publish; `hololive-api` YouTube plane owns observation consume, canonical persist, notification intent, live-end finalizer, and retention/replay; `alarm-worker` owns room resolution, rendering, retry, delivery rows, and Iris/Kakao egress.
+- YouTube notification split: `collector` AP fleet owns external fetch/normalize/collection lease/checkpoint/`source_observation` Publish; `hololive-api` YouTube plane owns observation consume, canonical persist, notification intent, live-end finalizer, and retention/replay; `alarm-worker` owns room resolution, rendering, retry, delivery rows, and Iris/Kakao egress.
 - X Spaces: alarm-worker의 선택적 Node helper가 무료 웹 내부 API 관측을 수행하고 기존 dispatch ledger로 LIVE 구독 방에 시작 링크를 보낸다. Iris Console은 후보 세션 제출·상태 화면을, hololive-api는 암호화된 후보 저장을, worker는 검증·승격을 소유한다. 상세 계약은 `services/x-spaces.md`를 따른다.
 - X Spaces 연결 복구는 관리 앱의 수동 쿠키 제출과 worker 후보 검증을 사용한다. 연결 상태는 현재 세션과 후보 검증 결과만 제공한다.
 
@@ -82,7 +82,7 @@ deployment baseline for the terminated Osaka VM (its boot volume was deleted on
 | API 일정 포스터 | `hololive/hololive-api/internal/service/scheduleposter` | admin·bot plane이 함께 쓰는 `schedule_poster*` 테이블 SQL, 일정표 행·변경 적용 |
 | API YouTube | `hololive/hololive-api/internal/youtube/sourceobservation`, `internal/youtube/canonicalwrite`, `internal/youtube/reconcile`, `internal/youtube/community` | observation consume, transaction 전용 canonical persist, replay·retention 및 private reducer |
 | Worker | `hololive/hololive-alarm-worker/internal/config`, `internal/service/alarm/{subscriptions,httpapi,dedup,dispatchoutbox,queue}`, `internal/service/eventgrade`, `internal/egress/{alarmdispatch,sendoutcome}`, `internal/egress/youtubedispatch/format` | worker `RuntimeConfig`·`AlarmWorkerProfile`, 구독 서비스·private cache, `/internal/alarm/*` HTTP handler·route registrar·요청 필수 값 검사(wire 타입은 shared `pkg/contracts/alarm`), 이벤트 등급 관측 소비·판정, dispatch 저장/발행·runner, Iris 발송 결과 분류, 실제 formatter |
-| Collector | `hololive/hololive-youtube-collector/internal/config`, `internal/runtime/{collection,joblease,sourceobservation,youtubejs,youtubejscollector}` | collector 설정·profile·tracing slot 정책, 순수 수집 계약, lease/checkpoint/observation publish, helper RPC·로컬 pacing·pagination |
+| Collector | `hololive/hololive-collector/internal/config`, `internal/runtime/{collection,joblease,sourceobservation,youtubejs,youtubejscollector}` | collector 설정·profile·tracing slot 정책, 순수 수집 계약, lease/checkpoint/observation publish, helper RPC·로컬 pacing·pagination |
 | Shared foundation | `hololive/hololive-shared/pkg/config/{envload,runtimepolicy,settings}`, `pkg/entrypoint`, `pkg/timeutil`, `pkg/alarmtiming/targetpolicy`, `pkg/providers/{database,holodex,iris,modules}` | strict 환경 파싱, 여러 runtime이 읽는 설정 구획 타입·loader·순수 검증, 세 runtime main의 `--check-worker-profile` 출력·파일 logger 조립, 순수 정책·시간 계산, typed infra 생성자. runtime 설정 집계와 단일 runtime 전용 구획(hololive-api의 `PHOTO_SYNC_ENABLED`·`KAKAO_ROOMS`·`KAKAO_ACL_*` room ACL seed·내부 H3 client 옵션)은 각 module `internal/config`가, 한 plane만 쓰는 상수(`/api/holo` rate limit, bot 기동 시 Iris 대기, 방송 제목 길이)는 그 plane 패키지가 소유 |
 
 Alarm HTTP provider는 worker이며 API bot·admin plane은 `ALARM_INTERNAL_URL`의 client입니다. 내부 HTTP/H3 client는 시작 시 적재한 `BotPlaneConfig.InternalH3`·`AdminPlaneConfig.InternalH3` 옵션을 명시적으로 받고, transport와 timeout은 각 plane이 소유합니다. Iris URL 파일의 동적 reload는 별도 기존 경로를 유지합니다.
@@ -104,7 +104,7 @@ not a parallel MQ configuration type.
 - Keep service docs and runbook links valid for all 3 runtime rows.
 - Keep contract docs aligned with `hololive/hololive-shared/pkg/contracts/*`.
 - Run `./scripts/architecture/ci-boundary-gate.sh` for architecture-wide changes.
-- Architecture: Go single-language runtime (3 app runtimes: hololive-api + alarm-worker + youtube-collector AP fleet). `hololive-api` hosts the bot/admin/YouTube planes in one process; bot and admin listen on ports 30001/30006.
-- Central startup uses the Quadlet units in `deploy/quadlet/hololive-bot/` and starts `hololive-api`, `hololive-alarm-worker`, fleet member `c` (`hololive-youtube-collector-c`, 30025), its isolated issuer and central infra; unhealthy containers are stopped gracefully by `HealthOnFailure=stop` (StopSignal and StopTimeout) and restarted by systemd (collector and issuer excepted). Runtime hosts use verified images with no builds, following the release runbook; `hololive-api` and `hololive-alarm-worker` are replaced only through `scripts/deploy/quadlet-redeploy-service.sh`.
+- Architecture: Go single-language runtime (3 app runtimes: hololive-api + alarm-worker + collector AP fleet). `hololive-api` hosts the bot/admin/YouTube planes in one process; bot and admin listen on ports 30001/30006.
+- Central startup uses the Quadlet units in `deploy/quadlet/hololive-bot/` and starts `hololive-api`, `hololive-alarm-worker`, fleet member `c` (`hololive-collector-c`, 30025), its isolated issuer and central infra; unhealthy containers are stopped gracefully by `HealthOnFailure=stop` (StopSignal and StopTimeout) and restarted by systemd (collector and issuer excepted). Runtime hosts use verified images with no builds, following the release runbook; `hololive-api` and `hololive-alarm-worker` are replaced only through `scripts/deploy/quadlet-redeploy-service.sh`.
 - iris-seoul `b` uses `deploy/podman/iris-seoul/` units with no central service interpolation or dependencies. Osaka `a` runs only as a native systemd unit and kapu `d` as a Quadlet; neither has a Compose overlay. [Deployment Baseline](DEPLOYMENT_BASELINE.md) distinguishes the prepared layout from actual host acceptance.
 - Retired runtime names: `hololive-alarm`, `hololive-scraper`, `rust-dispatcher`, `hololive-admin`, `hololive-rs`, `youtube-producer`.

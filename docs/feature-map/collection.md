@@ -4,7 +4,7 @@
 
 ## 하위 기능
 
-채널·영상·커뮤니티·쇼츠·프로필·사진·일정·방송 상태 관측, job lease와 checkpoint, 부분 수집 지연, 관측 소비와 정본 반영, 종료 근거 확인, replay·보관 기한 정리. [수집 서비스](../current/services/youtube-collector.md)에 종류별 근거와 수명 규칙이 있다.
+채널·영상·커뮤니티·쇼츠·프로필·사진·일정·방송 상태 관측, job lease와 checkpoint, 부분 수집 지연, 관측 소비와 정본 반영, 종료 근거 확인, replay·보관 기한 정리. [수집 서비스](../current/services/collector.md)에 종류별 근거와 수명 규칙이 있다.
 
 ## 사용자 경로
 
@@ -15,7 +15,7 @@
 ## Node 기록 테스트로 구동
 
 ```bash
-(cd hololive/hololive-youtube-collector/youtubejs && node --test --test-concurrency=1 src/upstream-mapping.test.mjs)
+(cd hololive/hololive-collector/youtubejs && node --test --test-concurrency=1 src/upstream-mapping.test.mjs)
 ```
 
 `youtubejs/testdata` 및 `test-fixtures`와 함께 해석한 입력·정규화 결과를 본다. 임대 계약은 [CollectionJobLease의 코드 대응과 Mermaid 상태도](../../verification/tla/CollectionJobLease/COVERAGE.md#상태도)를 기준으로 분리해 확인한다.

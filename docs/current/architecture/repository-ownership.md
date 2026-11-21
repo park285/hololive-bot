@@ -31,7 +31,7 @@ Structured table (doc-only, no gate reads it): `repository-ownership.allowlist`.
 
 | Runtime | Enabled role | Must stay disabled |
 |---|---|---|
-| `youtube-collector` | AP-fleet fetch/normalize/lease and observation Publish | Canonical persist, observation claim/finalize, Iris send, outbox dispatch |
+| `collector` | AP-fleet fetch/normalize/lease and observation Publish | Canonical persist, observation claim/finalize, Iris send, outbox dispatch |
 | `hololive-api` YouTube plane | Observation consume, canonical persist, notification intent | External scraping, proactive egress |
 
 Duplicated polling prevention is enforced by PostgreSQL collection leases. Each collector uses a slot-specific Stack Worker Profile v1 with `collection.executor.enabled=true`. Consume/canonical persist is owned by the `hololive-api` YouTube plane.

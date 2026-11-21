@@ -8,7 +8,7 @@
 
 ## 사용자 경로
 
-- `GET /api/holo/stats`는 멤버 저장소와 alarm worker에서 각각 수를 얻는다. `hololive-api` bot/admin, `alarm-worker`, `youtube-collector`의 상태 노출 설정은 [토폴로지](../current/PROJECT_MAP.md)와 각 서비스 문서를 따른다.
+- `GET /api/holo/stats`는 멤버 저장소와 alarm worker에서 각각 수를 얻는다. `hololive-api` bot/admin, `alarm-worker`, `collector`의 상태 노출 설정은 [토폴로지](../current/PROJECT_MAP.md)와 각 서비스 문서를 따른다.
 - 공통 라우터의 `GET /health`, `/ready`, `/internal/ready`, `/metrics`, `/diagnostics/workers`; pprof 전용 listener의 `GET /debug/pprof/`, `/cmdline`, `/profile`, `/symbol`, `/trace`, `/:profile` 및 `POST /debug/pprof/symbol`(하위 경로는 모두 `/debug/pprof` 기준). 런타임/설정에 따라 일부만 노출한다.
 - 세 runtime의 `--check-worker-profile`, 각 `healthcheck` CLI; `db-migrate`의 `--baseline-through`, `--statement-timeout`, `--allow-blocking-index-drop`은 기동 전 스키마 작업이다. collector의 `po-broker --version`, `--healthcheck`, `--socket` 또는 `--listen-fd`는 내부 issuer용이다. 재처리 기준점 도구는 [관측](collection.md)에 있다.
 - [발송 정산](dispatch.md)의 별도 운영자 SQL 도구는 `scripts/maintenance/preview-alarm-dispatch-closeout.sql`, `record-alarm-dispatch-closeout.sql`, `lookup-alarm-dispatch-closeout.sql`이다. 기록 조치는 일반 조회와 구분한다.

@@ -9,9 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/content"
+	publishkit "github.com/kapu/hololive-collector/testkit/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
 func populatedContentClock() content.EntityState {

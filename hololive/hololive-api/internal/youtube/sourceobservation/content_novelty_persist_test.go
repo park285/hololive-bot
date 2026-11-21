@@ -8,10 +8,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	publishkit "github.com/kapu/hololive-collector/testkit/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
 func TestContentNoveltyBaselineTakesEarliestAcceptedListWithoutLegacyBackfill(t *testing.T) {

@@ -2,7 +2,7 @@
 
 INTEGRATION_TEST_PACKAGES=(
     ./hololive/hololive-alarm-worker/internal/egress/youtubedispatch
-    ./hololive/hololive-youtube-collector/internal/runtime/joblease
+    ./hololive/hololive-collector/internal/runtime/joblease
 )
 INTEGRATION_TAG_PACKAGES=(
     ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox

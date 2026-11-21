@@ -40,8 +40,8 @@ def run_case(name, action, target=None, signo=signal.SIGTERM, initial=True, mode
     (case / 'old/rollback-contract').mkdir(parents=True)
     (case / 'new').mkdir()
     endpoint_env = 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n'
-    (case / 'new/youtube-collector-host.env').write_text(endpoint_env)
-    (case / 'old/rollback-contract/youtube-collector-host.env').write_text(endpoint_env)
+    (case / 'new/collector-host.env').write_text(endpoint_env)
+    (case / 'old/rollback-contract/collector-host.env').write_text(endpoint_env)
     (case / 'bin').mkdir()
     command = case / 'bin/systemctl'
     command.write_text('''#!/usr/bin/env bash
@@ -109,10 +109,10 @@ old_target="$CASE/old"
 [[ "$INITIAL" != false ]] || old_target=""
 host_env="$CASE/host.env" unit_file="$CASE/unit"
 current_link="$CASE/current" previous_link="$CASE/previous" releases_root="$CASE"
-cp "$release_dir/youtube-collector-host.env" "$host_env"
+cp "$release_dir/collector-host.env" "$host_env"
 printf 'new\\n' > "$unit_file"
 ln -s "$release_dir" "$current_link"
-unit=hololive-youtube-collector@youtube-collector-a.service
+unit=hololive-collector@collector-a.service
 collector_prechange_running="${PRECHANGE_RUNNING:-true}" collector_prechange_enabled="${PRECHANGE_ENABLED:-true}" collector_prechange_state=inactive
 po_service=hololive-youtube-po.service po_socket=hololive-youtube-po.socket
 native_previous_link_restore() { printf 'previous restored\\n' >> "$CASE/calls"; }
@@ -202,7 +202,7 @@ for enabled in [True, False]:
     calls = (case/'calls').read_text().splitlines()
     assert actual == 7 and not (case/'recovery').exists(), (actual, (case/'err').read_text())
     assert not (case/'restored').exists() and not any(line.startswith(('enable --now ', 'start ', 'restart ')) for line in calls), calls
-    assert (f'enable {"hololive-youtube-collector@youtube-collector-a.service"}' in calls) == enabled, calls
+    assert (f'enable {"hololive-collector@collector-a.service"}' in calls) == enabled, calls
     assert 'previous restored' in calls and 'ActiveState=inactive' in (case/'err').read_text() and 'without starting it' in (case/'err').read_text()
 case, actual = run_case('initial-signal', 'native_cutover_run restart sudo -n systemctl restart "$unit"', 'owner', initial=False)
 assert actual == 143 and not (case/'restored').exists() and not (case/'recovery').exists()
@@ -329,7 +329,7 @@ assert not (host_case/'unexpected-command').exists()
 pin_case = work/'pin'
 pin_case.mkdir()
 for field, name, key, tail in (
-    ('profile', 'youtube-collector-host.env', 'STACK_WORKER_PROFILE_FILE=', '/worker-profile.json'),
+    ('profile', 'collector-host.env', 'STACK_WORKER_PROFILE_FILE=', '/worker-profile.json'),
     ('issuer', 'issuer.service', 'RootDirectory=', '/po-sandbox/rootfs'),
 ):
     old, new = pin_case/'old', pin_case/'new-longer-id'
@@ -382,7 +382,7 @@ EXPECTED_REVISION=fixture
 assert actual == 7 and (case/'recovery').exists() and not (case/'issuer-started').exists()
 calls = (case/'calls').read_text().splitlines()
 assert calls.count('probe') == 1 and not any(line.startswith(('enable ', 'restart ', 'start ', 'po_restore_previous')) for line in calls)
-assert all('disable --now ' + unit in calls for unit in ('hololive-youtube-po.socket', 'hololive-youtube-po.service', 'hololive-youtube-collector@youtube-collector-a.service'))
+assert all('disable --now ' + unit in calls for unit in ('hololive-youtube-po.socket', 'hololive-youtube-po.service', 'hololive-collector@collector-a.service'))
 case, actual = run_case('restore-group', 'false', 'restore-group')
 assert actual == 143 and (case/'recovery').exists() and 'outcome_unknown' in (case/'err').read_text()
 assert (case/'calls').read_text().count('enable --now ') == 1
@@ -459,7 +459,7 @@ releases_root="$PWD/releases" release_id=new window_old=old
 old_target="$releases_root/old" current_link="$PWD/current" previous_link="$PWD/previous"
 payload="$PWD/payload" host_env="$PWD/host.env" unit_file="$PWD/system/collector@.service"
 native_recovery_dir="$PWD/recovery"
-service=youtube-collector-a unit=collector.service po_service=issuer.service po_socket=issuer.socket
+service=collector-a unit=collector.service po_service=issuer.service po_socket=issuer.socket
 window_name="$1" original="$2" fault="$3"
 EXPECTED_REVISION=$(printf 'a%.0s' {1..40})
 mkdir -p "$old_target/po-sandbox" "$payload" "$PWD/system"
@@ -475,7 +475,7 @@ po_health_ready() {
   if [[ -f broker-warming ]]; then rm -- broker-warming; return 1; fi
   if [[ -f expire-during-health ]]; then rmdir "$(native_window_permit rotation)"; fi
 }
-collector_readiness_fetch() { printf '{"instance_id":"youtube-collector-a","status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED","handoff_processed":true,"pending_queue":0}\n'; }
+collector_readiness_fetch() { printf '{"instance_id":"collector-a","status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED","handoff_processed":true,"pending_queue":0}\n'; }
 rotation_fixture_event() {
   local mid=$1 id=$2
   shift 2
@@ -513,7 +513,7 @@ sudo() {
   [[ "$1" == -n ]]; shift
   case "$1" in
     test) case "$2" in
-      /proc/*/exe) [[ "$3" == -ef && ( "$4" == "$release_dir/bin/youtube-collector" || "$4" == "$release_dir/po-sandbox/rootfs/app/bin/po-broker" ) ]] ;;
+      /proc/*/exe) [[ "$3" == -ef && ( "$4" == "$release_dir/bin/hololive-collector" || "$4" == "$release_dir/po-sandbox/rootfs/app/bin/po-broker" ) ]] ;;
       /proc/*/root) [[ "$3" == -ef && "$4" == "$release_dir/po-sandbox/rootfs" ]] ;;
       *) "$@" ;;
     esac ;;
@@ -909,11 +909,11 @@ window="$release_dir/native-observation"
 mkdir -p "$window" "$old_target/rollback-contract"
 native_window_boot > "$window/boot"
 printf '%s\\n' "$apply_origin_pin" "$release_dir" "$window_digest" "$native_claim_nonce" > "$window/pins"
-mv "$host_env" "$PWD/youtube-collector-host.env"; host_env="$PWD/youtube-collector-host.env"
+mv "$host_env" "$PWD/collector-host.env"; host_env="$PWD/collector-host.env"
 chmod 0640 "$host_env"
 printf 'STACK_WORKER_PROFILE_FILE=%s/worker-profile.json\\n' "$old_target" >> "$host_env"
 cp "$host_env" "$old_target/${host_env##*/}"
-cp "$host_env" "$old_target/rollback-contract/youtube-collector-host.env"
+cp "$host_env" "$old_target/rollback-contract/collector-host.env"
 sed "s|$old_target/worker-profile.json|$release_dir/worker-profile.json|" "$host_env" > "$release_dir/${host_env##*/}"
 profile_digest="$(native_file_digest "$release_dir/${host_env##*/}")"
 touch "$unit_file"; cp "$unit_file" "$old_target/${unit_file##*/}"
@@ -961,7 +961,7 @@ for name, mutation, fault, starts in (
     assert actual == starts, (name, actual, result.stderr)
     if name == 'verified':
         assert not (case/'recovery').exists() and (case/'current').resolve() == case/'releases/old'
-        assert (case/'youtube-collector-host.env').read_bytes() == (case/'releases/old/youtube-collector-host.env').read_bytes()
+        assert (case/'collector-host.env').read_bytes() == (case/'releases/old/collector-host.env').read_bytes()
     else:
         assert (case/'recovery/outcome').read_text() == 'outcome_unknown\n'
         if not starts:

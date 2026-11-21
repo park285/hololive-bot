@@ -110,7 +110,7 @@ linters:
             - "!$test"
           deny:
             - pkg: os/exec
-              desc: hololive-api와 저장 template 실행기는 외부 process를 실행하지 않는다. 외부 실행이 필요한 작업은 alarm-worker·youtube-collector처럼 별도 runtime이 소유한다
+              desc: hololive-api와 저장 template 실행기는 외부 process를 실행하지 않는다. 외부 실행이 필요한 작업은 alarm-worker·collector처럼 별도 runtime이 소유한다
             - pkg: plugin
               desc: hololive-api와 저장 template 실행기는 native plugin을 적재하지 않는다
         twentyq-boundaries:
@@ -332,7 +332,7 @@ linters:
         - google.golang.org/grpc
         - google.golang.org/grpc/*
         - golang.org/x/sync/*
-        - github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr
+        - github.com/kapu/hololive-collector/internal/runtime/collecterr
         - github.com/park285/iris-client-go/v5/internal/*
         - github.com/park285/iris-console/internal/apierr
         - github.com/park285/iris-console/internal/value

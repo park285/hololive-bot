@@ -55,7 +55,7 @@ configure_go_packages() {
             hololive/hololive-shared/*|hololive/hololive-dbtest/*|hololive/hololive-api/scripts/migrations/*)
                 return 0
                 ;;
-            hololive/hololive-youtube-collector/*)
+            hololive/hololive-collector/*)
                 selected[hololive/hololive-api]=1 ;;
             docs/current/contracts/admin-api.openapi.json|scripts/maintenance/queries/live_runtime_state_drift.sql)
                 selected[hololive/hololive-api]=1 ;;
@@ -63,12 +63,12 @@ configure_go_packages() {
                 selected[hololive/hololive-shared]=1 ;;
         esac
         case "${file}" in
-            hololive/hololive-api/*/queries/*|hololive/hololive-youtube-collector/*/queries/*|\
+            hololive/hololive-api/*/queries/*|hololive/hololive-collector/*/queries/*|\
             deploy/quadlet/hololive-bot/*|scripts/maintenance/queries/*)
                 selected[hololive/hololive-dbtest]=1 ;;
             scripts/ci/public-pr-collector-helper-install.sh|scripts/ci/public-pr-go-gate.sh|\
             scripts/ci/check-go-test-json.py|scripts/ci/collector-test-skip-allowlist.txt)
-                selected[hololive/hololive-youtube-collector]=1 ;;
+                selected[hololive/hololive-collector]=1 ;;
         esac
         for module in "${GO_OWNED_MODULES[@]}"; do
             if [[ "${file}" == "${module}/"* ]]; then

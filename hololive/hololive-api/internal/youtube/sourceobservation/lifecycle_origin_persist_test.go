@@ -8,9 +8,9 @@ import (
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/schedule"
+	publishkit "github.com/kapu/hololive-collector/testkit/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
 func assertLifecycleOrigin(t *testing.T, pool *pgxpool.Pool, want string) {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root_dir="$(git rev-parse --show-toplevel)"
-npm_package_manager="$(node -p 'require(process.argv[1]).packageManager' "$root_dir/hololive/hololive-youtube-collector/youtubejs/package.json")"
+npm_package_manager="$(node -p 'require(process.argv[1]).packageManager' "$root_dir/hololive/hololive-collector/youtubejs/package.json")"
 
 if [[ ! "$npm_package_manager" =~ ^npm@[0-9]+\.[0-9]+\.[0-9]+\+sha512\.[0-9a-f]{128}$ ]]; then
   echo "collector helper packageManager must be an exact npm version with sha512 integrity" >&2

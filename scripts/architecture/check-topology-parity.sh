@@ -158,7 +158,7 @@ done <"$manifest"
 
 assert_assignment "osaka AP host" AP_SSH_HOST "$osaka" "$root_dir/scripts/deploy/ap-hosts/osaka.conf"
 assert_assignment "osaka AP host-key alias" AP_SSH_HOST_KEY_ALIAS "$osaka" "$root_dir/scripts/deploy/ap-hosts/osaka.conf"
-assert_count "seoul collector b metrics bind" 1 "PublishPort=$seoul:30096:30096/tcp" "$root_dir/deploy/podman/iris-seoul/hololive-youtube-collector-b.container"
+assert_count "seoul collector b metrics bind" 1 "PublishPort=$seoul:30096:30096/tcp" "$root_dir/deploy/podman/iris-seoul/hololive-collector-b.container"
 
 public_ingress_sources=("$osaka2")
 for source in "${public_ingress_sources[@]}"; do

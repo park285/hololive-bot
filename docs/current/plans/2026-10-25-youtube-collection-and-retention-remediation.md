@@ -25,7 +25,7 @@
 - DB 계획의 보호 범위, 잠금 순서, 원자적 커밋을 유지합니다. 이미 적용된 migration은 수정하지 않고 새 migration으로 변경합니다([규약](../../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md)).
 - collector는 exact-key, fail-closed 경계를 유지합니다. 새 재시도·fallback·기본값 대체를 추가하지 않고, fleet rate·worker·retry 상한을 늘리지 않습니다.
 - 새 검사는 제품 동작을 실행하는 테스트로 한정합니다. 문서·스크립트 텍스트 검사, 계약 해시 게이트는 만들지 않습니다.
-- 구현은 hololive-bot 소유 worktree에서 합니다. collector 이미지는 issuer와 짝으로 배포합니다([runbook](../runbooks/youtube-collector.md#isolated-po-token-lifecycle)).
+- 구현은 hololive-bot 소유 worktree에서 합니다. collector 이미지는 issuer와 짝으로 배포합니다([runbook](../runbooks/collector.md#isolated-po-token-lifecycle)).
 
 ## 단계
 

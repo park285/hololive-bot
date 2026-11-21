@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
+	publishkit "github.com/kapu/hololive-collector/testkit/sourceobservation"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
 func TestChannelLiveCheckRejectsSnapshotJobLease(t *testing.T) {

@@ -27,7 +27,7 @@ type collectionCadenceCase struct {
 func TestCollectionTargetCadenceMatchesSchedulerCandidates(t *testing.T) {
 	const idleLeaseState = "IDLE"
 
-	candidateSQL, err := os.ReadFile("../../../../../hololive-youtube-collector/internal/runtime/joblease/queries/subject_candidates_for_projection.sql")
+	candidateSQL, err := os.ReadFile("../../../../../hololive-collector/internal/runtime/joblease/queries/subject_candidates_for_projection.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

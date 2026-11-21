@@ -42,7 +42,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 worker 권한은 migration 029가 worker 코드가 쓰는 표·sequence에만 줍니다. `hololive_alarm_worker`에는 미래 객체 기본 권한이 없으므로,
 worker가 새 표를 쓰게 되면 그 migration에서 필요한 동사만 GRANT합니다. `alarm-worker.env`에는 API 또는 admin DB 비밀번호를 복사하지 않습니다.
 
-worker 계정 분리는 [collector DB 계정 분리 컷오버](youtube-collector.md#collector-db-계정-분리-컷오버)와 한 번에 반영합니다.
+worker 계정 분리는 [collector DB 계정 분리 컷오버](collector.md#collector-db-계정-분리-컷오버)와 한 번에 반영합니다.
 stack-secrets master에 `HOLOLIVE_ALARM_WORKER_PASSWORD`를 새로 두고, worker가 지금까지 함께 쓰던 `HOLOLIVE_DB_PASSWORD`도 새 값으로 바꿉니다.
 db-migrate가 역할을 맞추는 순간 API 비밀번호가 바뀌므로, 기존 API·worker 연결은 유지되지만 새 연결은 각 서비스를 재시작해야 열립니다.
 그래서 db-migrate를 포함한 `hololive-api` 재배포 직후 alarm-worker를 재배포합니다. 그 사이 이전 worker는 새 연결을 열지 못합니다.

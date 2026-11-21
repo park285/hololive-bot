@@ -14,7 +14,7 @@
 
 전용 리포트 CLI는 없으며 PostgreSQL을 직접 조회한다.
 
-Community/shorts 수집 evidence는 `youtube-collector` observation, canonical consume는 `hololive-api` YouTube plane, 최종 발송은 `alarm-worker`다. 운영 조회는 `members`/`alarms`와 `youtube_content_alarm_tracking` + `youtube_notification_delivery_telemetry`를 직접 대조한다.
+Community/shorts 수집 evidence는 `collector` observation, canonical consume는 `hololive-api` YouTube plane, 최종 발송은 `alarm-worker`다. 운영 조회는 `members`/`alarms`와 `youtube_content_alarm_tracking` + `youtube_notification_delivery_telemetry`를 직접 대조한다.
 
 필요 조건:
 

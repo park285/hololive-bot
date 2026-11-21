@@ -168,22 +168,22 @@ build_local_pair() {
   local_stage="$(mktemp -d)"
   trap 'rm -rf "$local_stage"' EXIT
   "$root/scripts/build/build-po-sandbox-artifact.sh" arm64 "$revision" "$version" "$local_stage/issuer" podman
-  collector_image=localhost/hololive-youtube-collector:candidate
+  collector_image=localhost/hololive-collector:candidate
   podman build --platform linux/arm64 --format docker \
     --tag "$collector_image" \
-    --file "$root/hololive/hololive-youtube-collector/Dockerfile" \
+    --file "$root/hololive/hololive-collector/Dockerfile" \
     --build-arg "REVISION=$revision" --label "org.opencontainers.image.revision=$revision" \
     --build-arg "VERSION=$version" "$root"
   [[ "$(podman image inspect -f '{{.Os}}/{{.Architecture}}' "$collector_image")" == linux/arm64 ]]
   [[ "$(podman image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$collector_image")" == "$revision" ]]
   collector_id="$(podman create "$collector_image")"
-  podman cp "$collector_id:/app/bin/youtube-collector" "$local_stage/collector-binary"
+  podman cp "$collector_id:/app/bin/hololive-collector" "$local_stage/collector-binary"
   podman cp "$collector_id:/app/manifest.json" "$local_stage/collector-manifest.json"
   podman rm "$collector_id" >/dev/null
   python3 - "$local_stage/collector-manifest.json" "$local_stage/collector-binary" "$revision" <<'PY'
 import hashlib, json, sys
 m=json.load(open(sys.argv[1])); assert m['source_revision'] == sys.argv[3] and m['go']['goarch'] == 'arm64'
-assert hashlib.sha256(open(sys.argv[2], 'rb').read()).hexdigest() == m['files']['bin/youtube-collector']
+assert hashlib.sha256(open(sys.argv[2], 'rb').read()).hexdigest() == m['files']['bin/hololive-collector']
 PY
   podman save --format docker-archive --output "$local_stage/collector-image.tar" "$collector_image"
   (cd "$local_stage" && sha256sum collector-image.tar > collector-image.tar.sha256)

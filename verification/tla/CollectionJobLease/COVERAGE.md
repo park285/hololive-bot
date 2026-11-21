@@ -14,7 +14,7 @@ epoch 4 기준선에서도 `job_key` PK, `fence_epoch`와 슬롯 제약, 만료 
 
 ## 코드와 원자적 단계
 
-경로 기준: `hololive/hololive-youtube-collector/internal/runtime/joblease/`. 한 행의 성공한 전이만 관찰한다. `Acquire`, `Renew`, `CompleteCurrent`에서 표현한 효과는 트랜잭션이 보유한 행 잠금 아래의 최종 갱신이다. 그 앞의 SQL을 서로 독립적으로 재정렬하거나 외부 콜백까지 같은 단계로 취급하지 않는다.
+경로 기준: `hololive/hololive-collector/internal/runtime/joblease/`. 한 행의 성공한 전이만 관찰한다. `Acquire`, `Renew`, `CompleteCurrent`에서 표현한 효과는 트랜잭션이 보유한 행 잠금 아래의 최종 갱신이다. 그 앞의 SQL을 서로 독립적으로 재정렬하거나 외부 콜백까지 같은 단계로 취급하지 않는다.
 
 | 단계 | 원본 |
 |---|---|

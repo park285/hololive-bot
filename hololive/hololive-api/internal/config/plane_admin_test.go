@@ -72,7 +72,7 @@ func TestAdminPlaneIgnoresAccidentalIrisEgressInputs(t *testing.T) {
 func TestPlaneLoadersIgnoreInvalidYouTubeCollectorEnv(t *testing.T) {
 	t.Run("admin", func(t *testing.T) {
 		setAdminPlaneEnv(t)
-		t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
+		t.Setenv("COLLECTOR_INSTANCE_ID", "INVALID")
 
 		if err := loadAdminPlaneRuntime(t); err != nil {
 			t.Fatalf("admin plane load error = %v, want success when collector env is invalid", err)
@@ -81,7 +81,7 @@ func TestPlaneLoadersIgnoreInvalidYouTubeCollectorEnv(t *testing.T) {
 
 	t.Run("bot", func(t *testing.T) {
 		setBotPlaneEnv(t)
-		t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
+		t.Setenv("COLLECTOR_INSTANCE_ID", "INVALID")
 
 		if _, err := LoadBotPlaneRuntime(); err != nil {
 			t.Fatalf("LoadBotPlaneRuntime() error = %v, want success when collector env is invalid", err)

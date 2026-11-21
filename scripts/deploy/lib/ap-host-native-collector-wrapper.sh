@@ -20,6 +20,6 @@ if [ -z "${POSTGRES_PASSWORD:-}" ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-  set -- /opt/hololive-bot/youtube-collector/current/bin/youtube-collector
+  set -- /opt/hololive-bot/collector/current/bin/hololive-collector
 fi
 exec "$@"

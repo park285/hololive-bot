@@ -171,7 +171,7 @@ release 디렉터리를 보존하고, 스키마·admission 호환성을 승인�
 
 일반 설치의 runtime peer는 `Wants=`라 한 unit의 restart가 다른 unit을 재시작하지 않습니다. 다만 멈춰 있는 peer는 함께 시작되므로
 `hololive-api.service`를 시작하면 `hololive-alarm-worker.service`도 시작됩니다. main-host collector-c는
-`hololive-youtube-collector-c.service`이며 `po-central-cutover.sh`가 PO issuer를 먼저 교체·검증한 뒤 collector를
+`hololive-collector-c.service`이며 `po-central-cutover.sh`가 PO issuer를 먼저 교체·검증한 뒤 collector를
 재시작합니다. infra image는 `compose.env`의 identity를 바꾼 뒤 승인된 창에서 해당 unit만 재시작합니다.
 
 **컷오버 직후**에는 app unit이 아직 drop-in 없이 `:prod`·compose.env 값을 따르므로, 첫 배포 전에
@@ -190,7 +190,7 @@ release 디렉터리를 보존하고, 스키마·admission 호환성을 승인�
 
 건강한 container가 다른 image ID로 돌고 있으면 실패한 rollout입니다. 이전 pair release 디렉터리와 직전 배포 트리는
 수용될 때까지 보존합니다. PO issuer(`youtube-po-b`, `youtube-po-c`, native `hololive-youtube-po.service`)의 재시작
-카운트는 generation 교체 횟수이므로 `NRestarts=0` 대신 [youtube-collector 런북의 issuer 수용 기준](youtube-collector.md#issuer-generation-교체와-재시작-카운트)을 따릅니다.
+카운트는 generation 교체 횟수이므로 `NRestarts=0` 대신 [collector 런북의 issuer 수용 기준](collector.md#issuer-generation-교체와-재시작-카운트)을 따릅니다.
 
 > 중앙 Postgres publish 주소·인증서 mount는 `holo-postgres.container`와 app unit이 정의하고 기동 전에 `quadlet-prestart`가
 > topology 정본·Tailscale identity와 대조한다. Docker 시절 live-compat overlay와 그 cert mount 검사는 컷오버로 없어졌다.
@@ -199,7 +199,7 @@ Current Go runtime services:
 
 - `hololive-api`
 - `hololive-alarm-worker`
-- `youtube-collector` on the main host; `youtube-collector-b` uses the AP host wrapper.
+- `collector` on the main host; `collector-b` uses the AP host wrapper.
 
 ## 필수 검사
 
@@ -288,7 +288,7 @@ bash scripts/publish-release.sh "$tag" "$previous_tag" edit
 sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30001/health
 sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 sudo podman exec hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
-sudo podman exec hololive-youtube-collector-c ./bin/healthcheck https://127.0.0.1:30025/health
+sudo podman exec hololive-collector-c ./bin/healthcheck https://127.0.0.1:30025/health
 ```
 
 ## 관련 문서

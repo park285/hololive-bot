@@ -42,5 +42,5 @@ expect_fail() {
 
 expect_eq "$(compose_service_resolve_log_target hololive-api)" "hololive-api" "log target hololive-api"
 expect_eq "$(compose_service_resolve_log_target hololive-alarm-worker)" "hololive-alarm-worker" "log target hololive-alarm-worker"
-expect_eq "$(compose_service_resolve_log_target youtube-collector)" "hololive-youtube-collector-c" "log target youtube-collector"
-expect_fail "log target rejects unknown service" compose_service_resolve_log_target youtube-collector-c
+expect_eq "$(compose_service_resolve_log_target collector-c)" "hololive-collector-c" "log target collector-c"
+expect_fail "log target rejects bare collector" compose_service_resolve_log_target collector

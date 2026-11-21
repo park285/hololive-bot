@@ -26,7 +26,7 @@ Quadlet으로 운영합니다. iris-seoul collector b는 같은 방식의 별도
 | `hololive-alarm-worker.container` | `hololive-alarm-worker` | 알림 dispatcher(단일 인스턴스) |
 | `hololive-api.container` | `hololive-api` | bot/admin/YouTube plane |
 | `hololive-youtube-po-c.container` | `hololive-youtube-po-c` | collector c의 격리 PO issuer |
-| `hololive-youtube-collector-c.container` | `hololive-youtube-collector-c` | collector fleet c. network alias `youtube-collector` |
+| `hololive-collector-c.container` | `hololive-collector-c` | collector fleet c. network alias `collector` |
 | `admin-dashboard-ingress.container` | `admin-dashboard-ingress` | host network shortlink ingress |
 | `hololive-net.network` | `hololive-bot_hololive-net` | 172.23.0.0/16, interface `pm-holo` |
 
@@ -249,7 +249,7 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
   거부합니다. `KEY=` 빈 줄은 unit 기본값을 빈 값으로 덮으므로 기본값을 쓰려면 줄을 지웁니다.
 - 비밀번호·API key는 `podman run` 인자에 남지 않도록 prestart가
   `/run/hololive-bot/quadlet-env/<container>.env`(디렉터리 0700, 파일 0600)에 써서 `EnvironmentFile=`로 넘깁니다.
-  서비스별 env 파일(`bot.env`, `alarm-worker.env`, `youtube-collector.env`) 다음 순서라 compose의
+  서비스별 env 파일(`bot.env`, `alarm-worker.env`, `collector.env`) 다음 순서라 compose의
   `environment` > `env_file` 우선순위를 유지합니다.
 - PostgreSQL 로그인 비밀번호는 API `HOLOLIVE_DB_PASSWORD`, alarm-worker `HOLOLIVE_ALARM_WORKER_PASSWORD`,
   collector slot별 `HOLOLIVE_COLLECTOR_A_PASSWORD`~`D_PASSWORD`로 나누고 서로·`DB_PASSWORD`와 다르게 둡니다.
@@ -331,7 +331,7 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 - 방화벽 unit을 없애려면 먼저 이 저장소와 두 봇 저장소 unit의 `Requires=`·`After=` 의존을 지우고 반영합니다.
   의존이 남은 채 unit만 지우면 다음 기동이 실패합니다.
 - `hololive-api`를 시작하면 `hololive-alarm-worker`도 함께 시작됩니다(Wants).
-- collector c는 compose.env의 `HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR=1`이면 `ExecCondition`으로 건너뜁니다.
+- collector c는 compose.env의 `HOLOLIVE_DISABLE_COLLECTOR=1`이면 `ExecCondition`으로 건너뜁니다.
 
 ```bash
 sudo systemctl status hololive-api.service
@@ -349,7 +349,7 @@ API·worker의 image 교체와 migration은 아래 '배포 helper'로만 합니�
 `bb000290e`에 남아 있는 git 이력) 지금은 표식을 만드는 운영 경로가 없습니다. 표식이 보이면 직접 지우지 말고 원인을
 확인한 뒤 별도 승인으로 처리합니다.
 
-표식 없이 `systemctl stop holo-postgres.service`만 하면, `Wants=`로 묶인 소비자(`hololive-api`, `hololive-alarm-worker`, `hololive-youtube-collector-c`)가 crash나
+표식 없이 `systemctl stop holo-postgres.service`만 하면, `Wants=`로 묶인 소비자(`hololive-api`, `hololive-alarm-worker`, `hololive-collector-c`)가 crash나
 `HealthOnFailure=stop`으로 자동 재시작할 때 `holo-postgres` start job도 함께 걸려 DB가 다시 기동됩니다.
 표식 조건이 막는 것은 명시적 start와 이런 의존 start job입니다(`skipped because of an unmet condition check`).
 `Restart=always`의 자동 재시작은 `ConditionPathExists=`를 다시 평가하지 않으므로, 표식이 있어도 fence 중 죽은
@@ -361,7 +361,7 @@ release별 image·worker profile 고정은 `scripts/deploy/lib/worker-profile-pa
 `/etc/containers/systemd/hololive-bot/<unit>.container.d/50-worker-profile.conf` drop-in입니다. 설치 도구는 이 파일을
 건드리지 않습니다. drop-in은 `Image=sha256:<id>`, pair label, release 디렉터리의 읽기 전용 mount와
 `STACK_WORKER_PROFILE_FILE`을 바꾸고, 기본 unit의 원본 mirror mount는 그대로 둡니다. 서비스 이름은 `hololive-api`,
-`hololive-alarm-worker`, `youtube-collector`(unit `hololive-youtube-collector-c`)이며 이 서비스들은 `podman`으로 고정됩니다.
+`hololive-alarm-worker`, `collector`(unit `hololive-collector-c`)이며 이 서비스들은 `podman`으로 고정됩니다.
 
 ### 배포 helper
 
@@ -439,7 +439,7 @@ pair="$root/scripts/deploy/lib/worker-profile-pair.py"
 release="$root/artifacts/worker-profile/releases/cutover-$(date -u +%Y%m%dT%H%M%SZ)"
 sudo python3 "$pair" prepare hololive-api "$release/hololive-api/previous" hololive-api "$root"
 sudo python3 "$pair" prepare hololive-alarm-worker "$release/hololive-alarm-worker/previous" hololive-alarm-worker "$root"
-sudo python3 "$pair" prepare youtube-collector "$release/youtube-collector/previous" hololive-youtube-collector-c "$root"
+sudo python3 "$pair" prepare collector-c "$release/collector-c/previous" hololive-collector-c "$root"
 sudo systemctl daemon-reload
 ```
 

@@ -48,8 +48,8 @@ trap cleanup EXIT
   CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$fixture/probe" "$root/scripts/deploy/fixtures/pgbouncer/main.go"
   cd "$root/hololive/hololive-api"
   CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$fixture/db-migrate" ./cmd/db-migrate
-  cd "$root/hololive/hololive-youtube-collector"
-  CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$fixture/collector" ./cmd/runtime/youtube-collector
+  cd "$root/hololive/hololive-collector"
+  CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$fixture/collector" ./cmd/runtime/hololive-collector
 )
 (umask 022; "$fixture/probe" prepare "$fixture")
 install -m 0644 "$root/deploy/postgres/pg_hba.conf" "$fixture/postgres-hba.conf"
@@ -119,7 +119,7 @@ collector_sql() {
     podman run --rm --pull=never --platform="linux/$architecture" --security-opt label=disable \
       --read-only --cap-drop=all --security-opt no-new-privileges --network "$network" --unsetenv-all --http-proxy=false \
       --mount "type=bind,src=$fixture/collector,dst=/check,readonly" --mount "type=bind,src=$fixture/ca.crt,dst=$ca,readonly" \
-      --env-file /dev/stdin -e "YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-$slot" \
+      --env-file /dev/stdin -e "COLLECTOR_INSTANCE_ID=collector-$slot" \
       -e "POSTGRES_USER=hololive_collector_$slot" -e "POSTGRES_HOST=$host" -e "POSTGRES_PORT=$port" -e POSTGRES_DB=hololive \
       -e POSTGRES_SOCKET_PATH= -e POSTGRES_SSLMODE=verify-full -e "POSTGRES_SSLROOTCERT=$ca" -e POSTGRES_QUERY_EXEC_MODE=cache_statement \
       --entrypoint /check "$pg_image" --check-pooled-database

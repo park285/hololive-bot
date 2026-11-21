@@ -8,9 +8,9 @@ require (
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.13.0
+	github.com/kapu/hololive-collector v0.0.0
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/kapu/hololive-youtube-collector v0.0.0
 	github.com/park285/iris-client-go/adapters/valkeydedup v1.0.0
 	github.com/park285/iris-client-go/v5 v5.2.1
 	github.com/park285/shared-go/core v1.0.0
@@ -134,4 +134,4 @@ replace github.com/kapu/hololive-dbtest => ../hololive-dbtest
 
 replace github.com/kapu/hololive-shared => ../hololive-shared
 
-replace github.com/kapu/hololive-youtube-collector => ../hololive-youtube-collector
+replace github.com/kapu/hololive-collector => ../hololive-collector

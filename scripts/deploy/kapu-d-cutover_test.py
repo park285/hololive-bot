@@ -71,7 +71,7 @@ class Cutover(unittest.TestCase):
         for arg in ['--user=1000:1000', '--group-add=1002', '--userns=auto:size=65536,gidmapping=1002:1002:1',
                     '--security-opt=label=level:s0:c908,c909', '--read-only', '--network=hololive-collector',
                     '--ip=10.89.15.14', '--env=POSTGRES_USER=hololive_collector_d', '--env=POSTGRES_PORT=6433',
-                    '--env=YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-d', '--env-file=' + str(d.ENVFILE)]:
+                    '--env=COLLECTOR_INSTANCE_ID=collector-d', '--env-file=' + str(d.ENVFILE)]:
             self.assertIn(arg, sql)
         self.assertFalse(any('PASSWORD' in arg or '.key' in arg for arg in sql))
 
@@ -211,7 +211,7 @@ class Cutover(unittest.TestCase):
         if args[:2] == ('podman','tag'):
             self.tags[args[3]] = self.tags[args[2]]
         if args[:2] == ('podman','exec') and '--body' in args:
-            return json.dumps({'status':'ready','instance_id':'youtube-collector-d','helper':'ok',
+            return json.dumps({'status':'ready','instance_id':'collector-d','helper':'ok',
                                'first_success':True,'handoff_status':'PROCESSED','handoff_processed':True})
         if args[:2] == ('systemctl','stop'):
             n = args[-1].removesuffix('.service')
@@ -860,13 +860,13 @@ class Cutover(unittest.TestCase):
         self.patch('D',released)
         self.patch('SRC',source)
         contents = b'{"version": 1}\n'
-        legacy = b'{"service":"youtube-collector-b","architecture":"arm64"}\n'
+        legacy = b'{"service":"collector-b","architecture":"arm64"}\n'
         (released/'profile.json').write_bytes(contents)
-        (source/'youtube-collector-d.json').write_bytes(contents)
+        (source/'collector-d.json').write_bytes(contents)
         (released/'pair.json').write_bytes(legacy)
         (released/'SHA256SUMS').write_text(d.sha(contents) + '  profile.json\n' + d.sha(legacy) + '  pair.json\n')
         self.assertEqual(d.profile(),contents)
-        (source/'youtube-collector-d.json').write_bytes(contents.strip())
+        (source/'collector-d.json').write_bytes(contents.strip())
         with self.assertRaisesRegex(ValueError,'drift'):
             d.profile()
 

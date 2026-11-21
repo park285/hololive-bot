@@ -434,7 +434,7 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		t.Fatalf("resolve migrations dir for observation lock API check: %v", err)
 	}
 
-	publishQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation", "queries"))
+	publishQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-collector", "internal", "runtime", "sourceobservation", "queries"))
 	consumeQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "internal", "youtube", "sourceobservation", "queries"))
 	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
 	checks := map[string]struct {
@@ -687,8 +687,8 @@ func assertCollectionMembershipAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 		t.Fatalf("resolve migrations dir for collection membership check: %v", err)
 	}
 
-	collectorQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "sourceobservation", "queries"))
-	membershipQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-youtube-collector", "internal", "runtime", "joblease", "queries"))
+	collectorQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-collector", "internal", "runtime", "sourceobservation", "queries"))
+	membershipQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-collector", "internal", "runtime", "joblease", "queries"))
 	refreshQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "internal", "planes", "youtube", "targetprojection", "queries"))
 	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
 

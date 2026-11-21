@@ -53,9 +53,9 @@ run_build() {
 }
 builds() { grep '^build ' "$FAKE_PODMAN_LOG" || true; }
 
-run_build youtube-collector || { cat "$tmp/out" >&2; fail 'clean collector build failed'; }
+run_build collector || { cat "$tmp/out" >&2; fail 'clean collector build failed'; }
 [[ "$(builds | wc -l)" == 2 ]] || fail 'collector build must pair the PO issuer'
-for image in localhost/hololive-youtube-collector:prod localhost/hololive-youtube-po-sandbox:prod; do
+for image in localhost/hololive-collector:prod localhost/hololive-youtube-po-sandbox:prod; do
   line="$(builds | grep -F -- "--tag $image ")" || fail "missing build for $image"
   [[ "$line" == *"--format docker "* ]] || fail "$image must keep Docker image metadata for the Seoul AP"
   [[ "$line" == *"--build-arg REVISION=$head "* && "$line" == *"--build-arg VERSION=1.2.3 "* ]] \

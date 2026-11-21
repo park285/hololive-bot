@@ -7,9 +7,9 @@
 !hololive/hololive-dbtest/go.sum
 !hololive/hololive-api/
 !hololive/hololive-api/**
-!hololive/hololive-youtube-collector/
-!hololive/hololive-youtube-collector/go.mod
-!hololive/hololive-youtube-collector/go.sum
+!hololive/hololive-collector/
+!hololive/hololive-collector/go.mod
+!hololive/hololive-collector/go.sum
 
 **/*_test.go
 **/testdata/

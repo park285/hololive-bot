@@ -14,7 +14,7 @@ module="$1"
 stage="$2"
 
 case "${module}" in
-  hololive/hololive-api|hololive/hololive-alarm-worker|hololive/hololive-dbtest|hololive/hololive-shared|hololive/hololive-youtube-collector)
+  hololive/hololive-api|hololive/hololive-alarm-worker|hololive/hololive-dbtest|hololive/hololive-shared|hololive/hololive-collector)
     ;;
   *)
     echo "unsupported public PR module: ${module}" >&2
@@ -32,8 +32,8 @@ case "${stage}" in
 esac
 
 if [[ "${stage}" == "test-prod" || "${stage}" == "build-prod" ]]; then
-  if [[ "${module}" != "hololive/hololive-youtube-collector" ]]; then
-    echo "test-prod and build-prod are only valid for hololive/hololive-youtube-collector" >&2
+  if [[ "${module}" != "hololive/hololive-collector" ]]; then
+    echo "test-prod and build-prod are only valid for hololive/hololive-collector" >&2
     exit 2
   fi
   . "${SCRIPT_DIR}/python-runtime.sh"
@@ -137,15 +137,15 @@ case "${stage}" in
     mkdir -p "${out_dir}"
     revision="$(git -C "${ROOT_DIR}" rev-parse --verify 'HEAD^{commit}')"
     version="${HOLO_BOT_VERSION:-$(git -C "${ROOT_DIR}" rev-parse --short=12 HEAD)}"
-    echo "[public-pr] module=${module} build-youtube-collector-go.sh version=${version} revision=${revision}"
-    sh "${ROOT_DIR}/scripts/build/build-youtube-collector-go.sh" \
+    echo "[public-pr] module=${module} build-hololive-collector-go.sh version=${version} revision=${revision}"
+    sh "${ROOT_DIR}/scripts/build/build-hololive-collector-go.sh" \
       --output-dir "${out_dir}" \
       --version "${version}" \
       --revision "${revision}" \
       --goos linux \
       --goarch amd64 \
       --goamd64 v1
-    sh "${ROOT_DIR}/scripts/build/check-youtube-collector-go-artifact.sh" "${out_dir}" \
+    sh "${ROOT_DIR}/scripts/build/check-hololive-collector-go-artifact.sh" "${out_dir}" \
       --version "${version}" \
       --revision "${revision}" \
       --goos linux \

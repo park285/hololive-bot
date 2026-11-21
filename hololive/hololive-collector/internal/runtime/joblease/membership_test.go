@@ -1,0 +1,690 @@
+package joblease
+
+import (
+	"context"
+	"errors"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
+
+	"github.com/kapu/hololive-collector/internal/runtime/collection"
+	dbtest "github.com/kapu/hololive-dbtest"
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+)
+
+const (
+	subjectUCC      = "UC_C"
+	videoLiveID     = "video-live-1"
+	testGlobalClass = string(collection.JobClassGlobal)
+)
+
+func contentJob(subject string) *JobSpec {
+	return &JobSpec{
+		JobKey:   "collector:youtubejs:youtubejs_content:" + subject,
+		Provider: contract.ProviderYouTubeJS, Class: "SUBJECT",
+		CollectionJobKind: "youtubejs_content", SubjectKey: subject, PollInterval: time.Minute,
+	}
+}
+
+func holodexLiveJob() *JobSpec {
+	return &JobSpec{
+		JobKey:   "collector:holodex:holodex_live:global",
+		Provider: contract.ProviderHolodex, Class: testGlobalClass,
+		CollectionJobKind: "holodex_live", SubjectKey: "global:holodex_live", PollInterval: time.Minute,
+	}
+}
+
+func jobContractFor(t *testing.T, spec *JobSpec) collection.JobContract {
+	t.Helper()
+
+	job, ok := collection.InitialJobContracts().Definition(collection.JobID{
+		Provider: spec.Provider, Kind: collection.JobKind(spec.CollectionJobKind),
+	})
+	if !ok {
+		t.Fatalf("missing job contract %s/%s", spec.Provider, spec.CollectionJobKind)
+	}
+
+	return job
+}
+
+type projectionChange struct {
+	dropped []leaseTarget
+	added   []leaseTarget
+}
+
+func transitionProjection(t *testing.T, pool *pgxpool.Pool, previous int64, change projectionChange) int64 {
+	t.Helper()
+
+	tx, err := pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if rollbackErr := pgxdb.Rollback(t.Context(), tx); rollbackErr != nil {
+			t.Errorf("rollback projection transition: %v", rollbackErr)
+		}
+	}()
+
+	next := applyProjectionChange(t, tx, previous, change)
+
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	return next
+}
+
+func applyProjectionChange(t *testing.T, tx pgx.Tx, previous int64, change projectionChange) int64 {
+	t.Helper()
+
+	ctx := t.Context()
+
+	var guard bool
+
+	if err := tx.QueryRow(ctx, lockProjectionGuardSQL).Scan(&guard); err != nil {
+		t.Fatalf("lock projection guard: %v", err)
+	}
+
+	if _, err := tx.Exec(ctx, retireProjectionSQL, previous); err != nil {
+		t.Fatalf("retire projection: %v", err)
+	}
+
+	var next int64
+
+	if err := tx.QueryRow(ctx, insertProjectionSQL, 0).Scan(&next); err != nil {
+		t.Fatalf("insert projection: %v", err)
+	}
+
+	droppedSubjects := make([]string, len(change.dropped))
+	droppedKinds := make([]string, len(change.dropped))
+
+	for i, target := range change.dropped {
+		droppedSubjects[i] = target.subject
+		droppedKinds[i] = string(target.kind)
+	}
+
+	if _, err := tx.Exec(ctx, carryTargetsSQL, previous, next, droppedSubjects, droppedKinds); err != nil {
+		t.Fatalf("carry targets: %v", err)
+	}
+
+	for _, target := range change.added {
+		if _, err := tx.Exec(ctx, insertTargetSinceSQL, next, target.subject, target.kind,
+			target.interval.Milliseconds(), target.enabled, next); err != nil {
+			t.Fatalf("add target: %v", err)
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `UPDATE youtube_collection_projection_generations
+		SET row_count = (SELECT count(*) FROM youtube_collection_targets WHERE projection_generation=$1)
+		WHERE generation=$1`, next); err != nil {
+		t.Fatalf("update projection row count: %v", err)
+	}
+
+	return next
+}
+
+func contentTargets(subject string) []leaseTarget {
+	return []leaseTarget{
+		{subject, contract.KindVideoList, time.Minute, true},
+		{subject, contract.KindShortsList, time.Minute, true},
+	}
+}
+
+func TestUnrelatedTargetChurnKeepsAdmittedContentJob(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	first := seedProjection(t, pool, append(contentTargets(subjectUCA), leaseTarget{subjectUCB, contract.KindVideoList, time.Minute, true}))
+	repository := newTestRepository(t, pool)
+	spec := contentJob(subjectUCA)
+	lease := mustAcquireLease(t, repository, spec, "collector-a")
+
+	second := transitionProjection(t, pool, first, projectionChange{
+		dropped: []leaseTarget{{subjectUCB, contract.KindVideoList, time.Minute, true}},
+		added: []leaseTarget{
+			{subjectUCC, contract.KindVideoList, time.Minute, true},
+			{videoLiveID, contract.KindVideoLiveCheck, 2 * time.Minute, true},
+		},
+	})
+	third := transitionProjection(t, pool, second, projectionChange{
+		dropped: []leaseTarget{{videoLiveID, contract.KindVideoLiveCheck, 2 * time.Minute, true}},
+	})
+
+	if err := lease.Renew(ctx); err != nil {
+		t.Fatalf("renew after unrelated churn: %v", err)
+	}
+
+	proof := lease.Proof()
+	if proof.ProjectionGeneration != first || third <= first {
+		t.Fatalf("proof generation = %d, want acquisition generation %d (current %d)", proof.ProjectionGeneration, first, third)
+	}
+
+	snapshot, err := repository.LoadTargetSnapshot(ctx, &proof, spec, jobContractFor(t, spec), 10)
+	if err != nil {
+		t.Fatalf("snapshot after unrelated churn: %v", err)
+	}
+
+	for _, kind := range []contract.ObservationKind{contract.KindVideoList, contract.KindShortsList} {
+		roster, rosterErr := snapshot.Roster(kind)
+		if rosterErr != nil || len(roster) != 1 || roster[0] != subjectUCA {
+			t.Fatalf("%s roster = %#v, %v", kind, roster, rosterErr)
+		}
+	}
+
+	if snapshot.Generation() != first {
+		t.Fatalf("snapshot generation = %d, want acquisition generation %d", snapshot.Generation(), first)
+	}
+
+	if err := lease.CompleteCurrent(ctx); err != nil {
+		t.Fatalf("complete after unrelated churn: %v", err)
+	}
+}
+
+func TestOwnMembershipChangeSupersedesWithoutOwnerLoss(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		initial []leaseTarget
+		change  projectionChange
+		mutate  string
+	}{
+		{
+			name:    "removed",
+			initial: contentTargets(subjectUCA),
+			change:  projectionChange{dropped: []leaseTarget{{subjectUCA, contract.KindShortsList, time.Minute, true}}},
+		},
+		{
+			name:    "disabled in place",
+			initial: contentTargets(subjectUCA),
+			mutate:  `UPDATE youtube_collection_targets SET enabled = FALSE WHERE projection_generation = $1 AND observation_kind = 'shorts_list'`,
+		},
+		{
+			name:    "cadence changed",
+			initial: contentTargets(subjectUCA),
+			change: projectionChange{
+				dropped: []leaseTarget{{subjectUCA, contract.KindShortsList, time.Minute, true}},
+				added:   []leaseTarget{{subjectUCA, contract.KindShortsList, 2 * time.Minute, true}},
+			},
+		},
+		{
+			name:    "kind added",
+			initial: []leaseTarget{{subjectUCA, contract.KindVideoList, time.Minute, true}},
+			change:  projectionChange{added: []leaseTarget{{subjectUCA, contract.KindShortsList, time.Minute, true}}},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			ctx := t.Context()
+			pool := dbtest.NewPool(t)
+			first := seedProjection(t, pool, testCase.initial)
+			repository := newTestRepository(t, pool)
+			spec := contentJob(subjectUCA)
+			lease := mustAcquireLease(t, repository, spec, "collector-a")
+
+			current := transitionProjection(t, pool, first, testCase.change)
+			if testCase.mutate != "" {
+				if _, err := pool.Exec(ctx, testCase.mutate, current); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			assertSuperseded(t, repository, lease, spec)
+
+			if err := lease.Release(ctx, ReleaseSuperseded); err != nil {
+				t.Fatalf("fenced superseded release: %v", err)
+			}
+		})
+	}
+}
+
+func assertSuperseded(t *testing.T, repository *Repository, lease *JobLease, spec *JobSpec) {
+	t.Helper()
+
+	ctx := t.Context()
+	proof := lease.Proof()
+
+	if err := lease.Renew(ctx); !errors.Is(err, collection.ErrTargetDisabled) || errors.Is(err, collection.ErrFenceLost) {
+		t.Fatalf("renew error = %v, want membership superseded without owner loss", err)
+	}
+
+	if _, err := repository.LoadTargetSnapshot(ctx, &proof, spec, jobContractFor(t, spec), 10); !errors.Is(err, collection.ErrTargetDisabled) {
+		t.Fatalf("snapshot error = %v, want membership superseded", err)
+	}
+
+	if err := lease.CompleteCurrent(ctx); !errors.Is(err, collection.ErrTargetDisabled) {
+		t.Fatalf("complete error = %v, want membership superseded", err)
+	}
+}
+
+func TestRemovedAndReaddedTargetDoesNotRevalidateOldLease(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	first := seedProjection(t, pool, contentTargets(subjectUCA))
+	repository := newTestRepository(t, pool)
+	spec := contentJob(subjectUCA)
+	old := mustAcquireLease(t, repository, spec, "collector-a")
+	shorts := leaseTarget{subjectUCA, contract.KindShortsList, time.Minute, true}
+
+	second := transitionProjection(t, pool, first, projectionChange{dropped: []leaseTarget{shorts}})
+	transitionProjection(t, pool, second, projectionChange{added: []leaseTarget{shorts}})
+
+	assertSuperseded(t, repository, old, spec)
+
+	if err := old.Release(ctx, ReleaseSuperseded); err != nil {
+		t.Fatalf("release old lease: %v", err)
+	}
+
+	renewed := mustAcquireLease(t, repository, spec, "collector-a")
+	if err := renewed.Renew(ctx); err != nil {
+		t.Fatalf("renew lease acquired after re-registration: %v", err)
+	}
+
+	if err := renewed.CompleteCurrent(ctx); err != nil {
+		t.Fatalf("complete lease acquired after re-registration: %v", err)
+	}
+}
+
+func TestOwnershipAndProjectionChecksRemainAuthoritative(t *testing.T) {
+	t.Run("expired lease is owner loss", testExpiredLeaseIsOwnerLoss)
+	t.Run("owner loss outranks stale projection", testOwnerLossOutranksStaleProjection)
+	t.Run("legacy lease without recorded scope fails closed", testLegacyLeaseWithoutScopeFailsClosed)
+	t.Run("unproven current membership is not admitted", testUnprovenMembershipIsNotAdmitted)
+}
+
+func testExpiredLeaseIsOwnerLoss(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, contentTargets(subjectUCA))
+
+	repository := newTestRepository(t, pool)
+	spec := contentJob(subjectUCA)
+	lease := mustAcquireLease(t, repository, spec, "collector-a")
+
+	if _, err := pool.Exec(ctx, expireLeaseSQL, spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := lease.Renew(ctx); !errors.Is(err, collection.ErrFenceLost) {
+		t.Fatalf("expired renew error = %v", err)
+	}
+
+	if err := lease.CompleteCurrent(ctx); !errors.Is(err, collection.ErrFenceLost) {
+		t.Fatalf("expired complete error = %v", err)
+	}
+
+	takeover := mustAcquireLease(t, repository, spec, "collector-b")
+
+	if err := lease.Release(ctx, ReleaseSuperseded); !errors.Is(err, collection.ErrFenceLost) {
+		t.Fatalf("stale release error = %v, must not release another owner", err)
+	}
+
+	if err := takeover.Renew(ctx); err != nil {
+		t.Fatalf("takeover renew: %v", err)
+	}
+}
+
+func testOwnerLossOutranksStaleProjection(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	generation := seedProjection(t, pool, contentTargets(subjectUCA))
+	repository := newTestRepository(t, pool)
+	spec := contentJob(subjectUCA)
+	lease := mustAcquireLease(t, repository, spec, "collector-a")
+
+	if _, err := pool.Exec(ctx, expireProjectionSQL, generation); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := lease.Renew(ctx); !errors.Is(err, collection.ErrProjectionStale) {
+		t.Fatalf("stale projection renew error = %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, expireLeaseSQL, spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := lease.CompleteCurrent(ctx); !errors.Is(err, collection.ErrFenceLost) {
+		t.Fatalf("expired lease on stale projection complete error = %v", err)
+	}
+}
+
+func testLegacyLeaseWithoutScopeFailsClosed(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, contentTargets(subjectUCA))
+
+	repository := newTestRepository(t, pool)
+	spec := contentJob(subjectUCA)
+	lease := mustAcquireLease(t, repository, spec, "collector-a")
+
+	if _, err := pool.Exec(ctx, clearLeaseMembershipSQL, spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+
+	assertSuperseded(t, repository, lease, spec)
+}
+
+func testUnprovenMembershipIsNotAdmitted(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	generation := seedProjection(t, pool, contentTargets(subjectUCA))
+
+	if _, err := pool.Exec(ctx, nullTargetMembershipSQL, generation); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := newTestRepository(t, pool).Acquire(ctx, contentJob(subjectUCA), "collector-a"); !errors.Is(err, ErrInvalidJob) {
+		t.Fatalf("acquire with NULL member_since_generation error = %v", err)
+	}
+}
+
+func TestLeaseRecreatedAfterRetentionDoesNotReviveOldProof(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, contentTargets(subjectUCA))
+
+	repository := newTestRepository(t, pool)
+	spec := contentJob(subjectUCA)
+	old := mustAcquireLease(t, repository, spec, "collector-a")
+
+	if _, err := pool.Exec(ctx, deleteLeaseSQL, spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+
+	recreated := mustAcquireLease(t, repository, spec, "collector-a")
+	if recreated.Proof().FenceEpoch != old.Proof().FenceEpoch || recreated.Proof() == old.Proof() {
+		t.Fatalf("recreated proof = %#v, old = %#v; want reused epoch with a distinct proof", recreated.Proof(), old.Proof())
+	}
+
+	if err := old.Renew(ctx); !errors.Is(err, collection.ErrFenceLost) {
+		t.Fatalf("old proof renew error = %v", err)
+	}
+
+	if err := old.CompleteCurrent(ctx); !errors.Is(err, collection.ErrFenceLost) {
+		t.Fatalf("old proof complete error = %v", err)
+	}
+
+	if err := old.Release(ctx, ReleaseSuperseded); !errors.Is(err, collection.ErrFenceLost) {
+		t.Fatalf("old proof release error = %v", err)
+	}
+
+	if err := recreated.Renew(ctx); err != nil {
+		t.Fatalf("recreated renew: %v", err)
+	}
+}
+
+func TestNotBeforeChangesOnlyGateNewAdmission(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	generation := seedProjection(t, pool, []leaseTarget{{videoLiveID, contract.KindVideoLiveCheck, time.Minute, true}})
+	repository := newTestRepository(t, pool)
+	spec := &JobSpec{
+		JobKey:   "collector:youtubejs:youtubejs_video_live:" + videoLiveID,
+		Provider: contract.ProviderYouTubeJS, Class: "SUBJECT",
+		CollectionJobKind: "youtubejs_video_live", SubjectKey: videoLiveID, PollInterval: time.Minute,
+	}
+	lease := mustAcquireLease(t, repository, spec, "collector-a")
+
+	if _, err := pool.Exec(ctx, setNotBeforeSQL, generation, time.Hour.Milliseconds()); err != nil {
+		t.Fatal(err)
+	}
+
+	proof := lease.Proof()
+	if err := lease.Renew(ctx); err != nil {
+		t.Fatalf("renew after future not_before: %v", err)
+	}
+
+	if _, err := repository.LoadTargetSnapshot(ctx, &proof, spec, jobContractFor(t, spec), 10); err != nil {
+		t.Fatalf("snapshot after future not_before: %v", err)
+	}
+
+	if err := lease.CompleteCurrent(ctx); err != nil {
+		t.Fatalf("complete after future not_before: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, makeLeaseOverdueSQL, spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+
+	if jobs := candidateJobs(t, repository, contract.ProviderYouTubeJS, "youtubejs_video_live", 10); len(jobs) != 0 {
+		t.Fatalf("candidates before not_before = %+v", jobs)
+	}
+
+	if _, err := repository.Acquire(ctx, spec, "collector-b"); !errors.Is(err, ErrNotAcquired) {
+		t.Fatalf("acquire before not_before error = %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, setNotBeforeSQL, generation, -time.Second.Milliseconds()); err != nil {
+		t.Fatal(err)
+	}
+
+	if jobs := candidateJobs(t, repository, contract.ProviderYouTubeJS, "youtubejs_video_live", 10); len(jobs) != 1 {
+		t.Fatalf("candidates after not_before = %+v", jobs)
+	}
+
+	mustAcquireLease(t, repository, spec, "collector-b")
+}
+
+func TestGuardWaitersEvaluateFreshSnapshotAfterTransition(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	first := seedProjection(t, pool, append(contentTargets(subjectUCA), contentTargets(subjectUCB)...))
+	repository := newTestRepository(t, pool)
+	spec := contentJob(subjectUCA)
+	lease := mustAcquireLease(t, repository, spec, "collector-a")
+	proof := lease.Proof()
+	other := contentJob(subjectUCB)
+	job := jobContractFor(t, spec)
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
+			t.Errorf("rollback projection transition: %v", rollbackErr)
+		}
+	}()
+
+	second := applyProjectionChange(t, tx, first, projectionChange{
+		added: []leaseTarget{{subjectUCC, contract.KindVideoList, time.Minute, true}},
+	})
+
+	type snapshotResult struct {
+		snapshot collection.TargetSnapshot
+		err      error
+	}
+
+	snapshots := make(chan snapshotResult, 1)
+	acquired := make(chan error, 1)
+
+	go func() {
+		snapshot, loadErr := repository.LoadTargetSnapshot(ctx, &proof, spec, job, 10)
+		snapshots <- snapshotResult{snapshot: snapshot, err: loadErr}
+	}()
+
+	go func() {
+		otherLease, acquireErr := repository.Acquire(ctx, other, "collector-b")
+		if acquireErr == nil && otherLease.Proof().ProjectionGeneration != second {
+			acquireErr = errors.New("guard waiter acquired an old generation")
+		}
+
+		acquired <- acquireErr
+	}()
+
+	select {
+	case got := <-snapshots:
+		t.Fatalf("snapshot did not wait for the projection guard: %+v", got)
+	case got := <-acquired:
+		t.Fatalf("acquire did not wait for the projection guard: %v", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	got := <-snapshots
+	if got.err != nil || got.snapshot.Generation() != first {
+		t.Fatalf("guard waiter snapshot = generation %d, %v", got.snapshot.Generation(), got.err)
+	}
+
+	if err := <-acquired; err != nil {
+		t.Fatalf("guard waiter acquire: %v", err)
+	}
+}
+
+func TestGuardWaiterSeesOwnMembershipRemovedByTransition(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	first := seedProjection(t, pool, contentTargets(subjectUCA))
+	repository := newTestRepository(t, pool)
+	spec := contentJob(subjectUCA)
+	lease := mustAcquireLease(t, repository, spec, "collector-a")
+	proof := lease.Proof()
+	job := jobContractFor(t, spec)
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil {
+			t.Errorf("rollback projection transition: %v", rollbackErr)
+		}
+	}()
+
+	applyProjectionChange(t, tx, first, projectionChange{
+		dropped: []leaseTarget{{subjectUCA, contract.KindShortsList, time.Minute, true}},
+	})
+
+	loaded := make(chan error, 1)
+
+	go func() {
+		_, loadErr := repository.LoadTargetSnapshot(ctx, &proof, spec, job, 10)
+		loaded <- loadErr
+	}()
+
+	select {
+	case got := <-loaded:
+		t.Fatalf("snapshot did not wait for the projection guard: %v", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := <-loaded; !errors.Is(err, collection.ErrTargetDisabled) {
+		t.Fatalf("guard waiter snapshot error = %v, want membership superseded", err)
+	}
+}
+
+func TestGlobalProjectionJobScopeCoversRosterKinds(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	first := seedProjection(t, pool, []leaseTarget{
+		{subjectUCA, contract.KindLiveSnapshot, time.Minute, true},
+		{subjectUCB, contract.KindLiveSnapshot, time.Minute, true},
+	})
+	repository := newTestRepository(t, pool)
+	spec := holodexLiveJob()
+	lease := mustAcquireLease(t, repository, spec, "collector-a")
+
+	second := transitionProjection(t, pool, first, projectionChange{
+		added: []leaseTarget{{subjectUCA, contract.KindVideoList, time.Minute, true}},
+	})
+
+	if err := lease.Renew(ctx); err != nil {
+		t.Fatalf("global renew after unrelated kind change: %v", err)
+	}
+
+	transitionProjection(t, pool, second, projectionChange{
+		added: []leaseTarget{{subjectUCC, contract.KindLiveSnapshot, time.Minute, true}},
+	})
+	assertSuperseded(t, repository, lease, spec)
+}
+
+func TestSupersededRenewReleasesOnlyAfterCallbackJoin(t *testing.T) {
+	t.Parallel()
+
+	config := testConfig()
+
+	config.RenewInterval = 10 * time.Millisecond
+
+	repository := &Repository{config: config}
+	lease := &orderedReleaseLease{renewErr: collection.ErrTargetDisabled}
+	result := repository.Run(t.Context(), lease, func(ctx context.Context, _ contract.LeaseProof) error {
+		<-ctx.Done()
+		lease.callbackDone.Store(true)
+
+		return ctx.Err()
+	})
+
+	if result.Outcome != LeaseRunReleasedAfterSuperseded || !errors.Is(result.Err, collection.ErrTargetDisabled) || errors.Is(result.Err, collection.ErrFenceLost) {
+		t.Fatalf("run result = %#v", result)
+	}
+
+	if lease.releaseCalls.Load() != 1 || lease.lastRelease != ReleaseSuperseded || !lease.releasedAfterJoin.Load() {
+		t.Fatalf("release calls = %d reason = %q after join = %t", lease.releaseCalls.Load(), lease.lastRelease, lease.releasedAfterJoin.Load())
+	}
+}
+
+func TestSupersededRenewDoesNotReleaseWhenCallbackJoinTimesOut(t *testing.T) {
+	t.Parallel()
+
+	config := testConfig()
+
+	config.RenewInterval = 5 * time.Millisecond
+	config.CleanupTimeout = 20 * time.Millisecond
+
+	repository := &Repository{config: config}
+	lease := &fakeLease{renewErr: collection.ErrProjectionStale}
+	releaseRunner := make(chan struct{})
+	result := repository.Run(t.Context(), lease, func(context.Context, contract.LeaseProof) error {
+		<-releaseRunner
+
+		return nil
+	})
+
+	close(releaseRunner)
+
+	if result.Outcome != LeaseRunCleanupTimedOut || !errors.Is(result.Err, collection.ErrProjectionStale) {
+		t.Fatalf("run result = %#v", result)
+	}
+
+	if lease.releaseCalls.Load() != 0 {
+		t.Fatalf("release calls = %d, want none before callback join", lease.releaseCalls.Load())
+	}
+}
+
+type orderedReleaseLease struct {
+	fakeLease
+
+	callbackDone      atomic.Bool
+	releasedAfterJoin atomic.Bool
+}
+
+func (l *orderedReleaseLease) Release(ctx context.Context, reason ReleaseReason) error {
+	l.releasedAfterJoin.Store(l.callbackDone.Load())
+
+	return l.fakeLease.Release(ctx, reason)
+}

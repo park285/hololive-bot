@@ -8,10 +8,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	publishkit "github.com/kapu/hololive-collector/testkit/sourceobservation"
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	publishkit "github.com/kapu/hololive-youtube-collector/testkit/sourceobservation"
 )
 
 func TestPayloadDictionaryKeepsIndependentObservationSlots(t *testing.T) {
