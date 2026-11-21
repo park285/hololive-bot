@@ -1413,7 +1413,7 @@ qualify_released_predecessor() (
 if [[ "$released" == true ]]; then qualify_released_predecessor; fi
 
 for path in opt/current/deploy/postgres/pg_hba.conf opt/current/deploy/pgbouncer/stats-users.txt \
-    opt/current/hololive/hololive-api/scripts/init-db/00-assert-pg18-runtime.sql \
+    opt/current/hololive/hololive-api/scripts/init-db/00-assert-pg19-runtime.sql \
     etc-containers-systemd/hololive-bot/{hololive-api,holo-pgbouncer,hololive-alarm-worker}.container \
     etc-containers-systemd/hololive-bot/hololive-api.container.d/40-x-spaces.conf \
     usr-local-libexec/hololive-bot/quadlet-prestart etc-nftables.d/admin-dashboard-ingress.nft; do

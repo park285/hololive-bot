@@ -9,7 +9,7 @@ cleanup() {
   rm -rf -- "$work"
 }
 trap cleanup EXIT
-image=docker.io/library/postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
+image=docker.io/library/postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
 previous=85c236c00433e55c420dc08f2731c06741746b42
 epoch2_head=d288db26ac838e56ebc713e0679624c3875a66cc
 build_previous() {

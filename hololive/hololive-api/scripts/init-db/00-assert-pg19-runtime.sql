@@ -1,9 +1,9 @@
-DO $pg18_contract$
+DO $pg19_contract$
 DECLARE
   server_num integer := current_setting('server_version_num')::integer;
 BEGIN
-  IF server_num < 180006 OR server_num >= 190000 THEN
-    RAISE EXCEPTION 'expected PostgreSQL 18.6 or newer within major 18, got %', current_setting('server_version');
+  IF server_num < 190000 OR server_num >= 200000 THEN
+    RAISE EXCEPTION 'expected PostgreSQL major 19, got %', current_setting('server_version');
   END IF;
   IF (SELECT datlocprovider FROM pg_database WHERE datname = current_database()) <> 'b' THEN
     RAISE EXCEPTION 'locale provider must be builtin, got %',
@@ -14,7 +14,7 @@ BEGIN
       coalesce((SELECT datlocale FROM pg_database WHERE datname = current_database()), '(none)');
   END IF;
   IF current_setting('data_checksums') <> 'on' THEN
-    RAISE EXCEPTION 'data_checksums must be on for a new PostgreSQL 18 cluster';
+    RAISE EXCEPTION 'data_checksums must be on for a new PostgreSQL 19 cluster';
   END IF;
   IF current_setting('data_directory') <> '/var/lib/postgresql/pgdata' THEN
     RAISE EXCEPTION 'unexpected data_directory: %', current_setting('data_directory');
@@ -32,4 +32,4 @@ BEGIN
     RAISE EXCEPTION 'pg_stat_statements must be preloaded';
   END IF;
 END;
-$pg18_contract$;
+$pg19_contract$;

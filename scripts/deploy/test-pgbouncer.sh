@@ -5,7 +5,7 @@ if [[ -n "${CONTAINER_HOST:-}${CONTAINER_CONNECTION:-}" ]] || [[ "$(podman info 
   exit 2
 fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-pg_image="${POSTGRES_POLICY_TEST_IMAGE:-docker.io/library/postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015}"
+pg_image="${POSTGRES_POLICY_TEST_IMAGE:-docker.io/library/postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188}"
 pool_image="${PGBOUNCER_TEST_IMAGE:?set PGBOUNCER_TEST_IMAGE to the locally built host-architecture image}"
 case "$(uname -m)" in
   x86_64) architecture=amd64 ;;

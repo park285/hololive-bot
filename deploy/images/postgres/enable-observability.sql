@@ -45,7 +45,7 @@ BEGIN
         WHERE extname = 'pg_wait_sampling' AND extversion = '1.1' AND extnamespace = 'hololive_observability'::regnamespace
     ) OR NOT EXISTS (
         SELECT 1 FROM pg_extension
-        WHERE extname = 'pg_buffercache' AND extversion = '1.6' AND extnamespace = 'hololive_observability'::regnamespace
+        WHERE extname = 'pg_buffercache' AND extversion = '1.7' AND extnamespace = 'hololive_observability'::regnamespace
     ) OR NOT EXISTS (
         SELECT 1 FROM pg_extension
         WHERE extname = 'amcheck' AND extversion = '1.5' AND extnamespace = 'hololive_observability'::regnamespace

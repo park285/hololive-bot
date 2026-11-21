@@ -51,7 +51,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 podman exec "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 -Atc \
-  "SELECT current_setting('server_version_num') = '180007'" | tr -d '\r' | grep -qx t
+  "SELECT current_setting('server_version_num') = '190000'" | tr -d '\r' | grep -qx t
 podman exec -i "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
 CREATE ROLE hololive_migrator LOGIN PASSWORD 'fixture';
 CREATE ROLE hololive_runtime LOGIN PASSWORD 'fixture';
@@ -110,4 +110,4 @@ for role in postgres_admin hololive_migrator hololive_replicator; do
     echo "unapproved replication TCP unexpectedly accepted: $role" >&2; exit 1
   fi
 done
-printf 'PASS: PG18.7 isolated migration/nightly sockets, exporter TLS and direct runtime/privileged TCP rejection\n'
+printf 'PASS: PG19.0 isolated migration/nightly sockets, exporter TLS and direct runtime/privileged TCP rejection\n'

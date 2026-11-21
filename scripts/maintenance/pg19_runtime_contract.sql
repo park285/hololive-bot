@@ -11,7 +11,8 @@ SELECT
   current_setting('data_directory') AS data_directory,
   current_setting('data_checksums') AS data_checksums,
   current_setting('io_method') AS io_method,
-  current_setting('io_workers')::integer AS io_workers,
+  current_setting('io_min_workers')::integer AS io_min_workers,
+  current_setting('io_max_workers')::integer AS io_max_workers,
   current_setting('effective_io_concurrency')::integer AS effective_io_concurrency,
   current_setting('maintenance_io_concurrency')::integer AS maintenance_io_concurrency,
   current_setting('track_io_timing') AS track_io_timing,
@@ -19,12 +20,12 @@ SELECT
   current_setting('compute_query_id') AS compute_query_id,
   current_setting('shared_preload_libraries') AS shared_preload_libraries;
 
-DO $pg18_contract$
+DO $pg19_contract$
 DECLARE
   server_num integer := current_setting('server_version_num')::integer;
 BEGIN
-  IF server_num < 180006 OR server_num >= 190000 THEN
-    RAISE EXCEPTION 'expected PostgreSQL 18.6 or newer within major 18, got %', current_setting('server_version');
+  IF server_num < 190000 OR server_num >= 200000 THEN
+    RAISE EXCEPTION 'expected PostgreSQL major 19, got %', current_setting('server_version');
   END IF;
   IF (SELECT datlocprovider FROM pg_database WHERE datname = current_database()) <> 'b' THEN
     RAISE EXCEPTION 'locale provider must be builtin, got %',
@@ -56,7 +57,7 @@ BEGIN
     RAISE EXCEPTION 'pg_stat_statements extension is missing from database %', current_database();
   END IF;
 END;
-$pg18_contract$;
+$pg19_contract$;
 
 SELECT
   extension.extname,

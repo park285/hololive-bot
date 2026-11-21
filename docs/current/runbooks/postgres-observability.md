@@ -10,7 +10,7 @@ USAGE가 없는 exporter에도 이 전용 스키마의 USAGE와 통계 객체 SE
 기존 pg_stat_statements는 public에 유지하며 관리자 소유 view가 필요한 숫자 지표를 제공한다.
 Dockerfile은 고정 PostgreSQL 18.7/Alpine PGXS로 두 CPU 아키텍처의 모듈을 빌드하며
 앱 테이블·마이그레이션·initdb를 변경하지 않는다.
-base image의 contrib인 `auto_explain`(preload), `pg_buffercache` 1.6, `amcheck` 1.5도
+base image의 contrib인 `auto_explain`(preload), `pg_buffercache` 1.7, `amcheck` 1.5도
 같은 절차로 켠다. 두 확장은 같은 전용 스키마에 두고 확장 기본 권한을 유지한다.
 버퍼 조회는 `pg_monitor`, evict 함수와 amcheck 검사는 관리자만 실행할 수 있다.
 최종 이미지 스캔의 `CVE-2026-58055` 보고를 해소하도록 기존 `nghttp2-libs`만

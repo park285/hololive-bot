@@ -323,7 +323,7 @@ separately authorized service deployment workflow; source validation activates n
 ## Prepared database policy (not activated)
 
 이 절의 연결 수치는 `max_connections=61`·exporter 2로 바꾼 2026-10-25 이전 준비안 기록입니다. 현재 서버 한도와 연결 예산은
-[hololive-api runbook](../../docs/current/runbooks/hololive-api.md#postgresql-connections-pg18)과 `scripts/ci/postgres-capacity-policy.tsv`를 따릅니다.
+[hololive-api runbook](../../docs/current/runbooks/hololive-api.md#postgresql-connections-pg19)과 `scripts/ci/postgres-capacity-policy.tsv`를 따릅니다.
 
 PostgreSQL remains `max_connections=60`, with three superuser slots. The old application/
 migrator allocation 55 plus exporter 1 and nightly 2 was 58 against 57 ordinary slots.
@@ -417,7 +417,7 @@ Go bootstrap sends client-generated SCRAM verifiers. Synthetic failure/log check
 
 Local acceptance (not run by this preparation): `bash scripts/ci/check-postgres-capacity.sh` and
 `bash scripts/deploy/test-postgres-access-policy.sh`. The latter requires the already-built
-repository PG18.7 image (`POSTGRES_POLICY_TEST_IMAGE` may select its tag), rootless Podman and OpenSSL;
+repository PG19.0 image (`POSTGRES_POLICY_TEST_IMAGE` may select its tag), rootless Podman and OpenSSL;
 it uses a disposable internal network, tmpfs database/socket and synthetic certificates only,
 publishes no ports, and proves HBA rejection, runtime/exporter TLS, migration/nightly socket
 access and aggregate role limits. It never reads runtime env files or pulls/builds images.

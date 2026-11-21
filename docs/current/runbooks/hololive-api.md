@@ -205,7 +205,7 @@ curl -s --config <(printf 'header "X-API-Key: %s"\n' "$(sudo podman exec hololiv
 
 - `hololive_http_client_requests_total{client,code,method}`, `hololive_http_client_request_duration_seconds{client,method}`: 외부 API HTTP 요청마다 전송 계층에서 기록합니다. API와 alarm-worker의 Holodex client는 `client="holodex"`, collector는 provider 이름(`holodex`, `hololive_official`)을 씁니다. `code`는 응답 상태 코드이고, 응답을 받지 못한 요청(연결 거부·timeout·취소)은 `code="error"`입니다. 재시도한 시도도 각각 셉니다. 지연은 응답 헤더 도착이나 전송 실패까지이며 본문 읽기는 포함하지 않습니다. 오류율은 `sum by (client) (rate(hololive_http_client_requests_total{code=~"5..|error"}[5m])) / sum by (client) (rate(hololive_http_client_requests_total[5m]))`로 봅니다. 공식 일정 페이지 scraper와 collector의 youtube.js helper 호출은 이 지표에 포함하지 않습니다(helper는 `youtubejs_rpc_phase_duration_seconds`).
 
-### PostgreSQL connections (PG18)
+### PostgreSQL connections (PG19)
 
 컨테이너 내부 socket-trust로 admin user(`POSTGRES_ADMIN_USER`, 기본 `postgres_admin`)로 접속해 조회합니다.
 

@@ -58,7 +58,7 @@ fi
 stop_server
 start_observability
 [ "$(psql -h /var/run/postgresql -U postgres -Atqc 'SELECT current_user')" = postgres ]
-[ "$(psql -h /var/run/postgresql -U postgres -Atqc 'SHOW server_version_num')" = 180007 ]
+[ "$(psql -h /var/run/postgresql -U postgres -Atqc 'SHOW server_version_num')" = 190000 ]
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
   -f /usr/local/share/hololive/enable-observability.sql
 psql -X -h /var/run/postgresql -U postgres -v ON_ERROR_STOP=1 \
