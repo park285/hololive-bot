@@ -18,6 +18,8 @@ bot/admin plane과 YouTube Community consume plane을 한 프로세스에서 호
 - Bot plane: Kakao/Iris webhook ingress와 사용자 명령 routing, reply orchestration.
 - Admin plane: dashboard-facing admin HTTP control plane, worker alarm HTTP client.
 
+`!이벤트등급 <점수> [jp|us|global]`은 JP가 기본입니다. 예: `!이벤트등급 1,234,567`, `!이벤트등급 500000 미국`. 점수는 양의 int64이며 쉼표는 세 자리마다만 허용합니다. 봇은 원래 방·사용자와 정규화한 서버·점수를 기존 인증을 거쳐 worker에 전달합니다. 활성 챕터가 없으면 등록하지 않습니다. 등록·점수 갱신과 결과 공개 조건은 [alarm-worker](alarm-worker.md#이벤트-등급-알림)를 참고하십시오.
+
 ## Owns
 
 - Kakao/Iris webhook ingress, user-facing command routing and reply orchestration (bot plane)

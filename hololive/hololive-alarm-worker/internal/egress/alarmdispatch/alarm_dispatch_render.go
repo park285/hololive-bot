@@ -85,6 +85,18 @@ func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Rend
 	}
 
 	renderers := map[domain.AlarmDispatchSourceKind]sourceRenderer{
+		domain.AlarmDispatchSourceKindEventGrade: {
+			action: "render event grade",
+			run: func() (delivery.MessageVariants, error) {
+				if validationErr := envelope.ValidateCanonicalDispatch(); validationErr != nil {
+					return delivery.MessageVariants{}, fmt.Errorf("validate event grade: %w", validationErr)
+				}
+
+				message := envelope.EventGrade.Message()
+
+				return delivery.MessageVariants{Plain: message, RichText: message}, nil
+			},
+		},
 		domain.AlarmDispatchSourceKindXSpace: {
 			action: "render x space start",
 			run: func() (delivery.MessageVariants, error) {

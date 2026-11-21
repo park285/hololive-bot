@@ -7,6 +7,7 @@ const (
 	CommandUpcoming           CommandType = "upcoming"
 	CommandSchedule           CommandType = "schedule"
 	CommandSchedulePoster     CommandType = "schedule_poster"
+	CommandEventGrade         CommandType = "event_grade"
 	CommandHelp               CommandType = "help"
 	CommandAlarmAdd           CommandType = "alarm_add"
 	CommandAlarmRemove        CommandType = "alarm_remove"

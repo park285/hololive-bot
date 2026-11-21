@@ -315,7 +315,7 @@ func buildRouteAuditOutboxItems(targets map[routeAuditTarget][]string) []domain.
 			item.Payload = fmt.Sprintf(`{"canonical_post_id":%q,"video_id":%q,"title":"short-%s"}`, "short:"+contentID, contentID, target.channelID)
 		case domain.AlarmTypeCommunity:
 			item.Payload = fmt.Sprintf(`{"canonical_post_id":%q,"post_id":%q,"content_text":"community-%s"}`, "community:"+contentID, contentID, target.channelID)
-		case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+		case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary, domain.AlarmTypeEventGrade:
 		}
 
 		items = append(items, item)
@@ -330,7 +330,7 @@ func routeAuditOutboxKind(alarmType domain.AlarmType) domain.OutboxKind {
 		return domain.OutboxKindNewShort
 	case domain.AlarmTypeCommunity:
 		return domain.OutboxKindCommunityPost
-	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary, domain.AlarmTypeEventGrade:
 		panic("unsupported route audit alarm type: " + string(alarmType))
 	default:
 		panic("unexpected route audit alarm type: " + string(alarmType))

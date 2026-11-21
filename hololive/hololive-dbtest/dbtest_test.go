@@ -66,8 +66,13 @@ func TestTemplateReplayAfterCollectorSessionSetup(t *testing.T) {
 		t.Fatalf("replay sibling of collector database: %v", err)
 	}
 
-	err := ApplyMigrations(t.Context(), collector)
-	if err == nil || !strings.Contains(err.Error(), "physical contract for "+epoch4BaselineMigration+" is not satisfied") {
+	files, err := readMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = ApplyMigrations(t.Context(), collector)
+	if err == nil || !strings.Contains(err.Error(), "physical contract for "+files[len(files)-1].Name+" is not satisfied") {
 		t.Fatalf("replay clone with broad scraper grants = %v, want physical contract rejection", err)
 	}
 }

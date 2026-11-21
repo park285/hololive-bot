@@ -39,6 +39,8 @@ func BuildChannelSubscriberKey(channelID string, alarmType domain.AlarmType) str
 		return ChannelSubscribersCommunityPrefix + channelID
 	case domain.AlarmTypeShorts:
 		return ChannelSubscribersShortsPrefix + channelID
+	case domain.AlarmTypeEventGrade:
+		return ""
 	default:
 		return ChannelSubscribersKeyPrefix + channelID
 	}

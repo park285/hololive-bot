@@ -26,7 +26,7 @@ func deliveryTelemetryKindForAlarmType(alarmType domain.AlarmType) (domain.Outbo
 		return domain.OutboxKindCommunityPost, true
 	case domain.AlarmTypeShorts:
 		return domain.OutboxKindNewShort, true
-	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
+	case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary, domain.AlarmTypeEventGrade:
 		return "", false
 	default:
 		return "", false

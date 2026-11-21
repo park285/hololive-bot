@@ -51,6 +51,10 @@ func BuildEventKey(input *DedupeInput) string {
 }
 
 func buildRawEventKey(input *DedupeInput) string {
+	if input.SourceKind == domain.AlarmDispatchSourceKindEventGrade {
+		return "event-grade:" + input.SourceIdentity
+	}
+
 	if input.SourceKind == domain.AlarmDispatchSourceKindXSpace {
 		return "x-space:start:" + input.SourceIdentity
 	}
@@ -95,6 +99,13 @@ func buildRawEventKey(input *DedupeInput) string {
 
 func EnvelopeDedupeInput(envelope *AlarmQueueEnvelope) DedupeInput {
 	input := envelopeNotificationDedupeInput(&envelope.Notification)
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindEventGrade && envelope.EventGrade != nil {
+		input.SourceKind = envelope.SourceKind
+		input.SourceIdentity = strconv.FormatInt(envelope.EventGrade.RequestID, 10)
+
+		return input
+	}
+
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindXSpace && envelope.XSpace != nil {
 		input.SourceKind = envelope.SourceKind
 		input.SourceIdentity = envelope.XSpace.SpaceID

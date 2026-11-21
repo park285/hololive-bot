@@ -76,6 +76,12 @@ func alarmDispatchEnvelopeError(envelope *dispatchoutbox.AlarmQueueEnvelope) err
 	}
 
 	switch envelope.SourceKind {
+	case domain.AlarmDispatchSourceKindEventGrade:
+		if err := envelope.ValidateCanonicalDispatch(); err != nil {
+			return fmt.Errorf("validate event grade dispatch: %w", err)
+		}
+
+		return nil
 	case domain.AlarmDispatchSourceKindCelebration:
 		if envelope.Celebration != nil && !envelope.Celebration.Kind.IsValid() {
 			return fmt.Errorf("celebration kind %q has no egress path", envelope.Celebration.Kind)
