@@ -21,7 +21,9 @@ dump/restore로 새 볼륨 `hololive-bot_holo-pg-data19`에 옮기며, 기존 `h
 4. `sudo /opt/hololive-bot/compose/current/scripts/deploy/pg-major-upgrade.sh --check`로 사전 검사만 하고,
    통과하면 옵션 없이 실행합니다.
 5. 전환이 끝난 뒤에 이 리비전의 앱 배포와 `hololive-db-migrate` schema job을 진행합니다. 이 리비전의 풀러 인증
-   bootstrap은 `pg_stat_statements` 1.13을 요구하므로 PostgreSQL 18에서는 schema job이 실패합니다.
+   bootstrap은 `pg_stat_statements` 1.13을 요구하므로 PostgreSQL 18에서는 schema job이 실패합니다. 반대로 이전
+   리비전의 schema job은 1.12를 요구하므로 전환 뒤에는 이전 이미지로 schema job을 실행하지 않습니다. 전환 직후에는
+   설치되어 있던 이전 앱이 19에서 다시 기동하며, 이전 앱 코드에는 PostgreSQL major 검사가 없습니다.
 
 ## 사전 검사
 
@@ -40,8 +42,11 @@ dump/restore로 새 볼륨 `hololive-bot_holo-pg-data19`에 옮기며, 기존 `h
 
 1. 표식을 `phase=dump`로 쓰고 `hololive-api`, `hololive-alarm-worker`, 중앙 collector, `holo-pgbouncer`를 멈춥니다.
    앱 세션은 모두 풀러를 거치므로 이후에는 관리자, exporter, nightly 세션만 남아야 하며 아니면 멈춥니다.
+   다른 host의 collector a·b·d는 계속 실행되며 풀러가 돌아올 때까지 접속에 실패하고 재시도합니다.
 2. `/var/lib/hololive-bot/pg-major/<UTC>`(0700)에 `pg_dump -Fc`, 역할 SQL, 원본 지문을 만들고 18을 멈춥니다.
 3. 표식을 `phase=restore`로 바꾸고 19를 새 볼륨에서 기동합니다(init-db가 bootstrap 역할과 확장을 만듭니다).
+   unit의 healthy 검사는 init 중 임시 서버에도 통과하므로, 컨테이너의 PID 1이 `postgres`가 되고 접속을 받을 때까지
+   최대 600초 더 기다린 뒤에 SQL을 보냅니다.
 4. DB 연결 한도를 0으로 두고 일반 세션을 끊은 뒤, 역할 SQL을 한 트랜잭션으로 적용하고, init-db가 미리 만든 기본 권한을
    비운 다음 `pg_restore --single-transaction --exit-on-error`로 복원합니다. 기본 권한은 dump가 복원 마지막에
    다시 만듭니다. 미리 두면 복원 중 생기는 identity 시퀀스가 원본에 없던 `hololive_runtime` 권한을 받습니다.

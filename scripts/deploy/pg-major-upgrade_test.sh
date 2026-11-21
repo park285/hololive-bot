@@ -70,6 +70,11 @@ case "$1 $2" in
   exec\ *)
     [[ -e "$S/active/holo-postgres.service" ]] || exit 125
     case "$*" in
+      *"/proc/1/comm"*)
+        polls="$(cat "$S/init-polls" 2>/dev/null || echo 0)"
+        echo $((polls + 1)) >"$S/init-polls"
+        if [[ "$(cat "$S/version")" == 19* ]] && (( polls < 2 )); then exit 1; fi
+        echo final-server >>"$S/calls" ;;
       *pg_dump*) echo pg_dump >>"$S/calls"
         [[ ! -e "$S/fail-dump" ]] || exit 1; echo dump ;;
       *pg_restore*) echo pg_restore >>"$S/calls"; cat >/dev/null ;;
@@ -137,7 +142,8 @@ grep -qF 'major upgrade committed' "$T/out"
 [[ ! -e "$(marker)" ]]
 (( $(line_of 'systemctl stop hololive-api.service') < $(line_of 'pg_dump') ))
 (( $(line_of 'pg_dump') < $(line_of 'systemctl stop holo-postgres.service') ))
-(( $(line_of 'systemctl start holo-postgres.service') < $(line_of 'CONNECTION LIMIT 0') ))
+(( $(line_of 'systemctl start holo-postgres.service') < $(line_of 'final-server') ))
+(( $(line_of 'final-server') < $(line_of 'CONNECTION LIMIT 0') ))
 (( $(line_of 'CONNECTION LIMIT 0') < $(line_of 'default-acl') ))
 (( $(line_of 'default-acl') < $(line_of 'pg_restore') ))
 (( $(line_of 'pg_restore') < $(line_of 'systemctl start holo-pgbouncer.service') ))
@@ -147,7 +153,7 @@ grep -qF 'CONNECTION LIMIT -1' "$T/state/calls"
 work="$(find "$T/var/lib/hololive-bot/pg-major" -mindepth 1 -maxdepth 1 -type d)"
 [[ "$(stat -c %a "$work")" == 700 && -s "$work/hololive.dump" && -s "$work/globals.sql" ]]
 cmp -s "$work/fingerprint.source" "$work/fingerprint.target"
-echo 'commit stops writers before the dump, gates restore behind a zero connection limit, clears preset default privileges before restoring and restarts writers last'
+echo 'commit stops writers before the dump, waits for the final PostgreSQL 19 server after init, gates restore behind a zero connection limit, clears preset default privileges before restoring and restarts writers last'
 
 new_host mismatch
 printf 'rows|public|t|2|41\n' >"$T/state/target-rows"

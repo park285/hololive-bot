@@ -79,6 +79,18 @@ scalar() {
   psql_admin <<<"$1"
 }
 
+wait_final_server() {
+  local _
+  for _ in $(seq 1 600); do
+    # shellcheck disable=SC2016
+    if podman exec holo-postgres sh -c 'test "$(cat /proc/1/comm)" = postgres && pg_isready -q -p 5432' >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 clear_default_privileges() {
   psql_admin <"$clear_default_acl_sql"
 }
@@ -216,6 +228,7 @@ fi
 write_marker restore
 log "starting PostgreSQL 19 on $target_volume"
 systemctl start holo-postgres.service
+wait_final_server || die "PostgreSQL 19 did not finish initialization within 600 seconds"
 [[ "$(data_volume)" == "$target_volume" ]] || die "new holo-postgres does not use $target_volume"
 running_image="$(podman container inspect --format '{{.Image}}' holo-postgres)"
 [[ "sha256:${running_image#sha256:}" == "$target_image" ]] || die "new holo-postgres does not run $target_image"
