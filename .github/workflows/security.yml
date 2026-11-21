@@ -11,26 +11,30 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'push' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 env:
   GOCACHE: /tmp/go-cache
   GOTMPDIR: /tmp
   GOSEC_VERSION: v2.30.0
 
+defaults:
+  run:
+    shell: bash
+    working-directory: hololive-bot
+
 jobs:
   dependency-security:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    defaults:
-      run:
-        shell: bash
-        working-directory: hololive-bot
     steps:
-      - name: Checkout hololive-bot
+      - &checkout
+        name: Checkout hololive-bot
+        id: repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.sha }}
           path: hololive-bot
           persist-credentials: false
 
@@ -75,51 +79,68 @@ jobs:
           mkdir -p "$(dirname "${dest}")"
           cp -RT "${src}" "${dest}"
 
-      - name: Install security tools
+      - name: Prepare tool directory
+        id: tools
         run: |
-          export GOBIN="${RUNNER_TEMP}/go-tools"
-          mkdir -p "${GOBIN}"
-          source scripts/ci/go-tooling.sh
-          govulncheck_bin="$(ensure_govulncheck)"
-          printf 'GOVULNCHECK_BIN=%s\n' "${govulncheck_bin}" >> "${GITHUB_ENV}"
-          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
-          nilaway_bin="$(bash scripts/ci/nilaway-models/build.sh)"
-          printf 'NILAWAY_BIN=%s\n' "${nilaway_bin}" >> "${GITHUB_ENV}"
-          echo "${GOBIN}" >> "${GITHUB_PATH}"
+          mkdir -p "${RUNNER_TEMP}/go-tools"
+          echo "GOBIN=${RUNNER_TEMP}/go-tools" >> "${GITHUB_ENV}"
 
       - name: Resolve workspace package patterns
+        id: packages
         run: |
           source scripts/ci/go-workspace-modules.sh
-          owned_pkgs=()
-          for module in "${GO_OWNED_MODULES[@]}"; do
-            owned_pkgs+=("./${module}/...")
-          done
-          printf 'GO_PKG_PATTERNS=%s\n' "${owned_pkgs[*]}" >> "${GITHUB_ENV}"
+          go_workspace_package_patterns > "${RUNNER_TEMP}/owned-go-packages"
+          test -s "${RUNNER_TEMP}/owned-go-packages"
 
       - name: gosec
         run: |
-          read -ra pkgs <<< "${GO_PKG_PATTERNS}"
-          gosec -quiet -fmt text "${pkgs[@]}"
+          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          mapfile -t pkgs < "${RUNNER_TEMP}/owned-go-packages"
+          "${GOBIN}/gosec" -quiet -fmt text "${pkgs[@]}"
 
       - name: NilAway
+        if: ${{ !cancelled() && steps.packages.outcome == 'success' }}
         env:
           GOMEMLIMIT: 5GiB
           GOMAXPROCS: "2"
         run: |
-          read -ra pkgs <<< "${GO_PKG_PATTERNS}"
-          go vet -p 1 -vettool="${NILAWAY_BIN}" -pretty-print \
+          nilaway_bin="$(bash scripts/ci/nilaway-models/build.sh)"
+          mapfile -t pkgs < "${RUNNER_TEMP}/owned-go-packages"
+          go vet -p 1 -vettool="${nilaway_bin}" -pretty-print \
             -include-errors-in-files="${PWD}" "${pkgs[@]}"
 
       - name: govulncheck
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         run: |
-          mapfile -t modules < <(go work edit -json | jq -r '.Use[].DiskPath')
-          for module in "${modules[@]}"; do
+          source scripts/ci/go-tooling.sh
+          govulncheck_bin="$(ensure_govulncheck)"
+          modules="$(go work edit -json | jq -er '.Use[].DiskPath')"
+          failed=0
+          while IFS= read -r module; do
             echo "govulncheck ${module}"
-            (cd "${module}" && "${GOVULNCHECK_BIN}" ./...)
-          done
+            (cd "${module}" && "${govulncheck_bin}" ./...) </dev/null || failed=1
+          done <<< "${modules}"
+          exit "${failed}"
+
+  final-images:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GOWORK: "off"
+    steps:
+      - *checkout
+
+      - name: Validate final image inventory and scan policy
+        run: bash scripts/ci/check-recurring-security-scan-contract.sh
+
+      - name: Setup Go for binary vulnerability analysis
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
+        with:
+          go-version-file: hololive-bot/go.work
+          cache: false
 
       - name: Install exact Trivy
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
           source scripts/ci/final-image-scan-policy.sh
           archive="${RUNNER_TEMP}/trivy_${FINAL_IMAGE_TRIVY_VERSION}_Linux-64bit.tar.gz"
@@ -134,51 +155,43 @@ jobs:
           echo "${bin_dir}" >>"${GITHUB_PATH}"
 
       - name: Register arm64 emulation
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: docker run --rm --privileged tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 --install arm64
 
       - name: Build final production images
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           HOLOLIVE_BUILD_PLATFORM: linux/arm64
-        run: |
-          bash scripts/ci/test-infra-images.sh
-          ./build-all.sh --no-bump --build-only --skip-local-ci
+        run: ./build-all.sh --no-bump --build-only --skip-local-ci
 
       - name: Start rootless Podman API for Trivy
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
           mkdir -p "${XDG_RUNTIME_DIR}/podman"
           nohup podman system service --time=0 "unix://${XDG_RUNTIME_DIR}/podman/podman.sock" >/dev/null 2>&1 &
 
       - name: Scan every final production image
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: bash scripts/ci/run-final-image-scan.sh
+
+      - name: Test amd64 PostgreSQL image
+        if: ${{ !cancelled() && steps.repo.outcome == 'success' }}
+        run: bash scripts/ci/test-infra-images.sh
 
   npm-security:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        shell: bash
-        working-directory: hololive-bot
     steps:
-      - name: Checkout hololive-bot
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          path: hololive-bot
-          persist-credentials: false
+      - *checkout
+      - name: Validate final image inventory and scan policy on main
+        if: github.event_name == 'push'
+        run: bash scripts/ci/check-recurring-security-scan-contract.sh
 
       - name: Setup Node.js
+        if: ${{ !cancelled() && steps.repo.outcome == 'success' }}
+        id: node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: "26.13.0"
           cache: npm
-          cache-dependency-path: |
-            hololive-bot/hololive/hololive-youtube-collector/youtubejs/package-lock.json
-
-      - name: Validate recurring scan inventory
-        run: bash scripts/ci/check-recurring-security-scan-contract.sh
+          cache-dependency-path: hololive-bot/**/package-lock.json
 
       - name: Audit all npm lockfiles
+        if: ${{ !cancelled() && steps.node.outcome == 'success' }}
         run: bash scripts/ci/run-npm-audit.sh

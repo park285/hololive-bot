@@ -1,117 +1,89 @@
 #!/usr/bin/env bash
 
-dedupe_lines() {
-    awk 'NF && !seen[$0]++'
-}
-
-all_go_package_patterns() {
-    printf '%s\n' "${WORKSPACE_GO_PACKAGES[@]}" | dedupe_lines
-}
-
-changed_paths() {
-    local base_ref="${BASE_REF:-origin/main}"
-    local head_ref="${HEAD_REF:-HEAD}"
-
-    if git rev-parse --verify "${base_ref}" >/dev/null 2>&1 && git rev-parse --verify "${head_ref}" >/dev/null 2>&1; then
-        git diff --name-only -M "${base_ref}...${head_ref}" 2>/dev/null || true
-    elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
-        git diff --name-only -M HEAD~1..HEAD 2>/dev/null || true
+require_checkout_head() {
+    [[ "$1" != HEAD ]] || return 0
+    local expected current
+    expected="$(git rev-parse --verify "$1^{commit}")" || return 1
+    current="$(git rev-parse --verify HEAD)" || return 1
+    if [[ "${expected}" != "${current}" ]]; then
+        echo "gate target $1 does not match the current checkout" >&2
+        return 1
     fi
-
-    git diff --name-only -M --cached 2>/dev/null || true
-    git diff --name-only -M 2>/dev/null || true
-    git ls-files --others --exclude-standard 2>/dev/null || true
 }
 
-go_package_patterns_for_file() {
-    local file="$1"
-    local module
-
-    [[ "${file}" == *.go ]] || return 0
-
-    for module in "${GO_MODULES[@]}"; do
-        if [[ "${file}" == "${module}/"* ]]; then
-            printf './%s/...\n' "${module}"
-            return 0
-        fi
-    done
+checkout_changed_paths() {
+    git diff --no-renames --name-only -z "$1" -- &&
+        git diff --no-renames --name-only -z --cached HEAD -- &&
+        git diff --no-renames --name-only -z -- &&
+        git ls-files --others --exclude-standard -z
 }
 
-is_shared_module_file() {
-    local file="$1"
+load_changed_files() {
+    mapfile -d '' -t changed_files < <(checkout_changed_paths "$1")
+    wait "$!"
+}
 
-    case "${file}" in
-        hololive/hololive-shared/*)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
+is_metadata_path() {
+    case "$1" in
+        hololive/*/queries/*|hololive/*/testqueries/*|hololive/*/testdata/*) return 1 ;;
+        *.md|VERSION|hololive/hololive-api/VERSION|hololive/hololive-alarm-worker/VERSION) return 0 ;;
+        *) return 1 ;;
     esac
-}
-
-changed_go_package_patterns() {
-    local file
-    local needs_all=false
-    local package_patterns=()
-
-    while IFS= read -r file; do
-        case "${file}" in
-            go.work|go.work.sum|go.mod|go.sum|*/go.mod|*/go.sum|.golangci.yml)
-                needs_all=true
-                ;;
-            scripts/ci/go-tooling.sh|scripts/ci/go-test-nonrace.sh|scripts/ci/local-ci.sh|scripts/ci/local-ci-nilaway.sh|scripts/ci/nilaway-inputs.sh|scripts/ci/pre-push-gate.sh)
-                needs_all=true
-                ;;
-            *.go)
-                if is_shared_module_file "${file}"; then
-                    needs_all=true
-                else
-                    while IFS= read -r package_pattern; do
-                        package_patterns+=("${package_pattern}")
-                    done < <(go_package_patterns_for_file "${file}")
-                fi
-                ;;
-            hololive/hololive-api/scripts/migrations/*)
-                needs_all=true
-                ;;
-            *.json|*.tmpl|*.sql|*.tpl|*.png|*.ttf)
-                for module in "${GO_MODULES[@]}"; do
-                    if [[ "${file}" != "${module}/"* ]]; then
-                        continue
-                    fi
-                    if is_shared_module_file "${file}"; then
-                        needs_all=true
-                    else
-                        package_patterns+=("./${module}/...")
-                    fi
-                    break
-                done
-                ;;
-        esac
-    done < <(changed_paths | dedupe_lines)
-
-    if [[ "${needs_all}" == "true" ]]; then
-        all_go_package_patterns
-        return 0
-    fi
-
-    printf '%s\n' "${package_patterns[@]}" | dedupe_lines
 }
 
 configure_go_packages() {
+    local file module
+    local -A selected=()
+    mapfile -t GO_PACKAGES < <(go_workspace_package_patterns)
+    wait "$!"
     case "${LOCAL_CI_GO_SCOPE}" in
-        all)
-            mapfile -t GO_PACKAGES < <(all_go_package_patterns)
-            ;;
-        changed)
-            mapfile -t GO_PACKAGES < <(changed_go_package_patterns)
-            ;;
+        all) return 0 ;;
+        changed) ;;
         *)
             echo "unsupported LOCAL_CI_GO_SCOPE=${LOCAL_CI_GO_SCOPE}; expected all or changed" >&2
-            exit 1
+            return 1
             ;;
     esac
+
+    for file in "${changed_files[@]}"; do
+        if is_metadata_path "${file}"; then
+            continue
+        fi
+        case "${file}" in
+            go.work|go.work.sum|go.mod|go.sum|*/go.mod|*/go.sum|.golangci.yml|\
+            scripts/ci/go-*.sh|scripts/ci/local-ci*.sh|scripts/ci/nilaway-inputs.sh|scripts/ci/nilaway-models/*|scripts/ci/pre-push-gate.sh|\
+            hololive/hololive-shared/*|hololive/hololive-dbtest/*|hololive/hololive-api/scripts/migrations/*)
+                return 0
+                ;;
+            hololive/hololive-youtube-collector/*)
+                selected[hololive/hololive-api]=1 ;;
+            docs/current/contracts/admin-api.openapi.json|scripts/maintenance/queries/live_runtime_state_drift.sql)
+                selected[hololive/hololive-api]=1 ;;
+            deploy/nginx/holoshi-public-shortlink.conf|deploy/nginx/admin-dashboard-ingress.conf.template)
+                selected[hololive/hololive-shared]=1 ;;
+        esac
+        case "${file}" in
+            hololive/hololive-api/*/queries/*|hololive/hololive-youtube-collector/*/queries/*|\
+            deploy/quadlet/hololive-bot/*|scripts/maintenance/queries/*)
+                selected[hololive/hololive-dbtest]=1 ;;
+            scripts/ci/public-pr-collector-helper-install.sh|scripts/ci/public-pr-go-gate.sh|\
+            scripts/ci/check-go-test-json.py|scripts/ci/collector-test-skip-allowlist.txt)
+                selected[hololive/hololive-youtube-collector]=1 ;;
+        esac
+        for module in "${GO_OWNED_MODULES[@]}"; do
+            if [[ "${file}" == "${module}/"* ]]; then
+                selected[${module}]=1
+                break
+            fi
+        done
+    done
+
+    GO_PACKAGES=()
+    for module in "${GO_OWNED_MODULES[@]}"; do
+        if [[ -n "${selected[${module}]:-}" ]]; then
+            GO_PACKAGES+=("./${module}/...")
+        fi
+    done
 }
 
 has_go_packages() {

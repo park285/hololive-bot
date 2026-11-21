@@ -163,27 +163,24 @@ provision_integration_test_valkey() {
 
 check_integration_tests() {
     if [[ "${RUN_INTEGRATION_TESTS}" == "true" ]]; then
-        local provisioned_services=false
         if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
             run_step "Provision integration test PostgreSQL" provision_integration_test_database
-            provisioned_services=true
         fi
         if [[ -z "${TEST_VALKEY_ADDR:-}" ]]; then
             run_step "Provision integration test Valkey" provision_integration_test_valkey
-            provisioned_services=true
         fi
         run_step "Integration-tag tests" \
             go_mod_readonly env INTEGRATION_TEST=true go test -count=1 -tags=integration "${INTEGRATION_TAG_PACKAGES[@]}"
         run_step "INTEGRATION_TEST group" \
             go_mod_readonly env INTEGRATION_TEST=true go test -count=1 "${INTEGRATION_TEST_PACKAGES[@]}"
-        if [[ "${provisioned_services}" == "true" ]]; then
+        if [[ -n "${INTEGRATION_TEST_DB_CONTAINER}${INTEGRATION_TEST_VALKEY_CONTAINER}" ]]; then
             run_step "Remove integration test services" cleanup_integration_test_services
             trap - EXIT
         fi
         return 0
     fi
 
-    if [[ -n "${TEST_DATABASE_URL:-}" ]]; then
+    if [[ -z "${INTEGRATION_TEST_DB_CONTAINER}" && -n "${TEST_DATABASE_URL:-}" ]]; then
         run_step "Alarm dispatch PostgreSQL integration test" \
             go_mod_readonly go test -count=1 -tags=integration ./hololive/hololive-alarm-worker/internal/service/alarm/dispatchoutbox
         return 0
