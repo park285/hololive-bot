@@ -19,8 +19,8 @@ collector·PO image도 `hololive/hololive-api/VERSION`을 쓰므로 API를 재�
 label은 이전 build를 가리킵니다. API source가 바뀌지 않은 릴리스에서만 생기는 식별자 차이이며, API 산출물 판정은
 image label로 합니다.
 
-스택 전체 결정으로 버전 번호를 1.0.0부터 다시 시작합니다. 다음 릴리즈에서 루트 `VERSION`과 두 runtime `VERSION`을
-모두 1.0.0으로 맞추고 tag `r1.0.0`을 만듭니다. 그때까지 `VERSION`은 직전 릴리즈 값을 그대로 둡니다. 기존 `v<version>`
+스택 전체 결정으로 버전 번호를 1.0.0부터 다시 시작했습니다. `r1.0.0`에서 루트 `VERSION`과 두 runtime `VERSION`을
+모두 1.0.0으로 맞췄습니다. 기존 `v<version>`
 tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, 새 tag를 `v` 접두사로 만들지 않습니다. 두 체계의 번호는
 겹치므로 버전 숫자만으로 신구를 비교하지 않습니다. 배포 복구 도구는 원래 릴리스 tag로 `r<version>`과 이전 `v<version>`을 모두
 받고 tag 이름을 기록된 binding과 bundle의 tag ref로 검증하며, `scripts/publish-release.sh`는 새 Release를 `r<version>` tag로만 만들고, 기존 Release 수정과 비교 기준에는 이전 `v<version>`도 받습니다.

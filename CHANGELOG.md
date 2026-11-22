@@ -1,10 +1,12 @@
 # 변경 이력
 
-현재 릴리즈 버전은 루트 `VERSION`에서 관리하고 Git tag는 `r<version>` 형식을 사용합니다. 다음 릴리즈부터 번호를 1.0.0으로 다시 시작하며, `v<version>` tag와 절은 이전 번호 체계의 기록입니다.
+현재 릴리즈 버전은 루트 `VERSION`에서 관리하고 Git tag는 `r<version>` 형식을 사용합니다. 번호는 r1.0.0부터 다시 시작했으며, `v<version>` tag와 절은 이전 번호 체계의 기록입니다.
 버전은 배포하거나 게시할 때만 올리며, 절차는 [릴리즈 버전 관리](docs/current/runbooks/release.md)를 따릅니다.
 이 문서는 `미출시`와 최근 세 버전 구간(그 사이의 tag 없는 준비 구간은 세지 않음)만 유지하며, 이전 기록은 이 파일의 Git 이력과 tag에서 확인합니다.
 
 ## 미출시
+
+## r1.0.0 - 2026-11-22
 
 - **보호 소스 게시 경로 퇴역(운영자 조치 필요):** 19.2.1 설치의 init-db·pg_hba bind를 그대로 둔 채 앱 코드만 봉인 세대로 게시하던 `sync-opt-current.sh --protected-source`·`--supersede-unstarted`, `app-sources` 세대 저장소, 봉인 coordinator·rollback 분기와 그 복구 supervisor·시험을 지웠습니다. PostgreSQL 19 전환은 init-db와 Quadlet을 바꾸므로 이 경로로 배포할 수 없습니다. 중앙 API·worker는 다시 `current`의 배포 helper(`quadlet-redeploy-service.sh`, `quadlet-rollback-service.sh`)로 교체하고, 소스 교체는 전체 동기화나 `--application-only`·`--source-only`로 합니다. 운영 중앙에 남은 `/opt/hololive-bot/compose/app-sources`는 새 도구가 읽지 않으며, API·worker 교체가 migrator drop-in을 새로 쓴 뒤 승인된 정비 창에서 보관 위치로 옮깁니다.
 - **collector 이름 전환(운영자 조치 필요):** `youtube-collector`를 `collector`로 바꿨습니다. 모듈은 `hololive/hololive-collector`, 바이너리는 `bin/hololive-collector`, image는 `localhost/hololive-collector`, Quadlet unit은 `hololive-collector-{b,c,d}`, native a unit은 `hololive-collector@collector-a.service`(root `/opt/hololive-bot/collector`, host env `/etc/hololive-bot/collector-host.env`)입니다. 설정 키는 `HOLOLIVE_YOUTUBE_COLLECTOR_*`→`HOLOLIVE_COLLECTOR_*`, `HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR`→`HOLOLIVE_DISABLE_COLLECTOR`, `YOUTUBE_COLLECTOR_*`→`COLLECTOR_*`이고, 비밀 env 파일은 `collector.env`, worker profile 파일은 `collector-<slot>.json`, profile role은 `collector`, 인스턴스 ID는 `collector-<slot>`입니다. compose env 검사와 collector 기동은 구 키를 거부합니다. 후속 DB 변경 `003_epoch4_collector_session_instance`가 세션 인스턴스 함수를 새 이름으로 바꾸며, 이전 이름의 수집 lease는 만료된 뒤에만 넘겨받습니다. 배포 전 네 host의 env·profile·unit 파일을 새 이름으로 옮겨야 하고, 배포는 승인된 정비 창에서 진행합니다. metrics의 `service="youtube-collector"` 라벨은 플랫폼 수집 설정이 붙이므로 이번 변경으로 바뀌지 않습니다. 절차는 [collector runbook](docs/current/runbooks/collector.md#이름-전환)에 있습니다.
@@ -28,7 +30,3 @@
 ## v20.0.3 - 2026-11-19
 
 - **중앙 앱 기동:** systemd가 보고한 `-.mount`를 옵션이 아닌 루트 마운트 이름으로 조회합니다. 모든 기존 의존성이 활성일 때만 schema 또는 writer job을 요청합니다. 이미 소스만 게시되고 writer가 이전 세대인 설치에 재시도·복구 권한을 추가하지 않습니다.
-
-## v20.0.2 - 2026-11-19
-
-- **중앙 앱 소스 게시:** 봉인 세대의 prestart와 그 라이브러리는 후보 커밋의 Git 바이트를, 기존 호스트에 남기는 libexec는 설치된 구 커밋의 바이트를 각각 요구합니다. 두 세대의 `postgres-endpoint.sh`가 다르다는 이유만으로 게시를 거부하지 않으며, 설치된 파일이나 방화벽·DB 설정을 교체하지 않습니다.
