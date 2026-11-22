@@ -45,17 +45,10 @@ tmpfs 실험은 실제 디스크 I/O를 대표하지 않는다. ARM64는 kapu Bu
 
 ## JSON Schema 실험
 
-```bash
-podman build --platform linux/amd64 \
-  --file scripts/experiments/postgres-extensions/Dockerfile.jsonschema \
-  --tag localhost/hololive-postgres-jsonschema:experiment \
-  scripts/experiments/postgres-extensions
-python3 -B scripts/experiments/postgres-extensions/jsonschema.py \
-  --image localhost/hololive-postgres-jsonschema:experiment --output /tmp/pg-jsonschema-results.json
-```
-
-[pg_jsonschema v0.3.4](https://github.com/supabase/pg_jsonschema/releases/tag/v0.3.4)의
-공식 GNU/amd64 바이너리와 별도 PostgreSQL 18.6/Bookworm 이미지를 사용한다.
+2026-10에 [pg_jsonschema v0.3.4](https://github.com/supabase/pg_jsonschema/releases/tag/v0.3.4)의
+공식 GNU/amd64 바이너리와 별도 PostgreSQL 18.6/Bookworm 이미지로 측정한 기록이다.
+v0.3.4는 PostgreSQL 19용 바이너리를 제공하지 않으므로 PG 19 전환과 함께 재현용 Dockerfile·스크립트를
+저장소에서 지웠다. 다시 평가할 때는 아래 채택 판단의 조건에 맞춰 PG 19 source build로 새로 구성한다.
 운영 Alpine 호환성이나 ARM64 동작을 입증하는 실험이 아니다. production Dockerfile에
 pg_jsonschema를 넣지 않는다.
 
