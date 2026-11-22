@@ -1,9 +1,9 @@
-# syntax=docker/dockerfile:1.28.0@sha256:bb22d9815c728170f72750f4e5b0d672e06176142e1d602c7e66c050100b7e5b
-FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.27.4-alpine3.24@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS gosu
+# syntax=docker/dockerfile:1.29.0@sha256:572cebbc2b15e6f84c077742952674889cb63cd5e9b80abdffcbe587b6f19183
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.27.4-alpine3.24@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS gosu
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
-ADD --checksum=sha256:a656a62069c1ac63dda1f52c3d69c7261dcd5466a22f11dd52d2c2e42fca86f0 https://proxy.golang.org/github.com/tianon/gosu/@v/v0.0.0-20260606051551-40506998e34a.zip /tmp/gosu.zip
+ADD --checksum=sha256:f7ff6c7f3b67fec6231e2fa978c0410bf4fe4d9d5f07e6062c63b326fb09d096 https://proxy.golang.org/github.com/tianon/gosu/@v/v0.0.0-20261025094355-29b939aa5bd4.zip /tmp/gosu.zip
 RUN unzip -q /tmp/gosu.zip -d /src
-WORKDIR /src/github.com/tianon/gosu@v0.0.0-20260606051551-40506998e34a
+WORKDIR /src/github.com/tianon/gosu@v0.0.0-20261025094355-29b939aa5bd4
 COPY dependencies.mod go.mod
 COPY dependencies.sum go.sum
 RUN test "$(go env GOVERSION)" = go1.27.4 && go mod download
@@ -31,13 +31,13 @@ RUN apk add --no-cache --upgrade brotli-libs=1.2.1-r0 ca-certificates-bundle=202
 ARG REVISION=unknown
 LABEL org.opencontainers.image.revision=$REVISION \
       org.opencontainers.image.source="https://github.com/park285/hololive-bot" \
-      io.hololive.gosu.source="40506998e34a7a679e6dae41374c1b7aa37eb73f" \
+      io.hololive.gosu.source="29b939aa5bd4dc588af765b8248f6e39150d2565" \
       io.hololive.gosu.toolchain="go1.27.4" \
       io.hololive.pg_stat_kcache.version="2.3.2" \
       io.hololive.pg_wait_sampling.version="1.1.11"
 # 공식 gosu 1.19의 Go 1.24.6 취약 stdlib를 교체하며 entrypoint와 UID/GID 전환은 보존한다.
 COPY --from=gosu --chmod=0755 /out/gosu /usr/local/bin/gosu
-COPY --from=gosu /src/github.com/tianon/gosu@v0.0.0-20260606051551-40506998e34a/LICENSE /usr/local/share/licenses/gosu/LICENSE
+COPY --from=gosu /src/github.com/tianon/gosu@v0.0.0-20261025094355-29b939aa5bd4/LICENSE /usr/local/share/licenses/gosu/LICENSE
 COPY --from=extensions /extensions/usr/local/ /usr/local/
 COPY --from=extensions /src/pg_stat_kcache/LICENSE /usr/local/share/licenses/pg_stat_kcache/LICENSE
 COPY --from=extensions /src/pg_wait_sampling/LICENSE /usr/local/share/licenses/pg_wait_sampling/LICENSE

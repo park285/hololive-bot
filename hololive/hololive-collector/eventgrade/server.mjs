@@ -581,6 +581,6 @@ function serve(socket) {
 
 if (import.meta.main) {
   const socket = process.argv[2];
-  if (process.versions.node !== '26.13.0' || process.argv.length !== 3 || !isAbsolute(socket)) process.exit(1);
+  if (process.versions.node !== '26.13.1' || process.argv.length !== 3 || !isAbsolute(socket)) process.exit(1);
   serve(socket);
 }

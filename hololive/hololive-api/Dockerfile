@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.28.0@sha256:bb22d9815c728170f72750f4e5b0d672e06176142e1d602c7e66c050100b7e5b
+# syntax=docker/dockerfile:1.29.0@sha256:572cebbc2b15e6f84c077742952674889cb63cd5e9b80abdffcbe587b6f19183
 # Copyright 2025 Kapu
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +16,9 @@
 ARG GO_VERSION=1.27.4
 ARG ALPINE_VERSION=3.24
 
-FROM gcr.io/distroless/static-debian13@sha256:15f8637509792e05b97d83451b0b6ccfa4abd548f997e406ac1e72c87fe1fa78 AS runtime-base
+FROM gcr.io/distroless/static-debian13@sha256:1a64f46364620465ef9e9a8f5413757dfdf22695e050bbfd7303eeaf17a59383 AS runtime-base
 
-FROM --platform=$BUILDPLATFORM docker.io/library/golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS builder
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS builder
 
 ARG VERSION=dev
 ARG REVISION=unknown

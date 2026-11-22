@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **의존성:** Go 모듈(klauspost/compress 1.20.5, mongo-driver/v2 2.10.1, x/net 0.63.0, google.golang.org/api 0.316.0, otel auto/sdk 1.2.2 등)과 xspaces·po-sandbox·youtubejs의 npm lockfile을 최신 안정판으로 올렸습니다. Node는 26.13.1(이미지 `NODE_VERSION`, CI, 이벤트 등급 helper의 정확한 버전 검사와 `engines`), npm `packageManager`는 12.2.3, Dockerfile 프런트엔드는 1.29.0입니다. ingress nginx 기반은 1.31.9로 올리고 이미지 태그를 `localhost/iris-stack-nginx:1.31.9-zlib1.4-r0`로 바꿨으며, Quadlet의 `NGINX_IMAGE`도 같은 태그를 가리킵니다. PostgreSQL 이미지의 gosu는 1.20(moby/sys/user 0.5.0, x/sys 0.50.0)으로 빌드하고, golang·distroless·node 기반 이미지 digest와 govulncheck 기본값(v1.10.0)을 갱신했습니다. ChatBotGo·TwentyQ가 쓰는 PostgreSQL 이미지는 `5e9b9b1f8` 빌드를 계속 요구하므로, 새 recipe는 다시 빌드하고 두 저장소의 provenance 값을 옮길 때 반영됩니다. Valkey 9.1.3은 스택 계약 고정값이라 그대로 둡니다.
+
 - **CI:** 배포 스크립트 시험이 `ap-host-native-cutover_test.sh`를 실행하는 user unit의 시간 상한을 120초에서 300초로 늘렸습니다. 이 시험은 단독으로 67~86초가 걸리는데, 호스트 부하가 높을 때 120초에서 끊겨 pre-push 게이트가 실패한 일이 있었습니다. 멈춘 시험을 끊는 역할은 그대로입니다.
 
 ## r1.1.0 - 2026-11-22
