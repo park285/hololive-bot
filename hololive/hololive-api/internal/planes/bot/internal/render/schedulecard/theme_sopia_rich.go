@@ -285,13 +285,13 @@ func smartBuild(f *fontSet, days []day, spec smartRowSpec, k float64) smartRowLa
 	return smartRowLayout{cells: out, lines: lines, ok: ok && total <= spec.avail, bpw: bpw}
 }
 
-func fitSmartCardRows(f *fontSet, days []day, spec smartRowSpec, kMax float64) ([]richRowCell, float64, float64) {
-	baseLines := -1
+type smartFit struct {
+	cells  []richRowCell
+	k, bpw float64
+}
 
-	var (
-		best           []richRowCell
-		bestK, bestBPW float64
-	)
+func smartFitScale(f *fontSet, days []day, spec smartRowSpec, kMax float64) (smartFit, bool) {
+	baseLines := -1
 
 	for k := kMax; ; k -= 0.03 {
 		l := smartBuild(f, days, spec, k)
@@ -306,12 +306,16 @@ func fitSmartCardRows(f *fontSet, days []day, spec smartRowSpec, kMax float64) (
 		}
 
 		if ok || k <= kMin {
-			best, bestK, bestBPW = l.cells, k, l.bpw
-			break
+			return smartFit{cells: l.cells, k: k, bpw: l.bpw}, l.ok
 		}
 	}
+}
 
+func fitSmartCardRows(f *fontSet, days []day, spec smartRowSpec, kMax float64) ([]richRowCell, float64, float64) {
+	fit, _ := fitFolded(days, func(d []day) (smartFit, bool) { return smartFitScale(f, d, spec, kMax) })
+	best := fit.cells
 	total := spec.gap * float64(len(best)-1)
+
 	for i := range best {
 		total += best[i].h
 	}
@@ -323,7 +327,7 @@ func fitSmartCardRows(f *fontSet, days []day, spec smartRowSpec, kMax float64) (
 		best[i].h += extra
 	}
 
-	return best, bestK, bestBPW
+	return best, fit.k, fit.bpw
 }
 
 var sopiaRowStyle = rowStyle{
@@ -332,16 +336,18 @@ var sopiaRowStyle = rowStyle{
 	capPad: 15, gutter: 24, minSlot: 46, slotGap: 11,
 }
 
-func drawSopiaRichTable(c *canvas, t box, v view, st sopiaRichStyle) {
-	const gap = 12.0
+func sopiaRichSpec(t box) smartRowSpec {
+	timeX := t.X + 2*sopiaBadgeR + 28
 
+	return smartRowSpec{st: sopiaRowStyle, innerW: t.right() - 26 - timeX, avail: t.H - 46, gap: 12, minRow: 2*sopiaBadgeR - 2, pad: 12, capHBase: 42}
+}
+
+func drawSopiaRichTable(c *canvas, t box, v view, st sopiaRichStyle) {
 	bcx := t.X + sopiaBadgeR + 4
 	sx := bcx + 14
 	sw := t.right() - sx
 	timeX := t.X + 2*sopiaBadgeR + 28
-	rowSt := sopiaRowStyle
-
-	spec := smartRowSpec{st: rowSt, innerW: t.right() - 26 - timeX, avail: t.H - 46, gap: gap, minRow: 2*sopiaBadgeR - 2, pad: 12, capHBase: 42}
+	spec := sopiaRichSpec(t)
 	cells, k, basePW := fitSmartCardRows(c.f, v.days, spec, c.kMax())
 	rowY := t.Y
 
@@ -356,7 +362,7 @@ func drawSopiaRichTable(c *canvas, t box, v view, st sopiaRichStyle) {
 		d := cell.d
 		rh, y := cell.h, rowY
 
-		rowY += rh + gap
+		rowY += rh + spec.gap
 
 		cy := y + rh/2
 		r := box{sx, y, sw, rh}

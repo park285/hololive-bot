@@ -1128,6 +1128,71 @@ func TestThemeLayoutsFitBusyWeeks(t *testing.T) {
 	}
 }
 
+func TestPosterVariantLayoutsFitBusyWeeks(t *testing.T) {
+	f := testFonts(t)
+	w, h, _ := Format3x4.size()
+	c := &canvas{w: float64(w), h: float64(h), f: f}
+	table := box{X: 60, Y: 300, W: 960, H: 1000}
+	specs := map[string]smartRowSpec{
+		"sopia":   sopiaRichSpec(table),
+		"tsuzuri": tsuzuriRichSpec(tsuzuriRichStyle{mainFace: faceHand, subFace: faceBold, mainSize: 42, subSize: 20.5}, table),
+	}
+	weeks := map[string][]day{}
+
+	for _, perDay := range []int{3, maxSlotsPerDay} {
+		weeks[fmt.Sprintf("busy%d", perDay)] = busyDays(perDay)
+	}
+
+	for _, perDay := range []int{5, 6} {
+		weeks[fmt.Sprintf("changes%d", perDay)] = changeDays(t, f, perDay)
+	}
+
+	for week, days := range weeks {
+		for name, spec := range specs {
+			t.Run(name+"/"+week, func(t *testing.T) {
+				cells, _, _ := fitSmartCardRows(f, days, spec, c.kMax())
+				used := spec.gap * float64(len(cells)-1)
+				shown := make([]day, len(cells))
+
+				for i := range cells {
+					used += cells[i].h
+
+					shown[i] = cells[i].d
+				}
+
+				if used > spec.avail+1e-6 {
+					t.Errorf("rows use %.1f, table has %.1f", used, spec.avail)
+				}
+
+				if n, want := countShown(shown), countShown(days); n != want {
+					t.Errorf("shown + folded = %d, want %d", n, want)
+				}
+			})
+		}
+
+		t.Run("kyoko-polished/"+week, func(t *testing.T) {
+			g := box{X: 47, Y: 300, W: 986, H: 1074}
+			l, _ := kpFitFolded(f, g, days, c.kMax(), kpHasLang(days))
+			used := kyokoCellGap * float64(len(l.cells)-1)
+			shown := make([]day, len(l.cells))
+
+			for i := range l.cells {
+				used += l.cells[i].h
+
+				shown[i] = l.cells[i].d
+			}
+
+			if used > g.H+1e-6 {
+				t.Errorf("cells use %.1f, grid has %.1f", used, g.H)
+			}
+
+			if n, want := countShown(shown), countShown(days); n != want {
+				t.Errorf("shown + folded = %d, want %d", n, want)
+			}
+		})
+	}
+}
+
 func TestPlaceChipsInlineOrRow(t *testing.T) {
 	f := testFonts(t)
 	mainT, subT := txt{Size: 34, Face: faceXBold}, txt{Size: 24, Face: faceBold}

@@ -189,7 +189,7 @@ func melaRichOffRow(c *canvas, st melaRichStyle, d day, b box) {
 
 	mainS, subS := label.shape(c, -lw/2, 0)
 	c.Fill(xf(mainS, tm), st.offPillInk)
-	c.Fill(xf(subS, tm), st.sub)
+	c.Fill(xf(subS, tm), st.offPillInk)
 }
 
 func melaRichSlot(c *canvas, st melaRichStyle, s slot, first bool, b box, capH float64) {

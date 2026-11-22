@@ -67,14 +67,17 @@ func tsuzuriRowStyle(st tsuzuriRichStyle) rowStyle {
 	}
 }
 
-func drawTsuzuriRichTable(c *canvas, t box, v view, st tsuzuriRichStyle) {
-	const gap = 10.0
+func tsuzuriRichSpec(st tsuzuriRichStyle, t box) smartRowSpec {
+	timeX := t.X + tsuzuriRichDateW + 22
 
+	return smartRowSpec{st: tsuzuriRowStyle(st), innerW: t.right() - 22 - timeX, avail: t.H - 48, gap: 10, minRow: 80, pad: 11, capHBase: 40}
+}
+
+func drawTsuzuriRichTable(c *canvas, t box, v view, st tsuzuriRichStyle) {
 	dateW := tsuzuriRichDateW
 	timeX := t.X + dateW + 22
 	rowSt := tsuzuriRowStyle(st)
-
-	spec := smartRowSpec{st: rowSt, innerW: t.right() - 22 - timeX, avail: t.H - 48, gap: gap, minRow: 80, pad: 11, capHBase: 40}
+	spec := tsuzuriRichSpec(st, t)
 	cells, k, basePW := fitSmartCardRows(c.f, v.days, spec, c.kMax())
 	rowY := t.Y
 
@@ -83,7 +86,7 @@ func drawTsuzuriRichTable(c *canvas, t box, v view, st tsuzuriRichStyle) {
 		d := cell.d
 		rh, y := cell.h, rowY
 
-		rowY += rh + gap
+		rowY += rh + spec.gap
 
 		cy := y + rh/2
 
@@ -237,7 +240,7 @@ func tsuzuriRichTime(c *canvas, st tsuzuriRichStyle, s slot, kind timeKind, labe
 }
 
 func tsuzuriRichTitle(c *canvas, st tsuzuriRichStyle, sb *slotBox, titleX, top, pcy, k float64) {
-	if sb.s.status == StatusOff && sb.s.main == "휴방" && sb.s.sub == "" {
+	if sb.s.status == StatusOff && sb.s.main == "휴방" && sb.s.sub == "" && len(sb.tb.tags) == 0 {
 		mc := crescent(titleX+13, pcy, 11.5, deg(-16))
 		c.Fill(mc, hex(0xE8BA54))
 		c.Stroke(mc, 1.2, hex(0xB88222))

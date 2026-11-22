@@ -271,7 +271,7 @@ func kpMeasureCell(f *fontSet, g box, d day, k, basePW float64, hasLang bool) (k
 		tw := g.W - kyokoHeadW - 40
 
 		if !stack {
-			tw -= basePW + kyokoRow.gutter*k
+			tw -= max(basePW, pw) + kyokoRow.gutter*k
 
 			if hasLang {
 				tw -= langW + 9*k
@@ -347,9 +347,24 @@ func kpFit(f *fontSet, g box, days []day, kMax float64, hasLang bool) (kpLayout,
 	}
 }
 
+type kpFitted struct {
+	layout kpLayout
+	k      float64
+}
+
+func kpFitFolded(f *fontSet, g box, days []day, kMax float64, hasLang bool) (kpLayout, float64) {
+	fit, _ := fitFolded(days, func(d []day) (kpFitted, bool) {
+		l, k := kpFit(f, g, d, kMax, hasLang)
+
+		return kpFitted{layout: l, k: k}, l.ok
+	})
+
+	return fit.layout, fit.k
+}
+
 func kyokoPolishedCells(c *canvas, p kyokoClassicTheme, g box, days []day) {
 	hasLang := kpHasLang(days)
-	l, k := kpFit(c.f, g, days, c.kMax(), hasLang)
+	l, k := kpFitFolded(c.f, g, days, c.kMax(), hasLang)
 	total := kyokoCellGap * float64(len(l.cells)-1)
 	weight := 0.0
 
@@ -484,12 +499,12 @@ func kyokoPolishedSlot(c *canvas, p kyokoClassicTheme, fr kpSlotFrame, sb *slotB
 	if stacked {
 		kyokoPolishedLang(c, p, fr, lang, canceled, x0+w+9*k, pcy)
 	} else {
-		titleX = x0 + fr.basePW + kyokoRow.gutter*k
+		titleX = x0 + w + kyokoRow.gutter*k
 
 		if fr.hasLang {
-			kyokoPolishedLang(c, p, fr, lang, canceled, x0+fr.basePW+9*k, pcy)
+			kyokoPolishedLang(c, p, fr, lang, canceled, x0+w+9*k, pcy)
 
-			titleX = x0 + fr.basePW + 9*k + fr.langW + kyokoRow.gutter*k
+			titleX = x0 + w + 9*k + fr.langW + kyokoRow.gutter*k
 		}
 	}
 
