@@ -49,10 +49,13 @@ HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse --short "$HEAD_REVISION")"
 log "repo=$REPO_ROOT HEAD=$HEAD_SHA -> $OPT_CURRENT"
 if [[ -n "$source_base" ]]; then
   [[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=all)" ]] || die "source-only requires a clean checkout"
-  [[ -f "$OPT_CURRENT/.source-revision" && ! -L "$OPT_CURRENT/.source-revision" ]] &&
-    cmp -s "$OPT_CURRENT/.source-revision" <(printf '%s\n' "$source_base") || die "source-only installed revision mismatch"
-  [[ "$source_base" != "$HEAD_REVISION" ]] && git -C "$REPO_ROOT" merge-base --is-ancestor "$source_base" "$HEAD_REVISION" ||
+  if ! { [[ -f "$OPT_CURRENT/.source-revision" && ! -L "$OPT_CURRENT/.source-revision" ]] &&
+    cmp -s "$OPT_CURRENT/.source-revision" <(printf '%s\n' "$source_base"); }; then
+    die "source-only installed revision mismatch"
+  fi
+  if ! { [[ "$source_base" != "$HEAD_REVISION" ]] && git -C "$REPO_ROOT" merge-base --is-ancestor "$source_base" "$HEAD_REVISION"; }; then
     die "source-only requires a descendant of the installed revision"
+  fi
   reserved="$(git -C "$REPO_ROOT" ls-tree "$source_base" -- .source-revision)$(git -C "$REPO_ROOT" ls-tree "$HEAD_REVISION" -- .source-revision)"
   [[ -z "$reserved" ]] || die "reserved source-revision path in Git tree"
   [[ "$(git -C "$REPO_ROOT" hash-object --stdin <"${BASH_SOURCE[0]}")" == "$(git -C "$REPO_ROOT" rev-parse "$HEAD_REVISION:scripts/deploy/sync-opt-current.sh")" ]] ||
@@ -160,8 +163,9 @@ done
 host_assets+=("scripts/deploy/lib/collector-slots.tsv|$LIBEXEC_DIR/lib/collector-slots.tsv|644")
 
 assert_same_file() {
-  [[ -f "$1" && ! -L "$1" && -f "$2" && ! -L "$2" ]] && cmp -s -- "$1" "$2" ||
+  if ! { [[ -f "$1" && ! -L "$1" && -f "$2" && ! -L "$2" ]] && cmp -s -- "$1" "$2"; }; then
     die "application-only file drift: $2"
+  fi
 }
 
 assert_same_tree() {

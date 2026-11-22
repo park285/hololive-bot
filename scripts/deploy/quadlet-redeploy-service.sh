@@ -469,8 +469,9 @@ publish_receipt() {
 verify_receipt() {
   local receipt="${release_paths[hololive-api]}/quiesced" expected
   owns_hold && [[ -f "$receipt" && ! -L "$receipt" ]] || die "missing owner or invalid quiescence receipt"
-  expected="$(hold_receipt)" && cmp -s "$receipt" <(printf '%s\n' "$expected") ||
+  if ! { expected="$(hold_receipt)" && cmp -s "$receipt" <(printf '%s\n' "$expected"); }; then
     die "release pair or mask does not belong to this quiescence receipt"
+  fi
 }
 check_receipt() {
   local opening="${release_paths[hololive-api]}/opening" name
@@ -752,8 +753,9 @@ for service in "${services[@]}"; do
   if [[ "$mode" == resume ]]; then
     current_job="$(systemctl show "$unit" -p Job --value)"
     current_state="$(systemctl show "$unit" -p ActiveState --value)"
-    [[ -z "$current_job" && "$current_state" == inactive ]] && container_absent "$service" ||
+    if ! { [[ -z "$current_job" && "$current_state" == inactive ]] && container_absent "$service"; }; then
       die "$service: start 전 정지 상태 미확인"
+    fi
     echo "[START] $unit (NRestarts before=$restarts_before)"
     defer_signal=true
     [[ -z "$pending_signal" ]] || exit "$pending_signal"

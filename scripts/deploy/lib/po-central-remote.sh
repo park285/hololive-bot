@@ -285,11 +285,11 @@ require_confirmed_hold() {
 }
 
 record_confirmed_hold() {
-  require_held_units &&
+  if ! { require_held_units &&
     sync -- "$hold/issuer-stop.invocation" "$hold/$issuer_unit.stop-cid" "$hold/$collector_unit.stop-cid" &&
-    printf 'guarded-stop-v1\n' > "$hold/quiesced" && sync -- "$hold/quiesced" "$hold" || {
-      rm -f -- "$hold/quiesced"; return 1;
-    }
+    printf 'guarded-stop-v1\n' > "$hold/quiesced" && sync -- "$hold/quiesced" "$hold"; }; then
+    rm -f -- "$hold/quiesced"; return 1
+  fi
 }
 
 create_hold() {
@@ -842,10 +842,10 @@ restore() {
   if [[ "$mode" == rollback && "$hold_owned" != true ]] && ! cmp -s -- "$backup/card-candidate" "$card_active"; then
     echo 'rollback does not own the active card release' >&2; return 1
   fi
-  [[ "$card_transition" == false && -f "$backup/card-origin" ]] &&
-    { cmp -s -- "$backup/card-origin" "$card_active" || cmp -s -- "$backup/card-candidate" "$card_active"; } || {
-    echo 'rollback is not owned by an admitted card pair' >&2; return 1;
-  }
+  if ! { [[ "$card_transition" == false && -f "$backup/card-origin" ]] &&
+    { cmp -s -- "$backup/card-origin" "$card_active" || cmp -s -- "$backup/card-candidate" "$card_active"; }; }; then
+    echo 'rollback is not owned by an admitted card pair' >&2; return 1
+  fi
   if ! cutover_units_settled; then
     printf 'outcome_unknown\n' > "$backup/cutover-outcome" || echo 'failed to record cutover outcome; retain the backup' >&2
     echo "$host_label cutover outcome_unknown; settle issuer/collector manager jobs before an approved rollback; retain $backup" >&2

@@ -1258,8 +1258,9 @@ for reason in generation_changed invocation_changed other_stopped_invocation res
     assert_no_call "$root" "$reason" '^systemctl stop hololive-api.service$'
   elif [[ "$reason" == gc_exit_143 ]]; then
     worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
-    grep -qxF 'ExecMainCode=0' "$worker_release/stop/terminal" && grep -qxF '143' "$worker_release/stop/container-exit" ||
+    if ! { grep -qxF 'ExecMainCode=0' "$worker_release/stop/terminal" && grep -qxF '143' "$worker_release/stop/container-exit"; }; then
       fail "수거된 관리자의 초기값이 원래 컨테이너의 143을 숨김"
+    fi
   elif [[ "$reason" == failed_stop || "$reason" == abnormal_success_result ]]; then
     worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
     grep -qxF 'ExecMainStatus=143' "$worker_release/stop/terminal" || fail "비정상 원본 종료 증거를 잃음"
@@ -1410,8 +1411,9 @@ for reason in term_before_first_unmask term_after_first_restart replaced_at_laun
   fi
   case "$reason" in
     term_before_first_unmask)
-      [[ "$status" == 143 && ! -e "$api_release/opening" ]] && cmp -s "$api_release/quiesced" "$root/original-receipt" ||
+      if ! { [[ "$status" == 143 && ! -e "$api_release/opening" ]] && cmp -s "$api_release/quiesced" "$root/original-receipt"; }; then
         fail "첫 개방 전 취소에서 원래 영수증 유실"
+      fi
       assert_no_call "$root" "$reason" '^systemctl (stop|restart|unmask) '
       assert_held_pair "$root" ;;
     term_after_first_restart)
@@ -1431,8 +1433,9 @@ for reason in term_before_first_unmask term_after_first_restart replaced_at_laun
       assert_held_pair "$root"
       [[ "$reason" != client_failed_pending || -f "$root/state/hololive-alarm-worker/poll" ]] ||
         fail "차단 후 진행 중인 원래 job을 관찰하지 않음"
-      [[ -d "$api_release/opening" ]] && cmp -s "$api_release/quiesced" "$root/original-receipt" ||
+      if ! { [[ -d "$api_release/opening" ]] && cmp -s "$api_release/quiesced" "$root/original-receipt"; }; then
         fail "$reason: 실패한 요청이 완료를 게시함"
+      fi
       assert_no_call "$root" "$reason" '^(pair verify-live |systemctl unmask hololive-api.service)' ;;
     replaced_at_launch|restart_client_interrupted|client_failed_no_anchor|client_failed_foreign_cid|wrong_start_record)
       [[ "$reason" != restart_client_interrupted || "$status" == 143 ]] || fail "중단된 클라이언트의 신호를 놓침"
