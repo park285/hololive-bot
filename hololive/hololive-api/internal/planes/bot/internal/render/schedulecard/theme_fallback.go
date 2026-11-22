@@ -58,11 +58,12 @@ func posterVariants(channelID string, format Format) []posterVariant {
 }
 
 func Variants(channelID string, format Format, template cardtemplate.ID) []string {
-	if template != cardtemplate.Classic {
-		return nil
+	var pool []posterVariant
+
+	if template == cardtemplate.Classic {
+		pool = posterVariants(channelID, format)
 	}
 
-	pool := posterVariants(channelID, format)
 	names := make([]string, len(pool))
 
 	for i, v := range pool {
@@ -77,14 +78,13 @@ func classicTheme(card Card, format Format) (theme, error) {
 		return themeFor(card.ChannelID), nil
 	}
 
-	pool := posterVariants(card.ChannelID, format)
-
-	i := slices.IndexFunc(pool, func(v posterVariant) bool { return v.name == card.Variant })
-	if i < 0 {
-		return nil, fmt.Errorf("%w: unknown variant %q for format %q", ErrInvalidCard, card.Variant, format)
+	for _, v := range posterVariants(card.ChannelID, format) {
+		if v.name == card.Variant {
+			return v.draw, nil
+		}
 	}
 
-	return pool[i].draw, nil
+	return nil, fmt.Errorf("%w: unknown variant %q for format %q", ErrInvalidCard, card.Variant, format)
 }
 
 type fallbackPal struct {
