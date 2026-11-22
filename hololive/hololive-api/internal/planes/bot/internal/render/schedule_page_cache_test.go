@@ -27,9 +27,6 @@ func templateTestPages(template cardtemplate.ID) [][]byte {
 func TestScheduleCardRendererCachesEachTemplateAsOneBundle(t *testing.T) {
 	store := newTestCalendarImageCache(t)
 	member := scheduleCardMember()
-
-	member.ChannelID = "UCROQtXcp2loQEmvpe5rhJzQ"
-
 	schedule := scheduleCardSchedule(1)
 	draws := 0
 
@@ -138,7 +135,7 @@ func TestScheduleCardRendererReturnsOversizedBundleWithoutCaching(t *testing.T) 
 		t.Fatalf("draws = %d, want a redraw with neither cache retaining the oversized bundle", draws)
 	}
 
-	key := newScheduleCardKey(member, &schedule, schedulecard.Format3x4, cardtemplate.Orbit)
+	key := newScheduleCardKey(member, &schedule, schedulecard.Format3x4, cardtemplate.Orbit, "")
 	sharedKey, _ := key.shared()
 
 	if _, found, err := store.Get(t.Context(), sharedKey); err != nil || found {
@@ -158,7 +155,7 @@ func TestScheduleCardRendererRedrawsInvalidSharedBundle(t *testing.T) {
 	store := newTestCalendarImageCache(t)
 	member, schedule := scheduleCardMember(), scheduleCardSchedule(1)
 	template := cardtemplate.Orbit
-	key := newScheduleCardKey(member, &schedule, schedulecard.Format3x4, template)
+	key := newScheduleCardKey(member, &schedule, schedulecard.Format3x4, template, "")
 	sharedKey, hash := key.shared()
 	pages := templateTestPages(template)
 	record := encodeSchedulePages(hash, pages)

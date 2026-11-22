@@ -5,24 +5,86 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"slices"
 	"time"
+
+	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 )
 
 type theme func(c *canvas, v view)
 
-var channelThemes = map[string]theme{
-	"UCy9mgxB8pn2C4aNK_MPthDQ": renderTsuzuri,
-	"UCSjQDxud2HkAO2DVD3lwxmw": renderKyoko,
-	"UCROQtXcp2loQEmvpe5rhJzQ": renderSopia,
-	"UC8eitCE9Z6EwUCs-VUi1blg": renderMela,
+type posterVariant struct {
+	name string
+	draw theme
+}
+
+type channelPoster struct {
+	original theme
+	variants []posterVariant
+}
+
+const originalVariant = "original"
+
+var channelPosters = map[string]channelPoster{
+	"UCy9mgxB8pn2C4aNK_MPthDQ": {renderTsuzuri, []posterVariant{
+		{"postage-diary", renderRichTsuzuriA}, {"airmail-envelope", renderRichTsuzuriB}, {"royal-post-uniform", renderRichTsuzuriC},
+	}},
+	"UCSjQDxud2HkAO2DVD3lwxmw": {renderKyoko, []posterVariant{
+		{"polished-light", renderKyokoPolishedLight}, {"polished-dark", renderKyokoPolishedDark},
+	}},
+	"UCROQtXcp2loQEmvpe5rhJzQ": {renderSopia, []posterVariant{
+		{"pastel-orbit", renderRichSopiaA}, {"deep-space-hud", renderRichSopiaB}, {"cyber-science-pop", renderRichSopiaC},
+	}},
+	"UC8eitCE9Z6EwUCs-VUi1blg": {renderMela, []posterVariant{
+		{"aqua-matsuri", renderRichMelaA}, {"hikeshi-night", renderRichMelaB}, {"dual-tone-shrine", renderRichMelaC},
+	}},
 }
 
 func themeFor(channelID string) theme {
-	if th, ok := channelThemes[channelID]; ok {
-		return th
+	if p, ok := channelPosters[channelID]; ok {
+		return p.original
 	}
 
 	return renderFallback
+}
+
+func posterVariants(channelID string, format Format) []posterVariant {
+	p, ok := channelPosters[channelID]
+	if !ok || format != Format3x4 {
+		return nil
+	}
+
+	return slices.Concat([]posterVariant{{originalVariant, p.original}}, p.variants)
+}
+
+func Variants(channelID string, format Format, template cardtemplate.ID) []string {
+	var pool []posterVariant
+
+	if template == cardtemplate.Classic {
+		pool = posterVariants(channelID, format)
+	}
+
+	names := make([]string, len(pool))
+
+	for i, v := range pool {
+		names[i] = v.name
+	}
+
+	return names
+}
+
+func classicTheme(card Card, format Format) (theme, error) {
+	if card.Variant == "" {
+		return themeFor(card.ChannelID), nil
+	}
+
+	for _, v := range posterVariants(card.ChannelID, format) {
+		if v.name == card.Variant {
+			return v.draw, nil
+		}
+	}
+
+	return nil, fmt.Errorf("%w: unknown variant %q for format %q", ErrInvalidCard, card.Variant, format)
 }
 
 type fallbackPal struct {

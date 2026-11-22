@@ -66,6 +66,7 @@ type Card struct {
 	ExtractedAt time.Time
 	Items       []Item
 	Photo       image.Image
+	Variant     string
 }
 
 const supersample = 2
@@ -106,6 +107,11 @@ func renderClassic(ctx context.Context, card Card, format Format) ([]byte, error
 		return nil, fmt.Errorf("%w: unknown format %q", ErrInvalidCard, format)
 	}
 
+	th, err := classicTheme(card, format)
+	if err != nil {
+		return nil, err
+	}
+
 	fs, err := loadFontSet()
 	if err != nil {
 		return nil, fmt.Errorf("render schedule card: %w", err)
@@ -116,7 +122,7 @@ func renderClassic(ctx context.Context, card Card, format Format) ([]byte, error
 		return nil, err
 	}
 
-	img := paint(fs, themeFor(card.ChannelID), v, w, h)
+	img := paint(fs, th, v, w, h)
 
 	return encodeCard(ctx, img, MaxPageBytes)
 }
@@ -137,6 +143,10 @@ func RenderPages(ctx context.Context, card Card, format Format, template cardtem
 
 		return [][]byte{page}, nil
 	case cardtemplate.Orbit:
+		if card.Variant != "" {
+			return nil, fmt.Errorf("%w: orbit template has no variant %q", ErrInvalidCard, card.Variant)
+		}
+
 		return renderOrbitPages(ctx, card, format)
 	default:
 		return nil, fmt.Errorf("%w: unknown template %q", ErrInvalidCard, template)

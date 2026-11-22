@@ -7,6 +7,7 @@ import (
 	"image"
 	"math"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -573,6 +574,77 @@ func TestThemeForChannel(t *testing.T) {
 	}
 }
 
+const kyokoChannel = "UCSjQDxud2HkAO2DVD3lwxmw"
+
+func TestVariantsOfferPostersOnlyForPortraitClassic(t *testing.T) {
+	tests := []struct {
+		channel  string
+		format   Format
+		template cardtemplate.ID
+		want     []string
+	}{
+		{kyokoChannel, Format3x4, cardtemplate.Classic, []string{originalVariant, "polished-light", "polished-dark"}},
+		{"UCROQtXcp2loQEmvpe5rhJzQ", Format3x4, cardtemplate.Classic, []string{originalVariant, "pastel-orbit", "deep-space-hud", "cyber-science-pop"}},
+		{"UC8eitCE9Z6EwUCs-VUi1blg", Format3x4, cardtemplate.Classic, []string{originalVariant, "aqua-matsuri", "hikeshi-night", "dual-tone-shrine"}},
+		{"UCy9mgxB8pn2C4aNK_MPthDQ", Format3x4, cardtemplate.Classic, []string{originalVariant, "postage-diary", "airmail-envelope", "royal-post-uniform"}},
+		{kyokoChannel, Format16x9, cardtemplate.Classic, nil},
+		{kyokoChannel, Format4x3, cardtemplate.Classic, nil},
+		{kyokoChannel, Format3x4, cardtemplate.Orbit, nil},
+		{"UC-unknown", Format3x4, cardtemplate.Classic, nil},
+	}
+
+	for _, tt := range tests {
+		if got := Variants(tt.channel, tt.format, tt.template); !slices.Equal(got, tt.want) {
+			t.Errorf("Variants(%q, %s, %s) = %q, want %q", tt.channel, tt.format, tt.template, got, tt.want)
+		}
+	}
+}
+
+func TestClassicThemeResolvesOnlyPooledVariants(t *testing.T) {
+	for variant, want := range map[string]theme{
+		"":               renderKyoko,
+		originalVariant:  renderKyoko,
+		"polished-light": renderKyokoPolishedLight,
+		"polished-dark":  renderKyokoPolishedDark,
+	} {
+		got, err := classicTheme(Card{ChannelID: kyokoChannel, Variant: variant}, Format3x4)
+		if err != nil || reflect.ValueOf(got).Pointer() != reflect.ValueOf(want).Pointer() {
+			t.Errorf("classicTheme(%q) picked the wrong theme, err = %v", variant, err)
+		}
+	}
+
+	for _, tc := range []struct {
+		card   Card
+		format Format
+	}{
+		{Card{ChannelID: kyokoChannel, Variant: "pastel-orbit"}, Format3x4},
+		{Card{ChannelID: kyokoChannel, Variant: "polished-dark"}, Format16x9},
+		{Card{ChannelID: kyokoChannel, Variant: "unknown"}, Format3x4},
+		{Card{ChannelID: "UC-unknown", Variant: originalVariant}, Format3x4},
+	} {
+		if _, err := classicTheme(tc.card, tc.format); !errors.Is(err, ErrInvalidCard) {
+			t.Errorf("classicTheme(%q, %q, %s) error = %v, want ErrInvalidCard", tc.card.ChannelID, tc.card.Variant, tc.format, err)
+		}
+	}
+}
+
+func TestRenderPagesRejectsUnservedVariant(t *testing.T) {
+	card := weekCard(t, sampleWeek(t)...)
+
+	card.ChannelID = kyokoChannel
+	card.Variant = "polished-dark"
+
+	if _, err := RenderPages(t.Context(), card, Format3x4, cardtemplate.Orbit); !errors.Is(err, ErrInvalidCard) {
+		t.Errorf("orbit with variant: error = %v, want ErrInvalidCard", err)
+	}
+
+	card.Variant = "unknown"
+
+	if _, err := RenderPages(t.Context(), card, Format3x4, cardtemplate.Classic); !errors.Is(err, ErrInvalidCard) {
+		t.Errorf("unknown classic variant: error = %v, want ErrInvalidCard", err)
+	}
+}
+
 const fitStep = 0.03
 
 func testFonts(t *testing.T) *fontSet {
@@ -1053,6 +1125,71 @@ func TestThemeLayoutsFitBusyWeeks(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/kyoko/%s", format, week), func(t *testing.T) { checkKyokoFit(t, f, c, days) })
 			t.Run(fmt.Sprintf("%s/mela/%s", format, week), func(t *testing.T) { checkMelaFit(t, f, c, days) })
 		}
+	}
+}
+
+func TestPosterVariantLayoutsFitBusyWeeks(t *testing.T) {
+	f := testFonts(t)
+	w, h, _ := Format3x4.size()
+	c := &canvas{w: float64(w), h: float64(h), f: f}
+	table := box{X: 60, Y: 300, W: 960, H: 1000}
+	specs := map[string]smartRowSpec{
+		"sopia":   sopiaRichSpec(table),
+		"tsuzuri": tsuzuriRichSpec(tsuzuriRichStyle{mainFace: faceHand, subFace: faceBold, mainSize: 42, subSize: 20.5}, table),
+	}
+	weeks := map[string][]day{}
+
+	for _, perDay := range []int{3, maxSlotsPerDay} {
+		weeks[fmt.Sprintf("busy%d", perDay)] = busyDays(perDay)
+	}
+
+	for _, perDay := range []int{5, 6} {
+		weeks[fmt.Sprintf("changes%d", perDay)] = changeDays(t, f, perDay)
+	}
+
+	for week, days := range weeks {
+		for name, spec := range specs {
+			t.Run(name+"/"+week, func(t *testing.T) {
+				cells, _, _ := fitSmartCardRows(f, days, spec, c.kMax())
+				used := spec.gap * float64(len(cells)-1)
+				shown := make([]day, len(cells))
+
+				for i := range cells {
+					used += cells[i].h
+
+					shown[i] = cells[i].d
+				}
+
+				if used > spec.avail+1e-6 {
+					t.Errorf("rows use %.1f, table has %.1f", used, spec.avail)
+				}
+
+				if n, want := countShown(shown), countShown(days); n != want {
+					t.Errorf("shown + folded = %d, want %d", n, want)
+				}
+			})
+		}
+
+		t.Run("kyoko-polished/"+week, func(t *testing.T) {
+			g := box{X: 47, Y: 300, W: 986, H: 1074}
+			l, _ := kpFitFolded(f, g, days, c.kMax(), kpHasLang(days))
+			used := kyokoCellGap * float64(len(l.cells)-1)
+			shown := make([]day, len(l.cells))
+
+			for i := range l.cells {
+				used += l.cells[i].h
+
+				shown[i] = l.cells[i].d
+			}
+
+			if used > g.H+1e-6 {
+				t.Errorf("cells use %.1f, grid has %.1f", used, g.H)
+			}
+
+			if n, want := countShown(shown), countShown(days); n != want {
+				t.Errorf("shown + folded = %d, want %d", n, want)
+			}
+		})
 	}
 }
 

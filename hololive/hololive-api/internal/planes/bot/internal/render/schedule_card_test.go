@@ -20,9 +20,11 @@ import (
 )
 
 const (
-	late23        = "23:00"
-	late25        = "25:00"
-	kyokoPhotoURL = "https://yt3.googleusercontent.com/kyoko=s88-c"
+	late23              = "23:00"
+	late25              = "25:00"
+	kyokoPhotoURL       = "https://yt3.googleusercontent.com/kyoko=s88-c"
+	scheduleCardChannel = "UCwithoutPosterVariants"
+	kyokoChannel        = "UCSjQDxud2HkAO2DVD3lwxmw"
 )
 
 type recordingCardDrawer struct {
@@ -43,7 +45,7 @@ func (d *recordingCardDrawer) draw(_ context.Context, card schedulecard.Card, fo
 }
 
 func scheduleCardMember() *domain.Member {
-	return &domain.Member{ChannelID: "UCSjQDxud2HkAO2DVD3lwxmw", Name: "Hakuto Kyoko", NameKo: "햐쿠토 쿄코", ShortKoreanName: "쿄코"}
+	return &domain.Member{ChannelID: scheduleCardChannel, Name: "Hakuto Kyoko", NameKo: "햐쿠토 쿄코", ShortKoreanName: "쿄코"}
 }
 
 func novemberDay(d int) time.Time {
@@ -81,7 +83,7 @@ func TestScheduleCardRendererCopiesRowsIntoCard(t *testing.T) {
 	}
 
 	card := drawer.cards[0]
-	if card.ChannelID != "UCSjQDxud2HkAO2DVD3lwxmw" || card.MemberName != "쿄코" || card.Photo != nil ||
+	if card.ChannelID != scheduleCardChannel || card.Variant != "" || card.MemberName != "쿄코" || card.Photo != nil ||
 		!card.WeekStart.Equal(schedule.WeekStart) || !card.WeekEnd.Equal(schedule.WeekEnd) || !card.ExtractedAt.Equal(schedule.ExtractedAt) {
 		t.Fatalf("card header = %+v, want schedule fields, display name and no photo", card)
 	}
