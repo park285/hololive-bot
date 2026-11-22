@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- PostgreSQL 18 전용이던 pg_jsonschema 실험의 재현 파일(`Dockerfile.jsonschema`, `jsonschema.py`, `testqueries/jsonschema.sql`)을 지웠습니다. pg_jsonschema v0.3.4에는 PostgreSQL 19용 바이너리가 없습니다. [실험 README](scripts/experiments/postgres-extensions/README.md)에는 측정 결과와 보류 판단만 남깁니다. 운영 이미지와 배포는 바뀌지 않습니다.
+
 ## r1.0.1 - 2026-11-22
 
 - **collector 이름 전환 배포 경로:** native a에 `ap-host-native-deploy.sh osaka --install-initial`을 추가했습니다. 이전 이름의 설치를 퇴역시킨 osaka1에서 새 root의 `current`·`previous`·복구 guard와 collector·issuer unit 파일·drop-in이 모두 없을 때만 첫 설치를 하고, 관찰 검사가 통과하면 현재 릴리스를 수용 표식으로 고정해 다음 `--apply`의 원점으로 씁니다. 일반 `deploy`는 계속 osaka1을 거부합니다. [collector runbook](docs/current/runbooks/collector.md#이름-전환)에 slot별 퇴역·첫 설치, b·c의 다음 배포 경로(`quiesce-verified`→`resume`), d의 image·profile 위치를 적었고, [PostgreSQL major 전환](docs/current/runbooks/postgres-major-upgrade.md#순서)에 epoch3 원장의 002·003 적용 경로를 적었습니다.
