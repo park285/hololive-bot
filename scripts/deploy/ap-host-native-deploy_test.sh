@@ -165,6 +165,70 @@ fi
   [[ ! -e "$fixture/request" ]]
 )
 pass "native tool and product revisions are independent and checked before transport"
+(
+  set -euo pipefail
+  fixture="$(mktemp -d)"
+  trap 'rm -rf "$fixture"' EXIT
+  tool="$fixture/tool" product="$fixture/product"
+  mkdir -p "$tool/scripts/deploy/lib" "$tool/scripts/logs" \
+    "$product"/{deploy/topology,scripts/build,scripts/ci,scripts/deploy/{ap-hosts,lib},hololive/hololive-collector/youtubejs/src}
+  cp "$DEPLOY" "$ROOT_DIR/scripts/deploy/verify-exec-tree-ownership.sh" "$tool/scripts/deploy/"
+  cp "$ROOT_DIR"/scripts/deploy/lib/{ap-host.sh,ap-host-native-*.sh,source-revision.sh,compose-env.sh,postgres-endpoint.sh,youtubejs-node-version.sh,ap-collector-readiness.sh,collector-slots.sh,collector-slots.tsv} "$tool/scripts/deploy/lib/"
+  cp "$ROOT_DIR"/scripts/deploy/lib/{ap-host-native-*.sh,compose-env.sh,postgres-endpoint.sh,worker-profile-pair.py,hololive-collector.service,hololive-youtube-po.service,hololive-youtube-po.socket,collector-slots.tsv} "$product/scripts/deploy/lib/"
+  cp "$DEPLOY" "$product/scripts/deploy/"
+  cp "$ROOT_DIR/deploy/topology/hosts.conf" "$product/deploy/topology/"
+  cp "$ROOT_DIR/scripts/ci/postgres-capacity-policy.tsv" "$product/scripts/ci/"
+  sed -e 's/^AP_GOAMD64=.*/AP_GOAMD64=v1/' -e 's/^AP_SSH_HOST=.*/AP_SSH_HOST=fixture-ap/' \
+    "$ROOT_DIR/scripts/deploy/ap-hosts/osaka.conf" >"$product/scripts/deploy/ap-hosts/osaka.conf"
+  for observer in scripts/logs/ap-host-native-status.sh scripts/deploy/ap-completion-check.sh; do
+    printf '#!/usr/bin/env bash\nprintf "observer %%s\\n" "${0##*/}" >>"$OBSERVED"\n[[ ! -e "$OBSERVED.fail" ]]\n' >"$tool/$observer"
+    chmod +x "$tool/$observer"
+  done
+  printf '#!/bin/sh\nmkdir -p "$2/bin"\n: >"$2/bin/hololive-collector"\n' >"$product/scripts/build/build-hololive-collector-go.sh"
+  printf '#!/bin/sh\n' >"$product/scripts/build/check-hololive-collector-go-artifact.sh"
+  printf '#!/bin/sh\nmkdir -p "$4" && cd "$4" && touch rootfs.tar rootfs.tar.sha256 rootfs-manifest.json revision architecture version\n' \
+    >"$product/scripts/build/build-po-sandbox-artifact.sh"
+  chmod +x "$product/scripts/build/build-po-sandbox-artifact.sh"
+  touch "$product/scripts/build/po-sandbox-manifest.py" "$product"/hololive/hololive-collector/youtubejs/{package.json,package-lock.json,src/server.mjs}
+  for checkout in "$tool" "$product"; do
+    git -C "$checkout" init -q
+    git -C "$checkout" add .
+    git -C "$checkout" -c user.name=fixture -c user.email=fixture@example.invalid commit -qm fixture
+  done
+  ln -s "$tool/scripts/deploy/ap-host-native-deploy.sh" "$fixture/deploy"
+  SSH_KEY="$fixture/fixture.key" OBSERVED="$fixture/observed"
+  touch "$SSH_KEY"
+  AP_NATIVE_TOOL_REVISION="$(git -C "$tool" rev-parse HEAD)"
+  AP_NATIVE_PRODUCT_REVISION="$(git -C "$product" rev-parse HEAD)"
+  export SSH_KEY OBSERVED AP_NATIVE_TOOL_REVISION AP_NATIVE_PRODUCT_REVISION REPO_ROOT="$product" I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true
+  unset RELEASE_ID
+  hostname() { echo kapu; }
+  ssh() {
+    local request="${!#}"
+    cat >/dev/null
+    printf '%s\n' "$request" >>"$OBSERVED"
+    if [[ "$request" == 'bash -s --' ]]; then echo 2026-11-22T00:00:00Z; fi
+  }
+  rsync() { :; }
+  npm() { :; }
+  export -f hostname ssh rsync npm
+  for outcome in accepted observer-failed; do
+    rm -f "$OBSERVED" "$OBSERVED.fail"
+    if [[ "$outcome" != accepted ]]; then touch "$OBSERVED.fail"; fi
+    status=0
+    ARTIFACT_DIR="$fixture/artifact-$outcome" "$fixture/deploy" osaka --install-initial 2>"$fixture/$outcome.err" || status=$?
+    steps="$(sed -nE -e "s/^bash -s -- [^ ]+ [^ ]+ collector-a 30005 [^ ]+ [0-9]+ [0-9]+ $AP_NATIVE_PRODUCT_REVISION (install-initial|initial-accepted)$/\1/p" \
+      -e 's/^observer (.*)$/\1/p' "$OBSERVED" | paste -sd' ')"
+    if [[ "$outcome" == accepted ]]; then
+      [[ "$status" == 0 && "$steps" == 'install-initial ap-host-native-status.sh ap-completion-check.sh initial-accepted' ]] ||
+        { cat "$fixture/$outcome.err" >&2; printf '%s\n' "$steps" >&2; exit 1; }
+    else
+      [[ "$status" != 0 && "$steps" == 'install-initial ap-host-native-status.sh' ]] ||
+        { cat "$fixture/$outcome.err" >&2; printf '%s\n' "$steps" >&2; exit 1; }
+    fi
+  done
+) && pass 'osaka 첫 설치는 관찰 검사 두 개가 통과한 뒤에만 수용을 요청합니다.' ||
+  record_fail 'osaka 첫 설치의 설치·관찰·수용 순서가 맞지 않습니다.'
 rm -rf "${cfg008_dir}"
 
 permission_fn="$(awk '/^normalize_runtime_payload_permissions\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
