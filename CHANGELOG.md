@@ -6,6 +6,8 @@
 
 ## 미출시
 
+## r1.0.1 - 2026-11-22
+
 - **collector 이름 전환 배포 경로:** native a에 `ap-host-native-deploy.sh osaka --install-initial`을 추가했습니다. 이전 이름의 설치를 퇴역시킨 osaka1에서 새 root의 `current`·`previous`·복구 guard와 collector·issuer unit 파일·drop-in이 모두 없을 때만 첫 설치를 하고, 관찰 검사가 통과하면 현재 릴리스를 수용 표식으로 고정해 다음 `--apply`의 원점으로 씁니다. 일반 `deploy`는 계속 osaka1을 거부합니다. [collector runbook](docs/current/runbooks/collector.md#이름-전환)에 slot별 퇴역·첫 설치, b·c의 다음 배포 경로(`quiesce-verified`→`resume`), d의 image·profile 위치를 적었고, [PostgreSQL major 전환](docs/current/runbooks/postgres-major-upgrade.md#순서)에 epoch3 원장의 002·003 적용 경로를 적었습니다.
 
 ## r1.0.0 - 2026-11-22
@@ -28,7 +30,3 @@
 
 - **중앙 앱 복구:** 최초 소스 게시 후 API가 schema job 발행 전에 종료된 경우, 원본 영수증 및 변경되지 않은 두 writer를 증명한 뒤에만 별도 후보 소스를 게시할 수 있습니다. API와 worker의 후속 전환 순서를 검사하고, worker 수용 확인(`receipt`)이 기록된 뒤에만 정상 후속 게시를 허용합니다. 정상 게시나 롤백의 조건은 완화하지 않습니다.
 - **중앙 앱 기동:** 봉인 배포와 롤백은 기존 의존성이 활성이어도 대기 중인 job이 있으면 schema 또는 writer job을 요청하지 않고 중단합니다.
-
-## v20.0.3 - 2026-11-19
-
-- **중앙 앱 기동:** systemd가 보고한 `-.mount`를 옵션이 아닌 루트 마운트 이름으로 조회합니다. 모든 기존 의존성이 활성일 때만 schema 또는 writer job을 요청합니다. 이미 소스만 게시되고 writer가 이전 세대인 설치에 재시도·복구 권한을 추가하지 않습니다.
