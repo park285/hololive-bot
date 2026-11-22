@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **CI:** 배포 스크립트 시험이 `ap-host-native-cutover_test.sh`를 실행하는 user unit의 시간 상한을 120초에서 300초로 늘렸습니다. 이 시험은 단독으로 67~86초가 걸리는데, 호스트 부하가 높을 때 120초에서 끊겨 pre-push 게이트가 실패한 일이 있었습니다. 멈춘 시험을 끊는 역할은 그대로입니다.
+
 ## r1.1.0 - 2026-11-22
 
 - PostgreSQL 18 전용이던 pg_jsonschema 실험의 재현 파일(`Dockerfile.jsonschema`, `jsonschema.py`, `testqueries/jsonschema.sql`)을 지웠습니다. pg_jsonschema v0.3.4에는 PostgreSQL 19용 바이너리가 없습니다. [실험 README](scripts/experiments/postgres-extensions/README.md)에는 측정 결과와 보류 판단만 남깁니다. 운영 이미지와 배포는 바뀌지 않습니다.
