@@ -35,6 +35,9 @@ var dropSchemaVersionCheckSQL string
 //go:embed testdata/bump_schema_version.sql
 var bumpSchemaVersionSQL string
 
+//go:embed testdata/delete_observation.sql
+var deleteObservationSQL string
+
 func outboxPublisher(t *testing.T, r *Repository) writerPublisher {
 	t.Helper()
 
@@ -142,6 +145,68 @@ func TestConsumeStopsRegionOnUnsupportedSchemaVersion(t *testing.T) {
 	require.Zero(t, appliedSeq(t, r))
 }
 
+func TestConsumeCommitsBatchPrefixBeforeUnsupportedSchemaVersion(t *testing.T) {
+	r := NewRepository(dbtest.NewPool(t))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	empty := observationcontract.CatalogObservation{Chapters: []observationcontract.Chapter{}, Bindings: []observationcontract.Binding{}, Conflicts: []string{}}
+
+	_, err := r.pool.Exec(t.Context(), dropSchemaVersionCheckSQL)
+	require.NoError(t, err)
+
+	publishObservation(t, r, "catalog", now, now, empty)
+	publishObservation(t, r, "cutoff", now, now, cutoffPayload(Chapter{EventID: "absent", ChapterID: "absent"}, false, 5))
+
+	seq := publishObservation(t, r, "catalog", now, now, empty)
+	publishObservation(t, r, "catalog", now, now, empty)
+
+	_, err = r.pool.Exec(t.Context(), bumpSchemaVersionSQL, "jp", seq)
+	require.NoError(t, err)
+
+	result, err := r.ConsumeRegion(t.Context(), "jp", 10)
+	require.ErrorContains(t, err, "unsupported schema version")
+	require.Equal(t, ConsumeResult{Applied: 1, Rejected: 1}, result)
+	require.Equal(t, seq-1, appliedSeq(t, r))
+}
+
+func TestConsumeStopsAtSequenceGap(t *testing.T) {
+	r := NewRepository(dbtest.NewPool(t))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	empty := observationcontract.CatalogObservation{Chapters: []observationcontract.Chapter{}, Bindings: []observationcontract.Binding{}, Conflicts: []string{}}
+
+	first := publishObservation(t, r, "catalog", now, now, empty)
+	gap := publishObservation(t, r, "catalog", now, now, empty)
+	publishObservation(t, r, "catalog", now, now, empty)
+
+	_, err := r.pool.Exec(t.Context(), deleteObservationSQL, "jp", gap)
+	require.NoError(t, err)
+
+	result, err := r.ConsumeRegion(t.Context(), "jp", 10)
+	require.ErrorContains(t, err, "is missing before")
+	require.Equal(t, ConsumeResult{Applied: 1}, result)
+	require.Equal(t, first, appliedSeq(t, r))
+}
+
+func TestConsumeLimitsBatchAndResumes(t *testing.T) {
+	r := NewRepository(dbtest.NewPool(t))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	empty := observationcontract.CatalogObservation{Chapters: []observationcontract.Chapter{}, Bindings: []observationcontract.Binding{}, Conflicts: []string{}}
+
+	for i := range 3 {
+		observed := now.Add(time.Duration(i-3) * time.Second)
+		publishObservation(t, r, "catalog", observed, observed, empty)
+	}
+
+	result, err := r.ConsumeRegion(t.Context(), "jp", 2)
+	require.NoError(t, err)
+	require.Equal(t, ConsumeResult{Applied: 2}, result)
+	require.Equal(t, int64(2), appliedSeq(t, r))
+
+	result, err = r.ConsumeRegion(t.Context(), "jp", 2)
+	require.NoError(t, err)
+	require.Equal(t, ConsumeResult{Applied: 1}, result)
+	require.Equal(t, int64(3), appliedSeq(t, r))
+}
+
 func TestFinalizeWaitsForTimelyFinalPublishedBeforeDeadline(t *testing.T) {
 	r := NewRepository(dbtest.NewPool(t))
 	ctx := t.Context()
@@ -176,7 +241,7 @@ func TestFinalizeDefersWhileCutoffLeaseIsInFlight(t *testing.T) {
 
 	require.NoError(t, r.pool.QueryRow(ctx, seedRequestSQL, "1", "2", 90, "jp", c.EventID, c.ChapterID).Scan(&id))
 
-	_, err := r.pool.Exec(ctx, inflightLeaseSQL, contract.GradeRegion("jp"), c.EventID, c.ChapterID, c.StartsAt, c.EndsAt, c.RevealsAt)
+	_, err := r.pool.Exec(ctx, inflightLeaseSQL, contract.GradeRegion("jp"), c.EventID, c.ChapterID)
 	require.NoError(t, err)
 
 	require.NoError(t, r.FinalizeRegions(ctx, outboxPublisher(t, r), []string{"jp"}))

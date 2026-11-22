@@ -182,10 +182,7 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 		Logger: newCommandTestLogger(),
 	})
 
-	err := cmd.Execute(reqCtx, &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		testParamAction: testActionAdd,
-		paramMember:     testMemberAqua,
-	})
+	err := cmd.Execute(reqCtx, &botcommand.CommandContext{Room: testRoomID}, botcommand.AlarmParams{Action: testActionAdd, Member: testMemberAqua})
 	require.NoError(t, err)
 	require.True(t, sendErrorState.saw(reqCtx), "SendError must receive the request context")
 	assert.Equal(t, messaging.ErrGraduatedMemberBlocked, sendErrorMsg)
@@ -231,9 +228,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 		Logger: newCommandTestLogger(),
 	})
 
-	err := cmd.Execute(reqCtx, &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: testMemberAqua,
-	})
+	err := cmd.Execute(reqCtx, &botcommand.CommandContext{Room: testRoomID}, botcommand.LiveParams{Member: testMemberAqua})
 	require.NoError(t, err)
 	require.True(t, streamProvider.state.saw(reqCtx), "live query must observe the request context")
 	require.True(t, sendMessageState.saw(reqCtx), "SendMessage must receive the request context")

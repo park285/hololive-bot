@@ -43,9 +43,8 @@ def run_case(name, action, target=None, signo=signal.SIGTERM, initial=True, mode
     case.mkdir()
     (case / 'old/rollback-contract').mkdir(parents=True)
     (case / 'new').mkdir()
-    endpoint_env = 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n'
-    (case / 'new/collector-host.env').write_text(endpoint_env)
-    (case / 'old/rollback-contract/collector-host.env').write_text(endpoint_env)
+    (case / 'new/collector-host.env').write_text('POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=5433\n')
+    (case / 'old/rollback-contract/collector-host.env').write_text('POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=5433\n')
     (case / 'bin').mkdir()
     command = case / 'bin/systemctl'
     command.write_text('''#!/usr/bin/env bash
@@ -374,7 +373,7 @@ gate = source[source.index('native_pool_check_pending=true\n'):source.index('\ns
 case, actual = run_case('failed-database-proof', '''
 sudo() {
   shift
-  if [[ "$1" == systemd-run && "${!#}" == --check-pooled-database ]]; then
+  if [[ "$1" == systemd-run && "${!#}" == --check-database-endpoint ]]; then
     echo probe >> "$CASE/calls"
     return 7
   fi
@@ -676,7 +675,7 @@ journalctl() {
 native_window_verify_original() { test -L "$current_link"; }
 native_snapshot_before_cutover() { mkdir "$old_target/rollback-contract"; cp "$host_env" "$old_target/rollback-contract/SHA256SUMS"; }
 native_window_inputs() { sudo -n sha256sum --strict --check --status "$window/inputs.sha256"; }
-native_window_process_endpoint() { [[ "$2" == 6433 ]]; }
+native_window_process_endpoint() { [[ "$2" == 5433 || "$2" == "$original_port" ]]; }
 
 seed_accepted() (
   native_release_window="$1"
@@ -828,7 +827,7 @@ for name, mutation, valid in (
     ('old-revision', 'echo "$EXPECTED_REVISION" > "$old_target/po-sandbox/revision"', False),
     ('writable', 'chmod 0666 "$old_target/accepted-window"', False),
 ):
-    case, result = window_case('apply-origin-' + name, [release_window, '6433', 'normal'], '''
+    case, result = window_case('apply-origin-' + name, [release_window, '5433', 'normal'], '''
 if [[ -e "$old_target/accepted-window" ]]; then rm -r "$old_target/seed-guard" "$old_target/accepted-window"; fi
 seed_accepted "$native_release_window"
 other=W1; if [[ "$native_release_window" == W1 ]]; then other=W2; fi
@@ -881,7 +880,7 @@ case "$fault" in
 esac
 '''
 for fault in ('normal','env','collector','issuer','socket','profile','infra','inputs','used-stage','used-release','drop-dir','prior-guard'):
-    case, result = window_case('ordinary-origin-' + fault, [release_window, '6433', fault], ordinary_origin + origin_dispatch)
+    case, result = window_case('ordinary-origin-' + fault, [release_window, '5433', fault], ordinary_origin + origin_dispatch)
     assert (result.returncode == 0) == (fault == 'normal'), (fault, result)
     if fault == 'prior-guard':
         assert list((case/'recovery').iterdir()) == [case/'recovery/claim'] and (case/'recovery/claim').read_text() == 'preserved\n'
@@ -904,7 +903,7 @@ for name, mutation in (
     ('guard', 'echo foreign > "$native_recovery_dir/claim"'),
     ('incomplete', 'touch "$native_recovery_dir/outcome"'),
 ):
-    case, result = window_case('apply-stop-' + name, [release_window,'6433','normal'], apply_origin + mutation +
+    case, result = window_case('apply-stop-' + name, [release_window,'5433','normal'], apply_origin + mutation +
                                '\nnative_apply_before_stop\ntouch stopped\n')
     assert result.returncode != 0 and not (case/'stopped').exists(), (name, result.stderr)
 
@@ -938,7 +937,7 @@ native_same_window_stop_phase
 '''
 for fault in ('stop_client_error', 'no_drain', *(prefix + name for name in ('issuer.socket','issuer.service','collector.service')
                                     for prefix in ('queued-', 'query-', 'missing-receipt-'))):
-    case, result = window_case('ordinary-stop-' + fault, [release_window, '6433', fault], ordinary)
+    case, result = window_case('ordinary-stop-' + fault, [release_window, '5433', fault], ordinary)
     assert result.returncode != 0 and (case/'recovery/outcome').read_text() == 'outcome_unknown\n', (fault, result)
     assert (case/'recovery/step').read_text() == 'stop\n' and not (case/'starts').exists()
     assert (case/'current').resolve() == case/'releases/old' and not (case/'previous').exists()
@@ -959,7 +958,7 @@ for name, mutation, fault, starts in (
     ('candidate-request', 'mkdir "$window/$po_socket.requesting"', 'normal', []),
     ('changed-config', 'echo foreign >> "$host_env"', 'normal', []),
 ):
-    case, result = window_case('ordinary-restore-' + name, [release_window, '6433', fault],
+    case, result = window_case('ordinary-restore-' + name, [release_window, '5433', fault],
                                ordinary_stopped + mutation + '\nnative_cutover_run failure bash -c "exit 7"\n')
     assert result.returncode == 7, (name, result)
     actual = (case/'starts').read_text().splitlines() if (case/'starts').exists() else []
@@ -1002,7 +1001,7 @@ for name, mutation, fault, accepted in (
     ('competing-start', '', 'competing_start', False),
     ('foreign-start', '', 'foreign_start', False),
 ):
-    case, result = window_case('apply-close-' + name, [release_window,'6433',fault], apply_stage + mutation +
+    case, result = window_case('apply-close-' + name, [release_window,'5433',fault], apply_stage + mutation +
                                '\nnative_apply_close_observation\nnative_apply_preflight new\n')
     assert (result.returncode == 0) == accepted, (name, result.stderr)
     assert (case/'current/accepted-window').is_file() == accepted and (case/'recovery').exists() != accepted
@@ -1038,7 +1037,7 @@ for name, mutation, fault, valid in (
     ('other-host', 'hostname() { echo osaka2; }', 'normal', False),
     ('inactive', '', 'inactive', False),
 ):
-    case, result = window_case('initial-accept-' + name, [release_window, '6433', fault], initial_install + mutation +
+    case, result = window_case('initial-accept-' + name, [release_window, '5433', fault], initial_install + mutation +
                                '\nnative_initial_accept\nnative_apply_preflight new\n')
     assert (result.returncode == 0) == valid, (name, result.stderr)
     if valid:
@@ -1070,11 +1069,11 @@ for name, mutation, action, valid in (
     ('install-template-drop-in', 'ln -s missing "$unit_file.d"', 'install-initial', False),
     ('deploy-osaka1', '', 'deploy', False),
 ):
-    case, result = window_case('initial-dispatch-' + name, [release_window, '6433', 'normal'], initial_dispatch + mutation +
+    case, result = window_case('initial-dispatch-' + name, [release_window, '5433', 'normal'], initial_dispatch + mutation +
         '\nset -- stage new a 30005 started 7500000 2048 "$EXPECTED_REVISION" ' + action + '\nwindow_action="$9"\n' + origin_dispatch +
         '\n[[ "$window_action" == deploy ]]\ntouch "$CASE/dispatched"\n')
     assert (result.returncode == 0) == valid and (case/'dispatched').exists() == valid, (name, result.stderr)
-case, result = window_case('initial-dispatch-accepted', [release_window, '6433', 'normal'], initial_install +
+case, result = window_case('initial-dispatch-accepted', [release_window, '5433', 'normal'], initial_install +
     '\nset -- stage new a 30005 started 7500000 2048 "$EXPECTED_REVISION" initial-accepted\nwindow_action="$9"\n' + origin_dispatch + '\ntouch "$CASE/fell-through"\n')
 assert result.returncode == 0 and (case/'releases/new/accepted-window').is_file() and not (case/'fell-through').exists(), result.stderr
 

@@ -25,9 +25,8 @@ case "$mode" in
         ;;
     health|observe)
         [ "$#" -eq 4 ] || { echo 'valkey-runtime: expected password file, CA file and TLS port' >&2; exit 64; }
-        REDISCLI_AUTH="$(cat "$2")"
-        export REDISCLI_AUTH
-        set -- valkey-cli -e --raw --tls --cacert "$3" --user health -h 127.0.0.1 -p "$4"
+        exec <"$2"
+        set -- valkey-cli -e --raw --tls --cacert "$3" --askpass --user health -h 127.0.0.1 -p "$4"
         if [ "$mode" = health ]; then
             exec "$@" ping
         fi

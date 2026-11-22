@@ -634,7 +634,7 @@ CREATE TABLE youtube_collection_target_reasons (
 
 `youtube_collection_target_reasons`는 API 진단용이며 collector에 SELECT grant를 주지 않는다. `subject_key`는 `channel:<id>`뿐 아니라 `global:hololive-schedule` 같은 global target을 표현한다.
 
-Migration 259의 `youtube_collection_projection_guard`는 항상 TRUE인 단일 PK row입니다. API refresh는 이 row를 `FOR UPDATE`로 잠근 뒤 CURRENT를 전환합니다. collector의 `lock_current_youtube_collection_projection()`은 같은 row를 `FOR SHARE`로 기다린 뒤 별도 statement snapshot에서 유효 CURRENT를 읽습니다. guard 부재는 오류이며 임의 재시도로 우회하지 않습니다. `member_since_generation`은 직전 CURRENT와 subject/kind/priority/poll/enabled가 같은 동안만 이어받습니다. 재등록·의미 변경은 새 generation identity를 받고, 논리적 `created_at`도 이때만 갱신됩니다. 과거 이력의 NULL은 유효 membership이 아니며 heartbeat로 자동 복구하지 않습니다.
+API refresh는 `lock_youtube_collection_runtime_bundles()`로 projection 전역 advisory 잠금을 배타 모드로 잡은 뒤 CURRENT를 전환합니다. collector의 `lock_current_youtube_collection_projection()`은 같은 잠금을 공유 모드로 기다린 뒤 별도 statement snapshot에서 유효 CURRENT를 읽습니다. 두 함수는 READ COMMITTED 트랜잭션에서만 동작하며, 그 밖의 격리 수준은 오류로 거부합니다(epoch4 migration 005가 싱글톤 guard 행을 대체). `member_since_generation`은 직전 CURRENT와 subject/kind/priority/poll/enabled가 같은 동안만 이어받습니다. 재등록·의미 변경은 새 generation identity를 받고, 논리적 `created_at`도 이때만 갱신됩니다. 과거 이력의 NULL은 유효 membership이 아니며 heartbeat로 자동 복구하지 않습니다.
 
 collector가 읽을 수 있는 target은 current generation과 유효 기간을 통과한 row뿐이다.
 

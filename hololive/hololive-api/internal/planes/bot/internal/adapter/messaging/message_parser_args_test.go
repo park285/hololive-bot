@@ -3,6 +3,8 @@ package messaging
 import (
 	"reflect"
 	"testing"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
 func TestParseUpcomingArgs(t *testing.T) {
@@ -12,32 +14,32 @@ func TestParseUpcomingArgs(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
-		want map[string]any
+		want botcommand.UpcomingParams
 	}{
 		{
 			name: "empty args",
 			args: nil,
-			want: map[string]any{},
+			want: botcommand.UpcomingParams{},
 		},
 		{
 			name: "limit and member",
 			args: []string{"12", testMemberPekora},
-			want: map[string]any{testParamLimit: 12, testParamMember: testMemberPekora},
+			want: botcommand.UpcomingParams{Limit: 12, Member: testMemberPekora},
 		},
 		{
 			name: "all removes limit",
 			args: []string{"20", "all", "미코"},
-			want: map[string]any{testParamAll: true, testParamMember: "미코"},
+			want: botcommand.UpcomingParams{All: true, Member: "미코"},
 		},
 		{
 			name: "non positive numbers treated as member tokens",
 			args: []string{"0", "-3", "스이세이"},
-			want: map[string]any{testParamMember: "0 -3 스이세이"},
+			want: botcommand.UpcomingParams{Member: "0 -3 스이세이"},
 		},
 		{
 			name: "second positive number goes to member",
 			args: []string{"5", "3", "카나타"},
-			want: map[string]any{testParamLimit: 5, testParamMember: "3 카나타"},
+			want: botcommand.UpcomingParams{Limit: 5, Member: "3 카나타"},
 		},
 	}
 
@@ -60,32 +62,32 @@ func TestParseScheduleArgs(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
-		want map[string]any
+		want botcommand.ScheduleParams
 	}{
 		{
 			name: "empty args",
 			args: nil,
-			want: map[string]any{},
+			want: botcommand.ScheduleParams{},
 		},
 		{
 			name: "default days",
 			args: []string{testMemberPekora},
-			want: map[string]any{testParamMember: testMemberPekora, testParamDays: 7},
+			want: botcommand.ScheduleParams{Member: testMemberPekora, Days: 7},
 		},
 		{
 			name: "invalid days keeps default",
 			args: []string{testMemberPekora, "abc"},
-			want: map[string]any{testParamMember: testMemberPekora, testParamDays: 7},
+			want: botcommand.ScheduleParams{Member: testMemberPekora, Days: 7},
 		},
 		{
 			name: "clamps lower bound",
 			args: []string{testMemberPekora, "0"},
-			want: map[string]any{testParamMember: testMemberPekora, testParamDays: 1},
+			want: botcommand.ScheduleParams{Member: testMemberPekora, Days: 1},
 		},
 		{
 			name: "clamps upper bound",
 			args: []string{testMemberPekora, "99"},
-			want: map[string]any{testParamMember: testMemberPekora, testParamDays: 30},
+			want: botcommand.ScheduleParams{Member: testMemberPekora, Days: 30},
 		},
 	}
 

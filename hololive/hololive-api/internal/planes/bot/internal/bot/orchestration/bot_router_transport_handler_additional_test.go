@@ -27,12 +27,12 @@ import (
 
 type testCommand struct {
 	name    string
-	execute func(context.Context, *botcommand.CommandContext, map[string]any) error
+	execute func(context.Context, *botcommand.CommandContext, botcommand.Params) error
 }
 
 func (c *testCommand) Name() string        { return c.name }
 func (c *testCommand) Description() string { return "test" }
-func (c *testCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
+func (c *testCommand) Dispatch(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.Params) error {
 	if c.execute == nil {
 		return nil
 	}
@@ -226,7 +226,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 		registry := command.NewRegistry()
 		registry.Register(&testCommand{
 			name: testHelpCommandName,
-			execute: func(context.Context, *botcommand.CommandContext, map[string]any) error {
+			execute: func(context.Context, *botcommand.CommandContext, botcommand.Params) error {
 				return errors.New("handler failed")
 			},
 		})
@@ -242,10 +242,9 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 		t.Parallel()
 
 		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil, nil)
-		key, params := router.NormalizeCommand(botcommand.CommandAlarmAdd, map[string]any{"member": "miko"})
+		key, params := router.NormalizeCommand(botcommand.CommandAlarmAdd, botcommand.AlarmParams{Member: "miko"})
 		assert.Equal(t, orchcmd.CommandKeyAlarm, key)
-		assert.Equal(t, "add", params["action"])
-		assert.Equal(t, "miko", params["member"])
+		assert.Equal(t, botcommand.Params(botcommand.AlarmParams{Action: "add", Member: "miko"}), params)
 	})
 }
 
@@ -467,7 +466,7 @@ func TestBotProcessMessageCommandFailureRepliesProcessingFailed(t *testing.T) {
 	registry := command.NewRegistry()
 	registry.Register(&testCommand{
 		name: testHelpCommandName,
-		execute: func(context.Context, *botcommand.CommandContext, map[string]any) error {
+		execute: func(context.Context, *botcommand.CommandContext, botcommand.Params) error {
 			return errors.New("boom")
 		},
 	})

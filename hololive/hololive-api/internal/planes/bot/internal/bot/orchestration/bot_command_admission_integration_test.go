@@ -20,7 +20,7 @@ func TestBotProcessMessageRejectsUnknownIngressUserForExpensiveCommand(t *testin
 	registry := handlers.NewRegistry()
 	registry.Register(&testCommand{
 		name: "broadcast_history",
-		execute: func(context.Context, *botcommand.CommandContext, map[string]any) error {
+		execute: func(context.Context, *botcommand.CommandContext, botcommand.Params) error {
 			executions++
 			return nil
 		},

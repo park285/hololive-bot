@@ -35,7 +35,7 @@ func NewCommandRouter(registry *handlers.Registry, logger *slog.Logger, sendMess
 	}
 }
 
-func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, cmdType botcommand.CommandType, params map[string]any) error {
+func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, cmdType botcommand.CommandType, params botcommand.Params) error {
 	if r.registry == nil {
 		return errors.New("command registry is not initialized")
 	}
@@ -83,7 +83,7 @@ func (r *CommandRouter) executeRegisteredCommand(
 	ctx context.Context,
 	cmdCtx *botcommand.CommandContext,
 	key string,
-	params map[string]any,
+	params botcommand.Params,
 	started time.Time,
 	attrs []slog.Attr,
 ) registeredCommandResult {
@@ -147,6 +147,6 @@ func (r *CommandRouter) handleAdmissionError(ctx context.Context, cmdCtx *botcom
 	return nil
 }
 
-func (r *CommandRouter) NormalizeCommand(cmdType botcommand.CommandType, params map[string]any) (commandKey string, normalizedParams map[string]any) {
+func (r *CommandRouter) NormalizeCommand(cmdType botcommand.CommandType, params botcommand.Params) (commandKey string, normalizedParams botcommand.Params) {
 	return NormalizeCommandKey(cmdType, params)
 }

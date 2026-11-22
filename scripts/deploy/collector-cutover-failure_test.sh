@@ -88,16 +88,16 @@ podman() {
 proof_setup += '\n' + function(central, 'collector_database_endpoint') + '\n'
 proof_function = function(central, 'require_collector_lease_migration')
 for case, endpoint, success, queries in (
-    ('pooler', ('holo-pgbouncer', '6432', 'hololive'), True, True),
     ('direct', ('holo-postgres', '5432', 'hololive'), True, True),
-    ('foreign', ('other-pooler', '6432', 'hololive'), False, False),
-    ('wrong_port', ('holo-pgbouncer', '5432', 'hololive'), False, False),
-    ('wrong_database', ('holo-pgbouncer', '6432', 'other'), False, False),
-    ('socket_override', ('holo-pgbouncer', '6432', 'hololive'), False, False),
+    ('retired_pooler', ('holo-pgbouncer', '6432', 'hololive'), False, False),
+    ('foreign', ('other-postgres', '5432', 'hololive'), False, False),
+    ('wrong_port', ('holo-postgres', '6432', 'hololive'), False, False),
+    ('wrong_database', ('holo-postgres', '5432', 'other'), False, False),
+    ('socket_override', ('holo-postgres', '5432', 'hololive'), False, False),
     ('ambiguous_host', ('holo-postgres', '5432', 'hololive'), False, False),
-    ('query_failure', ('holo-pgbouncer', '6432', 'hololive'), False, True),
-    ('writable_proof', ('holo-pgbouncer', '6432', 'hololive'), False, True),
-    ('wrong_checksum', ('holo-pgbouncer', '6432', 'hololive'), False, True),
+    ('query_failure', ('holo-postgres', '5432', 'hololive'), False, True),
+    ('writable_proof', ('holo-postgres', '5432', 'hololive'), False, True),
+    ('wrong_checksum', ('holo-postgres', '5432', 'hololive'), False, True),
 ):
     with tempfile.TemporaryDirectory(prefix='collector-proof-test-') as raw:
         state = Path(raw)
@@ -128,18 +128,18 @@ for case, endpoint, success, queries in (
         print(f'[PASS] collector migration proof: {case}')
 
 for slot, host, port, accepted in (
-    ('c', 'holo-pgbouncer', 6432, True), ('c', 'holo-postgres', 5432, False),
-    ('c', 'foreign', 6432, False), ('b', '100.100.1.8', 6433, True),
-    ('b', '100.100.1.8', 5433, False), ('b', '100x100x1x8', 6433, False),
+    ('c', 'holo-postgres', 5432, True), ('c', 'holo-pgbouncer', 6432, False),
+    ('c', 'foreign', 5432, False), ('b', '100.100.1.8', 5433, True),
+    ('b', '100.100.1.8', 6433, False), ('b', '100x100x1x8', 5433, False),
 ):
     with tempfile.TemporaryDirectory(prefix='collector-endpoint-test-') as raw:
         state = Path(raw)
         (state / 'collector.env').write_text(
             f'POSTGRES_HOST={host}\nPOSTGRES_PORT={port}\nPOSTGRES_DB=hololive\n'
         )
-        result = run(proof_setup + f'\nslot={slot}\n' + function(central, 'require_collector_pooler_endpoint') +
-                     '\nrequire_collector_pooler_endpoint\n', state, 'endpoint')
-        require((result.returncode == 0) == accepted, 'post-activation pooler endpoint', result)
+        result = run(proof_setup + f'\nslot={slot}\n' + function(central, 'require_collector_database_endpoint') +
+                     '\nrequire_collector_database_endpoint\n', state, 'endpoint')
+        require((result.returncode == 0) == accepted, 'post-activation database endpoint', result)
 
 native_functions = '\n'.join(function(native, name) for name in (
     'stop_native_units_and_require_inactive',
@@ -214,8 +214,8 @@ for case in ('success', 'journal_failure', 'error_log', 'grep_failure', 'ordinar
         contract.mkdir()
         for name in (native_host_env, native_unit_template):
             (contract / name).write_text('old')
-        old_env = 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=' + ('5433' if case == 'endpoint_change' else '6433') + '\n'
-        new_env = 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n'
+        old_env = 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=' + ('6433' if case == 'endpoint_change' else '5433') + '\n'
+        new_env = 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=5433\n'
         (contract / native_host_env).write_text(old_env)
         (state / 'payload').mkdir()
         (state / 'payload' / native_host_env).write_text(new_env)
@@ -401,8 +401,8 @@ python3() {
       verify-captured)
         [[ "$5" == "$collector_container" ]] && cmp -s "$4/pair.json" "$fixture_root/collector.generation" &&
           cmp -s "$4/profile.json" "$fixture_root/loaded.profile" ;;
-      check-pooled)
-        [[ "$fixture_case" != *pooled_query_failure && "$3" == "$service" && "$4" == "$profile_release/candidate" ]] ;;
+      check-database)
+        [[ "$fixture_case" != *database_query_failure && "$3" == "$service" && "$4" == "$profile_release/candidate" ]] ;;
       verify-dropin)
         cmp "$4/50-worker-profile.conf" <(printf 'Image=sha256:%s\n' "$(hex_of new)") ;;
       verify-source)
@@ -558,15 +558,15 @@ podman() {
         *Config.Env*)
           if [[ "$slot" == c ]]; then
             if [[ -f "$fixture_root/direct-origin" && "$value" == old || "$fixture_case" == transition_* && "$value" == old || "$fixture_case" == transition_wrong_endpoint ]]; then
-              printf 'POSTGRES_HOST=holo-postgres\nPOSTGRES_PORT=5432\nPOSTGRES_DB=hololive\n'
-            else
               printf 'POSTGRES_HOST=holo-pgbouncer\nPOSTGRES_PORT=6432\nPOSTGRES_DB=hololive\n'
+            else
+              printf 'POSTGRES_HOST=holo-postgres\nPOSTGRES_PORT=5432\nPOSTGRES_DB=hololive\n'
             fi
           else
             if [[ -f "$fixture_root/direct-origin" && "$value" == old || "$fixture_case" == transition_* && "$value" == old || "$fixture_case" == transition_wrong_endpoint ]]; then
-              printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=5433\nPOSTGRES_DB=hololive\n'
-            else
               printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\nPOSTGRES_DB=hololive\n'
+            else
+              printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=5433\nPOSTGRES_DB=hololive\n'
             fi
           fi ;;
         *State.Health*)
@@ -584,11 +584,6 @@ podman() {
         *) return 2 ;;
       esac
       ;;
-    'exec holo-pgbouncer')
-      [[ "$*" == 'exec holo-pgbouncer sha256sum /etc/pgbouncer/pgbouncer.ini' ]] || return 2
-      [[ ! -e "$fixture_root/pooler-query-failed" ]] || return 125
-      value="$(sha256sum "$fixture_root/live-pgbouncer.ini")" || return
-      printf '%s  /etc/pgbouncer/pgbouncer.ini\n' "${value%% *}" ;;
     'exec '*)
       if [[ "$2" == "$issuer_container" ]]; then
         [[ ! -e "$fixture_root/issuer.socket-failed" ]] || return 1
@@ -1025,17 +1020,17 @@ central_cases = {
     'missing_receipt': (1, False), 'collector_stopped': (1, False), 'inventory_failure': (1, False),
     'rollback': (0, True), 'check_success': (0, False), 'check_error_log': (1, False),
     'transition_success': (0, False), 'transition_error_log': (1, False),
-    'check_wrong_profile': (1, False), 'pooled_query_failure': (1, False),
+    'check_wrong_profile': (1, False), 'database_query_failure': (1, False),
     'check_wrong_instance': (1, False), 'check_waiting_handoff': (1, False),
     'rollback_masked_endpoint': (1, False), 'rollback_missing_endpoint': (1, False),
     'transition_wrong_endpoint': (1, False), 'rollback_cross': (1, False),
-    'capacity_drift': (1, False), 'capacity_missing': (1, False), 'capacity_query_failed': (1, False),
-    'rollback_capacity_drift': (1, False),
+    'capacity_exhausted': (1, False),
+    'rollback_capacity_exhausted': (1, False),
     'unadmitted_deploy': (1, False), 'foreign_card_pair': (1, False), 'rollback_stale': (1, False),
 }
 slots = {slot: slot_preamble(slot) for slot in ('c', 'b')}
 runs = [('c', case) for case in central_cases] + [('b', case) for case in (
-    'success', 'rollback', 'check_success', 'check_wrong_profile', 'pooled_query_failure', 'transition_success',
+    'success', 'rollback', 'check_success', 'check_wrong_profile', 'database_query_failure', 'transition_success',
     'check_wrong_instance', 'check_waiting_handoff', 'unadmitted_deploy', 'foreign_card_pair', 'rollback_stale',
     'transition_error_log', 'transition_wrong_endpoint', 'rollback_cross', 'rollback_masked_endpoint', 'rollback_missing_endpoint')]
 recovery_cases = (
@@ -1054,14 +1049,14 @@ maintenance_cases = (
     'load_issuer_restarted', 'load_issuer_unhealthy', 'load_issuer_socket', 'stop_other_invocation', 'stop_missing_job',
     'stop_stale_job',
     'stop_peer_restarted', 'mask_race', 'mask_replaced',
-    'missing_stop_receipt', 'pooled_query_failure', 'rollback_image', 'rollback_profile', 'rollback_unhealthy',
+    'missing_stop_receipt', 'database_query_failure', 'rollback_image', 'rollback_profile', 'rollback_unhealthy',
     'candidate_check_failure', 'substitution_failure', 'error_log', 'unmask_failure',
     'source_changed', 'identity_changed', 'inputs_changed', 'foreign_hold', 'lock_busy',
     'operator_mask', 'incomplete_hold', 'candidate_unit_changed', 'candidate_profile_changed', 'wrong_endpoint',
     'installed_unit_changed', 'helper_changed', 'migration_changed', 'source_manifest_changed',
     'candidate_image_overlay_changed', 'candidate_endpoint_overlay_changed',
-    'rollback_cross', 'rollback_coordinated', 'capacity_drift', 'capacity_missing', 'capacity_query_failed',
-    'direct_origin', 'previous_candidate', 'origin_receipt_changed', 'copied_hold_receipt', 'lost_seal', 'seal_changed',
+    'rollback_cross', 'rollback_coordinated', 'capacity_exhausted',
+    'previous_candidate', 'origin_receipt_changed', 'copied_hold_receipt', 'lost_seal', 'seal_changed',
     'rollback_replaced', *recovery_cases,
 )
 runs += [(slot, 'maintenance_' + case) for slot in slots for case in maintenance_cases
@@ -1069,7 +1064,7 @@ runs += [(slot, 'maintenance_' + case) for slot in slots for case in maintenance
 runs += [('b', 'staged_' + scenario) for scenario in (
     'success', 'already_loaded', 'error_log', 'missing_start_record', 'archive_drift', 'partial_transport', 'origin_stale', 'unsafe_stage',
     'changed_seal', 'absent_hold', 'foreign_hold', 'missing_seal', 'other_owner', 'other_invocation', 'other_cid', 'old_start_cid',
-    'candidate_check_failure', 'pooled_query_failure', 'profile_drift', 'wrong_window', 'wrong_boot', 'wrong_tool',
+    'candidate_check_failure', 'database_query_failure', 'profile_drift', 'wrong_window', 'wrong_boot', 'wrong_tool',
     'expire_after_stop', 'expire_after_unmask', 'expire_after_issuer', 'expired_late_notify_client')]
 for slot, case in runs:
     expected_status, restored = central_cases.get(case, (0, False))
@@ -1087,7 +1082,7 @@ for slot, case in runs:
             (state / 'staged-pair').touch()
         for directory in (current, staging, state / 'images', state / 'units', state / f'po-current-{slot}'):
             directory.mkdir()
-        host, db_port = ('holo-pgbouncer', 6432) if slot == 'c' else ('100.100.1.8', 6433)
+        host, db_port = ('holo-postgres', 5432) if slot == 'c' else ('100.100.1.8', 5433)
         if case == 'maintenance_direct_origin':
             (state / 'direct-origin').touch()
         installed_definition = f'[Container]\nEnvironment=POSTGRES_HOST={host}\nEnvironment=POSTGRES_PORT={db_port}\n'
@@ -1095,12 +1090,12 @@ for slot, case in runs:
             installed_definition += 'Environment=POSTGRES_POOL_MAX_CONNS=${COLLECTOR_POSTGRES_POOL_MAX_CONNS}\n[Service]\nEnvironment=COLLECTOR_POSTGRES_POOL_MAX_CONNS=7\nEnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env\n'
         else:
             installed_definition = (root / b_unit_source).read_text().replace(
-                'Environment=POSTGRES_PORT=6433', f'Environment=POSTGRES_PORT={db_port}')
-        previous_host, previous_port = (('holo-postgres', 5432) if slot == 'c' else ('100.100.1.8', 5433)) if case == 'rollback_cross' else (host, db_port)
+                'Environment=POSTGRES_PORT=5433', f'Environment=POSTGRES_PORT={db_port}')
+        previous_host, previous_port = (('holo-pgbouncer', 6432) if slot == 'c' else ('100.100.1.8', 6433)) if case == 'rollback_cross' else (host, db_port)
         previous_definition = installed_definition.replace(f'POSTGRES_HOST={host}', f'POSTGRES_HOST={previous_host}').replace(f'POSTGRES_PORT={db_port}', f'POSTGRES_PORT={previous_port}') + '# previous revision\n'
         (state / f'units/{container(slot)}.container').write_text(installed_definition)
         (state / 'compose.env').write_text('APP_ENV=production\n')
-        for name in ('hololive-api', 'hololive-alarm-worker', 'holo-pgbouncer'):
+        for name in ('hololive-api', 'hololive-alarm-worker'):
             shutil.copyfile(root / f'deploy/quadlet/hololive-bot/{name}.container', state / f'units/{name}.container')
         source_files = (root / 'scripts/deploy/po-central-files.txt').read_text().splitlines()
         for name in source_files:
@@ -1109,14 +1104,8 @@ for slot, case in runs:
             shutil.copyfile(root / name, target)
         (staging / 'source-files.sha256').write_text(''.join(
             f'{hashlib.sha256((staging / name).read_bytes()).hexdigest()}  {name}\n' for name in source_files))
-        subprocess.run(['bash', '-c', '. "$1/scripts/deploy/lib/postgres-capacity.sh"; postgres_capacity_write_pgbouncer_config "$1/scripts/ci/postgres-capacity-policy.tsv" "$2/compose.env" "$2/live-pgbouncer.ini"',
-                        '_', str(root), str(state)], check=True, capture_output=True)
-        if case in ('capacity_drift', 'rollback_capacity_drift'):
-            (state / 'compose.env').write_text('COLLECTOR_POSTGRES_POOL_MAX_CONNS=6\n')
-        elif case == 'capacity_missing':
-            (state / 'live-pgbouncer.ini').unlink()
-        elif case == 'capacity_query_failed':
-            (state / 'pooler-query-failed').touch()
+        if case in ('capacity_exhausted', 'rollback_capacity_exhausted'):
+            (state / 'compose.env').write_text('COLLECTOR_POSTGRES_POOL_MAX_CONNS=8\n')
         is_check, is_rollback = case.startswith('check_'), case.startswith('rollback')
         issuer_absent = case in ('absent_success', 'absent_candidate_check_failure')
         initial = 'new' if is_check or is_rollback else 'old'
@@ -1188,7 +1177,7 @@ for slot, case in runs:
             if case != 'rollback_missing_endpoint':
                 captured_host, captured_port = host, db_port
                 if case in ('rollback_cross', 'rollback_masked_endpoint'):
-                    captured_host, captured_port = ('holo-postgres', 5432) if slot == 'c' else ('100.100.1.8', 5433)
+                    captured_host, captured_port = ('holo-pgbouncer', 6432) if slot == 'c' else ('100.100.1.8', 6433)
                 (backup / 'collector.endpoint').write_text(f'{captured_host}|{captured_port}\n')
             if is_check:
                 candidate = previous_pair.with_name('candidate')
@@ -1247,7 +1236,7 @@ for slot, case in runs:
                 (state / 'collector.cid').write_text('7')
             elif scenario == 'unsafe_stage':
                 (staging / 'foreign').symlink_to(prior_backup)
-            preflight_failure = scenario in ('candidate_check_failure', 'pooled_query_failure')
+            preflight_failure = scenario in ('candidate_check_failure', 'database_query_failure')
             result = invoke('quiesce', scenario if preflight_failure or scenario == 'expire_after_stop' else '')
             if scenario == 'expire_after_stop':
                 calls = calls_now()
@@ -1259,7 +1248,7 @@ for slot, case in runs:
                 continue
             if preflight_failure:
                 calls = calls_now()
-                expected_check = 'pair check-pooled' if scenario == 'pooled_query_failure' else 'pair check'
+                expected_check = 'pair check-database' if scenario == 'database_query_failure' else 'pair check'
                 reached = any(c.startswith(expected_check + ' ') and c.endswith('/candidate') for c in calls)
                 require(reached and result.returncode != 0 and not hold.exists() and active.read_text() == origin_pair and
                         all((state / f'{k}.running').read_text() == 'true' and
@@ -1439,10 +1428,10 @@ for slot, case in runs:
                 'stop_control_pid', 'collector_143', 'collected_143', 'died_duplicate', 'died_other_cid', 'died_stale',
                 'stop_terminal_invocation', 'stop_leftover_id')
             result = invoke('quiesce', scenario if fail_quiesce else '')
-            if scenario in ('direct_origin', 'previous_candidate'):
+            if scenario == 'previous_candidate':
                 require(result.returncode != 0 and not hold.exists() and
                         not any(c.startswith(('podman load ', 'systemctl stop ', held_start)) for c in calls_now()),
-                        f'{slot}: wrong original route or retained candidate cannot open the card window', result)
+                        f'{slot}: wrong original route or retained candidate cannot open the migration window', result)
                 continue
             if scenario.startswith('load_'):
                 require(result.returncode != 0 and not hold.exists() and
@@ -1526,8 +1515,7 @@ for slot, case in runs:
                 (state / 'issuer.exit').unlink()
                 assert_new_manager_blocks()
                 assert_held(result)
-            pool_host, pool_port = ('holo-pgbouncer', 6432) if slot == 'c' else ('100.100.1.8', 6433)
-            candidate_definition = installed_definition.replace(f'POSTGRES_HOST={host}', f'POSTGRES_HOST={pool_host}').replace(f'POSTGRES_PORT={db_port}', f'POSTGRES_PORT={pool_port}')
+            candidate_definition = installed_definition
             unit_path = state / f'units/{container(slot)}.container'
             unit_path.write_text(candidate_definition)
             if slot == 'c':
@@ -1553,16 +1541,12 @@ for slot, case in runs:
                 (state / 'collector.leftover').touch()
             elif scenario == 'inventory_unavailable':
                 (state / 'inventory-unavailable').touch()
-            if scenario == 'capacity_drift':
-                (state / 'compose.env').write_text('COLLECTOR_POSTGRES_POOL_MAX_CONNS=6\n')
-            elif scenario == 'capacity_missing':
-                (state / 'live-pgbouncer.ini').unlink()
-            elif scenario == 'capacity_query_failed':
-                (state / 'pooler-query-failed').touch()
+            if scenario == 'capacity_exhausted':
+                (state / 'compose.env').write_text('COLLECTOR_POSTGRES_POOL_MAX_CONNS=8\n')
             if scenario == 'wrong_endpoint' or scenario.startswith('rollback_'):
-                unit_path.write_text(installed_definition.replace('6432', '5432').replace('6433', '5433'))
+                unit_path.write_text(installed_definition.replace('holo-postgres', 'holo-pgbouncer').replace('POSTGRES_PORT=5432', 'POSTGRES_PORT=6432').replace('POSTGRES_PORT=5433', 'POSTGRES_PORT=6433'))
             elif scenario == 'origin_receipt_changed':
-                (backup / 'collector.endpoint').write_text('holo-postgres|5432\n' if slot == 'c' else '100.100.1.8|5433\n')
+                (backup / 'collector.endpoint').write_text('holo-pgbouncer|6432\n' if slot == 'c' else '100.100.1.8|6433\n')
             elif scenario == 'copied_hold_receipt':
                 (hold / 'card-candidate').unlink()
                 shutil.copyfile(backup / 'card-candidate', hold / 'card-candidate')
@@ -1659,7 +1643,7 @@ for slot, case in runs:
                             'c: pending target cannot activate candidate or release either writer', blocked)
                     assert_held(blocked)
                     (state / 'pending-suffix').unlink()
-                failure = scenario if scenario in ('activation_failure', 'candidate_check_failure', 'pooled_query_failure',
+                failure = scenario if scenario in ('activation_failure', 'candidate_check_failure', 'database_query_failure',
                                                    'substitution_failure', 'error_log', 'unmask_failure', 'signal_TERM', 'error_log_seal_failure', *recovery_cases) else ''
                 result = invoke('resume', failure)
                 success = scenario in ('success', 'reboot')
@@ -1743,7 +1727,7 @@ for slot, case in runs:
                             require((hold / 'quiesced').read_text() == 'guarded-stop-v1\n',
                                     f'{slot}: protective stop outcomes confirmed', result)
                         assert_new_manager_blocks()
-                    if scenario == 'pooled_query_failure':
+                    if scenario == 'database_query_failure':
                         require(not any(c.startswith(mutations) for c in subsequent),
                                 f'{slot}: failed pooled SQL before activation retains the hold', result)
                     if scenario not in ('foreign_hold', 'incomplete_hold', 'error_log_seal_failure', 'substitution_failure'):
@@ -1809,7 +1793,7 @@ for slot, case in runs:
                     f'{label}: previous pair never activated', result)
         if case in ('rollback_cross', 'rollback_masked_endpoint', 'rollback_missing_endpoint'):
             require(not changed, f'{label}: manual cross-endpoint rollback has no runtime mutations', result)
-        if case.startswith('capacity_') or case == 'rollback_capacity_drift':
+        if case.startswith('capacity_') or case == 'rollback_capacity_exhausted':
             require(not changed, f'{label}: capacity rejection has no runtime mutations', result)
             if is_rollback:
                 require((previous_pair / 'profile.json').exists() and
@@ -1832,7 +1816,7 @@ for slot, case in runs:
             require(not changed, f'{label}: check has no mutations', result)
             require(('completion verified' in result.stdout) == (expected_status == 0),
                     f'{label}: completion output requires the candidate loaded profile', result)
-        elif case in ('candidate_check_failure', 'absent_candidate_check_failure', 'activation_failure', 'pooled_query_failure'):
+        elif case in ('candidate_check_failure', 'absent_candidate_check_failure', 'activation_failure', 'database_query_failure'):
             require(not restarts, f'{label}: no unit restart', result)
             require(image_file(state, collector_prod).read_text() == 'old', f'{label}: collector tag baseline', result)
             require((image_file(state, issuer_prod).exists()) != issuer_absent, f'{label}: issuer tag baseline', result)

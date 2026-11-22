@@ -160,7 +160,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE hololive_migrator IN SCHEMA public GRANT SELEC
 ALTER DEFAULT PRIVILEGES FOR ROLE hololive_migrator IN SCHEMA public GRANT SELECT,USAGE ON SEQUENCES TO hololive_runtime;
 ALTER DEFAULT PRIVILEGES FOR ROLE hololive_migrator IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO hololive_runtime;
 SQL
-podman exec -i "$cid" psql -U postgres_admin -Xqv ON_ERROR_STOP=1 -d base <"$root/hololive/hololive-api/cmd/db-migrate/queries/bootstrap_pooler_auth.sql"
+podman exec -i "$cid" psql -U postgres_admin -Xqv ON_ERROR_STOP=1 -d base <"$root/hololive/hololive-api/cmd/db-migrate/queries/bootstrap_writer_admission.sql"
 clone() { sql postgres -c "CREATE DATABASE $1 TEMPLATE $2 OWNER hololive_migrator"; }
 started=$(sql postgres -c 'SELECT clock_timestamp()')
 clone hololive base

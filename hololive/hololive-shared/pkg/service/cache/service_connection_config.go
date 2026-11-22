@@ -61,5 +61,5 @@ func cacheTLSConfig(caFile string) (*tls.Config, error) {
 		return nil, errors.New("cache CA file contains no certificates")
 	}
 
-	return &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}, nil
+	return &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots}, nil
 }

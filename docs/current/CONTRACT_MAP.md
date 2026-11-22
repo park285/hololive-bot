@@ -34,7 +34,7 @@ Source observation의 공용 envelope·canonical JSON·hash·lease 계약은 `ho
 
 `hololive-shared/pkg/providers/database`의 runtime factory는 shared-go `pgxdb.AcquirePolicy`를 명시적으로 설정합니다. `bot`, `youtube_plane`, `alarm_worker`, `collector`는 reserve 1, `admin`은 reserve 0이며 모두 획득 예산은 5초입니다. reserve 1의 max는 2 이상이어야 하고 min 0은 유효합니다. worker goroutine 수를 연결 수와 합산하지 않습니다. `ProvideMaintenanceDatabaseResources`, replay CLI와 db-migrate는 nil policy를 유지합니다.
 
-설정 loader와 `--check-worker-profile`은 runtime과 같은 DB config/options를 `shared-go/postgres/pgxdb.Preflight`에 전달합니다. 로컬 CA 파일·풀 수명·Ping 옵션·유효 reserve/일반 용량을 연결 없이 검사하며, 그 뒤에만 logger·pool·listener·worker를 생성합니다. profile만으로 수치를 검증하는 `Load*WorkerProfile`과 달리 CLI에는 runtime 환경·로컬 CA가 필요합니다. 성공은 원격 TLS/SAN·인증·권한·pooler startup parameter/transaction pooling 호환성의 증거가 아닙니다.
+설정 loader와 `--check-worker-profile`은 runtime과 같은 DB config/options를 `shared-go/postgres/pgxdb.Preflight`에 전달합니다. 로컬 CA 파일·풀 수명·Ping 옵션·유효 reserve/일반 용량을 연결 없이 검사하며, 그 뒤에만 logger·pool·listener·worker를 생성합니다. profile만으로 수치를 검증하는 `Load*WorkerProfile`과 달리 CLI에는 runtime 환경·로컬 CA가 필요합니다. 성공은 원격 TLS/SAN·인증·권한의 증거가 아닙니다.
 
 일반 획득은 물리 연결을 요청하기 전 `MaxConns-ReservedConns` 한도를 따릅니다. Exec·Query·QueryRow·Begin/BeginTx·Batch·CopyFrom·Ping 및 명시적 Acquire가 같은 pool 경로를 거치며, rows/transaction의 연결 반환까지 permit을 유지합니다. 5초는 gate와 물리 pool/연결 준비 대기를 합친 예산이고 SQL 실행 timeout이 아닙니다. 더 이른 부모 deadline, SQLSTATE, commit 결과 불명 및 취소 독립 rollback 5초는 바꾸지 않습니다.
 

@@ -146,7 +146,7 @@ func (w *worker) exchange(ctx context.Context, input, output any) error {
 		var err error
 
 		data, err = json.Marshal(input)
-		if err != nil || len(data)+1 > 1<<20 {
+		if err != nil {
 			return errWorker
 		}
 

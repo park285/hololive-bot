@@ -6,11 +6,6 @@ const socketPath = "/run/hololive-youtube-po/worker.sock";
 const responseLimit = 64 * 1024;
 const requestLimit = 1024 * 1024;
 const idleSocketTimeoutMs = 1_000;
-const brokerStates = new Set(["IDLE", "STARTING", "AWAITING_CHALLENGE", "AWAITING_INTEGRITY", "READY"]);
-const brokerErrors = new Set([
-  "invalid_request", "generation_mismatch", "invalid_state", "expired", "busy", "worker_failed", "worker_timeout",
-]);
-const poTokenPattern = /^[A-Za-z0-9_-]+={0,2}$/;
 const generationPattern = /^[A-Za-z0-9_-]+$/;
 
 export class ProofError extends Error {
@@ -37,7 +32,7 @@ export class ProofBrokerClient {
       try {
         const health = await this.exchange("GET", "/health", undefined, readySignal);
         fields(health, ["protocol_version", "generation", "state", "revision"]);
-        if (!generation(health.generation) || typeof health.state !== "string" || !brokerStates.has(health.state) || typeof health.revision !== "string") {
+        if (!generation(health.generation) || typeof health.state !== "string" || typeof health.revision !== "string") {
           throw new ProofError("broker_protocol");
         }
         if (health.state === "IDLE" && health.generation !== retiredGeneration) {
@@ -81,7 +76,7 @@ export class ProofBrokerClient {
   async challenge(input, signal) {
     const result = await this.exchange("POST", "/v1/challenge", { protocol_version: 1, ...input }, signal);
     fields(result, ["protocol_version", "generation", "snapshot"]);
-    if (result.generation !== input.generation || !boundedString(result.snapshot, 60_000)) {
+    if (result.generation !== input.generation || !boundedString(result.snapshot, responseLimit)) {
       throw new ProofError("broker_protocol");
     }
     return result.snapshot;
@@ -111,8 +106,7 @@ export class ProofBrokerClient {
       protocol_version: 1, generation: id, video_id: videoId,
     }, signal);
     fields(result, ["protocol_version", "generation", "video_id", "po_token"]);
-    if (result.generation !== id || result.video_id !== videoId || !boundedString(result.po_token, 8_192) ||
-        !poTokenPattern.test(result.po_token)) {
+    if (result.generation !== id || result.video_id !== videoId || !boundedString(result.po_token, responseLimit)) {
       throw new ProofError("broker_protocol");
     }
     return result.po_token;
@@ -172,7 +166,7 @@ export class ProofBrokerClient {
             if (!record(result) || result.protocol_version !== 1) throw new ProofError("broker_protocol");
             if (res.statusCode !== 200) {
               fields(result, ["protocol_version", "error"]);
-              if (!record(result.error) || Object.keys(result.error).length !== 1 || typeof result.error.code !== "string" || !brokerErrors.has(result.error.code)) {
+              if (!record(result.error) || Object.keys(result.error).length !== 1 || typeof result.error.code !== "string") {
                 throw new ProofError("broker_protocol");
               }
               throw new ProofError(`broker_${result.error.code}`);

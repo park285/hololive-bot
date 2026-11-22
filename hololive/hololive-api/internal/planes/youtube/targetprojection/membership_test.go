@@ -120,30 +120,6 @@ func (f *projectionFixture) assertUnrelatedAddCarriesMembership(
 	}
 }
 
-func TestRefreshFailsClosedWithoutProjectionGuard(t *testing.T) {
-	pool := dbtest.NewPool(t)
-
-	refresher, err := NewRefresher(pool, time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	target := TargetSpec{SubjectKey: subjectChannelA, ObservationKind: contract.KindCommunityPage, Priority: 40, PollInterval: 2 * time.Minute, Enabled: true}
-	current := mustRefresh(t, refresher, staticBuilder{targets: []TargetSpec{target}}, projectionNow, "initial")
-
-	if _, err := pool.Exec(t.Context(), `DELETE FROM youtube_collection_projection_guard`); err != nil {
-		t.Fatal(err)
-	}
-
-	target.PollInterval = 3 * time.Minute
-
-	if _, err := refresher.Refresh(t.Context(), staticBuilder{targets: []TargetSpec{target}}, projectionNow.Add(time.Minute)); err == nil {
-		t.Fatal("refresh without projection guard succeeded")
-	}
-
-	assertGenerationStatus(t, pool, current.Generation, "CURRENT")
-}
-
 type membershipValidity struct {
 	t     *testing.T
 	pool  *pgxpool.Pool

@@ -218,8 +218,6 @@ try:
                 section == "Container" and directive in ("PodmanArgs", "GlobalArgs", "EnvironmentHost")
             ) or directive == "ServiceName":
                 raise ValueError(f"unsupported Quadlet execution override: {path}")
-            if installed.name == "holo-pgbouncer.container" and section == "Container" and directive in ("Exec", "Entrypoint"):
-                raise ValueError(f"unsupported Quadlet pooler command override: {path}")
             if section in environment and directive == "Environment":
                 if not raw:
                     environment[section].clear()

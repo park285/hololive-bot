@@ -119,8 +119,9 @@ programs = [
     "scripts/deploy/quadlet-redeploy-service.sh", "scripts/deploy/quadlet-rollback-service.sh",
     "scripts/deploy/quadlet-prestart.sh", "scripts/ci/postgres-capacity-policy.tsv",
     *("scripts/deploy/lib/" + name for name in (
-        "worker-profile-pair.py", "systemd-stop-guard.py", "card-migration-guard.py", "admin-bind.sh",
+        "worker-profile-pair.py", "systemd-stop-guard.py", "writer-drain-guard.py", "admin-bind.sh",
         "public-bind-mounts.sh", "postgres-capacity.sh", "compose-env.sh", "postgres-endpoint.sh")),
+    "hololive/hololive-api/cmd/db-migrate/queries/bootstrap_writer_admission.sql",
 ]
 slot_table = ("collector-slots.sh", "collector-slots.tsv")
 files = {root / path for path in programs}
@@ -182,8 +183,6 @@ verify_execution_tree() {
   shift
   local -a paths=("$@" "$OPT_CURRENT/scripts/deploy/verify-exec-tree-ownership.sh"
     "$OPT_CURRENT/scripts/ci/postgres-capacity-policy.tsv"
-    "$OPT_CURRENT/deploy/pgbouncer/pg_hba.conf"
-    "$OPT_CURRENT/deploy/pgbouncer/stats-users.txt"
     "$OPT_CURRENT/deploy/nginx/admin-dashboard-ingress.conf.template"
     "$OPT_CURRENT/deploy/postgres/pg_hba.conf")
   for asset in "${host_assets[@]}"; do
@@ -299,7 +298,7 @@ for feature in "${OPTIONAL_FEATURES[@]}"; do
 done
 if [[ "$application_only" == true ]]; then
   assert_same_tree "$quadlet_check_dir" "$QUADLET_DIR" "--exclude=/$migrator"
-  required_exec=--pool-only=auth
+  required_exec=--configure-login-roles
   if [[ -n "$source_base" ]]; then
     required_exec=--schema-only
     assert_same_file "$STAGING/$migrator_path" "$QUADLET_DIR/$migrator"

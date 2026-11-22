@@ -74,7 +74,7 @@ func TestPayloadStorageLimitMatchesPostgreSQL(t *testing.T) {
 	}
 }
 
-func TestPublishOversizedPayloadRejectsWholeBatch(t *testing.T) {
+func TestPublishUnpreparedOversizedPayloadRejectsWholeBatch(t *testing.T) {
 	for _, partial := range []bool{false, true} {
 		t.Run(fmt.Sprintf("partial=%t", partial), func(t *testing.T) {
 			pool := dbtest.NewPool(t)
@@ -130,7 +130,7 @@ func TestPublishOversizedPayloadRejectsWholeBatch(t *testing.T) {
 				_, err = repo.PublishBatch(t.Context(), input)
 			}
 
-			require.ErrorIs(t, err, contract.ErrPayloadTooLarge)
+			require.ErrorIs(t, err, ErrInvalidEnvelope)
 
 			assertPublishSideEffects(t, pool, 0, 0, 0)
 			assertTableCount(t, pool, "source_observation_payloads", 0)
@@ -173,12 +173,11 @@ func TestPublishPreservesRealCheckErrorAndRollback(t *testing.T) {
 	}
 }
 
-func TestPublishStoresVerifiedCanonicalPayload(t *testing.T) {
+func TestPublishStoresOnlyPreparedCanonicalPayload(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	envelope, canonical := paddedSchedulePublication(t, pool)
 	proof := envelope.Lease
-	rawPayloadSHA := contract.SHA256Hex(envelope.Payload)
 
 	require.Len(t, envelope.Payload, contract.MaxPayloadBytes)
 	require.Greater(t, postgresPayloadSize(t, pool, envelope.Payload), contract.MaxPayloadBytes)
@@ -186,9 +185,14 @@ func TestPublishStoresVerifiedCanonicalPayload(t *testing.T) {
 	require.NoError(t, envelope.Validate())
 
 	repo := NewRepository(pool)
-	input := publishInput(&envelope)
 
-	first, err := repo.PublishBatch(ctx, input)
+	_, err := repo.PublishBatch(ctx, publishInput(&envelope))
+	require.ErrorIs(t, err, ErrInvalidEnvelope)
+	assertPublishSideEffects(t, pool, 0, 0, 0)
+
+	envelope.Payload = canonical
+
+	first, err := repo.PublishBatch(ctx, publishInput(&envelope))
 	require.NoError(t, err)
 
 	var storedMatches bool
@@ -197,11 +201,8 @@ func TestPublishStoresVerifiedCanonicalPayload(t *testing.T) {
 		FROM source_observation_payloads`, string(canonical), envelope.PayloadSHA256).Scan(&storedMatches))
 
 	require.True(t, storedMatches)
-	require.Equal(t, rawPayloadSHA, contract.SHA256Hex(input.Observations[0].Payload))
 
 	reactivateLease(t, pool, &proof)
-
-	envelope.Payload = canonical
 
 	duplicate, err := repo.PublishBatch(ctx, publishInput(&envelope))
 	require.NoError(t, err)

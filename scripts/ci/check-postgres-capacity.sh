@@ -17,7 +17,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 
 : >"${tmp}/quadlet-defaults.env"
-postgres_capacity_write_pgbouncer_config "${policy_file}" "${tmp}/quadlet-defaults.env" "${tmp}/pgbouncer.ini"
+postgres_capacity_assert_policy_target "${policy_file}" "${tmp}/quadlet-defaults.env"
 
 "${CI_PYTHON_BIN}" - "${unit_dir}" "${policy_file}" "${root}/deploy/postgres/role-limits.sql" <<'PY'
 import re

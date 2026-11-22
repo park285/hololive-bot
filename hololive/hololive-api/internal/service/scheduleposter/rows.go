@@ -11,6 +11,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 )
 
 type RowStatus string
@@ -311,10 +313,19 @@ func (s *Store) RecordRowsFailure(ctx context.Context, item PendingRows, reason 
 }
 
 func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Time) (PublishedSchedule, bool, error) {
-	var schedule PublishedSchedule
+	schedule, _, found, err := s.PublishedMemberRows(ctx, 0, channelID, day)
+
+	return schedule, found, err
+}
+
+func (s *Store) PublishedMemberRows(ctx context.Context, memberID int, channelID string, day time.Time) (PublishedSchedule, cardtemplate.ID, bool, error) {
+	var (
+		schedule PublishedSchedule
+		template cardtemplate.ID
+	)
 
 	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		rows, queryErr := tx.Query(ctx, publishedRowsSQL, channelID, day)
+		rows, queryErr := tx.Query(ctx, publishedRowsSQL, channelID, day, memberID, cardtemplate.Classic)
 		if queryErr != nil {
 			return fmt.Errorf("load rows: %w", queryErr)
 		}
@@ -328,7 +339,7 @@ func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Ti
 			scanErr := row.Scan(&schedule.PosterID, &schedule.WeekStart, &schedule.WeekEnd, &schedule.ExtractedAt,
 				&schedule.PostedAt, &schedule.RowsPending, &schedule.RowsDayShift,
 				&item.Ordinal, &item.Day, &item.Start, &item.End, &item.TZ, &item.SourceZone, &item.Status, &item.SourceText, &item.Badges,
-				&item.TitleKo, &item.WithKo, &item.PlaceKo, &item.TagsKo, &item.NoteKo, &editedAt)
+				&item.TitleKo, &item.WithKo, &item.PlaceKo, &item.TagsKo, &item.NoteKo, &editedAt, &template)
 			if editedAt != nil {
 				item.EditedAt = *editedAt
 			}
@@ -355,14 +366,14 @@ func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Ti
 		return nil
 	})
 	if err != nil {
-		return PublishedSchedule{}, false, fmt.Errorf("load published schedule poster rows: %w", err)
+		return PublishedSchedule{}, "", false, fmt.Errorf("load published schedule poster rows: %w", err)
 	}
 
 	if len(schedule.Rows) == 0 {
-		return PublishedSchedule{}, false, nil
+		return PublishedSchedule{}, "", false, nil
 	}
 
-	return schedule, true, nil
+	return schedule, template, true, nil
 }
 
 type PosterSchedule struct {

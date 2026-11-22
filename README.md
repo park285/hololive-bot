@@ -58,7 +58,7 @@ bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 �
 
 다섯 업무 모듈은 shared-go의 `/v2 v2.25.0`과 `/postgres v1.0.3`을 고정합니다. `hololive-dbtest`를 제외한 네 모듈은 `/core v1.0.0`과 `/transport v1.0.1`도 사용합니다. 개발용 `go.work`에서 형제 소스를 읽더라도 운영 이미지와 격리 CI는 각 모듈의 정식 tag와 `go.sum`으로 빌드합니다. [릴리스 수용 기준](docs/current/runbooks/release.md#1921-의존성-수용-기준)은 Hololive inbox와 공용 pgstore의 전환 조건을 구분합니다.
 
-세 runtime의 `--check-worker-profile`은 같은 runtime 환경과 로컬 CA를 받아 profile 관계·DB 옵션·제어 예약을 무접속으로 검증합니다. 출력은 기존 식별 형식을 유지하며 성공이 원격 TLS·권한·pooler 호환성의 증거는 아닙니다. 로그는 임의 map/slice 대신 승인된 최소 필드와 count를 같은 키 아래 typed group으로 투영합니다.
+세 runtime의 `--check-worker-profile`은 같은 runtime 환경과 로컬 CA를 받아 profile 관계·DB 옵션·제어 예약을 무접속으로 검증합니다. 출력은 기존 식별 형식을 유지하며 성공이 원격 TLS·권한의 증거는 아닙니다. 로그는 임의 map/slice 대신 승인된 최소 필드와 count를 같은 키 아래 typed group으로 투영합니다.
 
 ## 개발 및 검증 (Development & Test)
 

@@ -38,7 +38,7 @@ func (c *Client) doJSON[T any](ctx context.Context, method, path string, body an
 	}
 	defer c.closeResponseBody(resp, path)
 
-	return decodeAPIEnvelope[T](path, resp.Body)
+	return readAPIEnvelope[T](path, resp.Body)
 }
 
 func (c *Client) putNoData(ctx context.Context, path string, body any) error {
@@ -53,49 +53,31 @@ func (c *Client) putNoData(ctx context.Context, path string, body any) error {
 	}
 	defer c.closeResponseBody(resp, path)
 
-	if _, envErr := readAPIEnvelope(path, resp.Body); envErr != nil {
+	if _, envErr := readAPIEnvelope[jsontext.Value](path, resp.Body); envErr != nil {
 		return fmt.Errorf("read API envelope: %w", envErr)
 	}
 
 	return nil
 }
 
-func readAPIEnvelope(path string, body io.Reader) (contractsalarm.Envelope[jsontext.Value], error) {
-	var envelope contractsalarm.Envelope[jsontext.Value]
+func readAPIEnvelope[T any](path string, body io.Reader) (T, error) {
+	var (
+		envelope contractsalarm.Envelope[T]
+		zero     T
+	)
 
 	if err := jsonv2.UnmarshalRead(body, &envelope); err != nil {
-		return contractsalarm.Envelope[jsontext.Value]{}, fmt.Errorf("alarm-api: %s: decode envelope: %w", path, err)
+		return zero, fmt.Errorf("alarm-api: %s: decode envelope: %w", path, err)
 	}
 
 	if !envelope.Success {
-		return contractsalarm.Envelope[jsontext.Value]{}, fmt.Errorf("alarm-api: %s: %s", path, envelopeFailureMessage(envelope))
+		return zero, fmt.Errorf("alarm-api: %s: %s", path, envelopeFailureMessage(envelope))
 	}
 
-	return envelope, nil
+	return envelope.Data, nil
 }
 
-func decodeAPIEnvelope[T any](path string, body io.Reader) (T, error) {
-	var out T
-
-	envelope, err := readAPIEnvelope(path, body)
-	if err != nil {
-		return out, fmt.Errorf("read API envelope: %w", err)
-	}
-
-	if !envelopeHasData(envelope.Data) {
-		return out, nil
-	}
-
-	if err := jsonv2.Unmarshal(envelope.Data, &out); err != nil {
-		var zero T
-
-		return zero, fmt.Errorf("alarm-api: %s: decode data: %w", path, err)
-	}
-
-	return out, nil
-}
-
-func envelopeFailureMessage(envelope contractsalarm.Envelope[jsontext.Value]) string {
+func envelopeFailureMessage[T any](envelope contractsalarm.Envelope[T]) string {
 	message := strings.TrimSpace(envelope.Message)
 	if message == "" {
 		message = strings.TrimSpace(envelope.Error)
@@ -106,14 +88,6 @@ func envelopeFailureMessage(envelope contractsalarm.Envelope[jsontext.Value]) st
 	}
 
 	return message
-}
-
-func envelopeHasData(data jsontext.Value) bool {
-	if len(data) == 0 {
-		return false
-	}
-
-	return !bytes.Equal(bytes.TrimSpace(data), []byte("null"))
 }
 
 func encodeJSONRequestBody(path string, body any) (io.Reader, error) {

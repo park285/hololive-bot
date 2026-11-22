@@ -27,7 +27,7 @@ const (
 )
 
 type Config struct {
-	CardWindow       bool
+	MigrationWindow  bool
 	VerifyOnly       bool
 	InitializeOnly   bool
 	StatementTimeout time.Duration
@@ -141,7 +141,7 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, files []migrationsourc
 }
 
 func advance(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg Config) (Result, error) {
-	epoch, applied, err := verifyHead(ctx, tx, files, cfg.CardWindow)
+	epoch, applied, err := verifyHead(ctx, tx, files, cfg.MigrationWindow)
 	if err != nil {
 		return Result{}, err
 	}
@@ -165,7 +165,7 @@ func advance(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg C
 }
 
 func bootstrap(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg Config) (Result, error) {
-	if cfg.CardWindow || cfg.VerifyOnly {
+	if cfg.MigrationWindow || cfg.VerifyOnly {
 		return Result{}, errors.New("an initialized migration lineage is required; hold writers")
 	}
 
@@ -204,7 +204,7 @@ func bootstrap(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg
 	return Result{Applied: len(files), Total: len(files)}, nil
 }
 
-func verifyHead(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cardWindow bool) (int, int, error) {
+func verifyHead(ctx context.Context, tx pgx.Tx, files []migrationsource.File, migrationWindow bool) (int, int, error) {
 	var epoch, applied, pending int
 
 	if err := tx.QueryRow(ctx, mustSQL("lineage_head.sql"), migrationsource.Receipts(files)).Scan(&epoch, &applied, &pending); err != nil {
@@ -219,15 +219,15 @@ func verifyHead(ctx context.Context, tx pgx.Tx, files []migrationsource.File, ca
 		return 0, 0, fmt.Errorf("verify applied schema: %w", err)
 	}
 
-	if cardWindow {
-		var admitted bool
+	if migrationWindow {
+		var private bool
 
-		if err := tx.QueryRow(ctx, mustSQL("card_window_state.sql")).Scan(&admitted); err != nil {
+		if err := tx.QueryRow(ctx, mustSQL("migration_window_state.sql")).Scan(&private); err != nil {
 			return 0, 0, fmt.Errorf("inspect protected migration endpoint: %w", err)
 		}
 
-		if !admitted {
-			return 0, 0, errors.New("schema-only requires the reviewed pool authentication and private migrator connection")
+		if !private {
+			return 0, 0, errors.New("migration window requires the private migrator connection")
 		}
 	}
 

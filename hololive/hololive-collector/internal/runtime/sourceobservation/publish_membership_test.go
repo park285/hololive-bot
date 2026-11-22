@@ -132,7 +132,7 @@ func TestPublishWaitsForProjectionGuardAndSeesCarriedMembership(t *testing.T) {
 
 	var guard bool
 
-	if err := tx.QueryRow(ctx, `SELECT guard_key FROM youtube_collection_projection_guard FOR UPDATE`).Scan(&guard); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT true FROM (SELECT public.lock_youtube_collection_runtime_bundles()) AS locked`).Scan(&guard); err != nil {
 		t.Fatalf("lock projection guard: %v", err)
 	}
 
@@ -193,7 +193,7 @@ func TestPublishRejectsHeaderExpiryCommittedWhileWaitingForProjectionGuard(t *te
 
 	var guard bool
 
-	require.NoError(t, tx.QueryRow(ctx, `SELECT guard_key FROM youtube_collection_projection_guard FOR UPDATE`).Scan(&guard))
+	require.NoError(t, tx.QueryRow(ctx, `SELECT true FROM (SELECT public.lock_youtube_collection_runtime_bundles()) AS locked`).Scan(&guard))
 
 	input := publishInput(communityEnvelope(t, &proof, "post-1"))
 	done := make(chan error, 1)

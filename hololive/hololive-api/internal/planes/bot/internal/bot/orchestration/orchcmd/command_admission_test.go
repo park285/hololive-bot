@@ -69,7 +69,7 @@ type trackedRouterCommand struct {
 
 func (c *trackedRouterCommand) Name() string        { return c.name }
 func (c *trackedRouterCommand) Description() string { return c.name }
-func (c *trackedRouterCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
+func (c *trackedRouterCommand) Dispatch(context.Context, *botcommand.CommandContext, botcommand.Params) error {
 	c.executed++
 	return nil
 }

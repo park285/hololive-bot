@@ -1,3 +1,5 @@
 001 001_schema_epoch4_baseline.sql
 002 002_epoch4_event_grade.sql
 003 003_epoch4_collector_session_instance.sql
+004 004_epoch4_retire_row_triggers.sql
+005 005_epoch4_retire_shadow_state.sql

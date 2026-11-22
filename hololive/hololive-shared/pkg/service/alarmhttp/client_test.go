@@ -115,9 +115,9 @@ func TestClientSendsAPIKeyHeader(t *testing.T) {
 	assert.True(t, added)
 }
 
-func TestDecodeAPIEnvelopeRejectsMalformedAndMissingSuccess(t *testing.T) {
+func TestReadAPIEnvelopeRejectsMalformedAndMissingSuccess(t *testing.T) {
 	for _, body := range []string{"not-json", `{"data":{"added":true}}`} {
-		got, err := decodeAPIEnvelope[contractsalarm.AddResponse]("/test", strings.NewReader(body))
+		got, err := readAPIEnvelope[contractsalarm.AddResponse]("/test", strings.NewReader(body))
 		require.Error(t, err)
 		assert.Equal(t, contractsalarm.AddResponse{}, got)
 	}

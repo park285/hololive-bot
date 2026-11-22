@@ -191,7 +191,8 @@ binary 1.1.11(SQL extension 1.1)을 활성화한 뒤, 같은 날 서울 중앙�
 `amcheck` 1.5를 같은 스키마에 활성화했습니다. 당시 PostgreSQL image revision은
 `12588674f2ddfac1a784c145b0a66620800691cf`(image ID `sha256:5606cad5c443…`)였습니다. 호스트의 비밀 아닌
 `HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES` 설정은 `pg_stat_statements,pg_stat_kcache,pg_wait_sampling,auto_explain`을
-preload합니다. 당시 직전 image `hololive-postgres:infra-58fc86436-20261026T044001Z-arm64`와 이전 compose 파일의
+preload합니다. 상시 목표 값은 `pg_stat_statements,auto_explain`이며 kcache·wait_sampling은 진단 구간에만 켭니다.
+서울 호스트 값을 목표 값으로 되돌리는 재시작은 아직 수행하지 않았습니다. 당시 직전 image `hololive-postgres:infra-58fc86436-20261026T044001Z-arm64`와 이전 compose 파일의
 복구 기록 경로는 `/opt/hololive-bot/compose/deploy-backups/pre-pg-auto-explain-20261027T150624Z/`입니다.
 새 통계는 `hololive_observability` 스키마에서 기존 `pg_read_all_stats` 역할이 읽습니다.
 exporter의 public USAGE 차단과 앱 역할의 권한은 유지했습니다.

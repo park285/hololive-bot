@@ -1,16 +1,18 @@
 package xspaces
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	sessions "github.com/kapu/hololive-shared/pkg/service/xspaces"
@@ -68,9 +70,26 @@ func (e *CollectionError) Error() string {
 	return fmt.Sprintf("X spaces collection: %s (%shttp_status=%d api_codes=%v)", e.Code, diagnostics.String(), e.HTTPStatus, e.APICodes)
 }
 
-type ProcessCollector struct{}
+const maxHelperOutput = 256 * 1024
 
-type boundedOutput struct{ bytes.Buffer }
+var errHelperOutputLimit = errors.New("x collector output exceeds limit")
+
+type ProcessCollector struct {
+	mu      sync.Mutex
+	helper  *helperProcess
+	command func(context.Context) *exec.Cmd
+}
+
+type helperProcess struct {
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	output *bufio.Reader
+}
+
+type helperLine struct {
+	line []byte
+	err  error
+}
 
 type collectionResult struct {
 	Spaces          *[]Observation `json:"spaces"`
@@ -83,20 +102,7 @@ type collectionResult struct {
 	APICodes        []int          `json:"api_codes"`
 }
 
-func (b *boundedOutput) Write(p []byte) (int, error) {
-	if b.Len()+len(p) > 256*1024 {
-		return 0, errors.New("x collector output exceeds limit")
-	}
-
-	n, err := b.Buffer.Write(p)
-	if err != nil {
-		return n, fmt.Errorf("buffer collector output: %w", err)
-	}
-
-	return n, nil
-}
-
-func (p ProcessCollector) Collect(ctx context.Context, cookies sessions.Cookies, userIDs []string) ([]Observation, error) {
+func (p *ProcessCollector) Collect(ctx context.Context, cookies sessions.Cookies, userIDs []string) ([]Observation, error) {
 	if err := cookies.Validate(); err != nil {
 		return nil, &CollectionError{Code: "invalid_cookies"}
 	}
@@ -114,39 +120,137 @@ func (p ProcessCollector) Collect(ctx context.Context, cookies sessions.Cookies,
 
 	defer cancel()
 
-	command := exec.CommandContext(ctx, "/usr/local/bin/node", "/app/xspaces/src/collect.mjs")
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	command.Env = []string{"LANG=C.UTF-8"}
-	command.Stdin = bytes.NewReader(raw)
-	command.Stderr = io.Discard
+	if p.helper == nil {
+		command := p.command
+		if command == nil {
+			command = nodeHelperCommand
+		}
 
-	output := &boundedOutput{}
+		helper, startErr := startHelper(command(context.WithoutCancel(ctx)))
+		if startErr != nil {
+			return nil, helperOutputFailure(startErr)
+		}
 
-	command.Stdout = output
-	command.WaitDelay = time.Second
+		p.helper = helper
+	}
 
-	runErr := command.Run()
+	line, err := p.helper.exchange(ctx, raw)
+	if err == nil {
+		spaces, decodeErr := decodeCollectionOutput(line)
+		if failure, ok := errors.AsType[*CollectionError](decodeErr); !ok || failure.Stage != helperOutputStage {
+			return spaces, decodeErr
+		}
+	}
+
+	exitErr := p.helper.stop()
+
+	p.helper = nil
 
 	if ctx.Err() != nil {
 		return nil, &CollectionError{Code: "timeout"}
 	}
 
-	return decodeCollectionOutput(output.Bytes(), runErr)
+	return nil, helperOutputFailure(exitErr)
 }
 
-func decodeCollectionOutput(output []byte, runErr error) ([]Observation, error) {
+func nodeHelperCommand(ctx context.Context) *exec.Cmd {
+	return exec.CommandContext(ctx, "/usr/local/bin/node", "/app/xspaces/src/serve.mjs")
+}
+
+func startHelper(cmd *exec.Cmd) (*helperProcess, error) {
+	cmd.Env = []string{"LANG=C.UTF-8"}
+	cmd.Stderr = io.Discard
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("open X collector input: %w", err)
+	}
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("open X collector output: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start X collector: %w", err)
+	}
+
+	return &helperProcess{cmd: cmd, stdin: stdin, output: bufio.NewReader(stdout)}, nil
+}
+
+func (h *helperProcess) exchange(ctx context.Context, request []byte) ([]byte, error) {
+	if _, err := h.stdin.Write(request); err != nil {
+		return nil, fmt.Errorf("send X collector request: %w", err)
+	}
+
+	if _, err := io.WriteString(h.stdin, "\n"); err != nil {
+		return nil, fmt.Errorf("send X collector request: %w", err)
+	}
+
+	result := make(chan helperLine, 1)
+
+	go func() {
+		line, err := readHelperLine(h.output)
+		result <- helperLine{line: line, err: err}
+	}()
+
+	select {
+	case response := <-result:
+		return response.line, response.err
+	case <-ctx.Done():
+		return nil, fmt.Errorf("await X collector response: %w", ctx.Err())
+	}
+}
+
+func (h *helperProcess) stop() error {
+	if err := h.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return fmt.Errorf("stop X collector: %w", err)
+	}
+
+	if err := h.cmd.Wait(); err != nil {
+		return fmt.Errorf("wait X collector: %w", err)
+	}
+
+	return nil
+}
+
+func readHelperLine(output *bufio.Reader) ([]byte, error) {
+	var line []byte
+
+	for {
+		chunk, err := output.ReadSlice('\n')
+		if len(line)+len(chunk) > maxHelperOutput {
+			return nil, errHelperOutputLimit
+		}
+
+		line = append(line, chunk...)
+
+		if err == nil {
+			return line[:len(line)-1], nil
+		}
+
+		if !errors.Is(err, bufio.ErrBufferFull) {
+			return nil, fmt.Errorf("read X collector response: %w", err)
+		}
+	}
+}
+
+func decodeCollectionOutput(output []byte) ([]Observation, error) {
 	var result collectionResult
 
 	if err := jsonv2.Unmarshal(output, &result, jsonv2.RejectUnknownMembers(true)); err != nil {
-		return nil, helperOutputFailure(runErr)
+		return nil, helperOutputFailure(nil)
 	}
 
 	if result.Error != "" {
 		return nil, result.failure()
 	}
 
-	if runErr != nil || result.Spaces == nil || len(*result.Spaces) > 100 {
-		return nil, helperOutputFailure(runErr)
+	if result.Spaces == nil || len(*result.Spaces) > 100 {
+		return nil, helperOutputFailure(nil)
 	}
 
 	return *result.Spaces, nil
@@ -215,4 +319,4 @@ type Collector interface {
 	Collect(context.Context, sessions.Cookies, []string) ([]Observation, error)
 }
 
-var _ Collector = ProcessCollector{}
+var _ Collector = (*ProcessCollector)(nil)

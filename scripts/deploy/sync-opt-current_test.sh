@@ -52,13 +52,14 @@ make_repo() {
     scripts/deploy/lib/compose-env.sh scripts/deploy/quadlet-prestart.sh \
     scripts/deploy/sync-opt-current.sh \
     scripts/deploy/quadlet-{redeploy,rollback}-service.sh \
-    scripts/deploy/lib/{card-migration-guard,worker-profile-pair,systemd-stop-guard}.py \
+    scripts/deploy/lib/{writer-drain-guard,worker-profile-pair,systemd-stop-guard}.py \
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     scripts/deploy/lib/admin-bind.sh scripts/deploy/lib/public-bind-mounts.sh \
     scripts/deploy/lib/postgres-endpoint.sh scripts/deploy/lib/source-revision.sh \
     scripts/systemd/admin-dashboard-ingress-firewall.service scripts/systemd/admin-dashboard-ingress.nft \
     verification/tla/{AlarmDispatchClaim,CollectionJobLease}/COVERAGE.md \
-    hololive/hololive-api/scripts/init-db deploy "${slot_table_files[@]}"; do
+    hololive/hololive-api/scripts/init-db hololive/hololive-api/cmd/db-migrate/queries/bootstrap_writer_admission.sql \
+    deploy "${slot_table_files[@]}"; do
     mkdir -p "${repo}/$(dirname "${path}")"
     cp -R "${ROOT_DIR}/${path}" "${repo}/${path}"
   done
@@ -79,9 +80,9 @@ commit_repo() {
 make_host() {
   local host="$1" x_spaces="$2" installed="${1}/etc-containers-systemd/hololive-bot"
   mkdir -p "${host}"/{etc-containers-systemd,usr-local-libexec,etc-stack-secrets/hololive-bot,etc-systemd-system,etc-nftables.d,run-lock}
-  mkdir -p "${host}/run/hololive-bot/pgbouncer" "${host}/run/lock"
+  mkdir -p "${host}/run/hololive-bot" "${host}/run/lock"
   mkdir -m 0700 "${host}/run/mount"
-  printf 'accepted pool configuration\n' >"${host}/run/hololive-bot/pgbouncer/pgbouncer.ini"
+  printf 'accepted runtime state\n' >"${host}/run/hololive-bot/marker"
   mkdir -p "${installed}/hololive-api.container.d" "${installed}/hololive-alarm-worker.container.d"
   printf '[Container]\nContainerName=stale\nImage=localhost/stale:old\n' >"${installed}/stale.container"
   printf '[Container]\nLabel=io.hololive.test.worker-profile=1\n' \
@@ -195,17 +196,11 @@ bash -c 'source "$1"; source "$2"; postgres_endpoint_quadlet "$3" "$4"' _ \
   "${host}/usr-local-libexec/hololive-bot/lib/postgres-endpoint.sh" \
   "${installed}/hololive-api.container" "${host}/etc-stack-secrets/hololive-bot/compose.env" >/dev/null ||
   fail "installed endpoint library cannot resolve the effective application endpoint"
-bash -c 'source "$1"; postgres_capacity_write_pgbouncer_config "$2" "$3" "$4"' _ \
+bash -c 'source "$1"; postgres_capacity_assert_policy_target "$2" "$3"' _ \
   "${host}/usr-local-libexec/hololive-bot/lib/postgres-capacity.sh" \
   "${host}/opt/current/scripts/ci/postgres-capacity-policy.tsv" \
-  "${host}/etc-stack-secrets/hololive-bot/compose.env" "${host}/pgbouncer.ini" ||
-  fail "installed capacity library cannot generate the pooler configuration"
-[[ -s "${host}/pgbouncer.ini" && "$(stat -c '%a' "${host}/pgbouncer.ini")" == 644 ]] ||
-  fail "pooler configuration is missing or unreadable by the container"
-for config in pg_hba.conf stats-users.txt; do
-  cmp -s "${base_repo}/deploy/pgbouncer/${config}" "${host}/opt/current/deploy/pgbouncer/${config}" ||
-    fail "pooler configuration not installed: ${config}"
-done
+  "${host}/etc-stack-secrets/hololive-bot/compose.env" >/dev/null ||
+  fail "installed capacity library cannot validate the connection budget"
 installed_validator="${host}/usr-local-libexec/hololive-bot/lib/compose-env.sh"
 bash -c '. "$1"; compose_env_validate_file_format "$2"' _ \
   "$installed_validator" "${host}/etc-stack-secrets/hololive-bot/compose.env" ||
@@ -284,8 +279,8 @@ pass "artifact-only sync preserves runtime bytes and metadata without copying ru
 migrator_path=deploy/quadlet/hololive-bot/hololive-db-migrate.container
 w1_repo="${tmp}/repo-pool"
 cp -a "${base_repo}" "${w1_repo}"
-sed -e 's/^Exec=--schema-only$/Exec=--pool-only=auth/' \
-  -e 's/ hololive-db-migrate schema$/ hololive-db-migrate pool-auth/' \
+sed -e 's/^Exec=--schema-only$/Exec=--configure-login-roles/' \
+  -e 's/ hololive-db-migrate schema$/ hololive-db-migrate admin-bootstrap/' \
   "${base_repo}/${migrator_path}" >"${w1_repo}/${migrator_path}"
 commit_repo "${w1_repo}" pool-window
 w1_host="${tmp}/host-pool"
@@ -295,27 +290,24 @@ for path in data logs backups runtime-config artifacts/worker-profile; do
   mkdir -p "${w1_host}/opt/current/${path}"
   printf 'accepted runtime\n' >"${w1_host}/opt/current/${path}/accepted"
 done
-pool_dropin="${w1_host}/etc-containers-systemd/hololive-bot/holo-pgbouncer.container.d"
-mkdir -p "$pool_dropin"
-printf '[Container]\nImage=sha256:%064d\n' 1 >"$pool_dropin/50-pooler-image.conf"
 touch -d @1 "${w1_host}/opt/current/deploy/postgres/pg_hba.conf" \
-  "${w1_host}/opt/current/deploy/pgbouncer/"* "${w1_host}/opt/current/hololive/hololive-api/scripts/init-db/"*
+  "${w1_host}/opt/current/hololive/hololive-api/scripts/init-db/"*
 
 protected_snapshot() (
   cd "$1"
   find etc-containers-systemd usr-local-libexec etc-systemd-system etc-nftables.d etc-stack-secrets run/hololive-bot \
-    opt/current/{deploy/{pgbouncer,postgres,nginx,topology},hololive/hololive-api/scripts/init-db,data,logs,backups,runtime-config,artifacts/worker-profile} \
+    opt/current/{deploy/{postgres,nginx,topology},hololive/hololive-api/scripts/init-db,data,logs,backups,runtime-config,artifacts/worker-profile} \
     -type f ! -name hololive-db-migrate.container -printf '%p %i %m %U:%G %T@ %C@\n' -exec sha256sum {} + | LC_ALL=C sort
 )
 w2_repo="${tmp}/repo-card"
 cp -a "${base_repo}" "$w2_repo"
 printf 'card release\n' >"$w2_repo/hololive/hololive-api/VERSION"
-commit_repo "$w2_repo" card-window
+commit_repo "$w2_repo" writer-drain
 host="${tmp}/host-card"
 cp -a "$w1_host" "$host"
 before="$(protected_snapshot "$host")"
-run_sync "$host" "$w2_repo" --application-only || { cat "$host/out" >&2; fail "card-window publication failed"; }
-[[ "$(protected_snapshot "$host")" == "$before" ]] || fail "card window changed a protected inode, mode or content"
+run_sync "$host" "$w2_repo" --application-only || { cat "$host/out" >&2; fail "writer-drain publication failed"; }
+[[ "$(protected_snapshot "$host")" == "$before" ]] || fail "writer drain changed a protected inode, mode or content"
 ! grep -q '^systemctl ' "$host/events" || fail "source publication changed daemon state"
 cmp "$w2_repo/$migrator_path" "$host/etc-containers-systemd/hololive-bot/${migrator_path##*/}"
 cmp "$w2_repo/$migrator_path" "$host/opt/current/$migrator_path"
@@ -333,7 +325,7 @@ source_repo="$tmp/repo-source"
 cp -a "$host" "$source_host"
 cp -a "$w2_repo" "$source_repo"
 installed_revision="$(git -C "$source_repo" rev-parse HEAD)"
-chmod -R go-w "$source_host/opt/current/scripts"
+chmod -R go-w "$source_host/opt/current/scripts" "$source_host/opt/current/hololive"
 chmod go-w "$source_host/opt" "$source_host/opt/current"
 chmod go-w "$source_host/usr-local-libexec"
 cp "$ROOT_DIR/scripts/deploy/sync-opt-current.sh" "$source_repo/scripts/deploy/sync-opt-current.sh"
@@ -413,9 +405,9 @@ for path in scripts/deploy/sync-opt-current.sh hololive/hololive-api/VERSION; do
 done
 pass "source-only publishes existing app files from the proven precursor without replacing installed definitions or bind inodes"
 
-for path in opt/current/deploy/postgres/pg_hba.conf opt/current/deploy/pgbouncer/stats-users.txt \
+for path in opt/current/deploy/postgres/pg_hba.conf \
     opt/current/hololive/hololive-api/scripts/init-db/00-assert-pg19-runtime.sql \
-    etc-containers-systemd/hololive-bot/{hololive-api,holo-pgbouncer,hololive-alarm-worker}.container \
+    etc-containers-systemd/hololive-bot/{hololive-api,holo-postgres,hololive-alarm-worker}.container \
     etc-containers-systemd/hololive-bot/hololive-api.container.d/40-x-spaces.conf \
     usr-local-libexec/hololive-bot/quadlet-prestart etc-nftables.d/admin-dashboard-ingress.nft; do
   host="$(mktemp -d "${tmp}/host-drift.XXXXXX")"
@@ -427,12 +419,12 @@ host="${tmp}/host-override"
 cp -a "$w1_host" "$host"
 dropin="$host/etc-containers-systemd/hololive-bot/hololive-db-migrate.container.d"
 mkdir -p "$dropin"
-printf '[Container]\nExec=--pool-only=auth\n' >"$dropin/60-command.conf"
+printf '[Container]\nExec=--configure-login-roles\n' >"$dropin/60-command.conf"
 assert_rejected_without_change "$host" "$w2_repo" "migrator override" "requires the schema-only migrator" --application-only
 assert_rejected_without_change "$w1_host" "$w1_repo" "pool candidate" "requires the schema-only migrator" --application-only
 drift_repo="${tmp}/repo-infra-change"
 cp -a "$w2_repo" "$drift_repo"
-printf 'drift\n' >"$drift_repo/deploy/pgbouncer/unreviewed.conf"
+printf 'drift\n' >"$drift_repo/deploy/postgres/unreviewed.conf"
 commit_repo "$drift_repo" changed-infrastructure
 assert_rejected_without_change "$w1_host" "$drift_repo" "candidate infrastructure" "application-only tree drift" --application-only
 pass "application-only rejects candidate, installed, drop-in and privileged bind drift before backup or publication"

@@ -65,10 +65,7 @@ func TestAlarmMemberLookupPreservesBackendFailureWithoutNotFoundReply(t *testing
 				Logger:    slog.New(slog.DiscardHandler),
 			}
 
-			err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-				testParamAction: action,
-				paramMember:     "미코",
-			})
+			err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.AlarmParams{Action: action, Member: "미코"})
 			if !errors.Is(err, cause) || errors.Is(err, handlercore.ErrMemberLookupHandled) {
 				t.Fatalf("alarm %s error = %v, want backend cause", action, err)
 			}

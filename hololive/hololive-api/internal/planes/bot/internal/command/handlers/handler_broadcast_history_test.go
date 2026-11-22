@@ -105,12 +105,7 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 	cmd := NewBroadcastHistoryCommand(deps)
 	before := time.Now().AddDate(0, 0, -MaxBroadcastHistoryDays).Add(-2 * time.Second)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{
-		"type":         "게임",
-		"topic":        "Forza",
-		testParamLimit: 5,
-		"all":          true,
-	})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastHistoryParams{Type: "게임", Topic: "Forza", Limit: 5, Days: MaxBroadcastHistoryDays})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -153,7 +148,7 @@ func TestBroadcastHistoryCommandReportsTruncatedResult(t *testing.T) {
 		SendError: func(_ context.Context, _, _ string) error { return nil },
 	}
 
-	if err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, nil); err != nil {
+	if err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastHistoryParams{}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -181,9 +176,7 @@ func TestBroadcastHistoryCommandInvalidType(t *testing.T) {
 		},
 	}
 
-	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{
-		"type": "not-a-type",
-	})
+	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastHistoryParams{Type: "not-a-type"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -219,10 +212,7 @@ func TestBroadcastHistoryCommandMemberAliasAndTypeQuery(t *testing.T) {
 		SendError: func(_ context.Context, _, _ string) error { return nil },
 	}
 
-	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{
-		paramMember: "미코치",
-		"type":      "게임",
-	})
+	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastHistoryParams{Member: "미코치", Type: "게임"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -254,7 +244,7 @@ func TestBroadcastHistoryCommandDefaultDaysIsOneWeek(t *testing.T) {
 	}
 	before := time.Now().AddDate(0, 0, -defaultBroadcastHistoryDays).Add(-2 * time.Second)
 
-	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{})
+	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastHistoryParams{})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -286,7 +276,7 @@ func TestBroadcastHistoryCommandListErrorSendsOneUserMessage(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{})
+	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastHistoryParams{})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -502,9 +492,7 @@ func TestBroadcastThumbnailCommandExecute(t *testing.T) {
 		},
 	}
 
-	err := NewBroadcastThumbnailCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{
-		"video_id": testVideoID,
-	})
+	err := NewBroadcastThumbnailCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastThumbnailParams{VideoID: testVideoID})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -547,9 +535,7 @@ func TestBroadcastThumbnailCommandLookupErrorSendsOneUserMessage(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewBroadcastThumbnailCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{
-		"video_id": testVideoID,
-	})
+	err := NewBroadcastThumbnailCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastThumbnailParams{VideoID: testVideoID})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -585,9 +571,7 @@ func TestBroadcastThumbnailCommandDownloadErrorSendsOneUserMessage(t *testing.T)
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewBroadcastThumbnailCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{
-		"video_id": testVideoID,
-	})
+	err := NewBroadcastThumbnailCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastThumbnailParams{VideoID: testVideoID})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -711,7 +695,7 @@ func assertBroadcastHistoryTime(t *testing.T, entry handlercore.BroadcastHistory
 		SendError: func(_ context.Context, _, _ string) error { return nil },
 	}
 
-	if err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{}); err != nil {
+	if err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastHistoryParams{}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 

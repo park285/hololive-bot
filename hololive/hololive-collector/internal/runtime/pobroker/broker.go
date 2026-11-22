@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -21,6 +22,8 @@ const (
 	requestLimit        = 1 << 20
 	idleConnectionLimit = 30 * time.Second
 )
+
+var poTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+={0,2}$`)
 
 type State string
 
@@ -387,12 +390,12 @@ func (b *Broker) reserveSession() *worker {
 }
 
 func validChallenge(v *challengeRequest) bool {
-	return validText(v.Program, requestLimit) && validText(v.GlobalName, 1024) &&
+	return validText(v.Program, requestLimit) && validText(v.GlobalName, requestLimit) &&
 		validText(v.Interpreter, requestLimit)
 }
 
 func (b *Broker) session(ctx context.Context, w http.ResponseWriter, v *sessionRequest) {
-	if !validText(v.UserAgent, 1024) {
+	if !validText(v.UserAgent, requestLimit) {
 		failure(w, http.StatusBadRequest, "invalid_request")
 
 		return
@@ -653,7 +656,7 @@ func (b *Broker) mint(ctx context.Context, w http.ResponseWriter, v *mintRequest
 		return
 	}
 
-	if err != nil || result.Type != "minted" || result.VideoID != v.VideoID || !validText(result.PoToken, 8192) {
+	if err != nil || !validMinted(result, v.VideoID) {
 		b.workerFailure(w, err)
 
 		return
@@ -689,6 +692,11 @@ func (b *Broker) mint(ctx context.Context, w http.ResponseWriter, v *mintRequest
 		failure(w, http.StatusServiceUnavailable, "worker_failed")
 		b.retireAfterResponse(w, ExitResponseFailed)
 	}
+}
+
+func validMinted(result workerMint, videoID string) bool {
+	return result.Type == "minted" && result.VideoID == videoID && validText(result.PoToken, 8192) &&
+		poTokenPattern.MatchString(result.PoToken)
 }
 
 func success(w http.ResponseWriter, body any) bool {

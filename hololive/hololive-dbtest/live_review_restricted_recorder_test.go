@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLiveReviewRecorderDecoderMigrationPreservesRestrictedRecording(t *testing.T) {
+func TestLiveReviewRestrictedRecorderRecordsAndReopens(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
@@ -22,7 +22,7 @@ func TestLiveReviewRecorderDecoderMigrationPreservesRestrictedRecording(t *testi
   GRANT SELECT,INSERT ON youtube_live_review_receipts,youtube_live_review_receipt_facts TO `+recorder+`;
   GRANT EXECUTE ON FUNCTION record_youtube_live_review(uuid,text,text,text,text),
    youtube_live_review_snapshot(text),youtube_live_review_semantic_facts(jsonb),
-   youtube_live_review_receipt_semantic_facts(jsonb),youtube_live_review_receipt_value(jsonb),
+   youtube_live_review_receipt_semantic_facts(jsonb),
    lock_youtube_live_runtime_state(),refresh_youtube_live_runtime_state(text[]) TO `+recorder)
 	require.NoError(t, err)
 	seedLiveReviewComparison(t, pool)
@@ -60,25 +60,22 @@ func assertRestrictedRecorderReopens(t *testing.T, pool *pgxpool.Pool, roles obs
 	assertLiveReviewReceiptFactsMatchReceipts(t, pool)
 	assertLiveRuntimeState(t, pool)
 
-	var receiptAndFacts, runtimeReviewed, unauthorizedRecord, unauthorizedDecoder bool
+	var receiptAndFacts, runtimeReviewed, unauthorizedRecord bool
 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT
 		EXISTS (SELECT 1 FROM youtube_live_review_receipts receipt
 			JOIN youtube_live_review_receipt_facts facts USING(receipt_id)
 			WHERE receipt.receipt_id=$1::uuid AND receipt.video_id='none'
 			  AND receipt.operator_id='restricted-recorder' AND receipt.reason='별도 역할 검토'
-			  AND receipt.original_snapshot->'session'->>'title'=$1::text
-			  AND to_jsonb(facts.semantic_value)=facts.facts),
+			  AND receipt.original_snapshot->'session'->>'title'=$1::text),
 		EXISTS (SELECT 1 FROM youtube_live_runtime_state state
 			JOIN youtube_live_review_receipts receipt ON receipt.video_id=state.video_id
 			WHERE receipt.receipt_id=$1::uuid AND state.reviewed_at=receipt.recorded_at),
-		has_function_privilege($2,'record_youtube_live_review(uuid,text,text,text,text)','EXECUTE'),
-		has_function_privilege($2,'youtube_live_review_receipt_value(jsonb)','EXECUTE')`, receiptID, roles.scraper).
-		Scan(&receiptAndFacts, &runtimeReviewed, &unauthorizedRecord, &unauthorizedDecoder))
+		has_function_privilege($2,'record_youtube_live_review(uuid,text,text,text,text)','EXECUTE')`, receiptID, roles.scraper).
+		Scan(&receiptAndFacts, &runtimeReviewed, &unauthorizedRecord))
 	require.True(t, receiptAndFacts)
 	require.True(t, runtimeReviewed)
 	require.False(t, unauthorizedRecord)
-	require.False(t, unauthorizedDecoder)
 }
 
 func recordLiveReviewAsRole(t *testing.T, pool *pgxpool.Pool, role, receiptID string) error {

@@ -1,7 +1,6 @@
 package orchcmd
 
 import (
-	"maps"
 	"strings"
 
 	"github.com/park285/shared-go/core/stringutil"
@@ -11,24 +10,19 @@ import (
 
 const CommandKeyAlarm = "alarm"
 
-func NormalizeCommandKey(cmdType botcommand.CommandType, params map[string]any) (commandKey string, normalizedParams map[string]any) {
+func NormalizeCommandKey(cmdType botcommand.CommandType, params botcommand.Params) (commandKey string, normalizedParams botcommand.Params) {
 	typeStr := stringutil.Normalize(cmdType.String())
 
-	if after, ok := strings.CutPrefix(typeStr, "alarm_"); ok {
-		action := after
-		newParams := cloneParamsWithAction(params, action)
+	if action, ok := strings.CutPrefix(typeStr, "alarm_"); ok {
+		alarm, isAlarm := params.(botcommand.AlarmParams)
+		if !isAlarm && params != nil {
+			return CommandKeyAlarm, params
+		}
 
-		return CommandKeyAlarm, newParams
+		alarm.Action = action
+
+		return CommandKeyAlarm, alarm
 	}
 
 	return typeStr, params
-}
-
-func cloneParamsWithAction(params map[string]any, action string) map[string]any {
-	newParams := make(map[string]any)
-	maps.Copy(newParams, params)
-
-	newParams["action"] = action
-
-	return newParams
 }

@@ -48,6 +48,7 @@ WITH clock AS MATERIALIZED (
 		updated_at = clock.now
 	FROM picked CROSS JOIN clock
 	WHERE d.id = picked.id
+	  AND d.status IN ('pending', 'retry')
 	RETURNING d.id, d.event_id, d.room_id, d.dedupe_key, d.claim_keys, d.delivery_context,
 		d.dispatch_group_key, d.send_unit_id, d.status, d.attempt_count, d.next_attempt_at,
 		d.locked_by, d.locked_at, d.lock_expires_at, d.sending_started_at, d.sent_at,

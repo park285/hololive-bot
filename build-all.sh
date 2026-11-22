@@ -29,13 +29,11 @@ declare -A IMAGE_BY_SERVICE=(
     [collector]=localhost/hololive-collector:prod
     [youtube-po-c]=localhost/hololive-youtube-po-sandbox:prod
     [holo-postgres]=localhost/hololive-postgres:prod
-    [holo-pgbouncer]=localhost/iris-stack-pgbouncer:1.26.1-guc1
     [valkey-cache]=localhost/iris-stack-valkey:9.1.3-zlib1.4-r0
     [admin-dashboard-ingress]=localhost/iris-stack-nginx:1.31.9-zlib1.4-r0
 )
 declare -A CONTEXT_BY_SERVICE=(
     [holo-postgres]=deploy/images/postgres
-    [holo-pgbouncer]=deploy/images/pgbouncer
     [valkey-cache]=deploy/images/valkey
     [admin-dashboard-ingress]=deploy/images/nginx
 )
@@ -181,7 +179,7 @@ if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
         BUILD_SERVICES+=(youtube-po-c)
     fi
 else
-    BUILD_SERVICES=(hololive-api hololive-alarm-worker collector youtube-po-c holo-postgres holo-pgbouncer valkey-cache admin-dashboard-ingress)
+    BUILD_SERVICES=(hololive-api hololive-alarm-worker collector youtube-po-c holo-postgres valkey-cache admin-dashboard-ingress)
 fi
 
 build_service() {

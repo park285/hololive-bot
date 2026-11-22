@@ -82,6 +82,46 @@ func TestPersistVideosTxChunksVideosOutboxAndWatermark(t *testing.T) {
 	require.EqualValues(t, batchMaxSize+5, countRows(t, pool, `SELECT COUNT(*) FROM youtube_notification_outbox`))
 }
 
+func TestUpsertVideosSkipsUnchangedRows(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	ctx := t.Context()
+	video := &domain.YouTubeVideo{VideoID: "video-stable", ChannelID: testChannelID, Title: "stable", ViewCount: 10}
+
+	version := func() string {
+		var xmin string
+
+		require.NoError(t, pool.QueryRow(ctx, `SELECT xmin::text FROM youtube_videos WHERE video_id = $1`, video.VideoID).Scan(&xmin))
+
+		return xmin
+	}
+
+	upsert := func() {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		require.NoError(t, batchUpsertVideos(ctx, tx, []*domain.YouTubeVideo{video}))
+		require.NoError(t, tx.Commit(ctx))
+	}
+
+	upsert()
+
+	inserted := version()
+
+	upsert()
+	require.Equal(t, inserted, version())
+
+	video.ViewCount = 11
+
+	upsert()
+	require.NotEqual(t, inserted, version())
+
+	viewed := version()
+	published := time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC)
+	video.PublishedAt = &published
+
+	upsert()
+	require.NotEqual(t, viewed, version())
+}
+
 func TestPersistVideosTxAllowsDifferentKindsForSameContentID(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()

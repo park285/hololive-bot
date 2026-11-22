@@ -68,9 +68,7 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		testParamQuery: "Shirakami Fubuki",
-	})
+	err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.MemberInfoParams{Query: "Shirakami Fubuki"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -106,10 +104,10 @@ func TestMemberInfoCommandPrefersRequestedSharedChannelMember(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	for _, params := range []map[string]any{
-		{testParamQuery: "Izuki Michiru"},
-		{testParamQuery: "Michiru"},
-		{testParamQuery: "IZUKI  MICHIRU"},
+	for _, params := range []botcommand.MemberInfoParams{
+		{Query: "Izuki Michiru"},
+		{Query: "Michiru"},
+		{Query: "IZUKI  MICHIRU"},
 	} {
 		if err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, params); err != nil {
 			t.Fatal(err)
@@ -145,7 +143,7 @@ func TestMemberInfoDoesNotTurnDatabaseFailureIntoNotFound(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{testParamQuery: "Michiru"})
+	err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.MemberInfoParams{Query: "Michiru"})
 	if err == nil || !strings.Contains(err.Error(), "member DB unavailable") {
 		t.Fatalf("error=%v", err)
 	}

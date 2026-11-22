@@ -152,20 +152,20 @@ func PrepareEnvelope(envelope Envelope) (Envelope, error) {
 	}
 
 	envelope.EvidenceSHA256 = evidenceSHA256
-	if err := envelope.validatePrepared(canonicalPayload, canonicalScope); err != nil {
-		return Envelope{}, fmt.Errorf("validate: %w", err)
+	if err := envelope.validateEnvelopeStructure(); err != nil {
+		return Envelope{}, fmt.Errorf("validate: validate envelope: %w", err)
 	}
 
 	return envelope, nil
 }
 
-func (e *Envelope) validatePrepared(canonicalPayload, canonicalScope []byte) error {
+func (e *Envelope) ValidatePrepared() error {
 	if err := e.validateEnvelopeStructure(); err != nil {
-		return fmt.Errorf("validate envelope: %w", err)
+		return err
 	}
 
-	if err := e.matchCanonicalDigests(canonicalPayload, canonicalScope); err != nil {
-		return fmt.Errorf("validate envelope: verify canonical payload: match canonical digests: %w", err)
+	if SHA256Hex(e.Payload) != e.PayloadSHA256 {
+		return errors.New("validate source observation envelope: payload bytes do not match payload sha256")
 	}
 
 	return nil

@@ -13,6 +13,7 @@ import (
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/schedulecard"
 	"github.com/kapu/hololive-api/internal/service/scheduleposter"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -38,15 +39,14 @@ func (c *SchedulePosterCommand) Description() string {
 	return "멤버 주간 일정 포스터 조회"
 }
 
-func (c *SchedulePosterCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
+func (c *SchedulePosterCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.SchedulePosterParams) error {
 	room := cmdCtx.Room
 
-	memberName, ok := scheduleMemberName(params)
-	if !ok {
+	if params.Member == "" {
 		return c.replyError(ctx, room, messaging.ErrSchedulePosterNeedMemberName)
 	}
 
-	member, err := handlercore.FindActiveMemberProfile(ctx, c.Deps(), room, memberName, "스케쥴")
+	member, err := handlercore.FindActiveMemberProfile(ctx, c.Deps(), room, params.Member, "스케쥴")
 	if memberLookupHandled(err) {
 		return nil
 	}
@@ -62,7 +62,7 @@ func (c *SchedulePosterCommand) Execute(ctx context.Context, cmdCtx *botcommand.
 	now := c.now().In(schedulePosterZone)
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
-	schedule, found, err := c.Deps().SchedulePosters.PublishedRows(ctx, member.ChannelID, day)
+	schedule, template, found, err := c.Deps().SchedulePosters.PublishedMemberRows(ctx, member.ID, member.ChannelID, day)
 	if err != nil {
 		c.Deps().Logger.Error("Failed to load schedule poster", slog.String("channel_id", member.ChannelID), slog.Any("error", err))
 
@@ -78,15 +78,10 @@ func (c *SchedulePosterCommand) Execute(ctx context.Context, cmdCtx *botcommand.
 		return c.reply(ctx, room, text)
 	}
 
-	return c.replySchedule(ctx, room, member, schedule)
+	return c.replySchedule(ctx, room, member, schedule, template)
 }
 
-func (c *SchedulePosterCommand) replySchedule(ctx context.Context, room string, member *domain.Member, schedule scheduleposter.PublishedSchedule) error {
-	template, err := c.Deps().SchedulePosters.MemberCardTemplate(ctx, member.ID)
-	if err != nil {
-		return fmt.Errorf("load member schedule card template: %w", err)
-	}
-
+func (c *SchedulePosterCommand) replySchedule(ctx context.Context, room string, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID) error {
 	pages, err := c.Deps().ScheduleCards.RenderScheduleCards(ctx, member, schedule, template)
 	if errors.Is(err, schedulecard.ErrRenderBudget) {
 		if ctxErr := ctx.Err(); ctxErr != nil {

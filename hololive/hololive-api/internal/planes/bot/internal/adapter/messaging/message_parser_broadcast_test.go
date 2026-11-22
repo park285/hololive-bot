@@ -21,23 +21,23 @@ func TestParseMessage_BroadcastHistory(t *testing.T) {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
-	if got := result.Params["type"]; got != "게임" {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != "게임" {
 		t.Fatalf("type = %v, want 게임", got)
 	}
 
-	if got := result.Params["limit"]; got != 20 {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Limit; got != 20 {
 		t.Fatalf("limit = %v, want 20", got)
 	}
 
-	if got := result.Params["days"]; got != 30 {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Days; got != 30 {
 		t.Fatalf("days = %v, want 30", got)
 	}
 
-	if got := result.Params["topic"]; got != "Forza" {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Topic; got != "Forza" {
 		t.Fatalf("topic = %v, want Forza", got)
 	}
 
-	if got := result.Params["member"]; got != testMemberPekora {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Member; got != testMemberPekora {
 		t.Fatalf("member = %v, want 페코라", got)
 	}
 }
@@ -55,11 +55,11 @@ func TestParseMessage_BroadcastHistoryCategoryAlias(t *testing.T) {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
-	if got := result.Params["type"]; got != "잡담" {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != "잡담" {
 		t.Fatalf("type = %v, want 잡담", got)
 	}
 
-	if got := result.Params["member"]; got != testMemberPekora {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Member; got != testMemberPekora {
 		t.Fatalf("member = %v, want 페코라", got)
 	}
 }
@@ -77,11 +77,11 @@ func TestParseMessage_BroadcastHistoryMembershipTypeAlias(t *testing.T) {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
-	if got := result.Params["type"]; got != "멤버십" {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != "멤버십" {
 		t.Fatalf("type = %v, want 멤버십", got)
 	}
 
-	if got := result.Params["member"]; got != nil {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Member; got != "" {
 		t.Fatalf("member = %v, want nil", got)
 	}
 }
@@ -118,19 +118,19 @@ func TestParseMessage_BroadcastHistoryBareMemberNameAndType(t *testing.T) {
 				t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 			}
 
-			if got := result.Params["member"]; got != tt.wantMember {
+			if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Member; got != tt.wantMember {
 				t.Fatalf("member = %v, want %s", got, tt.wantMember)
 			}
 
 			if tt.wantType == "" {
-				if got := result.Params["type"]; got != nil {
+				if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != "" {
 					t.Fatalf("type = %v, want nil", got)
 				}
 
 				return
 			}
 
-			if got := result.Params["type"]; got != tt.wantType {
+			if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != tt.wantType {
 				t.Fatalf("type = %v, want %s", got, tt.wantType)
 			}
 		})
@@ -150,19 +150,19 @@ func TestParseMessage_BroadcastHistoryHorseRacingAlias(t *testing.T) {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
-	if got := result.Params["type"]; got != "경마" {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != "경마" {
 		t.Fatalf("type = %v, want 경마", got)
 	}
 
-	if got := result.Params["days"]; got != 20 {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Days; got != 20 {
 		t.Fatalf("days = %v, want 20", got)
 	}
 
-	if got := result.Params["limit"]; got != nil {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Limit; got != 0 {
 		t.Fatalf("limit = %v, want nil", got)
 	}
 
-	if got := result.Params["member"]; got != nil {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Member; got != "" {
 		t.Fatalf("member = %v, want nil", got)
 	}
 }
@@ -180,11 +180,11 @@ func TestParseMessage_BroadcastHistoryExplicitLimitFilter(t *testing.T) {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
-	if got := result.Params["type"]; got != "경마" {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != "경마" {
 		t.Fatalf("type = %v, want 경마", got)
 	}
 
-	if got := result.Params["limit"]; got != 20 {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Limit; got != 20 {
 		t.Fatalf("limit = %v, want 20", got)
 	}
 }
@@ -202,15 +202,15 @@ func TestParseMessage_BroadcastHistoryLegacyLimitBeforeDays(t *testing.T) {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
-	if got := result.Params["type"]; got != "게임" {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != "게임" {
 		t.Fatalf("type = %v, want 게임", got)
 	}
 
-	if got := result.Params["limit"]; got != 20 {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Limit; got != 20 {
 		t.Fatalf("limit = %v, want 20", got)
 	}
 
-	if got := result.Params["days"]; got != 30 {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Days; got != 30 {
 		t.Fatalf("days = %v, want 30", got)
 	}
 }
@@ -245,11 +245,11 @@ func TestParseMessage_BroadcastHistoryAliasVariants(t *testing.T) {
 				t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 			}
 
-			if got := result.Params["type"]; got != tt.want {
+			if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != tt.want {
 				t.Fatalf("type = %v, want %s", got, tt.want)
 			}
 
-			if got := result.Params["member"]; got != nil {
+			if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Member; got != "" {
 				t.Fatalf("member = %v, want nil", got)
 			}
 		})
@@ -269,19 +269,19 @@ func TestParseMessage_BroadcastHistorySeparatedFilters(t *testing.T) {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
-	if got := result.Params["type"]; got != "게임" {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != "게임" {
 		t.Fatalf("type = %v, want 게임", got)
 	}
 
-	if got := result.Params["member"]; got != testMemberSakuraMiko {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Member; got != testMemberSakuraMiko {
 		t.Fatalf("member = %v, want 사쿠라 미코", got)
 	}
 
-	if got := result.Params["days"]; got != 14 {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Days; got != 14 {
 		t.Fatalf("days = %v, want 14", got)
 	}
 
-	if got := result.Params["limit"]; got != 10 {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Limit; got != 10 {
 		t.Fatalf("limit = %v, want 10", got)
 	}
 }
@@ -300,12 +300,8 @@ func TestParseMessage_BroadcastHistoryAllIsCappedToOneYear(t *testing.T) {
 				t.Fatal("expected parsed command, got nil")
 			}
 
-			if got := result.Params["days"]; got != 365 {
+			if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Days; got != 365 {
 				t.Fatalf("days = %v, want 365", got)
-			}
-
-			if got := result.Params["all"]; got != nil {
-				t.Fatalf("all = %v, want nil", got)
 			}
 		})
 	}
@@ -324,11 +320,11 @@ func TestParseMessage_BroadcastHistoryAttachedMemberFilterConsumesNameUntilType(
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
-	if got := result.Params["member"]; got != testMemberSakuraMiko {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Member; got != testMemberSakuraMiko {
 		t.Fatalf("member = %v, want 사쿠라 미코", got)
 	}
 
-	if got := result.Params["type"]; got != "게임" {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != "게임" {
 		t.Fatalf("type = %v, want 게임", got)
 	}
 }
@@ -346,11 +342,11 @@ func TestParseMessage_BroadcastHistoryExplicitMemberFilterWinsOverTrailingBareTo
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
 
-	if got := result.Params["member"]; got != testMemberPekora {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Member; got != testMemberPekora {
 		t.Fatalf("member = %v, want 페코라", got)
 	}
 
-	if got := result.Params["type"]; got != "게임" {
+	if got := typedParams[botcommand.BroadcastHistoryParams](t, result).Type; got != "게임" {
 		t.Fatalf("type = %v, want 게임", got)
 	}
 }
@@ -368,7 +364,7 @@ func TestParseMessage_BroadcastThumbnail(t *testing.T) {
 		t.Fatalf("expected CommandBroadcastThumbnail, got %s", result.Type)
 	}
 
-	if got := result.Params["video_id"]; got != "AqxEw3kXcgU" {
+	if got := typedParams[botcommand.BroadcastThumbnailParams](t, result).VideoID; got != "AqxEw3kXcgU" {
 		t.Fatalf("video_id = %v, want AqxEw3kXcgU", got)
 	}
 }
@@ -386,7 +382,7 @@ func TestParseMessage_StandaloneBroadcastThumbnail(t *testing.T) {
 		t.Fatalf("expected CommandBroadcastThumbnail, got %s", result.Type)
 	}
 
-	if got := result.Params["video_id"]; got != "AqxEw3kXcgU" {
+	if got := typedParams[botcommand.BroadcastThumbnailParams](t, result).VideoID; got != "AqxEw3kXcgU" {
 		t.Fatalf("video_id = %v, want AqxEw3kXcgU", got)
 	}
 }
@@ -420,7 +416,7 @@ func TestParseMessage_StandaloneBroadcastThumbnailYouTubeURL(t *testing.T) {
 				t.Fatalf("expected CommandBroadcastThumbnail, got %s", result.Type)
 			}
 
-			if got := result.Params["video_id"]; got != tt.want {
+			if got := typedParams[botcommand.BroadcastThumbnailParams](t, result).VideoID; got != tt.want {
 				t.Fatalf("video_id = %v, want %s", got, tt.want)
 			}
 		})

@@ -35,7 +35,7 @@ elif (
   export port="30005"
   export release_id="profile-pair-fixture"
   export REPO_ROOT="${ROOT_DIR}"
-  export AP_POSTGRES_PORT=6433
+  export AP_POSTGRES_PORT=5433
   eval "$(awk '/^AP_POSTGRES_HOST=""/,/^\[\[ -n "\$AP_POSTGRES_HOST" \]\]/' "${DEPLOY}")"
   eval "$(awk '/^AP_POSTGRES_POOL_MAX_CONNS=""/,/^\[\[ "\$AP_POSTGRES_POOL_MAX_CONNS"/' "${DEPLOY}")"
   export AP_SSH_HOST="100.100.1.6"
@@ -47,8 +47,8 @@ elif (
   elif grep -Eq '^SETTINGS_DIR=' "${generated_env}"; then
     record_fail "generated host env contents still include SETTINGS_DIR"
   elif ! grep -Fxq 'POSTGRES_HOST=100.100.1.8' "${generated_env}" ||
-       ! grep -Fxq 'POSTGRES_PORT=6433' "${generated_env}"; then
-    record_fail "generated host env must use the central pooler endpoint"
+       ! grep -Fxq 'POSTGRES_PORT=5433' "${generated_env}"; then
+    record_fail "generated host env must use the central PostgreSQL TLS endpoint"
   else
     pass "generated host env contents have 0 CACHE lines"
     pass "generated host env contents have 0 SETTINGS_DIR lines"
@@ -60,13 +60,13 @@ fi
 if direct_error="$(
   hostname() { echo kapu; }
   export -f hostname
-  AP_POSTGRES_PORT=5433 "$DEPLOY" osaka --dry-run 2>&1
+  AP_POSTGRES_PORT=6433 "$DEPLOY" osaka --dry-run 2>&1
 )"; then
-  record_fail "ap-host-native deploy accepted the direct database port"
-elif [[ "$direct_error" == 'AP_POSTGRES_PORT must be the collector pooler port (6433)' ]]; then
-  pass "ap-host-native deploy rejects the direct database port before any build or transport"
+  record_fail "ap-host-native deploy accepted the retired pooler port"
+elif [[ "$direct_error" == 'AP_POSTGRES_PORT must be the central PostgreSQL TLS port (5433)' ]]; then
+  pass "ap-host-native deploy rejects the retired pooler port before any build or transport"
 else
-  record_fail "ap-host-native deploy did not reject the direct database port at entry"
+  record_fail "ap-host-native deploy did not reject the retired pooler port at entry"
 fi
 
 (
@@ -318,7 +318,7 @@ run_native_units() (
   mkdir -p "${old_target}"
   release_dir="${state}/new-release"
   mkdir -p "${old_target}/rollback-contract" "${release_dir}"
-  printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n' > "${release_dir}/${native_host_env}"
+  printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=5433\n' > "${release_dir}/${native_host_env}"
   cp "${release_dir}/${native_host_env}" "${old_target}/rollback-contract/${native_host_env}"
   cp "${release_dir}/${native_host_env}" "${host_env}"
   native_cutover_run() {
@@ -670,7 +670,7 @@ chmod +x "${rollback_fixture}/bin/hololive-collector" \
   "${rollback_fixture}/bin/hololive-collector-wrapper" \
   "${rollback_fixture}/bin/healthcheck"
 printf 'APP_ENV=production\nSTACK_WORKER_PROFILE_FILE=%s/worker-profile.json\n' "$rollback_fixture" > "${rollback_fixture}/rollback-contract/${native_host_env}"
-printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=6433\n' >> "${rollback_fixture}/rollback-contract/${native_host_env}"
+printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=5433\n' >> "${rollback_fixture}/rollback-contract/${native_host_env}"
 printf '{}\n' > "$rollback_fixture/worker-profile.json"
 (cd "$rollback_fixture" && sha256sum bin/hololive-collector worker-profile.json > SHA256SUMS)
 printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/${native_unit_template}"
@@ -692,7 +692,7 @@ printf 'absent\n' > "${rollback_fixture}/rollback-contract/po-unit-presence"
 native_current_env="${tmp}/native-current.env"
 for native_port in 5433 6433 invalid ''; do
   printf 'POSTGRES_HOST=100.100.1.8\nPOSTGRES_PORT=%s\n' "${native_port}" > "${native_current_env}"
-  if [[ "${native_port}" == 6433 ]]; then
+  if [[ "${native_port}" == 5433 ]]; then
     PATH="${tmp}/rollback-bin:${PATH}" native_rollback_endpoint_validate "${rollback_fixture}" "${native_current_env}" ||
       record_fail "native same-endpoint rollback was rejected"
   elif PATH="${tmp}/rollback-bin:${PATH}" native_rollback_endpoint_validate "${rollback_fixture}" "${native_current_env}" >"${tmp}/endpoint.err" 2>&1; then

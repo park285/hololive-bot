@@ -101,7 +101,7 @@ func TestHelpCommand_Execute_GoldenPathSendsImageAlbum(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	if err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err != nil {
+	if err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.NoParams{}); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
@@ -144,7 +144,7 @@ func TestHelpCommand_Execute_ImageProviderFailureFallsBackToText(t *testing.T) {
 
 	before := imageTextFallbackCount("help", imageTextFallbackReasonRenderFailed)
 
-	if err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err != nil {
+	if err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.NoParams{}); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
@@ -181,7 +181,7 @@ func TestHelpCommand_Execute_AlbumFailureFallsBackToText(t *testing.T) {
 
 	before := imageTextFallbackCount("help", imageTextFallbackReasonSendFailed)
 
-	if err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err != nil {
+	if err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.NoParams{}); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
@@ -213,7 +213,7 @@ func TestHelpCommand_Execute_AlbumOutcomeUnknownSuppressesTextFallback(t *testin
 				Logger: slog.New(slog.DiscardHandler),
 			}
 			before := imageTextFallbackCount("help", imageTextFallbackReasonOutcomeUnknown)
-			err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
+			err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.NoParams{})
 
 			if !errors.Is(err, imageErr) {
 				t.Fatalf("Execute() error = %v, want preserved outcome uncertainty", err)
@@ -245,7 +245,7 @@ func TestHelpCommand_Execute_JoinsImageAndTextFailures(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil)
+	err := NewHelpCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.NoParams{})
 	if !errors.Is(err, imageErr) || !errors.Is(err, textErr) {
 		t.Fatalf("Execute error = %v, want joined failures", err)
 	}
@@ -297,7 +297,7 @@ func TestHelpCommand_Execute_NilCommandContext(t *testing.T) {
 		Formatter:   formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 	}
-	if err := NewHelpCommand(deps).Execute(t.Context(), nil, nil); err == nil {
+	if err := NewHelpCommand(deps).Execute(t.Context(), nil, botcommand.NoParams{}); err == nil {
 		t.Fatal("expected error for nil command context")
 	}
 }

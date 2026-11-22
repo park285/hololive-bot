@@ -109,12 +109,13 @@ replacement, and failed cutover restoration. No live operation is implied by the
 `admin-dashboard-ingress` uses the local-only `localhost/iris-stack-nginx:1.31.9-zlib1.4-r0`
 image (`Pull=never`). Its only build context is `deploy/images/nginx`; the
 immutable official Nginx base retains its entrypoint, configuration and users,
-with Alpine 3.24 `zlib=1.4-r0` (CVE-2026-4738) and `musl=1.2.6-r3`/`musl-utils=1.2.6-r3`
-(CVE-2026-107891) applied. `ca-certificates-bundle=20261020-r0` keeps the CA bundle free of the
+with Alpine 3.24 `zlib>=1.4-r0` (CVE-2026-4738) and `musl>=1.2.6-r3`/`musl-utils>=1.2.6-r3`
+(CVE-2026-107891) applied. `ca-certificates-bundle>=20261020-r0` keeps the CA bundle free of the
 roots distrusted on 2026-10-22 (emSign ECC Root CA - G3, AAA Certificate Services), so the
 built image needs no separate CA derivation. The PostgreSQL and Valkey runtimes apply the same
-zlib, musl and CA bundle pins; PostgreSQL adds `brotli-libs=1.2.1-r0`, `libcurl=8.23.0-r0` and
-`nghttp2-libs=1.70.0-r0`.
+zlib, musl and CA bundle minimums; PostgreSQL adds `brotli-libs>=1.2.1-r0`, `libcurl>=8.23.0-r0` and
+`nghttp2-libs>=1.70.0-r0`. Base images stay digest-pinned; the minimums let each rebuild take
+later Alpine security revisions instead of failing when a pinned revision leaves the repository.
 
 `./build-all.sh --no-bump --build-only` builds it with `podman build` together with the other central
 images. For isolated local builds without runtime env inputs:

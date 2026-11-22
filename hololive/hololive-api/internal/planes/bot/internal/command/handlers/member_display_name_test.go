@@ -86,7 +86,7 @@ func displayNameCommandContext() *botcommand.CommandContext {
 func TestLiveMemberQueryUsesCanonicalDisplayName(t *testing.T) {
 	recorder := &liveQueryRequestRecorder{}
 	runDisplayNameCommand(t, &handlercore.Dependencies{LiveQuery: recorder}, func(deps *handlercore.Dependencies) error {
-		return NewLiveCommand(deps).Execute(t.Context(), displayNameCommandContext(), map[string]any{paramMember: displayNameQuery})
+		return NewLiveCommand(deps).Execute(t.Context(), displayNameCommandContext(), botcommand.LiveParams{Member: displayNameQuery})
 	})
 
 	if recorder.request.MemberName != canonicalDisplayName {
@@ -96,7 +96,7 @@ func TestLiveMemberQueryUsesCanonicalDisplayName(t *testing.T) {
 
 func TestMemberNoUpcomingUsesCanonicalDisplayName(t *testing.T) {
 	assertCanonicalDisplayName(t, runDisplayNameCommand(t, &handlercore.Dependencies{Holodex: &upcomingStreamProviderStub{}}, func(deps *handlercore.Dependencies) error {
-		return NewUpcomingCommand(deps).Execute(t.Context(), displayNameCommandContext(), map[string]any{paramMember: displayNameQuery})
+		return NewUpcomingCommand(deps).Execute(t.Context(), displayNameCommandContext(), botcommand.UpcomingParams{Member: displayNameQuery})
 	}))
 }
 
@@ -107,7 +107,7 @@ func TestScheduleTitleUsesCanonicalDisplayName(t *testing.T) {
 	}}}
 
 	assertCanonicalDisplayName(t, runDisplayNameCommand(t, &handlercore.Dependencies{Holodex: holodex}, func(deps *handlercore.Dependencies) error {
-		return NewScheduleCommand(deps).Execute(t.Context(), displayNameCommandContext(), map[string]any{paramMember: displayNameQuery})
+		return NewScheduleCommand(deps).Execute(t.Context(), displayNameCommandContext(), botcommand.ScheduleParams{Member: displayNameQuery})
 	}))
 }
 
@@ -115,7 +115,7 @@ func TestAlarmReplyUsesCanonicalDisplayName(t *testing.T) {
 	for _, action := range []string{testActionAdd, "remove"} {
 		t.Run(action, func(t *testing.T) {
 			assertCanonicalDisplayName(t, runDisplayNameCommand(t, &handlercore.Dependencies{Alarm: &alarmListViewerStub{}}, func(deps *handlercore.Dependencies) error {
-				return alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), displayNameCommandContext(), map[string]any{testParamAction: action, paramMember: displayNameQuery})
+				return alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), displayNameCommandContext(), botcommand.AlarmParams{Action: action, Member: displayNameQuery})
 			}))
 		})
 	}
@@ -123,7 +123,7 @@ func TestAlarmReplyUsesCanonicalDisplayName(t *testing.T) {
 
 func TestBroadcastHistoryFilterUsesCanonicalDisplayName(t *testing.T) {
 	message := runDisplayNameCommand(t, &handlercore.Dependencies{BroadcastHistory: &stubBroadcastHistoryRepository{}}, func(deps *handlercore.Dependencies) error {
-		return NewBroadcastHistoryCommand(deps).Execute(t.Context(), displayNameCommandContext(), map[string]any{paramMember: displayNameQuery})
+		return NewBroadcastHistoryCommand(deps).Execute(t.Context(), displayNameCommandContext(), botcommand.BroadcastHistoryParams{Member: displayNameQuery})
 	})
 
 	if !strings.Contains(message, "멤버: "+canonicalDisplayName) {

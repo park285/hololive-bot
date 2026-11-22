@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -83,24 +84,33 @@ func (v *commandInitView) toCommandDependencies() *handlercore.Dependencies {
 	}
 }
 
-type checkedCommand interface {
+type checkedCommand struct {
 	handlercore.Command
+
+	CheckDependencies func() error
+}
+
+func checked[P botcommand.Params](handler interface {
+	handlercore.Handler[P]
 	CheckDependencies() error
+},
+) checkedCommand {
+	return checkedCommand{Command: handlercore.Bind(handler), CheckDependencies: handler.CheckDependencies}
 }
 
 func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []checkedCommand {
 	return []checkedCommand{
-		handlers.NewHelpCommand(deps),
-		handlers.NewLiveCommand(deps),
-		handlers.NewUpcomingCommand(deps),
-		handlers.NewScheduleCommand(deps),
-		handlers.NewSchedulePosterCommand(deps),
-		handlers.NewEventGradeCommand(deps, v.eventGrades),
-		alarmcmd.NewAlarmCommand(deps),
-		info.NewMemberInfoCommand(deps),
-		handlers.NewBroadcastHistoryCommand(deps),
-		handlers.NewBroadcastThumbnailCommand(deps),
-		handlers.NewBroadcastTimeCommand(deps),
-		handlers.NewCalendarCommand(deps, v.memberRepository, v.calendarImageRenderer),
+		checked(handlers.NewHelpCommand(deps)),
+		checked(handlers.NewLiveCommand(deps)),
+		checked(handlers.NewUpcomingCommand(deps)),
+		checked(handlers.NewScheduleCommand(deps)),
+		checked(handlers.NewSchedulePosterCommand(deps)),
+		checked(handlers.NewEventGradeCommand(deps, v.eventGrades)),
+		checked(alarmcmd.NewAlarmCommand(deps)),
+		checked(info.NewMemberInfoCommand(deps)),
+		checked(handlers.NewBroadcastHistoryCommand(deps)),
+		checked(handlers.NewBroadcastThumbnailCommand(deps)),
+		checked(handlers.NewBroadcastTimeCommand(deps)),
+		checked(handlers.NewCalendarCommand(deps, v.memberRepository, v.calendarImageRenderer)),
 	}
 }

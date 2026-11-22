@@ -766,7 +766,7 @@ native_window_commit_policy() {
   native_window_probe_units "${window_units[@]}"
   pid="$(native_window_prop "$unit" MainPID)"; [[ "$pid" =~ ^[1-9][0-9]*$ ]]
   for n in "${window_units[@]}"; do native_window_candidate_runtime "$n"; done
-  native_window_process_endpoint "$pid" 6433
+  native_window_process_endpoint "$pid" 5433
   native_window_lease_live || { native_window_uncertain; return 1; }
   native_window_barriers observing "$@"
   native_window_issuer_ready || { native_window_uncertain; return 1; }
@@ -782,10 +782,10 @@ native_apply_before_stop() {
      "$(sudo -n cat "$native_recovery_dir/claim")" == "$native_claim_nonce" &&
      "$(sudo -n cat "$native_recovery_dir/owner-pid")" == "$BASHPID" && "$(sudo -n cat "$native_recovery_dir/release")" == "$release_dir" ]]
   sudo -n test ! -e "$native_recovery_dir/outcome"
-  [[ "$(native_root_endpoint "$host_env")" == '100.100.1.8|6433' ]]
+  [[ "$(native_root_endpoint "$host_env")" == '100.100.1.8|5433' ]]
   local release_dir="$old_target"
   for n in "${window_units[@]}"; do native_window_candidate_runtime "$n"; done
-  native_window_process_endpoint "$(native_window_prop "$unit" MainPID)" 6433
+  native_window_process_endpoint "$(native_window_prop "$unit" MainPID)" 5433
 }
 
 native_apply_observation_record() { printf '%s\n' "$native_release_window" "$release_id" "$EXPECTED_REVISION" "$1"; }

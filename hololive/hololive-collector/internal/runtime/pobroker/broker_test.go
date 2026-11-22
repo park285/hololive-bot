@@ -488,3 +488,39 @@ func TestWorkerExitDuringRequestRecordsWorkerFailed(t *testing.T) {
 		}
 	}
 }
+
+func TestMalformedMintedTokenFailsAndRetires(t *testing.T) {
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\n" +
+		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"prepared\",\"prepared\":true}'\n" +
+		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"snapshot\",\"snapshot\":\"snapshot-value\"}'\n" +
+		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"ready\",\"ready\":true}'\n" +
+		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"minted\",\"video_id\":\"video\",\"po_token\":\"token;injected\"}'\nsleep 30\n"
+
+	b := New("revision", fakeNode(t, "malformed-token-node", script), "unused")
+	initializeTestWorker(t, b)
+
+	requests := []struct {
+		path string
+		body any
+	}{
+		{"/v1/session", sessionRequest{envelope{protocolVersion, b.Generation()}, "UA"}},
+		{"/v1/challenge", challengeRequest{envelope{protocolVersion, b.Generation()}, "program", "name", "code"}},
+		{"/v1/activate", activateRequest{envelope{protocolVersion, b.Generation()}, "token", 60000}},
+	}
+
+	for _, request := range requests {
+		body, err := json.Marshal(request.body)
+		require.NoError(t, err)
+
+		status, result := call(t, b, http.MethodPost, request.path, string(body))
+		require.Equal(t, http.StatusOK, status, "%s: %v", request.path, result)
+	}
+
+	mint, err := json.Marshal(mintRequest{envelope{protocolVersion, b.Generation()}, "video"})
+	require.NoError(t, err)
+
+	status, result := call(t, b, http.MethodPost, "/v1/mint", string(mint))
+	require.Equal(t, http.StatusServiceUnavailable, status)
+	require.Equal(t, "worker_failed", errorCode(result))
+	require.Equal(t, ExitWorkerFailed, b.ExitReason())
+}

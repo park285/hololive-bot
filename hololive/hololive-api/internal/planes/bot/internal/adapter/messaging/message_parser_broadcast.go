@@ -43,12 +43,13 @@ func (ma *MessageAdapter) tryBroadcastTimeCommand(command string, args []string,
 		return nil, false
 	}
 
-	params := make(map[string]any)
+	var params botcommand.BroadcastTimeParams
+
 	memberTokens := make([]string, 0, len(args))
 
 	for _, arg := range args {
 		if days, ok := parseBroadcastHistoryDaysToken(arg); ok {
-			params[paramDays] = days
+			params.Days = days
 
 			continue
 		}
@@ -56,9 +57,7 @@ func (ma *MessageAdapter) tryBroadcastTimeCommand(command string, args []string,
 		memberTokens = append(memberTokens, arg)
 	}
 
-	if member := strings.TrimSpace(strings.Join(memberTokens, " ")); member != "" {
-		params[paramMember] = member
-	}
+	params.Member = strings.TrimSpace(strings.Join(memberTokens, " "))
 
 	return &ParsedCommand{Type: botcommand.CommandBroadcastTime, Params: params, RawMessage: raw}, true
 }
@@ -70,10 +69,10 @@ func (ma *MessageAdapter) isBroadcastThumbnailCommand(cmd string) bool {
 }
 
 func broadcastThumbnailCommand(args []string, raw string) *ParsedCommand {
-	params := make(map[string]any)
+	var params botcommand.BroadcastThumbnailParams
 
 	if len(args) > 0 {
-		params["video_id"] = parseBroadcastThumbnailVideoID(args[0])
+		params.VideoID = parseBroadcastThumbnailVideoID(args[0])
 	}
 
 	return &ParsedCommand{Type: botcommand.CommandBroadcastThumbnail, Params: params, RawMessage: raw}
@@ -165,24 +164,25 @@ func looksLikeYouTubeVideoID(videoID string) bool {
 	return true
 }
 
-func parseBroadcastHistoryArgs(args []string) map[string]any {
-	params := make(map[string]any)
+func parseBroadcastHistoryArgs(args []string) botcommand.BroadcastHistoryParams {
+	var params botcommand.BroadcastHistoryParams
+
 	memberTokens := make([]string, 0, len(args))
 
 	for i := 0; i < len(args); i++ {
-		consumed := applyBroadcastHistoryArg(params, &memberTokens, args, i)
+		consumed := applyBroadcastHistoryArg(&params, &memberTokens, args, i)
 
 		i += consumed
 	}
 
-	if member := strings.TrimSpace(strings.Join(memberTokens, " ")); member != "" && params[paramMember] == nil {
-		params[paramMember] = member
+	if params.Member == "" {
+		params.Member = strings.TrimSpace(strings.Join(memberTokens, " "))
 	}
 
 	return params
 }
 
-func applyBroadcastHistoryArg(params map[string]any, memberTokens *[]string, args []string, index int) int {
+func applyBroadcastHistoryArg(params *botcommand.BroadcastHistoryParams, memberTokens *[]string, args []string, index int) int {
 	token := strings.TrimSpace(args[index])
 	if token == "" {
 		return 0
@@ -206,20 +206,20 @@ func applyBroadcastHistoryArg(params map[string]any, memberTokens *[]string, arg
 	return 0
 }
 
-func applyBroadcastHistorySimpleToken(params map[string]any, _, normalized string) bool {
+func applyBroadcastHistorySimpleToken(params *botcommand.BroadcastHistoryParams, _, normalized string) bool {
 	if normalized == "최근" {
 		return true
 	}
 
 	if isAllBroadcastHistoryToken(normalized) {
-		params[paramDays] = maxParsedBroadcastHistoryDays
+		params.Days = maxParsedBroadcastHistoryDays
 		return true
 	}
 
 	return false
 }
 
-func applyBroadcastHistoryFilterArg(params map[string]any, token string, rest []string) (int, bool) {
+func applyBroadcastHistoryFilterArg(params *botcommand.BroadcastHistoryParams, token string, rest []string) (int, bool) {
 	key, value, ok := splitBroadcastHistoryFilter(token)
 	if !ok {
 		return 0, false
@@ -244,24 +244,24 @@ func applyBroadcastHistoryFilterArg(params map[string]any, token string, rest []
 	return consumed, true
 }
 
-func applyBroadcastHistoryValueToken(params map[string]any, token, normalized string, rest []string) bool {
+func applyBroadcastHistoryValueToken(params *botcommand.BroadcastHistoryParams, token, normalized string, rest []string) bool {
 	if days, ok := parseBroadcastHistoryDaysToken(token); ok {
-		params[paramDays] = days
+		params.Days = days
 		return true
 	}
 
 	if value, ok := parsePositiveInt(token); ok {
-		if _, hasDays := params[paramDays]; hasDays || containsBroadcastHistoryDaysToken(rest) {
-			params[paramLimit] = value
+		if params.Days != 0 || containsBroadcastHistoryDaysToken(rest) {
+			params.Limit = value
 		} else {
-			params[paramDays] = value
+			params.Days = value
 		}
 
 		return true
 	}
 
 	if isBroadcastHistoryTypeToken(normalized) {
-		params[paramType] = token
+		params.Type = token
 		return true
 	}
 
@@ -365,7 +365,7 @@ func isBroadcastHistoryFilterKey(key string) bool {
 	return ok
 }
 
-func applyBroadcastHistoryFilter(params map[string]any, key, value string) {
+func applyBroadcastHistoryFilter(params *botcommand.BroadcastHistoryParams, key, value string) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return
@@ -377,21 +377,15 @@ func applyBroadcastHistoryFilter(params map[string]any, key, value string) {
 	}
 }
 
-func broadcastHistoryStringFilter(param string) func(map[string]any, string) {
-	return func(params map[string]any, value string) {
-		params[param] = value
-	}
-}
-
-func applyBroadcastHistoryDaysFilter(params map[string]any, value string) {
+func applyBroadcastHistoryDaysFilter(params *botcommand.BroadcastHistoryParams, value string) {
 	if days, ok := parseBroadcastHistoryDays(value); ok {
-		params[paramDays] = days
+		params.Days = days
 	}
 }
 
-func applyBroadcastHistoryLimitFilter(params map[string]any, value string) {
+func applyBroadcastHistoryLimitFilter(params *botcommand.BroadcastHistoryParams, value string) {
 	if limit, ok := parsePositiveInt(value); ok {
-		params[paramLimit] = limit
+		params.Limit = limit
 	}
 }
 
@@ -447,10 +441,10 @@ var broadcastHistoryFilterKinds = map[string]string{
 	"member": paramMember, "멤버": paramMember,
 }
 
-var broadcastHistoryFilterAppliers = map[string]func(map[string]any, string){
-	paramType:   broadcastHistoryStringFilter(paramType),
-	paramTopic:  broadcastHistoryStringFilter(paramTopic),
+var broadcastHistoryFilterAppliers = map[string]func(*botcommand.BroadcastHistoryParams, string){
+	paramType:   func(params *botcommand.BroadcastHistoryParams, value string) { params.Type = value },
+	paramTopic:  func(params *botcommand.BroadcastHistoryParams, value string) { params.Topic = value },
 	paramDays:   applyBroadcastHistoryDaysFilter,
 	paramLimit:  applyBroadcastHistoryLimitFilter,
-	paramMember: broadcastHistoryStringFilter(paramMember),
+	paramMember: func(params *botcommand.BroadcastHistoryParams, value string) { params.Member = value },
 }

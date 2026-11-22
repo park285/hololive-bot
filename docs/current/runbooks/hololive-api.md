@@ -92,9 +92,9 @@ RichText 활성화는 코드·DB 배포와 별도입니다. 기본 템플릿은 
 
 ## 동기 집계 정합 확인
 
-`scripts/maintenance/check-runtime-projections.sh`는 `youtube_collection_runtime_bundles`와
-`youtube_live_runtime_state`를 원본에서 재계산한 값과 비교합니다. dbtest와 같은 SQL 자산을 사용하며,
-bundle의 observation-to-job 매핑도 운영 view와 독립적으로 비교합니다.
+`scripts/maintenance/check-runtime-projections.sh`는 `youtube_live_runtime_state`를 원본에서 재계산한 값과
+비교합니다. dbtest와 같은 SQL 자산을 사용합니다. 수집 대상 bundle 지표는 별도 동기 테이블 없이
+`youtube_collection_targets`에서 조회 시점에 집계하므로 정합 확인 대상이 아닙니다.
 
 승인된 대상 DB의 libpq 접속 설정(`PGSERVICE` 또는 명시적 host·database·user와 기존 인증)을
 준비한 환경에서 아래 명령을 실행합니다. 대상 선택·인증·원격 실행은 `stack-platform-ops`를 따르며,

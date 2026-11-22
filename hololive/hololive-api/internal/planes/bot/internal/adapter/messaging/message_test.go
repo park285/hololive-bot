@@ -21,12 +21,7 @@ func TestParseMessage_CompactAlarmAdd(t *testing.T) {
 		t.Fatalf("expected CommandAlarmAdd, got %s", result.Type)
 	}
 
-	member, ok := result.Params["member"].(string)
-	if !ok {
-		t.Fatal("expected member param to exist")
-	}
-
-	if member != "미즈미야" {
+	if member := typedParams[botcommand.AlarmParams](t, result).Member; member != "미즈미야" {
 		t.Fatalf("expected member to be '미즈미야', got %s", member)
 	}
 }
@@ -58,9 +53,8 @@ func TestParseMessage_InvalidAlarmCommand(t *testing.T) {
 		t.Fatalf("expected CommandAlarmInvalid, got %s", result.Type)
 	}
 
-	action, ok := result.Params["action"].(string)
-	if !ok || action != "invalid" {
-		t.Fatalf("expected action invalid, got %v", result.Params["action"])
+	if params := typedParams[botcommand.AlarmParams](t, result); params != (botcommand.AlarmParams{}) {
+		t.Fatalf("expected no alarm arguments, got %#v", params)
 	}
 }
 
@@ -105,13 +99,8 @@ func TestParseMessage_UpcomingAll(t *testing.T) {
 		t.Fatalf("expected CommandUpcoming, got %s", result.Type)
 	}
 
-	all, ok := result.Params["all"].(bool)
-	if !ok || !all {
-		t.Fatalf("expected all=true, got %v", result.Params["all"])
-	}
-
-	if _, exists := result.Params["limit"]; exists {
-		t.Fatal("expected limit to be removed when all is set")
+	if params := typedParams[botcommand.UpcomingParams](t, result); !params.All || params.Limit != 0 {
+		t.Fatalf("expected all=true without limit, got %#v", params)
 	}
 }
 
@@ -128,9 +117,8 @@ func TestParseMessage_UpcomingLimit(t *testing.T) {
 		t.Fatalf("expected CommandUpcoming, got %s", result.Type)
 	}
 
-	limit, ok := result.Params["limit"].(int)
-	if !ok || limit != 30 {
-		t.Fatalf("expected limit=30, got %v", result.Params["limit"])
+	if limit := typedParams[botcommand.UpcomingParams](t, result).Limit; limit != 30 {
+		t.Fatalf("expected limit=30, got %v", limit)
 	}
 }
 
@@ -147,14 +135,8 @@ func TestParseMessage_UpcomingLimitAndMember(t *testing.T) {
 		t.Fatalf("expected CommandUpcoming, got %s", result.Type)
 	}
 
-	limit, ok := result.Params["limit"].(int)
-	if !ok || limit != 30 {
-		t.Fatalf("expected limit=30, got %v", result.Params["limit"])
-	}
-
-	member, ok := result.Params["member"].(string)
-	if !ok || member != testMemberPekora {
-		t.Fatalf("expected member=페코라, got %v", result.Params["member"])
+	if params := typedParams[botcommand.UpcomingParams](t, result); params.Limit != 30 || params.Member != testMemberPekora {
+		t.Fatalf("expected limit=30 member=페코라, got %#v", params)
 	}
 }
 

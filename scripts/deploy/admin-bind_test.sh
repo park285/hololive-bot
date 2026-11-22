@@ -56,11 +56,11 @@ cp "$fixture/valid.json" "$fixture/firewall.json"
 admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft"
 for filter in '.nftables[0].set.elem = []' '.nftables[0].set.elem += ["0.0.0.0/0"]' 'del(.nftables[1])' 'del(.nftables[2])' \
     'del(.nftables[-1])' '.nftables[-1].set.elem += ["100.100.1.5"]' \
-    'del(.nftables[6])' '.nftables[6].rule.expr[1].match.right = 5433' \
-    'del(.nftables[6].rule.expr[4])' 'del(.nftables[7])' \
-    '.nftables[10].chain.prio = -10' 'del(.nftables[12])' \
-    '.nftables[12].rule.expr[-1].mangle.value = 0' \
-    'del(.nftables[12].rule.expr[4])'; do
+    'del(.nftables[4])' '.nftables[4].rule.expr[1].match.right = 6433' \
+    'del(.nftables[4].rule.expr[4])' 'del(.nftables[5])' \
+    '.nftables[8].chain.prio = -10' 'del(.nftables[9])' \
+    '.nftables[9].rule.expr[-1].mangle.value = 0' \
+    'del(.nftables[9].rule.expr[4])'; do
     jq "$filter" "$fixture/valid.json" > "$fixture/firewall.json"
     if admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft" > "$fixture/rejected.log" 2>&1; then
         echo 'incomplete firewall accepted' >&2
@@ -84,7 +84,7 @@ echo 'admin firewall preflight fixtures passed'
 test_root="$fixture/prestart"
 mkdir -p "$test_root/bin" "$test_root/secrets" "$test_root/deploy/hololive/hololive-api" \
     "$test_root/deploy/scripts/systemd" "$test_root/deploy/deploy/topology"
-mkdir -p "$test_root/deploy/scripts/ci" "$test_root/secrets/pgbouncer" "$test_root/secrets/certs"
+mkdir -p "$test_root/deploy/scripts/ci" "$test_root/secrets/certs"
 cp "${root}/scripts/ci/postgres-capacity-policy.tsv" "$test_root/deploy/scripts/ci/"
 mkdir -p "$test_root/units"
 cp "${root}/deploy/quadlet/hololive-bot/"*.container "$test_root/units/"
@@ -127,10 +127,7 @@ fi
 SH
 cat > "$test_root/bin/podman" <<'SH'
 #!/usr/bin/env bash
-[[ "$*" == 'exec holo-pgbouncer sha256sum /etc/pgbouncer/pgbouncer.ini' ]] || exit 2
-[[ ! -e "$HOLOLIVE_QUADLET_TEST_ROOT/query-failed" ]] || exit 125
-digest="$(sha256sum "$HOLOLIVE_QUADLET_TEST_ROOT/live-pgbouncer.ini")" || exit
-printf '%s  /etc/pgbouncer/pgbouncer.ini\n' "${digest%% *}"
+exit 2
 SH
 chmod +x "$test_root/bin/"*
 cat > "$test_root/compose.env" <<'ENV'
@@ -141,8 +138,6 @@ HOLOLIVE_API_PORT_BIND_IP=100.100.1.8
 HOLOLIVE_ADMIN_API_PORT_BIND_IP=0.0.0.0
 HOLOLIVE_H3_SERVER_NAME=100.100.1.8
 ENV
-postgres_capacity_write_pgbouncer_config "${root}/scripts/ci/postgres-capacity-policy.tsv" \
-    "$test_root/compose.env" "$test_root/live-pgbouncer.ini" >/dev/null
 invoke_prestart() {
     PATH="$test_root/bin:$PATH" HOLOLIVE_QUADLET_TEST_ROOT="$test_root" \
         bash "${root}/scripts/deploy/quadlet-prestart.sh" "$@"
@@ -171,40 +166,16 @@ printf 'FIXTURE=worker\n' > "$test_root/secrets/alarm-worker.env"
 printf 'FIXTURE=collector\n' > "$test_root/secrets/collector.env"
 printf 'HOLOLIVE_ALARM_WORKER_PASSWORD=alarm-secret\n%s=collector-secret\n' "$central_password_key" >> "$test_root/compose.env"
 for service in hololive-api hololive-alarm-worker "$central_collector"; do
-    for failure in drift missing query_failed; do
-        rm -f "$test_root/run/quadlet-env/$service.env"
-        case "$failure" in
-            drift)
-                printf 'ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' >> "$test_root/compose.env"
-                mkdir -p "$test_root/run/pgbouncer"
-                postgres_capacity_write_pgbouncer_config "${root}/scripts/ci/postgres-capacity-policy.tsv" \
-                    "$test_root/compose.env" "$test_root/run/pgbouncer/pgbouncer.ini" >/dev/null ;;
-            missing) mv "$test_root/live-pgbouncer.ini" "$test_root/stopped-pgbouncer.ini" ;;
-            query_failed)
-                mv "$test_root/stopped-pgbouncer.ini" "$test_root/live-pgbouncer.ini"
-                touch "$test_root/query-failed" ;;
-        esac
-        if run_prestart "$service" > "$fixture/rejected.log" 2>&1; then
-            echo "prestart accepted $failure for $service" >&2
-            exit 1
-        fi
-        [[ ! -e "$test_root/run/quadlet-env/$service.env" ]]
-        if [[ "$failure" == drift ]]; then
-            grep -v '^ADMIN_API_POSTGRES_POOL_MAX_CONNS=' "$test_root/compose.env" > "$test_root/restored.env"
-            mv "$test_root/restored.env" "$test_root/compose.env"
-        fi
-    done
-    rm "$test_root/query-failed"
+    rm -f "$test_root/run/quadlet-env/$service.env"
     run_prestart "$service"
     [[ -s "$test_root/run/quadlet-env/$service.env" ]]
 done
-echo 'all app prestarts require matching live mounted capacity before writing runtime secrets'
+echo 'all app prestarts validate the static connection budget before writing runtime secrets'
 
 unsupported_origins=(
     units/container.d/60-pool.conf
     units/hololive-.container.d/60-pool.conf
     units/hololive-collector-.container.d/60-pool.conf
-    units/holo-.container.d/60-pool.conf
     etc/containers/systemd/container.d/60-pool.conf
     run/containers/systemd/hololive-.container.d/60-pool.conf
     run/containers/systemd/users/hololive-.container.d/60-pool.conf
@@ -278,7 +249,6 @@ neutral_origins=(
     units/hololive-.container.d/72-security.conf
     etc/containers/systemd/hololive-api.container.d/73-security.conf
     usr/share/containers/systemd/nested/hololive-alarm-worker.container.d/74-security.conf
-    etc/containers/systemd/holo-pgbouncer.container.d/75-security.conf
 )
 write_neutral_origin() {
     mkdir -p "$(dirname "$test_root/$1")"
@@ -325,116 +295,33 @@ rm "$test_root/$origin" "$test_root/units/hololive-api.container.d/$(basename "$
 run_prestart
 echo 'prestart preserves neutral MCS drop-ins but rejects mixed content, unsupported syntax and precedence collisions'
 
-cp "$test_root/compose.env" "$test_root/pooled.env"
-printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres\nHOLOLIVE_CENTRAL_POSTGRES_PORT=5432\n' >> "$test_root/compose.env"
-mv "$test_root/live-pgbouncer.ini" "$test_root/stopped-pgbouncer.ini"
-for service in hololive-api hololive-alarm-worker "$central_collector"; do
-    rm "$test_root/run/quadlet-env/$service.env"
-    run_prestart "$service"
-    [[ -s "$test_root/run/quadlet-env/$service.env" ]]
-done
+cp "$test_root/compose.env" "$test_root/within-budget.env"
 printf 'BOT_POSTGRES_POOL_MAX_CONNS=40\n' >> "$test_root/compose.env"
 rm "$test_root/run/quadlet-env/hololive-api.env"
 if run_prestart > "$fixture/rejected.log" 2>&1; then
-    echo 'direct recovery accepted an exhausted connection budget' >&2
+    echo 'prestart accepted an exhausted connection budget' >&2
     exit 1
 fi
 [[ ! -e "$test_root/run/quadlet-env/hololive-api.env" ]]
-mv "$test_root/pooled.env" "$test_root/compose.env"
-mv "$test_root/stopped-pgbouncer.ini" "$test_root/live-pgbouncer.ini"
-echo 'explicit direct recovery starts without a pooler but retains the static capacity budget'
+mv "$test_root/within-budget.env" "$test_root/compose.env"
+run_prestart
+echo 'prestart retains the static direct TLS connection budget'
 
 sed -i 's/^HOLOLIVE_ADMIN_API_PORT_BIND_IP=.*/HOLOLIVE_ADMIN_API_PORT_BIND_IP=fd7a:115c:a1e0::8/' "$test_root/compose.env"
 timeout 20 bash -c "$(declare -f run_prestart invoke_prestart); test_root='$test_root' root='$root' run_prestart"
 echo 'prestart waits for an IPv6 tailnet admin bind on the IPv6 address family'
 
-(
-cp -a "$test_root" "$fixture/pooler-prestart"
-test_root="$fixture/pooler-prestart"
-printf 'POSTGRES_PORT_BIND_IP=100.100.1.8\nADMIN_API_POSTGRES_POOL_MAX_CONNS=3\n' >> "$test_root/compose.env"
-printf 'fixture-ca\n' > "$test_root/secrets/certs/postgres-ca.pem"
-for tls_file in server.crt server.key backend-client.crt backend-client.key; do
-    printf 'fixture-tls\n' > "$test_root/secrets/pgbouncer/$tls_file"
-done
-run_pooler_prestart() {
-    (set -a; . "$test_root/compose.env"; set +a
-     PATH="$test_root/bin:$PATH" HOLOLIVE_QUADLET_TEST_ROOT="$test_root" \
-        bash "${root}/scripts/deploy/quadlet-prestart.sh" holo-pgbouncer)
-}
-run_pooler_prestart
-pooler_config="$test_root/run/pgbouncer/pgbouncer.ini"
-[[ -s "$pooler_config" && "$(stat -c '%a' "$pooler_config")" == 644 ]]
-[[ ! -e "$test_root/run/quadlet-env/holo-pgbouncer.env" ]]
-python3 - "$pooler_config" <<'PY'
-import configparser
-import shlex
-import sys
-
-config = configparser.ConfigParser(interpolation=None)
-config.read(sys.argv[1])
-runtime = dict(part.split("=", 1) for part in shlex.split(config["users"]["hololive_runtime"]))
-assert runtime == {"pool_size": "9", "max_user_connections": "9"}
-assert config.getint("pgbouncer", "max_db_connections") == 46
-PY
-cp "$pooler_config" "$fixture/accepted-pgbouncer.ini"
-for origin in "${unsupported_origins[@]}"; do
-    write_origin_override "$origin"
-    if run_pooler_prestart > "$fixture/rejected.log" 2>&1; then
-        echo "pooler prestart accepted unsupported origin: $origin" >&2
-        exit 1
-    fi
-    grep -q 'unsupported Quadlet/systemd override origin:' "$fixture/rejected.log"
-    cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
-    rm "$test_root/$origin"
-done
-run_pooler_prestart
-cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
-echo 'pooler prestart rejects unknown effective override origins without replacing the accepted config'
-for origin in "${neutral_origins[@]}"; do
-    write_neutral_origin "$origin"
-    run_pooler_prestart
-    cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
-    printf 'Environment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' >> "$test_root/$origin"
-    if run_pooler_prestart > "$fixture/rejected.log" 2>&1; then
-        echo "pooler prestart accepted capacity settings mixed into a security-only origin: $origin" >&2
-        exit 1
-    fi
-    grep -q 'unsupported Quadlet/systemd override origin:' "$fixture/rejected.log"
-    cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
-    rm "$test_root/$origin"
-done
-cp "$pooler_config" "$test_root/live-pgbouncer.ini"
-mkdir -p "$test_root/units/holo-pgbouncer.container.d"
-for directive in 'Exec=/tmp/other.ini' 'Entrypoint=/bin/sh' 'Exec=' 'Entrypoint='; do
-    printf '[Container]\n%s\n' "$directive" > "$test_root/units/holo-pgbouncer.container.d/60-command.conf"
-    rm -f "$test_root/run/quadlet-env/hololive-api.env"
-    if run_prestart > "$fixture/rejected.log" 2>&1; then
-        echo "app prestart accepted a pooler command override: ${directive%%=*}" >&2
-        exit 1
-    fi
-    grep -q 'unsupported Quadlet pooler command override:' "$fixture/rejected.log"
-    [[ ! -e "$test_root/run/quadlet-env/hololive-api.env" ]]
-    if run_pooler_prestart > "$fixture/rejected.log" 2>&1; then
-        echo "pooler prestart accepted a command override: ${directive%%=*}" >&2
-        exit 1
-    fi
-    grep -q 'unsupported Quadlet pooler command override:' "$fixture/rejected.log"
-    cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
-done
-rm "$test_root/units/holo-pgbouncer.container.d/60-command.conf"
-run_prestart
-run_pooler_prestart
-echo 'pooler command overrides fail before secrets or configuration publication even with a matching mounted hash'
 quadlet_bin=/usr/libexec/podman/quadlet
 if [[ -x "$quadlet_bin" ]]; then
+(
+    cp -a "$test_root" "$fixture/generated-prestart"
+    test_root="$fixture/generated-prestart"
     cp "${root}/deploy/quadlet/hololive-bot/"*.network "${root}/deploy/quadlet/hololive-bot/"*.volume "$test_root/units/"
     generated_dir="$test_root/run/systemd/generator"
     mkdir -p "$generated_dir"
     QUADLET_UNIT_DIRS="$test_root/units" "$quadlet_bin" "$generated_dir" \
         > "$fixture/generator.log" 2>&1
-    cp "$pooler_config" "$test_root/live-pgbouncer.ini"
     run_prestart
-    run_pooler_prestart
     mkdir -p "$generated_dir/hololive-api.service.d"
     printf '[Service]\nEnvironment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=5\n' \
         > "$generated_dir/hololive-api.service.d/60-pool.conf"
@@ -445,47 +332,13 @@ if [[ -x "$quadlet_bin" ]]; then
     fi
     grep -q 'unsupported Quadlet/systemd override origin:' "$fixture/rejected.log"
     [[ ! -e "$test_root/run/quadlet-env/hololive-api.env" ]]
-    if run_pooler_prestart > "$fixture/rejected.log" 2>&1; then
-        echo 'pooler prestart accepted a drop-in overriding an actual generated app service' >&2
-        exit 1
-    fi
-    cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
     rm "$generated_dir/hololive-api.service.d/60-pool.conf"
     run_prestart
-    run_pooler_prestart
-    echo 'actual generated units work; generated-service drop-ins fail before secrets or pooler config publication'
+    echo 'actual generated units work; generated-service drop-ins fail before secrets publication'
+)
 fi
-for tls_file in pgbouncer/server.crt pgbouncer/server.key pgbouncer/backend-client.crt pgbouncer/backend-client.key certs/postgres-ca.pem; do
-    mv "$test_root/secrets/$tls_file" "$fixture/missing-tls"
-    if run_pooler_prestart > "$fixture/rejected.log" 2>&1; then
-        echo 'pooler prestart accepted missing TLS material' >&2
-        exit 1
-    fi
-    cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
-    mv "$fixture/missing-tls" "$test_root/secrets/$tls_file"
-done
-printf '# stale firewall\n' >> "$test_root/installed.nft"
-if run_pooler_prestart > "$fixture/rejected.log" 2>&1; then
-    echo 'pooler prestart accepted a stale installed firewall' >&2
-    exit 1
-fi
-cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
-cp "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$test_root/installed.nft"
-sed -i 's/^POSTGRES_PORT_BIND_IP=.*/POSTGRES_PORT_BIND_IP=0.0.0.0/' "$test_root/compose.env"
-if run_pooler_prestart > "$fixture/rejected.log" 2>&1; then
-    echo 'pooler prestart accepted a wildcard publish address' >&2
-    exit 1
-fi
-cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
-sed -i 's/^POSTGRES_PORT_BIND_IP=.*/POSTGRES_PORT_BIND_IP=100.100.1.8/' "$test_root/compose.env"
-printf 'BOT_POSTGRES_POOL_MAX_CONNS=40\n' >> "$test_root/compose.env"
-if run_pooler_prestart > "$fixture/rejected.log" 2>&1; then
-    echo 'pooler prestart accepted an exhausted connection budget' >&2
-    exit 1
-fi
-cmp -s "$pooler_config" "$fixture/accepted-pgbouncer.ini"
-echo 'pooler prestart preserves the last config on missing TLS, invalid bind or exhausted capacity'
 
+(
 offline_units="$fixture/offline-units"
 foreign_roots="$fixture/foreign-roots"
 mkdir -p "$offline_units" "$fixture/offline-bin" \
@@ -502,48 +355,38 @@ touch "$fixture/offline-manager-called"
 exit 99
 SH
 chmod +x "$fixture/offline-bin/systemctl"
-run_offline_render() (
+run_offline_check() (
     unset HOLOLIVE_QUADLET_TEST_ROOT
     export PATH="$fixture/offline-bin:$PATH" QUADLET_UNIT_DIRS="$foreign_roots" SYSTEMD_UNIT_PATH="$foreign_roots"
-    postgres_capacity_write_quadlet_config "$root" "$fixture/offline.env" "$offline_units" "$fixture/offline.ini"
+    postgres_capacity_assert_service "$root" "$fixture/offline.env" "$offline_units" hololive-api \
+        "$offline_units/hololive-api.container"
 )
-postgres_capacity_write_pgbouncer_config "${root}/scripts/ci/postgres-capacity-policy.tsv" \
-    "$fixture/offline.env" "$fixture/offline-expected.ini" >/dev/null
-run_offline_render
-cmp -s "$fixture/offline.ini" "$fixture/offline-expected.ini"
+run_offline_check
 [[ ! -e "$fixture/offline-manager-called" ]]
 (
     unset HOLOLIVE_QUADLET_TEST_ROOT
-    units="$fixture/before-pooler"
+    units="$fixture/capped-units"
     cp -R "$offline_units" "$units"
-    rm "$units/holo-pgbouncer.container"
     service="$central_collector"
-    direct_env="$fixture/direct.env"
-    printf 'HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres\nHOLOLIVE_CENTRAL_POSTGRES_PORT=5432\n' > "$direct_env"
-    postgres_capacity_assert_service "$root" "$direct_env" "$units" "$service" "$units/$service.container"
-    if postgres_capacity_write_quadlet_config "$root" "$direct_env" "$units" "$fixture/absent-pooler.ini" > "$fixture/rejected.log" 2>&1; then
-        echo 'pooled configuration accepted without its installed pooler unit' >&2
-        exit 1
-    fi
+    postgres_capacity_assert_service "$root" "$fixture/offline.env" "$units" "$service" "$units/$service.container"
     mkdir "$units/$service.container.d"
     printf '[Container]\nEnvironment=POSTGRES_POOL_MAX_CONNS=8\n' > "$units/$service.container.d/60-pool.conf"
-    if postgres_capacity_assert_service "$root" "$direct_env" "$units" "$service" "$units/$service.container" > "$fixture/rejected.log" 2>&1; then
-        echo 'direct recovery accepted an installed pool cap above the role limit' >&2
+    if postgres_capacity_assert_service "$root" "$fixture/offline.env" "$units" "$service" "$units/$service.container" > "$fixture/rejected.log" 2>&1; then
+        echo 'capacity check accepted an installed pool cap above the role limit' >&2
         exit 1
     fi
     grep -Fq 'aggregate pools exceed role limit: hololive_collector_c' "$fixture/rejected.log"
-    echo 'pre-sync direct recovery validates effective writer budgets without an installed pooler'
+    echo 'pre-sync capacity check validates effective writer budgets from installed units'
 )
 mkdir -p "$offline_units/hololive-.container.d"
 cp "$foreign_roots/hololive-.container.d/60-pool.conf" "$offline_units/hololive-.container.d/"
-if run_offline_render > "$fixture/rejected.log" 2>&1; then
-    echo 'offline rendering ignored an inherited override inside its explicit source tree' >&2
+if run_offline_check > "$fixture/rejected.log" 2>&1; then
+    echo 'offline capacity check ignored an inherited override inside its explicit source tree' >&2
     exit 1
 fi
 grep -q 'unsupported Quadlet/systemd override origin:' "$fixture/rejected.log"
-cmp -s "$fixture/offline.ini" "$fixture/offline-expected.ini"
 [[ ! -e "$fixture/offline-manager-called" ]]
-echo 'offline source rendering excludes host origins but rejects unsupported origins inside its own tree'
+echo 'offline capacity check excludes host origins but rejects unsupported origins inside its own tree'
 )
 
 printf 'WORKER_SECRET=synthetic\n' > "$test_root/secrets/alarm-worker.env"

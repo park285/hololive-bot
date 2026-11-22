@@ -18,8 +18,8 @@ import (
 //go:embed queries/lock_offset.sql
 var lockOffsetSQL string
 
-//go:embed queries/next_observation.sql
-var nextObservationSQL string
+//go:embed queries/next_observations.sql
+var nextObservationsSQL string
 
 //go:embed queries/advance_offset.sql
 var advanceOffsetSQL string
@@ -27,6 +27,7 @@ var advanceOffsetSQL string
 var errRejected = errors.New("event grade observation rejected")
 
 type observation struct {
+	seq        int64
 	version    int16
 	kind       string
 	startedAt  time.Time
@@ -40,95 +41,141 @@ type ConsumeResult struct {
 }
 
 func (r *Repository) ConsumeRegion(ctx context.Context, region contract.GradeRegion, limit int) (ConsumeResult, error) {
-	var result ConsumeResult
-
 	if !region.Valid() || limit < 1 {
-		return result, errors.New("invalid event grade consume request")
+		return ConsumeResult{}, errors.New("invalid event grade consume request")
 	}
 
-	for range limit {
-		consumed, rejected, err := r.consumeNext(ctx, region)
-		if err != nil {
-			return result, err
-		}
+	var batch consumedBatch
 
-		if !consumed {
-			return result, nil
-		}
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var batchErr error
 
-		if rejected {
-			result.Rejected++
-		} else {
-			result.Applied++
-		}
-	}
+		batch, batchErr = r.consumeBatch(ctx, tx, region, limit)
 
-	return result, nil
-}
-
-func (r *Repository) consumeNext(ctx context.Context, region contract.GradeRegion) (consumed, rejected bool, err error) {
-	err = pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		var applied int64
-
-		if scanErr := tx.QueryRow(ctx, lockOffsetSQL, region).Scan(&applied); scanErr != nil {
-			return fmt.Errorf("lock event grade consumer offset: %w", scanErr)
-		}
-
-		var obs observation
-
-		scanErr := tx.QueryRow(ctx, nextObservationSQL, region, applied+1).Scan(&obs.version, &obs.kind, &obs.startedAt, &obs.observedAt, &obs.payload)
-		if errors.Is(scanErr, pgx.ErrNoRows) {
-			return nil
-		}
-
-		if scanErr != nil {
-			return fmt.Errorf("read event grade observation %d: %w", applied+1, scanErr)
-		}
-
-		if obs.version != observationcontract.SchemaVersion {
-			return fmt.Errorf("event grade observation %d has unsupported schema version %d", applied+1, obs.version)
-		}
-
-		savepoint, beginErr := tx.Begin(ctx)
-		if beginErr != nil {
-			return fmt.Errorf("begin event grade observation apply: %w", beginErr)
-		}
-
-		applyErr := r.applyObservation(ctx, savepoint, region, &obs)
-
-		switch {
-		case applyErr == nil:
-			if commitErr := savepoint.Commit(ctx); commitErr != nil {
-				return fmt.Errorf("commit event grade observation apply: %w", commitErr)
-			}
-		case rejectedApply(applyErr):
-			if rollbackErr := savepoint.Rollback(ctx); rollbackErr != nil {
-				return fmt.Errorf("discard rejected event grade observation: %w", rollbackErr)
-			}
-
-			rejected = true
-		default:
-			return fmt.Errorf("apply event grade observation %d: %w", applied+1, applyErr)
-		}
-
-		tag, advanceErr := tx.Exec(ctx, advanceOffsetSQL, region, applied+1)
-		if advanceErr != nil {
-			return fmt.Errorf("advance event grade consumer offset: %w", advanceErr)
-		}
-
-		if tag.RowsAffected() != 1 {
-			return errors.New("event grade consumer offset moved concurrently")
-		}
-
-		consumed = true
-
-		return nil
+		return batchErr
 	})
 	if err != nil {
-		return false, false, fmt.Errorf("consume event grade observation: %w", err)
+		return ConsumeResult{}, fmt.Errorf("consume event grade observations: %w", err)
 	}
 
-	return consumed, rejected, nil
+	if batch.stopErr != nil {
+		return batch.result, fmt.Errorf("consume event grade observations: %w", batch.stopErr)
+	}
+
+	return batch.result, nil
+}
+
+type consumedBatch struct {
+	result  ConsumeResult
+	stopErr error
+}
+
+func (r *Repository) consumeBatch(ctx context.Context, tx pgx.Tx, region contract.GradeRegion, limit int) (consumedBatch, error) {
+	var (
+		out     consumedBatch
+		applied int64
+	)
+
+	if err := tx.QueryRow(ctx, lockOffsetSQL, region).Scan(&applied); err != nil {
+		return out, fmt.Errorf("lock event grade consumer offset: %w", err)
+	}
+
+	observations, err := readObservations(ctx, tx, region, applied, limit)
+	if err != nil {
+		return out, err
+	}
+
+	last := applied
+
+	for i := range observations {
+		rejected, consumeErr := r.consumeObservation(ctx, tx, region, last+1, &observations[i])
+		if consumeErr != nil {
+			out.stopErr = consumeErr
+
+			break
+		}
+
+		last++
+
+		if rejected {
+			out.result.Rejected++
+		} else {
+			out.result.Applied++
+		}
+	}
+
+	if last == applied {
+		return out, out.stopErr
+	}
+
+	tag, err := tx.Exec(ctx, advanceOffsetSQL, region, applied, last)
+	if err != nil {
+		return out, fmt.Errorf("advance event grade consumer offset: %w", err)
+	}
+
+	if tag.RowsAffected() != 1 {
+		return out, errors.New("event grade consumer offset moved concurrently")
+	}
+
+	return out, nil
+}
+
+func readObservations(ctx context.Context, tx pgx.Tx, region contract.GradeRegion, applied int64, limit int) ([]observation, error) {
+	rows, err := tx.Query(ctx, nextObservationsSQL, region, applied, limit)
+	if err != nil {
+		return nil, fmt.Errorf("read event grade observations after %d: %w", applied, err)
+	}
+
+	observations, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (observation, error) {
+		var obs observation
+
+		scanErr := row.Scan(&obs.seq, &obs.version, &obs.kind, &obs.startedAt, &obs.observedAt, &obs.payload)
+
+		return obs, scanErr
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read event grade observations after %d: %w", applied, err)
+	}
+
+	return observations, nil
+}
+
+func (r *Repository) consumeObservation(ctx context.Context, tx pgx.Tx, region contract.GradeRegion, seq int64, obs *observation) (rejected bool, err error) {
+	if obs.seq != seq {
+		return false, fmt.Errorf("event grade observation %d is missing before %d", seq, obs.seq)
+	}
+
+	if obs.version != observationcontract.SchemaVersion {
+		return false, fmt.Errorf("event grade observation %d has unsupported schema version %d", seq, obs.version)
+	}
+
+	savepoint, err := tx.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin event grade observation apply: %w", err)
+	}
+
+	applyErr := r.applyObservation(ctx, savepoint, region, obs)
+
+	switch {
+	case applyErr == nil:
+		if err := savepoint.Commit(ctx); err != nil {
+			return false, fmt.Errorf("commit event grade observation apply: %w", err)
+		}
+
+		return false, nil
+	case rejectedApply(applyErr):
+		if err := savepoint.Rollback(ctx); err != nil {
+			return false, fmt.Errorf("discard rejected event grade observation: %w", err)
+		}
+
+		return true, nil
+	default:
+		if err := savepoint.Rollback(ctx); err != nil {
+			return false, errors.Join(fmt.Errorf("apply event grade observation %d: %w", seq, applyErr), fmt.Errorf("discard failed event grade observation: %w", err))
+		}
+
+		return false, fmt.Errorf("apply event grade observation %d: %w", seq, applyErr)
+	}
 }
 
 func rejectedApply(err error) bool {

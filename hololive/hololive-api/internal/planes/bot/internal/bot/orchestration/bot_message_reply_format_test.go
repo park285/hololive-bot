@@ -36,7 +36,7 @@ func TestProcessMessageFixesReplyFormatForCommand(t *testing.T) {
 			registry := command.NewRegistry()
 			registry.Register(&testCommand{
 				name: testHelpCommandName,
-				execute: func(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
+				execute: func(ctx context.Context, cmdCtx *botcommand.CommandContext, _ botcommand.Params) error {
 					got, _ = messageformatter.ReplyFormatFromContext(ctx)
 
 					return transport.SendMessage(ctx, cmdCtx.Room, body)

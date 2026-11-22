@@ -1,11 +1,12 @@
 #!/bin/sh
 set -eu
 
-if [ "$(id -u)" = 0 ]; then
-  [ "$(gosu 999:999 id -u)" = 999 ]
-  [ "$(gosu 999:999 id -g)" = 999 ]
-else
-  [ "$(id -u)" = 999 ]
+[ "$(id -u)" = 999 ]
+[ "$(id -g)" = 999 ]
+if command -v gosu >/dev/null; then
+  printf 'gosu must not ship in the runtime image
+' >&2
+  exit 1
 fi
 
 start_server() {

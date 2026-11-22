@@ -18,6 +18,13 @@ const (
 	releaseSQL           = "SELECT public.event_grade_release($1, $2, $3)"
 	observationFlagSQL   = "SELECT kind, (payload->>'quarantine_missing')::boolean FROM public.event_grade_observations WHERE region = $1 AND seq = $2"
 	insertObservationSQL = "INSERT INTO public.event_grade_observations(region,seq,schema_version,kind,job_key,scheduled_for,owner_instance,fence_epoch,started_at,observed_at,published_at,payload) VALUES ('jp',99,1,'catalog','x',now(),'x',1,now(),now(),now(),'{}')"
+	workerChapterSQL     = `WITH catalog AS (
+		INSERT INTO public.event_grade_catalogs(region, observed_at) VALUES ('jp', $5)
+		ON CONFLICT (region) DO UPDATE SET observed_at = EXCLUDED.observed_at RETURNING region
+	)
+	INSERT INTO public.event_grade_chapters(region,event_id,chapter_id,event_type,starts_at,ends_at,event_ends_at,reveals_at,observed_at)
+	SELECT region,'ev1','ch1','normal',$1,$2,$3,$4,$5 FROM catalog`
+	countCutoffClaimsSQL = "SELECT count(*) FROM public.event_grade_claim_cutoffs('jp', $1, 60000, 3)"
 )
 
 type eventGradeClaim struct {
@@ -70,6 +77,13 @@ func eventGradeCatalogPayload(now time.Time) string {
 		`","event_ends_at":"` + reveals + `","reveals_at":"` + reveals + `"}],"bindings":[{"event_id":"ev1","chapter_id":"ch1"}],"conflicts":[],"quarantine_missing":false}`
 }
 
+func applyWorkerChapter(t *testing.T, pool *pgxpool.Pool, now time.Time) {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(), workerChapterSQL, now.Add(-time.Hour), now.Add(time.Hour), now.Add(2*time.Hour), now.Add(2*time.Hour), now)
+	require.NoError(t, err)
+}
+
 func TestEventGradeCollectorCPublishesOnlyWithCurrentProof(t *testing.T) {
 	pool := NewPool(t)
 	collector := eventGradeSession(t, pool, "hololive_collector_c")
@@ -93,6 +107,13 @@ func TestEventGradeCollectorCPublishesOnlyWithCurrentProof(t *testing.T) {
 
 	_, err := collector.Exec(ctx, publishSQL, claim.jobKey, eventGradeOwner, claim.epoch, claim.claimedAt, claim.claimedAt, `{"chapters":[],"bindings":[],"conflicts":[],"quarantine_missing":false}`)
 	requireSQLState(t, err, "23505")
+
+	var unapplied int
+
+	require.NoError(t, collector.QueryRow(ctx, countCutoffClaimsSQL, eventGradeOwner).Scan(&unapplied))
+	require.Zero(t, unapplied, "cutoffs follow the worker-applied chapters, not the published catalog")
+
+	applyWorkerChapter(t, pool, claim.claimedAt)
 
 	var cutoff eventGradeClaim
 
@@ -179,6 +200,7 @@ func TestEventGradeRejectsExpiredProofAfterReclaim(t *testing.T) {
 	claim, _ := claimEventGradeCatalog(t, collector)
 	_, err := collector.Exec(ctx, publishSQL, claim.jobKey, eventGradeOwner, claim.epoch, claim.claimedAt, claim.claimedAt, eventGradeCatalogPayload(claim.claimedAt))
 	require.NoError(t, err)
+	applyWorkerChapter(t, pool, claim.claimedAt)
 
 	const shortClaimSQL = "SELECT job_key, fence_epoch, claimed_at FROM public.event_grade_claim_cutoffs($1, $2, 1000, 1)"
 
@@ -204,4 +226,48 @@ func TestEventGradeRejectsExpiredProofAfterReclaim(t *testing.T) {
 
 	_, err = collector.Exec(ctx, publishSQL, current.jobKey, nextOwner, current.epoch, current.claimedAt, current.claimedAt, ranks)
 	require.NoError(t, err)
+}
+
+func TestEventGradeFinalCutoffClaimFollowsWorkerBorders(t *testing.T) {
+	pool := NewPool(t)
+	collector := eventGradeSession(t, pool, "hololive_collector_c")
+	ctx := t.Context()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+
+	_, err := pool.Exec(ctx, workerChapterSQL, now.Add(-3*time.Hour), now.Add(-2*time.Hour), now.Add(-time.Hour), now.Add(-time.Hour), now)
+	require.NoError(t, err)
+
+	var final eventGradeClaim
+
+	var eventID, chapterID string
+
+	require.NoError(t, collector.QueryRow(ctx, claimCutoffsSQL, "jp", eventGradeOwner).Scan(&final.jobKey, &eventID, &chapterID, &final.epoch, &final.claimedAt))
+
+	var seq int64
+
+	ranks := `{"event_id":"ev1","chapter_id":"ch1","board_kind":"marathon_score","final":true,"ranks":[{"rank":1,"score":"10"}]}`
+	require.NoError(t, collector.QueryRow(ctx, publishSQL, final.jobKey, eventGradeOwner, final.epoch, final.claimedAt, final.claimedAt, ranks).Scan(&seq))
+
+	claims := func() int {
+		var count int
+
+		require.NoError(t, collector.QueryRow(ctx, countCutoffClaimsSQL, eventGradeOwner).Scan(&count))
+
+		return count
+	}
+
+	require.Zero(t, claims(), "an unconsumed final cutoff must not be collected again")
+
+	_, err = pool.Exec(ctx, "UPDATE public.event_grade_consumer_offsets SET applied_seq = $1 WHERE region = 'jp'", seq)
+	require.NoError(t, err)
+	require.Equal(t, 1, claims(), "a final cutoff the worker did not store must be collected again")
+
+	_, err = pool.Exec(ctx, `UPDATE public.event_grade_collection_leases SET owner_instance = NULL, claimed_at = NULL, lease_expires_at = NULL
+		WHERE job_key = $1`, final.jobKey)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `INSERT INTO public.event_grade_borders(region,event_id,chapter_id,board_kind,rank,score,started_at,observed_at,is_final)
+		VALUES ('jp','ev1','ch1','marathon_score',1,10,$1,$1,true)`, now)
+	require.NoError(t, err)
+	require.Zero(t, claims(), "a stored final border closes the chapter")
 }

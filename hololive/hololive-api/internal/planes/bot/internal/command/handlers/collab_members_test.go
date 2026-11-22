@@ -56,7 +56,7 @@ func TestWithCollabMembersReplacesOfficialNamesOnCopies(t *testing.T) {
 type collabFailureCase struct {
 	name    string
 	want    string
-	params  map[string]any
+	params  botcommand.Params
 	holodex domain.StreamProvider
 	command func(*handlercore.Dependencies) handlercore.Command
 }
@@ -67,21 +67,21 @@ func collabFailureCases() []collabFailureCase {
 	return []collabFailureCase{
 		{
 			"live", messaging.ErrLiveStreamQueryFailed,
-			map[string]any{},
+			botcommand.LiveParams{},
 			nil,
-			func(d *handlercore.Dependencies) handlercore.Command { return NewLiveCommand(d) },
+			func(d *handlercore.Dependencies) handlercore.Command { return handlercore.Bind(NewLiveCommand(d)) },
 		},
 		{
 			"upcoming", messaging.ErrUpcomingStreamQueryFailed,
-			map[string]any{},
+			botcommand.UpcomingParams{},
 			&upcomingStreamProviderStub{upcomingStreams: streams},
-			func(d *handlercore.Dependencies) handlercore.Command { return NewUpcomingCommand(d) },
+			func(d *handlercore.Dependencies) handlercore.Command { return handlercore.Bind(NewUpcomingCommand(d)) },
 		},
 		{
 			"schedule", messaging.ErrScheduleQueryFailed,
-			map[string]any{paramMember: "미코"},
+			botcommand.ScheduleParams{Member: "미코"},
 			&scheduleStreamProviderStub{scheduleStreams: streams},
-			func(d *handlercore.Dependencies) handlercore.Command { return NewScheduleCommand(d) },
+			func(d *handlercore.Dependencies) handlercore.Command { return handlercore.Bind(NewScheduleCommand(d)) },
 		},
 	}
 }
@@ -116,7 +116,7 @@ func TestStreamListCommandsReportCollabMemberFailure(t *testing.T) {
 
 			deps := collabFailureDeps(t, tc, collabMembersStub{err: errors.New("schedule items unavailable")}, &sentError)
 
-			if err := tc.command(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, tc.params); err != nil {
+			if err := tc.command(deps).Dispatch(t.Context(), &botcommand.CommandContext{Room: testRoomID}, tc.params); err != nil {
 				t.Fatalf("Execute() error = %v", err)
 			}
 
@@ -137,7 +137,7 @@ func TestStreamListCommandsReturnCollabMemberCancellation(t *testing.T) {
 
 			cancel()
 
-			err := tc.command(deps).Execute(ctx, &botcommand.CommandContext{Room: testRoomID}, tc.params)
+			err := tc.command(deps).Dispatch(ctx, &botcommand.CommandContext{Room: testRoomID}, tc.params)
 			if !errors.Is(err, context.Canceled) || sentError != "" {
 				t.Fatalf("Execute() error = %v, error reply = %q", err, sentError)
 			}

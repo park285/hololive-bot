@@ -68,7 +68,7 @@ func run() error {
 	defer cancel()
 
 	cfg := migrationrunner.Config{
-		CardWindow:       *schemaOnly || *configureRoles,
+		MigrationWindow:  *schemaOnly || *configureRoles,
 		VerifyOnly:       *check || *configureRoles,
 		InitializeOnly:   *initialize,
 		StatementTimeout: *statementTimeout,

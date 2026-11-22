@@ -61,7 +61,7 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 
 	gotNames := make([]string, 0, len(commands))
 	for _, cmd := range commands {
-		if cmd == nil {
+		if cmd.Command == nil || cmd.CheckDependencies == nil {
 			t.Fatal("buildCommands() returned nil command")
 		}
 

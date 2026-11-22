@@ -4,10 +4,14 @@ WITH mapping AS (
     SELECT generation FROM youtube_collection_projection_generations
     WHERE status = 'CURRENT' AND valid_until > statement_timestamp()
 ), targets AS (
-    SELECT bundle.kind COLLATE "C" AS kind,bundle.rpc_calls,
-           bundle.subject_key COLLATE "C" AS subject_key,bundle.interval_ms,bundle.created_at,bundle.eligible_at
-    FROM youtube_collection_runtime_bundles bundle
-    JOIN current_projection generation ON generation.generation=bundle.projection_generation
+    SELECT runtime_kind.kind COLLATE "C" AS kind,
+           CASE WHEN runtime_kind.rpc_per_kind THEN count(target.observation_kind) ELSE 1 END AS rpc_calls,
+           target.subject_key COLLATE "C" AS subject_key,min(target.poll_interval_ms) AS interval_ms,
+           min(target.created_at) AS created_at,min(COALESCE(target.not_before,'-infinity'::timestamptz)) AS eligible_at
+    FROM current_projection generation
+    JOIN youtube_collection_targets target ON target.projection_generation=generation.generation AND target.enabled
+    JOIN youtube_collection_runtime_kinds runtime_kind ON runtime_kind.observation_kind=target.observation_kind
+    GROUP BY runtime_kind.kind COLLATE "C",target.subject_key COLLATE "C",runtime_kind.rpc_per_kind
 ), leased AS (
     SELECT t.kind, t.rpc_calls, t.subject_key, t.interval_ms, t.eligible_at, l.last_completed_at,
            CASE

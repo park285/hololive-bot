@@ -5,8 +5,8 @@
 Description=Hololive central collector c
 # 런타임 peer는 Wants=로만 끌어온다. Requires=는 명시적 stop/restart를 전파해 primary fence(소비자 유지)와
 # Sentinel HA(로컬 노드 교체)를 깨뜨린다.
-Wants=holo-pgbouncer.service
-After=holo-pgbouncer.service tailscaled.service
+Wants=holo-postgres.service
+After=holo-postgres.service tailscaled.service
 ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent
 ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced
 StartLimitIntervalSec=0
@@ -113,8 +113,8 @@ Environment=LOG_MAX_SIZE_MB=5
 Environment=LOG_MAX_BACKUPS=5
 Environment=LOG_MAX_AGE_DAYS=30
 Environment=LOG_COMPRESS=true
-Environment=HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-pgbouncer
-Environment=HOLOLIVE_CENTRAL_POSTGRES_PORT=6432
+Environment=HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres
+Environment=HOLOLIVE_CENTRAL_POSTGRES_PORT=5432
 Environment=POSTGRES_SSLMODE=verify-full
 Environment=POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
 Environment=POSTGRES_QUERY_EXEC_MODE=cache_statement

@@ -31,7 +31,7 @@ func TestLockCurrentProjectionWaitsForRefreshAndReadsNewCurrent(t *testing.T) {
 		}
 	}()
 
-	_, err = refresh.Exec(ctx, `SELECT guard_key FROM youtube_collection_projection_guard WHERE guard_key FOR UPDATE`)
+	_, err = refresh.Exec(ctx, `SELECT public.lock_youtube_collection_runtime_bundles()`)
 	require.NoError(t, err)
 
 	type lockResult struct {
@@ -72,23 +72,4 @@ func TestLockCurrentProjectionWaitsForRefreshAndReadsNewCurrent(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("collector lock did not resume after the refresh committed")
 	}
-}
-
-func TestLockCurrentProjectionFailsWithoutGuard(t *testing.T) {
-	t.Parallel()
-
-	pool := NewPool(t)
-	ctx := t.Context()
-
-	_, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_projection_generations(status,row_count,projection_sha256,valid_until,activated_at)
-		VALUES ('CURRENT',0,repeat('a',64),now()+interval '1 hour',now());
-		DELETE FROM youtube_collection_projection_guard;
-	`)
-	require.NoError(t, err)
-
-	var generation int64
-
-	err = pool.QueryRow(ctx, `SELECT generation FROM public.lock_current_youtube_collection_projection()`).Scan(&generation)
-	require.ErrorContains(t, err, "guard row is missing")
 }

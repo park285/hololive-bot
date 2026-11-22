@@ -9,11 +9,7 @@ for (const method of ['log', 'info', 'warn', 'error', 'debug', 'trace']) {
 
 const output = process.stdout.write.bind(process.stdout);
 const reply = (value) => output(`${JSON.stringify(value)}\n`);
-const fields = (value, names) => value !== null && typeof value === 'object' && !Array.isArray(value) &&
-  Object.keys(value).length === names.length && names.every((name) => Object.hasOwn(value, name));
-const bounded = (value, max) => typeof value === 'string' && value.length > 0 && Buffer.byteLength(value, 'utf8') <= max;
 
-let phase = 'IDLE';
 let dom;
 let bot;
 let minter;
@@ -24,47 +20,39 @@ reply({ type: 'loaded' });
 
 try {
   for await (const line of input) {
-    if (Buffer.byteLength(line, 'utf8') > 1024 * 1024) throw new Error('frame too large');
     const message = JSON.parse(line);
-    if (phase === 'IDLE' && fields(message, ['type', 'user_agent']) && message.type === 'prepare' &&
-        bounded(message.user_agent, 1024)) {
-      dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', {
-        url: 'https://www.youtube.com/', referrer: 'https://www.youtube.com/',
-        resources: { userAgent: message.user_agent },
-      });
-      Object.assign(globalThis, {
-        window: dom.window, document: dom.window.document,
-        location: dom.window.location, origin: dom.window.origin,
-      });
-      if (!Reflect.has(globalThis, 'navigator')) {
-        Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator });
-      }
-      if (navigator.userAgent !== message.user_agent) throw new Error('user agent mismatch');
-      reply({ type: 'prepared', prepared: true });
-      phase = 'AWAITING_CHALLENGE';
-    } else if (phase === 'AWAITING_CHALLENGE' && fields(message, ['type', 'program', 'global_name', 'interpreter']) &&
-        message.type === 'challenge' && bounded(message.program, 1024 * 1024) &&
-        bounded(message.global_name, 1024) && bounded(message.interpreter, 1024 * 1024)) {
-      new Function(message.interpreter)();
-      bot = await BotGuardClient.create({
-        program: message.program, globalName: message.global_name, globalObject: globalThis,
-      });
-      const snapshot = await bot.snapshot({ webPoSignalOutput: signals }, 8000);
-      if (!bounded(snapshot, 60000)) throw new Error('invalid snapshot');
-      reply({ type: 'snapshot', snapshot });
-      phase = 'AWAITING_INTEGRITY';
-    } else if (phase === 'AWAITING_INTEGRITY' && fields(message, ['type', 'integrity_token']) &&
-        message.type === 'activate' && bounded(message.integrity_token, 1024 * 1024)) {
-      minter = await WebPoMinter.create({ integrityToken: message.integrity_token }, signals);
-      reply({ type: 'ready', ready: true });
-      phase = 'READY';
-    } else if (phase === 'READY' && fields(message, ['type', 'video_id']) &&
-        message.type === 'mint' && bounded(message.video_id, 128)) {
-      const poToken = await minter.mintAsWebsafeString(message.video_id);
-      if (!bounded(poToken, 8192)) throw new Error('invalid minted token');
-      reply({ type: 'minted', video_id: message.video_id, po_token: poToken });
-    } else {
-      throw new Error('invalid operation');
+    switch (message.type) {
+      case 'prepare':
+        dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', {
+          url: 'https://www.youtube.com/', referrer: 'https://www.youtube.com/',
+          resources: { userAgent: message.user_agent },
+        });
+        Object.assign(globalThis, {
+          window: dom.window, document: dom.window.document,
+          location: dom.window.location, origin: dom.window.origin,
+        });
+        if (!Reflect.has(globalThis, 'navigator')) {
+          Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator });
+        }
+        if (navigator.userAgent !== message.user_agent) throw new Error('user agent mismatch');
+        reply({ type: 'prepared', prepared: true });
+        break;
+      case 'challenge':
+        new Function(message.interpreter)();
+        bot = await BotGuardClient.create({
+          program: message.program, globalName: message.global_name, globalObject: globalThis,
+        });
+        reply({ type: 'snapshot', snapshot: await bot.snapshot({ webPoSignalOutput: signals }, 8000) });
+        break;
+      case 'activate':
+        minter = await WebPoMinter.create({ integrityToken: message.integrity_token }, signals);
+        reply({ type: 'ready', ready: true });
+        break;
+      case 'mint':
+        reply({ type: 'minted', video_id: message.video_id, po_token: await minter.mintAsWebsafeString(message.video_id) });
+        break;
+      default:
+        throw new Error('invalid operation');
     }
   }
 } catch {

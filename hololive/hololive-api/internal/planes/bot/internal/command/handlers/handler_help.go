@@ -27,7 +27,7 @@ func (c *HelpCommand) Description() string {
 	return "도움말을 표시합니다"
 }
 
-func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
+func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, _ botcommand.NoParams) error {
 	if cmdCtx == nil {
 		return errors.New("help command context is nil")
 	}

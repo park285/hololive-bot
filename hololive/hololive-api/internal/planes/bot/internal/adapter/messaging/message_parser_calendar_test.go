@@ -48,34 +48,10 @@ func TestTryCelebrationCalendarCommand(t *testing.T) {
 				t.Errorf("Type = %v, want %v", cmd.Type, botcommand.CommandCalendar)
 			}
 
-			assertMonthParam(t, cmd.Params, tt.month)
-			assertOffsetParam(t, cmd.Params, tt.offset)
+			want := botcommand.CalendarParams{Month: tt.month, MonthOffset: tt.offset}
+			if cmd.Params != want {
+				t.Errorf("Params = %#v, want %#v", cmd.Params, want)
+			}
 		})
-	}
-}
-
-func assertMonthParam(t *testing.T, params map[string]any, want int) {
-	t.Helper()
-
-	if want <= 0 {
-		return
-	}
-
-	m, hasMonth := params["month"].(int)
-	if !hasMonth || m != want {
-		t.Errorf("Params[month] = %v, want %d", params["month"], want)
-	}
-}
-
-func assertOffsetParam(t *testing.T, params map[string]any, want int) {
-	t.Helper()
-
-	if want == 0 {
-		return
-	}
-
-	offset, hasOffset := params["monthOffset"].(int)
-	if !hasOffset || offset != want {
-		t.Errorf("Params[monthOffset] = %v, want %d", params["monthOffset"], want)
 	}
 }

@@ -2,10 +2,12 @@ package durability
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/assert"
@@ -124,7 +126,7 @@ func TestOversizedDiagnosticsAreTruncatedInsteadOfStrandingTheRow(t *testing.T) 
 		assertOutboxSettleTruncatesLastError(ctx, t, pool, oversized)
 	})
 
-	t.Run("command execution scrubs result_summary at the terminal transition", func(t *testing.T) {
+	t.Run("command execution records the terminal summary and rejects raw diagnostics", func(t *testing.T) {
 		assertCommandExecutionScrubsResultSummary(ctx, t, pool)
 	})
 
@@ -205,11 +207,11 @@ func assertCommandExecutionScrubsResultSummary(ctx context.Context, t *testing.T
 
 	_, err = pool.Exec(ctx, `UPDATE bot_command_executions SET result_summary = 'raw diagnostic' WHERE message_id = $1`,
 		"message:m-clamp")
-	require.NoError(t, err)
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT result_summary FROM bot_command_executions WHERE message_id = $1",
-		"message:m-clamp").Scan(&summary))
-	assert.Equal(t, CommandExecutionFailed, summary, "the database trigger must preserve the scrub invariant")
+
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	require.True(t, ok, "terminal summary rewrite error = %v", err)
+	assert.Equal(t, "23514", pgErr.Code)
+	assert.Equal(t, "chk_bot_command_executions_terminal_summary_scrubbed", pgErr.ConstraintName)
 }
 
 func TestInboxReclaimExpiredLeases(t *testing.T) {

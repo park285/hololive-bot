@@ -63,12 +63,12 @@ func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage 
 
 	if slices.Contains(alarmAddSubCommandAliases, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
-		return alarmMemberCommand(botcommand.CommandAlarmAdd, "add", member, alarmType, rawMessage)
+		return alarmMemberCommand(botcommand.CommandAlarmAdd, member, alarmType, rawMessage)
 	}
 
 	if slices.Contains(alarmRemoveSubCommandAliases, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
-		return alarmMemberCommand(botcommand.CommandAlarmRemove, "remove", member, alarmType, rawMessage)
+		return alarmMemberCommand(botcommand.CommandAlarmRemove, member, alarmType, rawMessage)
 	}
 
 	if slices.Contains(alarmListSubCommandAliases, subCmd) {
@@ -79,47 +79,23 @@ func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage 
 		return alarmClearCommand(rawMessage)
 	}
 
-	return alarmInvalidCommand(subCmd, restArgs, rawMessage)
+	return &ParsedCommand{Type: botcommand.CommandAlarmInvalid, Params: botcommand.AlarmParams{}, RawMessage: rawMessage}
 }
 
-func alarmMemberCommand(commandType botcommand.CommandType, action, member, alarmType, rawMessage string) *ParsedCommand {
+func alarmMemberCommand(commandType botcommand.CommandType, member, alarmType, rawMessage string) *ParsedCommand {
 	return &ParsedCommand{
-		Type: commandType,
-		Params: map[string]any{
-			paramAction: action,
-			paramMember: member,
-			paramType:   alarmType,
-		},
+		Type:       commandType,
+		Params:     botcommand.AlarmParams{Member: member, Type: alarmType},
 		RawMessage: rawMessage,
 	}
 }
 
 func alarmListCommand(rawMessage string) *ParsedCommand {
-	return &ParsedCommand{
-		Type:       botcommand.CommandAlarmList,
-		Params:     map[string]any{paramAction: "list"},
-		RawMessage: rawMessage,
-	}
+	return &ParsedCommand{Type: botcommand.CommandAlarmList, Params: botcommand.AlarmParams{}, RawMessage: rawMessage}
 }
 
 func alarmClearCommand(rawMessage string) *ParsedCommand {
-	return &ParsedCommand{
-		Type:       botcommand.CommandAlarmClear,
-		Params:     map[string]any{paramAction: "clear"},
-		RawMessage: rawMessage,
-	}
-}
-
-func alarmInvalidCommand(subCmd string, restArgs []string, rawMessage string) *ParsedCommand {
-	return &ParsedCommand{
-		Type: botcommand.CommandAlarmInvalid,
-		Params: map[string]any{
-			paramAction:   "invalid",
-			"sub_command": subCmd,
-			paramMember:   strings.Join(restArgs, " "),
-		},
-		RawMessage: rawMessage,
-	}
+	return &ParsedCommand{Type: botcommand.CommandAlarmClear, Params: botcommand.AlarmParams{}, RawMessage: rawMessage}
 }
 
 var alarmTypeKeywords = map[string]string{

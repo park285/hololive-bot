@@ -25,11 +25,34 @@ export function validBootstrap(input) {
     Object.values(credentials).every(value => secret(value, 2048)) && new Set(Object.values(credentials)).size === 3;
 }
 
+function hasDuplicateKey(json) {
+  const scopes = [];
+  for (let i = 0; i < json.length; i++) {
+    const c = json[i];
+    if (c === '"') {
+      let end = i + 1;
+      while (json[end] !== '"') end += json[end] === '\\' ? 2 : 1;
+      const scope = scopes.at(-1);
+      if (scope?.expectKey) {
+        const key = JSON.parse(json.slice(i, end + 1));
+        if (scope.keys.has(key)) return true;
+        scope.keys.add(key);
+        scope.expectKey = false;
+      }
+      i = end;
+    } else if (c === '{') scopes.push({ keys: new Set(), expectKey: true });
+    else if (c === '[') scopes.push(null);
+    else if (c === '}' || c === ']') scopes.pop();
+    else if (c === ',' && scopes.at(-1)) scopes.at(-1).expectKey = true;
+  }
+  return false;
+}
+
 export function parseRequest(raw) {
   if (raw.length > limit) throw new Error('size');
   const str = new TextDecoder('utf-8', { fatal: true }).decode(raw);
   const value = JSON.parse(str);
-  if (JSON.stringify(value) !== str) throw new Error('noncanonical');
+  if (hasDuplicateKey(str)) throw new Error('duplicate_key');
   return value;
 }
 
@@ -281,8 +304,8 @@ function sessionFor(region, config) {
     bundle: profile.bundle,
     lang: profile.lang,
     appVersion: config.app_version,
-    apiSecret: config.api_secret,
-    credential: config.credentials[region],
+    apiSecret: Buffer.from(config.api_secret, 'utf8'),
+    credential: Buffer.from(config.credentials[region], 'utf8'),
     token: '',
     master: '',
     catalog: new Map(),
@@ -525,7 +548,14 @@ export function createGradeServer() {
       }
       if (bytesRead !== size) return reply(400, { version: 1, status: 'invalid_size' });
       operation.signal.throwIfAborted();
-      const input = parseRequest(Buffer.concat(chunks, bytesRead));
+      const body = Buffer.concat(chunks, bytesRead);
+      let input;
+      try {
+        input = parseRequest(body);
+      } finally {
+        body.fill(0);
+        for (const chunk of chunks) chunk.fill(0);
+      }
       if (req.url === '/v1/bootstrap') {
         if (sessions || !validBootstrap(input)) return reply(400, { version: 1, status: 'invalid_bootstrap' });
         sessions = new Map([...regions].map(region => [region, sessionFor(region, input.secret)]));
@@ -557,10 +587,10 @@ export function createGradeServer() {
   server.once('close', () => {
     if (sessions) {
       for (const session of sessions.values()) {
-        session.credential = '';
+        session.credential.fill(0);
+        session.apiSecret.fill(0);
         session.token = '';
         session.master = '';
-        session.apiSecret = '';
         session.client?.destroy();
       }
     }
@@ -581,6 +611,6 @@ function serve(socket) {
 
 if (import.meta.main) {
   const socket = process.argv[2];
-  if (process.versions.node !== '26.13.1' || process.argv.length !== 3 || !isAbsolute(socket)) process.exit(1);
+  if (process.versions.node.split('.')[0] !== '26' || process.argv.length !== 3 || !isAbsolute(socket)) process.exit(1);
   serve(socket);
 }

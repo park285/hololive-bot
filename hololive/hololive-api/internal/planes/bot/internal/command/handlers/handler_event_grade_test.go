@@ -40,10 +40,10 @@ func TestEventGradeAcknowledgesPinnedRelayWithoutEchoingUntrustedNames(t *testin
 		return contract.EventGradeResponse{Status: "registered", Region: "as", EventType: "relay", EndsAt: end, RevealsAt: end.Add(time.Hour)}, nil
 	}))
 	ctx := &botcommand.CommandContext{Room: "101", UserID: "202", UserName: "never echo"}
-	require.NoError(t, cmd.Execute(t.Context(), ctx, nil))
+	require.NoError(t, cmd.Execute(t.Context(), ctx, botcommand.EventGradeParams{}))
 	require.Contains(t, reply, "사용법")
 	require.Zero(t, calls)
-	require.NoError(t, cmd.Execute(t.Context(), ctx, map[string]any{"region": contract.GradeRegion("as"), "score": int64(250)}))
+	require.NoError(t, cmd.Execute(t.Context(), ctx, botcommand.EventGradeParams{Region: contract.GradeRegion("as"), Score: int64(250)}))
 	require.Equal(t, 1, calls)
 
 	for _, part := range []string{"릴레이 마라톤", "250점", "종료까지", "01-31 10:00 KST", "01-31 11:00 KST"} {
@@ -66,7 +66,7 @@ func TestEventGradeReportsUnconfirmedRegistrationSeparately(t *testing.T) {
 	}))
 	ctx := &botcommand.CommandContext{Room: "101", UserID: "202"}
 
-	require.NoError(t, cmd.Execute(t.Context(), ctx, map[string]any{"region": contract.GradeRegion("jp"), "score": int64(250)}))
+	require.NoError(t, cmd.Execute(t.Context(), ctx, botcommand.EventGradeParams{Region: contract.GradeRegion("jp"), Score: int64(250)}))
 	require.Contains(t, reply, "등록 결과를 확인하지 못했습니다")
 	require.Contains(t, reply, "다시 입력하면")
 }

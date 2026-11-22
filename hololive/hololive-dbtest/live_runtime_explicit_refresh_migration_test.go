@@ -30,8 +30,7 @@ func TestLiveRuntimeRefreshPrivileges(t *testing.T) {
 	require.NoError(t, pool.QueryRow(t.Context(), `SELECT
  has_function_privilege('pg_monitor','record_youtube_live_review(uuid,text,text,text,text)','EXECUTE')
  AND has_function_privilege('pg_monitor','refresh_youtube_live_runtime_state(text[])','EXECUTE')
- AND has_function_privilege('pg_monitor','lock_youtube_live_runtime_state()','EXECUTE')
- AND has_function_privilege('pg_monitor','youtube_live_review_receipt_value(jsonb)','EXECUTE')`).Scan(&recorderDependencies))
+ AND has_function_privilege('pg_monitor','lock_youtube_live_runtime_state()','EXECUTE')`).Scan(&recorderDependencies))
 	require.True(t, recorderDependencies)
 	assertLiveRuntimeRefreshPrivileges(t, pool, roles)
 	assertRuntimeRoleRefreshesLiveRuntimeState(t, pool, pgx.Identifier{roles.runtime}.Sanitize())

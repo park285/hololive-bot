@@ -32,7 +32,8 @@ SYSTEM = Path('/etc/systemd/system')
 GEN = Path('/run/systemd/generator')
 INPUT = RELEASE_ROOT / SLOT['unit_dir']
 GUARD = Path(__file__).resolve().with_name('lib') / 'systemd-stop-guard.py'
-QUIESCED = {'5433': b'kapu-d-guarded-stop-v2 direct\n', '6433': b'kapu-d-guarded-stop-v3 already-pooled\n'}
+CANDIDATE_PORT = '5433'
+QUIESCED = {'6433': b'kapu-d-guarded-stop-v4 pooled-to-direct\n', '5433': b'kapu-d-guarded-stop-v5 already-direct\n'}
 STORE = Path('/var/lib') / (C + '-cutover')
 D = Path('/etc/hololive-bot') / SERVICE / 'worker-profile-release'
 SECRETS = Path('/etc/stack-secrets/hololive-bot') / SERVICE
@@ -272,7 +273,7 @@ def config(name, source_port, *, candidate_installed=False):
     candidate = raw(INPUT / unit(name))
     expected = candidate
     if name == C:
-        token = b'Environment=POSTGRES_PORT=6433\n'
+        token = f'Environment=POSTGRES_PORT={CANDIDATE_PORT}\n'.encode()
         need(candidate.count(token) == 1, '후보 port 선언 불일치')
         expected = candidate.replace(token, f'Environment=POSTGRES_PORT={source_port}\n'.encode())
     need(raw(UNIT / unit(name)) == (candidate if candidate_installed else expected), '검토한 기본 unit과 설치본이 다름: ' + name)
@@ -559,13 +560,13 @@ def snapshot(h, source_port, target):
 
 def stop_receipt(source_port, state):
     marker = QUIESCED[source_port]
-    if source_port == '6433':
+    if source_port == CANDIDATE_PORT:
         marker += sha(json.dumps(state,sort_keys=True).encode()).encode() + b'\n'
     return marker
 
 
 def quiesce(h, source_port, target=None):
-    need((source_port == '6433') == (target is not None), 'pooled quiesce에만 별도 후보 identity 필요')
+    need(source_port != CANDIDATE_PORT or target is not None, '같은 endpoint 교체에는 별도 후보 identity 필요')
     need(not os.path.lexists(h), '새 hold 필요')
     trusted(GUARD)
     trusted(SLOTS_FILE)
@@ -623,8 +624,8 @@ def gate(image_id, level):
         '--volume=' + str(D/'profile.json') + ':' + PROFILE_ENV['STACK_WORKER_PROFILE_FILE'] + ':ro',
         *('--env=' + item for item in runtime['Environment']), image_id, '--check-worker-profile', timeout=65)
     args = [*common,'--name=' + C + '-database-check','--network=' + NETWORK,'--ip=10.89.15.14',envfile,ca]
-    args.extend('--env=' + k + '=' + v for k,v in {**DB,'POSTGRES_PORT':'6433'}.items())
-    run(*args, image_id, '--check-pooled-database', timeout=65)
+    args.extend('--env=' + k + '=' + v for k,v in {**DB,'POSTGRES_PORT':CANDIDATE_PORT}.items())
+    run(*args, image_id, '--check-database-endpoint', timeout=65)
 
 
 def start_once(n, requested):
@@ -683,7 +684,7 @@ def acceptance(h, s, n, g):
     if n == I:
         issuer(g)
     else:
-        need(collector(g,'6433',s['level']) == raw(h / 'profile.json'), '후보 loaded profile drift')
+        need(collector(g,CANDIDATE_PORT,s['level']) == raw(h / 'profile.json'), '후보 loaded profile drift')
         result = json.loads(run('podman','exec',g['cid'],'/app/bin/healthcheck','--body','https://127.0.0.1:' + PORT + '/ready'))
         need(result['status'] == 'ready' and result['instance_id'] == SERVICE and result['helper'] == 'ok' and
              result['first_success'] is True and result['handoff_status'] == 'PROCESSED' and result['handoff_processed'] is True and
@@ -728,7 +729,7 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
                     no_process(n,result,s['old'][n]['cid'])
                     guard('undo-unmask',h,n)
                     held_one(h,s,n)
-                    origin(n,'6433',True)
+                    origin(n,CANDIDATE_PORT,True)
                     continue
             except errors:
                 damaged = uncertain = True
@@ -736,7 +737,7 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
             continue
         try:
             guard('arm',h,n)
-            origin(n,'6433',False,True,allow_job=True)
+            origin(n,CANDIDATE_PORT,False,True,allow_job=True)
             if not uncertain:
                 armed.add(n)
         except errors:
@@ -748,11 +749,11 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
             if n in requested:
                 if n not in started:
                     started[n] = candidate(n,requested[n],s['old'][n],ids[n],guarded_hold=h)
-                guarded_stop(h,n,started[n],'6433',candidate=True)
+                guarded_stop(h,n,started[n],CANDIDATE_PORT,candidate=True)
                 stops[n] = started[n]['inv']
             else:
                 guard('check',h,n)
-                origin(n,'6433',False,True)
+                origin(n,CANDIDATE_PORT,False,True)
                 result = terminal(n)
                 need(n in before and before[n]['ActiveState'] == result['ActiveState'] == 'inactive', '후보 종료 미확인')
                 no_process(n,result,s['old'][n]['cid'])
@@ -782,7 +783,7 @@ def resume(h, target, source_port):
     need(stat.S_IMODE(h.stat().st_mode) == 0o700 and raw(h/'quiesced') == stop_receipt(source_port,s),
          '선택한 모드의 새 quiesce 영수증 필요')
     revision, ids, digests = target['revision'], target['images'], target['units']
-    if source_port == '6433':
+    if source_port == CANDIDATE_PORT or s.get('candidate') is not None:
         need(s.get('candidate') == target, '이 hold에서 정지 전에 승인한 후보와 불일치')
     retained(h,s,source_port)
     candidates = {}
@@ -807,7 +808,7 @@ def resume(h, target, source_port):
     inputs()
     for n in NAMES:
         held_one(h,s,n)
-        origin(n,'6433',True)
+        origin(n,CANDIDATE_PORT,True)
     gate(ids[C],s['level'])
     record(h/'sql-passed',b'kapu-d-v1\n')
     opened = []
@@ -831,7 +832,7 @@ def resume(h, target, source_port):
                 opened.append(n)
                 sync_dir(SYSTEM)
             run('systemctl','daemon-reload')
-            origin(n,'6433',False)
+            origin(n,CANDIDATE_PORT,False)
             need(prop(n,'LoadState') == 'loaded' and prop(n,'ActiveState') in ('inactive','failed'), '단독 기동 전 상태 불일치')
             if n == I:
                 held_one(h,s,C)
@@ -849,7 +850,7 @@ def resume(h, target, source_port):
         accepted = h/'accepted.json'
         try:
             metadata(pending, {'generations':started, 'revision':revision, 'profile':s['profile'],
-                               'host':DB['POSTGRES_HOST'], 'port':6433, 'role':DB['POSTGRES_USER'],
+                               'host':DB['POSTGRES_HOST'], 'port':int(CANDIDATE_PORT), 'role':DB['POSTGRES_USER'],
                                'first_success':True, 'handoff':'PROCESSED', 'collector_restarts':0})
             with defer_interrupts():
                 os.link(pending,accepted,follow_symlinks=False)
@@ -895,8 +896,11 @@ def main():
     for cmd in ('quiesce','resume'):
         p = sub.add_parser(cmd, allow_abbrev=False)
         p.add_argument('hold', type=Path)
-        p.add_argument('--already-pooled', required=True, dest='source_port', action='store_const', const='6433',
-                       help='이미 6433인 d를 정지하고 같은 pooled endpoint에서 교체')
+        source = p.add_mutually_exclusive_group(required=True)
+        source.add_argument('--already-direct', dest='source_port', action='store_const', const=CANDIDATE_PORT,
+                            help='이미 직접 TLS 5433인 d를 정지하고 같은 endpoint에서 교체')
+        source.add_argument('--from-pooler', dest='source_port', action='store_const', const='6433',
+                            help='PgBouncer 6433의 d를 정지하고 직접 TLS 5433 후보로 교체')
         for arg in ('revision','collector_id','issuer_id','collector_unit_sha256','issuer_unit_sha256'):
             p.add_argument(arg)
     a = parser.parse_args()

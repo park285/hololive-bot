@@ -19,7 +19,7 @@ type stubBotCommand struct {
 func (c *stubBotCommand) Name() string        { return c.name }
 func (c *stubBotCommand) Description() string { return c.name }
 
-func (c *stubBotCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
+func (c *stubBotCommand) Dispatch(context.Context, *botcommand.CommandContext, botcommand.Params) error {
 	c.calls++
 	return nil
 }

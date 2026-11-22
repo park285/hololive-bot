@@ -197,11 +197,7 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 	}
 
 	cmd := alarmcmd.NewAlarmCommand(deps)
-	params := map[string]any{
-		testParamAction: "invalid",
-		"sub_command":   "설정123",
-		paramMember:     "설정123",
-	}
+	params := botcommand.AlarmParams{Action: "invalid", Member: "설정123"}
 
 	ctx := &botcommand.CommandContext{
 		Room:     testRoomID,
@@ -246,7 +242,7 @@ func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
 
 	cmd := alarmcmd.NewAlarmCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{testParamAction: "list"})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.AlarmParams{Action: "list"})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -287,10 +283,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 		Room:     testRoomID,
 		UserID:   "user-1",
 		UserName: "tester",
-	}, map[string]any{
-		testParamAction: testActionAdd,
-		paramMember:     testMemberAqua,
-	})
+	}, botcommand.AlarmParams{Action: testActionAdd, Member: testMemberAqua})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -326,10 +319,7 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 		Room:     testRoomID,
 		UserID:   "user-1",
 		UserName: "tester",
-	}, map[string]any{
-		testParamAction: testActionAdd,
-		paramMember:     "NoSuchMember",
-	})
+	}, botcommand.AlarmParams{Action: testActionAdd, Member: "NoSuchMember"})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}

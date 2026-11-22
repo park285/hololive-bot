@@ -118,8 +118,8 @@ func ensureLoginRoles(
 
 	defer func() { err = closeConn(ctx, conn, "admin", err) }()
 
-	if _, err := conn.Exec(ctx, mustSQL("bootstrap_pooler_auth.sql")); err != nil {
-		return fmt.Errorf("bootstrap: configure pooler authentication: %w", err)
+	if _, err := conn.Exec(ctx, mustSQL("bootstrap_writer_admission.sql")); err != nil {
+		return fmt.Errorf("bootstrap: configure writer admission: %w", err)
 	}
 
 	if err := upsertScraperGroupRole(ctx, conn, scraperGroup); err != nil {

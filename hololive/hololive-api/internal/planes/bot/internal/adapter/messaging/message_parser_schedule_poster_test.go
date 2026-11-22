@@ -15,10 +15,10 @@ func TestParseMessage_SchedulePosterIsSeparateFromSchedule(t *testing.T) {
 	adapter := NewMessageAdapter("!")
 
 	for msg, want := range map[string]*ParsedCommand{
-		"!스케쥴 소라시나 소피아": {Type: botcommand.CommandSchedulePoster, Params: map[string]any{paramMember: "소라시나 소피아"}},
-		"!스케쥴":          {Type: botcommand.CommandSchedulePoster, Params: map[string]any{}},
-		"!스케줄 소피아":      {Type: botcommand.CommandSchedule, Params: map[string]any{paramMember: "소피아", paramDays: 7, "_raw_command": "스케줄"}},
-		"!일정 소피아":       {Type: botcommand.CommandSchedule, Params: map[string]any{paramMember: "소피아", paramDays: 7, "_raw_command": "일정"}},
+		"!스케쥴 소라시나 소피아": {Type: botcommand.CommandSchedulePoster, Params: botcommand.SchedulePosterParams{Member: "소라시나 소피아"}},
+		"!스케쥴":          {Type: botcommand.CommandSchedulePoster, Params: botcommand.SchedulePosterParams{}},
+		"!스케줄 소피아":      {Type: botcommand.CommandSchedule, Params: botcommand.ScheduleParams{Member: "소피아", Days: 7, RawCommand: "스케줄"}},
+		"!일정 소피아":       {Type: botcommand.CommandSchedule, Params: botcommand.ScheduleParams{Member: "소피아", Days: 7, RawCommand: "일정"}},
 	} {
 		result := adapter.ParseMessage(&webhook.Message{Msg: msg})
 		require.NotNil(t, result, msg)

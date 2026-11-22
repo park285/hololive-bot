@@ -1,15 +1,11 @@
 package geminidecision
 
 import (
-	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"slices"
 
 	"google.golang.org/genai/interactions/models/decisions"
@@ -94,27 +90,24 @@ var preserveScalars = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(func(dec 
 	return nil
 }))
 
-func (r Request) prepareHTTPRequest(ctx context.Context, req *http.Request) (*http.Request, error) {
-	defer req.Body.Close()
+func (r Request) encode() ([]byte, error) {
+	sdk, err := jsonv2.Marshal(decisions.CreateDecisionRequest{Model: Model, Input: r.Input, Questions: r.Questions})
+	if err != nil {
+		return nil, fmt.Errorf("marshal decision request: %w", err)
+	}
 
 	var members map[string]any
 
-	if err := jsonv2.UnmarshalRead(req.Body, &members, preserveScalars); err != nil {
-		return nil, fmt.Errorf("read SDK decision request: %w", err)
+	if err = jsonv2.Unmarshal(sdk, &members, preserveScalars); err != nil {
+		return nil, fmt.Errorf("read decision request: %w", err)
 	}
 
 	raw, err := jsonv2.Marshal(members, jsonv2.WithMarshalers(jsonv2.MarshalToFunc(r.writeObject)))
 	if err != nil {
-		return nil, fmt.Errorf("order SDK decision request: %w", err)
+		return nil, fmt.Errorf("order decision request: %w", err)
 	}
 
-	out := req.Clone(ctx)
-
-	out.Body = io.NopCloser(bytes.NewReader(raw))
-	out.ContentLength = int64(len(raw))
-	out.GetBody = nil
-
-	return out, nil
+	return raw, nil
 }
 
 func Text(text string) decisions.DecisionInputContent {

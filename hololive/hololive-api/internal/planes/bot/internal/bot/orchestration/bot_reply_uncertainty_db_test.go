@@ -51,7 +51,7 @@ func TestBotCommittedReplyWithLostReceiptDoesNotStageErrorResponse(t *testing.T)
 	}, registry)
 	registry.Register(&testCommand{
 		name: testHelpCommandName,
-		execute: func(ctx context.Context, commandContext *botcommand.CommandContext, _ map[string]any) error {
+		execute: func(ctx context.Context, commandContext *botcommand.CommandContext, _ botcommand.Params) error {
 			return bot.sendMessage(ctx, commandContext.Room, "answer")
 		},
 	})
