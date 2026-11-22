@@ -624,32 +624,6 @@ release_of() {
   find "$1/opt/hololive-bot/compose/current/artifacts/worker-profile/releases" -mindepth 1 -maxdepth 1 -type d
 }
 
-make_coordinated_case() {
-  local root="$1" service
-  make_case "${root}" hololive-api true
-  for service in hololive-api hololive-alarm-worker; do
-    mkdir -p "${root}/state/${service}" "${root}/etc/containers/systemd/hololive-bot/${service}.container.d"
-    printf 'true\n' >"${root}/state/${service}/active"
-    printf 'loaded\n' >"${root}/state/${service}/loadstate"
-    printf 'generated\n' >"${root}/state/${service}/mask_scope"
-    if [[ "$service" == hololive-api ]]; then printf '%032d\n' 7; else printf '%032d\n' 1; fi >"${root}/state/${service}/invocation"
-    if [[ "$service" == hololive-api ]]; then printf '%064d\n' 7; else printf '%064d\n' 1; fi >"${root}/state/${service}/cid"
-    printf '42\n' >"${root}/state/${service}/conmonpid"
-    printf '3\n' >"${root}/state/${service}/nrestarts"
-    printf 'baseline\n' >"${root}/state/${service}/runtime"
-    printf 'pair=baseline\n' >"${root}/etc/containers/systemd/hololive-bot/${service}.container.d/50-worker-profile.conf"
-  done
-}
-
-sealed_case() {
-  local root="$tmp/sealed-app"
-  make_coordinated_case "$root"
-  bash "$ROOT_DIR/scripts/deploy/sealed-app-case.sh" "$root" "$fakebin" "$REVISION" "sha256:$API_HEX" "sha256:$WORKER_HEX"
-  pass "19.2.1 보호 소스와 Quadlet을 유지하고 봉인 세대의 검사·실제 생성 단위로 지정된 writer만 교체한다"
-}
-if [[ "$#" == 1 && "$1" == --sealed ]]; then sealed_case; exit; fi
-[[ $# == 0 ]] || fail "usage: $0 [--sealed]"
-
 root="${tmp}/success"
 make_case "${root}" hololive-api true
 run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate ||
@@ -1076,6 +1050,22 @@ done
 pass "기존 release는 보존한 overlay로만 명시적 복원이 가능하다"
 
 FAKE_COORDINATED=true
+make_coordinated_case() {
+  local root="$1" service
+  make_case "${root}" hololive-api true
+  for service in hololive-api hololive-alarm-worker; do
+    mkdir -p "${root}/state/${service}" "${root}/etc/containers/systemd/hololive-bot/${service}.container.d"
+    printf 'true\n' >"${root}/state/${service}/active"
+    printf 'loaded\n' >"${root}/state/${service}/loadstate"
+    printf 'generated\n' >"${root}/state/${service}/mask_scope"
+    if [[ "$service" == hololive-api ]]; then printf '%032d\n' 7; else printf '%032d\n' 1; fi >"${root}/state/${service}/invocation"
+    if [[ "$service" == hololive-api ]]; then printf '%064d\n' 7; else printf '%064d\n' 1; fi >"${root}/state/${service}/cid"
+    printf '42\n' >"${root}/state/${service}/conmonpid"
+    printf '3\n' >"${root}/state/${service}/nrestarts"
+    printf 'baseline\n' >"${root}/state/${service}/runtime"
+    printf 'pair=baseline\n' >"${root}/etc/containers/systemd/hololive-bot/${service}.container.d/50-worker-profile.conf"
+  done
+}
 coordinated_release() {
   local root="$1" service="$2" candidate
   for candidate in "${root}/opt/hololive-bot/compose/current/artifacts/worker-profile/releases/"*; do
@@ -1514,7 +1504,5 @@ grep -q 'single-writer endpoint change refused' "$root/out" || { cat "$root/out"
 assert_no_call "$root" single '^(pair |systemctl (start|restart|daemon-reload))'
 [[ ! -e "$root/opt/hololive-bot/compose/current/artifacts" ]] || fail "단일 전환 거부가 release를 변경함"
 pass "기존 PG·풀러 실행 세대가 바뀌면 같은 이미지여도 카드 창을 재개하지 않는다"
-
-sealed_case
 
 echo "all quadlet redeploy checks passed"

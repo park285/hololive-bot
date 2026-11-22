@@ -29,8 +29,6 @@ CREDENTIALS = {
 COLLECTOR_NETWORKS = {}
 QUADLET_DIR = Path(os.environ.get("HOLOLIVE_QUADLET_TEST_ROOT", "") + "/etc/containers/systemd/hololive-bot")
 DROPIN = "50-worker-profile.conf"
-COMPOSE_ROOT = (Path(os.environ["HOLOLIVE_QUADLET_TEST_ROOT"]) if os.geteuid() and
-                os.environ.get("HOLOLIVE_QUADLET_TEST_ROOT") else Path("/")) / "opt/hololive-bot/compose"
 UNIT_RECORD = "unit.container"
 
 
@@ -605,13 +603,6 @@ def dropin_contents(directory, service, pair, app_version=None):
         if re.fullmatch(r"[0-9A-Za-z.+-]+", app_version) is None:
             raise ValueError("retained APP_VERSION is not safe for a Quadlet drop-in")
         lines.append("Environment=APP_VERSION=" + app_version)
-    if "source_generation" in pair:
-        revision = pair["source_generation"]
-        if (service not in ("hololive-api", "hololive-alarm-worker") or revision != pair["revision"]
-                or not re.fullmatch("[0-9a-f]{40}", revision)):
-            raise ValueError("invalid app prestart generation")
-        script = COMPOSE_ROOT / "app-sources" / revision / "scripts/deploy/quadlet-prestart.sh"
-        lines.extend(("[Service]", "ExecStartPre=", f"ExecStartPre=/usr/bin/bash {script} {service}"))
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
@@ -659,9 +650,6 @@ def verify_writer(directory, service, container, *, captured):
     if captured:
         require_captured(pair, container, before)
     release = pair["captured_release"] if captured else str(directory)
-    if service == "hololive-api" and "source_generation" in pair:
-        if [v for v in before["Config"]["Env"] if v.startswith("APP_VERSION=")] != ["APP_VERSION=" + pair["app_version"]]:
-            raise ValueError("running APP_VERSION differs from the pinned generation")
     loaded = container_profile_hash(service, before)
     mounted = writer_profile(before, service, release)
     if loaded != pair["profile_hash"] or (release is not None and digest(mounted) != loaded):
@@ -791,20 +779,7 @@ def main():
         (directory / UNIT_RECORD).write_text(unit_text)
         source = Path(SOURCE) / PROFILES[service]
         (directory / "profile.json").write_bytes(profile_bytes(source))
-        identity = image_identity(image)
-        source = Path(__file__).resolve().parents[3]
-        if service in ("hololive-api", "hololive-alarm-worker") and source.parent == COMPOSE_ROOT / "app-sources":
-            revision = identity["revision"]
-            if (not re.fullmatch("[0-9a-f]{40}", revision) or source.name != revision
-                    or (source / ".source-revision").read_bytes() != (revision + "\n").encode("ascii")):
-                raise ValueError("candidate image does not belong to its sealed source")
-            identity["source_generation"] = revision
-            if service == "hololive-api":
-                version = (source / "hololive/hololive-api/VERSION").read_text()
-                if not re.fullmatch(r"(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2}\n", version):
-                    raise ValueError("invalid sealed API version")
-                identity["app_version"] = version.rstrip("\n")
-        pair = save_pair(directory, service, identity)
+        pair = save_pair(directory, service, image_identity(image))
         dropin(directory, service, pair)
     elif action in ("capture", "prepare"):
         capture(rest[0], service, directory, rest[1])

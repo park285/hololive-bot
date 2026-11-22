@@ -137,19 +137,7 @@ unit을 갱신합니다. 이 도구는 배포 트리에 그 commit을 `.source-r
 
 구 `current.bak-*`를 검증·보존하고 stamp를 먼저 `incomplete`로 내구성 있게 바꿉니다. 검토된 파일(이번에는 helper 자신과 CHANGELOG 포함)을 교체한 뒤 전체 후보와 대조하고 온전한 SHA를 마지막에 게시합니다. 중간 실패 시 혼합 트리에 구 이미지나 새 이미지를 활성화할 수 없습니다. 자동 재실행·복원하지 말고 실제 파일·backup·기존 pair를 대조합니다. 이후 각 앱 교체는 아래 설치된 coordinator가 수행합니다.
 
-기존 19.2.1 설치의 보호 bind와 `current`를 그대로 두고 epoch 4 앱을 배포할 때는 위 세 가지 동기화 모드 대신 [보호된 소스 게시](../../../deploy/quadlet/README.md)의 `--protected-source <설치 SHA> <후보 SHA> <도구 SHA> <후보 clone>`를 사용합니다. 소스 게시 성공은 앱 기동 성공이 아닙니다. 중앙 API·worker용으로 검증해 전송한 이미지와 **같은 commit에 이 coordinator가 포함되어야** 합니다. 과거 릴리스의 이미지와 후속 도구를 섞지 않습니다.
-
-```bash
-helper="/opt/hololive-bot/compose/app-sources/${reviewed_sha}/scripts/deploy/quadlet-redeploy-service.sh"
-sudo -n "$helper" hololive-api "$approved_api_image_id"
-sudo -n "$helper" hololive-alarm-worker "$approved_worker_image_id" "$approved_api_image_id"
-```
-
-각 호출은 별도로 승인합니다. `reviewed_sha`는 승인된 40자리 SHA, image ID는 `sha256:`과 64자리 hex입니다. `active`를 따라가서 SHA를 고르거나, 검증 실패 후 `current`의 구 helper를 실행하지 않습니다. 기존 `--schema-only` base를 재설치하지 않고 migrator drop-in만 `--check`와 후보 API 이미지에 고정합니다. 후보의 실제 종료·`applied=0`, 이전 pair, 완전한 계보와 pooled SQL, 대상의 H3 준비 상태와 loaded profile을 확인합니다. 완료 epoch 3이면 32개 영수증을 그대로 사용하며, 신규 기준선 영수증을 쓰지 않습니다. peer의 컨테이너·invocation·이미지·endpoint와 보호 bind의 양쪽 inode가 바뀌면 중단합니다. 실패 시 소스 세대·release·migrator 기록을 보존하며 자동으로 재시도하거나 원복하지 않습니다.
-
-순서는 API 다음 worker입니다. 최초 API 교체에는 게시 영수증의 predecessor worker가 실행 중이어야 합니다. worker 교체에는 같은 SHA의 API `accepted-writer` 영수증과 그 세대에서 실제 로드된 pair가 필요합니다. 양쪽 모두 기존 설치 pair가 없는 경우 새로 만들어 우회하지 않습니다. `outcome_unknown`이면 release의 `activation.intent`, `schema-job`, `writer-job`과 실제 실행 세대를 보존하고 동일 명령을 다시 보내지 않습니다.
-
-보호 소스 저장소가 없는 일반 설치에서는 배포 트리의 helper로 API·worker를 교체합니다. helper가 이전 pair 보존, candidate 검사, 활성화 전
+API·worker는 배포 트리의 배포 helper로 교체합니다. helper가 이전 pair 보존, candidate 검사, 활성화 전
 `hololive-db-migrate`(같은 revision의 API image로 고정), drop-in 활성화와 restart, `verify-live`·`NRestarts` 확인을 한
 번에 합니다. 활성화 뒤 실패해도 자동으로 이전 pair를 복원하지 않습니다. 따로 `systemctl start hololive-db-migrate.service`나
 `systemctl restart`를 실행하지 않습니다. 단계와 결과 줄은 [배포 helper](../../../deploy/quadlet/README.md#배포-helper)에 있습니다.
@@ -169,7 +157,7 @@ Iris와 인증 계약을 함께 전환할 때는 위 단일 서비스 호출 대
 release 디렉터리를 보존하고, 스키마·admission 호환성을 승인받은 뒤에만 [rollback 런북](rollback.md)의 `--check`·`--apply`로
 이전 pair를 되살립니다. 호환되지 않으면 fix-forward합니다. helper는 실패한 단계를 재시도하지 않습니다.
 
-일반 설치의 runtime peer는 `Wants=`라 한 unit의 restart가 다른 unit을 재시작하지 않습니다. 다만 멈춰 있는 peer는 함께 시작되므로
+런타임 peer는 `Wants=`라 한 unit의 restart가 다른 unit을 재시작하지 않습니다. 다만 멈춰 있는 peer는 함께 시작되므로
 `hololive-api.service`를 시작하면 `hololive-alarm-worker.service`도 시작됩니다. main-host collector-c는
 `hololive-collector-c.service`이며 `po-central-cutover.sh`가 PO issuer를 먼저 교체·검증한 뒤 collector를
 재시작합니다. infra image는 `compose.env`의 identity를 바꾼 뒤 승인된 창에서 해당 unit만 재시작합니다.
