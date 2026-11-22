@@ -24,6 +24,10 @@ dump/restore로 새 볼륨 `hololive-bot_holo-pg-data19`에 옮기며, 기존 `h
    bootstrap은 `pg_stat_statements` 1.13을 요구하므로 PostgreSQL 18에서는 schema job이 실패합니다. 반대로 이전
    리비전의 schema job은 1.12를 요구하므로 전환 뒤에는 이전 이미지로 schema job을 실행하지 않습니다. 전환 직후에는
    설치되어 있던 이전 앱이 19에서 다시 기동하며, 이전 앱 코드에는 PostgreSQL major 검사가 없습니다.
+   원장이 epoch3(`032_schedule_poster_template.sql`까지)이면 이 리비전의 manifest에서 002·003이 남아 일반 배포의
+   원장 검사가 거부합니다. 이전 이름 collector 네 개를 모두 멈춘 뒤 `quadlet-redeploy-service.sh --quiesce <API ID>
+   <worker ID>`로 두 writer를 정지하고, `--resume <API release> <worker release>`가 migration을 적용하게 합니다.
+   절차는 [중앙 배포](../../../deploy/quadlet/README.md)의 `--quiesce`·`--resume` 설명을 따릅니다.
 6. 퇴역한 보호 소스 게시가 남긴 `/opt/hololive-bot/compose/app-sources`가 있는 중앙에서는, 5단계의 API·worker 교체가
    `hololive-db-migrate`의 `50-migrator-image.conf`를 새로 쓴 뒤 같은 정비 창에서 이 디렉터리를 보관 위치로 옮깁니다.
    그 전까지 남은 migrator drop-in의 `ExecStartPre`가 이 디렉터리의 prestart를 가리킵니다.

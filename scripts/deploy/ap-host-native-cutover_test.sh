@@ -1053,6 +1053,7 @@ for name, mutation, fault, valid in (
 initial_dispatch = '''
 rm "$current_link"
 slot_service=collector-a payload="$PWD/unused-stage"
+po_unit_file="$PWD/system/$po_service" po_socket_file="$PWD/system/$po_socket"
 native_deployment_inputs() { :; }
 '''
 for name, mutation, action, valid in (
@@ -1061,6 +1062,12 @@ for name, mutation, action, valid in (
     ('install-previous', 'ln -s "$old_target" "$previous_link"', 'install-initial', False),
     ('install-guard', 'mkdir "$native_recovery_dir"', 'install-initial', False),
     ('install-other-host', 'hostname() { echo osaka2; }', 'install-initial', False),
+    ('install-collector-unit', 'touch "$unit_file"', 'install-initial', False),
+    ('install-issuer-unit', 'touch "$po_unit_file"', 'install-initial', False),
+    ('install-socket-unit', 'touch "$po_socket_file"', 'install-initial', False),
+    ('install-issuer-drop-in', 'mkdir "$PWD/system/$po_service.d"', 'install-initial', False),
+    ('install-collector-drop-in', 'mkdir "$PWD/system/$unit.d"', 'install-initial', False),
+    ('install-template-drop-in', 'ln -s missing "$unit_file.d"', 'install-initial', False),
     ('deploy-osaka1', '', 'deploy', False),
 ):
     case, result = window_case('initial-dispatch-' + name, [release_window, '6433', 'normal'], initial_dispatch + mutation +

@@ -127,6 +127,11 @@ case "$window_action" in
     sudo -n test ! -L "$current_link"
     sudo -n test ! -e "$previous_link"
     sudo -n test ! -L "$previous_link"
+    for retired in "$unit_file" "$po_unit_file" "$po_socket_file" "$unit_file.d" "${unit_file%/*}/$unit.d" \
+      "${unit_file%/*}/$po_service.d" "${unit_file%/*}/$po_socket.d"; do
+      sudo -n test ! -e "$retired"
+      sudo -n test ! -L "$retired"
+    done
     native_recovery_require_clear
     window_action=deploy ;;
   initial-accepted)
