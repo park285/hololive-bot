@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **collector 이름 전환 배포 경로:** native a에 `ap-host-native-deploy.sh osaka --install-initial`을 추가했습니다. 이전 이름의 설치를 퇴역시킨 osaka1에서 새 root의 `current`·`previous`·복구 guard와 collector·issuer unit 파일·drop-in이 모두 없을 때만 첫 설치를 하고, 관찰 검사가 통과하면 현재 릴리스를 수용 표식으로 고정해 다음 `--apply`의 원점으로 씁니다. 일반 `deploy`는 계속 osaka1을 거부합니다. [collector runbook](docs/current/runbooks/collector.md#이름-전환)에 slot별 퇴역·첫 설치, b·c의 다음 배포 경로(`quiesce-verified`→`resume`), d의 image·profile 위치를 적었고, [PostgreSQL major 전환](docs/current/runbooks/postgres-major-upgrade.md#순서)에 epoch3 원장의 002·003 적용 경로를 적었습니다.
+
 ## r1.0.0 - 2026-11-22
 
 - **보호 소스 게시 경로 퇴역(운영자 조치 필요):** 19.2.1 설치의 init-db·pg_hba bind를 그대로 둔 채 앱 코드만 봉인 세대로 게시하던 `sync-opt-current.sh --protected-source`·`--supersede-unstarted`, `app-sources` 세대 저장소, 봉인 coordinator·rollback 분기와 그 복구 supervisor·시험을 지웠습니다. PostgreSQL 19 전환은 init-db와 Quadlet을 바꾸므로 이 경로로 배포할 수 없습니다. 중앙 API·worker는 다시 `current`의 배포 helper(`quadlet-redeploy-service.sh`, `quadlet-rollback-service.sh`)로 교체하고, 소스 교체는 전체 동기화나 `--application-only`·`--source-only`로 합니다. 운영 중앙에 남은 `/opt/hololive-bot/compose/app-sources`는 새 도구가 읽지 않으며, API·worker 교체가 migrator drop-in을 새로 쓴 뒤 승인된 정비 창에서 보관 위치로 옮깁니다.
