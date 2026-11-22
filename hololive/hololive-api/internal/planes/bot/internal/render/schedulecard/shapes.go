@@ -463,3 +463,138 @@ func drawRocket(c *canvas, cx, cy, scale, angle float64, ink color.RGBA) {
 	c.Fill(xf(circle(0, -8, 9), m), hex(0x7FD4FF))
 	c.Fill(xf(circle(-3, -11, 3), m), rgba(0xFFFFFF, 0.9))
 }
+
+func drawBell(c *canvas, cx, cy, s, angle float64, gold, shade, ink color.RGBA) {
+	m := place(cx, cy, s, angle)
+
+	var body shape
+
+	body.MoveTo(0, -20)
+	body.CubeTo(-15, -20, -21, -8, -23, 8)
+	body.LineTo(-28, 15)
+	body.QuadTo(0, 21, 28, 15)
+	body.LineTo(23, 8)
+	body.CubeTo(21, -8, 15, -20, 0, -20)
+	body.Close()
+
+	c.Fill(xf(circle(0, -24, 5.5), m), shade)
+	c.Stroke(xf(circle(0, -24, 5.5), m), 2.2*s, ink)
+	c.Fill(xf(circle(0, 19, 6.5), m), shade)
+	c.Stroke(xf(circle(0, 19, 6.5), m), 2.0*s, ink)
+
+	tb := xf(body, m)
+	c.Fill(outline(tb, 4.4*s, false), ink)
+	c.FillLinear(tb, cx-24*s, cy-20*s, cx+24*s, cy+20*s, stop{0, hex(0xFFF0B5)}, stop{0.55, gold}, stop{1, shade})
+	c.Fill(xf(rrect(-14, -4, 7, 14, 3.5), m), rgba(0xFFFFFF, 0.52))
+}
+
+func goatSilhouette() shape {
+	var s shape
+
+	s.MoveTo(-22, 12)
+	s.LineTo(-22, 27)
+	s.LineTo(-15, 27)
+	s.LineTo(-14, 14)
+	s.LineTo(10, 14)
+	s.LineTo(11, 27)
+	s.LineTo(18, 27)
+	s.LineTo(18, 8)
+	s.CubeTo(23, 3, 25, -5, 23, -12)
+	s.LineTo(28, -17)
+	s.LineTo(23, -19)
+	s.CubeTo(22, -26, 17, -30, 10, -28)
+	s.LineTo(14, -18)
+	s.CubeTo(9, -15, 7, -10, 8, -4)
+	s.CubeTo(-2, -6, -15, -6, -24, -1)
+	s.LineTo(-30, -7)
+	s.LineTo(-27, 4)
+	s.CubeTo(-26, 8, -24, 10, -22, 12)
+	s.Close()
+
+	return s
+}
+
+func drawLeafSprig(c *canvas, cx, cy float64, flip bool, col color.RGBA) {
+	dir := 1.0
+
+	if flip {
+		dir = -1
+	}
+
+	c.Stroke(line(cx, cy, cx+dir*26, cy-6), 2.0, col)
+
+	for _, lf := range [][4]float64{
+		{8, -2, -32, 7.5},
+		{16, -4, 36, 6.8},
+		{24, -6, -22, 6.2},
+	} {
+		lx, ly := cx+dir*lf[0], cy+lf[1]
+		ang := deg(lf[2]) * dir
+		c.Fill(xf(ellipse(0, 0, lf[3], lf[3]*0.48), place(lx, ly, 1, ang)), col)
+	}
+}
+
+func roundedDiamond(cx, cy, r, corner float64) shape {
+	side := r * math.Sqrt2
+
+	return xf(rrect(-side/2, -side/2, side, side, corner), place(cx, cy, 1, math.Pi/4))
+}
+
+func crescent(cx, cy, r, angle float64) shape {
+	d := r * 0.48
+	rin := r * 0.86
+	xi := (r*r - rin*rin + d*d) / (2 * d)
+	yi := math.Sqrt(max(0, r*r-xi*xi))
+
+	aOut0 := math.Atan2(yi, xi)
+	aOut1 := 2*math.Pi - aOut0
+	aInTop := math.Atan2(-yi, xi-d) + 2*math.Pi
+	aInBot := math.Atan2(yi, xi-d)
+
+	var s shape
+
+	s.Arc(0, 0, r, r, aOut0, aOut1)
+
+	const steps = 28
+
+	for i := 1; i <= steps; i++ {
+		a := aInTop + (aInBot-aInTop)*float64(i)/float64(steps)
+		s.LineTo(d+rin*math.Cos(a), rin*math.Sin(a))
+	}
+
+	s.Close()
+
+	return xf(s, place(cx, cy, 1, angle))
+}
+
+func bookmarkRibbon(x, y, w, h, notch float64) shape {
+	return poly(x, y, x+w, y, x+w, y+h, x+w/2, y+h-notch, x, y+h)
+}
+
+func wafuCloudLine(cx, cy, w, h float64) shape {
+	var s shape
+
+	r := h * 0.28
+	s.Add(rrect(cx-w*0.50, cy-h*0.48, w*0.66, r*2, r))
+	s.Add(rrect(cx-w*0.26, cy-r, w*0.76, r*2, r))
+	s.Add(rrect(cx-w*0.42, cy+h*0.48-r*2, w*0.62, r*2, r))
+
+	return s
+}
+
+func goatPostmark(c *canvas, cx, cy, r float64, col color.RGBA) {
+	c.Stroke(circle(cx, cy, r), 2.1, col)
+	c.StrokeButt(dash(circle(cx, cy, r*0.80), 4, 4), 1.4, col)
+	c.Fill(xf(goatSilhouette(), place(cx, cy+1, r*0.017, 0)), col)
+
+	for i := -1; i <= 1; i++ {
+		wy := cy + float64(i)*r*0.30
+
+		var w shape
+
+		w.MoveTo(cx+r+5, wy)
+		w.QuadTo(cx+r+14, wy-3.5, cx+r+23, wy)
+		w.QuadTo(cx+r+32, wy+3.5, cx+r+41, wy)
+		c.Stroke(w, 1.7, col)
+	}
+}

@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"image"
 	"log/slog"
+	"math/rand/v2"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
@@ -24,8 +26,8 @@ import (
 
 const (
 	scheduleCardFormat       = schedulecard.Format3x4
-	scheduleCardCacheLimit   = 16
-	scheduleCardCacheVersion = "v3"
+	scheduleCardCacheLimit   = 32
+	scheduleCardCacheVersion = "v4"
 	scheduleCardCacheTTL     = 7 * 24 * time.Hour
 )
 
@@ -37,22 +39,23 @@ type scheduleCardKey struct {
 	changes       int
 	format        schedulecard.Format
 	template      cardtemplate.ID
+	variant       string
 	memberName    string
 	photo         string
 }
 
 func (k scheduleCardKey) String() string {
-	return fmt.Sprintf("%d:%d:%d:%d:%d:%s:%s:%q:%q", k.posterID, k.extractedAtNS, k.changedAtNS, k.editedAtNS, k.changes, k.format, k.template, k.memberName, k.photo)
+	return fmt.Sprintf("%d:%d:%d:%d:%d:%s:%s:%q:%q:%q", k.posterID, k.extractedAtNS, k.changedAtNS, k.editedAtNS, k.changes, k.format, k.template, k.variant, k.memberName, k.photo)
 }
 
 func (k scheduleCardKey) shared() (string, [sha256.Size]byte) {
-	return fmt.Sprintf("bot:schedule:card:%s:%d:%s:%s", scheduleCardCacheVersion, k.posterID, k.format, k.template), sha256.Sum256([]byte(k.String()))
+	return fmt.Sprintf("bot:schedule:card:%s:%d:%s:%s:%s", scheduleCardCacheVersion, k.posterID, k.format, k.template, k.variant), sha256.Sum256([]byte(k.String()))
 }
 
-func newScheduleCardKey(member *domain.Member, schedule *scheduleposter.PublishedSchedule, format schedulecard.Format, template cardtemplate.ID) scheduleCardKey {
+func newScheduleCardKey(member *domain.Member, schedule *scheduleposter.PublishedSchedule, format schedulecard.Format, template cardtemplate.ID, variant string) scheduleCardKey {
 	key := scheduleCardKey{
 		posterID: schedule.PosterID, extractedAtNS: schedule.ExtractedAt.UnixNano(), changes: len(schedule.Changes), format: format,
-		template: template, memberName: member.DisplayName(), photo: member.Photo,
+		template: template, variant: variant, memberName: member.DisplayName(), photo: member.Photo,
 	}
 
 	for i := range schedule.Rows {
@@ -73,11 +76,42 @@ func newScheduleCardKey(member *domain.Member, schedule *scheduleposter.Publishe
 }
 
 type ScheduleCardRenderer struct {
-	format  schedulecard.Format
-	cache   *imageCache[scheduleCardKey]
-	shared  sharedRenderCache
-	flights singleflight.Group
-	draw    func(context.Context, schedulecard.Card, schedulecard.Format, cardtemplate.ID) ([][]byte, error)
+	format   schedulecard.Format
+	cache    *imageCache[scheduleCardKey]
+	shared   sharedRenderCache
+	flights  singleflight.Group
+	variants *variantPicker
+	draw     func(context.Context, schedulecard.Card, schedulecard.Format, cardtemplate.ID) ([][]byte, error)
+}
+
+type variantPicker struct {
+	mu   sync.Mutex
+	last map[string]string
+	intN func(int) int
+}
+
+func newVariantPicker() *variantPicker {
+	return &variantPicker{last: make(map[string]string), intN: rand.IntN}
+}
+
+func (p *variantPicker) pick(channelID string, pool []string) string {
+	if len(pool) == 0 {
+		return ""
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	candidates := slices.DeleteFunc(slices.Clone(pool), func(v string) bool { return v == p.last[channelID] })
+	if len(candidates) == 0 {
+		candidates = pool
+	}
+
+	choice := candidates[p.intN(len(candidates))]
+
+	p.last[channelID] = choice
+
+	return choice
 }
 
 func NewScheduleCardRenderer(store sharedcache.Store) *ScheduleCardRenderer {
@@ -93,7 +127,7 @@ func newScheduleCardSharedCache(store sharedcache.Store) sharedRenderCache {
 }
 
 func newScheduleCardRenderer(format schedulecard.Format, cacheLimit int, draw func(context.Context, schedulecard.Card, schedulecard.Format, cardtemplate.ID) ([][]byte, error)) *ScheduleCardRenderer {
-	return &ScheduleCardRenderer{format: format, cache: newImageCache[scheduleCardKey](cacheLimit), draw: draw}
+	return &ScheduleCardRenderer{format: format, cache: newImageCache[scheduleCardKey](cacheLimit), variants: newVariantPicker(), draw: draw}
 }
 
 func (r *ScheduleCardRenderer) RenderScheduleCards(ctx context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID) ([][]byte, error) {
@@ -109,7 +143,9 @@ func (r *ScheduleCardRenderer) RenderScheduleCards(ctx context.Context, member *
 		return nil, err
 	}
 
-	key := newScheduleCardKey(member, &schedule, r.format, template)
+	variant := r.variants.pick(member.ChannelID, schedulecard.Variants(member.ChannelID, r.format, template))
+	key := newScheduleCardKey(member, &schedule, r.format, template, variant)
+
 	if pages, ok := r.cachedPages(key); ok {
 		return pages, nil
 	}
@@ -220,6 +256,9 @@ func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleC
 	photo := photos.photos[member.Photo]
 
 	card := newScheduleCard(member, schedule, photo)
+
+	card.Variant = key.variant
+
 	if key.template == cardtemplate.Orbit && len(card.Items) > schedulecard.MaxItems {
 		return nil, schedulecard.ErrRenderBudget
 	}

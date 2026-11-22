@@ -7,6 +7,7 @@ import (
 	"image"
 	"math"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -570,6 +571,77 @@ func TestThemeForChannel(t *testing.T) {
 		if got := themeFor(id); reflect.ValueOf(got).Pointer() != reflect.ValueOf(want).Pointer() {
 			t.Errorf("themeFor(%q) picked the wrong theme", id)
 		}
+	}
+}
+
+const kyokoChannel = "UCSjQDxud2HkAO2DVD3lwxmw"
+
+func TestVariantsOfferPostersOnlyForPortraitClassic(t *testing.T) {
+	tests := []struct {
+		channel  string
+		format   Format
+		template cardtemplate.ID
+		want     []string
+	}{
+		{kyokoChannel, Format3x4, cardtemplate.Classic, []string{originalVariant, "polished-light", "polished-dark"}},
+		{"UCROQtXcp2loQEmvpe5rhJzQ", Format3x4, cardtemplate.Classic, []string{originalVariant, "pastel-orbit", "deep-space-hud", "cyber-science-pop"}},
+		{"UC8eitCE9Z6EwUCs-VUi1blg", Format3x4, cardtemplate.Classic, []string{originalVariant, "aqua-matsuri", "hikeshi-night", "dual-tone-shrine"}},
+		{"UCy9mgxB8pn2C4aNK_MPthDQ", Format3x4, cardtemplate.Classic, []string{originalVariant, "postage-diary", "airmail-envelope", "royal-post-uniform"}},
+		{kyokoChannel, Format16x9, cardtemplate.Classic, nil},
+		{kyokoChannel, Format4x3, cardtemplate.Classic, nil},
+		{kyokoChannel, Format3x4, cardtemplate.Orbit, nil},
+		{"UC-unknown", Format3x4, cardtemplate.Classic, nil},
+	}
+
+	for _, tt := range tests {
+		if got := Variants(tt.channel, tt.format, tt.template); !slices.Equal(got, tt.want) {
+			t.Errorf("Variants(%q, %s, %s) = %q, want %q", tt.channel, tt.format, tt.template, got, tt.want)
+		}
+	}
+}
+
+func TestClassicThemeResolvesOnlyPooledVariants(t *testing.T) {
+	for variant, want := range map[string]theme{
+		"":               renderKyoko,
+		originalVariant:  renderKyoko,
+		"polished-light": renderKyokoPolishedLight,
+		"polished-dark":  renderKyokoPolishedDark,
+	} {
+		got, err := classicTheme(Card{ChannelID: kyokoChannel, Variant: variant}, Format3x4)
+		if err != nil || reflect.ValueOf(got).Pointer() != reflect.ValueOf(want).Pointer() {
+			t.Errorf("classicTheme(%q) picked the wrong theme, err = %v", variant, err)
+		}
+	}
+
+	for _, tc := range []struct {
+		card   Card
+		format Format
+	}{
+		{Card{ChannelID: kyokoChannel, Variant: "pastel-orbit"}, Format3x4},
+		{Card{ChannelID: kyokoChannel, Variant: "polished-dark"}, Format16x9},
+		{Card{ChannelID: kyokoChannel, Variant: "unknown"}, Format3x4},
+		{Card{ChannelID: "UC-unknown", Variant: originalVariant}, Format3x4},
+	} {
+		if _, err := classicTheme(tc.card, tc.format); !errors.Is(err, ErrInvalidCard) {
+			t.Errorf("classicTheme(%q, %q, %s) error = %v, want ErrInvalidCard", tc.card.ChannelID, tc.card.Variant, tc.format, err)
+		}
+	}
+}
+
+func TestRenderPagesRejectsUnservedVariant(t *testing.T) {
+	card := weekCard(t, sampleWeek(t)...)
+
+	card.ChannelID = kyokoChannel
+	card.Variant = "polished-dark"
+
+	if _, err := RenderPages(t.Context(), card, Format3x4, cardtemplate.Orbit); !errors.Is(err, ErrInvalidCard) {
+		t.Errorf("orbit with variant: error = %v, want ErrInvalidCard", err)
+	}
+
+	card.Variant = "unknown"
+
+	if _, err := RenderPages(t.Context(), card, Format3x4, cardtemplate.Classic); !errors.Is(err, ErrInvalidCard) {
+		t.Errorf("unknown classic variant: error = %v, want ErrInvalidCard", err)
 	}
 }
 

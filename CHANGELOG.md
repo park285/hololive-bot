@@ -8,6 +8,8 @@
 
 - PostgreSQL 18 전용이던 pg_jsonschema 실험의 재현 파일(`Dockerfile.jsonschema`, `jsonschema.py`, `testqueries/jsonschema.sql`)을 지웠습니다. pg_jsonschema v0.3.4에는 PostgreSQL 19용 바이너리가 없습니다. [실험 README](scripts/experiments/postgres-extensions/README.md)에는 측정 결과와 보류 판단만 남깁니다. 운영 이미지와 배포는 바뀌지 않습니다.
 
+- **`!스케쥴` 카드 시안 회전:** 쿄코·소피아·메라·츠즈리의 3:4 classic 일정 카드가 요청마다 기존 디자인과 새 포스터 시안(쿄코 2종, 나머지 멤버 각 3종) 중 하나를 무작위로 고르며, 같은 멤버에게 직전에 보낸 시안은 고르지 않습니다. 직전 시안은 프로세스 메모리에만 남으므로 재시작 뒤에는 전체에서 다시 고릅니다. orbit 템플릿, 16:9·4:3 형식, 다른 멤버는 기존 디자인 하나를 그대로 씁니다. 렌더 캐시는 시안별로 따로 두고 메모리 상한을 32장으로 늘렸으며, 공유 캐시 키가 `bot:schedule:card:v4:…`로 바뀌어 v3 항목은 읽지 않습니다. 저장된 카드 양식이 orbit인 멤버는 회전하지 않으며, 기본 스키마가 소피아를 orbit으로 넣으므로 운영 값이 orbit이면 Iris Console에서 classic으로 바꿔야 소피아 카드가 회전합니다.
+
 ## r1.0.1 - 2026-11-22
 
 - **collector 이름 전환 배포 경로:** native a에 `ap-host-native-deploy.sh osaka --install-initial`을 추가했습니다. 이전 이름의 설치를 퇴역시킨 osaka1에서 새 root의 `current`·`previous`·복구 guard와 collector·issuer unit 파일·drop-in이 모두 없을 때만 첫 설치를 하고, 관찰 검사가 통과하면 현재 릴리스를 수용 표식으로 고정해 다음 `--apply`의 원점으로 씁니다. 일반 `deploy`는 계속 osaka1을 거부합니다. [collector runbook](docs/current/runbooks/collector.md#이름-전환)에 slot별 퇴역·첫 설치, b·c의 다음 배포 경로(`quiesce-verified`→`resume`), d의 image·profile 위치를 적었고, [PostgreSQL major 전환](docs/current/runbooks/postgres-major-upgrade.md#순서)에 epoch3 원장의 002·003 적용 경로를 적었습니다.
