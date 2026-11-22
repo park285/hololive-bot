@@ -62,13 +62,14 @@ done < "$REPO_ROOT/deploy/topology/hosts.conf"
 [[ -n "$AP_POSTGRES_HOST" ]] || { echo 'topology central address missing' >&2; exit 1; }
 case "$MODE" in
   --dry-run|--apply|--prepare-profile) [[ $# -le 2 ]] || exit 2 ;;
+  --install-initial) [[ ${1:-} == osaka && $# == 2 ]] || exit 2 ;;
   --quiesce|--resume)
     [[ ${1:-} == osaka && ${3:-} == "$native_release_window" && -n ${RELEASE_ID:-} &&
        -n ${HOLO_BOT_VERSION:-} && -n ${4:-} && ${HOLO_NATIVE_PAYLOAD_SHA256:-} =~ ^[0-9a-f]{64}$ ]] || exit 2
     if [[ "$MODE" == --quiesce ]]; then [[ $# == 4 ]]; else [[ $# == 5 && "$5" =~ ^[0-9a-f-]{36}$ ]]; fi
     ;;
   *)
-    echo "Usage: $0 <ap-host> [--dry-run|--apply|--prepare-profile] | osaka --quiesce|--resume W1|W2 <old-release> [nonce]" >&2
+    echo "Usage: $0 <ap-host> [--dry-run|--apply|--prepare-profile] | osaka --install-initial | osaka --quiesce|--resume W1|W2 <old-release> [nonce]" >&2
     exit 2
     ;;
 esac
@@ -318,6 +319,7 @@ REMOTE
 
 action=deploy
 if [[ "$MODE" == --quiesce || "$MODE" == --resume ]]; then action="${MODE#--}"; fi
+if [[ "$MODE" == --install-initial ]]; then action=install-initial; fi
 apply_cutover() {
   if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
     local nonce
@@ -350,3 +352,4 @@ for observer in "$tool_root/scripts/logs/ap-host-native-status.sh" "$tool_root/s
 done
 if [[ "$MODE" == --resume ]]; then apply_remote accepted; fi
 if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then apply_remote apply-accepted; fi
+if [[ "$MODE" == --install-initial ]]; then apply_remote initial-accepted; fi

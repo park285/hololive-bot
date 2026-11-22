@@ -476,6 +476,23 @@ else
   pass '오사카 첫 일반 apply는 빌드·전송 전에 실제 원점 부재를 확인하고 거절합니다.'
 fi
 
+status=0
+PATH="$tmp/bin:$PATH" ARTIFACT_DIR="$tmp/initial-other-host" SSH_KEY="$tmp/KR.key" I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true \
+  "$DEPLOY" seoul --install-initial >"$tmp/initial-other.out" 2>&1 || status=$?
+if [[ "$status" != 2 || -e "$tmp/initial-other-host" ]]; then
+  record_fail '첫 설치 모드가 osaka 밖에서 빌드 전에 거절되지 않았습니다.'
+else
+  pass '첫 설치 모드는 osaka에만 허용됩니다.'
+fi
+status=0
+PATH="$tmp/bin:$PATH" ARTIFACT_DIR="$tmp/initial-unapproved" SSH_KEY="$tmp/KR.key" \
+  "$DEPLOY" osaka --install-initial >"$tmp/initial-unapproved.out" 2>&1 || status=$?
+if [[ "$status" != 2 || -e "$tmp/initial-unapproved" ]] || ! grep -Fq 'Refusing apply without I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true' "$tmp/initial-unapproved.out"; then
+  record_fail '승인 없는 osaka 첫 설치가 빌드 전에 거절되지 않았습니다.'
+else
+  pass '승인 없는 osaka 첫 설치는 빌드 전에 거절됩니다.'
+fi
+
 . "$ROOT_DIR/scripts/deploy/lib/ap-host-native-window.sh"
 mkdir -p "$tmp/payload/bin" "$tmp/transfer-home"
 printf 'qualified\n' > "$tmp/payload/bin/worker-profile-pair.py"

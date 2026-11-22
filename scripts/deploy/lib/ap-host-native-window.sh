@@ -849,6 +849,41 @@ native_apply_close_observation() {
   native_window_accept_guard accept
 }
 
+native_initial_accept() {
+  local n persistent reserved
+  [[ "$(hostname -s)" == osaka1 && "$service" == "$slot_service" && "$(realpath -e "$current_link")" == "$release_dir" &&
+     "$(sudo -n cat "$release_dir/po-sandbox/revision")" == "$EXPECTED_REVISION" ]]
+  sudo -n test ! -e "$previous_link"
+  sudo -n test ! -L "$previous_link"
+  for reserved in accepted-window native-window native-observation; do
+    sudo -n test ! -e "$release_dir/$reserved"
+    sudo -n test ! -L "$release_dir/$reserved"
+  done
+  native_recovery_require_clear
+  for n in "${window_units[@]}"; do
+    [[ "$(native_window_prop "$n" ActiveState)" == active ]]
+    persistent="$(native_window_prop "$n" UnitFileState)"
+    [[ "$persistent" == enabled || ( "$n" == "$po_service" && "$persistent" == disabled ) ]]
+  done
+  collector_readiness_validate "$(collector_readiness_fetch)"
+  sudo -n mkdir -m 0700 "$native_recovery_dir"
+  native_window_identity stage "$release_id" "$EXPECTED_REVISION"
+  sudo -n python3 -I -B - "$native_recovery_dir" "$release_dir" <<'PY'
+from pathlib import Path
+import os, sys
+guard, release = map(Path, sys.argv[1:3])
+assert not guard.is_symlink() and {p.name for p in guard.iterdir()} == {'accepted-window'}
+window = release/'native-observation'
+os.mkdir(window, 0o700)
+os.link(guard/'accepted-window', release/'accepted-window')
+os.rename(guard, window/'accepted-guard')
+for path in (window, release, guard.parent):
+    fd = os.open(path, os.O_RDONLY|os.O_DIRECTORY)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+PY
+}
+
 native_window_accept_guard() {
   local step="$1" dest="$window/accepted-guard" expires permit status=0
   native_window_identity stage "$release_id" "$EXPECTED_REVISION"

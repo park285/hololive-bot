@@ -121,6 +121,20 @@ case "$window_action" in
   deploy)
     remote_host="$(hostname -s)"
     [[ $# == 9 && -n "$remote_host" && "$remote_host" != osaka1 ]]; native_recovery_require_clear ;;
+  install-initial)
+    [[ $# == 9 && "$(hostname -s)" == osaka1 && "$service" == "$slot_service" ]]
+    sudo -n test ! -e "$current_link"
+    sudo -n test ! -L "$current_link"
+    sudo -n test ! -e "$previous_link"
+    sudo -n test ! -L "$previous_link"
+    native_recovery_require_clear
+    window_action=deploy ;;
+  initial-accepted)
+    [[ $# == 9 ]]
+    native_release_id_validate "$release_id"
+    release_dir="$releases_root/$release_id" window_units=("$po_socket" "$po_service" "$unit")
+    native_initial_accept
+    exit ;;
   *) exit 2 ;;
 esac
 

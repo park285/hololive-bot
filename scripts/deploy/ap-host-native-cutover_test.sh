@@ -1010,5 +1010,66 @@ for name, mutation, fault, accepted in (
         assert not (case/'releases/new/native-observation/issuer.socket.requesting').exists()
         assert all((case/f'down-{target}').exists() for target in ('issuer.socket', 'issuer.service', 'collector.service'))
 
-print('[PASS] native cutover owner/child/group/restore signals, first install, bounded unknown, supervisor errors, apply guards and grep errors')
+initial_install = '''
+rm "$current_link"
+release_dir="$releases_root/new" slot_service=collector-a
+window_units=("$po_socket" "$po_service" "$unit")
+mkdir -p "$release_dir/po-sandbox"
+echo "$EXPECTED_REVISION" > "$release_dir/po-sandbox/revision"
+ln -s "$release_dir" "$current_link"
+native_window_prop() {
+  case "$2" in
+    ActiveState) if [[ "$fault" == inactive ]]; then echo failed; else echo active; fi ;;
+    UnitFileState) if [[ "$1" == "$po_service" ]]; then echo disabled; else echo enabled; fi ;;
+    *) return 99 ;;
+  esac
+}
+'''
+for name, mutation, fault, valid in (
+    ('normal', '', 'normal', True),
+    ('previous', 'ln -s "$old_target" "$previous_link"', 'normal', False),
+    ('guard', 'mkdir "$native_recovery_dir"', 'normal', False),
+    ('marked', 'touch "$release_dir/accepted-window"', 'normal', False),
+    ('observed', 'mkdir "$release_dir/native-observation"', 'normal', False),
+    ('retired', 'mkdir "$release_dir/native-window"', 'normal', False),
+    ('old-revision', 'printf "%040d\\n" 1 > "$release_dir/po-sandbox/revision"', 'normal', False),
+    ('not-current', 'ln -sfn "$old_target" "$current_link"', 'normal', False),
+    ('not-ready', 'collector_readiness_fetch() { printf "{\\"instance_id\\":\\"collector-a\\",\\"status\\":\\"starting\\"}\\n"; }', 'normal', False),
+    ('other-host', 'hostname() { echo osaka2; }', 'normal', False),
+    ('inactive', '', 'inactive', False),
+):
+    case, result = window_case('initial-accept-' + name, [release_window, '6433', fault], initial_install + mutation +
+                               '\nnative_initial_accept\nnative_apply_preflight new\n')
+    assert (result.returncode == 0) == valid, (name, result.stderr)
+    if valid:
+        assert result.stdout.split()[:2] == ['new', 'a' * 40], (name, result.stdout)
+        assert (case/'releases/new/accepted-window').is_file() and (case/'releases/new/native-observation/accepted-guard/accepted-window').samefile(case/'releases/new/accepted-window')
+        assert not (case/'recovery').exists()
+    elif name != 'marked':
+        assert not (case/'releases/new/accepted-window').exists(), name
+    if name == 'guard':
+        assert (case/'recovery').is_dir() and not any((case/'recovery').iterdir())
+
+initial_dispatch = '''
+rm "$current_link"
+slot_service=collector-a payload="$PWD/unused-stage"
+native_deployment_inputs() { :; }
+'''
+for name, mutation, action, valid in (
+    ('install', '', 'install-initial', True),
+    ('install-current', 'ln -s "$old_target" "$current_link"', 'install-initial', False),
+    ('install-previous', 'ln -s "$old_target" "$previous_link"', 'install-initial', False),
+    ('install-guard', 'mkdir "$native_recovery_dir"', 'install-initial', False),
+    ('install-other-host', 'hostname() { echo osaka2; }', 'install-initial', False),
+    ('deploy-osaka1', '', 'deploy', False),
+):
+    case, result = window_case('initial-dispatch-' + name, [release_window, '6433', 'normal'], initial_dispatch + mutation +
+        '\nset -- stage new a 30005 started 7500000 2048 "$EXPECTED_REVISION" ' + action + '\nwindow_action="$9"\n' + origin_dispatch +
+        '\n[[ "$window_action" == deploy ]]\ntouch "$CASE/dispatched"\n')
+    assert (result.returncode == 0) == valid and (case/'dispatched').exists() == valid, (name, result.stderr)
+case, result = window_case('initial-dispatch-accepted', [release_window, '6433', 'normal'], initial_install +
+    '\nset -- stage new a 30005 started 7500000 2048 "$EXPECTED_REVISION" initial-accepted\nwindow_action="$9"\n' + origin_dispatch + '\ntouch "$CASE/fell-through"\n')
+assert result.returncode == 0 and (case/'releases/new/accepted-window').is_file() and not (case/'fell-through').exists(), result.stderr
+
+print('[PASS] native cutover owner/child/group/restore signals, first install, bounded unknown, supervisor errors, apply guards, osaka initial acceptance and grep errors')
 CUTOVER_TEST_PY
