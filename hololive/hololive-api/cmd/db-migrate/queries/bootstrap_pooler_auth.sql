@@ -107,7 +107,7 @@ BEGIN
                  JOIN pg_catalog.pg_extension AS e ON e.oid = d.refobjid
                  WHERE d.classid = 'pg_catalog.pg_class'::pg_catalog.regclass AND d.objid = c.oid AND d.objsubid = 0
                    AND d.refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND d.refobjsubid = 0 AND d.deptype = 'e'
-                   AND e.extname = 'pg_stat_statements' AND e.extversion = '1.12' AND e.extnamespace = n.oid
+                   AND e.extname = 'pg_stat_statements' AND e.extversion = '1.13' AND e.extnamespace = n.oid
                    AND n.nspname = 'public' AND NOT pg_catalog.has_schema_privilege(auth_oid, n.oid, 'USAGE')
                    AND c.relkind = 'v' AND c.relname IN ('pg_stat_statements', 'pg_stat_statements_info')
                    AND (SELECT pg_catalog.bool_and(a.grantor = c.relowner AND a.privilege_type = 'SELECT' AND NOT a.is_grantable)

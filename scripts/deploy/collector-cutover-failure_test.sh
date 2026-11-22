@@ -275,7 +275,6 @@ fi
 # staged helper는 원격 본문과 같은 checksum gate 뒤에서만 읽는다.
 compose_env="$fixture_root/compose.env"
 remote_root="$fixture_root"
-export HOLOLIVE_QUADLET_TEST_ROOT="$fixture_root"
 current="$fixture_root/current" staging="$fixture_root/staging" backup="$fixture_root/card-po-$slot-20261003T000000Z"
 unit_dir="$fixture_root/units"
 revision=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb version=6.0.1
@@ -1033,7 +1032,6 @@ central_cases = {
     'capacity_drift': (1, False), 'capacity_missing': (1, False), 'capacity_query_failed': (1, False),
     'rollback_capacity_drift': (1, False),
     'unadmitted_deploy': (1, False), 'foreign_card_pair': (1, False), 'rollback_stale': (1, False),
-    'unlisted_source_authority': (1, False),
 }
 slots = {slot: slot_preamble(slot) for slot in ('c', 'b')}
 runs = [('c', case) for case in central_cases] + [('b', case) for case in (
@@ -1089,9 +1087,6 @@ for slot, case in runs:
             (state / 'staged-pair').touch()
         for directory in (current, staging, state / 'images', state / 'units', state / f'po-current-{slot}'):
             directory.mkdir()
-        authority = state / 'opt/hololive-bot/compose'
-        if slot == 'c':
-            (authority / 'current').mkdir(parents=True, mode=0o700)
         host, db_port = ('holo-pgbouncer', 6432) if slot == 'c' else ('100.100.1.8', 6433)
         if case == 'maintenance_direct_origin':
             (state / 'direct-origin').touch()
@@ -1113,8 +1108,7 @@ for slot, case in runs:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(root / name, target)
         (staging / 'source-files.sha256').write_text(''.join(
-            f'{hashlib.sha256((staging / name).read_bytes()).hexdigest()}  {name}\n' for name in source_files
-            if case != 'unlisted_source_authority' or name != 'scripts/deploy/lib/app-source-authority.py'))
+            f'{hashlib.sha256((staging / name).read_bytes()).hexdigest()}  {name}\n' for name in source_files))
         subprocess.run(['bash', '-c', '. "$1/scripts/deploy/lib/postgres-capacity.sh"; postgres_capacity_write_pgbouncer_config "$1/scripts/ci/postgres-capacity-policy.tsv" "$2/compose.env" "$2/live-pgbouncer.ini"',
                         '_', str(root), str(state)], check=True, capture_output=True)
         if case in ('capacity_drift', 'rollback_capacity_drift'):
@@ -1537,20 +1531,7 @@ for slot, case in runs:
             unit_path = state / f'units/{container(slot)}.container'
             unit_path.write_text(candidate_definition)
             if slot == 'c':
-                if scenario in ('success', 'source_changed'):
-                    store = authority / 'app-sources'
-                    store.mkdir(mode=0o700)
-                    generation = store / new_revision
-                    generation.mkdir()
-                    stamp = generation / '.source-revision'
-                    stamp.write_text(new_revision + '\n')
-                    stamp.chmod(0o400)
-                    generation.chmod(0o500)
-                    active_revision = store / 'active'
-                    active_revision.write_text(new_revision + '\n' if scenario == 'success' else 'incomplete\n')
-                    active_revision.chmod(0o600)
-                else:
-                    (current / '.source-revision').write_text(new_revision)
+                (current / '.source-revision').write_text(new_revision)
             else:
                 shutil.copyfile(staging / b_unit_source, unit_path)
                 require(unit_path.read_text() == candidate_definition and not (current / '.source-revision').exists(),
@@ -1591,7 +1572,7 @@ for slot, case in runs:
                 (staging / 'transport-files.sha256').write_text('other transport\n')
             if scenario == 'source_changed':
                 if slot == 'c':
-                    (current / '.source-revision').write_text(new_revision)
+                    (current / '.source-revision').write_text('c' * 40)
                 else:
                     staged_unit = staging / b_unit_source
                     staged_unit.write_text(staged_unit.read_text() + '# unreviewed source\n')
@@ -1843,7 +1824,7 @@ for slot, case in runs:
             require((backup / 'cutover-outcome').read_text().strip() == 'outcome_unknown', f'{label}: outcome receipt retained', result)
             require(not any(call.startswith('pair activate ') and call.endswith('/previous') for call in calls), f'{label}: no previous pair activation', result)
             require(len(restarts) == 1, f'{label}: no restoration restart while manager outcome is unknown', result)
-        elif case in ('missing_receipt', 'collector_stopped', 'inventory_failure', 'unadmitted_deploy', 'foreign_card_pair', 'unlisted_source_authority'):
+        elif case in ('missing_receipt', 'collector_stopped', 'inventory_failure', 'unadmitted_deploy', 'foreign_card_pair'):
             require(not backup.exists() and not changed, f'{label}: no partial backup or runtime change', result)
         elif case == 'rollback_stale':
             require(not changed, f'{label}: copied release receipt is not the active owner', result)

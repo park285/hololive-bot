@@ -121,12 +121,6 @@ fi
 if [[ "$mode" == quiesce || "$mode" == deploy || ( "$staged_pair" == true && "$mode" != resume ) ]]; then
   (cd "$staging" && sha256sum --check --strict image.tar.sha256 collector-image.tar.sha256)
 fi
-if [[ "$slot" == c && ( "$mode" == deploy || "$mode" == quiesce || "$mode" == resume ) ]]; then
-  authority=scripts/deploy/lib/app-source-authority.py
-  [[ -f "$staging/$authority" && ! -L "$staging/$authority" && "$(realpath -e -- "$staging/$authority")" == "$staging/$authority" ]] || exit 1
-  awk -v path="$authority" '$2 == path { ++n; if (length($1) != 64 || $1 ~ /[^0-9a-f]/ || $0 != $1 "  " path) bad=1 } END { exit (bad || n != 1) }' \
-    "$staging/source-files.sha256" || exit 1
-fi
 (cd "$staging" && sha256sum --check --strict source-files.sha256)
 . "$staging/scripts/deploy/lib/collector-slots.sh"
 collector_slot_matches "$slot" "$staging/scripts/deploy/lib/collector-slots.tsv" ||
@@ -291,11 +285,11 @@ require_confirmed_hold() {
 }
 
 record_confirmed_hold() {
-  require_held_units &&
+  if ! { require_held_units &&
     sync -- "$hold/issuer-stop.invocation" "$hold/$issuer_unit.stop-cid" "$hold/$collector_unit.stop-cid" &&
-    printf 'guarded-stop-v1\n' > "$hold/quiesced" && sync -- "$hold/quiesced" "$hold" || {
-      rm -f -- "$hold/quiesced"; return 1;
-    }
+    printf 'guarded-stop-v1\n' > "$hold/quiesced" && sync -- "$hold/quiesced" "$hold"; }; then
+    rm -f -- "$hold/quiesced"; return 1
+  fi
 }
 
 create_hold() {
@@ -636,19 +630,12 @@ verify_candidate_images() {
 }
 
 prepare_candidate_pair() {
-  local candidate_image env_file=- expected previous_revision source_status
+  local candidate_image env_file=- expected previous_revision
   candidate_image="$(image_id "$collector_candidate")"
-  if [[ "$slot" == c ]]; then
-    source_status=0
-    python3 -ISB "$staging/scripts/deploy/lib/app-source-authority.py" "$revision" >/dev/null || source_status=$?
-    case "$source_status" in
-      0) ;;
-      3) [[ "$mode" != resume || "$(<"$current/.source-revision")" == "$revision" ]] || return 1 ;;
-      *) return 1 ;;
-    esac
-  fi
   if [[ "$mode" == resume ]]; then
-    if [[ "$slot" != c ]]; then
+    if [[ "$slot" == c ]]; then
+      [[ "$(<"$current/.source-revision")" == "$revision" ]] || return 1
+    else
       cmp -- "$staging/$slot_unit_dir/$collector_container.container" \
         "$unit_dir/$collector_container.container" || return
     fi
@@ -855,10 +842,10 @@ restore() {
   if [[ "$mode" == rollback && "$hold_owned" != true ]] && ! cmp -s -- "$backup/card-candidate" "$card_active"; then
     echo 'rollback does not own the active card release' >&2; return 1
   fi
-  [[ "$card_transition" == false && -f "$backup/card-origin" ]] &&
-    { cmp -s -- "$backup/card-origin" "$card_active" || cmp -s -- "$backup/card-candidate" "$card_active"; } || {
-    echo 'rollback is not owned by an admitted card pair' >&2; return 1;
-  }
+  if ! { [[ "$card_transition" == false && -f "$backup/card-origin" ]] &&
+    { cmp -s -- "$backup/card-origin" "$card_active" || cmp -s -- "$backup/card-candidate" "$card_active"; }; }; then
+    echo 'rollback is not owned by an admitted card pair' >&2; return 1
+  fi
   if ! cutover_units_settled; then
     printf 'outcome_unknown\n' > "$backup/cutover-outcome" || echo 'failed to record cutover outcome; retain the backup' >&2
     echo "$host_label cutover outcome_unknown; settle issuer/collector manager jobs before an approved rollback; retain $backup" >&2

@@ -24,6 +24,7 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     secrets_dir=/etc/stack-secrets/hololive-bot
     installed_firewall=/etc/nftables.d/admin-dashboard-ingress.nft
     quadlet_dir=/etc/containers/systemd/hololive-bot
+    pg_major_marker=/var/lib/hololive-bot/.pg-major.pending
 else
     test_root="${HOLOLIVE_QUADLET_TEST_ROOT:?non-root execution is only for tests and requires HOLOLIVE_QUADLET_TEST_ROOT}"
     deploy_root="${test_root}/deploy"
@@ -33,15 +34,7 @@ else
     secrets_dir="${test_root}/secrets"
     installed_firewall="${test_root}/installed.nft"
     quadlet_dir="${test_root}/units"
-fi
-source_root="$deploy_root"
-compose_root="${deploy_root%/*}"
-if (( EUID != 0 )); then compose_root="$test_root/opt/hololive-bot/compose"; fi
-if [[ "$self_dir" == "$compose_root/app-sources/"* ]]; then
-    source_root="${self_dir%/scripts/deploy}"
-    sha="${source_root##*/}"
-    [[ "$sha" =~ ^[0-9a-f]{40}$ && "$self_dir" == "$compose_root/app-sources/$sha/scripts/deploy" ]] &&
-        cmp -s "$source_root/.source-revision" <(printf '%s\n' "$sha") || die "invalid pinned app prestart"
+    pg_major_marker="${test_root}/var/lib/hololive-bot/.pg-major.pending"
 fi
 central_slot="$(collector_slots_where host central)" && [[ "$central_slot" =~ ^[a-z]$ ]] ||
     die "central collector slot is missing from $(collector_slots_file)"
@@ -121,6 +114,33 @@ wait_for_tailnet_address() {
     die "tailscale0 does not carry ${name}=${address} after 90s"
 }
 
+pg_major_phase() {
+    [[ -e "$pg_major_marker" || -L "$pg_major_marker" ]] || return 1
+    [[ -f "$pg_major_marker" && ! -L "$pg_major_marker" ]] \
+        || die "PostgreSQL major upgrade marker is not a regular file: ${pg_major_marker}"
+    sed -n 's/^phase=//p' "$pg_major_marker"
+}
+
+assert_postgres_data_volume() {
+    local volume_unit="${quadlet_dir}/holo-pg-data.volume" phase target mountpoint volumes name
+    if phase="$(pg_major_phase)"; then
+        [[ "$phase" == restore ]] \
+            || die "PostgreSQL major upgrade in progress (phase ${phase:-unknown}); holo-postgres stays stopped. Inspect ${pg_major_marker}"
+        return 0
+    fi
+    target="$(sed -n 's/^VolumeName=//p' "$volume_unit")"
+    [[ -n "$target" ]] || die "VolumeName is missing from ${volume_unit}"
+    mountpoint="$(podman volume inspect --format '{{.Mountpoint}}' "$target")" \
+        || die "cannot inspect PostgreSQL volume ${target}"
+    [[ ! -f "${mountpoint}/pgdata/PG_VERSION" ]] || return 0
+    volumes="$(podman volume ls --format '{{.Name}}')" || die "cannot list Podman volumes"
+    while IFS= read -r name; do
+        if [[ "$name" =~ ^hololive-bot_holo-pg-data[0-9]*$ && "$name" != "$target" ]]; then
+            die "PostgreSQL volume ${target} has no cluster while ${name} holds a previous one; run scripts/deploy/pg-major-upgrade.sh instead of starting an empty cluster"
+        fi
+    done <<<"$volumes"
+}
+
 require_secret_file() {
     local path="$1"
     [[ -f "$path" && -s "$path" ]] || die "secret file is missing or empty: ${path}"
@@ -162,7 +182,7 @@ write_secret_env() {
 }
 
 api_release_version() {
-    local file="${source_root}/hololive/hololive-api/VERSION"
+    local file="${deploy_root}/hololive/hololive-api/VERSION"
     local -a lines=()
     [[ -f "$file" && ! -L "$file" ]] || die "hololive-api VERSION is missing: ${file}"
     mapfile -t lines < "$file"
@@ -175,7 +195,7 @@ case "$target" in
     hololive-api|hololive-alarm-worker|"$central_collector")
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         if [[ "$render_env" != true ]]; then
-            postgres_capacity_assert_service "$source_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
+            postgres_capacity_assert_service "$deploy_root" "$compose_env" "$quadlet_dir" "$target" "$quadlet_dir/$target.container"
         fi
         ;;
 esac
@@ -188,6 +208,7 @@ case "$target" in
         esac
         ;;
     holo-postgres)
+        assert_postgres_data_volume
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values POSTGRES_PORT_BIND_IP
         require_secret_file "${secrets_dir}/postgres-tls/server.crt"
@@ -209,6 +230,9 @@ case "$target" in
             'HOLOLIVE_REPLICATOR_PASSWORD=HOLOLIVE_REPLICATOR_PASSWORD'
         ;;
     holo-pgbouncer)
+        if phase="$(pg_major_phase)"; then
+            die "PostgreSQL major upgrade in progress (phase ${phase:-unknown}); holo-pgbouncer stays stopped. Inspect ${pg_major_marker}"
+        fi
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values POSTGRES_PORT_BIND_IP
         require_secret_file "${secrets_dir}/certs/postgres-ca.pem"
@@ -254,7 +278,7 @@ case "$target" in
             wait_for_tailnet_address HOLOLIVE_ADMIN_API_PORT_BIND_IP
             wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
             admin_bind_assert_host "$HOLOLIVE_ADMIN_API_PORT_BIND_IP"
-            admin_network_assert_firewall "${source_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
+            admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
         fi
         if [[ -n "$app_version_override" ]]; then
             APP_VERSION_VALUE="$app_version_override"

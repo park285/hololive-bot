@@ -624,32 +624,6 @@ release_of() {
   find "$1/opt/hololive-bot/compose/current/artifacts/worker-profile/releases" -mindepth 1 -maxdepth 1 -type d
 }
 
-make_coordinated_case() {
-  local root="$1" service
-  make_case "${root}" hololive-api true
-  for service in hololive-api hololive-alarm-worker; do
-    mkdir -p "${root}/state/${service}" "${root}/etc/containers/systemd/hololive-bot/${service}.container.d"
-    printf 'true\n' >"${root}/state/${service}/active"
-    printf 'loaded\n' >"${root}/state/${service}/loadstate"
-    printf 'generated\n' >"${root}/state/${service}/mask_scope"
-    if [[ "$service" == hololive-api ]]; then printf '%032d\n' 7; else printf '%032d\n' 1; fi >"${root}/state/${service}/invocation"
-    if [[ "$service" == hololive-api ]]; then printf '%064d\n' 7; else printf '%064d\n' 1; fi >"${root}/state/${service}/cid"
-    printf '42\n' >"${root}/state/${service}/conmonpid"
-    printf '3\n' >"${root}/state/${service}/nrestarts"
-    printf 'baseline\n' >"${root}/state/${service}/runtime"
-    printf 'pair=baseline\n' >"${root}/etc/containers/systemd/hololive-bot/${service}.container.d/50-worker-profile.conf"
-  done
-}
-
-sealed_case() {
-  local root="$tmp/sealed-app"
-  make_coordinated_case "$root"
-  bash "$ROOT_DIR/scripts/deploy/sealed-app-case.sh" "$root" "$fakebin" "$REVISION" "sha256:$API_HEX" "sha256:$WORKER_HEX"
-  pass "19.2.1 보호 소스와 Quadlet을 유지하고 봉인 세대의 검사·실제 생성 단위로 지정된 writer만 교체한다"
-}
-if [[ "$#" == 1 && "$1" == --sealed ]]; then sealed_case; exit; fi
-[[ $# == 0 ]] || fail "usage: $0 [--sealed]"
-
 root="${tmp}/success"
 make_case "${root}" hololive-api true
 run_tool "${root}" success "${API_HEX}" "${HELPER}" hololive-api localhost/hololive-api:candidate ||
@@ -1076,6 +1050,22 @@ done
 pass "기존 release는 보존한 overlay로만 명시적 복원이 가능하다"
 
 FAKE_COORDINATED=true
+make_coordinated_case() {
+  local root="$1" service
+  make_case "${root}" hololive-api true
+  for service in hololive-api hololive-alarm-worker; do
+    mkdir -p "${root}/state/${service}" "${root}/etc/containers/systemd/hololive-bot/${service}.container.d"
+    printf 'true\n' >"${root}/state/${service}/active"
+    printf 'loaded\n' >"${root}/state/${service}/loadstate"
+    printf 'generated\n' >"${root}/state/${service}/mask_scope"
+    if [[ "$service" == hololive-api ]]; then printf '%032d\n' 7; else printf '%032d\n' 1; fi >"${root}/state/${service}/invocation"
+    if [[ "$service" == hololive-api ]]; then printf '%064d\n' 7; else printf '%064d\n' 1; fi >"${root}/state/${service}/cid"
+    printf '42\n' >"${root}/state/${service}/conmonpid"
+    printf '3\n' >"${root}/state/${service}/nrestarts"
+    printf 'baseline\n' >"${root}/state/${service}/runtime"
+    printf 'pair=baseline\n' >"${root}/etc/containers/systemd/hololive-bot/${service}.container.d/50-worker-profile.conf"
+  done
+}
 coordinated_release() {
   local root="$1" service="$2" candidate
   for candidate in "${root}/opt/hololive-bot/compose/current/artifacts/worker-profile/releases/"*; do
@@ -1268,8 +1258,9 @@ for reason in generation_changed invocation_changed other_stopped_invocation res
     assert_no_call "$root" "$reason" '^systemctl stop hololive-api.service$'
   elif [[ "$reason" == gc_exit_143 ]]; then
     worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
-    grep -qxF 'ExecMainCode=0' "$worker_release/stop/terminal" && grep -qxF '143' "$worker_release/stop/container-exit" ||
+    if ! { grep -qxF 'ExecMainCode=0' "$worker_release/stop/terminal" && grep -qxF '143' "$worker_release/stop/container-exit"; }; then
       fail "수거된 관리자의 초기값이 원래 컨테이너의 143을 숨김"
+    fi
   elif [[ "$reason" == failed_stop || "$reason" == abnormal_success_result ]]; then
     worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
     grep -qxF 'ExecMainStatus=143' "$worker_release/stop/terminal" || fail "비정상 원본 종료 증거를 잃음"
@@ -1420,8 +1411,9 @@ for reason in term_before_first_unmask term_after_first_restart replaced_at_laun
   fi
   case "$reason" in
     term_before_first_unmask)
-      [[ "$status" == 143 && ! -e "$api_release/opening" ]] && cmp -s "$api_release/quiesced" "$root/original-receipt" ||
+      if ! { [[ "$status" == 143 && ! -e "$api_release/opening" ]] && cmp -s "$api_release/quiesced" "$root/original-receipt"; }; then
         fail "첫 개방 전 취소에서 원래 영수증 유실"
+      fi
       assert_no_call "$root" "$reason" '^systemctl (stop|restart|unmask) '
       assert_held_pair "$root" ;;
     term_after_first_restart)
@@ -1441,8 +1433,9 @@ for reason in term_before_first_unmask term_after_first_restart replaced_at_laun
       assert_held_pair "$root"
       [[ "$reason" != client_failed_pending || -f "$root/state/hololive-alarm-worker/poll" ]] ||
         fail "차단 후 진행 중인 원래 job을 관찰하지 않음"
-      [[ -d "$api_release/opening" ]] && cmp -s "$api_release/quiesced" "$root/original-receipt" ||
+      if ! { [[ -d "$api_release/opening" ]] && cmp -s "$api_release/quiesced" "$root/original-receipt"; }; then
         fail "$reason: 실패한 요청이 완료를 게시함"
+      fi
       assert_no_call "$root" "$reason" '^(pair verify-live |systemctl unmask hololive-api.service)' ;;
     replaced_at_launch|restart_client_interrupted|client_failed_no_anchor|client_failed_foreign_cid|wrong_start_record)
       [[ "$reason" != restart_client_interrupted || "$status" == 143 ]] || fail "중단된 클라이언트의 신호를 놓침"
@@ -1514,7 +1507,5 @@ grep -q 'single-writer endpoint change refused' "$root/out" || { cat "$root/out"
 assert_no_call "$root" single '^(pair |systemctl (start|restart|daemon-reload))'
 [[ ! -e "$root/opt/hololive-bot/compose/current/artifacts" ]] || fail "단일 전환 거부가 release를 변경함"
 pass "기존 PG·풀러 실행 세대가 바뀌면 같은 이미지여도 카드 창을 재개하지 않는다"
-
-sealed_case
 
 echo "all quadlet redeploy checks passed"

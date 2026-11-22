@@ -8,9 +8,9 @@
 새 확장과 읽기 view는 `hololive_observability` 스키마를 사용한다. 기존 `public` 스키마의
 USAGE가 없는 exporter에도 이 전용 스키마의 USAGE와 통계 객체 SELECT/EXECUTE만 부여한다.
 기존 pg_stat_statements는 public에 유지하며 관리자 소유 view가 필요한 숫자 지표를 제공한다.
-Dockerfile은 고정 PostgreSQL 18.7/Alpine PGXS로 두 CPU 아키텍처의 모듈을 빌드하며
+Dockerfile은 고정 PostgreSQL 19.0/Alpine PGXS로 두 CPU 아키텍처의 모듈을 빌드하며
 앱 테이블·마이그레이션·initdb를 변경하지 않는다.
-base image의 contrib인 `auto_explain`(preload), `pg_buffercache` 1.6, `amcheck` 1.5도
+base image의 contrib인 `auto_explain`(preload), `pg_buffercache` 1.7, `amcheck` 1.5도
 같은 절차로 켠다. 두 확장은 같은 전용 스키마에 두고 확장 기본 권한을 유지한다.
 버퍼 조회는 `pg_monitor`, evict 함수와 amcheck 검사는 관리자만 실행할 수 있다.
 최종 이미지 스캔의 `CVE-2026-58055` 보고를 해소하도록 기존 `nghttp2-libs`만
@@ -29,11 +29,11 @@ Osaka의 적용 기록은 당시 증거로 보존하되, 해당 VM과 100GB 부�
 로컬 결과와 재현 명령은 [extension experiments](../../../scripts/experiments/postgres-extensions/README.md)에 있다.
 계측은 DB 안의 쿼리 CPU·대기를 설명하며 Go의 pool 대기·decode·GC 시간을 직접 측정하지 않는다.
 
-18.6에서 18.7로 갱신할 때는 두 C 확장을 새 PGXS·헤더로 함께 재빌드한다.
+같은 major 안의 minor 갱신은 두 C 확장을 새 PGXS·헤더로 함께 재빌드한다.
 dump/restore·`pg_upgrade`는 필요하지 않으며 기존 확장을 다시 생성하지 않는다.
-[18.7 릴리스 노트](https://www.postgresql.org/docs/release/18.7/)의 GIN·`gist_trgm_ops`·
-길이 없는 `bpchar` 인덱스와 partitioned table의 `NOT NULL NO INHERIT` 조건을 확인한다.
-해당 인덱스 재구축·제약 수정은 별도 승인 범위다. 증분 백업은 업데이트 뒤 새 전체 백업을
+해당 minor 릴리스 노트의 인덱스 재구축·제약 조건을 확인하며, 재구축·제약 수정은 별도 승인 범위다.
+18에서 19로의 major 전환은 [PostgreSQL major 전환](postgres-major-upgrade.md)을 따른다. 확장은 복원 때
+다시 만들어지며 `pg_buffercache`는 1.7, `pg_stat_statements`는 1.13이 된다. 증분 백업은 업데이트 뒤 새 전체 백업을
 기준으로 삼아야 하지만, 현재 백업 중단 정책을 이 이미지 갱신만으로 해제하지 않는다.
 
 ## 로컬 준비

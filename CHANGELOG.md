@@ -1,15 +1,21 @@
 # 변경 이력
 
-현재 릴리즈 버전은 루트 `VERSION`에서 관리하고 Git tag는 `r<version>` 형식을 사용합니다. 다음 릴리즈부터 번호를 1.0.0으로 다시 시작하며, `v<version>` tag와 절은 이전 번호 체계의 기록입니다.
+현재 릴리즈 버전은 루트 `VERSION`에서 관리하고 Git tag는 `r<version>` 형식을 사용합니다. 번호는 r1.0.0부터 다시 시작했으며, `v<version>` tag와 절은 이전 번호 체계의 기록입니다.
 버전은 배포하거나 게시할 때만 올리며, 절차는 [릴리즈 버전 관리](docs/current/runbooks/release.md)를 따릅니다.
 이 문서는 `미출시`와 최근 세 버전 구간(그 사이의 tag 없는 준비 구간은 세지 않음)만 유지하며, 이전 기록은 이 파일의 Git 이력과 tag에서 확인합니다.
 
 ## 미출시
 
+## r1.0.0 - 2026-11-22
+
+- **보호 소스 게시 경로 퇴역(운영자 조치 필요):** 19.2.1 설치의 init-db·pg_hba bind를 그대로 둔 채 앱 코드만 봉인 세대로 게시하던 `sync-opt-current.sh --protected-source`·`--supersede-unstarted`, `app-sources` 세대 저장소, 봉인 coordinator·rollback 분기와 그 복구 supervisor·시험을 지웠습니다. PostgreSQL 19 전환은 init-db와 Quadlet을 바꾸므로 이 경로로 배포할 수 없습니다. 중앙 API·worker는 다시 `current`의 배포 helper(`quadlet-redeploy-service.sh`, `quadlet-rollback-service.sh`)로 교체하고, 소스 교체는 전체 동기화나 `--application-only`·`--source-only`로 합니다. 운영 중앙에 남은 `/opt/hololive-bot/compose/app-sources`는 새 도구가 읽지 않으며, API·worker 교체가 migrator drop-in을 새로 쓴 뒤 승인된 정비 창에서 보관 위치로 옮깁니다.
 - **collector 이름 전환(운영자 조치 필요):** `youtube-collector`를 `collector`로 바꿨습니다. 모듈은 `hololive/hololive-collector`, 바이너리는 `bin/hololive-collector`, image는 `localhost/hololive-collector`, Quadlet unit은 `hololive-collector-{b,c,d}`, native a unit은 `hololive-collector@collector-a.service`(root `/opt/hololive-bot/collector`, host env `/etc/hololive-bot/collector-host.env`)입니다. 설정 키는 `HOLOLIVE_YOUTUBE_COLLECTOR_*`→`HOLOLIVE_COLLECTOR_*`, `HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR`→`HOLOLIVE_DISABLE_COLLECTOR`, `YOUTUBE_COLLECTOR_*`→`COLLECTOR_*`이고, 비밀 env 파일은 `collector.env`, worker profile 파일은 `collector-<slot>.json`, profile role은 `collector`, 인스턴스 ID는 `collector-<slot>`입니다. compose env 검사와 collector 기동은 구 키를 거부합니다. 후속 DB 변경 `003_epoch4_collector_session_instance`가 세션 인스턴스 함수를 새 이름으로 바꾸며, 이전 이름의 수집 lease는 만료된 뒤에만 넘겨받습니다. 배포 전 네 host의 env·profile·unit 파일을 새 이름으로 옮겨야 하고, 배포는 승인된 정비 창에서 진행합니다. metrics의 `service="youtube-collector"` 라벨은 플랫폼 수집 설정이 붙이므로 이번 변경으로 바뀌지 않습니다. 절차는 [collector runbook](docs/current/runbooks/collector.md#이름-전환)에 있습니다.
-- **collector slot 표:** collector와 PO issuer의 slot별 값(service 키, 배포 방식, host, root, port, host env, unit, network, image)을 `scripts/deploy/lib/collector-slots.tsv` 하나로 모았습니다. 배포·전환·롤백·로그 스크립트와 pair·stop-guard·kapu 전환 도구가 이 표에서 값을 읽고, 원격 스크립트는 표에서 만든 slot 값을 받아 씁니다. native 배포는 도구와 배포 대상 소스의 표가 다르면 중단합니다. 배포되는 이름과 경로는 바뀌지 않습니다. 표는 이를 읽는 스크립트 옆에 있어 도구 리비전과 함께 움직이며, 중앙 host에는 `quadlet-prestart`와 함께 libexec에 설치됩니다. 표 도입 전 세대로 설치된 중앙 host에 application-only 후속 게시를 하면, 그 세대에 없던 libexec 자산은 host에도 없어야 통과하고 설치는 다음 전체 게시에서 이루어집니다.
+- **collector slot 표:** collector와 PO issuer의 slot별 값(service 키, 배포 방식, host, root, port, host env, unit, network, image)을 `scripts/deploy/lib/collector-slots.tsv` 하나로 모았습니다. 배포·전환·롤백·로그 스크립트와 pair·stop-guard·kapu 전환 도구가 이 표에서 값을 읽고, 원격 스크립트는 표에서 만든 slot 값을 받아 씁니다. native 배포는 도구와 배포 대상 소스의 표가 다르면 중단합니다. 배포되는 이름과 경로는 바뀌지 않습니다. 표는 이를 읽는 스크립트 옆에 있어 도구 리비전과 함께 움직이며, 중앙 host에는 `quadlet-prestart`와 함께 libexec에 설치됩니다. 표 도입 전 세대로 설치된 중앙 host는 libexec에 표가 없어 application-only·source-only 게시가 거부되므로, 전체 동기화로 설치합니다.
 - **이벤트 등급 수집(collector c):** collector c가 게임 helper로 JP·US·AS catalog와 cutoff를 수집해 이벤트 등급 관측으로 발행합니다. worker profile의 `collection.settings.event_grade_enabled`(모든 collector profile에 필요, a·b·d는 `false`)와 `COLLECTOR_EVENT_GRADE_SECRET_FILE`이 함께 있어야 하며, c가 아닌 slot이나 `hololive_collector_c`가 아닌 DB 로그인에서는 기동하지 않습니다. 중앙 배포는 `HOLOLIVE_EVENT_GRADE_ENABLED=1`일 때 인증 파일 drop-in을 설치합니다. 이 버전을 배포하기 전에 네 collector profile에 새 키를 넣어야 합니다.
 - **이벤트 등급(`!이벤트등급`):** 점수와 지역을 등록하면 공개된 최종 컷 기준 결과(최고 충족 등급, 경계 동점, 순위권 밖, 24시간 내 최종 컷 없음)를 기존 알림 발송 경로로 보냅니다. 후속 DB 변경 `002_epoch4_event_grade`가 canonical 테이블, append-only 관측 원장, 지역별 소비 offset, collector c 전용 수집 lease와 발행 함수를 만듭니다. alarm-worker는 관측을 지역별 순번대로 적용하고, 아직 적용하지 않은 발행이나 진행 중 수집이 있으면 판정을 미룹니다. 게임 수집은 collector c 소관이며 worker에는 게임 helper·인증 설정이 없습니다. 이 DB 변경을 포함한 배포는 승인된 정비 창에서 진행합니다.
+- 스키마 카탈로그 직렬화 golden(`hololive-dbtest/testdata/schema_snapshot.golden`)과 그 직렬화기·시험을 제거했습니다. 마이그레이션 결과는 epoch4 계보 검증과 마이그레이션별 DB 시험이 실제 PostgreSQL에서 검사합니다.
+- **PostgreSQL 19:** 중앙 PostgreSQL 이미지와 시험 이미지를 `postgres:19.0-alpine`(digest 고정)으로 올립니다. PG 19에서 제거된 `io_workers` 대신 `io_min_workers=3`·`io_max_workers=8`을 쓰고 `log_autoanalyze_min_duration=10s`를 추가합니다. 초기화 계약은 major 19를 요구하는 `00-assert-pg19-runtime.sql`로, 유지보수 계약은 `pg19_runtime_contract.sql`로 바뀝니다. 관측 확장의 `pg_buffercache` 고정 버전은 1.7, 풀러 인증 bootstrap이 허용하는 `pg_stat_statements` 버전은 1.13입니다. 데이터 볼륨은 `hololive-bot_holo-pg-data19`이며 18 데이터는 dump/restore로 옮기고 기존 볼륨은 롤백용으로 보존합니다. init-db와 Quadlet이 바뀌므로 전체 동기화와 PostgreSQL 전환 배포가 필요합니다.
+- **PostgreSQL 18→19 전환(운영자 조치 필요):** root 전용 `scripts/deploy/pg-major-upgrade.sh`(`--check`는 사전 검사만)가 쓰기 서비스와 풀러를 멈추고 18을 dump한 뒤 19 볼륨에 역할·설정과 함께 복원하고, 원본 지문과 같을 때만 서비스를 다시 기동합니다. 전환 중에는 표식 파일이 PostgreSQL과 풀러의 일반 기동을 막고, 전환 밖에서도 이전 볼륨이 있는데 새 볼륨이 비어 있으면 PostgreSQL 기동을 거부합니다. 이 버전의 schema job은 PostgreSQL 19에서만 통과하므로 전환을 먼저 합니다. 절차와 복구는 [PostgreSQL major 전환](docs/current/runbooks/postgres-major-upgrade.md)에 있습니다.
 - 스택 공통 lint 자산(주석 금지 검사, `verify-tools.sh`, Go 린트 행렬·도구 resolver, 생성된 `.golangci.yml`)을 메타 정본과 맞췄습니다. 확장된 검사가 찾은 workflow YAML·셸 heredoc·JavaScript·Go 주석을 지웠고, 해석되지 않던 heredoc·here-string을 파이프나 변수로 바꿨습니다(Valkey 상태 점검, 풀러 SQL 확인, go.work 동기화 검사, 종료 live head 복구 시험). SQL이 아닌 스키마 카탈로그 직렬화 golden은 `hololive/hololive-dbtest/testdata/schema_snapshot.golden`으로 이름을 바꿨습니다. 동작은 바뀌지 않습니다.
 - 버전 번호를 다음 릴리즈부터 1.0.0으로 다시 시작하고 tag를 `r<version>`으로 씁니다. 배포 복구 도구는 원래 릴리스 tag로 `r<version>`과 이전 `v<version>`을 모두 받고, `scripts/publish-release.sh`는 새 Release를 `r<version>` tag로만 만듭니다.
 - **Gemini Decisions**의 공식 Go SDK 클라이언트를 방송 유형 분류와 일정 포스터·변경 게시글 검토가 공유합니다. 판정마다 요청은 한 번만 보내며, 응답 상한 64 KiB와 용도별 실패 처리를 유지합니다. HTTP 오류와 로그에는 상태 번호와 분류에 쓰는 코드만 남겨 Gemini가 응답에 포함한 API 키를 보호합니다.
@@ -24,7 +30,3 @@
 ## v20.0.3 - 2026-11-19
 
 - **중앙 앱 기동:** systemd가 보고한 `-.mount`를 옵션이 아닌 루트 마운트 이름으로 조회합니다. 모든 기존 의존성이 활성일 때만 schema 또는 writer job을 요청합니다. 이미 소스만 게시되고 writer가 이전 세대인 설치에 재시도·복구 권한을 추가하지 않습니다.
-
-## v20.0.2 - 2026-11-19
-
-- **중앙 앱 소스 게시:** 봉인 세대의 prestart와 그 라이브러리는 후보 커밋의 Git 바이트를, 기존 호스트에 남기는 libexec는 설치된 구 커밋의 바이트를 각각 요구합니다. 두 세대의 `postgres-endpoint.sh`가 다르다는 이유만으로 게시를 거부하지 않으며, 설치된 파일이나 방화벽·DB 설정을 교체하지 않습니다.

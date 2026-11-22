@@ -19,8 +19,8 @@ po_verify_image() {
   actual_revision="$(sudo -n podman image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")"
   actual_arch="$(sudo -n podman image inspect -f '{{.Os}}/{{.Architecture}}' "$image")"
   actual_id="$(po_image_identity "$image")"
-  [[ "$actual_revision" == "$revision" && "$actual_arch" == "linux/$arch" ]] && po_image_id_matches "$actual_id" "$expected_id" || {
+  if ! { [[ "$actual_revision" == "$revision" && "$actual_arch" == "linux/$arch" ]] && po_image_id_matches "$actual_id" "$expected_id"; }; then
     echo "loaded issuer image ID/revision/architecture differs from reviewed kapu artifact" >&2
     return 1
-  }
+  fi
 }

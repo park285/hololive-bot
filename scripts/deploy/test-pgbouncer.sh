@@ -5,7 +5,7 @@ if [[ -n "${CONTAINER_HOST:-}${CONTAINER_CONNECTION:-}" ]] || [[ "$(podman info 
   exit 2
 fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-pg_image="${POSTGRES_POLICY_TEST_IMAGE:-docker.io/library/postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015}"
+pg_image="${POSTGRES_POLICY_TEST_IMAGE:-docker.io/library/postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188}"
 pool_image="${PGBOUNCER_TEST_IMAGE:?set PGBOUNCER_TEST_IMAGE to the locally built host-architecture image}"
 case "$(uname -m)" in
   x86_64) architecture=amd64 ;;
@@ -89,7 +89,7 @@ for _ in $(seq 1 60); do
 done
 [[ "$ready" == true ]] || { podman logs "$server" >&2; echo 'PostgreSQL fixture startup failed' >&2; exit 1; }
 podman exec "$server" psql -X -v ON_ERROR_STOP=1 -q -U postgres_admin -d hololive -f /fixture/setup.sql >"$fixture/setup.log" 2>&1 || {
-  echo 'isolated role fixture setup failed' >&2; exit 1;
+  tail -n 20 "$fixture/setup.log" >&2; echo 'isolated role fixture setup failed' >&2; exit 1;
 }
 client() {
   local network="$1" address="$2" mode="$3" argument="$4" name="${id}-client"
@@ -167,8 +167,8 @@ cat "$fixture/version"
 podman run --rm --pull=never --platform="linux/$architecture" --security-opt label=disable --network none \
   --mount "type=volume,src=$socket,dst=/var/run/postgresql" \
   --mount "type=bind,src=$fixture,dst=/fixture,readonly" \
-  --env-file "$fixture/bootstrap.env" --entrypoint /fixture/db-migrate "$pg_image" >"$fixture/bootstrap.log" 2>&1 || {
-    echo 'isolated application bootstrap/migrations failed' >&2; exit 1;
+  --env-file "$fixture/bootstrap.env" --entrypoint /fixture/db-migrate "$pg_image" --initialize >"$fixture/bootstrap.log" 2>&1 || {
+    tail -n 20 "$fixture/bootstrap.log" >&2; echo 'isolated application bootstrap/migrations failed' >&2; exit 1;
   }
 podman exec "$server" psql -X -v ON_ERROR_STOP=1 -q -U postgres_admin -d hololive -f /fixture/records.sql
 podman exec -i "$server" psql -X -v ON_ERROR_STOP=1 -q -U postgres_admin -d hololive <"$root/deploy/postgres/role-limits.sql"

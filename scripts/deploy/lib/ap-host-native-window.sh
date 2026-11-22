@@ -729,8 +729,10 @@ native_window_rehold() {
       native_window_candidate_runtime "$n" || { native_window_uncertain; return 1; }
       opened+=("$n")
     else
-      sudo -n test ! -e "$window/$n.requesting" && sudo -n test ! -e "$window/$n.started" &&
-        sudo -n test ! -e "$window/$n.job" && native_window_terminal "$n" || { native_window_uncertain; return 1; }
+      if ! { sudo -n test ! -e "$window/$n.requesting" && sudo -n test ! -e "$window/$n.started" &&
+        sudo -n test ! -e "$window/$n.job" && native_window_terminal "$n"; }; then
+        native_window_uncertain; return 1
+      fi
     fi
   done
   if [[ "$policy" != held ]]; then
