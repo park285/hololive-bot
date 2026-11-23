@@ -10,9 +10,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	observationcontract "github.com/kapu/hololive-shared/pkg/contracts/eventgrade"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 //go:embed queries/lock_offset.sql
@@ -47,7 +49,7 @@ func (r *Repository) ConsumeRegion(ctx context.Context, region contract.GradeReg
 
 	var batch consumedBatch
 
-	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+	err := dbx.InPgxTxOptions(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		var batchErr error
 
 		batch, batchErr = r.consumeBatch(ctx, tx, region, limit)
@@ -169,13 +171,13 @@ func (r *Repository) consumeObservation(ctx context.Context, tx pgx.Tx, region c
 
 		return false, nil
 	case rejectedApply(applyErr):
-		if err := savepoint.Rollback(ctx); err != nil {
+		if err := pgxdb.Rollback(ctx, savepoint); err != nil {
 			return false, fmt.Errorf("discard rejected event grade observation: %w", err)
 		}
 
 		return true, nil
 	default:
-		if err := savepoint.Rollback(ctx); err != nil {
+		if err := pgxdb.Rollback(ctx, savepoint); err != nil {
 			return false, errors.Join(fmt.Errorf("apply event grade observation %d: %w", seq, applyErr), fmt.Errorf("discard failed event grade observation: %w", err))
 		}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/migrationsource"
 )
 
@@ -107,15 +108,14 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, files []migrationsourc
 		opts.AccessMode = pgx.ReadOnly
 	}
 
-	err := pgx.BeginTxFunc(ctx, conn, opts, func(tx pgx.Tx) error {
-		if _, pathErr := tx.Exec(ctx, "SET LOCAL search_path = pg_catalog, public, pg_temp"); pathErr != nil {
+	err := dbx.InPgxTxOptions(ctx, conn, opts, func(tx pgx.Tx) error {
+		if _, pathErr := tx.Exec(ctx, mustSQL("migration_search_path.sql")); pathErr != nil {
 			return fmt.Errorf("select migration namespace: %w", pathErr)
 		}
 
 		var migrations, checksums bool
 
-		if err := tx.QueryRow(ctx, `SELECT to_regclass('public.schema_migrations') IS NOT NULL,
-			to_regclass('public.schema_migration_checksums') IS NOT NULL`).Scan(&migrations, &checksums); err != nil {
+		if err := tx.QueryRow(ctx, mustSQL("migration_ledgers_present.sql")).Scan(&migrations, &checksums); err != nil {
 			return fmt.Errorf("inspect migration ledgers: %w", err)
 		}
 
@@ -282,7 +282,7 @@ func applyFiles(ctx context.Context, tx pgx.Tx, files []migrationsource.File) er
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, `LOCK TABLE public.schema_migrations, public.schema_migration_checksums IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+	if _, err := tx.Exec(ctx, mustSQL("lock_migration_ledgers.sql")); err != nil {
 		return fmt.Errorf("protect migration ledgers: %w", err)
 	}
 
@@ -328,7 +328,7 @@ func applyFile(ctx context.Context, tx pgx.Tx, file migrationsource.File) error 
 		return fmt.Errorf("record checksum for %s: %w", file.Name, err)
 	}
 
-	if _, err := tx.Exec(ctx, `INSERT INTO public.schema_migrations(filename) VALUES($1)`, file.Name); err != nil {
+	if _, err := tx.Exec(ctx, mustSQL("record_migration_application.sql"), file.Name); err != nil {
 		return fmt.Errorf("record application of %s: %w", file.Name, err)
 	}
 

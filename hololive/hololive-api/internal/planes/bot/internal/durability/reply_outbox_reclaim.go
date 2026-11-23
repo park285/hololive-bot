@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 const replyOutboxStatusPending = "pending"
@@ -33,7 +35,7 @@ func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize in
 
 	var result ReplyOutboxReclaim
 
-	if err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+	if err := dbx.InPgxTxOptions(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		candidates, err := lockedReplyReclaimCandidates(ctx, tx, batchSize, horizonMS)
 		if err != nil {
 			return err

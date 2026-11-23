@@ -27,6 +27,7 @@
 - **PO 발급 검사 정리(collector):** 격리 issuer에서 원격 BotGuard JS를 실행하는 worker(`po-sandbox/src/worker.mjs`)가 broker와 같은 순서 표와 필드 상한을 다시 검사하던 부분을 지웠습니다. 원격 코드가 실행된 뒤에는 worker 안의 검사를 믿을 수 없으므로, 요청 순서와 worker 출력 검사는 broker가 혼자 맡습니다. 발급 토큰의 문자 형식 검사도 helper에서 broker로 옮겼습니다. helper는 broker 상태·오류 코드 목록과 snapshot·토큰 길이 상한을 따로 두지 않고, 응답 키와 세대·영상 ID 일치만 확인합니다. broker의 user agent·global name 1024바이트 상한은 지우고 1MiB 요청 상한만 적용합니다. upstream 값의 상한(응답 512KiB, integrity token 8192바이트)은 helper가 맡습니다. Network=none 격리 컨테이너와 broker 구성은 그대로이며, collector와 issuer는 지금처럼 같은 revision으로 함께 배포합니다.
 
 - **CI:** 배포 스크립트 시험이 `ap-host-native-cutover_test.sh`를 실행하는 user unit의 시간 상한을 120초에서 300초로 늘렸습니다. 이 시험은 단독으로 67~86초가 걸리는데, 호스트 부하가 높을 때 120초에서 끊겨 pre-push 게이트가 실패한 일이 있었습니다. 멈춘 시험을 끊는 역할은 그대로입니다.
+- **PostgreSQL 트랜잭션·SQL 규칙:** alarm-worker·API에서 `pgx.BeginFunc`·`BeginTxFunc`로 열던 트랜잭션 17곳을 `dbx.InPgxTxOptions`로 옮겼습니다. 이 함수는 격리 수준과 읽기 전용 옵션을 받는 `dbx.InPgxTx`의 일반형으로, 요청 ctx와 분리된 `pgxdb.Rollback`으로 롤백하므로 ctx가 취소되거나 시간을 넘겨도 ROLLBACK을 보내고 연결을 버리지 않습니다. 이벤트 등급 소비의 저장점과 collector 직접 접속 검사의 읽기 전용 트랜잭션도 `pgxdb.Rollback`으로 닫으며, 접속 검사는 중간에 실패해도 롤백합니다. migration runner·migration source·collector 접속 검사의 Go 문자열 SQL은 `queries/*.sql`(물리 계약 검사는 `.sql.tpl`)로 옮겼습니다. 새 스택 ast-grep 규칙(`.ast-grep/rules/go-postgres-conventions.yml`)이 운영 Go 코드의 인라인 SQL, `pgx.BeginFunc`·`BeginTxFunc`, 트랜잭션 직접 `Rollback`, `pgxpool.New`를 `verify-tools.sh scan`에서 거부합니다. 트랜잭션 오류 문구에 `run pgx transaction`·`commit pgx transaction` 같은 단계 접두사가 붙는 것 말고는 동작이 같습니다.
 
 ## r1.1.0 - 2026-11-22
 

@@ -32,7 +32,7 @@ func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, 
 		return nil
 	}
 
-	if err := pgx.BeginTxFunc(ctx, r.db, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
+	if err := dbx.InPgxTxOptions(ctx, r.db, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
 		if err := lockOutboxAggregateParents(ctx, tx, uniqueIDs); err != nil {
 			return err
 		}

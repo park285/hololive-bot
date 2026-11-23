@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 type RowStatus string
@@ -169,7 +170,7 @@ func (s *Store) RecordRows(ctx context.Context, item PendingRows, rows []Row, da
 
 	recorded := false
 
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		tag, markErr := tx.Exec(ctx, recordRowsSQL, item.ID, item.RowsRevision, dayShift)
 		if markErr != nil {
 			return fmt.Errorf("mark rows extracted: %w", markErr)
@@ -324,7 +325,7 @@ func (s *Store) PublishedMemberRows(ctx context.Context, memberID int, channelID
 		template cardtemplate.ID
 	)
 
-	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, publishedRowsSQL, channelID, day, memberID, cardtemplate.Classic)
 		if queryErr != nil {
 			return fmt.Errorf("load rows: %w", queryErr)
@@ -386,7 +387,7 @@ type PosterSchedule struct {
 func (s *Store) PosterRows(ctx context.Context, id int64, day time.Time) (PosterSchedule, error) {
 	var schedule PosterSchedule
 
-	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
 		var (
 			channelID          string
 			weekStart, weekEnd *time.Time

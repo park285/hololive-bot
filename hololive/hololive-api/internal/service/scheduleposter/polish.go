@@ -11,6 +11,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 const MaxMemoChars = 4000
@@ -65,7 +67,7 @@ func (s *Store) PolishSlot(ctx context.Context, posterID int64, seen time.Time, 
 		return fmt.Errorf("polish schedule poster slot: %w", err)
 	}
 
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		var (
 			schedule           PosterSchedule
 			channelID          string

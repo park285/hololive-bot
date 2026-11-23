@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/alarm"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 //go:embed queries/register.sql
@@ -117,7 +118,7 @@ func (r *Repository) storeCatalogSnapshot(ctx context.Context, region contract.G
 		return err
 	}
 
-	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+	err := dbx.InPgxTxOptions(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		return r.storeCatalogSnapshotTx(ctx, tx, region, observed, chapters, bindings, conflicts, quarantineMissing)
 	})
 	if err != nil {
@@ -352,7 +353,7 @@ func (r *Repository) StoreBorder(ctx context.Context, b Border) error {
 		return err
 	}
 
-	err = pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+	err = dbx.InPgxTxOptions(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		return r.storeBorderTx(ctx, tx, &b, ranks, scores)
 	})
 	if err != nil {

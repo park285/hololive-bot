@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"net"
 	"os"
@@ -108,35 +109,32 @@ func databaseCheckConfig() (*pgx.ConnConfig, error) {
 	return cfg, nil
 }
 
-func verifyDatabaseSession(ctx context.Context, conn *pgx.Conn, role string) error {
+//go:embed queries/read_only_session_limits.sql
+var readOnlySessionLimitsSQL string
+
+//go:embed queries/verify_database_session.sql
+var verifyDatabaseSessionSQL string
+
+func verifyDatabaseSession(ctx context.Context, conn *pgx.Conn, role string) (err error) {
 	tx, err := conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return errors.New("read-only transaction failed")
 	}
 
-	for _, statement := range [...]string{
-		"SET LOCAL default_transaction_read_only = on",
-		"SET LOCAL statement_timeout = '30s'",
-		"SET LOCAL lock_timeout = '3s'",
-	} {
-		if _, err := tx.Exec(ctx, statement); err != nil {
-			return errors.New("read-only transaction limits failed")
+	defer func() {
+		if rollbackErr := pgxdb.Rollback(ctx, tx); rollbackErr != nil && err == nil {
+			err = errors.New("read-only transaction rollback failed")
 		}
-	}
+	}()
 
-	const query = `SELECT current_database() = 'hololive' AND current_user = $1::name AND session_user = $1::name
-		AND current_setting('default_transaction_read_only') = 'on' AND current_setting('transaction_read_only') = 'on'
-		AND current_setting('statement_timeout') = '30s' AND current_setting('lock_timeout') = '3s'
-		AND EXISTS (SELECT 1 FROM pg_catalog.pg_stat_ssl WHERE pid = pg_backend_pid() AND ssl AND version = 'TLSv1.3')`
+	if _, execErr := tx.Exec(ctx, readOnlySessionLimitsSQL); execErr != nil {
+		return errors.New("read-only transaction limits failed")
+	}
 
 	var verified bool
 
-	if err := tx.QueryRow(ctx, query, role).Scan(&verified); err != nil || !verified {
+	if scanErr := tx.QueryRow(ctx, verifyDatabaseSessionSQL, role).Scan(&verified); scanErr != nil || !verified {
 		return errors.New("database backend identity check failed")
-	}
-
-	if err := tx.Rollback(ctx); err != nil {
-		return errors.New("read-only transaction rollback failed")
 	}
 
 	return nil

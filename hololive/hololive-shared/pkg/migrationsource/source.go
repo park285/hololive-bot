@@ -23,6 +23,12 @@ var suffixName = regexp.MustCompile(`^\d{3}_epoch4_[a-z0-9_]+\.sql$`)
 //go:embed queries/settle_constraints.sql
 var settleConstraints string
 
+//go:embed queries/prepare_migration_session.sql
+var prepareMigrationSessionSQL string
+
+//go:embed queries/physical_contract.sql.tpl
+var physicalContractTemplateSQL string
+
 type File struct {
 	Name     string
 	Checksum string
@@ -104,7 +110,7 @@ func (f File) Apply(ctx context.Context, tx pgx.Tx) error {
 }
 
 func prepareMigrationSession(ctx context.Context, tx pgx.Tx) error {
-	if _, err := tx.Exec(ctx, `SET LOCAL search_path = pg_catalog, public, pg_temp; SET LOCAL check_function_bodies = on`); err != nil {
+	if _, err := tx.Exec(ctx, prepareMigrationSessionSQL); err != nil {
 		return fmt.Errorf("prepare migration namespace and function validation: %w", err)
 	}
 
@@ -132,7 +138,7 @@ func (f File) Verify(ctx context.Context, tx pgx.Tx) error {
 
 	predicate := strings.TrimSuffix(strings.TrimSpace(f.Contract), ";")
 
-	if err := tx.QueryRow(ctx, "SELECT coalesce(("+predicate+"),false)", pgx.QueryExecModeExec).Scan(&ready); err != nil {
+	if err := tx.QueryRow(ctx, strings.ReplaceAll(physicalContractTemplateSQL, "{{predicate}}", predicate), pgx.QueryExecModeExec).Scan(&ready); err != nil {
 		return fmt.Errorf("inspect physical contract for %s: %w", f.Name, err)
 	}
 

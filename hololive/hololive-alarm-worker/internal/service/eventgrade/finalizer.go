@@ -10,6 +10,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/alarm"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -47,7 +48,7 @@ func (r *Repository) FinalizeRegions(ctx context.Context, publisher dispatchPubl
 func (r *Repository) decideRegion(ctx context.Context, region string) (bool, error) {
 	decided := false
 
-	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+	err := dbx.InPgxTxOptions(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, regionFenceSQL, region); err != nil {
 			return fmt.Errorf("wait for event grade publications: %w", err)
 		}
