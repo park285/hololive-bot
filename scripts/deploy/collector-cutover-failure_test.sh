@@ -1031,14 +1031,31 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
         feeder.join(5)
         os.close(drain)
         require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
-                and not (state / f'b.quiesce.{change}.requested').exists() and not (state / f'b.{window}.resume-grant').exists(),
+                and not (state / f'b.quiesce.{change}.requested').exists(),
                 f'b: {mode} refuses a one-shot resume grant that step 5 could not read again', refused)
     fifo.unlink()
     grant('quiesce', expires=int(time.time()) + 4500)
     refused = run('deploy_approval=false\n' + entry, state, 'preflight')
     require(refused.returncode != 0 and not (state / 'calls').exists(),
             'b: preflight keeps time to stop d before b quiesce consumes the grant', refused)
+    grant('quiesce', expires=int(time.time()) + 3603)
+    refused = run('sync() { sleep 4; command sync "$@"; }\nexport -f sync\n' + entry, state, 'quiesce')
+    require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
+            and not (state / f'b.quiesce.{change}.requested').exists() and not (state / f'b.{window}.quiesce.used').exists(),
+            'b: quiesce rechecks the one-hour floor after a slow sync and before consuming the grant', refused)
     grant('quiesce')
+    swapped = state / 'swap-resume-grant'
+    shutil.copyfile(state / 'prepared-resume-grant', swapped)
+    swap = ('dd() { if [[ "$*" == *swap-resume-grant* ]]; then rm -f -- "$state/swap-resume-grant"; mkfifo -- "$state/swap-resume-grant"; fi; command dd "$@"; }\n'
+            f'export -f dd\nresume_grant_arg={shlex.quote(str(swapped))}\n')
+    for mode in ('preflight', 'quiesce'):
+        refused = run(swap + entry, state, mode)
+        require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
+                and not (state / f'b.quiesce.{change}.requested').exists(),
+                f'b: {mode} reads the resume grant once without blocking when the path turns into a FIFO', refused)
+        swapped.unlink()
+        shutil.copyfile(state / 'prepared-resume-grant', swapped)
+    swapped.unlink()
     real_archive = state / 'arm64-real'
     archive.rename(real_archive)
     archive.symlink_to(real_archive)
@@ -1081,15 +1098,20 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
     (state / 'c.accepted').unlink()
     refused = run(entry, state, 'resume')
     require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: resume requires the accepted c pair', refused)
+    consumed_expiry = int(time.time()) + 4500
     for mode in ('quiesce', 'resume'):
         if mode == 'resume':
             (state / 'c.accepted').write_bytes(accepted_pair)
             (state / 'c.accepted').chmod(0o600)
-        grant(mode)
+            (state / 'prepared-resume-grant').unlink()
+            shutil.copyfile(state / f'b.{window}.resume-grant', state / 'b.current-grant')
+            (state / 'b.current-grant').chmod(0o600)
+        else:
+            grant(mode, expires=consumed_expiry)
         result = run(entry, state, mode)
         expected = (f'iris-seoul sudo -n bash -s -- b {mode} {slot_table["b"]["root"]}/po-staging-{change} '
                     f'{slot_table["b"]["root"]}/backups/staged-po-b-{change} {new_revision} 19.2.1 {seal} '
-                    f'{window} {old_revision} {old_id} {w2_issuer} {origin_digest} {expiry} {tool_revision}')
+                    f'{window} {old_revision} {old_id} {w2_issuer} {origin_digest} {consumed_expiry} {tool_revision}')
         require(result.returncode == 0 and (state / 'calls').read_text().splitlines() == [expected],
                 'b: coordinator revision stays distinct; only already-staged accepted candidate addresses the writer', result)
         (state / 'calls').unlink()
@@ -1106,7 +1128,7 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
     require(checked.returncode == 0 and (state / 'calls').read_text().splitlines() ==
             [expected.replace(' b resume ', ' b check ')], 'b: pinned completion takes no writer grant', checked)
     (state / 'calls').unlink()
-    grant('rollback')
+    grant('rollback', expires=consumed_expiry)
     refused = run(entry, state, 'rollback')
     require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: rollback requires its own approval', refused)
     for op in ('check', 'rollback'):

@@ -152,9 +152,17 @@ if [[ "$slot" == b && ( "$mode" =~ ^(preflight|quiesce)$ || ( "$mode" =~ ^(resum
     (( EPOCHSECONDS < expires ))
     if [[ "$grant_phase" == quiesce ]]; then
       resume_line="${expected_grant/ quiesce / resume }"
-      if [[ ! -f "$resume_grant" ]] || ! cmp -s -- "$resume_grant" <(printf '%s\n' "$resume_line"); then
+      if [[ ! -f "$resume_grant" ]] ||
+        ! dd if="$resume_grant" iflag=nonblock bs=4096 count=1 status=none | cmp -s -- - <(printf '%s\n' "$resume_line"); then
         echo 'prepared resume grant must be a regular file holding this quiesce grant with only its phase changed to resume' >&2
         exit 1
+      fi
+      if [[ "$mode" == quiesce ]]; then
+        retained="$receipt_dir/b.$window.resume-grant"
+        retained_tmp="$(mktemp -- "$retained.XXXXXX")"
+        printf '%s\n' "$resume_line" >"$retained_tmp"
+        sync -- "$retained_tmp"
+        mv -f -T -- "$retained_tmp" "$retained"
       fi
       lifetime=3600
       if [[ "$mode" == preflight ]]; then lifetime=5400; fi
@@ -163,13 +171,6 @@ if [[ "$slot" == b && ( "$mode" =~ ^(preflight|quiesce)$ || ( "$mode" =~ ^(resum
     if [[ "$mode" == preflight ]]; then
       printf 'collector b preflight: source=%s seal=%s window=%s\n' "$revision" "$seal" "$window"
       exit 0
-    fi
-    if [[ "$grant_phase" == quiesce ]]; then
-      retained="$receipt_dir/b.$window.resume-grant"
-      retained_tmp="$(mktemp -- "$retained.XXXXXX")"
-      printf '%s\n' "$resume_line" >"$retained_tmp"
-      sync -- "$retained_tmp"
-      mv -f -T -- "$retained_tmp" "$retained"
     fi
     ln -T -- "$grant" "$requested"
     ln -T -- "$grant" "$used"
