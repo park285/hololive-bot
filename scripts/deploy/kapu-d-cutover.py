@@ -768,14 +768,13 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
     need(not damaged and not receipt_failed, '양쪽 소유 mask 복원 미확인: 증거와 잔여 가드 유지')
 
 
-def resume(h, target):
+def resumable(h, target):
     trusted(h,True)
     trusted(GUARD)
     trusted(SLOTS_FILE)
     s = json.loads(raw(h/'previous.json'))
     need(stat.S_IMODE(h.stat().st_mode) == 0o700 and raw(h/'quiesced') == stop_receipt(s),
          '선택한 모드의 새 quiesce 영수증 필요')
-    revision, ids, digests = target['revision'], target['images'], target['units']
     need(s.get('candidate') == target, '이 hold에서 정지 전에 승인한 후보와 불일치')
     retained(h,s)
     candidates = {}
@@ -785,6 +784,17 @@ def resume(h, target):
         candidates[n] = raw(INPUT / unit(n))
         verify_candidate_input(n,candidates[n],target)
         need(image(n,prod(n)) == s['images'][n], '이전 :prod 불일치')
+    return s, candidates
+
+
+def check(h, target):
+    resumable(h, target)
+    print('d check: ' + h.name + ' 재개 가능')
+
+
+def resume(h, target):
+    s, candidates = resumable(h, target)
+    revision, ids, digests = target['revision'], target['images'], target['units']
     metadata(h/'resume-attempt.json', {**target,'profile':s['profile']})
     for n in NAMES:
         if candidates[n] != raw(UNIT/unit(n)):
@@ -885,7 +895,7 @@ def prepare_store(path, *, create):
 def main():
     parser = argparse.ArgumentParser(description='kapu d 전용. 기존 설치·실행 증거가 없는 첫 설치와 자동 복구는 지원하지 않는다.')
     sub = parser.add_subparsers(dest='action', required=True)
-    for cmd in ('quiesce','resume'):
+    for cmd in ('quiesce','resume','check'):
         p = sub.add_parser(cmd, allow_abbrev=False)
         p.add_argument('hold', type=Path)
         for arg in ('revision','collector_id','issuer_id','collector_unit_sha256','issuer_unit_sha256'):
@@ -915,8 +925,10 @@ def main():
         fcntl.flock(fd,fcntl.LOCK_EX | fcntl.LOCK_NB)
         if a.action == 'quiesce':
             quiesce(a.hold, target)
-        else:
+        elif a.action == 'resume':
             resume(a.hold, target)
+        else:
+            check(a.hold, target)
 
 
 if __name__ == '__main__':

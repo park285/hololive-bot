@@ -392,6 +392,30 @@ class Cutover(unittest.TestCase):
         self.assertFalse(h.exists())
         self.assertFalse(self.calls)
 
+    def test_check_runs_resume_gates_without_changing_the_hold(self):
+        target = self.target()
+        self.seal(target)
+        before = sorted((p.name, p.read_bytes() if p.is_file() else None) for p in self.h.iterdir())
+        masks = {n: os.readlink(d.mask(n)) for n in d.NAMES}
+        units = {n: (self.units / d.unit(n)).read_bytes() for n in d.NAMES}
+        self.cli('check', target)
+        self.assertEqual(sorted((p.name, p.read_bytes() if p.is_file() else None) for p in self.h.iterdir()), before)
+        self.assertEqual({n: os.readlink(d.mask(n)) for n in d.NAMES}, masks)
+        self.assertEqual({n: (self.units / d.unit(n)).read_bytes() for n in d.NAMES}, units)
+        self.assertEqual(self.calls, [])
+
+    def test_check_refuses_what_resume_refuses(self):
+        target = self.target()
+        self.seal(target)
+        def rebooted(h, s):
+            d.need(False, '다른 hold/boot')
+        with patch.object(d, 'retained', rebooted), self.assertRaises(d.Refused):
+            self.cli('check', target)
+        (self.h / 'quiesced').write_bytes(b'stale\n')
+        with self.assertRaises(d.Refused):
+            self.cli('check', target)
+        self.assertEqual(self.calls, [])
+
     def test_direct_resume_refuses_changed_previous_endpoint(self):
         h = self.running_pair()
         d.quiesce(h,self.target())

@@ -1046,17 +1046,26 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
     grant('quiesce')
     swapped = state / 'swap-resume-grant'
     shutil.copyfile(state / 'prepared-resume-grant', swapped)
-    swap = ('swap_resume_fifo() { if [[ "$*" == *swap-resume-grant* ]]; then local line; line="$(cat -- "$state/swap-resume-grant")"; '
-            'rm -f -- "$state/swap-resume-grant"; mkfifo -- "$state/swap-resume-grant"; exec 7<>"$state/swap-resume-grant"; printf "%s\\n" "$line" >&7; fi; }\n'
-            'dd() { swap_resume_fifo "$@"; command dd "$@"; }\npython3() { swap_resume_fifo "$@"; command python3 "$@"; }\n'
-            f'export -f swap_resume_fifo dd python3\nresume_grant_arg={shlex.quote(str(swapped))}\n')
-    for mode in ('preflight', 'quiesce'):
-        refused = run(swap + entry, state, mode)
-        require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
-                and not (state / f'b.quiesce.{change}.requested').exists(),
-                f'b: {mode} refuses a resume grant path that turns into a FIFO holding the right line', refused)
-        swapped.unlink()
-        shutil.copyfile(state / 'prepared-resume-grant', swapped)
+    for writer, label in (('exec 7<>"$state/swap-resume-grant"; printf "%s\\n" "$line" >&7; ', 'holding the right line'), ('', 'without a writer')):
+        swap = ('swap_resume_fifo() { if [[ "$*" == *swap-resume-grant* ]]; then local line; line="$(cat -- "$state/swap-resume-grant")"; '
+                f'rm -f -- "$state/swap-resume-grant"; mkfifo -- "$state/swap-resume-grant"; {writer}fi; }}\n'
+                'python3() { swap_resume_fifo "$@"; command python3 "$@"; }\n'
+                f'export -f swap_resume_fifo python3\nresume_grant_arg={shlex.quote(str(swapped))}\n')
+        for mode in ('preflight', 'quiesce'):
+            refused = run(swap + entry, state, mode)
+            require(refused.returncode != 0 and 'prepared resume grant must be a regular file' in refused.stderr
+                    and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
+                    and not (state / f'b.quiesce.{change}.requested').exists(),
+                    f'b: {mode} refuses a resume grant path that turns into a FIFO {label}', refused)
+            swapped.unlink()
+            shutil.copyfile(state / 'prepared-resume-grant', swapped)
+    argv_log = state / 'python-argv'
+    spy = f'python3() {{ printf "%s\\n" "$*" >> {shlex.quote(str(argv_log))}; command python3 "$@"; }}\nexport -f python3\n'
+    accepted = run(spy + 'deploy_approval=false\n' + entry, state, 'preflight')
+    require(accepted.returncode == 0 and argv_log.exists()
+            and (state / 'prepared-resume-grant').read_text().strip() not in argv_log.read_text(),
+            'b: preflight compares the resume grant without passing its bytes as process arguments', accepted)
+    argv_log.unlink()
     swapped.unlink()
     real_archive = state / 'arm64-real'
     archive.rename(real_archive)
