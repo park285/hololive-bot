@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 [[ "$(hostname -s)" == kapu ]] || { echo 'image build/export is restricted to kapu' >&2; exit 1; }
-usage() { echo "Usage: $0 <c|b> deploy | c quiesce | <c|b> quiesce-verified|verify-pair <local-pair-dir> <trusted-transport-sha256> | b quiesce|resume|check|rollback <clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir> | <c|b> resume|rollback|check <card-backup>" >&2; exit 2; }
+usage() { echo "Usage: $0 <c|b> deploy | c quiesce | <c|b> quiesce-verified|verify-pair <local-pair-dir> <trusted-transport-sha256> | b preflight|quiesce|resume|check|rollback <clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir> | <c|b> resume|rollback|check <card-backup>" >&2; exit 2; }
 [[ $# -ge 2 && $# -le 7 ]] || usage
 slot="$1"
 shift
@@ -22,11 +22,17 @@ source_payload_files() {
     fi
   done <<<"$receipts"
 }
+archive_sums_match() {
+  local archive
+  for archive in image.tar collector-image.tar; do
+    sha256sum -- "$archive" | cmp -s -- - "$archive.sha256" || return 1
+  done
+}
 ssh_var="PO_${slot_upper}_SSH_TARGET" deploy_var="APPROVE_PO_${slot_upper}_DEPLOY" rollback_var="APPROVE_PO_${slot_upper}_ROLLBACK"
 mode="$1"
 verified_pair='' backup_prefix="card-po-$slot"
 remote_mode="$mode" seal=-
-if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollback)$ && $# != 2 ) ) ]]; then
+if [[ "$slot" == b && ( "$mode" =~ ^(preflight|quiesce)$ || ( "$mode" =~ ^(resume|check|rollback)$ && $# != 2 ) ) ]]; then
   [[ $# == 6 && "$4" =~ ^[0-9]{8}T[0-9]{6}Z$ && "$5" =~ ^[0-9a-f]{32}$ ]] || usage
   [[ "${!ssh_var:-}" == iris-seoul ]]
   case "$mode" in
@@ -52,8 +58,9 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
   grant_name=b.current-grant
   grant_phase="$mode"
   if [[ "$mode" == check ]]; then grant_name="b.quiesce.$change_id.requested" grant_phase=quiesce; fi
+  if [[ "$mode" == preflight ]]; then grant_phase=quiesce; fi
   receipts=("b.stage.$change_id.finished" "$grant_name")
-  [[ "$mode" == quiesce ]] || receipts+=(c.accepted)
+  [[ "$mode" =~ ^(preflight|quiesce)$ ]] || receipts+=(c.accepted)
   for receipt in "${receipts[@]}"; do
     [[ -f "$receipt_dir/$receipt" && ! -L "$receipt_dir/$receipt" &&
        "$(stat -c '%u:%a' "$receipt_dir/$receipt")" == "$EUID:600" ]] || { echo "missing or untrusted $receipt" >&2; exit 1; }
@@ -61,7 +68,7 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
   read -r staged_revision seal staged_change extra < "$receipt_dir/b.stage.$change_id.finished"
   [[ "$staged_revision" == "$revision" && "$seal" =~ ^[0-9a-f]{64}$ && "$staged_change" == "$change_id" && -z "$extra" ]]
   cmp -s -- "$receipt_dir/b.stage.$change_id.finished" <(printf '%s %s %s\n' "$revision" "$seal" "$change_id")
-  if [[ "$mode" != quiesce ]]; then cmp -s -- "$receipt_dir/c.accepted" <(printf '%s %s\n' "$revision" "$seal"); fi
+  if [[ ! "$mode" =~ ^(preflight|quiesce)$ ]]; then cmp -s -- "$receipt_dir/c.accepted" <(printf '%s %s\n' "$revision" "$seal"); fi
   grant="$receipt_dir/$grant_name"
   if [[ "$mode" != check ]]; then [[ "$(stat -c '%h' "$grant")" == 1 ]]; fi
   read -r -a fields < "$grant"
@@ -100,7 +107,7 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
     printf '%s  transport-files.sha256\n' "$seal" | sha256sum --check --strict --status -
     sha256sum source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id \
       image.tar.sha256 collector-image.tar.sha256 | cmp -s -- - transport-files.sha256
-    sha256sum --check --strict --status image.tar.sha256 collector-image.tar.sha256
+    archive_sums_match
   )
   files=scripts/deploy/po-central-files.txt
   version_file=hololive/hololive-api/VERSION
@@ -120,8 +127,14 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
   backup="$remote_root/backups/staged-po-b-$change_id"
   staging="$remote_root/po-staging-$change_id"
   remote_body="$slot_preamble"$'\n'"$(git -C "$root" cat-file blob "$tool_revision:scripts/deploy/lib/po-central-remote.sh")"
+  if [[ "$mode" == preflight ]]; then
+    printf 'collector b preflight: source=%s seal=%s window=%s\n' "$revision" "$seal" "$window"
+    exit 0
+  fi
   if [[ "$mode" != check ]]; then
     used="$receipt_dir/b.$window.$mode.used"
+    exec 9>>"$receipt_dir/receipts.lock"
+    flock -n 9 || { echo 'another grant publication or consumption holds the receipt lock' >&2; exit 1; }
     (( EPOCHSECONDS < expires ))
     ln -T -- "$grant" "$receipt_dir/b.$mode.$change_id.requested"
     ln -T -- "$grant" "$used"
@@ -131,6 +144,7 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
     rm -- "$grant"
     sync -- "$receipt_dir"
     (( EPOCHSECONDS < expires ))
+    exec 9>&-
   fi
   ssh "${!ssh_var}" sudo -n bash -s -- b "$mode" "$staging" "$backup" "$revision" "$version" "$seal" \
     "$window" "$w2_revision" "$w2_collector" "$w2_issuer" "$origin_digest" "$expires" "$tool_revision" \
@@ -156,7 +170,7 @@ verify_local_pair() {
     printf '%s  transport-files.sha256\n' "$pair_seal" | sha256sum --check --strict --status - || exit 1
     actual="$(sha256sum source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id image.tar.sha256 collector-image.tar.sha256)" || exit 1
     cmp -s transport-files.sha256 <(printf '%s\n' "$actual") || exit 1
-    sha256sum --check --strict --status image.tar.sha256 collector-image.tar.sha256 || exit 1
+    archive_sums_match || exit 1
     jq -e --arg r "$pair_revision" '.source_revision==$r and .go.goarch=="arm64"' collector-manifest.json >/dev/null || exit 1
     jq -e --arg r "$pair_revision" '.source_revision==$r and .architecture=="arm64"' rootfs-manifest.json >/dev/null
   ) || { echo 'verified pair transport or revision mismatch; nothing transferred' >&2; return 1; }

@@ -911,7 +911,7 @@ rsync() { printf 'unexpected rsync\n' >> "$state/calls"; return 7; }
 podman() { printf 'unexpected build\n' >> "$state/calls"; return 7; }
 export -f hostname git ssh rsync podman
 export state PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY="${deploy_approval:-true}" APPROVE_PO_B_ROLLBACK="${rollback_approval:-false}"
-bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "$2" "${product_root:-$state/candidate}" "$state" "${stage_id:-20261003T000000Z}" \
+bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "$2" "${product_root:-$state/candidate}" "${receipt_arg:-$state}" "${stage_id:-20261003T000000Z}" \
   "${window_id:-11111111111111111111111111111111}" "$state/w2"
 '''
     stage_receipt = state / f'b.stage.{change}.finished'
@@ -952,6 +952,32 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
     refused = run(entry, state, 'quiesce')
     require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: locally drifted archive refused before SSH', refused)
     (archive / 'image.tar').write_bytes(b'image.tar')
+    good_issuer_sum, good_transport, good_seal = (archive / 'image.tar.sha256').read_text(), (archive / 'transport-files.sha256').read_text(), seal
+    (archive / 'image.tar.sha256').write_text(good_issuer_sum.replace('  image.tar', '  ./image.tar'))
+    (archive / 'transport-files.sha256').write_text(sums(archive, names))
+    seal = hashlib.sha256((archive / 'transport-files.sha256').read_bytes()).hexdigest()
+    stage_receipt.write_text(f'{new_revision} {seal} {change}\n')
+    grant('quiesce')
+    for mode in ('preflight', 'quiesce'):
+        refused = run('deploy_approval=false\n' + entry if mode == 'preflight' else entry, state, mode)
+        require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists(),
+                f'b: {mode} refuses a checksum line the remote rejects before consuming the grant', refused)
+    (archive / 'image.tar.sha256').write_text(good_issuer_sum)
+    (archive / 'transport-files.sha256').write_text(good_transport)
+    seal = good_seal
+    stage_receipt.write_text(f'{new_revision} {seal} {change}\n')
+    grant('quiesce')
+    before = sorted(p.name for p in state.iterdir())
+    checked = run('deploy_approval=false\n' + entry, state, 'preflight')
+    require(checked.returncode == 0 and not (state / 'calls').exists() and sorted(p.name for p in state.iterdir()) == before
+            and (state / 'b.current-grant').stat().st_nlink == 1, 'b: preflight runs the quiesce checks without SSH or grant consumption', checked)
+    refused = run(f'receipt_arg={shlex.quote(str(state))}/\ndeploy_approval=false\n' + entry, state, 'preflight')
+    require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: preflight refuses the receipt path that quiesce refuses', refused)
+    with open(state / 'receipts.lock', 'a') as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        refused = run(entry, state, 'quiesce')
+    require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
+            and not (state / f'b.quiesce.{change}.requested').exists(), 'b: grant consumption refuses a concurrent publication', refused)
     lost_window, lost_change = 'f' * 32, '20261002T000000Z'
     lost_entry = f'window_id={lost_window}\nstage_id={lost_change}\n' + entry
     lost_stage = state / f'b.stage.{lost_change}.finished'
@@ -1044,6 +1070,13 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
     require(result.returncode != 0 and not (state / 'calls').exists(), 'c: a VERSION that quiesce rejects is judged before any stop', result)
     version_file.write_text(good_version)
     (archive / 'source-files.sha256').write_text(good_sources)
+    (archive / 'transport-files.sha256').write_text(good_transport)
+    good_issuer_sum = (archive / 'image.tar.sha256').read_text()
+    (archive / 'image.tar.sha256').write_text(good_issuer_sum.replace('  image.tar', '  ./image.tar'))
+    (archive / 'transport-files.sha256').write_text(sums(archive, names))
+    result = run(verify, state, hashlib.sha256((archive / 'transport-files.sha256').read_bytes()).hexdigest())
+    require(result.returncode != 0 and not (state / 'calls').exists(), 'c: a checksum line the remote rejects is judged before any stop', result)
+    (archive / 'image.tar.sha256').write_text(good_issuer_sum)
     (archive / 'transport-files.sha256').write_text(good_transport)
 
 
