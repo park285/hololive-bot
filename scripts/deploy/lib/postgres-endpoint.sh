@@ -121,9 +121,18 @@ def check_origins(installed):
             ).stdout.strip()
         if loaded("NeedDaemonReload") != "no":
             reject_origin("systemd loaded unit requires daemon-reload")
-        if loaded("Names") != service or loaded("DropInPaths"):
+        load_state = loaded("LoadState")
+        if load_state == "masked":
+            mask = prefix / "etc/systemd/system" / service
+            if loaded("FragmentPath") != "/etc/systemd/system/" + service or not (
+                mask.is_symlink() and os.readlink(mask) == "/dev/null"
+            ):
+                reject_origin("systemd masked unit fragment")
+        elif load_state != "loaded":
+            reject_origin("systemd unit load state " + load_state)
+        elif loaded("Names") != service or loaded("DropInPaths"):
             reject_origin("systemd loaded unit aliases or drop-ins")
-        if loaded("FragmentPath") not in ("", "/run/systemd/generator/" + service):
+        elif loaded("FragmentPath") != "/run/systemd/generator/" + service:
             reject_origin("systemd loaded unit fragment")
     name = installed.stem
     inherited = [name[:index + 1] for index, char in enumerate(name) if char == "-"]

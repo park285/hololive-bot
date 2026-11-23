@@ -37,7 +37,8 @@ case "$1" in
       *--property=NeedDaemonReload*) echo no ;;
       *--property=Names*) if [[ -e "${SYNC_TEST_EVENTS}.alias" ]]; then echo "$2 valkey-alias.service"; else echo "$2"; fi ;;
       *--property=DropInPaths*) if [[ -e "${SYNC_TEST_EVENTS}.alias-dropin" ]]; then echo /etc/systemd/system/valkey-alias.service.d/10-image.conf; fi ;;
-      *--property=FragmentPath*) echo "/run/systemd/generator/$2" ;;
+      *--property=LoadState*) if [[ -e "${SYNC_TEST_EVENTS}.not-found" ]]; then echo not-found; else echo loaded; fi ;;
+      *--property=FragmentPath*) [[ -e "${SYNC_TEST_EVENTS}.not-found" ]] || echo "/run/systemd/generator/$2" ;;
     esac
     ;;
 esac
@@ -147,12 +148,14 @@ run_sync() {
     mount --bind "${host}/etc-nftables.d" /etc/nftables.d
     mount --bind "${host}/run" /run
     mount --bind "${host}/run-lock" /run/lock
-    if [[ " $* " == *" --valkey-only "* ]]; then
+    if [[ " $* " != *" --source-only "* ]]; then
       mount -t tmpfs -o mode=0755 tmpfs /opt
-      mkdir -p /opt/hololive-bot/compose
-      mount --bind "$host/opt" /opt/hololive-bot/compose
       mkdir -p /opt/iris-stack/valkey-ha
       : >/opt/iris-stack/valkey-ha/stage.py
+    fi
+    if [[ " $* " == *" --valkey-only "* ]]; then
+      mkdir -p /opt/hololive-bot/compose
+      mount --bind "$host/opt" /opt/hololive-bot/compose
       for directory in /usr/lib/systemd/system /usr/local/lib/systemd/system /usr/share/containers/systemd; do
         [[ ! -d $directory ]] || mount -t tmpfs -o mode=0755 tmpfs "$directory"
       done
@@ -336,6 +339,7 @@ printf '%s\n' /usr/local/libexec/hololive-bot/lib/collector-slots.tsv >"$host/ev
 assert_rejected_without_change "$host" "$base_repo" "unsafe Valkey start check path" "installed Valkey start checks are writable by a non-root user" --valkey-only
 printf '%s\n' /opt/iris-stack/valkey-ha/stage.py >"$host/events.ownership-denied"
 assert_rejected_without_change "$host" "$base_repo" "unsafe Valkey stage tool path" "Valkey stage tool is missing or writable by a non-root user" --valkey-only
+assert_rejected_without_change "$host" "$base_repo" "unsafe Valkey stage tool path in a full sync" "Valkey stage tool is missing or writable by a non-root user"
 rm "$host/events.ownership-denied"
 SYNC_TEST_OPT_ROOT="$host/opt" assert_rejected_without_change "$host" "$base_repo" "other Valkey runtime tree" \
   "Valkey-only publication checks the runtime tree that the prestart reads" --valkey-only
@@ -356,6 +360,9 @@ rm "$host/events.alias-dropin"
 touch "$host/events.alias"
 assert_rejected_without_change "$host" "$base_repo" "Valkey alias name" "$override" --valkey-only
 rm "$host/events.alias"
+touch "$host/events.not-found"
+assert_rejected_without_change "$host" "$base_repo" "Valkey unit not loaded by systemd" "$override" --valkey-only
+rm "$host/events.not-found"
 mkdir "$host/etc-containers-systemd/container.d"
 printf '[Container]\nImage=localhost/other:tag\n' >"$host/etc-containers-systemd/container.d/60-image.conf"
 assert_rejected_without_change "$host" "$base_repo" "inherited Quadlet drop-in" "$override" --valkey-only

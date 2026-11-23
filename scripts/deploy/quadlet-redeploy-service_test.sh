@@ -177,7 +177,13 @@ case "$*" in
   show\ *.service\ --property=Names\ --value)
     printf '%s\n' "$2"
     exit 0 ;;
-  show\ *.service\ --property=DropInPaths\ --value | show\ *.service\ --property=FragmentPath\ --value)
+  show\ *.service\ --property=DropInPaths\ --value)
+    exit 0 ;;
+  show\ *.service\ --property=LoadState\ --value)
+    if [[ -L "${HOLOLIVE_QUADLET_TEST_ROOT}/etc/systemd/system/$2" ]]; then echo masked; else echo loaded; fi
+    exit 0 ;;
+  show\ *.service\ --property=FragmentPath\ --value)
+    if [[ -L "${HOLOLIVE_QUADLET_TEST_ROOT}/etc/systemd/system/$2" ]]; then echo "/etc/systemd/system/$2"; else echo "/run/systemd/generator/$2"; fi
     exit 0 ;;
 esac
 launch_job=''

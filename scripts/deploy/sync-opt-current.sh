@@ -67,6 +67,13 @@ for lib in admin-bind public-bind-mounts postgres-capacity compose-env postgres-
   host_assets+=("scripts/deploy/lib/$lib.sh|$LIBEXEC_DIR/lib/$lib.sh|644")
 done
 host_assets+=("scripts/deploy/lib/collector-slots.tsv|$LIBEXEC_DIR/lib/collector-slots.tsv|644")
+require_valkey_stage_selected() {
+  local stage_tool=/opt/iris-stack/valkey-ha/stage.py
+  { [[ -f $stage_tool && ! -L $stage_tool ]] && bash "$REPO_ROOT/scripts/deploy/verify-exec-tree-ownership.sh" "$stage_tool"; } ||
+    die "Valkey stage tool is missing or writable by a non-root user: $stage_tool"
+  python3 -I "$stage_tool" selected hololive || die "Valkey standalone stage is not admitted"
+}
+
 if [[ $valkey_only == true ]]; then
   [[ $OPT_ROOT == /opt/hololive-bot/compose ]] || die "Valkey-only publication checks the runtime tree that the prestart reads: /opt/hololive-bot/compose"
   # shellcheck source=scripts/deploy/lib/compose-env.sh
@@ -74,10 +81,7 @@ if [[ $valkey_only == true ]]; then
   # shellcheck source=scripts/deploy/lib/postgres-endpoint.sh
   . "$REPO_ROOT/scripts/deploy/lib/postgres-endpoint.sh"
   require_central_valkey_bind
-  stage_tool=/opt/iris-stack/valkey-ha/stage.py
-  { [[ -f $stage_tool && ! -L $stage_tool ]] && bash "$REPO_ROOT/scripts/deploy/verify-exec-tree-ownership.sh" "$stage_tool"; } ||
-    die "Valkey stage tool is missing or writable by a non-root user: $stage_tool"
-  python3 -I "$stage_tool" selected hololive || die "Valkey standalone stage is not admitted"
+  require_valkey_stage_selected
   unit=valkey-cache.container
   target="$QUADLET_DIR/$unit"
   [[ -f $target && ! -L $target && $(realpath -e "$target") == "$target" && ! -e $target.d && ! -L $target.d ]] ||
@@ -154,7 +158,7 @@ backup_current() {
 }
 
 if [[ "$application_only" != true ]]; then
-  python3 -I /opt/iris-stack/valkey-ha/stage.py selected hololive || die "Valkey standalone stage is not admitted"
+  require_valkey_stage_selected
   backup_current
 fi
 

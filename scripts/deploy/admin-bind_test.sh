@@ -121,7 +121,13 @@ case "$*" in
     show\ *.service\ --property=Names\ --value)
         printf '%s\n' "$2"
         exit 0 ;;
-    show\ *.service\ --property=DropInPaths\ --value | show\ *.service\ --property=FragmentPath\ --value)
+    show\ *.service\ --property=DropInPaths\ --value)
+        exit 0 ;;
+    show\ *.service\ --property=LoadState\ --value)
+        echo loaded
+        exit 0 ;;
+    show\ *.service\ --property=FragmentPath\ --value)
+        echo "/run/systemd/generator/$2"
         exit 0 ;;
 esac
 exit 0
