@@ -42,6 +42,11 @@ cat >"${fakebin}/mv" <<'EOF'
 if [[ -f "$SYNC_TEST_EVENTS.fail-before" && "${!#}" == "$(<"$SYNC_TEST_EVENTS.fail-before")" ]]; then exit 92; fi
 exec /usr/bin/mv "$@"
 EOF
+cat >"${fakebin}/podman" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1 $2 $#" == "image exists 3" ]] || exit 64
+! grep -qxF -- "$3" "$SYNC_TEST_EVENTS.image-missing" 2>/dev/null
+EOF
 cat >"${fakebin}/python3" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$*" == '-I /opt/iris-stack/valkey-ha/stage.py selected hololive' ]]; then
@@ -246,6 +251,28 @@ printf '\n' >>"$installed/valkey-cache.container"
 sed -i 's/^VALKEY_BIND_IP=.*/VALKEY_BIND_IP=0.0.0.0/' "$host/etc-stack-secrets/hololive-bot/compose.env"
 assert_rejected_without_change "$host" "$base_repo" "Valkey wildcard bind" "VALKEY_BIND_IP must select the central Valkey endpoint" --valkey-only
 pass "Valkey 단독 게시는 중앙 주소가 아닌 VALKEY_BIND_IP를 거부합니다"
+
+sed -i 's/^VALKEY_BIND_IP=.*/VALKEY_BIND_IP=100.100.1.8/' "$host/etc-stack-secrets/hololive-bot/compose.env"
+stale_start="installed Valkey start checks differ from the checkout; run a full sync first"
+printf '\n' >>"$host/usr-local-libexec/hololive-bot/quadlet-prestart"
+assert_rejected_without_change "$host" "$base_repo" "stale Valkey prestart" "$stale_start" --valkey-only
+cp "$base_repo/scripts/deploy/quadlet-prestart.sh" "$host/usr-local-libexec/hololive-bot/quadlet-prestart"
+printf '\n' >>"$host/usr-local-libexec/hololive-bot/lib/admin-bind.sh"
+assert_rejected_without_change "$host" "$base_repo" "stale Valkey bind check" "$stale_start" --valkey-only
+cp "$base_repo/scripts/deploy/lib/admin-bind.sh" "$host/usr-local-libexec/hololive-bot/lib/admin-bind.sh"
+printf '\n' >>"$host/opt/current/deploy/topology/hosts.conf"
+assert_rejected_without_change "$host" "$base_repo" "stale Valkey topology" "$stale_start" --valkey-only
+cp "$base_repo/deploy/topology/hosts.conf" "$host/opt/current/deploy/topology/hosts.conf"
+pass "Valkey 단독 게시는 설치된 시작 검사·토폴로지가 checkout과 다르면 거부합니다"
+
+printf 'localhost/iris-stack-valkey:9.1.3-zlib1.4-r1\n' >"$host/events.image-missing"
+assert_rejected_without_change "$host" "$base_repo" "missing Valkey image" "Valkey image is not present: localhost/iris-stack-valkey:9.1.3-zlib1.4-r1" --valkey-only
+printf 'VALKEY_IMAGE=localhost/iris-stack-valkey:pinned\n' >>"$host/etc-stack-secrets/hololive-bot/compose.env"
+printf 'localhost/iris-stack-valkey:pinned\n' >"$host/events.image-missing"
+assert_rejected_without_change "$host" "$base_repo" "missing pinned Valkey image" "Valkey image is not present: localhost/iris-stack-valkey:pinned" --valkey-only
+sed -i '/^VALKEY_IMAGE=/d' "$host/etc-stack-secrets/hololive-bot/compose.env"
+rm -f -- "$host/events.image-missing"
+pass "Valkey 단독 게시는 unit이 실제로 쓸 이미지가 없으면 거부합니다"
 
 broken_repo="${tmp}/repo-broken-unit"
 cp -R "${base_repo}" "${broken_repo}"

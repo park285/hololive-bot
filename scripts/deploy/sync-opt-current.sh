@@ -58,6 +58,15 @@ require_central_valkey_bind() {
   compose_env_validate_file_format "$COMPOSE_ENV"
   [[ "$(env_value VALKEY_BIND_IP)" == 100.100.1.8 ]] || die "VALKEY_BIND_IP must select the central Valkey endpoint"
 }
+host_assets=(
+  "scripts/deploy/quadlet-prestart.sh|$LIBEXEC_DIR/quadlet-prestart|755"
+  "scripts/systemd/admin-dashboard-ingress-firewall.service|/etc/systemd/system/admin-dashboard-ingress-firewall.service|644"
+  "scripts/systemd/admin-dashboard-ingress.nft|/etc/nftables.d/admin-dashboard-ingress.nft|644"
+)
+for lib in admin-bind public-bind-mounts postgres-capacity compose-env postgres-endpoint collector-slots; do
+  host_assets+=("scripts/deploy/lib/$lib.sh|$LIBEXEC_DIR/lib/$lib.sh|644")
+done
+host_assets+=("scripts/deploy/lib/collector-slots.tsv|$LIBEXEC_DIR/lib/collector-slots.tsv|644")
 if [[ $valkey_only == true ]]; then
   # shellcheck source=scripts/deploy/lib/compose-env.sh
   . "$REPO_ROOT/scripts/deploy/lib/compose-env.sh"
@@ -67,7 +76,21 @@ if [[ $valkey_only == true ]]; then
   target="$QUADLET_DIR/$unit"
   [[ -f $target && ! -L $target && $(realpath -e "$target") == "$target" && ! -e $target.d && ! -L $target.d ]] ||
     die "expected an existing Valkey unit without overrides"
-  [[ -x $LIBEXEC_DIR/quadlet-prestart ]] || die "installed Quadlet prestart missing"
+  start_checks=("deploy/topology/hosts.conf|$OPT_CURRENT/deploy/topology/hosts.conf|644")
+  for asset in "${host_assets[@]}"; do
+    [[ $asset != *"|$LIBEXEC_DIR/"* ]] || start_checks+=("$asset")
+  done
+  for asset in "${start_checks[@]}"; do
+    IFS='|' read -r path dest mode <<<"$asset"
+    if ! { [[ -f $dest && ! -L $dest && $(stat -c %a -- "$dest") == "$mode" ]] && cmp -s -- "$REPO_ROOT/$path" "$dest"; }; then
+      die "installed Valkey start checks differ from the checkout; run a full sync first: $dest"
+    fi
+  done
+  image=$(env_value VALKEY_IMAGE)
+  [[ -n $image ]] || image=$(sed -n 's/^Environment=VALKEY_IMAGE=//p' "$REPO_ROOT/deploy/quadlet/hololive-bot/$unit")
+  if [[ -z $image ]] || ! podman image exists "$image"; then
+    die "Valkey image is not present: $image"
+  fi
   scratch=$(mktemp -d /run/.hololive-valkey-unit.XXXXXX)
   candidate=
   trap 'rm -rf -- "$scratch"; [[ -z $candidate ]] || rm -f -- "$candidate"' EXIT
@@ -190,15 +213,6 @@ fi
 
 migrator=hololive-db-migrate.container
 migrator_path="deploy/quadlet/hololive-bot/$migrator"
-host_assets=(
-  "scripts/deploy/quadlet-prestart.sh|$LIBEXEC_DIR/quadlet-prestart|755"
-  "scripts/systemd/admin-dashboard-ingress-firewall.service|/etc/systemd/system/admin-dashboard-ingress-firewall.service|644"
-  "scripts/systemd/admin-dashboard-ingress.nft|/etc/nftables.d/admin-dashboard-ingress.nft|644"
-)
-for lib in admin-bind public-bind-mounts postgres-capacity compose-env postgres-endpoint collector-slots; do
-  host_assets+=("scripts/deploy/lib/$lib.sh|$LIBEXEC_DIR/lib/$lib.sh|644")
-done
-host_assets+=("scripts/deploy/lib/collector-slots.tsv|$LIBEXEC_DIR/lib/collector-slots.tsv|644")
 
 assert_same_file() {
   if ! { [[ -f "$1" && ! -L "$1" && -f "$2" && ! -L "$2" ]] && cmp -s -- "$1" "$2"; }; then

@@ -50,7 +50,7 @@ sudo ./scripts/deploy/sync-opt-current.sh
 
 - hostname이 `kapu`이면 `HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1` 없이 거부합니다(두 번째 dispatcher 방지).
 - `compose.env`의 `VALKEY_BIND_IP=100.100.1.8`을 API·alarm-worker가 TLS 직접 접속에 사용합니다. 전환 전에 이 주소의 `16379`가 최신 쓰기 primary인지 확인합니다.
-- 앱 배포와 별개로 구 중앙 primary의 ACL·AOF와 실제 볼륨을 확인한 다음, `sudo ./scripts/deploy/sync-opt-current.sh --valkey-only`로 이 unit 하나만 교체할 수 있습니다. 서비스의 재기동·단계 승인은 수행하지 않고, 앱·DB·기존 데이터·실행 트리·백업을 변경하지 않습니다. [영속 단계와 최종 캐시](../compose/README.md#중앙-valkey)를 구분하십시오.
+- 앱 배포와 별개로 구 중앙 primary의 ACL·AOF와 실제 볼륨을 확인한 다음, `sudo ./scripts/deploy/sync-opt-current.sh --valkey-only`로 이 unit 하나만 교체할 수 있습니다. 설치된 `quadlet-prestart`·`lib/`와 `deploy/topology/hosts.conf`가 이 checkout과 같고 unit이 실제로 쓸 Valkey 이미지가 로컬에 있어야 하며, 다르면 전체 sync를 먼저 합니다. 서비스의 재기동·단계 승인은 수행하지 않고, 앱·DB·기존 데이터·실행 트리·백업을 변경하지 않습니다. [영속 단계와 최종 캐시](../compose/README.md#중앙-valkey)를 구분하십시오.
 - `HOLOLIVE_X_SPACES_ENABLED`·`HOLOLIVE_SCHEDULE_POSTER_ENABLED`·`HOLOLIVE_SCHEDULE_POSTER_REVIEW_ENABLED`·`HOLOLIVE_BROADCAST_TYPE_DECISION_ENABLED`·`HOLOLIVE_EVENT_GRADE_ENABLED`는 `0` 또는 `1`이며, 그 값에 따라 각 선택 기능 drop-in을 설치하거나 지웁니다.
 - `compose.env`의 PostgreSQL pool 값이 연결 예산(`scripts/deploy/lib/postgres-capacity.sh`)을 넘으면 거부합니다.
 - 설치 전에 설치 뒤와 같은 구성(staged unit, 켜진 선택 기능 drop-in, 설치 도구가 건드리지 않는 기존 drop-in)이
