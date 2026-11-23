@@ -978,6 +978,22 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
         refused = run(entry, state, 'quiesce')
     require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
             and not (state / f'b.quiesce.{change}.requested').exists(), 'b: grant consumption refuses a concurrent publication', refused)
+    replaced = run('flock() { python3 -c "import sys; p = sys.argv[1]; open(p + \'.new\', \'w\').write(open(p).read().replace(\' quiesce \', \' quiesce \').rsplit(\' \', 1)[0] + \' 9999999999\\n\')" "$state/b.current-grant" && chmod 600 "$state/b.current-grant.new" && mv -f "$state/b.current-grant.new" "$state/b.current-grant"; }\nexport -f flock\n' + entry, state, 'quiesce')
+    require(replaced.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').stat().st_nlink == 1
+            and not (state / f'b.quiesce.{change}.requested').exists() and not (state / f'b.{window}.quiesce.used').exists(),
+            'b: a grant replaced before the lock is revalidated and left unconsumed', replaced)
+    grant('quiesce')
+    (archive / 'elsewhere').mkdir()
+    shutil.copyfile(archive / 'image.tar', archive / 'elsewhere/image.tar')
+    (archive / 'image.tar').unlink()
+    (archive / 'image.tar').symlink_to(archive / 'elsewhere/image.tar')
+    for mode in ('preflight', 'quiesce'):
+        refused = run(entry, state, mode)
+        require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists(),
+                f'b: {mode} refuses a symlinked archive that resume would rehash', refused)
+    (archive / 'image.tar').unlink()
+    shutil.move(archive / 'elsewhere/image.tar', archive / 'image.tar')
+    (archive / 'elsewhere').rmdir()
     lost_window, lost_change = 'f' * 32, '20261002T000000Z'
     lost_entry = f'window_id={lost_window}\nstage_id={lost_change}\n' + entry
     lost_stage = state / f'b.stage.{lost_change}.finished'
@@ -990,13 +1006,14 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
             not (state / f'b.{lost_window}.quiesce.finished').exists(), 'b: no completed phase on lost transport', unknown)
     (state / 'calls').unlink()
     (state / 'lost-reply').unlink()
-    for mode in ('quiesce', 'resume'):
-        grant(mode, lost_window, stage=lost_change)
+    for mode in ('preflight', 'quiesce', 'resume'):
+        grant('quiesce' if mode == 'preflight' else mode, lost_window, stage=lost_change)
         refused = run(lost_entry, state, mode)
-        require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: unknown outcome permits neither replay nor resume', refused)
-    grant('quiesce', stage=lost_change)
-    refused = run(f'stage_id={lost_change}\n' + entry, state, 'quiesce')
-    require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: a different window cannot retry unknown stage effects', refused)
+        require(refused.returncode != 0 and not (state / 'calls').exists(), f'b: unknown outcome permits neither replay nor resume ({mode})', refused)
+    for mode in ('preflight', 'quiesce'):
+        grant('quiesce', stage=lost_change)
+        refused = run(f'stage_id={lost_change}\n' + entry, state, mode)
+        require(refused.returncode != 0 and not (state / 'calls').exists(), f'b: a different window cannot retry unknown stage effects ({mode})', refused)
     accepted_pair = (state / 'c.accepted').read_bytes()
     grant('resume')
     (state / 'c.accepted').unlink()

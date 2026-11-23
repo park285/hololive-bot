@@ -22,6 +22,13 @@ source_payload_files() {
     fi
   done <<<"$receipts"
 }
+pair_files_regular() {
+  local file
+  for file in transport-files.sha256 source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id \
+    image.tar image.tar.sha256 collector-image.tar collector-image.tar.sha256; do
+    [[ -f "$file" && ! -L "$file" ]] || return 1
+  done
+}
 archive_sums_match() {
   local archive
   for archive in image.tar collector-image.tar; do
@@ -102,8 +109,10 @@ if [[ "$slot" == b && ( "$mode" =~ ^(preflight|quiesce)$ || ( "$mode" =~ ^(resum
     cmp -s -- "$previous" <(printf 'PO_B_PAIR_V1 iris-seoul %s quiesce %s %s\n' "${origin[2]}" "$grant_pair" "${origin[12]}")
   fi
   archive="$receipt_dir/arm64"
+  [[ -d "$archive" && ! -L "$archive" ]]
   (
     cd -- "$archive"
+    pair_files_regular
     printf '%s  transport-files.sha256\n' "$seal" | sha256sum --check --strict --status -
     sha256sum source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id \
       image.tar.sha256 collector-image.tar.sha256 | cmp -s -- - transport-files.sha256
@@ -127,16 +136,22 @@ if [[ "$slot" == b && ( "$mode" =~ ^(preflight|quiesce)$ || ( "$mode" =~ ^(resum
   backup="$remote_root/backups/staged-po-b-$change_id"
   staging="$remote_root/po-staging-$change_id"
   remote_body="$slot_preamble"$'\n'"$(git -C "$root" cat-file blob "$tool_revision:scripts/deploy/lib/po-central-remote.sh")"
-  if [[ "$mode" == preflight ]]; then
-    printf 'collector b preflight: source=%s seal=%s window=%s\n' "$revision" "$seal" "$window"
-    exit 0
-  fi
   if [[ "$mode" != check ]]; then
-    used="$receipt_dir/b.$window.$mode.used"
-    exec 9>>"$receipt_dir/receipts.lock"
-    flock -n 9 || { echo 'another grant publication or consumption holds the receipt lock' >&2; exit 1; }
+    used="$receipt_dir/b.$window.$grant_phase.used"
+    requested="$receipt_dir/b.$grant_phase.$change_id.requested"
+    if [[ "$mode" != preflight ]]; then
+      exec 9>>"$receipt_dir/receipts.lock"
+      flock -n 9 || { echo 'another grant publication or consumption holds the receipt lock' >&2; exit 1; }
+    fi
+    [[ ! -e "$requested" && ! -L "$requested" && ! -e "$used" && ! -L "$used" ]] || { echo "b $grant_phase was already requested for this stage or window" >&2; exit 1; }
+    [[ -f "$grant" && ! -L "$grant" && "$(stat -c '%u:%a:%h' "$grant")" == "$EUID:600:1" ]] || { echo 'window grant withdrawn or replaced' >&2; exit 1; }
+    cmp -s -- "$grant" <(printf '%s\n' "$expected_grant") || { echo 'window grant withdrawn or replaced' >&2; exit 1; }
     (( EPOCHSECONDS < expires ))
-    ln -T -- "$grant" "$receipt_dir/b.$mode.$change_id.requested"
+    if [[ "$mode" == preflight ]]; then
+      printf 'collector b preflight: source=%s seal=%s window=%s\n' "$revision" "$seal" "$window"
+      exit 0
+    fi
+    ln -T -- "$grant" "$requested"
     ln -T -- "$grant" "$used"
     cmp -s -- "$used" <(printf '%s\n' "$expected_grant")
     sync -- "$used" "$receipt_dir"
@@ -163,10 +178,7 @@ verify_local_pair() {
   local pair="$1" pair_seal="$2" pair_revision="$3" sources="$4" expected_sources
   (
     cd -- "$pair" || exit 1
-    for file in transport-files.sha256 source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id \
-      image.tar image.tar.sha256 collector-image.tar collector-image.tar.sha256; do
-      [[ -f "$file" && ! -L "$file" ]] || exit 1
-    done
+    pair_files_regular || exit 1
     printf '%s  transport-files.sha256\n' "$pair_seal" | sha256sum --check --strict --status - || exit 1
     actual="$(sha256sum source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id image.tar.sha256 collector-image.tar.sha256)" || exit 1
     cmp -s transport-files.sha256 <(printf '%s\n' "$actual") || exit 1
