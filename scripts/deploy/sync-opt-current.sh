@@ -74,7 +74,10 @@ if [[ $valkey_only == true ]]; then
   # shellcheck source=scripts/deploy/lib/postgres-endpoint.sh
   . "$REPO_ROOT/scripts/deploy/lib/postgres-endpoint.sh"
   require_central_valkey_bind
-  python3 -I /opt/iris-stack/valkey-ha/stage.py selected hololive || die "Valkey standalone stage is not admitted"
+  stage_tool=/opt/iris-stack/valkey-ha/stage.py
+  { [[ -f $stage_tool && ! -L $stage_tool ]] && bash "$REPO_ROOT/scripts/deploy/verify-exec-tree-ownership.sh" "$stage_tool"; } ||
+    die "Valkey stage tool is missing or writable by a non-root user: $stage_tool"
+  python3 -I "$stage_tool" selected hololive || die "Valkey standalone stage is not admitted"
   unit=valkey-cache.container
   target="$QUADLET_DIR/$unit"
   [[ -f $target && ! -L $target && $(realpath -e "$target") == "$target" && ! -e $target.d && ! -L $target.d ]] ||

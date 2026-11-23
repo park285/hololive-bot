@@ -174,6 +174,11 @@ case "$*" in
   show\ *.service\ --property=NeedDaemonReload\ --value)
     if [[ -e "${state}/manager-reload-required" ]]; then echo yes; else echo no; fi
     exit 0 ;;
+  show\ *.service\ --property=Names\ --value)
+    printf '%s\n' "$2"
+    exit 0 ;;
+  show\ *.service\ --property=DropInPaths\ --value | show\ *.service\ --property=FragmentPath\ --value)
+    exit 0 ;;
 esac
 launch_job=''
 if [[ "$1" == --show-transaction ]]; then
@@ -1061,17 +1066,15 @@ assert_order "$root" quiesce \
   'guard seal hololive-alarm-worker.service' 'guard seal hololive-api.service'
 api_release="$(coordinated_release "${root}" hololive-api)"
 worker_release="$(coordinated_release "${root}" hololive-alarm-worker)"
-for capacity_case in exhausted; do
-  : >"${root}/state/calls"
-  printf 'BOT_POSTGRES_POOL_MAX_CONNS=40\n' >>"${root}/etc/stack-secrets/hololive-bot/compose.env"
-  if run_tool "${root}" success "${API_HEX}" "${HELPER}" --resume "${api_release}" "${worker_release}"; then
-    fail "${capacity_case}: unsafe held resume accepted"
-  fi
-  assert_held_pair "${root}"
-  assert_no_call "${root}" capacity '^(pair activate |systemctl (unmask|start|restart|daemon-reload))'
-  [[ -f "${api_release}/previous/profile.json" && -f "${worker_release}/previous/profile.json" ]] ||
-    fail "capacity rejection discarded retained recovery pairs"
-done
+: >"${root}/state/calls"
+printf 'BOT_POSTGRES_POOL_MAX_CONNS=40\n' >>"${root}/etc/stack-secrets/hololive-bot/compose.env"
+if run_tool "${root}" success "${API_HEX}" "${HELPER}" --resume "${api_release}" "${worker_release}"; then
+  fail "exhausted: unsafe held resume accepted"
+fi
+assert_held_pair "${root}"
+assert_no_call "${root}" capacity '^(pair activate |systemctl (unmask|start|restart|daemon-reload))'
+[[ -f "${api_release}/previous/profile.json" && -f "${worker_release}/previous/profile.json" ]] ||
+  fail "capacity rejection discarded retained recovery pairs"
 printf 'VALKEY_BIND_IP=100.100.1.8\n' >"${root}/etc/stack-secrets/hololive-bot/compose.env"
 api_release="$(coordinated_release "${root}" hololive-api)"
 worker_release="$(coordinated_release "${root}" hololive-alarm-worker)"
@@ -1436,14 +1439,12 @@ make_coordinated_case "$root"
 quiesce_case "$root"
 api_release="$(coordinated_release "$root" hololive-api)"
 worker_release="$(coordinated_release "$root" hololive-alarm-worker)"
-for retained in pg; do
-  printf '1794960722000000000\n' >"$root/state/$retained-started"
-  : >"$root/state/calls"
-  if run_tool "$root" success "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release"; then fail "같은 이미지의 $retained 재시작을 수용함"; fi
-  assert_no_call "$root" "$retained" '^(writer-sql |pair activate |systemctl (unmask|start|restart))'
-  assert_held_pair "$root"
-  printf '1794960062300000000\n' >"$root/state/$retained-started"
-done
+printf '1794960722000000000\n' >"$root/state/pg-started"
+: >"$root/state/calls"
+if run_tool "$root" success "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release"; then fail "같은 이미지의 pg 재시작을 수용함"; fi
+assert_no_call "$root" pg '^(writer-sql |pair activate |systemctl (unmask|start|restart))'
+assert_held_pair "$root"
+printf '1794960062300000000\n' >"$root/state/pg-started"
 : >"$root/state/calls"
 if run_tool "$root" idle_frontend "$API_HEX" "$HELPER" --resume "$api_release" "$worker_release"; then fail "업무 역할 연결이 남았는데 카드 창 진행"; fi
 assert_no_call "$root" frontend '^(systemctl (start hololive-db-migrate|unmask|restart)|pair activate )'

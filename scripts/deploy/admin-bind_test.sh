@@ -118,6 +118,11 @@ case "$*" in
     show\ *.service\ --property=NeedDaemonReload\ --value)
         if [[ -e "$HOLOLIVE_QUADLET_TEST_ROOT/manager-reload-required" ]]; then echo yes; else echo no; fi
         exit 0 ;;
+    show\ *.service\ --property=Names\ --value)
+        printf '%s\n' "$2"
+        exit 0 ;;
+    show\ *.service\ --property=DropInPaths\ --value | show\ *.service\ --property=FragmentPath\ --value)
+        exit 0 ;;
 esac
 exit 0
 SH

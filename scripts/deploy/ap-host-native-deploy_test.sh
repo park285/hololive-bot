@@ -157,7 +157,7 @@ fi
   grep -Fq 'template differs from the approved product' "$fixture/result"
   [[ ! -e "$fixture/request" ]]
   printf '%s\n' "$write_host_env_fn" >"$product/scripts/deploy/ap-host-native-deploy.sh"
-  printf 'native_release_window=W1\n' >"$product/scripts/deploy/lib/ap-host-native-window.sh"
+  printf 'native_release_window=W2\n' >"$product/scripts/deploy/lib/ap-host-native-window.sh"
   git -C "$product" -c user.name=fixture -c user.email=fixture@example.invalid commit -qam 'different family'
   AP_NATIVE_PRODUCT_REVISION="$(git -C "$product" rev-parse HEAD)"
   if "$fixture/deploy" osaka --apply 2>"$fixture/result"; then exit 1; fi

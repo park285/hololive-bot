@@ -35,6 +35,9 @@ case "$1" in
     case "$*" in
       *--property=UnitPath*) echo /etc/systemd/system /run/systemd/system ;;
       *--property=NeedDaemonReload*) echo no ;;
+      *--property=Names*) if [[ -e "${SYNC_TEST_EVENTS}.alias" ]]; then echo "$2 valkey-alias.service"; else echo "$2"; fi ;;
+      *--property=DropInPaths*) if [[ -e "${SYNC_TEST_EVENTS}.alias-dropin" ]]; then echo /etc/systemd/system/valkey-alias.service.d/10-image.conf; fi ;;
+      *--property=FragmentPath*) echo "/run/systemd/generator/$2" ;;
     esac
     ;;
 esac
@@ -87,7 +90,10 @@ make_repo() {
 #!/usr/bin/env bash
 printf 'verify %s\n' "$#" >>"${SYNC_TEST_EVENTS:?}"
 printf 'verify-path %s\n' "$@" >>"${SYNC_TEST_EVENTS:?}"
-[[ ! -e "${SYNC_TEST_EVENTS:?}.ownership-denied" ]]
+if [[ -e "${SYNC_TEST_EVENTS}.ownership-denied" ]]; then
+  denied="$(cat "${SYNC_TEST_EVENTS}.ownership-denied")"
+  for path in "$@"; do [[ "$path" != "$denied" ]] || exit 1; done
+fi
 EOF
   git -C "${repo}" init -q
   commit_repo "${repo}" fixture
@@ -145,6 +151,8 @@ run_sync() {
       mount -t tmpfs -o mode=0755 tmpfs /opt
       mkdir -p /opt/hololive-bot/compose
       mount --bind "$host/opt" /opt/hololive-bot/compose
+      mkdir -p /opt/iris-stack/valkey-ha
+      : >/opt/iris-stack/valkey-ha/stage.py
       for directory in /usr/lib/systemd/system /usr/local/lib/systemd/system /usr/share/containers/systemd; do
         [[ ! -d $directory ]] || mount -t tmpfs -o mode=0755 tmpfs "$directory"
       done
@@ -305,7 +313,7 @@ rm -f -- "$host/events.image-missing"
 pass "Valkey 단독 게시는 비어 있는 VALKEY_IMAGE를 거부하고 compose.env에 고정한 이미지를 확인합니다"
 
 for path in /usr/local/libexec/hololive-bot/quadlet-prestart /usr/local/libexec/hololive-bot/lib/collector-slots.tsv \
-  /opt/hololive-bot/compose/current/deploy/topology/hosts.conf; do
+  /opt/hololive-bot/compose/current/deploy/topology/hosts.conf /opt/iris-stack/valkey-ha/stage.py; do
   grep -qxF "verify-path $path" "$host/events" || fail "Valkey 시작 검사 경로의 소유권을 확인하지 않았습니다: $path"
 done
 printf '\n' >>"$installed/valkey-cache.container"
@@ -324,8 +332,10 @@ mv "$start_check.real" "$start_check"
 podman unshare /usr/bin/chown 1 "$start_check"
 assert_rejected_without_change "$host" "$base_repo" "non-root Valkey start check" "$stale_start" --valkey-only
 podman unshare /usr/bin/chown 0 "$start_check"
-touch "$host/events.ownership-denied"
+printf '%s\n' /usr/local/libexec/hololive-bot/lib/collector-slots.tsv >"$host/events.ownership-denied"
 assert_rejected_without_change "$host" "$base_repo" "unsafe Valkey start check path" "installed Valkey start checks are writable by a non-root user" --valkey-only
+printf '%s\n' /opt/iris-stack/valkey-ha/stage.py >"$host/events.ownership-denied"
+assert_rejected_without_change "$host" "$base_repo" "unsafe Valkey stage tool path" "Valkey stage tool is missing or writable by a non-root user" --valkey-only
 rm "$host/events.ownership-denied"
 SYNC_TEST_OPT_ROOT="$host/opt" assert_rejected_without_change "$host" "$base_repo" "other Valkey runtime tree" \
   "Valkey-only publication checks the runtime tree that the prestart reads" --valkey-only
@@ -340,6 +350,12 @@ mkdir "$host/etc-systemd-system/valkey-cache.service.d"
 printf '[Service]\nExecStartPre=\n' >"$host/etc-systemd-system/valkey-cache.service.d/override.conf"
 assert_rejected_without_change "$host" "$base_repo" "Valkey service drop-in" "$override" --valkey-only
 rm -r "$host/etc-systemd-system/valkey-cache.service.d"
+touch "$host/events.alias-dropin"
+assert_rejected_without_change "$host" "$base_repo" "Valkey alias drop-in" "$override" --valkey-only
+rm "$host/events.alias-dropin"
+touch "$host/events.alias"
+assert_rejected_without_change "$host" "$base_repo" "Valkey alias name" "$override" --valkey-only
+rm "$host/events.alias"
 mkdir "$host/etc-containers-systemd/container.d"
 printf '[Container]\nImage=localhost/other:tag\n' >"$host/etc-containers-systemd/container.d/60-image.conf"
 assert_rejected_without_change "$host" "$base_repo" "inherited Quadlet drop-in" "$override" --valkey-only

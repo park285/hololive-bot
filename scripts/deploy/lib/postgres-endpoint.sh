@@ -112,12 +112,19 @@ def check_origins(installed):
         if not unit_paths or any(not path.startswith("/") or "\\" in path for path in unit_paths):
             reject_origin("systemd manager UnitPath")
         system_roots.update(map(pathlib.Path, unit_paths))
-        reload_needed = subprocess.run(
-            ["systemctl", "show", installed.stem + ".service", "--property=NeedDaemonReload", "--value"],
-            check=True, capture_output=True, text=True,
-        ).stdout.strip()
-        if reload_needed != "no":
+        service = installed.stem + ".service"
+
+        def loaded(prop):
+            return subprocess.run(
+                ["systemctl", "show", service, "--property=" + prop, "--value"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+        if loaded("NeedDaemonReload") != "no":
             reject_origin("systemd loaded unit requires daemon-reload")
+        if loaded("Names") != service or loaded("DropInPaths"):
+            reject_origin("systemd loaded unit aliases or drop-ins")
+        if loaded("FragmentPath") not in ("", "/run/systemd/generator/" + service):
+            reject_origin("systemd loaded unit fragment")
     name = installed.stem
     inherited = [name[:index + 1] for index, char in enumerate(name) if char == "-"]
     quadlet_dropins = {"container.d", *(part + ".container.d" for part in inherited),

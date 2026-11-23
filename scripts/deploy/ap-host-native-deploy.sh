@@ -69,7 +69,7 @@ case "$MODE" in
     if [[ "$MODE" == --quiesce ]]; then [[ $# == 4 ]]; else [[ $# == 5 && "$5" =~ ^[0-9a-f-]{36}$ ]]; fi
     ;;
   *)
-    echo "Usage: $0 <ap-host> [--dry-run|--apply|--prepare-profile] | osaka --install-initial | osaka --quiesce|--resume W1|W2 <old-release> [nonce]" >&2
+    echo "Usage: $0 <ap-host> [--dry-run|--apply|--prepare-profile] | osaka --install-initial | osaka --quiesce|--resume W3 <old-release> [nonce]" >&2
     exit 2
     ;;
 esac

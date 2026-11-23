@@ -110,15 +110,15 @@ PgBouncer 경로로 운영 중인 배포를 직접 TLS로 옮기는 절차입니
 4. writer 정지(d→b→a→c→중앙): 첫 정지 전에 관리 socket에서 `SELECT r.rolconnlimit - count(a.pid) FROM pg_roles r LEFT JOIN pg_stat_activity a ON a.usename = r.rolname WHERE r.rolname = 'hololive_collector_b' GROUP BY r.rolconnlimit`가 1 이상인지 확인합니다. b quiesce의 후보 직접 접속 검사가 이 한 자리를 씁니다. pooler 시절의 b는 pooler backend로 역할 한도 7을 모두 채울 수 있고, 검사가 실패하면 일회성 정지 승인과 복구점이 이미 소비된 뒤입니다. 0이면 정지를 시작하지 않습니다.
    - d: 1–9단계용 commit kapu 절차의 `kapu-d-cutover.py quiesce --from-pooler`
    - b: [iris-seoul 절차](../podman/iris-seoul/README.md)의 `po-central-cutover.sh b quiesce`
-   - a: 1–9단계용 commit의 collector 런북 절차대로 `ap-host-native-deploy.sh osaka --quiesce W2`. 그 commit의 W2는 6433 원점만 받고, 이 release의 W2는 직접 TLS 5433 원점만 받습니다.
-   - c: `po-central-cutover.sh c quiesce-verified`
+   - a: 1–9단계용 commit의 collector 런북 절차대로 `ap-host-native-deploy.sh osaka --quiesce W2`. 그 commit의 W2는 6433 원점만 받습니다. 이 release는 직접 TLS 5433 원점의 창을 W3으로 구분하므로, 두 commit의 도구와 제품 checkout을 섞으면 전송 전에 거부됩니다.
+   - c: `PO_C_SSH_TARGET="$C_HOST" APPROVE_PO_C_DEPLOY=true po-central-cutover.sh c quiesce-verified "$C_PAIR" "$C_SEAL"`. 검증한 pair 디렉터리와 승인된 transport SHA-256은 d를 정지하기 전에 확인합니다. 출력된 `backup=` 경로(`card-po-c-<timestamp>`)를 `C_BACKUP`으로 기록합니다.
    - 중앙: 1단계 원장에 `002_epoch4_event_grade.sql`이 있으면 먼저 `SELECT count(*) FROM event_grade_regions r JOIN event_grade_consumer_offsets o USING (region) WHERE o.applied_seq < r.published_seq`가 0인지 확인합니다. 002 이전 head(epoch 3의 032, epoch 4의 001)에는 두 테이블이 없으므로 이 확인을 건너뜁니다. 원장에 002가 있는데 테이블이 없으면 진행하지 않습니다. collector가 모두 멈춘 뒤 worker가 남은 관측을 소비할 때까지 기다리며, 0이 아니면 005가 적용을 거부합니다. 이어서 `quadlet-redeploy-service.sh --quiesce <API image> <worker image>`. 실행 중 원본이 `holo-pgbouncer:6432`이면 설치 unit이 직접 TLS일 때만 정지하고, 원래 endpoint를 hold에 기록합니다.
 5. pooler 정지: 여섯 hold가 모두 완료됐는지 확인한 뒤 `systemctl stop holo-pgbouncer.service`를 실행합니다. 이어서 `SELECT count(*) FROM pg_stat_activity WHERE client_addr = inet '172.23.255.254'`가 0인지 확인합니다. 0이 아니면 진행하지 않고 남은 세션의 출처를 조사합니다. backend를 강제 종료해 0을 만들지 않습니다.
 6. 중앙 재개: `quadlet-redeploy-service.sh --resume <API release> <worker release>`. 가드가 writer 차단 게이트를 설치·확인하고 `--schema-only` migrator를 실행한 뒤 두 후보를 엽니다.
 7. 방화벽: `sudo systemctl reload admin-dashboard-ingress-firewall.service`로 6433 게시 규칙을 지웁니다.
-8. collector 재개(c→a→b→d): `po-central-cutover.sh c resume`, `ap-host-native-deploy.sh osaka --resume W2`, `po-central-cutover.sh b resume`, `kapu-d-cutover.py resume --from-pooler`. 각 후보는 활성화 전에 실제 경로의 `--check-database-endpoint`를 통과해야 합니다.
+8. collector 재개(c→a→b→d): `po-central-cutover.sh c resume "$C_BACKUP"`, `ap-host-native-deploy.sh osaka --resume W2`, `po-central-cutover.sh b resume`, `kapu-d-cutover.py resume --from-pooler`. 각 후보는 활성화 전에 실제 경로의 `--check-database-endpoint`를 통과해야 합니다.
 9. 정리(별도 승인): 관리 socket의 `hololive` DB에서 한 트랜잭션으로 `DROP SCHEMA hololive_pooler_auth CASCADE`, `REVOKE ALL ON DATABASE hololive FROM hololive_pgbouncer_auth`, `DROP ROLE hololive_pgbouncer_auth`를 실행하고 `pg_roles`에 역할이 남지 않았는지 확인합니다. `DROP ROLE`이 남은 권한 때문에 실패하면 트랜잭션 전체가 취소되므로, 남은 권한의 출처를 조사한 뒤 다시 실행합니다. 10단계 전까지 `hololive-net`의 `172.23.255.254`를 다른 컨테이너에 고정 배정하지 않습니다.
-10. 최종 HBA: 이 release의 clean checkout에서 `sync-opt-current.sh`로 전체 설치하고, 승인된 PostgreSQL 재생성(`systemctl restart holo-postgres.service`)에서 새 HBA를 적용합니다. `pg_hba_file_rules`에 오류와 `172.23.255.254` 규칙이 없는지 확인합니다. 이 release의 AP W2 창은 직접 TLS 5433으로 실행 중인 osaka a를 정지·교체하는 정비 창이며, 이후 중앙 migration 창에서 a를 멈출 때 씁니다.
+10. 최종 HBA: 이 release의 clean checkout에서 `sync-opt-current.sh`로 전체 설치하고, 승인된 PostgreSQL 재생성(`systemctl restart holo-postgres.service`)에서 새 HBA를 적용합니다. `pg_hba_file_rules`에 오류와 `172.23.255.254` 규칙이 없는지 확인합니다. 이 release의 AP W3 창은 직접 TLS 5433으로 실행 중인 osaka a를 정지·교체하는 정비 창이며, 이후 중앙 migration 창에서 a를 멈출 때 씁니다.
 
 어느 단계든 실패하면 hold와 복구 입력을 보존합니다. 이전 endpoint로의 rollback은 helper가 거부하므로 호환 후보로 fix-forward합니다.
 

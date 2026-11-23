@@ -48,14 +48,40 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
 
 ### Iris webhook nonce 저장소 전환
 
-구 Valkey 판정과 신규 PostgreSQL 판정은 한 요청을 각각 처음 보는 것으로 처리할 수 있습니다. 키 복사나 이중 쓰기 대신, 승인된 정비 창에서 다음 순서로 서명 유효창을 닫습니다.
+구 Valkey 판정과 신규 PostgreSQL 판정은 한 요청을 각각 처음 보는 것으로 처리할 수 있습니다. 키 복사나 이중 쓰기 대신, 승인된 정비 창에서 다음 순서로 서명 유효창을 닫습니다. 각 collector의 정지·재개는 준비한 후보로의 교체이므로, 무엇이든 멈추기 전에 모든 입력을 갖춥니다.
 
-1. 송신을 일시 중단하고 `/webhook/iris`의 모든 유입 경로(직접 H3 포함)를 닫습니다. 재시작·자동 복구·다른 슬롯을 통한 구 API 재기동도 차단합니다. Valkey는 그대로 둡니다.
-2. 검증한 복구점을 확보합니다. [writer 정지·재개 계약](../../../deploy/quadlet/README.md#writer-정지재개-계약)에 따라 collector를 d→b→a→c 순서로 먼저 정지합니다. d는 [`kapu-d-cutover.py quiesce`](../../../deploy/podman/kapu/README.md), b는 [`po-central-cutover.sh b quiesce`](../../../deploy/podman/iris-seoul/README.md), a는 [W2 정지 창](collector.md#osaka-a-w1w2-분리-정지-창)의 `ap-host-native-deploy.sh osaka --quiesce W2 "$OLD"`, c는 `po-central-cutover.sh c quiesce-verified`로 정지합니다. 네 도구는 직접 TLS 원점(a·b·d `100.100.1.8:5433`, c `holo-postgres:5432`)만 받으므로, d를 멈추기 전에 네 슬롯이 모두 이 원점에서 실행 중인지 확인합니다. 이어서 [동시 전환](../../../deploy/quadlet/README.md#iris-소비자-동시-전환)의 `quadlet-redeploy-service.sh --quiesce <API image> <worker image>`로 실행 중인 구 API·alarm-worker pair를 함께 정지하고 영속 mask합니다. `[OUTCOME] quiesced`와 구 API 원래 invocation의 정지 journal 시각을 마지막 드레인 시각으로 기록합니다. 다른 구 API 인스턴스가 남았거나 구 세대가 마지막으로 승인할 수 있었던 시각이 확인되지 않으면 창을 열지 않습니다.
-3. 마지막 드레인 확인 이후 **10분을 초과**해 기다립니다. 서명 timestamp는 당시 시각보다 최대 5분 앞설 수 있고 그 시각 이후 5분까지 유효하므로, 5분 대기만으로는 부족합니다. 송·수신 시계 동기화와 인스턴스 간 시각 오차를 확인하고 오차만큼 여유를 둡니다. 시계가 역행하거나 구 writer가 다시 떴으면 hold를 유지하고 기준점을 다시 잡습니다.
-4. 같은 정지 작업의 `quadlet-redeploy-service.sh --resume <API release> <worker release>`를 실행합니다. 가드가 writer 차단 게이트를 설치·확인하고 `--schema-only` migrator로 006을 적용한 뒤 두 후보를 엽니다([적용 조건](../../../deploy/quadlet/README.md#postgresql-직접-tls-접속)). `[OUTCOME] deployed`를 확인하고 `--check`로 `006_epoch4_bot_webhook_nonces.sql`까지 양쪽 원장·권한·실물 검사를 통과하는지 확인합니다. collector를 c→a→b→d 순서로 `po-central-cutover.sh c resume`, `ap-host-native-deploy.sh osaka --resume W2 "$OLD" "$NONCE"`, `po-central-cutover.sh b resume`, `kapu-d-cutover.py resume`으로 재개합니다. 준비 상태와 실행 revision, 구 세대 차단 상태를 확인한 뒤 ingress와 송신을 엽니다. 같은 서명은 한 번만 승인되고 판정 불능은 503이어야 합니다. 운영 계정·ACL을 임시로 넓히거나 기존 원장 및 cache 키를 지우지 않으며, Valkey의 nonce를 조회하거나 복원하지 않습니다.
+1. 정지·재개 입력을 승인 기록에서 확보합니다. 하나라도 없거나 확인되지 않으면 창을 열지 않습니다. 네 도구는 직접 TLS 원점(a·b·d `100.100.1.8:5433`, c `holo-postgres:5432`)만 받으므로, 네 슬롯이 모두 이 원점에서 실행 중인지도 확인합니다.
+   - d: kapu에 푼 카드 산출물 트리 `release`, 새 `hold` 경로, 다섯 인수 `candidate`([kapu 절차](../../../deploy/podman/kapu/README.md))
+   - b: 다섯 인자 `B_ARGS=(<clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir>)`([iris-seoul 절차](../../../deploy/podman/iris-seoul/README.md))
+   - a: `OLD`, `RELEASE_ID`, `HOLO_BOT_VERSION`, `ARTIFACT_DIR`, 승인 기록의 `HOLO_NATIVE_PAYLOAD_SHA256`, `I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true`([W3 정지 창](collector.md#osaka-a-분리-정지-창))
+   - c: 검증한 pair 디렉터리 `C_PAIR`, 승인된 transport SHA-256 `C_SEAL`, 승인된 SSH 대상 `C_HOST`
+   - 중앙: 같은 revision으로 설치한 API·alarm-worker 후보 image ID
+2. 송신을 일시 중단하고 `/webhook/iris`의 모든 유입 경로(직접 H3 포함)를 닫습니다. 재시작·자동 복구·다른 슬롯을 통한 구 API 재기동도 차단합니다. Valkey는 그대로 둡니다.
+3. 검증한 복구점을 확보합니다. [writer 정지·재개 계약](../../../deploy/quadlet/README.md#writer-정지재개-계약)에 따라 collector를 d→b→a→c 순서로 정지한 뒤 [동시 전환](../../../deploy/quadlet/README.md#iris-소비자-동시-전환)으로 실행 중인 구 API·alarm-worker pair를 함께 정지하고 영속 mask합니다. d는 kapu의 root가, b·a·c는 kapu에 있는 이 release의 clean checkout이, 중앙 helper는 `hololive-seoul`이 실행합니다.
 
-**롤백:** 신규 API가 한 번이라도 서명을 판정했거나 판정 여부가 불명이면 구 API를 바로 열지 않습니다. 방향을 바꿔 1단계로 유입을 다시 닫고, 2단계처럼 실행 중인 **모든 신규 API·alarm-worker pair**를 `quadlet-redeploy-service.sh --quiesce`로 정지·영속 mask하며 각 신규 API 원래 invocation의 정지 journal 시각을 기록합니다. 그 가운데 가장 늦은 시각부터 3단계처럼 10분과 시계 오차를 넘겨 기다린 뒤, 이전 버전의 Valkey 원자적 선점 및 비축출·가용성 조건이 복원된 경우에만 구 세대를 단독 재개합니다. 휘발·축출 가능한 cache 설정을 그대로 쓰는 구 코드로 되돌리지 않습니다. DB 원장·migration을 되돌리거나 삭제하지 않습니다. PG 복구로 최신 nonce의 보존 여부가 불명일 때도 같은 격리 창이 필요합니다.
+   ```bash
+   sudo -n python3 -I -B "$release/scripts/deploy/kapu-d-cutover.py" quiesce "$hold" "${candidate[@]}"
+   PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cutover.sh b quiesce "${B_ARGS[@]}"
+   scripts/deploy/ap-host-native-deploy.sh osaka --quiesce W3 "$OLD"
+   PO_C_SSH_TARGET="$C_HOST" APPROVE_PO_C_DEPLOY=true scripts/deploy/po-central-cutover.sh c quiesce-verified "$C_PAIR" "$C_SEAL"
+   sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh --quiesce sha256:<api-id> sha256:<worker-id>
+   ```
+
+   a가 출력한 nonce를 `NONCE`로, c가 출력한 `backup=` 경로(`card-po-c-<timestamp>`)를 `C_BACKUP`으로, 중앙 `[OUTCOME] quiesced`가 보존한 두 release 경로를 기록합니다. 구 API 원래 invocation의 정지 journal 시각을 마지막 드레인 시각으로 기록합니다. 다른 구 API 인스턴스가 남았거나 구 세대가 마지막으로 승인할 수 있었던 시각이 확인되지 않으면 창을 열지 않습니다.
+4. 마지막 드레인 확인 이후 **10분을 초과**해 기다립니다. 서명 timestamp는 당시 시각보다 최대 5분 앞설 수 있고 그 시각 이후 5분까지 유효하므로, 5분 대기만으로는 부족합니다. 송·수신 시계 동기화와 인스턴스 간 시각 오차를 확인하고 오차만큼 여유를 둡니다. 시계가 역행하거나 구 writer가 다시 떴으면 hold를 유지하고 기준점을 다시 잡습니다.
+5. 같은 정지 작업으로 중앙 pair를 재개한 뒤 collector를 c→a→b→d 순서로 재개합니다.
+
+   ```bash
+   sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh --resume '<api-release-dir>' '<alarm-release-dir>'
+   PO_C_SSH_TARGET="$C_HOST" APPROVE_PO_C_DEPLOY=true scripts/deploy/po-central-cutover.sh c resume "$C_BACKUP"
+   scripts/deploy/ap-host-native-deploy.sh osaka --resume W3 "$OLD" "$NONCE"
+   PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cutover.sh b resume "${B_ARGS[@]}"
+   sudo -n python3 -I -B "$release/scripts/deploy/kapu-d-cutover.py" resume "$hold" "${candidate[@]}"
+   ```
+
+   중앙 재개에서 가드가 writer 차단 게이트를 설치·확인하고 `--schema-only` migrator로 006을 적용한 뒤 두 후보를 엽니다([적용 조건](../../../deploy/quadlet/README.md#postgresql-직접-tls-접속)). `[OUTCOME] deployed`를 확인하고 `--check`로 `006_epoch4_bot_webhook_nonces.sql`까지 양쪽 원장·권한·실물 검사를 통과하는지 확인합니다. 준비 상태와 실행 revision, 구 세대 차단 상태를 확인한 뒤 ingress와 송신을 엽니다. 같은 서명은 한 번만 승인되고 판정 불능은 503이어야 합니다. 운영 계정·ACL을 임시로 넓히거나 기존 원장 및 cache 키를 지우지 않으며, Valkey의 nonce를 조회하거나 복원하지 않습니다.
+
+**롤백:** 이 전환 뒤에는 구 세대(Valkey nonce 판정)를 다시 열지 않으며, 도구에도 그 경로가 없습니다. `--quiesce`는 설치된 source revision의 image만 후보로 받고, `--resume`은 같은 정지 작업이 보존한 후보만 엽니다. hold가 남아 있는 동안 단일 `rollback --apply`는 거부됩니다. 5단계의 중앙 `--resume`이 실패하면 hold를 유지한 채 원인을 해결하고 같은 보존 pair로 다시 재개합니다. 재개 뒤 신규 API에 결함이 있으면 2단계처럼 유입을 다시 닫고, 006 원장을 쓰는 수정 revision으로 1~5단계를 다시 수행해 교체합니다. 신규와 수정 후보는 같은 PostgreSQL nonce 원장을 쓰므로 4단계의 대기는 필요 없습니다. 휘발·축출 가능한 cache 설정을 쓰는 구 코드로 되돌리지 않으며, DB 원장·migration을 되돌리거나 삭제하지 않습니다. PG 복구로 최신 nonce의 보존 여부가 불명이면 2~4단계와 같은 격리 창이 필요합니다.
 
 ### 19.2.1 의존성 수용 기준
 

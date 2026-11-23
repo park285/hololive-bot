@@ -242,7 +242,7 @@ REPO_ROOT="${PRODUCT_CHECKOUT:?}" AP_NATIVE_PRODUCT_REVISION="$product_sha" \
 
 호출자는 제품과 도구의 full SHA 및 release window를 대조합니다. 원격 cutover 본문은 도구 commit의 blob이며, 제품 checkout에서 collector·issuer를 빌드하고 unit·wrapper·보존 helper를 가져옵니다. host env는 **실행 중인 도구**의 `write_host_env`가 생성합니다. 그 함수의 바이트가 승인된 제품 commit의 동일 함수와 일치해야 하며, 경로·endpoint·용량·서비스 값은 제품 설정에서 읽습니다.
 
-`--apply`는 **최초 설치나 W1→W2 전환이 아닙니다**. 전송 전 `apply-origin`에서 같은 창에 수용된 기존 release의 ID·제품 SHA·inode 영수증과 설치된 설정을 읽어 대조합니다. 후보 host env의 `STACK_WORKER_PROFILE_FILE` 한 줄 및 issuer unit의 불변 `RootDirectory` 경로 외에 차이가 있으면 중단합니다. 계정·로그 설정·sysctl·swap·fstab의 차이를 고치거나 이전 host env를 통째로 덮어쓰지 않습니다. 실제 전환은 출처·네 개의 사전 대조 digest를 확인한 같은 호출자가 `same-window`로만 요청합니다. 기존 `current`나 수용 영수증이 없으면 최초 설치 분기로 우회하지 않습니다.
+`--apply`는 **최초 설치나 정지 창 전환이 아닙니다**. 전송 전 `apply-origin`에서 같은 창(이 release는 W2 또는 W3)에 수용된 기존 release의 ID·제품 SHA·inode 영수증과 설치된 설정을 읽어 대조합니다. 후보 host env의 `STACK_WORKER_PROFILE_FILE` 한 줄 및 issuer unit의 불변 `RootDirectory` 경로 외에 차이가 있으면 중단합니다. 계정·로그 설정·sysctl·swap·fstab의 차이를 고치거나 이전 host env를 통째로 덮어쓰지 않습니다. 실제 전환은 출처·네 개의 사전 대조 digest를 확인한 같은 호출자가 `same-window`로만 요청합니다. 기존 `current`나 수용 영수증이 없으면 최초 설치 분기로 우회하지 않습니다.
 
 새 시도의 `native deploy source` 두 SHA, 새 release ID와 `native attempt`의 payload SHA-256을 함께 보존합니다. 원격 비교 위치는 로그인 사용자의 `~/.hololive-host-native-osaka-<ID>`가 아니라 `/opt/hololive-bot/collector/releases/<ID>`입니다. root 소유로 복사한 직후(권한 정규화·rootfs 해제·profile 추가 전)의 전체 트리 digest가 kapu의 값과 같아야 합니다. 그 뒤 로그인 사용자와 `hololive:opc` 실행 역할의 실제 접근권, 세 unit의 Job·실행 세대, readiness 및 `apply-accepted`까지 별도로 확인합니다. 출처·전송 성공만으로 수용한 것이 아닙니다.
 
@@ -293,15 +293,15 @@ native 배포는 root 소유 `/opt/hololive-bot/collector/cutover-recovery` guar
 
 guard가 남으면 새 배포와 수동 rollback `--apply` 모두 거절합니다. 준비 중 실패와 복원 실패도 guard를 보존하며 rollback `--dry-run`은 기존 payload 진단에 사용할 수 있습니다. 운영 변경 승인을 받은 뒤 기록의 worker와 자식 process group, 잔존 systemd job 및 collector/issuer 상태를 확인하고 변경 완료 여부를 확정하십시오. PID는 재사용될 수 있으므로 PID 숫자만으로 다른 프로세스를 종료하지 않습니다. 5초 뒤 worker group에 TERM을 전달해도 신호를 무시하는 클라이언트나 daemon 작업의 종료를 보장하지 않습니다. 복구가 확정된 뒤에만 guard를 해제하고 필요한 rollback/fix-forward를 적용합니다. 새 release와 `previous`의 rollback 자료는 이 확인이 끝날 때까지 보존합니다.
 
-### Osaka a: W1·W2 분리 정지 창
+### Osaka a: 분리 정지 창
 
 Osaka의 일반 `--apply`는 최초 설치나 창 전환 명령이 아닙니다. kapu 빌드·staging 전송 전에 osaka1의 실제 `current/accepted-window`가 이 소스의 창과 같은지 확인합니다. 이 root 전용 파일은 창 이름, release ID, 설치된 `po-sandbox/revision`의 전체 SHA와 release 디렉터리 식별자를 묶습니다. 다른 release에 복사한 파일, 남은 복구 guard 또는 수용 기록이 없는 endpoint는 증거가 아닙니다. 원격에서도 guard 선점 뒤, 이전 writer를 정지하기 전에 같은 원점과 실행 파일·DB endpoint를 다시 확인합니다.
 
-일반 배포도 새 socket·issuer·collector의 이번 부팅 및 기동 완료 job·invocation 영수증을 남깁니다. 두 외부 관찰이 성공한 뒤 같은 nonce·current·revision·실행 세대를 재확인한 경우에만 새 release에 `accepted-window`를 게시합니다. 관찰 실패나 인계 중단 시에는 새 창 수용을 추정하거나 marker를 복사·작성하지 않습니다. 이 release의 전용 W2 정지는 W1 또는 W2에서 수용되어 `100.100.1.8:5433`에 직접 TLS로 접속 중인 원점만 대상으로 합니다. PgBouncer 6433 원점의 W2 전환은 [퇴역 전환](../../../deploy/quadlet/README.md#pgbouncer-퇴역-전환)대로 1–9단계용 commit의 도구와 문서로 합니다.
+일반 배포도 새 socket·issuer·collector의 이번 부팅 및 기동 완료 job·invocation 영수증을 남깁니다. 두 외부 관찰이 성공한 뒤 같은 nonce·current·revision·실행 세대를 재확인한 경우에만 새 release에 `accepted-window`를 게시합니다. 관찰 실패나 인계 중단 시에는 새 창 수용을 추정하거나 marker를 복사·작성하지 않습니다. 이 release의 전용 창은 W3입니다. W2 또는 W3에서 수용되어 `100.100.1.8:5433`에 직접 TLS로 접속 중인 원점만 대상으로 합니다. PgBouncer 6433 원점을 받는 W2 전환은 [퇴역 전환](../../../deploy/quadlet/README.md#pgbouncer-퇴역-전환)대로 1–9단계용 commit의 도구와 문서로 합니다. 창 이름이 다른 도구와 제품 checkout을 함께 쓰면 `ap-host-native-deploy.sh`가 전송 전에 거부합니다.
 
 원격 staging에서 root 소유 후보로 복사한 직후에도 전체 payload를 확인합니다. 일반 배포는 kapu에서 방금 빌드한 digest, 전용 창은 별도 승인 기록의 digest와 같아야 합니다. `accepted-window`가 먼저 생겨도 복구 guard가 남으면 미수용입니다. 실제 영수증과 남은 허가 시간을 확인한 뒤 guard를 `accepted-guard`로 넘깁니다. 인계 중단 시 남은 영수증과 후보를 보존하고 자동으로 다시 시도하지 않습니다.
 
-아래는 **별도 운영 승인을 받은 뒤** kapu에서 실행할 절차입니다. 이 release의 `WINDOW=W2`만 허용합니다. 일반 `--apply`의 자동 복원을 쓰지 않습니다. `RELEASE_ID`(새 ID), `HOLO_BOT_VERSION`, `ARTIFACT_DIR`, `I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true`를 명시합니다. `OLD`는 osaka1의 실제 `current`가 가리키는 `releases/` 바로 아래 릴리스 이름입니다. 원 프로세스의 endpoint는 `100.100.1.8:5433`이며 이전 창의 OLD·nonce는 재사용할 수 없습니다.
+아래는 **별도 운영 승인을 받은 뒤** kapu에서 실행할 절차입니다. 이 release의 `WINDOW=W3`만 허용합니다. 일반 `--apply`의 자동 복원을 쓰지 않습니다. `RELEASE_ID`(새 ID), `HOLO_BOT_VERSION`, `ARTIFACT_DIR`, `I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true`를 명시합니다. `OLD`는 osaka1의 실제 `current`가 가리키는 `releases/` 바로 아래 릴리스 이름입니다. 원 프로세스의 endpoint는 `100.100.1.8:5433`이며 이전 창의 OLD·nonce는 재사용할 수 없습니다.
 
 각 창에서 깨끗한 source의 `osaka --dry-run`은 빌드한 **전체** 디렉터리의 `HOLO_NATIVE_PAYLOAD_SHA256`을 출력합니다. qualification 완료 시 같은 `source scripts/deploy/lib/ap-host-native-window.sh; native_payload_digest "$ARTIFACT_DIR"`로 일치하는 값을 확인해 산출물 밖의 승인 기록에 revision·release ID와 함께 보존하십시오. `--quiesce`와 `--resume` 둘 다 그 **기록의 값**을 `export HOLO_NATIVE_PAYLOAD_SHA256=…`로 요구합니다. 실행 직전 디렉터리를 다시 해시해 입력을 대체하지 않습니다.
 
@@ -433,7 +433,7 @@ service and runbook contract
 
 - Quadlet b·c는 paired cutover 백업으로 `PO_<B|C>_SSH_TARGET=<승인된 SSH 대상> APPROVE_PO_<B|C>_ROLLBACK=true scripts/deploy/po-central-cutover.sh <b|c> rollback <backup>`을 실행합니다. 이전 pair의 drop-in(`50-worker-profile.conf`)·rollback tag·issuer 영수증을 함께 되돌리고 issuer부터 재시작합니다. 그 밖에 이전 `hololive-collector:rollback-<UTC timestamp>` tag가 있으면 [`rollback.md`](rollback.md#runtime-rollback)의 revision 확인·`prod` 재승격 절차를 사용한 뒤 collector만 무빌드로 다시 시작합니다. Quadlet unit과 host-native generator는 같은 revision tree를 써야 합니다.
 - kapu Quadlet d는 [kapu README](../../../deploy/podman/kapu/README.md)의 `SHA256SUMS` release profile과 `runtime-before-<날짜>` image tag로 되돌립니다. `po-central-cutover.sh`와 `ap-host-native-*`는 d를 다루지 않습니다.
-- 일반 host-native AP 배포의 복구 기준점은 `previous`와 그 issuer입니다. 기준점이 없거나 해당 release에 `native-window`가 있으면 수동·자동 rollback을 거절합니다. [W1·W2 분리 창](#osaka-a-w1w2-분리-정지-창)의 `--resume` 실패에는 일반 복원을 사용하지 않습니다.
+- 일반 host-native AP 배포의 복구 기준점은 `previous`와 그 issuer입니다. 기준점이 없거나 해당 release에 `native-window`가 있으면 수동·자동 rollback을 거절합니다. [분리 정지 창](#osaka-a-분리-정지-창)의 `--resume` 실패에는 일반 복원을 사용하지 않습니다.
 - Quadlet b·c는 collector를 정지한 채 교체하는 점검 모드를 지원하지 않습니다(정지한 unit의 container가 없어 이전 profile을 증명할 수 없음). schema 점검 창에서는 배포 전에 실행 중인 collector로 이전 pair를 확보합니다. host-native a 배포는 별도 값 없이 변경 전 collector unit의 실행·활성화 상태를 기록하고, 실패 복원은 실행 중이던 unit만 `previous` release로 다시 시작합니다. 점검 창에서 멈춰 둔 unit과 변경 전에 실패(`failed`)해 있던 unit은 `previous` release로 되돌리고 변경 전 활성화 상태만 복원하며 시작하지 않습니다(`ActiveState=…`를 포함한 `restored … without starting it` 안내). schema가 복원한 release와 맞는지 확인한 뒤 시작합니다. 수동 `ap-host-native-rollback.sh`는 이 기록을 쓰지 않고 collector를 시작하므로, 점검 창에서는 schema가 이전 release와 맞을 때만 실행합니다.
 
 ```bash
