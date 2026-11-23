@@ -186,12 +186,11 @@ def check_origins(installed):
     for root in sorted(system_roots):
         if root.is_dir():
             for entry in root.iterdir():
-                if entry.name != service_name and entry.is_symlink() and any(
-                    target.name == service_name and target.parent in search_dirs for target in (
-                        pathlib.Path(os.path.normpath(entry.parent / os.readlink(entry))),
-                        pathlib.Path(os.path.realpath(entry)),
-                    )
-                ):
+                if entry.name == service_name or not entry.is_symlink():
+                    continue
+                head, tail = os.path.split(os.path.join(entry.parent, os.readlink(entry)))
+                target = pathlib.Path(os.path.realpath(head), tail)
+                if tail == service_name and any(target.is_relative_to(directory) for directory in search_dirs):
                     reject_origin(entry)
         for dropin in service_dropins:
             directory = root / dropin

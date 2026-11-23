@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 [[ "$(hostname -s)" == kapu ]] || { echo 'image build/export is restricted to kapu' >&2; exit 1; }
-usage() { echo "Usage: $0 <c|b> deploy | c quiesce | <c|b> quiesce-verified <local-pair-dir> <trusted-transport-sha256> | b quiesce|resume|check|rollback <clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir> | <c|b> resume|rollback|check <card-backup>" >&2; exit 2; }
+usage() { echo "Usage: $0 <c|b> deploy | c quiesce | <c|b> quiesce-verified|verify-pair <local-pair-dir> <trusted-transport-sha256> | b quiesce|resume|check|rollback <clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir> | <c|b> resume|rollback|check <card-backup>" >&2; exit 2; }
 [[ $# -ge 2 && $# -le 7 ]] || usage
 slot="$1"
 shift
@@ -143,6 +143,28 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
   exit 0
 fi
 . "$root/scripts/deploy/lib/source-revision.sh"
+verify_local_pair() {
+  local pair="$1" pair_seal="$2" pair_revision="$3" sources="$4" expected_sources
+  (
+    cd -- "$pair" || exit 1
+    printf '%s  transport-files.sha256\n' "$pair_seal" | sha256sum --check --strict --status - || exit 1
+    actual="$(sha256sum source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id image.tar.sha256 collector-image.tar.sha256)" || exit 1
+    cmp -s transport-files.sha256 <(printf '%s\n' "$actual") || exit 1
+    sha256sum --check --strict --status image.tar.sha256 collector-image.tar.sha256 || exit 1
+    jq -e --arg r "$pair_revision" '.source_revision==$r and .go.goarch=="arm64"' collector-manifest.json >/dev/null || exit 1
+    jq -e --arg r "$pair_revision" '.source_revision==$r and .architecture=="arm64"' rootfs-manifest.json >/dev/null
+  ) || { echo 'verified pair transport or revision mismatch; nothing transferred' >&2; return 1; }
+  expected_sources="$(cd "$root"; while IFS= read -r file; do sha256sum "$file" || exit 1; done <<<"$sources")"
+  cmp -- "$pair/source-files.sha256" <(printf '%s\n' "$expected_sources")
+}
+if [[ "$mode" == verify-pair ]]; then
+  [[ $# == 3 && "$3" =~ ^[0-9a-f]{64}$ ]] || usage
+  revision="$(deploy_source_revision "$root")"
+  payload_files="$(source_payload_files "$root")"
+  verify_local_pair "$(realpath -e -- "$2")" "$3" "$revision" "$payload_files"
+  printf 'collector %s pair verified: source=%s seal=%s\n' "$slot" "$revision" "$3"
+  exit 0
+fi
 if [[ "$mode" == quiesce-verified ]]; then
   [[ $# == 3 && "$3" =~ ^[0-9a-f]{64}$ ]] || usage
   verified_pair="$(realpath -e -- "$2")"
@@ -205,17 +227,7 @@ if [[ "$mode" == deploy || "$mode" == quiesce ]]; then
   if [[ -n "$verified_pair" ]]; then
     local_stage="$verified_pair"
     issuer_dir="$verified_pair"
-    (
-      cd -- "$verified_pair" || exit 1
-      printf '%s  transport-files.sha256\n' "$seal" | sha256sum --check --strict --status - || exit 1
-      actual="$(sha256sum source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id image.tar.sha256 collector-image.tar.sha256)" || exit 1
-      cmp -s transport-files.sha256 <(printf '%s\n' "$actual") || exit 1
-      sha256sum --check --strict --status image.tar.sha256 collector-image.tar.sha256 || exit 1
-      jq -e --arg r "$revision" '.source_revision==$r and .go.goarch=="arm64"' collector-manifest.json >/dev/null || exit 1
-      jq -e --arg r "$revision" '.source_revision==$r and .architecture=="arm64"' rootfs-manifest.json >/dev/null
-    ) || { echo 'verified pair transport or revision mismatch; nothing transferred' >&2; exit 1; }
-    expected_sources="$(cd "$root"; while IFS= read -r file; do sha256sum "$file" || exit 1; done <<<"$payload_files")"
-    cmp -- "$local_stage/source-files.sha256" <(printf '%s\n' "$expected_sources")
+    verify_local_pair "$verified_pair" "$seal" "$revision" "$payload_files"
   else
     build_local_pair
     issuer_dir="$local_stage/issuer"

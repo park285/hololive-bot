@@ -1009,6 +1009,24 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
     authorized = run('rollback_approval=true\ndeploy_approval=false\n' + entry, state, 'rollback')
     require(authorized.returncode == 0 and (state / 'calls').read_text().splitlines() ==
             [expected.replace(' b resume ', ' b rollback ')], 'b: original tool executes separately granted rollback', authorized)
+    (state / 'calls').unlink()
+    for name in ('scripts/deploy/po-central-cutover.sh', 'scripts/deploy/lib/source-revision.sh', 'scripts/deploy/lib/po-central-remote.sh',
+                 'scripts/deploy/lib/collector-slots.sh', 'scripts/deploy/lib/collector-slots.tsv', 'scripts/deploy/lib/migration-receipts.sh'):
+        (candidate / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(root / name, candidate / name)
+    verify = entry[:entry.index('bash "${tool_root')] + 'bash "$state/candidate/scripts/deploy/po-central-cutover.sh" c verify-pair "$state/arm64" "$2"\n'
+    for label, damaged, pair_seal in (('verified pair', None, seal), ('foreign seal', None, 'd' * 64),
+                                      ('truncated issuer archive', 'image.tar', seal), ('missing collector archive', 'collector-image.tar', seal)):
+        original = (archive / damaged).read_bytes() if damaged else None
+        if damaged == 'image.tar':
+            (archive / damaged).write_bytes(original[:-1])
+        elif damaged:
+            (archive / damaged).unlink()
+        result = run(verify, state, pair_seal)
+        require((result.returncode == 0) == (label == 'verified pair') and not (state / 'calls').exists(),
+                f'c: {label} is judged before any stop without SSH', result)
+        if damaged:
+            (archive / damaged).write_bytes(original)
 
 
 def manifest(revision, identity):

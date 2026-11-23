@@ -57,7 +57,7 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
    - c: 검증한 pair 디렉터리 `C_PAIR`, 승인된 transport SHA-256 `C_SEAL`, 승인된 SSH 대상 `C_HOST`
    - 중앙: 같은 revision으로 설치한 API·alarm-worker 후보 image ID `API_ID`, `WORKER_ID`(`sha256:<64자리>`)
 
-   무엇이든 멈추기 전에 b staging 후보와 c 후보가 같은지 이 release의 clean checkout에서 대조합니다. b는 staging한 revision·seal과 `B_ARGS[0]` checkout으로, c는 이 checkout의 revision과 `C_PAIR`·`C_SEAL`로 재개되므로 하나라도 다르면 c·a를 재개한 뒤에야 b 재개가 거절됩니다. 이전 창의 `c.accepted`가 영수증 디렉터리에 남아 있으면 5단계 게시가 실패하므로 창을 열지 않습니다.
+   무엇이든 멈추기 전에 b staging 후보와 c 후보가 같은지 이 release의 clean checkout에서 대조합니다. b는 staging한 revision·seal과 `B_ARGS[0]` checkout으로, c는 이 checkout의 revision과 `C_PAIR`·`C_SEAL`로 재개되므로 하나라도 다르면 c·a를 재개한 뒤에야 b 재개가 거절됩니다. `c verify-pair`는 c `quiesce-verified`와 같은 기준(seal, 두 image archive의 실제 체크섬, arm64 manifest, 이 checkout의 source 목록)으로 `C_PAIR`를 읽기만 하며 SSH를 열지 않습니다. 이전 창의 `c.accepted`가 영수증 디렉터리에 남아 있으면 그 창의 b 재개 완료 영수증 `b.<이전-owner-window-id>.resume.finished`를 확인한 뒤 `ln -T -- c.accepted c.accepted.<이전-b-staging-timestamp>`로 보존하고 원래 이름을 지웁니다. 완료 영수증이 없으면 창을 열지 않습니다. 아래 검사는 `c.accepted`가 없어야 통과합니다.
 
    ```bash
    (
@@ -66,10 +66,7 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
      read -r b_revision b_seal b_change <"${B_ARGS[1]}/b.stage.${B_ARGS[2]}.finished"
      [[ $b_revision == "$(deploy_source_revision .)" && $b_revision == "$(deploy_source_revision "${B_ARGS[0]}")" ]]
      [[ $b_seal == "$C_SEAL" && $b_change == "${B_ARGS[2]}" && ! -e ${B_ARGS[1]}/c.accepted && ! -L ${B_ARGS[1]}/c.accepted ]]
-     cd -- "$C_PAIR"
-     printf '%s  transport-files.sha256\n' "$C_SEAL" | sha256sum --check --strict --status -
-     sha256sum --check --strict --status transport-files.sha256
-     jq -e -s --arg r "$b_revision" 'all(.[]; .source_revision == $r)' collector-manifest.json rootfs-manifest.json >/dev/null
+     scripts/deploy/po-central-cutover.sh c verify-pair "$C_PAIR" "$C_SEAL"
    )
    ```
 2. 송신을 일시 중단하고 `/webhook/iris`의 모든 유입 경로(직접 H3 포함)를 닫습니다. 재시작·자동 복구·다른 슬롯을 통한 구 API 재기동도 차단합니다. Valkey는 그대로 둡니다.
@@ -105,7 +102,7 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
    scripts/deploy/ap-host-native-deploy.sh osaka --resume W3 "$OLD" "$NONCE"
    ```
 
-   c가 실제로 재개한 후보를 `$C_BACKUP`의 `candidate.revision`·`transport.sha256`에서 읽어 b staging 영수증과 같은지 승인 주체가 확인하면, 그 값으로 `c.accepted`를 게시하고 준비한 재개 grant를 게시한 뒤 b·d를 재개합니다. `b quiesce`가 정지 grant를 소비해 지웠으므로 재개 grant는 새 파일이어야 합니다. 두 파일은 같은 디렉터리의 임시 파일에 한 줄을 완성한 뒤 하드 링크로 게시하므로 기존 파일을 덮어쓰지 않고 빈 파일도 남기지 않습니다. 이미 있으면 게시가 실패하므로, 기존 파일을 보존한 채 b 재개를 멈추고 누가 언제 썼는지 대조합니다. 블록 안의 명령 하나라도 실패하면 뒤의 b·d 재개는 실행되지 않습니다.
+   c가 실제로 재개한 후보를 `$C_BACKUP`의 `candidate.revision`·`transport.sha256`에서 읽어 b staging 영수증과 같은지 승인 주체가 확인하면, 그 값으로 `c.accepted`를 게시하고 준비한 재개 grant를 게시한 뒤 b·d를 재개합니다. `b quiesce`가 정지 grant를 소비해 지웠으므로 재개 grant는 새 파일이어야 합니다. 두 파일은 같은 디렉터리의 임시 파일에 한 줄을 완성한 뒤 하드 링크로 게시하므로 기존 파일을 덮어쓰지 않고 빈 파일도 남기지 않습니다. `c.accepted`가 이미 있으면 실행 사용자 소유 0600 일반 파일이고 같은 줄일 때만 그대로 씁니다. 같은 창에서 재개 grant 게시가 실패한 뒤 다시 실행하는 경우입니다. 내용이 다르거나 재개 grant가 이미 있으면 기존 파일을 보존한 채 b 재개를 멈추고 누가 언제 썼는지 대조합니다. 블록 안의 명령 하나라도 실패하면 뒤의 b·d 재개는 실행되지 않습니다.
 
    ```bash
    (
@@ -114,7 +111,7 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
      publish_new() {
        local target=$1 tmp status=0
        tmp=$(mktemp "$target.XXXXXX") || return 1
-       { cat >"$tmp" && [[ $(wc -l <"$tmp") == 1 ]] && ln -- "$tmp" "$target"; } || status=1
+       { cat >"$tmp" && [[ $(wc -l <"$tmp") == 1 ]] && ln -T -- "$tmp" "$target"; } || status=1
        rm -f -- "$tmp"
        return "$status"
      }
@@ -122,7 +119,13 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
      c_seal="$(ssh "$C_HOST" "sudo -n cat '$C_BACKUP/transport.sha256'")"
      read -r b_revision b_seal _ <"${B_ARGS[1]}/b.stage.${B_ARGS[2]}.finished"
      [[ $c_revision == "$b_revision" && $c_seal == "$b_seal" ]]
-     printf '%s %s\n' "$c_revision" "$c_seal" | publish_new "${B_ARGS[1]}/c.accepted"
+     accepted="${B_ARGS[1]}/c.accepted"
+     if [[ -e $accepted || -L $accepted ]]; then
+       [[ -f $accepted && ! -L $accepted && $(stat -c '%u:%a' "$accepted") == "$EUID:600" ]]
+       cmp -s -- "$accepted" <(printf '%s %s\n' "$c_revision" "$c_seal")
+     else
+       printf '%s %s\n' "$c_revision" "$c_seal" | publish_new "$accepted"
+     fi
      publish_new "${B_ARGS[1]}/b.current-grant" <"$B_RESUME_GRANT"
      PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cutover.sh b resume "${B_ARGS[@]}"
      sudo -n python3 -I -B "$release/scripts/deploy/kapu-d-cutover.py" resume "$hold" "${candidate[@]}"

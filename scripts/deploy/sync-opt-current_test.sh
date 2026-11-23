@@ -372,6 +372,12 @@ ln -s /dev/null "$host/etc-systemd-system/valkey-cache.service"
 ln -s /run/systemd/generator/valkey-cache.service "$host/etc-systemd-system/valkey-alias.service"
 assert_rejected_without_change "$host" "$base_repo" "masked Valkey unit with an alias" "$override" --valkey-only
 rm "$host/etc-systemd-system/valkey-alias.service"
+for alias_target in /etc/systemd/system/held/valkey-cache.service held/valkey-cache.service \
+  /etc/systemd/system/multi-user.target.wants/valkey-cache.service ../system/held/../valkey-cache.service; do
+  ln -s "$alias_target" "$host/etc-systemd-system/valkey-alias.service"
+  assert_rejected_without_change "$host" "$base_repo" "masked Valkey unit with an alias to $alias_target" "$override" --valkey-only
+  rm "$host/etc-systemd-system/valkey-alias.service"
+done
 mkdir -p "$host/run/systemd/system"
 ln -s /dev/null "$host/run/systemd/system/valkey-cache.service"
 assert_rejected_without_change "$host" "$base_repo" "Valkey runtime mask under the persistent mask" "$override" --valkey-only
