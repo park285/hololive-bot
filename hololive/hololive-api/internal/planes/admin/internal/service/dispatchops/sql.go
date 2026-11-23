@@ -16,7 +16,7 @@ var (
 	actionsSQL     = mustSQL("actions.sql")
 	detailSQL      = withListProjection(mustSQL("detail.sql"))
 	failuresSQL    = withErrorCodeExpression(mustSQL("failures.sql"))
-	groupLockedSQL = groupSQL + "FOR UPDATE OF d\n"
+	groupLockedSQL = withListProjection(mustSQL("group_locked.sql"))
 	groupSQL       = withListProjection(mustSQL("group.sql"))
 	listSQL        = withErrorCodeExpression(mustSQL("list.sql"))
 	requeueSQL     = mustSQL("requeue.sql")

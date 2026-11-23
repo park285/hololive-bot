@@ -18,12 +18,11 @@ var (
 	markLoggedBatchSQL                   = mustSQL("mark_logged_batch.sql")
 	markRetryBatchSQL                    = mustSQL("mark_retry_batch.sql")
 	persistPostLatencyClassificationsSQL = mustSQL("persist_post_latency_classifications.sql")
-	postDeliveryTimelineQuerySQL         = mustSQL("post_delivery_timeline_query.sql")
 	refreshLockedRowsSQL                 = mustSQL("refresh_locked_rows.sql")
 	repositoryFetchLockPendingSQL        = mustSQL("repository_fetch_lock_pending.sql")
 )
 
 var (
-	postDeliveryTimelineByOutboxIDsSQL          = postDeliveryTimelineQuery(mustSQL("timelines_filter_outbox_ids.sql"))
-	postDeliveryTimelineByTrackingIdentitiesSQL = postDeliveryTimelineQuery(mustSQL("timelines_filter_tracking_identities.sql"))
+	postDeliveryTimelineByOutboxIDsSQL          = sqlassets.WithFragment(mustSQL("post_delivery_timeline.sql"), "filter", mustSQL("timelines_filter_outbox_ids.sql"))
+	postDeliveryTimelineByTrackingIdentitiesSQL = sqlassets.WithFragment(mustSQL("post_delivery_timeline.sql"), "filter", mustSQL("timelines_filter_tracking_identities.sql"))
 )
