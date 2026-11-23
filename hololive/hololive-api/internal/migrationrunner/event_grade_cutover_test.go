@@ -1,6 +1,7 @@
 package migrationrunner
 
 import (
+	"fmt"
 	"io/fs"
 	"strings"
 	"testing"
@@ -24,7 +25,7 @@ func TestShadowStateRetirementRequiresConsumedEventGradeObservations(t *testing.
 
 		body, readErr := fs.ReadFile(migrations.FS, path)
 		if readErr != nil {
-			return readErr
+			return fmt.Errorf("read migration %s: %w", path, readErr)
 		}
 
 		if path == "manifest.txt" {

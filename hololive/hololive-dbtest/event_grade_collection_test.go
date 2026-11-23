@@ -251,6 +251,7 @@ func TestEventGradeCutoffPublishRechecksTheClaimedWindow(t *testing.T) {
 		require.NoError(t, err)
 
 		ranks := `{"event_id":"ev1","chapter_id":"ch1","board_kind":"marathon_score","final":true,"ranks":[{"rank":1,"score":"10"}]}`
+
 		_, err = collector.Exec(ctx, publishSQL, final.jobKey, eventGradeOwner, final.epoch, final.claimedAt, final.claimedAt, ranks)
 		requireSQLState(t, err, "22023")
 

@@ -234,8 +234,14 @@ func TestClassifyPostBlamesTheConnection(t *testing.T) {
 		}
 
 		conn, _, hijackErr := http.NewResponseController(w).Hijack()
-		if hijackErr == nil {
-			_ = conn.Close()
+		if hijackErr != nil {
+			t.Errorf("hijack decision connection: %v", hijackErr)
+
+			return
+		}
+
+		if closeErr := conn.Close(); closeErr != nil {
+			t.Errorf("close hijacked decision connection: %v", closeErr)
 		}
 	}))
 

@@ -226,11 +226,13 @@ func TestConsumeRejectsInvalidCatalogChapterAndContinues(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	c := chapterAt("valid-after-bad", now.Add(time.Hour))
 	bad := chapterAt("inverted", now.Add(time.Hour))
+
 	bad.EndsAt = bad.StartsAt
 
 	publishObservation(t, r, "catalog", now.Add(-time.Second), now.Add(-time.Second), observationcontract.CatalogObservation{
 		Chapters: []observationcontract.Chapter{observationcontract.Chapter(bad)}, Bindings: []observationcontract.Binding{{EventID: bad.EventID, ChapterID: bad.ChapterID}}, Conflicts: []string{},
 	})
+
 	last := publishObservation(t, r, "catalog", now, now, observationcontract.CatalogObservation{
 		Chapters: []observationcontract.Chapter{observationcontract.Chapter(c)}, Bindings: []observationcontract.Binding{{EventID: c.EventID, ChapterID: c.ChapterID}}, Conflicts: []string{},
 	})

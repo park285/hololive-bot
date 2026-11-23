@@ -2,6 +2,7 @@ package xspaces
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
@@ -128,7 +129,7 @@ func (p *ProcessCollector) Collect(ctx context.Context, cookies sessions.Cookies
 	defer p.mu.Unlock()
 
 	if p.helper != nil && p.helper.hasExited() {
-		_ = p.helper.stop()
+		_ = p.helper.stop() //nolint:errcheck // 유휴 중 끝난 helper의 종료 상태는 이번 요청의 결과가 아니며, 같은 호출에서 새 helper로 교체한다.
 
 		p.helper = nil
 	}
@@ -264,7 +265,7 @@ func readHelperLine(output *bufio.Reader) ([]byte, error) {
 		line = append(line, chunk...)
 
 		if err == nil {
-			return line[:len(line)-1], nil
+			return bytes.TrimSuffix(line, []byte{'\n'}), nil
 		}
 
 		if !errors.Is(err, bufio.ErrBufferFull) {

@@ -116,6 +116,7 @@ func TestUpsertVideosSkipsUnchangedRows(t *testing.T) {
 
 	viewed := version()
 	published := time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC)
+
 	video.PublishedAt = &published
 
 	upsert()
