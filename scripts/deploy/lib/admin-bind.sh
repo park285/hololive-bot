@@ -12,15 +12,19 @@ admin_bind_assert_host() {
     fi
 }
 
-admin_postgres_bind_assert() {
-    local root="$1" bind_ip="$2" primary="" name address
+admin_central_bind_assert() {
+    local root="$1" bind_ip="$2" service="$3" primary="" name address
     while IFS='=' read -r name address; do
         if [[ "$name" == central ]]; then primary="$address"; fi
     done < "$root/deploy/topology/hosts.conf"
     if [[ -z "$primary" || "$bind_ip" != "$primary" ]] || ! tailscale ip --assert "$bind_ip" >/dev/null 2>&1; then
-        echo '[ERROR] PostgreSQL bind must match the topology primary and this host Tailscale identity' >&2
+        echo "[ERROR] ${service} bind must match the topology primary and this host Tailscale identity" >&2
         return 1
     fi
+}
+
+admin_postgres_bind_assert() {
+    admin_central_bind_assert "$1" "$2" PostgreSQL
 }
 
 admin_network_assert_firewall() {

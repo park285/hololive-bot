@@ -23,7 +23,7 @@ scanner는 로컬 태그를 불변 image ID로 고정하고, Trivy가 보고한 
 
 모든 빌드와 검증은 kapu에서 수행한다. `scripts/ci/test-infra-images.sh`는 임시 PostgreSQL을 root와 UID 999로 시작해 `deploy/images/postgres/test.sh`의 SQL 검사를 실행하며 recurring security job이 실행한다. PostgreSQL 테스트는 `--network none`, tmpfs와 bounded PID/memory만 사용하고 Docker socket·운영 저장소·운영 credential을 연결하지 않는다. 테스트의 trust 인증은 이 격리된 일회성 DB에만 적용된다.
 
-`build-all.sh --no-bump --build-only`는 기존 서비스와 함께 인프라 image `hololive-postgres:prod`·`iris-stack-valkey:9.1.3-zlib1.4-r0`·`iris-stack-nginx:1.31.8-zlib1.4-r0`를 빌드하고 실제 소스 revision label을 검증한다. 게시용 빌드는 깨끗한 reviewed revision, ARM64, provenance·SBOM 및 전체 검증이 필요하다. validation-only 빌드의 `working-tree`·`test` revision은 배포용 근거가 아니다.
+`build-all.sh --no-bump --build-only`는 기존 서비스와 함께 인프라 image `hololive-postgres:prod`·`iris-stack-valkey:9.1.3-zlib1.4-r1`·`iris-stack-nginx:1.31.8-zlib1.4-r0`를 빌드하고 실제 소스 revision label을 검증한다. 게시용 빌드는 깨끗한 reviewed revision, ARM64, provenance·SBOM 및 전체 검증이 필요하다. validation-only 빌드의 `working-tree`·`test` revision은 배포용 근거가 아니다.
 
 중앙 primary와 비활성 standby 참고 unit(`deploy/quadlet/hololive-bot-standby/`)은 같은 `POSTGRES_IMAGE`를 쓴다. 인프라 image(PostgreSQL·Valkey·nginx) 교체는 [Quadlet README](../../../deploy/quadlet/README.md#이미지)의 load → build host identity 대조 → `compose.env` 갱신 → 승인된 restart 순서를 따른다. standby에서 빌드하거나 이전 공식 이미지로 자동 대체하지 않으며, 이미지 목록 갱신만으로 실행 중 인프라의 취약점이 해소됐다고 보고하지 않는다.
 

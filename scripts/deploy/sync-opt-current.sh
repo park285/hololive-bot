@@ -49,7 +49,19 @@ assert_clean "$REPO_ROOT" "repo"
 HEAD_REVISION="$(git -C "$REPO_ROOT" rev-parse --verify 'HEAD^{commit}')"
 HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse --short "$HEAD_REVISION")"
 log "repo=$REPO_ROOT HEAD=$HEAD_SHA -> $OPT_CURRENT"
+env_value() {
+  if compose_env_key_exists_in_file "$COMPOSE_ENV" "$1"; then
+    compose_env_read_value_from_file "$COMPOSE_ENV" "$1"
+  fi
+}
+require_central_valkey_bind() {
+  compose_env_validate_file_format "$COMPOSE_ENV"
+  [[ "$(env_value VALKEY_BIND_IP)" == 100.100.1.8 ]] || die "VALKEY_BIND_IP must select the central Valkey endpoint"
+}
 if [[ $valkey_only == true ]]; then
+  # shellcheck source=scripts/deploy/lib/compose-env.sh
+  . "$REPO_ROOT/scripts/deploy/lib/compose-env.sh"
+  require_central_valkey_bind
   python3 -I /opt/iris-stack/valkey-ha/stage.py selected hololive || die "Valkey standalone stage is not admitted"
   unit=valkey-cache.container
   target="$QUADLET_DIR/$unit"
@@ -271,16 +283,10 @@ fi
 . "$STAGING/scripts/deploy/lib/compose-env.sh"
 # shellcheck source=scripts/deploy/lib/collector-slots.sh
 . "$STAGING/scripts/deploy/lib/collector-slots.sh"
-compose_env_validate_file_format "$COMPOSE_ENV"
+require_central_valkey_bind
 central_collector="$(collector_slot "$(collector_slots_where host central)" collector_unit)" ||
   die "central collector slot is missing"
 central_collector="${central_collector%.service}"
-env_value() {
-  if compose_env_key_exists_in_file "$COMPOSE_ENV" "$1"; then
-    compose_env_read_value_from_file "$COMPOSE_ENV" "$1"
-  fi
-}
-[[ "$(env_value VALKEY_BIND_IP)" == 100.100.1.8 ]] || die "VALKEY_BIND_IP must select the central Valkey endpoint"
 OPTIONAL_FEATURES=(
   "x-spaces|HOLOLIVE_X_SPACES_ENABLED|40-x-spaces.conf|hololive-api hololive-alarm-worker"
   "schedule-poster|HOLOLIVE_SCHEDULE_POSTER_ENABLED|41-schedule-poster.conf|hololive-api"

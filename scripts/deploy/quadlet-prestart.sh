@@ -233,6 +233,7 @@ case "$target" in
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values VALKEY_BIND_IP
         wait_for_tailnet_address VALKEY_BIND_IP
+        admin_central_bind_assert "$deploy_root" "$VALKEY_BIND_IP" Valkey || die "VALKEY_BIND_IP must select the central Valkey endpoint"
         ;;
     hololive-db-migrate)
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"

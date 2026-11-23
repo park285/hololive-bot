@@ -242,6 +242,11 @@ cmp -s "$installed/valkey-cache.container" "$base_repo/deploy/quadlet/hololive-b
    $backups == "$(find "$host/opt" -maxdepth 1 -name 'current.bak-*' -printf '%i\n' | sort)" ]] || fail "Valkey 단독 게시가 다른 리소스를 변경했습니다"
 pass "Valkey 단독 게시는 앱·DB·실행 트리·기존 복구점에 손대지 않습니다"
 
+printf '\n' >>"$installed/valkey-cache.container"
+sed -i 's/^VALKEY_BIND_IP=.*/VALKEY_BIND_IP=0.0.0.0/' "$host/etc-stack-secrets/hololive-bot/compose.env"
+assert_rejected_without_change "$host" "$base_repo" "Valkey wildcard bind" "VALKEY_BIND_IP must select the central Valkey endpoint" --valkey-only
+pass "Valkey 단독 게시는 중앙 주소가 아닌 VALKEY_BIND_IP를 거부합니다"
+
 broken_repo="${tmp}/repo-broken-unit"
 cp -R "${base_repo}" "${broken_repo}"
 printf '[Container]\nContainerName=broken\n' >"${broken_repo}/deploy/quadlet/hololive-bot/broken.container"

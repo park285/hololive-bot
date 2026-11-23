@@ -415,6 +415,15 @@ for unit in "${units[@]}"; do
     mkdir -m 0700 "$fixture/normal-$unit"
     cp "$test_root/run/quadlet-env/$unit.env" "$fixture/normal-$unit/"
 done
+sed -i 's/^VALKEY_BIND_IP=.*/VALKEY_BIND_IP=0.0.0.0/' "$test_root/compose.env"
+if run_prestart valkey-cache > "$fixture/valkey-bind.log" 2>&1; then
+    echo 'prestart accepted a wildcard Valkey bind' >&2
+    exit 1
+fi
+grep -q 'Valkey bind must match the topology primary' "$fixture/valkey-bind.log"
+sed -i 's/^VALKEY_BIND_IP=.*/VALKEY_BIND_IP=100.100.1.8/' "$test_root/compose.env"
+run_prestart valkey-cache
+echo 'Valkey prestart publishes only on the central tailnet address'
 mv "$test_root/bin" "$test_root/online-bin"
 mkdir "$test_root/bin"
 for command in ip tailscale nft systemctl podman docker sleep install; do

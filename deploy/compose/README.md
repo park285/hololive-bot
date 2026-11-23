@@ -130,7 +130,7 @@ source is committed. Other stack ingress consumers must load this same owned
 image rather than maintain a second recipe or pull the unpatched official tag.
 
 `valkey-cache` also uses a local-only owned image:
-`localhost/iris-stack-valkey:9.1.3-zlib1.4-r0` applies the same zlib, musl and CA bundle pins to the pinned official
+`localhost/iris-stack-valkey:9.1.3-zlib1.4-r1` applies the same zlib, musl and CA bundle pins to the pinned official
 Valkey base. Its context is `deploy/images/valkey` and it is included in `build-all.sh --no-bump --build-only`.
 ChatBotGo must load the same owned Valkey image for its host architecture. No official-image
 fallback or live-data mutation is performed by building these candidates.

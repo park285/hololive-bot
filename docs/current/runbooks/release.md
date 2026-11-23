@@ -51,7 +51,7 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
 구 Valkey 판정과 신규 PostgreSQL 판정은 한 요청을 각각 처음 보는 것으로 처리할 수 있습니다. 키 복사나 이중 쓰기 대신, 승인된 정비 창에서 다음 순서로 서명 유효창을 닫습니다.
 
 1. 송신을 일시 중단하고 `/webhook/iris`의 모든 유입 경로(직접 H3 포함)를 닫습니다. 모든 구 API 인스턴스의 진행 중 요청을 드레인하고 종료를 확인합니다. 재시작·자동 복구·다른 슬롯을 통한 재기동도 차단합니다. Valkey는 그대로 둡니다. 마지막으로 구 세대가 승인할 수 있었던 시각이 확인되지 않으면 창을 열지 않습니다.
-2. 검증한 복구점을 확보하고 기존 보호 endpoint·migrator로 `--schema-only`를 적용합니다. `--check`로 `006_epoch4_bot_webhook_nonces.sql`까지 양쪽 원장·권한·실물 검사를 통과해야 합니다. 운영 계정·ACL을 임시로 넓히거나 기존 원장 및 cache 키를 지우지 않습니다.
+2. 검증한 복구점을 확보합니다. 대기 migration은 writer drain 아래에서만 적용되므로 [writer 정지·재개 계약](../../../deploy/quadlet/README.md#writer-정지재개-계약)에 따라 중앙 alarm-worker·collector c와 AP collector a·b·d도 정지하고, `writer-drain-guard.py`가 가드를 쥔 상태에서 기존 보호 endpoint·migrator로 `--schema-only`를 적용합니다([적용 조건](../../../deploy/quadlet/README.md#postgresql-직접-tls-접속)). `--check`로 `006_epoch4_bot_webhook_nonces.sql`까지 양쪽 원장·권한·실물 검사를 통과해야 합니다. 가드를 푼 뒤 같은 release의 alarm-worker와 collector는 재개할 수 있지만, API는 4단계까지 정지 상태로 둡니다. 운영 계정·ACL을 임시로 넓히거나 기존 원장 및 cache 키를 지우지 않습니다.
 3. 마지막 드레인 확인 이후 **10분을 초과**해 기다립니다. 서명 timestamp는 당시 시각보다 최대 5분 앞설 수 있고 그 시각 이후 5분까지 유효하므로, 5분 대기만으로는 부족합니다. 송·수신 시계 동기화와 인스턴스 간 시각 오차를 확인하고 오차만큼 여유를 둡니다. 시계가 역행하거나 구 writer가 다시 떴으면 hold를 유지하고 기준점을 다시 잡습니다.
 4. 같은 DB·006 head를 쓰는 신규 API만 시작합니다. 준비 상태와 실행 revision, 구 세대 차단 상태를 확인한 뒤 ingress와 송신을 엽니다. 같은 서명은 한 번만 승인되고 판정 불능은 503이어야 합니다. Valkey의 nonce를 조회하거나 복원하지 않습니다.
 

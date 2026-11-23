@@ -41,11 +41,11 @@ StopTimeout=60
 Exec=valkey-server /run/valkey/${VALKEY_STAGE}.conf
 
 [Service]
-Environment=VALKEY_IMAGE=localhost/iris-stack-valkey:9.1.3-zlib1.4-r0
+Environment=VALKEY_IMAGE=localhost/iris-stack-valkey:9.1.3-zlib1.4-r1
 EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
 EnvironmentFile=/var/lib/iris-valkey-standalone/hololive.env
-ExecStartPre=/usr/bin/python3 -I /opt/iris-stack/valkey-ha/stage.py check hololive
 ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart valkey-cache
+ExecStartPre=/usr/bin/python3 -I /opt/iris-stack/valkey-ha/stage.py check hololive
 Restart=always
 RestartSec=5s
 TimeoutStartSec=300

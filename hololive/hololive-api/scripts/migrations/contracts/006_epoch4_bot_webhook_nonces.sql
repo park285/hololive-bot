@@ -108,7 +108,7 @@ SELECT pg_catalog.to_regclass('public.member_schedule_card_templates') IS NOT NU
        JOIN pg_catalog.pg_attribute d ON d.attrelid = c.oid AND d.attname = 'digest' AND d.attnotnull AND d.atttypid = 'bytea'::regtype
        JOIN pg_catalog.pg_attribute e ON e.attrelid = c.oid AND e.attname = 'expires_at' AND e.attnotnull AND e.atttypid = 'timestamptz'::regtype
        WHERE c.oid = pg_catalog.to_regclass('public.bot_webhook_nonces') AND c.relkind = 'r' AND c.relpersistence = 'p'
-         AND EXISTS (SELECT FROM pg_catalog.pg_index i WHERE i.indrelid = c.oid AND i.indisprimary AND i.indisvalid
+         AND EXISTS (SELECT FROM pg_catalog.pg_index i WHERE i.indrelid = c.oid AND i.indisprimary AND i.indisvalid AND i.indimmediate
                      AND i.indnkeyatts = 1 AND i.indkey[0] = d.attnum)
          AND EXISTS (SELECT FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
                      JOIN pg_catalog.pg_am am ON am.oid = idx.relam

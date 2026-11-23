@@ -58,11 +58,7 @@ func (s postgresNonceStore) IsDuplicate(ctx context.Context, key string, ttl tim
 
 	err := s.pool.QueryRow(ctx, reserveBotWebhookNonceSQL, digest[:], ttl.Microseconds()).Scan(&reserved)
 	if err != nil {
-		if ctx.Err() != nil {
-			return false, fmt.Errorf("reserve webhook nonce: %w", ctx.Err())
-		}
-
-		return false, errors.New("postgres webhook nonce reservation failed")
+		return false, fmt.Errorf("reserve webhook nonce: %w", err)
 	}
 
 	return !reserved, nil

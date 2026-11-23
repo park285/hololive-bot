@@ -69,8 +69,11 @@ func TestCacheClientDialsDevelopmentUnixSocket(t *testing.T) {
 	conn, err := opts.DialCtxFn(t.Context(), socket, &opts.Dialer, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, conn.Close()) })
-	assert.Equal(t, "unix", conn.RemoteAddr().Network())
-	assert.Equal(t, socket, conn.RemoteAddr().String())
+
+	addr := conn.RemoteAddr()
+	require.NotNil(t, addr)
+	assert.Equal(t, "unix", addr.Network())
+	assert.Equal(t, socket, addr.String())
 }
 
 func TestCacheServiceScanKeyPagesAdditional(t *testing.T) {
