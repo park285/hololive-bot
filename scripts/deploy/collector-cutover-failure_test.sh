@@ -6,6 +6,7 @@ python3 - "$root" <<'PY'
 import hashlib
 import fcntl
 import json
+import os
 import socket
 import threading
 import re
@@ -1014,6 +1015,30 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
                     and not (state / f'b.quiesce.{change}.requested').exists(),
                     f'b: {mode} refuses a {label} prepared resume grant before anything stops', refused)
     grant('quiesce')
+    fifo = state / 'resume-grant.fifo'
+    os.mkfifo(fifo)
+    for mode in ('preflight', 'quiesce'):
+        def feed():
+            try:
+                with open(fifo, 'w') as pipe:
+                    pipe.write((state / 'prepared-resume-grant').read_text())
+            except BrokenPipeError:
+                pass
+        feeder = threading.Thread(target=feed, daemon=True)
+        feeder.start()
+        refused = run(f'resume_grant_arg={shlex.quote(str(fifo))}\n' + entry, state, mode)
+        drain = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+        feeder.join(5)
+        os.close(drain)
+        require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
+                and not (state / f'b.quiesce.{change}.requested').exists() and not (state / f'b.{window}.resume-grant').exists(),
+                f'b: {mode} refuses a one-shot resume grant that step 5 could not read again', refused)
+    fifo.unlink()
+    grant('quiesce', expires=int(time.time()) + 4500)
+    refused = run('deploy_approval=false\n' + entry, state, 'preflight')
+    require(refused.returncode != 0 and not (state / 'calls').exists(),
+            'b: preflight keeps time to stop d before b quiesce consumes the grant', refused)
+    grant('quiesce')
     real_archive = state / 'arm64-real'
     archive.rename(real_archive)
     archive.symlink_to(real_archive)
@@ -1069,6 +1094,11 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
                 'b: coordinator revision stays distinct; only already-staged accepted candidate addresses the writer', result)
         (state / 'calls').unlink()
         require(not (state / 'b.current-grant').exists(), 'b: grant slot vacated for independent no-replace issuance', result)
+        if mode == 'quiesce':
+            retained = state / f'b.{window}.resume-grant'
+            require(retained.is_file() and not retained.is_symlink() and retained.stat().st_mode & 0o777 == 0o600 and retained.stat().st_nlink == 1
+                    and retained.read_text() == (state / 'prepared-resume-grant').read_text(),
+                    'b: quiesce keeps the verified resume grant for step 5', result)
         grant(mode)
         replay = run(entry, state, mode)
         require(replay.returncode != 0 and not (state / 'calls').exists(), 'b: consumed phase grant cannot be replayed', replay)
