@@ -50,10 +50,9 @@ func newStreamFillTestService(t *testing.T, requester *MockRequester) *Service {
 	logger := slog.New(slog.DiscardHandler)
 
 	store, err := cache.NewCacheService(t.Context(), cache.Config{
-		Host:              host,
-		Port:              port,
-		DisableCache:      true,
-		ForceSingleClient: true,
+		Host:         host,
+		Port:         port,
+		DisableCache: true,
 	}, logger)
 	if err != nil {
 		t.Fatalf("create serialized cache: %v", err)

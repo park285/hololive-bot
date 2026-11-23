@@ -42,6 +42,14 @@ cat >"${fakebin}/mv" <<'EOF'
 if [[ -f "$SYNC_TEST_EVENTS.fail-before" && "${!#}" == "$(<"$SYNC_TEST_EVENTS.fail-before")" ]]; then exit 92; fi
 exec /usr/bin/mv "$@"
 EOF
+cat >"${fakebin}/python3" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == '-I /opt/iris-stack/valkey-ha/stage.py selected hololive' ]]; then
+  [[ ! -e "$SYNC_TEST_EVENTS.stage-denied" ]]
+  exit $?
+fi
+exec /usr/bin/python3 "$@"
+EOF
 chmod +x "${fakebin}"/*
 
 slot_table_files=(scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv)
@@ -91,7 +99,7 @@ make_host() {
     >"${installed}/hololive-alarm-worker.container.d/40-x-spaces.conf"
   mkdir -p "${host}/opt/current"
   printf 'old current\n' >"${host}/opt/current/marker"
-  printf 'HOLOLIVE_VALKEY_HA_ENABLED=1\nVALKEY_SENTINEL_ADDRS=100.100.1.3:26379,100.100.1.8:26379\nHOLOLIVE_X_SPACES_ENABLED=%s\n' \
+  printf 'VALKEY_BIND_IP=100.100.1.8\nHOLOLIVE_X_SPACES_ENABLED=%s\n' \
     "${x_spaces}" >"${host}/etc-stack-secrets/hololive-bot/compose.env"
 }
 
@@ -172,6 +180,11 @@ assert_rejected_without_change() {
 base_repo="${tmp}/repo-base"
 make_repo "${base_repo}"
 
+host="${tmp}/host-unadmitted"
+make_host "${host}" 1
+touch "${host}/events.stage-denied"
+assert_rejected_without_change "${host}" "${base_repo}" "Valkey admission" "Valkey standalone stage is not admitted"
+
 host="${tmp}/host-ok"
 make_host "${host}" 1
 run_sync "${host}" "${base_repo}" || { cat "${host}/out" >&2; fail "valid units were rejected"; }
@@ -219,6 +232,15 @@ grep -qx 'systemctl daemon-reload' "${host}/events" || fail "daemon-reload did n
 grep -q '^verify ' "${host}/events" || fail "exec-tree ownership verification did not run"
 ! compgen -G "${host}/opt/.quadlet-check.*" >/dev/null || fail "Quadlet check directory was left behind"
 pass "valid units install with x-spaces drop-ins, keep the worker-profile drop-in and record the source revision"
+
+preserved=$(stat -c '%i:%Y' "$installed/hololive-api.container" "$installed/holo-postgres.container" "$host/opt/current/.source-revision")
+backups=$(find "$host/opt" -maxdepth 1 -name 'current.bak-*' -printf '%i\n' | sort)
+printf '\n' >>"$installed/valkey-cache.container"
+run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "Valkey 단독 게시 실패"; }
+cmp -s "$installed/valkey-cache.container" "$base_repo/deploy/quadlet/hololive-bot/valkey-cache.container" || fail "Valkey 후보가 게시되지 않았습니다"
+[[ $preserved == "$(stat -c '%i:%Y' "$installed/hololive-api.container" "$installed/holo-postgres.container" "$host/opt/current/.source-revision")" &&
+   $backups == "$(find "$host/opt" -maxdepth 1 -name 'current.bak-*' -printf '%i\n' | sort)" ]] || fail "Valkey 단독 게시가 다른 리소스를 변경했습니다"
+pass "Valkey 단독 게시는 앱·DB·실행 트리·기존 복구점에 손대지 않습니다"
 
 broken_repo="${tmp}/repo-broken-unit"
 cp -R "${base_repo}" "${broken_repo}"

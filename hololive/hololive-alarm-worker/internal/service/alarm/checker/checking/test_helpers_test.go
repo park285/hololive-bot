@@ -58,10 +58,9 @@ func newCheckerTestCacheClient(t *testing.T) cache.Client {
 	cacheClient, err := cache.NewCacheService(
 		t.Context(),
 		cache.Config{
-			Host:              host,
-			Port:              port,
-			DisableCache:      true,
-			ForceSingleClient: true,
+			Host:         host,
+			Port:         port,
+			DisableCache: true,
 		},
 		newCheckerTestLogger(),
 	)

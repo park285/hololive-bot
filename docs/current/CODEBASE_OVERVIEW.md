@@ -28,7 +28,7 @@
 └── deploy/compose/                 # shared runtime contracts (README only)
 ```
 
-`go.work` ties the Go runtime/shared/dbtest modules under `hololive/` to source modules in the sibling repositories `../shared-go` and `../iris-client-go`, including `../iris-client-go/adapters/valkeydedup` for API webhook ingress. Production builds use `GOWORK=off` and resolve external modules from the owning `go.mod` and `go.sum`. The three production runtime binaries (`hololive-api`, `alarm-worker`, `collector`) are implemented in Go 1.27.x. Web implementation, credentials, SSR and native deployment belong to sibling `../iris-console`.
+`go.work`는 `hololive/` 아래의 런타임·공유·DB 시험 모듈을 형제 저장소 `../shared-go`, `../iris-client-go`에 연결합니다. 운영 빌드는 `GOWORK=off`에서 각 모듈의 `go.mod`와 `go.sum`을 사용합니다. `hololive-api`, `alarm-worker`, `collector`는 Go 1.27.x 바이너리입니다. 웹 구현·자격 증명·SSR·네이티브 배포는 `../iris-console`이 소유합니다.
 
 ## Runtime Services
 

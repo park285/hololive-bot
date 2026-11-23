@@ -48,10 +48,6 @@ func NewCacheService(ctx context.Context, config Config, logger *slog.Logger) (*
 }
 
 func cacheAddress(config Config) (string, string) {
-	if config.SentinelMasterSet != "" {
-		return config.SentinelMasterSet, "sentinel"
-	}
-
 	if config.SocketPath != "" {
 		return config.SocketPath, "unix"
 	}
@@ -73,32 +69,7 @@ func cacheClientOptions(config Config, addr string) (valkey.ClientOption, error)
 		BlockingPoolSize:  constants.ValkeyConfig.BlockingPoolSize,
 		PipelineMultiplex: constants.ValkeyConfig.PipelineMultiplex,
 		DisableCache:      config.DisableCache,
-		ForceSingleClient: config.ForceSingleClient,
-	}
-	if config.SentinelMasterSet != "" || len(config.SentinelAddrs) != 0 ||
-		config.SentinelUsername != "" || config.SentinelPassword != "" {
-		if err := validateCacheSentinel(config); err != nil {
-			return valkey.ClientOption{}, err
-		}
-
-		transport, err := cacheTLSConfig(config.TLSCAFile)
-		if err != nil {
-			return valkey.ClientOption{}, err
-		}
-
-		opts.InitAddress = config.SentinelAddrs
-		opts.TLSConfig = transport
-		opts.Dialer = net.Dialer{Timeout: constants.ValkeyTimeout.DialTimeout}
-		opts.Sentinel = valkey.SentinelOption{
-			MasterSet:               config.SentinelMasterSet,
-			Username:                config.SentinelUsername,
-			Password:                config.SentinelPassword,
-			TLSConfig:               transport,
-			Dialer:                  opts.Dialer,
-			TopologyRefreshInterval: 5 * time.Second,
-		}
-
-		return opts, nil
+		ForceSingleClient: true,
 	}
 
 	if config.TLSCAFile != "" {

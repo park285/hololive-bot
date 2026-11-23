@@ -2,8 +2,6 @@
 # 중앙(hololive-seoul)에만 설치한다. 설치 도구는 build-control host kapu에서 설치를 거부한다.
 [Unit]
 Description=Hololive alarm worker
-# 런타임 peer는 Wants=로만 끌어온다. Requires=는 명시적 stop/restart를 전파해 primary fence(소비자 유지)와
-# Sentinel HA(로컬 노드 교체)를 깨뜨린다.
 Wants=holo-postgres.service valkey-cache.service
 After=holo-postgres.service valkey-cache.service tailscaled.service
 ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent
@@ -40,7 +38,6 @@ Volume=/etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/c
 Volume=/etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
 Volume=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
 Volume=/etc/stack-secrets/hololive-bot/certs/valkey-worker-password:/run/hololive-bot/certs/valkey-worker-password:ro
-Volume=/etc/stack-secrets/hololive-bot/certs/valkey-discovery-password:/run/hololive-bot/certs/valkey-discovery-password:ro
 # 원자 교체가 drift 감시에 보이도록 profile은 디렉터리로 mount한다.
 Volume=/etc/stack-secrets/hololive-bot/worker-profiles:/run/hololive-bot/worker-profiles:ro
 Tmpfs=/tmp:size=64m,mode=1777,noexec,nosuid,nodev
@@ -64,7 +61,7 @@ Environment=POSTGRES_SSLMODE=${POSTGRES_SSLMODE}
 Environment=POSTGRES_SSLROOTCERT=${POSTGRES_SSLROOTCERT}
 Environment=POSTGRES_QUERY_EXEC_MODE=${POSTGRES_QUERY_EXEC_MODE}
 Environment=CACHE_SOCKET_PATH=
-Environment=CACHE_HOST=
+Environment=CACHE_HOST=${VALKEY_BIND_IP}
 Environment=CACHE_PORT=16379
 Environment=CACHE_PASSWORD=
 Environment=HOLOLIVE_H3_CERT_FILE=${HOLOLIVE_H3_CERT_FILE}
@@ -106,10 +103,6 @@ Environment=LOG_DIR=/app/logs
 Environment=GOMEMLIMIT=320MiB
 Environment=APP_ENV=production
 Environment=IRIS_BASE_URL_ALLOWED_HOSTS=${IRIS_BASE_URL_ALLOWED_HOSTS}
-Environment=CACHE_SENTINEL_MASTER_SET=hololive
-Environment=CACHE_SENTINEL_ADDRS=${VALKEY_SENTINEL_ADDRS}
-Environment=CACHE_SENTINEL_USERNAME=hololive-discovery
-Environment=CACHE_SENTINEL_PASSWORD_FILE=/run/hololive-bot/certs/valkey-discovery-password
 Environment=CACHE_TLS_CA_FILE=/run/hololive-bot/certs/iris-ca.pem
 Environment=CACHE_USERNAME=hololive-worker
 Environment=CACHE_PASSWORD_FILE=/run/hololive-bot/certs/valkey-worker-password

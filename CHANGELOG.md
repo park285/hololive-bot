@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- 중앙 API와 alarm-worker는 Valkey에 TLS로 직접 연결합니다. Sentinel 발견용 비밀번호를 컨테이너에 마운트하지 않습니다.
+- 웹훅 서명 nonce를 PostgreSQL(마이그레이션 006)에 보존해, 캐시를 비우거나 API를 재시작해도 같은 서명이 두 번 처리되지 않습니다.
 - **의존성:** Go 모듈(klauspost/compress 1.20.5, mongo-driver/v2 2.10.1, x/net 0.63.0, google.golang.org/api 0.316.0, otel auto/sdk 1.2.2 등)과 xspaces·po-sandbox·youtubejs의 npm lockfile을 최신 안정판으로 올렸습니다. Node는 26.13.1(이미지 `NODE_VERSION`과 Dockerfile 빌드 단계의 정확한 버전 검사, CI, 이벤트 등급 helper의 `engines`), npm `packageManager`는 12.2.3, Dockerfile 프런트엔드는 1.29.0입니다. ingress nginx 기반은 1.31.9로 올리고 이미지 태그를 `localhost/iris-stack-nginx:1.31.9-zlib1.4-r0`로 바꿨으며, Quadlet의 `NGINX_IMAGE`도 같은 태그를 가리킵니다. golang·distroless·node 기반 이미지 digest와 govulncheck 기본값(v1.10.0)을 갱신했습니다. ChatBotGo·TwentyQ가 쓰는 PostgreSQL 이미지는 `5e9b9b1f8` 빌드를 계속 요구하므로, 새 recipe는 다시 빌드하고 두 저장소의 provenance 값을 옮길 때 반영됩니다. Valkey 9.1.3은 스택 계약 고정값이라 그대로 둡니다.
 - **이벤트 등급 관측 소비:** alarm-worker가 지역별 관측을 한 건마다 트랜잭션을 열어 반영하던 방식을 바꿨습니다. 이제 최대 50건을 한 트랜잭션에서 순번대로 반영하고 소비 offset은 마지막에 한 번만 올립니다. 의미상 거부(SQLSTATE 22·23)는 지금처럼 그 관측만 건너뜁니다. 지원하지 않는 schema version 같은 오류로 중간에 멈추면 그 앞까지 반영한 결과는 커밋하고 오류를 보고합니다. 순번에 빈자리가 있으면 예전처럼 조용히 멈추지 않고 오류를 보고합니다.
 - **알림 발송 선점:** `ClaimDue`의 최종 UPDATE가 delivery의 최신 상태가 `pending`·`retry`인지 다시 확인합니다. 스냅샷을 잡은 뒤 멈춘 소비자가 다른 소비자가 이미 성공 정산한 행을 다시 `leased`로 바꾸고 같은 요청을 한 번 더 보낼 수 있던 경합(TLA+ `AlarmDispatchClaim`의 H1)을 막습니다. 운영 구성은 발송 worker가 하나여서 이 경합에 도달하지 않았습니다. 모델의 결함 설정(`AlarmDispatchClaimBug.cfg`)은 지우고 그 속성을 기본 설정에서 검사합니다.

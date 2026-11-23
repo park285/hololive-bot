@@ -552,7 +552,7 @@ make_case() {
     "${root}/state/images"
   printf '%s\n' "${REVISION}" >"${root}/opt/hololive-bot/compose/current/.source-revision"
   cp "${ROOT_DIR}/deploy/quadlet/hololive-bot/"*.container "${quadlet_dir}/"
-  printf 'HOLOLIVE_VALKEY_HA_ENABLED=1\n' >"${root}/etc/stack-secrets/hololive-bot/compose.env"
+  printf 'VALKEY_BIND_IP=100.100.1.8\n' >"${root}/etc/stack-secrets/hololive-bot/compose.env"
   if [[ "${with_dropin}" == true ]]; then
     mkdir -p "${quadlet_dir}/${service}.container.d"
     printf 'pair=baseline\n' >"${quadlet_dir}/${service}.container.d/50-worker-profile.conf"
@@ -1072,7 +1072,7 @@ for capacity_case in exhausted; do
   [[ -f "${api_release}/previous/profile.json" && -f "${worker_release}/previous/profile.json" ]] ||
     fail "capacity rejection discarded retained recovery pairs"
 done
-printf 'HOLOLIVE_VALKEY_HA_ENABLED=1\n' >"${root}/etc/stack-secrets/hololive-bot/compose.env"
+printf 'VALKEY_BIND_IP=100.100.1.8\n' >"${root}/etc/stack-secrets/hololive-bot/compose.env"
 api_release="$(coordinated_release "${root}" hololive-api)"
 worker_release="$(coordinated_release "${root}" hololive-alarm-worker)"
 FAKE_SERVER_EPOCH=new

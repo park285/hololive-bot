@@ -141,7 +141,7 @@ chmod +x "$test_root/bin/"*
 cat > "$test_root/compose.env" <<'ENV'
 HOLOLIVE_DB_PASSWORD=runtime-secret
 LIVE_LOGS_PATH=/var/log/hololive
-VALKEY_SENTINEL_ADDRS=100.100.1.3:26379
+VALKEY_BIND_IP=100.100.1.8
 HOLOLIVE_API_PORT_BIND_IP=100.100.1.8
 HOLOLIVE_ADMIN_API_PORT_BIND_IP=0.0.0.0
 HOLOLIVE_H3_SERVER_NAME=100.100.1.8
@@ -476,13 +476,13 @@ grep -qx 'HOLODEX_API_KEY=' "$fixture/service-input/hololive-api.env"
 for spec in \
     hololive-api:HOLOLIVE_DB_PASSWORD \
     hololive-api:LIVE_LOGS_PATH \
-    hololive-api:VALKEY_SENTINEL_ADDRS \
+    hololive-api:VALKEY_BIND_IP \
     hololive-api:HOLOLIVE_API_PORT_BIND_IP \
     hololive-api:HOLOLIVE_ADMIN_API_PORT_BIND_IP \
     hololive-api:HOLOLIVE_H3_SERVER_NAME \
     hololive-alarm-worker:HOLOLIVE_ALARM_WORKER_PASSWORD \
     hololive-alarm-worker:LIVE_LOGS_PATH \
-    hololive-alarm-worker:VALKEY_SENTINEL_ADDRS \
+    hololive-alarm-worker:VALKEY_BIND_IP \
     "$central_collector:$central_password_key" \
     "$central_collector:LIVE_LOGS_PATH"; do
     unit="${spec%%:*}" key="${spec#*:}"

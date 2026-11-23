@@ -37,7 +37,3 @@ type PlaneDependencies struct {
 type CoreIntegrationServices struct {
 	ACLService *acl.Service
 }
-
-type BotWebhookRuntimeDependencies struct {
-	Cache cache.LowLevelCache
-}

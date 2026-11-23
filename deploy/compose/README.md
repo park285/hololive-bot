@@ -162,10 +162,8 @@ release pair, not as extra keys or aliases in the new profile.
 
 - 다섯 소비자는 각 `go.mod`가 고정한 shared-go 판본과 공식 checksum을 씁니다.
   api·alarm-worker·shared는 `github.com/park285/iris-client-go/v5`를 직접,
-  collector는 간접 의존성으로 고정합니다. `hololive-api`만 webhook nonce 저장에 독립 모듈
-  `github.com/park285/iris-client-go/adapters/valkeydedup v1.0.0`을 요구합니다.
-  루트 SDK pin은 `v5.2.1`입니다. 운영 빌드에는 각 모듈의 정식 tag(어댑터는
-  `adapters/valkeydedup/v1.0.0`)와 공식 Go checksum이 필요하며, 로컬 `go.work`의 형제 소스로 대체하지 않습니다.
+  collector는 간접 의존성으로 고정합니다. 루트 SDK pin은 `v5.2.1`입니다.
+  운영 빌드에는 각 모듈의 정식 tag와 공식 Go checksum이 필요하며, 로컬 `go.work`의 형제 소스로 대체하지 않습니다.
   SDK v5는 H3 `GET /auth/epoch`를 지원하는 Iris와 같은 배포 창에서 교체하며,
   롤백도 인증 호환 조합으로 수행합니다. webhook v3와 inbox 저장 형식은 바꾸지 않습니다.
 - On kapu, run the owning release/pre-push gates and independent `GOWORK=off`
@@ -236,38 +234,13 @@ Rollback never writes the desired mirror or synthesizes removed keys; verify
 the restored loaded hash, not health alone. A known schema-incompatible old
 writer must stay stopped even when its profile CLI succeeds.
 
-## 중앙 Valkey 영속 TLS·Sentinel 전환
+## 중앙 Valkey
 
-중앙 Quadlet은 Valkey HA 노드(`valkey-cache.container`)와 Sentinel 접속만 정의합니다. `sync-opt-current.sh`는
-compose.env에 `HOLOLIVE_VALKEY_HA_ENABLED=1`과 비어 있지 않은 `VALKEY_SENTINEL_ADDRS`가 없으면 unit을 설치하지 않으며,
-옛 standalone/UDS나 Sentinel 없는 직접 TLS 단계의 정의는 남아 있지 않습니다.
-`VALKEY_BIND_IP=100.100.1.8`과 검증된 `VALKEY_IMAGE`를 지정합니다.
-`valkey-cache` 물리 슬롯은 `hololive-bot_valkey-ha-data`를 사용하며 역할은 native `/data/valkey.conf`가 소유합니다.
+API·alarm-worker는 `100.100.1.8:16379`에 TLS와 기존 개별 자격으로 직접 접속합니다. 먼저 이 주소가 실제 최신 쓰기 primary인지 검증합니다. replica면 중단합니다. 승격이나 `SENTINEL FAILOVER`로 맞추지 않습니다.
 
-두 그룹 primary와 각 복제본 2개의 초기 동기화를 수용하고 세 Sentinel/quorum 2를 확인한 뒤
-`VALKEY_SENTINEL_ADDRS=100.100.1.3:26379,100.100.1.8:26379,100.100.1.5:26379`를 설정합니다.
-앱 unit은 직접 host/socket을 비우고 master `hololive`, discovery 계정 `hololive-discovery`로 접속합니다.
-직접 endpoint fallback은 없습니다. worker profile drop-in(`50-worker-profile.conf`)은 image·profile 경로만 바꾸며
-`LIVE_LOGS_PATH`의 로그 bind는 기본 unit에 남습니다.
+메타 저장소의 `tools/ops/prepare-valkey-ha.py --group hololive --stage standalone-persistent`가 승인된 기존 정본(root 옵션)에서 앱·health·operator 비밀번호와 ACL verifier를 대조합니다. 신규 비밀번호나 기존 파일 교체는 없습니다. `deploy/valkey-ha/stage.py standalone-persistent hololive --source-run-id … --ha-fenced-direct-rw-verified`는 failback·Sentinel·replica 차단과 직접 읽기/쓰기 확인 후에만 사용합니다. `--valkey-only` 게시 뒤 별도 재기동해 동일 볼륨·AOF와 앱 동작을 확인합니다.
 
-secret 정본은 `stack-secrets/hosts/<host>/valkey/`와 각 host manifest입니다.
-서버 TLS·seed·ACL·복제·health 파일은 UID 999가 읽고, operator password는 호스트 root 전용입니다.
-앱은 자기 `valkey-api-password` 또는 `valkey-worker-password`와 공통 `valkey-discovery-password`만 개별 mount합니다.
-새 leaf는 기존 내부 CA로 host tailnet IP 및 health의 `127.0.0.1` SAN을 포함해 발급합니다.
-개인키·전체 env·인증 암호를 출력하거나 CA 개인키를 host로 전송하지 않습니다.
-
-`iris-stack/deploy/valkey-ha/`는 중앙의 반대 그룹 replica, kt032의 Hololive replica,
-kapu의 두 replica와 세 Sentinel을 관리합니다. 초기 standalone stage에는 `sentinel` profile이 없습니다.
-복제 수용 뒤 seed 정본·native runtime의 replica write gate를 1/5초로 맞추고 `CONFIG REWRITE`한 다음
-host profile에 `sentinel`을 추가합니다. 준비 중에는 unit을 enable하지 않으며
-최초 기동 시 `--wait`/PING을 full-sync·lineage·offset·TTL 보존의 대체 증거로 사용하지 않습니다.
-
-기존 메모리-only 원본은 writer 정지와 승인된 임시 replication donor를 거쳐 영속 volume으로 옮깁니다.
-원본→donor의 기존 plaintext/auth 경로와 donor→영속 노드의 TLS/replication-auth 경로를 구분합니다.
-앱 재개 뒤에는 과거 donor·빈 AOF·이전 비영속 정의로 데이터 rollback하지 않습니다.
-최신 데이터와 호환되는 image/profile/transport로 복구하며 기존 PostgreSQL 포함 unit은 유지합니다.
-비동기 복제·AOF everysec·min-replicas는 무손실 동기 커밋이나 외부 부수효과 fencing이 아닙니다.
-정기 백업 중단 정책은 변경하지 않습니다.
+PG nonce 원장과 [구 수신기 차단·유효창](../../docs/current/runbooks/release.md#iris-webhook-nonce-저장소-전환), 신규 API의 서명 재사용 거부 및 worker의 PG 대기 작업 처리를 확인한 뒤에만 `stage.py ephemeral hololive --source-run-id … --old-writers-fenced --last-legacy-receiver-at <마지막 드레인 epoch> --clock-error-seconds <실측 최대 오차> --application-cutover-verified`를 선택합니다. 재기동한 최종 캐시는 AOF·자동 RDB가 없고 `/data`는 빈 읽기 전용 tmpfs입니다. 옛 볼륨을 마운트하거나 삭제하지 않으며 최종 앱의 첫 쓰기 이후 이를 단순 재생하지 않습니다.
 
 ## Runtime Env Inputs
 

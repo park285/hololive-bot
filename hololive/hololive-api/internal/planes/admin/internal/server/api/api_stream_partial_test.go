@@ -133,10 +133,9 @@ func newMiniredisCache(t *testing.T, mini *miniredis.Miniredis) cache.Client {
 	}
 
 	cacheClient, err := cache.NewCacheService(t.Context(), cache.Config{
-		Host:              host,
-		Port:              port,
-		DisableCache:      true,
-		ForceSingleClient: true,
+		Host:         host,
+		Port:         port,
+		DisableCache: true,
 	}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("NewCacheService() error = %v", err)

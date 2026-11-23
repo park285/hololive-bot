@@ -2,7 +2,6 @@ go 1.27.4
 
 use (
 	../iris-client-go
-	../iris-client-go/adapters/valkeydedup
 	../shared-go
 	../shared-go/core
 	../shared-go/postgres
@@ -13,8 +12,6 @@ use (
 	./hololive/hololive-dbtest
 	./hololive/hololive-shared
 )
-
-replace github.com/park285/iris-client-go/adapters/valkeydedup v1.0.0 => ../iris-client-go/adapters/valkeydedup
 
 replace github.com/park285/shared-go/v2 v2.25.0 => ../shared-go
 

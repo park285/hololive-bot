@@ -30,10 +30,9 @@ func outageService(t *testing.T) (*Service, *bytes.Buffer) {
 	logger := slog.New(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	service, err := NewCacheService(t.Context(), Config{
-		Host:              host,
-		Port:              port,
-		DisableCache:      true,
-		ForceSingleClient: true,
+		Host:         host,
+		Port:         port,
+		DisableCache: true,
 	}, logger)
 	if err != nil {
 		t.Fatalf("NewCacheService: %v", err)

@@ -33,7 +33,7 @@ func TestShadowStateRetirementRequiresConsumedEventGradeObservations(t *testing.
 			kept := lines[:0]
 
 			for _, line := range lines {
-				if !strings.HasPrefix(line, "005 ") {
+				if version, _, _ := strings.Cut(line, " "); version <= "004" {
 					kept = append(kept, line)
 				}
 			}
@@ -66,5 +66,5 @@ func TestShadowStateRetirementRequiresConsumedEventGradeObservations(t *testing.
 
 	result, err := Run(t.Context(), pool, migrations.FS, Config{})
 	require.NoError(t, err)
-	require.Equal(t, 1, result.Applied)
+	require.Equal(t, 2, result.Applied)
 }

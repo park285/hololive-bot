@@ -253,7 +253,7 @@ case "$target" in
         esac
         ;;
     hololive-alarm-worker)
-        require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS
+        require_values LIVE_LOGS_PATH VALKEY_BIND_IP
         validate_container_env_file "${secrets_dir}/alarm-worker.env"
         if [[ "$render_env" == false ]]; then
             wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
@@ -263,7 +263,7 @@ case "$target" in
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     hololive-api)
-        require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS \
+        require_values LIVE_LOGS_PATH VALKEY_BIND_IP \
             HOLOLIVE_API_PORT_BIND_IP HOLOLIVE_ADMIN_API_PORT_BIND_IP HOLOLIVE_H3_SERVER_NAME
         validate_container_env_file "${secrets_dir}/bot.env"
         if [[ "$render_env" == false ]]; then

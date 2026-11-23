@@ -363,11 +363,10 @@ func newTestCommandAdmissionPolicy(t *testing.T) (*commandAdmissionPolicy, *atom
 	}
 
 	cacheClient, err := cache.NewCacheService(t.Context(), cache.Config{
-		Host:              host,
-		Port:              port,
-		DB:                0,
-		DisableCache:      true,
-		ForceSingleClient: true,
+		Host:         host,
+		Port:         port,
+		DB:           0,
+		DisableCache: true,
 	}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("new cache service: %v", err)

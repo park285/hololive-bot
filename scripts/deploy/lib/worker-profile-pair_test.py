@@ -538,7 +538,7 @@ class ResolvedPairTest(unittest.TestCase):
             "PATH": os.environ["PATH"],
             "HOLOLIVE_QUADLET_TEST_ROOT": str(self.root),
             "LIVE_LOGS_PATH": str(self.root / "logs"),
-            "VALKEY_SENTINEL_ADDRS": "sentinel.invalid:26379",
+            "VALKEY_BIND_IP": "127.0.0.1",
             "HOLOLIVE_API_PORT_BIND_IP": "127.0.0.1",
             "HOLOLIVE_ADMIN_API_PORT_BIND_IP": "127.0.0.1",
             "HOLOLIVE_H3_SERVER_NAME": "api.example.test",

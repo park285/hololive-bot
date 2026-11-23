@@ -56,7 +56,7 @@ deployment baseline for the terminated Osaka VM (its boot volume was deleted on
 | `holo-postgres` | PostgreSQL data store | Bridge-networked PostgreSQL (`hololive-net`); publishes `${POSTGRES_PORT_BIND_IP}:5433` to container `5432`; `ssl=on`; `iris-stack internal CA` server cert mounted read-only from `/etc/stack-secrets/hololive-bot/postgres-tls/` at `/run/hololive-bot/postgres-tls/` |
 | `holo-pgbouncer` | 퇴역 중인 transaction pooler | 저장소에 unit이 없습니다. 운영에 남은 인스턴스는 [퇴역 전환 절차](../../deploy/quadlet/README.md#pgbouncer-퇴역-전환)로 정지합니다. 앱은 [직접 TLS](../../deploy/quadlet/README.md#postgresql-직접-tls-접속)로 접속합니다 |
 | `hololive-db-migrate` | Migration bootstrap/apply job | One-shot unit with `Network=none` and an isolated admin Unix socket volume; no TCP admin/migrator route. Production activation is recorded separately in the deployment baseline |
-| `valkey-cache` | Valkey HA node (hololive group) | TLS TCP `${VALKEY_BIND_IP}:16379`; apps discover the primary through Sentinel |
+| `valkey-cache` | Ephemeral cache and wakeups | Direct TLS `${VALKEY_BIND_IP}:16379`; PostgreSQL owns webhook nonces and dispatch state |
 | `hololive-youtube-po-c` / `hololive-youtube-po-b` | Isolated PO issuer for central / Seoul collectors | Private Unix sockets; native Osaka uses `hololive-youtube-po.service`; kapu `d` uses `hololive-youtube-po-d.service` |
 | `admin-dashboard-ingress` | Central shortlink ingress (the web runs on iris-seoul) | Not part of the 3 app runtime set |
 

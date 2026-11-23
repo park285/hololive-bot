@@ -3,8 +3,9 @@ set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 image="localhost/hololive-postgres-test:ci-$$"
+valkey_image="localhost/hololive-valkey-test:ci-$$"
 cleanup() {
-  podman image rm "$image" >/dev/null 2>&1 || true
+  podman image rm "$image" "$valkey_image" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -17,3 +18,6 @@ podman run --rm --platform linux/amd64 --security-opt label=disable --network no
   --mount "type=bind,src=$root_dir/deploy/images/postgres/test.sh,dst=/test.sh,readonly" \
   -e PGDATA=/var/lib/postgresql/testdata -e POSTGRES_HOST_AUTH_METHOD=trust \
   "$image" sh /test.sh
+
+podman build --platform linux/amd64 --build-arg REVISION=test --tag "$valkey_image" "$root_dir/deploy/images/valkey"
+bash "$root_dir/deploy/images/valkey/test.sh" "$valkey_image"

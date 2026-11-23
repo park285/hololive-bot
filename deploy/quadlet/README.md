@@ -21,7 +21,7 @@ Quadlet으로 운영합니다. iris-seoul collector b는 같은 방식의 별도
 | unit | 컨테이너 | 비고 |
 | --- | --- | --- |
 | `holo-postgres.container` | `holo-postgres` | 권위 primary. `admin-dashboard-ingress-firewall.service`를 Requires |
-| `valkey-cache.container` | `valkey-cache` | Valkey HA hololive 그룹 노드. 역할은 `/data/valkey.conf`가 소유 |
+| `valkey-cache.container` | `valkey-cache` | 중앙 TLS 서버. 서비스별 단계 승인이 없으면 설치·기동하지 않음 |
 | `hololive-db-migrate.container` | `hololive-db-migrate` | one-shot. `[Install]` 없음 |
 | `hololive-alarm-worker.container` | `hololive-alarm-worker` | 알림 dispatcher(단일 인스턴스) |
 | `hololive-api.container` | `hololive-api` | bot/admin/YouTube plane |
@@ -49,7 +49,8 @@ sudo ./scripts/deploy/sync-opt-current.sh
 설치 도구는 다음을 확인한 뒤에만 unit을 설치합니다.
 
 - hostname이 `kapu`이면 `HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1` 없이 거부합니다(두 번째 dispatcher 방지).
-- `compose.env`에 `HOLOLIVE_VALKEY_HA_ENABLED=1`과 비어 있지 않은 `VALKEY_SENTINEL_ADDRS`가 있어야 합니다.
+- `compose.env`의 `VALKEY_BIND_IP=100.100.1.8`을 API·alarm-worker가 TLS 직접 접속에 사용합니다. 전환 전에 이 주소의 `16379`가 최신 쓰기 primary인지 확인합니다.
+- 앱 배포와 별개로 구 중앙 primary의 ACL·AOF와 실제 볼륨을 확인한 다음, `sudo ./scripts/deploy/sync-opt-current.sh --valkey-only`로 이 unit 하나만 교체할 수 있습니다. 서비스의 재기동·단계 승인은 수행하지 않고, 앱·DB·기존 데이터·실행 트리·백업을 변경하지 않습니다. [영속 단계와 최종 캐시](../compose/README.md#중앙-valkey)를 구분하십시오.
 - `HOLOLIVE_X_SPACES_ENABLED`·`HOLOLIVE_SCHEDULE_POSTER_ENABLED`·`HOLOLIVE_SCHEDULE_POSTER_REVIEW_ENABLED`·`HOLOLIVE_BROADCAST_TYPE_DECISION_ENABLED`·`HOLOLIVE_EVENT_GRADE_ENABLED`는 `0` 또는 `1`이며, 그 값에 따라 각 선택 기능 drop-in을 설치하거나 지웁니다.
 - `compose.env`의 PostgreSQL pool 값이 연결 예산(`scripts/deploy/lib/postgres-capacity.sh`)을 넘으면 거부합니다.
 - 설치 전에 설치 뒤와 같은 구성(staged unit, 켜진 선택 기능 drop-in, 설치 도구가 건드리지 않는 기존 drop-in)이
@@ -82,7 +83,7 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
   이 창의 one-shot은 여섯 업무 역할의 로그인 비밀번호와 연결 한도를 변경하지 않습니다. 배포 이미지의 `db-migrate`는 창 전용 인자가 빠지면 DB 접속 전에 거부합니다. 신규 DB의 별도 초기화에서만 같은 이미지의 `--initialize`를 명시하며, 운영 one-shot은 `--schema-only`입니다.
   `--schema-only`가 대기 migration을 적용하려면 같은 트랜잭션에서 writer drain 가드의 superuser 세션과 그 advisory lock, login 게이트, 업무 역할 세션 0건이 모두 확인돼야 합니다. migrator 세션은 확인보다 먼저 `hololive-migration-window` 표식을 달고 통계 snapshot을 비운 뒤 확인하므로, 확인과 표식 사이에 가드가 끊겨도 그 틈에 로그인한 writer는 확인에서 드러납니다. 게이트는 가드 세션이 끊겨도 이 세션이 끝날 때까지 업무 역할 로그인을 막습니다.
   같은 비밀번호이면 기존 SCRAM verifier를 유지합니다. 실제 비밀번호를 바꿀 때는 해당 역할의 모든 앱 frontend를 먼저 drain·종료해야 하며, 비밀번호 변경 자체가 기존 세션을 폐기하지는 않습니다.
-- compose에서 `:?`였던 필수 값(`VALKEY_SENTINEL_ADDRS`, `LIVE_LOGS_PATH`,
+- compose에서 `:?`였던 필수 값(`LIVE_LOGS_PATH`,
   `POSTGRES_PORT_BIND_IP`, `VALKEY_BIND_IP`, `HOLOLIVE_API_PORT_BIND_IP`, `HOLOLIVE_ADMIN_API_PORT_BIND_IP`,
   `HOLOLIVE_BOT_PORT_BIND_IP`)은 prestart가 확인합니다. tailnet publish 주소는 `tailscale0`에 붙을 때까지 90초 기다립니다.
 - `hololive-api`의 `APP_VERSION`은 배포 트리 `hololive/hololive-api/VERSION`에서 읽습니다.
@@ -155,7 +156,7 @@ PgBouncer 경로로 운영 중인 배포를 직접 TLS로 옮기는 절차입니
   기본 90초가 끊지 않게 합니다.
 - `Tmpfs=`에는 `noexec,nosuid,nodev`를 적습니다. Podman은 옵션을 준 `--tmpfs`에 Docker처럼 이 옵션을 붙이지 않습니다.
 - 런타임 peer(PostgreSQL·Valkey·worker)는 `Wants=`+`After=`입니다. `Requires=`는 명시적 stop/restart를
-  소비자에게 전파해 primary fence(소비자 유지)와 Sentinel HA를 깨뜨리기 때문입니다.
+  소비자에게 전파해 primary fence(소비자 유지)를 깨뜨리기 때문입니다.
   보안 전제인 `admin-dashboard-ingress-firewall.service`와 migration의 PostgreSQL 의존만 `Requires=`입니다.
 - 방화벽 규칙 갱신은 `sudo systemctl reload admin-dashboard-ingress-firewall.service`로만 합니다. reload는 table
   선언·삭제·재정의를 한 nft transaction으로 적용해 규칙이 빈 순간이 없고, 새 파일이 거부되면 기존 table이 남습니다.

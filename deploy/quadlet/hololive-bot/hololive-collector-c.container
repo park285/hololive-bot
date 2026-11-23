@@ -3,8 +3,6 @@
 # compose.env의 HOLOLIVE_DISABLE_COLLECTOR=1이면 ExecCondition이 기동을 건너뛴다.
 [Unit]
 Description=Hololive central collector c
-# 런타임 peer는 Wants=로만 끌어온다. Requires=는 명시적 stop/restart를 전파해 primary fence(소비자 유지)와
-# Sentinel HA(로컬 노드 교체)를 깨뜨린다.
 Wants=holo-postgres.service
 After=holo-postgres.service tailscaled.service
 ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent

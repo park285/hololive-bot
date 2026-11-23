@@ -14,14 +14,16 @@ die() { printf '[sync-opt-current] ERROR: %s\n' "$*" >&2; exit 1; }
 preserve_runtime=false
 application_only=false
 source_base=
+valkey_only=false
 case "$#:${1:-}" in
   0:) ;;
+  1:--valkey-only) valkey_only=true ;;
   1:--preserve-runtime) preserve_runtime=true ;;
   1:--application-only) application_only=true; preserve_runtime=true ;;
   2:--source-only)
     [[ "$2" =~ ^[0-9a-f]{40}$ ]] || die "source-only requires the full installed commit"
     source_base="$2"; application_only=true; preserve_runtime=true ;;
-  *) die "usage: $0 [--preserve-runtime | --application-only | --source-only <installed-commit>]" ;;
+  *) die "usage: $0 [--valkey-only | --preserve-runtime | --application-only | --source-only <installed-commit>]" ;;
 esac
 
 [[ "$(id -u)" -eq 0 ]] || die "must run as root (sudo)"
@@ -47,6 +49,28 @@ assert_clean "$REPO_ROOT" "repo"
 HEAD_REVISION="$(git -C "$REPO_ROOT" rev-parse --verify 'HEAD^{commit}')"
 HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse --short "$HEAD_REVISION")"
 log "repo=$REPO_ROOT HEAD=$HEAD_SHA -> $OPT_CURRENT"
+if [[ $valkey_only == true ]]; then
+  python3 -I /opt/iris-stack/valkey-ha/stage.py selected hololive || die "Valkey standalone stage is not admitted"
+  unit=valkey-cache.container
+  target="$QUADLET_DIR/$unit"
+  [[ -f $target && ! -L $target && $(realpath -e "$target") == "$target" && ! -e $target.d && ! -L $target.d ]] ||
+    die "expected an existing Valkey unit without overrides"
+  [[ -x $LIBEXEC_DIR/quadlet-prestart ]] || die "installed Quadlet prestart missing"
+  scratch=$(mktemp -d /run/.hololive-valkey-unit.XXXXXX)
+  candidate=
+  trap 'rm -rf -- "$scratch"; [[ -z $candidate ]] || rm -f -- "$candidate"' EXIT
+  mkdir "$scratch/units"
+  cp -a "$QUADLET_DIR/." "$scratch/units/"
+  install -m0644 "$REPO_ROOT/deploy/quadlet/hololive-bot/$unit" "$scratch/units/$unit"
+  QUADLET_UNIT_DIRS="$scratch/units" /usr/libexec/podman/quadlet -dryrun >/dev/null || die "Valkey unit rejected"
+  candidate=$(mktemp "$QUADLET_DIR/.valkey-candidate.XXXXXX")
+  install -m0644 "$scratch/units/$unit" "$candidate"
+  mv -T -- "$candidate" "$target"
+  candidate=
+  systemctl daemon-reload || die "Valkey unit published; daemon-reload outcome unknown"
+  log "Valkey unit published without a service restart"
+  exit 0
+fi
 if [[ -n "$source_base" ]]; then
   [[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=all)" ]] || die "source-only requires a clean checkout"
   if ! { [[ -f "$OPT_CURRENT/.source-revision" && ! -L "$OPT_CURRENT/.source-revision" ]] &&
@@ -80,6 +104,7 @@ backup_current() {
 }
 
 if [[ "$application_only" != true ]]; then
+  python3 -I /opt/iris-stack/valkey-ha/stage.py selected hololive || die "Valkey standalone stage is not admitted"
   backup_current
 fi
 
@@ -255,8 +280,7 @@ env_value() {
     compose_env_read_value_from_file "$COMPOSE_ENV" "$1"
   fi
 }
-[[ "$(env_value HOLOLIVE_VALKEY_HA_ENABLED)" == 1 ]] || die "HOLOLIVE_VALKEY_HA_ENABLED=1 is required in $COMPOSE_ENV"
-[[ -n "$(env_value VALKEY_SENTINEL_ADDRS)" ]] || die "VALKEY_SENTINEL_ADDRS is required in $COMPOSE_ENV"
+[[ "$(env_value VALKEY_BIND_IP)" == 100.100.1.8 ]] || die "VALKEY_BIND_IP must select the central Valkey endpoint"
 OPTIONAL_FEATURES=(
   "x-spaces|HOLOLIVE_X_SPACES_ENABLED|40-x-spaces.conf|hololive-api hololive-alarm-worker"
   "schedule-poster|HOLOLIVE_SCHEDULE_POSTER_ENABLED|41-schedule-poster.conf|hololive-api"

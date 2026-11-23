@@ -46,9 +46,20 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
 계약 변경, `PATCH`는 하위 호환 수정·보안·운영 안정화·의존성 갱신에 씁니다. 단계 판단이 갈리면 낮은
 단계를 고릅니다. 지운 `CHANGELOG.md` 구간은 Git 이력과 tag에 남으며 추정 버전을 소급하지 않습니다.
 
+### Iris webhook nonce 저장소 전환
+
+구 Valkey 판정과 신규 PostgreSQL 판정은 한 요청을 각각 처음 보는 것으로 처리할 수 있습니다. 키 복사나 이중 쓰기 대신, 승인된 정비 창에서 다음 순서로 서명 유효창을 닫습니다.
+
+1. 송신을 일시 중단하고 `/webhook/iris`의 모든 유입 경로(직접 H3 포함)를 닫습니다. 모든 구 API 인스턴스의 진행 중 요청을 드레인하고 종료를 확인합니다. 재시작·자동 복구·다른 슬롯을 통한 재기동도 차단합니다. Valkey는 그대로 둡니다. 마지막으로 구 세대가 승인할 수 있었던 시각이 확인되지 않으면 창을 열지 않습니다.
+2. 검증한 복구점을 확보하고 기존 보호 endpoint·migrator로 `--schema-only`를 적용합니다. `--check`로 `006_epoch4_bot_webhook_nonces.sql`까지 양쪽 원장·권한·실물 검사를 통과해야 합니다. 운영 계정·ACL을 임시로 넓히거나 기존 원장 및 cache 키를 지우지 않습니다.
+3. 마지막 드레인 확인 이후 **10분을 초과**해 기다립니다. 서명 timestamp는 당시 시각보다 최대 5분 앞설 수 있고 그 시각 이후 5분까지 유효하므로, 5분 대기만으로는 부족합니다. 송·수신 시계 동기화와 인스턴스 간 시각 오차를 확인하고 오차만큼 여유를 둡니다. 시계가 역행하거나 구 writer가 다시 떴으면 hold를 유지하고 기준점을 다시 잡습니다.
+4. 같은 DB·006 head를 쓰는 신규 API만 시작합니다. 준비 상태와 실행 revision, 구 세대 차단 상태를 확인한 뒤 ingress와 송신을 엽니다. 같은 서명은 한 번만 승인되고 판정 불능은 503이어야 합니다. Valkey의 nonce를 조회하거나 복원하지 않습니다.
+
+**롤백:** 신규 API가 한 번이라도 서명을 판정했거나 판정 여부가 불명이면 구 API를 바로 열지 않습니다. 방향을 바꿔 1·3단계를 반복해 **모든 신규 writer**를 격리하고 유효창을 닫은 뒤, 이전 버전의 Valkey 원자적 선점 및 비축출·가용성 조건이 복원된 경우에만 구 세대를 단독 재개합니다. 휘발·축출 가능한 cache 설정을 그대로 쓰는 구 코드로 되돌리지 않습니다. DB 원장·migration을 되돌리거나 삭제하지 않습니다. PG 복구로 최신 nonce의 보존 여부가 불명일 때도 같은 격리 창이 필요합니다.
+
 ### 19.2.1 의존성 수용 기준
 
-- 다섯 모듈을 각각 `GOWORK=off`로 검사합니다. API의 `adapters/valkeydedup/v1.0.0`은 새 모듈 캐시에서 공개 프록시와 `sum.golang.org`로 ZIP·`go.mod`가 모두 기존 `go.sum`과 일치해야 합니다. 형제 checkout이나 오프라인 동기화 결과만으로 릴리스를 수용하지 않습니다.
+- 다섯 모듈을 각각 `GOWORK=off`로 검사합니다. 릴리스 빌드는 형제 checkout이 아니라 각 모듈의 `go.mod`와 `go.sum`에 고정된 공개 의존성을 사용합니다.
 - Hololive는 `shared-go/postgres`의 `pgxdb`를 쓰지만 `pgstore.Store`는 쓰지 않습니다. API는 `bot_webhook_inbox`와 `bot_webhook_heads`를 소유합니다. 격리 PostgreSQL에서 `internal/planes/bot/internal/durability`의 `TestInboxTransitionsMoveTheOrderingHeadOnlyWhenTerminal`로 재시도 중 head 유지와 종단 뒤 다음 행 처리를 확인합니다. nonce 중복·오류 처리, Gemini 일정표 처리, collector/PO issuer와 worker 회귀도 확인합니다.
 - 공용 `pgstore`를 실제로 쓰는 소비자만 [postgres/v1.0.3 전환·롤백 조건](https://github.com/park285/shared-go/blob/postgres/v1.0.3/README.md#inbox-수락-순서)을 따릅니다. `(scope, ordering_key)`별 수락 ID FIFO, 시퀀스 증가폭 1·`CACHE 1`·`NO CYCLE`, 기존 인덱스 보존과 `idx_iris_webhook_inbox_head_by_id` 추가가 전제입니다. 수락·claim·만료 복구를 멈추고 진행 중 트랜잭션이 끝난 뒤 미종단 `pending`·`processing`의 기존/신규 head 불일치 또는 비선두 processing이 0행이어야 합니다. 두 claim 구현을 섞지 않습니다. 이 조건을 Hololive 테이블에 적용하거나 운영 변경 승인으로 해석하지 않습니다.
 - 빌드 호스트에서 같은 clean revision과 `19.2.1`로 API·alarm-worker·collector/PO 산출물을 식별합니다. 중앙 API·alarm-worker는 아래 절차로 교체하고, AP는 슬롯별 런북과 승인 범위에 따라 collector·issuer를 한 쌍으로 수용합니다. 소스 게시와 운영 수용은 별도 증거로 남기며 새 DB migration, DB 재시작이나 승인 없는 rollback은 수행하지 않습니다.

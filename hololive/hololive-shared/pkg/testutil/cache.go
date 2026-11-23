@@ -25,11 +25,10 @@ func NewTestCacheServiceWithMini(ctx context.Context, t *testing.T) (*cache.Serv
 	host, port, mini := testredis.StartMiniRedis(t)
 
 	service, err := cache.NewCacheService(ctx, cache.Config{
-		Host:              host,
-		Port:              port,
-		DB:                0,
-		DisableCache:      true,
-		ForceSingleClient: true,
+		Host:         host,
+		Port:         port,
+		DB:           0,
+		DisableCache: true,
 	}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		mini.Close()
