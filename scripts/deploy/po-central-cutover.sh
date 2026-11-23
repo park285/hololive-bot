@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 [[ "$(hostname -s)" == kapu ]] || { echo 'image build/export is restricted to kapu' >&2; exit 1; }
-usage() { echo "Usage: $0 <c|b> deploy | c quiesce | <c|b> quiesce-verified|verify-pair <local-pair-dir> <trusted-transport-sha256> | b preflight|quiesce|resume|check|rollback <clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir> | <c|b> resume|rollback|check <card-backup>" >&2; exit 2; }
-[[ $# -ge 2 && $# -le 7 ]] || usage
+usage() { echo "Usage: $0 <c|b> deploy | c quiesce | <c|b> quiesce-verified|verify-pair <local-pair-dir> <trusted-transport-sha256> | b preflight|quiesce <clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir> <prepared-resume-grant> | b resume|check|rollback <clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir> | <c|b> resume|rollback|check <card-backup>" >&2; exit 2; }
+[[ $# -ge 2 && $# -le 8 ]] || usage
 slot="$1"
 shift
 . "$root/scripts/deploy/lib/collector-slots.sh"
@@ -40,7 +40,10 @@ mode="$1"
 verified_pair='' backup_prefix="card-po-$slot"
 remote_mode="$mode" seal=-
 if [[ "$slot" == b && ( "$mode" =~ ^(preflight|quiesce)$ || ( "$mode" =~ ^(resume|check|rollback)$ && $# != 2 ) ) ]]; then
-  [[ $# == 6 && "$4" =~ ^[0-9]{8}T[0-9]{6}Z$ && "$5" =~ ^[0-9a-f]{32}$ ]] || usage
+  b_args=6
+  if [[ "$mode" =~ ^(preflight|quiesce)$ ]]; then b_args=7; fi
+  [[ $# == "$b_args" && "$4" =~ ^[0-9]{8}T[0-9]{6}Z$ && "$5" =~ ^[0-9a-f]{32}$ ]] || usage
+  resume_grant="${7-}"
   [[ "${!ssh_var:-}" == iris-seoul ]]
   case "$mode" in
     rollback) [[ "${!rollback_var:-}" == true ]] || exit 2 ;;
@@ -147,6 +150,11 @@ if [[ "$slot" == b && ( "$mode" =~ ^(preflight|quiesce)$ || ( "$mode" =~ ^(resum
     [[ -f "$grant" && ! -L "$grant" && "$(stat -c '%u:%a:%h' "$grant")" == "$EUID:600:1" ]] || { echo 'window grant withdrawn or replaced' >&2; exit 1; }
     cmp -s -- "$grant" <(printf '%s\n' "$expected_grant") || { echo 'window grant withdrawn or replaced' >&2; exit 1; }
     (( EPOCHSECONDS < expires ))
+    if [[ "$grant_phase" == quiesce ]]; then
+      (( expires - EPOCHSECONDS >= 3600 )) || { echo 'quiesce grant must stay valid for at least an hour so the same expiry covers b resume' >&2; exit 1; }
+      cmp -s -- "$resume_grant" <(printf '%s\n' "${expected_grant/ quiesce / resume }") ||
+        { echo 'prepared resume grant must be this quiesce grant with only its phase changed to resume' >&2; exit 1; }
+    fi
     if [[ "$mode" == preflight ]]; then
       printf 'collector b preflight: source=%s seal=%s window=%s\n' "$revision" "$seal" "$window"
       exit 0

@@ -52,12 +52,12 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
 
 1. 정지·재개 입력을 승인 기록에서 확보합니다. 하나라도 없거나 확인되지 않으면 창을 열지 않습니다. 네 도구는 직접 TLS 원점(a·b·d `100.100.1.8:5433`, c `holo-postgres:5432`)만 받으므로, 네 슬롯이 모두 이 원점에서 실행 중인지도 확인합니다.
    - d: kapu에 푼 카드 산출물 트리 `release`, 새 `hold` 경로, 다섯 인수 `candidate`([kapu 절차](../../../deploy/podman/kapu/README.md))
-   - b: 다섯 인자 `B_ARGS=(<clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir>)`([iris-seoul 절차](../../../deploy/podman/iris-seoul/README.md)). kapu의 영수증 디렉터리(실행 사용자 소유 0700, 심볼릭 링크 없는 절대 경로로 지정)에 b staging이 남긴 `arm64/` archive와 `b.stage.<b-staging-timestamp>.finished`(`<revision> <seal> <b-staging-timestamp>` 한 줄), 승인 주체가 쓴 정지 grant `b.current-grant`가 있어야 합니다. 승인 주체는 grant를 게시하거나 회수할 때 5단계처럼 영수증 디렉터리의 `receipts.lock`을 `flock -n`으로 잡습니다. `b quiesce`·`b resume`은 같은 잠금을 잡은 뒤 grant를 다시 검증하고 소비합니다. 영수증 파일은 모두 실행 사용자 소유 0600 일반 파일입니다. grant는 하드 링크 1개인 한 줄 `PO_B_PAIR_V1 iris-seoul <owner-window-id> quiesce <b-staging-timestamp> <tool-revision> <revision> <seal> <origin-revision> <origin-collector-id> <origin-issuer-id> <origin-digest> <expires>`입니다. 재개 grant는 `quiesce`만 `resume`으로 바꾼 같은 줄이어야 하므로 `expires`(Unix 초)는 첫 정지부터 5단계의 b 재개까지(4단계 대기와 앞선 슬롯 재개 포함)를 덮어야 합니다. 재개 grant는 `B_RESUME_GRANT` 파일로 따로 준비해 두고 5단계에서만 게시합니다.
+   - b: 다섯 인자 `B_ARGS=(<clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir>)`([iris-seoul 절차](../../../deploy/podman/iris-seoul/README.md)). kapu의 영수증 디렉터리(실행 사용자 소유 0700, 심볼릭 링크 없는 절대 경로로 지정)에 b staging이 남긴 `arm64/` archive와 `b.stage.<b-staging-timestamp>.finished`(`<revision> <seal> <b-staging-timestamp>` 한 줄), 승인 주체가 쓴 정지 grant `b.current-grant`가 있어야 합니다. 승인 주체는 grant를 게시하거나 회수할 때 5단계처럼 영수증 디렉터리의 `receipts.lock`을 `flock -n`으로 잡습니다. `b quiesce`·`b resume`은 같은 잠금을 잡은 뒤 grant를 다시 검증하고 소비합니다. 영수증 파일은 모두 실행 사용자 소유 0600 일반 파일입니다. grant는 하드 링크 1개인 한 줄 `PO_B_PAIR_V1 iris-seoul <owner-window-id> quiesce <b-staging-timestamp> <tool-revision> <revision> <seal> <origin-revision> <origin-collector-id> <origin-issuer-id> <origin-digest> <expires>`입니다. 재개 grant는 `quiesce`만 `resume`으로 바꾼 같은 줄이어야 하므로 `expires`(Unix 초)는 첫 정지부터 5단계의 b 재개까지(4단계 대기와 앞선 슬롯 재개 포함)를 덮어야 합니다. 재개 grant는 `B_RESUME_GRANT` 파일로 따로 준비해 두고 5단계에서만 게시합니다. `b preflight`와 `b quiesce`는 이 파일을 여섯째 인자로 받아, 검증한 정지 grant에서 `quiesce`만 `resume`으로 바꾼 줄이 아니면 거부합니다.
    - a: `OLD`, `RELEASE_ID`, `HOLO_BOT_VERSION`, `ARTIFACT_DIR`, 승인 기록의 `HOLO_NATIVE_PAYLOAD_SHA256`, `I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true`([W3 정지 창](collector.md#osaka-a-분리-정지-창))
    - c: 검증한 pair 디렉터리 `C_PAIR`, 승인된 transport SHA-256 `C_SEAL`, 승인된 SSH 대상 `C_HOST`
    - 중앙: 같은 revision으로 설치한 API·alarm-worker 후보 image ID `API_ID`, `WORKER_ID`(`sha256:<64자리>`)
 
-   무엇이든 멈추기 전에 b staging 후보와 c 후보가 같은지 이 release의 clean checkout에서 대조합니다. b는 staging한 revision·seal과 `B_ARGS[0]` checkout으로, c는 이 checkout의 revision과 `C_PAIR`·`C_SEAL`로 재개되므로 하나라도 다르면 c·a를 재개한 뒤에야 b 재개가 거절됩니다. `c verify-pair`는 c `quiesce-verified`와 같은 기준(seal, 전송할 파일이 모두 심볼릭 링크가 아닌 일반 파일인지, 두 image archive의 체크섬과 원격이 받는 체크섬 줄 형식, arm64 manifest, 이 checkout의 VERSION 형식과 source 목록)으로 `C_PAIR`를 읽기만 하며 SSH를 열지 않습니다. `b preflight`는 같은 다섯 인자로 `b quiesce`가 grant를 소비하기 전까지의 검사(두 checkout, 영수증 디렉터리 경로·권한, staging 영수증, 정지 grant와 그 만료, 이 stage·창의 정지 요청 표식이 없는지, W2 pair, `${B_ARGS[1]}/arm64`가 심볼릭 링크 없는 일반 파일인지와 seal·체크섬, source 목록, VERSION)를 그대로 실행하고, grant를 소비하거나 SSH를 열지 않고 끝납니다. 이전 창의 `c.accepted`가 영수증 디렉터리에 남아 있으면 그 창의 b 재개 완료 영수증 `b.<이전-owner-window-id>.resume.finished`를 확인한 뒤 `ln -T -- c.accepted c.accepted.<이전-b-staging-timestamp>`로 보존하고 원래 이름을 지웁니다. 완료 영수증이 없으면 창을 열지 않습니다. 아래 검사는 `c.accepted`가 없어야 통과합니다. 정지 grant의 `expires`가 지금부터 1시간 이상 남았는지도 확인합니다. 재개 grant는 같은 `expires`를 써야 하므로, 4단계의 10분 초과 대기와 3·5단계의 앞선 슬롯 정지·재개를 마치고 b를 재개할 때까지 grant가 유효해야 합니다. 남은 시간이 1시간보다 짧으면 승인 주체에게서 새 grant를 받은 뒤 창을 엽니다.
+   무엇이든 멈추기 전에 b staging 후보와 c 후보가 같은지 이 release의 clean checkout에서 대조합니다. b는 staging한 revision·seal과 `B_ARGS[0]` checkout으로, c는 이 checkout의 revision과 `C_PAIR`·`C_SEAL`로 재개되므로 하나라도 다르면 c·a를 재개한 뒤에야 b 재개가 거절됩니다. `c verify-pair`는 c `quiesce-verified`와 같은 기준(seal, 전송할 파일이 모두 심볼릭 링크가 아닌 일반 파일인지, 두 image archive의 체크섬과 원격이 받는 체크섬 줄 형식, arm64 manifest, 이 checkout의 VERSION 형식과 source 목록)으로 `C_PAIR`를 읽기만 하며 SSH를 열지 않습니다. `b preflight`는 `b quiesce`와 같은 여섯 인자로 `b quiesce`가 grant를 소비하기 전까지의 검사(두 checkout, 영수증 디렉터리 경로·권한, staging 영수증, 정지 grant와 그 만료, 준비한 재개 grant가 그 정지 grant와 짝인지, 이 stage·창의 정지 요청 표식이 없는지, W2 pair, `${B_ARGS[1]}/arm64`가 심볼릭 링크 없는 일반 파일인지와 seal·체크섬, source 목록, VERSION)를 그대로 실행하고, grant를 소비하거나 SSH를 열지 않고 끝납니다. 이전 창의 `c.accepted`가 영수증 디렉터리에 남아 있으면 그 창의 b 재개 완료 영수증 `b.<이전-owner-window-id>.resume.finished`를 확인한 뒤 `ln -T -- c.accepted c.accepted.<이전-b-staging-timestamp>`로 보존하고 원래 이름을 지웁니다. 완료 영수증이 없으면 창을 열지 않습니다. 아래 검사는 `c.accepted`가 없어야 통과합니다. 재개 grant는 정지 grant와 같은 `expires`를 써야 하므로, 4단계의 10분 초과 대기와 3·5단계의 앞선 슬롯 정지·재개를 마치고 b를 재개할 때까지 grant가 유효해야 합니다. 그래서 `b preflight`와 `b quiesce`는 검증한 정지 grant의 `expires`가 1시간 이상 남았고 `B_RESUME_GRANT`가 그 grant의 짝일 때만 통과하며, `b quiesce`는 `receipts.lock` 안에서 소비 직전에 둘 다 다시 확인합니다. 남은 시간이 부족하면 승인 주체에게서 새 정지 grant와 그 짝인 새 재개 grant를 함께 받은 뒤 창을 엽니다.
 
    ```bash
    (
@@ -66,10 +66,8 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
      read -r b_revision b_seal b_change <"${B_ARGS[1]}/b.stage.${B_ARGS[2]}.finished"
      [[ $b_revision == "$(deploy_source_revision .)" && $b_revision == "$(deploy_source_revision "${B_ARGS[0]}")" ]]
      [[ $b_seal == "$C_SEAL" && $b_change == "${B_ARGS[2]}" && ! -e ${B_ARGS[1]}/c.accepted && ! -L ${B_ARGS[1]}/c.accepted ]]
-     read -r -a quiesce_grant <"${B_ARGS[1]}/b.current-grant"
-     (( ${#quiesce_grant[@]} == 13 && quiesce_grant[12] - EPOCHSECONDS >= 3600 ))
      scripts/deploy/po-central-cutover.sh c verify-pair "$C_PAIR" "$C_SEAL"
-     PO_B_SSH_TARGET=iris-seoul scripts/deploy/po-central-cutover.sh b preflight "${B_ARGS[@]}"
+     PO_B_SSH_TARGET=iris-seoul scripts/deploy/po-central-cutover.sh b preflight "${B_ARGS[@]}" "$B_RESUME_GRANT"
    )
    ```
 2. 송신을 일시 중단하고 `/webhook/iris`의 모든 유입 경로(직접 H3 포함)를 닫습니다. 재시작·자동 복구·다른 슬롯을 통한 구 API 재기동도 차단합니다. Valkey는 그대로 둡니다.
@@ -79,7 +77,7 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
 
    ```bash
    sudo -n python3 -I -B "$release/scripts/deploy/kapu-d-cutover.py" quiesce "$hold" "${candidate[@]}"
-   PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cutover.sh b quiesce "${B_ARGS[@]}"
+   PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cutover.sh b quiesce "${B_ARGS[@]}" "$B_RESUME_GRANT"
    scripts/deploy/ap-host-native-deploy.sh osaka --quiesce W3 "$OLD"
    PO_C_SSH_TARGET="$C_HOST" APPROVE_PO_C_DEPLOY=true scripts/deploy/po-central-cutover.sh c quiesce-verified "$C_PAIR" "$C_SEAL"
    ```

@@ -864,7 +864,7 @@ with tempfile.TemporaryDirectory(prefix='b-staged-cli-') as raw:
     (archive / 'transport-files.sha256').write_text(sums(archive, names))
     seal = hashlib.sha256((archive / 'transport-files.sha256').read_bytes()).hexdigest()
     tool_revision = '1'.zfill(40)
-    expiry = int(time.time()) + 3600
+    expiry = int(time.time()) + 7200
     window, origin_digest = '1' * 32, '2' * 64
     w2 = state / 'w2'
     w2.mkdir()
@@ -879,6 +879,8 @@ with tempfile.TemporaryDirectory(prefix='b-staged-cli-') as raw:
                        f'{old_revision} {old_id} {issuer} {origin_digest} {expires}\n')
         tmp.chmod(0o600)
         tmp.replace(state / 'b.current-grant')
+        (state / 'prepared-resume-grant').write_text(f'PO_B_PAIR_V1 iris-seoul {grant_window} resume {stage} {tool_id} {new_revision} {seal} '
+                                                     f'{old_revision} {old_id} {issuer} {origin_digest} {expires}\n')
     (state / 'b.window-clear').write_text(f'IRIS_WINDOW_CLEAR {new_revision}\n')
     (state / 'c.accepted').write_text(f'{new_revision} {seal}\n')
     (state / 'c.accepted').chmod(0o600)
@@ -911,8 +913,10 @@ rsync() { printf 'unexpected rsync\n' >> "$state/calls"; return 7; }
 podman() { printf 'unexpected build\n' >> "$state/calls"; return 7; }
 export -f hostname git ssh rsync podman
 export state PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY="${deploy_approval:-true}" APPROVE_PO_B_ROLLBACK="${rollback_approval:-false}"
+resume_grant_args=()
+if [[ "$2" == preflight || "$2" == quiesce ]]; then resume_grant_args=("${resume_grant_arg:-$state/prepared-resume-grant}"); fi
 bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "$2" "${product_root:-$state/candidate}" "${receipt_arg:-$state}" "${stage_id:-20261003T000000Z}" \
-  "${window_id:-11111111111111111111111111111111}" "$state/w2"
+  "${window_id:-11111111111111111111111111111111}" "$state/w2" "${resume_grant_args[@]}"
 '''
     stage_receipt = state / f'b.stage.{change}.finished'
     stage_receipt.write_text(f'{new_revision} {seal} {change}\n')
@@ -994,6 +998,22 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
     (archive / 'image.tar').unlink()
     shutil.move(archive / 'elsewhere/image.tar', archive / 'image.tar')
     (archive / 'elsewhere').rmdir()
+    grant('quiesce', expires=int(time.time()) + 300)
+    for mode in ('preflight', 'quiesce'):
+        refused = run(entry, state, mode)
+        require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
+                and not (state / f'b.quiesce.{change}.requested').exists(), f'b: {mode} refuses a quiesce grant that expires before b resume', refused)
+    grant('quiesce')
+    earlier_resume_grant = (state / 'prepared-resume-grant').read_text()
+    grant('quiesce', expires=expiry + 60)
+    (state / 'prepared-resume-grant').write_text(earlier_resume_grant)
+    for label, prefix in (('stale', ''), ('missing', f'resume_grant_arg={shlex.quote(str(state / "absent-resume-grant"))}\n')):
+        for mode in ('preflight', 'quiesce'):
+            refused = run(prefix + entry, state, mode)
+            require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
+                    and not (state / f'b.quiesce.{change}.requested').exists(),
+                    f'b: {mode} refuses a {label} prepared resume grant before anything stops', refused)
+    grant('quiesce')
     real_archive = state / 'arm64-real'
     archive.rename(real_archive)
     archive.symlink_to(real_archive)
