@@ -1046,13 +1046,15 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
     grant('quiesce')
     swapped = state / 'swap-resume-grant'
     shutil.copyfile(state / 'prepared-resume-grant', swapped)
-    swap = ('dd() { if [[ "$*" == *swap-resume-grant* ]]; then rm -f -- "$state/swap-resume-grant"; mkfifo -- "$state/swap-resume-grant"; fi; command dd "$@"; }\n'
-            f'export -f dd\nresume_grant_arg={shlex.quote(str(swapped))}\n')
+    swap = ('swap_resume_fifo() { if [[ "$*" == *swap-resume-grant* ]]; then local line; line="$(cat -- "$state/swap-resume-grant")"; '
+            'rm -f -- "$state/swap-resume-grant"; mkfifo -- "$state/swap-resume-grant"; exec 7<>"$state/swap-resume-grant"; printf "%s\\n" "$line" >&7; fi; }\n'
+            'dd() { swap_resume_fifo "$@"; command dd "$@"; }\npython3() { swap_resume_fifo "$@"; command python3 "$@"; }\n'
+            f'export -f swap_resume_fifo dd python3\nresume_grant_arg={shlex.quote(str(swapped))}\n')
     for mode in ('preflight', 'quiesce'):
         refused = run(swap + entry, state, mode)
         require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
                 and not (state / f'b.quiesce.{change}.requested').exists(),
-                f'b: {mode} reads the resume grant once without blocking when the path turns into a FIFO', refused)
+                f'b: {mode} refuses a resume grant path that turns into a FIFO holding the right line', refused)
         swapped.unlink()
         shutil.copyfile(state / 'prepared-resume-grant', swapped)
     swapped.unlink()
@@ -1121,9 +1123,14 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
             require(retained.is_file() and not retained.is_symlink() and retained.stat().st_mode & 0o777 == 0o600 and retained.stat().st_nlink == 1
                     and retained.read_text() == (state / 'prepared-resume-grant').read_text(),
                     'b: quiesce keeps the verified resume grant for step 5', result)
-        grant(mode)
+        if mode == 'resume':
+            shutil.copyfile(state / f'b.{window}.resume-grant', state / 'b.current-grant')
+            (state / 'b.current-grant').chmod(0o600)
+        else:
+            grant(mode, expires=consumed_expiry)
         replay = run(entry, state, mode)
-        require(replay.returncode != 0 and not (state / 'calls').exists(), 'b: consumed phase grant cannot be replayed', replay)
+        require(replay.returncode != 0 and not (state / 'calls').exists() and 'was already requested' in replay.stderr,
+                'b: the same consumed phase grant cannot be replayed', replay)
     checked = run('deploy_approval=false\n' + entry, state, 'check')
     require(checked.returncode == 0 and (state / 'calls').read_text().splitlines() ==
             [expected.replace(' b resume ', ' b check ')], 'b: pinned completion takes no writer grant', checked)

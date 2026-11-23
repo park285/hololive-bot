@@ -152,8 +152,18 @@ if [[ "$slot" == b && ( "$mode" =~ ^(preflight|quiesce)$ || ( "$mode" =~ ^(resum
     (( EPOCHSECONDS < expires ))
     if [[ "$grant_phase" == quiesce ]]; then
       resume_line="${expected_grant/ quiesce / resume }"
-      if [[ ! -f "$resume_grant" ]] ||
-        ! dd if="$resume_grant" iflag=nonblock bs=4096 count=1 status=none | cmp -s -- - <(printf '%s\n' "$resume_line"); then
+      if ! python3 - "$resume_grant" "$resume_line" <<'PY'
+import os
+import stat
+import sys
+
+fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NONBLOCK)
+regular = stat.S_ISREG(os.fstat(fd).st_mode)
+data = os.read(fd, 4096) if regular else b''
+os.close(fd)
+sys.exit(0 if regular and data == (sys.argv[2] + '\n').encode() else 1)
+PY
+      then
         echo 'prepared resume grant must be a regular file holding this quiesce grant with only its phase changed to resume' >&2
         exit 1
       fi
