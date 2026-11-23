@@ -52,7 +52,7 @@ postgres_capacity_parse_policy_target() {
     local server_limit="" server_limit_rows=0 used=0
     local superuser_reserved="" superuser_reserved_rows=0
     local min_reserve=3
-    local -A seen_owners=() role_limits=() role_used=()
+    local -A seen_owners=() role_limits=() role_used=() role_reserves=()
     parsed_role_capacities=()
 
     [[ -f "${policy_file}" && -r "${policy_file}" ]] || {
@@ -92,6 +92,15 @@ postgres_capacity_parse_policy_target() {
                 return 1
             fi
             role_limits["$role"]="$maximum"
+            continue
+        fi
+        if [[ "${line}" == @probe-reserve\|* ]]; then
+            IFS='|' read -r _env_key role maximum <<<"${line}"
+            if [[ ! -v "role_limits[$role]" || ! "$maximum" =~ ^[1-9][0-9]{0,8}$ ]] || [[ -v "role_reserves[$role]" ]]; then
+                echo '[pg-capacity] probe reserve needs one positive value for a limited role' >&2
+                return 1
+            fi
+            role_reserves["$role"]="$maximum"
             continue
         fi
 
@@ -142,6 +151,10 @@ postgres_capacity_parse_policy_target() {
         role_used["$role"]=$(( ${role_used[$role]:-0} + instances * capacity ))
         if (( role_used[$role] > role_limits[$role] )); then
             echo "[pg-capacity] aggregate pools exceed role limit: $role" >&2
+            return 1
+        fi
+        if (( role_used[$role] + ${role_reserves[$role]:-0} > role_limits[$role] )); then
+            echo "[pg-capacity] aggregate pools leave no reserved probe connection: $role" >&2
             return 1
         fi
     done <"${policy_file}"

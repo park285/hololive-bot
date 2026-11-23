@@ -20,4 +20,4 @@ SELECT EXISTS (
         'hololive_collector_a', 'hololive_collector_b',
         'hololive_collector_c', 'hololive_collector_d'
     )
-) AND pg_catalog.set_config('application_name', 'hololive-migration-window', false) = 'hololive-migration-window';
+) AND pg_catalog.current_setting('application_name') = 'hololive-migration-window';

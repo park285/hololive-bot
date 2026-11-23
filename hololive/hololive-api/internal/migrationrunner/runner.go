@@ -152,10 +152,9 @@ func advance(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg C
 	}
 
 	if cfg.MigrationWindow && len(pending) != 0 {
-		var drained bool
-
-		if err := tx.QueryRow(ctx, mustSQL("writer_drain_state.sql")).Scan(&drained); err != nil {
-			return Result{}, fmt.Errorf("inspect writer drain: %w", err)
+		drained, err := openMigrationWindow(ctx, tx)
+		if err != nil {
+			return Result{}, err
 		}
 
 		if !drained {
@@ -174,6 +173,20 @@ func advance(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg C
 	}
 
 	return Result{Skipped: skipped, Applied: len(pending), Total: skipped + len(pending)}, nil
+}
+
+func openMigrationWindow(ctx context.Context, tx pgx.Tx) (bool, error) {
+	if _, err := tx.Exec(ctx, mustSQL("migration_window_marker.sql")); err != nil {
+		return false, fmt.Errorf("publish migration window marker: %w", err)
+	}
+
+	var drained bool
+
+	if err := tx.QueryRow(ctx, mustSQL("writer_drain_state.sql")).Scan(&drained); err != nil {
+		return false, fmt.Errorf("inspect writer drain: %w", err)
+	}
+
+	return drained, nil
 }
 
 func bootstrap(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg Config) (Result, error) {

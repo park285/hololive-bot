@@ -11,6 +11,17 @@ shift
 remote_root="$(collector_slot "$slot" root)"
 slot_preamble="$(collector_slot_preamble "$slot")"
 slot_upper="${slot^^}"
+source_payload_files() {
+  local tree="$1" receipts name
+  cat "$tree/scripts/deploy/po-central-files.txt" || return 1
+  . "$root/scripts/deploy/lib/migration-receipts.sh"
+  receipts="$(migration_receipts "$tree")" || return 1
+  while read -r _ name; do
+    if [[ "$name" != 001_schema_epoch4_baseline.sql ]]; then
+      printf 'hololive/hololive-api/scripts/migrations/%s\n' "$name" "contracts/$name"
+    fi
+  done <<<"$receipts"
+}
 ssh_var="PO_${slot_upper}_SSH_TARGET" deploy_var="APPROVE_PO_${slot_upper}_DEPLOY" rollback_var="APPROVE_PO_${slot_upper}_ROLLBACK"
 mode="$1"
 verified_pair='' backup_prefix="card-po-$slot"
@@ -26,7 +37,7 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
      "$(realpath -e -- "${BASH_SOURCE[0]}")" == "$root/scripts/deploy/po-central-cutover.sh" ]]
   tool_revision="$(git -C "$root" rev-parse --verify 'HEAD^{commit}')"
   for script in scripts/deploy/po-central-cutover.sh scripts/deploy/lib/source-revision.sh scripts/deploy/lib/po-central-remote.sh \
-    scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv; do
+    scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv scripts/deploy/lib/migration-receipts.sh; do
     git -C "$root" cat-file blob "$tool_revision:$script" | cmp -s -- - "$root/$script"
   done
   . "$root/scripts/deploy/lib/source-revision.sh"
@@ -96,7 +107,7 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
   for file in "$files" "$version_file"; do
     git -C "$source_root" cat-file blob "$revision:$file" | cmp -s -- - "$source_root/$file"
   done
-  sources="$(git -C "$source_root" cat-file blob "$revision:$files")"
+  sources="$(source_payload_files "$source_root")"
   (
     cd -- "$source_root"
     while IFS= read -r file; do
@@ -155,17 +166,6 @@ else
 fi
 version="$(cat "$root/hololive/hololive-api/VERSION")"
 [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
-source_payload_files() {
-  local receipts name
-  cat "$root/scripts/deploy/po-central-files.txt" || return 1
-  . "$root/scripts/deploy/lib/migration-receipts.sh"
-  receipts="$(migration_receipts "$root")" || return 1
-  while read -r _ name; do
-    if [[ "$name" != 001_schema_epoch4_baseline.sql ]]; then
-      printf 'hololive/hololive-api/scripts/migrations/%s\n' "$name" "contracts/$name"
-    fi
-  done <<<"$receipts"
-}
 build_local_pair() {
   local_stage="$(mktemp -d)"
   trap 'rm -rf "$local_stage"' EXIT
@@ -197,7 +197,7 @@ PY
 }
 
 if [[ "$mode" == deploy || "$mode" == quiesce ]]; then
-  payload_files="$(source_payload_files)"
+  payload_files="$(source_payload_files "$root")"
   revision="$(deploy_source_revision "$root")"
   change_id="$(date -u +%Y%m%dT%H%M%SZ)"
   backup="$remote_root/backups/$backup_prefix-$change_id"

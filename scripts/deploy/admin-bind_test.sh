@@ -60,7 +60,15 @@ for filter in '.nftables[0].set.elem = []' '.nftables[0].set.elem += ["0.0.0.0/0
     'del(.nftables[4].rule.expr[4])' 'del(.nftables[5])' \
     '.nftables[8].chain.prio = -10' 'del(.nftables[9])' \
     '.nftables[9].rule.expr[-1].mangle.value = 0' \
-    'del(.nftables[9].rule.expr[4])'; do
+    'del(.nftables[9].rule.expr[4])' \
+    'del(.nftables[] | select(.chain.name == "input"))' \
+    'del(.nftables[] | select(.rule.chain == "input" and .rule.expr[-1].reject.type == "tcp reset" and .rule.expr[0].match.right == 5433))' \
+    '(.nftables[] | select(.rule.chain == "input" and .rule.expr[0].match.right == "tailscale0" and .rule.expr[-2].match.right == 5433) | .rule.expr) |= .[1:]' \
+    '.nftables |= (.[0:11] + [{"rule":{"chain":"input","expr":[{"accept":null}]}}] + .[11:])' \
+    '(.nftables[] | select(.rule.chain == "input") | .rule.expr[] | select(.match.right == 5433) | .match.right) |= {"set":[5433,6433]}' \
+    '(.nftables | map(.rule.chain == "input") | index(true)) as $i | .nftables |= (.[0:$i] + [{"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":{"range":[5000,6500]}}},{"accept":null}]}}] + .[$i:])' \
+    '(.nftables | map(.rule.chain == "input") | index(true)) as $i | .nftables |= (.[0:$i] + [{"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":"@wide_ports"}},{"accept":null}]}}] + .[$i:])' \
+    '(.nftables | map(.rule.chain == "input") | index(true)) as $i | .nftables |= (.[0:$i] + [{"rule":{"chain":"input","expr":[{"match":{"op":"!=","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":22}},{"accept":null}]}}] + .[$i:])'; do
     jq "$filter" "$fixture/valid.json" > "$fixture/firewall.json"
     if admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft" > "$fixture/rejected.log" 2>&1; then
         echo 'incomplete firewall accepted' >&2
@@ -72,7 +80,11 @@ cp "$fixture/retiring.json" "$fixture/firewall.json"
 admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft"
 for filter in 'del(.nftables[] | select(.rule.chain == "forward" and .rule.expr[1].match.right == 6433 and .rule.expr[-1].reject != null))' \
     'del(.nftables[] | select(.rule.chain == "forward_preserve_postgres_source" and .rule.expr[1].match.right == 6433))' \
-    '(.nftables[] | select(.rule.chain == "forward" and .rule.expr[1].match.right == 6433 and (.rule.expr[-1] | has("accept"))) | .rule.expr) |= .[0:3] + [{"accept":null}]'; do
+    '(.nftables[] | select(.rule.chain == "forward" and .rule.expr[1].match.right == 6433 and (.rule.expr[-1] | has("accept"))) | .rule.expr) |= .[0:3] + [{"accept":null}]' \
+    'del(.nftables[] | select(.rule.chain == "input" and .rule.expr[-1].reject.type == "tcp reset" and .rule.expr[0].match.right.set == [5433,6433]))' \
+    '(.nftables | map(.rule.chain == "input") | index(true)) as $i | .nftables |= (.[0:$i] + [{"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":{"range":[5000,6500]}}},{"accept":null}]}}] + .[$i:])' \
+    '(.nftables | map(.rule.chain == "input") | index(true)) as $i | .nftables |= (.[0:$i] + [{"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":"@wide_ports"}},{"accept":null}]}}] + .[$i:])' \
+    '(.nftables | map(.rule.chain == "input") | index(true)) as $i | .nftables |= (.[0:$i] + [{"rule":{"chain":"input","expr":[{"match":{"op":"!=","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":22}},{"accept":null}]}}] + .[$i:])'; do
     jq "$filter" "$fixture/retiring.json" > "$fixture/firewall.json"
     if admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft" > "$fixture/rejected.log" 2>&1; then
         echo 'incomplete retiring pooler firewall accepted' >&2
@@ -388,6 +400,12 @@ run_offline_check
         exit 1
     fi
     grep -Fq 'aggregate pools exceed role limit: hololive_collector_c' "$fixture/rejected.log"
+    printf '[Container]\nEnvironment=POSTGRES_POOL_MAX_CONNS=7\n' > "$units/$service.container.d/60-pool.conf"
+    if postgres_capacity_assert_service "$root" "$fixture/offline.env" "$units" "$service" "$units/$service.container" > "$fixture/rejected.log" 2>&1; then
+        echo 'capacity check accepted a collector pool that leaves no probe connection' >&2
+        exit 1
+    fi
+    grep -Fq 'aggregate pools leave no reserved probe connection: hololive_collector_c' "$fixture/rejected.log"
     echo 'pre-sync capacity check validates effective writer budgets from installed units'
 )
 mkdir -p "$offline_units/hololive-.container.d"

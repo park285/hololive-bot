@@ -42,7 +42,7 @@ PO_B_SSH_TARGET=iris-seoul scripts/deploy/po-central-cutover.sh b check /opt/hol
 PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_ROLLBACK=true scripts/deploy/po-central-cutover.sh b rollback /opt/hololive-bot/collector-b/backups/po-b-<TIMESTAMP>
 ```
 
-PgBouncer에서의 전환은 [퇴역 전환 절차](../../quadlet/README.md#pgbouncer-퇴역-전환)를 따릅니다. unit 교체 전에 `b quiesce`로 실행 중 이전 pair를 보존·정지하고, 설치된 후보와 중앙 재개가 끝난 뒤 `b resume <backup>`으로 재개합니다. `b quiesce`는 stage 완료 영수증의 seal만 요구하고, c 후보 수용 영수증(`c.accepted`)은 resume·check·rollback에서 확인합니다. 정지된 collector에 일반 `deploy`를 적용하지 않습니다. 실패 시 hold와 backup을 보존합니다. endpoint가 다른 이전 pair로의 `rollback`은 거부되므로 호환 후보로 fix-forward합니다.
+PgBouncer에서의 전환은 [퇴역 전환 절차](../../quadlet/README.md#pgbouncer-퇴역-전환)를 따릅니다. unit 교체 전에 `b quiesce`로 실행 중 이전 pair를 보존·정지하고, 설치된 후보와 중앙 재개가 끝난 뒤 `b resume`으로 재개합니다. 두 단계 모두 `<clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir>` 다섯 인자를 받으며, backup 하나만 주는 `b resume <backup>`은 `staged-po-b-*` backup을 받지 않습니다. `b quiesce`는 stage 완료 영수증의 seal만 요구하고, c 후보 수용 영수증(`c.accepted`)은 resume·check·rollback에서 확인합니다. stage archive의 `source-files.sha256`은 c와 같이 `po-central-files.txt`와 `manifest.txt`의 002 이후 migration·계약 SQL을 모두 담아야 하므로, c `quiesce-verified`에 쓴 pair와 같은 seal이 됩니다. 정지 전 실제 경로 확인(`--check-database-endpoint`)은 아직 설치하지 않은 staging의 후보 unit으로 실행하고, 재개 때는 설치된 unit이 그 unit과 바이트 단위로 같아야 합니다. 정지된 collector에 일반 `deploy`를 적용하지 않습니다. 실패 시 hold와 backup을 보존합니다. endpoint가 다른 이전 pair로의 `rollback`은 거부되므로 호환 후보로 fix-forward합니다.
 
 `b/current`는 source checkout이 아니라 release pair 저장소이므로 `.source-revision`을 만들지 않습니다.
 `quiesce`는 동일 full revision으로 빌드한 image/manifest와 bounded source checksum을 전송하고 보존합니다.
@@ -55,14 +55,15 @@ network·volume·issuer unit과 worker-profile drop-in 소유권은 기존 절�
 
 ```bash
 # iris-seoul, 두 writer가 해당 backup의 persistent hold 아래에 있는 동안 실행
-sudo install -m 0644 /opt/hololive-bot/collector-b/po-staging-<TIMESTAMP>/deploy/podman/iris-seoul/hololive-collector-b.container \
+sudo install -m 0644 /opt/hololive-bot/collector-b/po-staging-<b-staging-timestamp>/deploy/podman/iris-seoul/hololive-collector-b.container \
   /etc/containers/systemd/hololive-bot/hololive-collector-b.container
 sudo systemctl daemon-reload
 # kapu, 같은 release의 중앙 재개와 c 수용 뒤 실행
-PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cutover.sh b resume /opt/hololive-bot/collector-b/backups/po-b-<TIMESTAMP>
+PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cutover.sh b resume \
+  <clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir>
 ```
 
-이전 unit은 quiesce가 보존한 `current/artifacts/worker-profile/releases/po-b-<TIMESTAMP>/collector-b/previous/unit.container`에
+이전 unit은 quiesce가 보존한 `current/artifacts/worker-profile/releases/staged-po-b-<b-staging-timestamp>/collector-b/previous/unit.container`에
 남습니다. 재개 검증 실패는 mask를 해제하지 않으며, 재개 후 실패도 두 writer를 다시 hold합니다.
 롤백은 먼저 중앙 HBA와 설치 unit의 effective endpoint를 이전 경로로 정합화한 뒤 수행해야 합니다.
 

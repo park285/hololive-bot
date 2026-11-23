@@ -540,14 +540,12 @@ SQL
   )" && [[ "$result" == t ]] || die "migration lineage not confirmed; no single-writer migration or new writer activation"
 }
 
-if [[ "$mode" != quiesce ]]; then
-  postgres_capacity_assert_installed "$ROOT_DIR" "$compose_env" "$quadlet_dir"
-  for service in "${services[@]}"; do assert_writer_endpoint "$service"; done
-  if [[ "$mode" == deploy ]]; then
-    require_card_ledger
-    postgres_endpoint_require_same "$(postgres_endpoint_container "$service")" 'holo-postgres|5432' ||
-      die "single-writer endpoint change refused; use the coordinated pre-sync hold"
-  fi
+postgres_capacity_assert_installed "$ROOT_DIR" "$compose_env" "$quadlet_dir"
+for service in "${services[@]}"; do assert_writer_endpoint "$service"; done
+if [[ "$mode" == deploy ]]; then
+  require_card_ledger
+  postgres_endpoint_require_same "$(postgres_endpoint_container "$service")" 'holo-postgres|5432' ||
+    die "single-writer endpoint change refused; use the coordinated pre-sync hold"
 fi
 
 prepare_slot() {

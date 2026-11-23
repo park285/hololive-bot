@@ -59,6 +59,22 @@ admin_network_assert_firewall() {
             ($forward[5].expr == dnat(6433; 6432) + [{"reject":{"type":"tcp reset"}}]))) and
         ($forward[2].expr == dnat(5433; 5432) + sources + [{"accept":null}]) and
         ($forward[3].expr == dnat(5433; 5432) + [{"reject":{"type":"tcp reset"}}]) and
+        def dport: .match? | select(.left.payload.field? == "dport") | .right;
+        def matches_postgres: [.[] | dport | select(. == 5433 or (type == "object" and (.set // [] | index(5433) != null)))] | length > 0;
+        (if $retiring_pooler then {"set":[5433,6433]} else 5433 end) as $port |
+        {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":$port}} as $postgres |
+        [.nftables[] | .rule // empty | select(.chain == "input") | .expr] as $input |
+        [$input[] | select(matches_postgres)] as $published |
+        ($input | index([$published[2]])) as $boundary |
+        any(.nftables[]; .chain.hook == "input" and .chain.name == "input" and .chain.prio == -20) and
+        ($published == [
+            [{"match":{"op":"==","left":{"meta":{"key":"iifname"}},"right":"lo"}}, $postgres, {"accept":null}],
+            sources + [$postgres, {"accept":null}],
+            [$postgres, {"reject":{"type":"tcp reset"}}]]) and
+        def literal_port: type == "number" or (type == "object" and keys == ["set"] and (.set | length > 0 and all(type == "number")));
+        def reviewed_ports: [.[] | .match? | select(.left.payload.field? == "dport")] as $ports |
+            ($ports | length > 0) and ($ports | all(.op == "==" and (.right | literal_port)));
+        ($boundary != null) and ([$input[0:$boundary][] | reviewed_ports] | all) and
         any(.nftables[]; .chain.hook == "forward" and .chain.name == "forward_preserve_postgres_source" and .chain.prio == 10) and
         ([.nftables[] | .rule // empty | select(.chain == "forward_preserve_postgres_source") | .expr] ==
             [dnat(5433; 5432) + sources + preserve] + (if $retiring_pooler then [dnat(6433; 6432) + sources + preserve] else [] end))

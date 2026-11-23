@@ -73,15 +73,54 @@ func TestPendingMigrationWindowRequiresHeldDrainAndKeepsWritersClosed(t *testing
 	window, err := migrator.Begin(t.Context())
 	require.NoError(t, err)
 
-	var drained bool
-
-	require.NoError(t, window.QueryRow(t.Context(), mustSQL("writer_drain_state.sql")).Scan(&drained))
+	drained, err := openMigrationWindow(t.Context(), window)
+	require.NoError(t, err)
 	require.True(t, drained)
 	require.NoError(t, guard.Close(t.Context()))
 	requireWriterLogin(t, pool, "57P03")
 
 	require.NoError(t, window.Rollback(t.Context()))
 	requireWriterLogin(t, pool, "")
+
+	guard = drainConnect(t, pool, pool.Config().ConnConfig.User)
+	_, err = guard.Exec(t.Context(), "SELECT set_config('application_name', 'hololive-writers-drained', false)")
+	require.NoError(t, err)
+	guardTx, err = guard.Begin(t.Context())
+	require.NoError(t, err)
+	require.NoError(t, guardTx.QueryRow(t.Context(), "SELECT pg_try_advisory_xact_lock(0x484f4c4f, 6432)").Scan(&locked))
+	require.True(t, locked)
+	require.Eventually(t, func() bool { return drainState(t, migrator) }, 10*time.Second, 50*time.Millisecond)
+
+	stale, err := migrator.Begin(t.Context())
+	require.NoError(t, err)
+
+	var observed int
+
+	require.NoError(t, stale.QueryRow(t.Context(), "SELECT count(*) FROM pg_catalog.pg_stat_activity").Scan(&observed))
+	require.NoError(t, guard.Close(t.Context()))
+	require.Eventually(t, func() bool {
+		late, connectErr := pgx.ConnectConfig(t.Context(), writerConfig(pool))
+		if connectErr != nil {
+			return false
+		}
+
+		writer = late
+
+		return true
+	}, 10*time.Second, 50*time.Millisecond)
+
+	drained, err = openMigrationWindow(t.Context(), stale)
+	require.NoError(t, err)
+	require.False(t, drained, "a writer admitted after the guard dropped must keep the window closed")
+	require.NoError(t, stale.Rollback(t.Context()))
+	require.NoError(t, writer.Close(t.Context()))
+}
+
+func writerConfig(pool *pgxpool.Pool) *pgx.ConnConfig {
+	config := pool.Config().ConnConfig.Copy()
+	config.User, config.Password = drainWriterRole, drainPassword
+
+	return config
 }
 
 func drainState(t *testing.T, conn *pgx.Conn) bool {
@@ -92,9 +131,8 @@ func drainState(t *testing.T, conn *pgx.Conn) bool {
 
 	defer func() { require.NoError(t, tx.Rollback(context.WithoutCancel(t.Context()))) }()
 
-	var drained bool
-
-	require.NoError(t, tx.QueryRow(t.Context(), mustSQL("writer_drain_state.sql")).Scan(&drained))
+	drained, err := openMigrationWindow(t.Context(), tx)
+	require.NoError(t, err)
 
 	return drained
 }
@@ -122,10 +160,7 @@ func drainConnect(t *testing.T, pool *pgxpool.Pool, user string) *pgx.Conn {
 func requireWriterLogin(t *testing.T, pool *pgxpool.Pool, rejected string) {
 	t.Helper()
 
-	config := pool.Config().ConnConfig.Copy()
-	config.User, config.Password = drainWriterRole, drainPassword
-
-	conn, err := pgx.ConnectConfig(t.Context(), config)
+	conn, err := pgx.ConnectConfig(t.Context(), writerConfig(pool))
 	if rejected == "" {
 		require.NoError(t, err)
 		require.NoError(t, conn.Close(t.Context()))

@@ -1115,6 +1115,18 @@ fi
 assert_no_call "${root}" pooled-candidate '^(guard arm |systemctl stop )'
 pass "the retiring pooler original is quiesced only for its direct TLS candidate and recorded for the hold"
 
+root="${tmp}/coordinated-installed-cap"
+make_coordinated_case "${root}"
+printf '[Service]\nEnvironment=ADMIN_API_POSTGRES_POOL_MAX_CONNS=40\n' \
+  >"${root}/etc/containers/systemd/hololive-bot/hololive-api.container.d/60-pool.conf"
+: >"${root}/state/calls"
+if run_tool "${root}" success "${API_HEX}" "${HELPER}" --quiesce \
+    localhost/hololive-api:candidate localhost/hololive-alarm-worker:candidate; then
+  fail "quiesce accepted an installed pool cap that resume would refuse"
+fi
+assert_no_call "${root}" installed-cap '^(guard arm |systemctl stop )'
+pass "quiesce refuses installed pool caps above the role limit before stopping a writer"
+
 root="${tmp}/coordinated-reboot"
 make_coordinated_case "${root}"
 quiesce_case "${root}"

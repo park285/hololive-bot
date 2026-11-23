@@ -404,7 +404,8 @@ python3() {
         [[ "$5" == "$collector_container" ]] && cmp -s "$4/pair.json" "$fixture_root/collector.generation" &&
           cmp -s "$4/profile.json" "$fixture_root/loaded.profile" ;;
       check-database)
-        [[ "$fixture_case" != *database_query_failure && "$3" == "$service" && "$4" == "$profile_release/candidate" ]] ;;
+        [[ "$fixture_case" != *database_query_failure && "$3" == "$service" && "$4" == "$profile_release/candidate" ]] &&
+          cmp -s "$4/unit.container" "$5" ;;
       verify-dropin)
         cmp "$4/50-worker-profile.conf" <(printf 'Image=sha256:%s\n' "$(hex_of new)") ;;
       verify-source)
@@ -832,7 +833,7 @@ with tempfile.TemporaryDirectory(prefix='b-staged-cli-') as raw:
     tool = state / 'coordinator'
     candidate = state / 'candidate'
     for name in ('scripts/deploy/po-central-cutover.sh', 'scripts/deploy/lib/source-revision.sh', 'scripts/deploy/lib/po-central-remote.sh',
-                 'scripts/deploy/lib/collector-slots.sh', 'scripts/deploy/lib/collector-slots.tsv'):
+                 'scripts/deploy/lib/collector-slots.sh', 'scripts/deploy/lib/collector-slots.tsv', 'scripts/deploy/lib/migration-receipts.sh'):
         (tool / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(root / name, tool / name)
     version_file = candidate / 'hololive/hololive-api/VERSION'
@@ -841,13 +842,19 @@ with tempfile.TemporaryDirectory(prefix='b-staged-cli-') as raw:
     source_name = 'hololive/hololive-api/VERSION'
     (candidate / 'scripts/deploy').mkdir(parents=True)
     (candidate / 'scripts/deploy/po-central-files.txt').write_text(source_name + '\n')
+    migrations = candidate / 'hololive/hololive-api/scripts/migrations'
+    (migrations / 'contracts').mkdir(parents=True)
+    (migrations / 'manifest.txt').write_text('1 001_schema_epoch4_baseline.sql\n2 002_epoch4_fixture.sql\n')
+    for name in ('001_schema_epoch4_baseline.sql', '002_epoch4_fixture.sql', 'contracts/002_epoch4_fixture.sql'):
+        (migrations / name).write_text(f'SELECT {name!r};\n')
+    migration_sources = [f'hololive/hololive-api/scripts/migrations/{n}' for n in ('002_epoch4_fixture.sql', 'contracts/002_epoch4_fixture.sql')]
     shutil.copytree(tool, state / 'objects/coordinator')
     shutil.copytree(candidate, state / 'objects/candidate')
     archive = state / 'arm64'
     archive.mkdir()
     def sums(directory, names):
         return ''.join(f'{hashlib.sha256((directory / n).read_bytes()).hexdigest()}  {n}\n' for n in names)
-    (archive / 'source-files.sha256').write_text(sums(candidate, [source_name]))
+    (archive / 'source-files.sha256').write_text(sums(candidate, [source_name] + migration_sources))
     for prefix, meta in (('', 'rootfs-manifest.json'), ('collector-', 'collector-manifest.json')):
         name = prefix + 'image.tar'
         (archive / name).write_bytes(name.encode())
@@ -1097,7 +1104,7 @@ for slot, case in runs:
             (state / 'direct-origin').touch()
         installed_definition = f'[Container]\nEnvironment=POSTGRES_HOST={host}\nEnvironment=POSTGRES_PORT={db_port}\n'
         if slot == 'c':
-            installed_definition += 'Environment=POSTGRES_POOL_MAX_CONNS=${COLLECTOR_POSTGRES_POOL_MAX_CONNS}\n[Service]\nEnvironment=COLLECTOR_POSTGRES_POOL_MAX_CONNS=7\nEnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env\n'
+            installed_definition += 'Environment=POSTGRES_POOL_MAX_CONNS=${COLLECTOR_POSTGRES_POOL_MAX_CONNS}\n[Service]\nEnvironment=COLLECTOR_POSTGRES_POOL_MAX_CONNS=6\nEnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env\n'
         else:
             installed_definition = (root / b_unit_source).read_text().replace(
                 'Environment=POSTGRES_PORT=5433', f'Environment=POSTGRES_PORT={db_port}')

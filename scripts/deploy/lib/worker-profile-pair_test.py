@@ -654,11 +654,11 @@ class ResolvedPairTest(unittest.TestCase):
         self.assertEqual(kwargs["stderr"], subprocess.DEVNULL)
         return self.real_run(args, **kwargs)
 
-    def check(self, *, database_check=False):
+    def check(self, *, database_check=False, reviewed=None):
         (self.root / "compose.env").write_text("SYNTHETIC_FIXTURE=1\n")
         with mock.patch.dict(os.environ, self.host, clear=True), \
                 mock.patch.object(self.module.subprocess, "run", side_effect=self.lifecycle):
-            self.module.check_resolved_pair(self.directory, self.pair, database_check=database_check)
+            self.module.check_resolved_pair(self.directory, self.pair, database_check=database_check, reviewed=reviewed)
 
     def test_pooled_probe_uses_only_its_candidate_network_and_slot_environment(self):
         for service, volume, slot in ((SERVICE, "hololive-bot_youtube-po-c-socket", "c"),
@@ -686,6 +686,21 @@ class ResolvedPairTest(unittest.TestCase):
                     fixture.assert_private_inputs()
                 finally:
                     fixture.doCleanups()
+
+    def test_staged_probe_runs_the_reviewed_unit_while_the_previous_unit_stays_installed(self):
+        self.case(B_SERVICE)
+        self.existing_volume("hololive-youtube-po-b-socket")
+        staged = self.root / "staging" / self.module.QUADLET_UNITS[B_SERVICE]
+        staged.parent.mkdir()
+        staged.write_bytes(self.record.read_bytes())
+        self.assertNotEqual((self.units / self.module.QUADLET_UNITS[B_SERVICE]).read_bytes(), staged.read_bytes())
+        self.check(database_check=True, reviewed=staged)
+        self.assertEqual(len(self.consumed), 1)
+        self.assertEqual(self.consumed[0][0][-1], "--check-database-endpoint")
+        staged.write_text(staged.read_text() + "Environment=UNREVIEWED=1\n")
+        with self.assertRaisesRegex(ValueError, "reviewed staged candidate unit"):
+            self.check(database_check=True, reviewed=staged)
+        self.assertEqual(len(self.consumed), 1)
 
     def test_pooled_probe_refuses_previous_or_unreviewed_network_before_podman(self):
         self.case(B_SERVICE)

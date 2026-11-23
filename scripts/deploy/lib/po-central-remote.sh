@@ -629,10 +629,18 @@ verify_candidate_images() {
   [[ "$(image_label "$collector_candidate" version)" == "$version" ]]
 }
 
+candidate_unit_path() {
+  if [[ "$mode" == quiesce && "$slot" != c ]]; then
+    printf '%s\n' "$staging/$slot_unit_dir/$collector_container.container"
+  else
+    printf '%s\n' "$unit_dir/$collector_container.container"
+  fi
+}
+
 prepare_candidate_pair() {
-  local candidate_image env_file=- expected previous_revision candidate_unit="$unit_dir/$collector_container.container"
+  local candidate_image env_file=- expected previous_revision candidate_unit
+  candidate_unit="$(candidate_unit_path)"
   candidate_image="$(image_id "$collector_candidate")"
-  [[ "$mode" != quiesce || "$slot" == c ]] || candidate_unit="$staging/$slot_unit_dir/$collector_container.container"
   if [[ "$mode" == resume ]]; then
     if [[ "$slot" == c ]]; then
       [[ "$(<"$current/.source-revision")" == "$revision" ]] || return 1
@@ -664,7 +672,7 @@ prepare_candidate_pair() {
 
 validate_candidate_pair() {
   prepare_candidate_pair
-  python3 "$pair_tool" check-database "$service" "$profile_release/candidate"
+  python3 "$pair_tool" check-database "$service" "$profile_release/candidate" "$(candidate_unit_path)"
 }
 
 image_id() {

@@ -71,7 +71,7 @@ Environment=HOLOLIVE_METRICS_ADDR=:30096
 Environment=COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS=3
 Environment=COLLECTOR_INSTANCE_ID=collector-d
 Environment=POSTGRES_SOCKET_PATH=
-Environment=POSTGRES_POOL_MAX_CONNS=7
+Environment=POSTGRES_POOL_MAX_CONNS=6
 Environment=YOUTUBEJS_NODE=/usr/local/bin/node
 Environment=YOUTUBEJS_SCRIPT=/app/youtubejs/src/server.mjs
 Volume=/var/lib/hololive-collectors/d/data:/app/data:idmap

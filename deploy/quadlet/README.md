@@ -80,7 +80,7 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 - PostgreSQL 로그인 비밀번호는 API `HOLOLIVE_DB_PASSWORD`, alarm-worker `HOLOLIVE_ALARM_WORKER_PASSWORD`,
   collector slot별 `HOLOLIVE_COLLECTOR_A_PASSWORD`~`D_PASSWORD`로 나누고 서로·`DB_PASSWORD`와 다르게 둡니다.
   이 창의 one-shot은 여섯 업무 역할의 로그인 비밀번호와 연결 한도를 변경하지 않습니다. 배포 이미지의 `db-migrate`는 창 전용 인자가 빠지면 DB 접속 전에 거부합니다. 신규 DB의 별도 초기화에서만 같은 이미지의 `--initialize`를 명시하며, 운영 one-shot은 `--schema-only`입니다.
-  `--schema-only`가 대기 migration을 적용하려면 같은 트랜잭션에서 writer drain 가드의 superuser 세션과 그 advisory lock, login 게이트, 업무 역할 세션 0건이 모두 확인돼야 합니다. 확인 뒤 migrator 세션은 `hololive-migration-window` 표식을 달고, 게이트는 가드 세션이 끊겨도 이 세션이 끝날 때까지 업무 역할 로그인을 막습니다.
+  `--schema-only`가 대기 migration을 적용하려면 같은 트랜잭션에서 writer drain 가드의 superuser 세션과 그 advisory lock, login 게이트, 업무 역할 세션 0건이 모두 확인돼야 합니다. migrator 세션은 확인보다 먼저 `hololive-migration-window` 표식을 달고 통계 snapshot을 비운 뒤 확인하므로, 확인과 표식 사이에 가드가 끊겨도 그 틈에 로그인한 writer는 확인에서 드러납니다. 게이트는 가드 세션이 끊겨도 이 세션이 끝날 때까지 업무 역할 로그인을 막습니다.
   같은 비밀번호이면 기존 SCRAM verifier를 유지합니다. 실제 비밀번호를 바꿀 때는 해당 역할의 모든 앱 frontend를 먼저 drain·종료해야 하며, 비밀번호 변경 자체가 기존 세션을 폐기하지는 않습니다.
 - compose에서 `:?`였던 필수 값(`VALKEY_SENTINEL_ADDRS`, `LIVE_LOGS_PATH`,
   `POSTGRES_PORT_BIND_IP`, `VALKEY_BIND_IP`, `HOLOLIVE_API_PORT_BIND_IP`, `HOLOLIVE_ADMIN_API_PORT_BIND_IP`,
@@ -91,7 +91,7 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 
 - 중앙 API·alarm-worker·collector c는 `holo-postgres:5432`, AP a·b·d는 `100.100.1.8:5433`에 `verify-full` TLS로 직접 접속합니다. 중앙 unit의 endpoint는 `HOLOLIVE_CENTRAL_POSTGRES_HOST`·`HOLOLIVE_CENTRAL_POSTGRES_PORT` 기본값입니다. `quadlet-redeploy-service.sh`는 effective 값이 이 endpoint와 `verify-full`이 아니면 거부합니다.
 - `deploy/postgres/pg_hba.conf`는 역할마다 접속 source를 고정합니다. bridge(`172.16.0.0/12`)에서는 runtime·alarm-worker·collector c만, tailnet에서는 d `100.100.1.3/32`, b `100.100.1.5/32`, a `100.100.1.6/32`의 자기 역할만 받습니다. 관리자·migrator·nightly·복제 TCP는 거부합니다.
-- 역할별 연결 한도는 `deploy/postgres/role-limits.sql`, 앱 풀 상한과 서버 예산은 `scripts/ci/postgres-capacity-policy.tsv`가 소유합니다. 배포 helper는 compose.env와 설치 unit·drop-in의 effective 풀 상한으로 같은 예산을 다시 계산합니다.
+- 역할별 연결 한도는 `deploy/postgres/role-limits.sql`, 앱 풀 상한과 서버 예산은 `scripts/ci/postgres-capacity-policy.tsv`가 소유합니다. 배포 helper는 compose.env와 설치 unit·drop-in의 effective 풀 상한으로 같은 예산을 다시 계산합니다. collector 네 역할은 `@probe-reserve`로 한 연결을 남깁니다(역할 한도 7, 풀 상한 6). 전환 도구의 후보 `--check-database-endpoint`가 같은 역할로 직접 접속하므로, 실행 중인 collector 풀이 꽉 차도 검사가 한도에 걸리지 않습니다.
 - 앱의 30초 `statement_timeout`은 연결 startup 파라미터로 전달합니다. 역할 단위 `ALTER ROLE … SET`은 쓰지 않습니다.
 - 마이그레이션 창의 writer 차단은 PostgreSQL 19 login event trigger `hololive_writer_admission`이 맡습니다. `writer-drain-guard.py`가 관리 socket의 superuser 세션으로 `bootstrap_writer_admission.sql`을 멱등 적용합니다. 같은 DB에 `application_name`이 `hololive-writers-draining`/`hololive-writers-drained`인 superuser 세션이 있는 동안 여섯 업무 역할의 새 로그인은 `57P03`으로 거부됩니다. 가드는 업무 역할 backend가 0건인 것을 확인한 뒤에만 migrator를 시작합니다. trigger 함수가 고장 나면 superuser가 `-c event_triggers=off`로 접속해 복구합니다.
 
@@ -103,15 +103,15 @@ HBA는 단일 파일 bind라서 PostgreSQL을 다시 만들 때만 바뀝니다.
 
 중앙 `--resume`의 카드 창 가드는 여섯 업무 역할의 연결이 모두 0이어야 진행합니다. pooler의 idle backend도 역할 연결 한도를 차지합니다. 따라서 writer는 정지만 먼저 하고, pooler를 멈춘 뒤 중앙부터 재개합니다. collector는 정지부터 재개까지, API·alarm-worker는 중앙 정지부터 중앙 재개까지 멈춥니다.
 
-1. 복구점: 각 writer의 실행 세대와 endpoint, `holo-postgres`·`holo-pgbouncer`의 CID·image ID·`StartedAt`, 현재 HBA mount를 기록합니다.
+1. 복구점: 각 writer의 실행 세대와 endpoint, `holo-postgres`·`holo-pgbouncer`의 CID·image ID·`StartedAt`, 현재 HBA mount, 적용된 migration 원장(`SELECT filename FROM public.schema_migrations ORDER BY filename`)을 기록합니다.
 2. 중앙 설치: 이 release의 clean checkout에서 `sync-opt-current.sh`로 전체 설치합니다. 설치는 `holo-pgbouncer.container`를 지웁니다. 실행 중인 pooler는 정지할 때까지 계속 동작하므로 이후 재시작하지 않습니다. 6433 게시 규칙이 사라지는 방화벽 reload는 7단계까지 미룹니다.
 3. PostgreSQL 재생성: `systemctl restart holo-postgres.service`로 새 HBA를 적용합니다. pooler는 `Wants=`로만 묶여 있어 함께 멈추지 않고 backend를 다시 연결합니다. `SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL`이 0이고 기존 writer가 정상인지 확인합니다.
-4. writer 정지(d→b→a→c→중앙):
+4. writer 정지(d→b→a→c→중앙): 첫 정지 전에 관리 socket에서 `SELECT r.rolconnlimit - count(a.pid) FROM pg_roles r LEFT JOIN pg_stat_activity a ON a.usename = r.rolname WHERE r.rolname = 'hololive_collector_b' GROUP BY r.rolconnlimit`가 1 이상인지 확인합니다. b quiesce의 후보 직접 접속 검사가 이 한 자리를 씁니다. pooler 시절의 b는 pooler backend로 역할 한도 7을 모두 채울 수 있고, 검사가 실패하면 일회성 정지 승인과 복구점이 이미 소비된 뒤입니다. 0이면 정지를 시작하지 않습니다.
    - d: [kapu 절차](../podman/kapu/README.md)의 `kapu-d-cutover.py quiesce --from-pooler`
    - b: [iris-seoul 절차](../podman/iris-seoul/README.md)의 `po-central-cutover.sh b quiesce`
    - a: [collector 런북](../../docs/current/runbooks/collector.md#osaka-a-w1w2-분리-정지-창)의 `ap-host-native-deploy.sh osaka --quiesce W2`. W2는 원래 6433 원점만 받습니다.
    - c: `po-central-cutover.sh c quiesce-verified`
-   - 중앙: 먼저 `SELECT count(*) FROM event_grade_regions r JOIN event_grade_consumer_offsets o USING (region) WHERE o.applied_seq < r.published_seq`가 0인지 확인합니다. collector가 모두 멈춘 뒤 worker가 남은 관측을 소비할 때까지 기다리며, 0이 아니면 005가 적용을 거부합니다. 이어서 `quadlet-redeploy-service.sh --quiesce <API image> <worker image>`. 실행 중 원본이 `holo-pgbouncer:6432`이면 설치 unit이 직접 TLS일 때만 정지하고, 원래 endpoint를 hold에 기록합니다.
+   - 중앙: 1단계 원장에 `002_epoch4_event_grade.sql`이 있으면 먼저 `SELECT count(*) FROM event_grade_regions r JOIN event_grade_consumer_offsets o USING (region) WHERE o.applied_seq < r.published_seq`가 0인지 확인합니다. 002 이전 head(epoch 3의 032, epoch 4의 001)에는 두 테이블이 없으므로 이 확인을 건너뜁니다. 원장에 002가 있는데 테이블이 없으면 진행하지 않습니다. collector가 모두 멈춘 뒤 worker가 남은 관측을 소비할 때까지 기다리며, 0이 아니면 005가 적용을 거부합니다. 이어서 `quadlet-redeploy-service.sh --quiesce <API image> <worker image>`. 실행 중 원본이 `holo-pgbouncer:6432`이면 설치 unit이 직접 TLS일 때만 정지하고, 원래 endpoint를 hold에 기록합니다.
 5. pooler 정지: 여섯 hold가 모두 완료됐는지 확인한 뒤 `systemctl stop holo-pgbouncer.service`를 실행합니다. 이어서 `SELECT count(*) FROM pg_stat_activity WHERE client_addr = inet '172.23.255.254'`가 0인지 확인합니다. 0이 아니면 진행하지 않고 남은 세션의 출처를 조사합니다. backend를 강제 종료해 0을 만들지 않습니다.
 6. 중앙 재개: `quadlet-redeploy-service.sh --resume <API release> <worker release>`. 가드가 writer 차단 게이트를 설치·확인하고 `--schema-only` migrator를 실행한 뒤 두 후보를 엽니다.
 7. 방화벽: `sudo systemctl reload admin-dashboard-ingress-firewall.service`로 6433 게시 규칙을 지웁니다.
