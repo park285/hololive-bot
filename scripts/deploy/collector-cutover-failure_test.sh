@@ -994,6 +994,23 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
     (archive / 'image.tar').unlink()
     shutil.move(archive / 'elsewhere/image.tar', archive / 'image.tar')
     (archive / 'elsewhere').rmdir()
+    real_archive = state / 'arm64-real'
+    archive.rename(real_archive)
+    archive.symlink_to(real_archive)
+    for mode in ('preflight', 'quiesce'):
+        refused = run(entry, state, mode)
+        require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists(),
+                f'b: {mode} refuses a symlinked arm64 directory', refused)
+    archive.unlink()
+    real_archive.rename(archive)
+    window_used = state / f'b.{window}.quiesce.used'
+    window_used.write_text('earlier stage\n')
+    for mode in ('preflight', 'quiesce'):
+        refused = run(entry, state, mode)
+        require(refused.returncode != 0 and not (state / 'calls').exists() and (state / 'b.current-grant').exists()
+                and not (state / f'b.quiesce.{change}.requested').exists(),
+                f'b: {mode} refuses a window already used by another stage without marking this stage', refused)
+    window_used.unlink()
     lost_window, lost_change = 'f' * 32, '20261002T000000Z'
     lost_entry = f'window_id={lost_window}\nstage_id={lost_change}\n' + entry
     lost_stage = state / f'b.stage.{lost_change}.finished'

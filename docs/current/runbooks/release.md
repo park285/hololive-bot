@@ -57,7 +57,7 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
    - c: 검증한 pair 디렉터리 `C_PAIR`, 승인된 transport SHA-256 `C_SEAL`, 승인된 SSH 대상 `C_HOST`
    - 중앙: 같은 revision으로 설치한 API·alarm-worker 후보 image ID `API_ID`, `WORKER_ID`(`sha256:<64자리>`)
 
-   무엇이든 멈추기 전에 b staging 후보와 c 후보가 같은지 이 release의 clean checkout에서 대조합니다. b는 staging한 revision·seal과 `B_ARGS[0]` checkout으로, c는 이 checkout의 revision과 `C_PAIR`·`C_SEAL`로 재개되므로 하나라도 다르면 c·a를 재개한 뒤에야 b 재개가 거절됩니다. `c verify-pair`는 c `quiesce-verified`와 같은 기준(seal, 전송할 파일이 모두 심볼릭 링크가 아닌 일반 파일인지, 두 image archive의 체크섬과 원격이 받는 체크섬 줄 형식, arm64 manifest, 이 checkout의 VERSION 형식과 source 목록)으로 `C_PAIR`를 읽기만 하며 SSH를 열지 않습니다. `b preflight`는 같은 다섯 인자로 `b quiesce`가 grant를 소비하기 전까지의 검사(두 checkout, 영수증 디렉터리 경로·권한, staging 영수증, 정지 grant와 그 만료, 이 stage·창의 정지 요청 표식이 없는지, W2 pair, `${B_ARGS[1]}/arm64`가 심볼릭 링크 없는 일반 파일인지와 seal·체크섬, source 목록, VERSION)를 그대로 실행하고, grant를 소비하거나 SSH를 열지 않고 끝납니다. 이전 창의 `c.accepted`가 영수증 디렉터리에 남아 있으면 그 창의 b 재개 완료 영수증 `b.<이전-owner-window-id>.resume.finished`를 확인한 뒤 `ln -T -- c.accepted c.accepted.<이전-b-staging-timestamp>`로 보존하고 원래 이름을 지웁니다. 완료 영수증이 없으면 창을 열지 않습니다. 아래 검사는 `c.accepted`가 없어야 통과합니다.
+   무엇이든 멈추기 전에 b staging 후보와 c 후보가 같은지 이 release의 clean checkout에서 대조합니다. b는 staging한 revision·seal과 `B_ARGS[0]` checkout으로, c는 이 checkout의 revision과 `C_PAIR`·`C_SEAL`로 재개되므로 하나라도 다르면 c·a를 재개한 뒤에야 b 재개가 거절됩니다. `c verify-pair`는 c `quiesce-verified`와 같은 기준(seal, 전송할 파일이 모두 심볼릭 링크가 아닌 일반 파일인지, 두 image archive의 체크섬과 원격이 받는 체크섬 줄 형식, arm64 manifest, 이 checkout의 VERSION 형식과 source 목록)으로 `C_PAIR`를 읽기만 하며 SSH를 열지 않습니다. `b preflight`는 같은 다섯 인자로 `b quiesce`가 grant를 소비하기 전까지의 검사(두 checkout, 영수증 디렉터리 경로·권한, staging 영수증, 정지 grant와 그 만료, 이 stage·창의 정지 요청 표식이 없는지, W2 pair, `${B_ARGS[1]}/arm64`가 심볼릭 링크 없는 일반 파일인지와 seal·체크섬, source 목록, VERSION)를 그대로 실행하고, grant를 소비하거나 SSH를 열지 않고 끝납니다. 이전 창의 `c.accepted`가 영수증 디렉터리에 남아 있으면 그 창의 b 재개 완료 영수증 `b.<이전-owner-window-id>.resume.finished`를 확인한 뒤 `ln -T -- c.accepted c.accepted.<이전-b-staging-timestamp>`로 보존하고 원래 이름을 지웁니다. 완료 영수증이 없으면 창을 열지 않습니다. 아래 검사는 `c.accepted`가 없어야 통과합니다. 정지 grant의 `expires`가 지금부터 1시간 이상 남았는지도 확인합니다. 재개 grant는 같은 `expires`를 써야 하므로, 4단계의 10분 초과 대기와 3·5단계의 앞선 슬롯 정지·재개를 마치고 b를 재개할 때까지 grant가 유효해야 합니다. 남은 시간이 1시간보다 짧으면 승인 주체에게서 새 grant를 받은 뒤 창을 엽니다.
 
    ```bash
    (
@@ -66,6 +66,8 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
      read -r b_revision b_seal b_change <"${B_ARGS[1]}/b.stage.${B_ARGS[2]}.finished"
      [[ $b_revision == "$(deploy_source_revision .)" && $b_revision == "$(deploy_source_revision "${B_ARGS[0]}")" ]]
      [[ $b_seal == "$C_SEAL" && $b_change == "${B_ARGS[2]}" && ! -e ${B_ARGS[1]}/c.accepted && ! -L ${B_ARGS[1]}/c.accepted ]]
+     read -r -a quiesce_grant <"${B_ARGS[1]}/b.current-grant"
+     (( ${#quiesce_grant[@]} == 13 && quiesce_grant[12] - EPOCHSECONDS >= 3600 ))
      scripts/deploy/po-central-cutover.sh c verify-pair "$C_PAIR" "$C_SEAL"
      PO_B_SSH_TARGET=iris-seoul scripts/deploy/po-central-cutover.sh b preflight "${B_ARGS[@]}"
    )
