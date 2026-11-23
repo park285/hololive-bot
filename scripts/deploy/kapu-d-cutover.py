@@ -775,9 +775,18 @@ def unit_paths():
 
 
 def service_dropins(name):
-    roots = [root for root in unit_paths() if root.is_dir()]
-    names = {name, *(e.name.removesuffix('.service') for root in roots for e in os.scandir(root)
-                     if e.name.endswith('.service') and e.is_symlink() and Path(os.readlink(e.path)).name == name + '.service')}
+    paths = unit_paths()
+    roots = [root for root in paths if root.is_dir()]
+    entries = {}
+    for root in roots:
+        for e in sorted(os.scandir(root), key=lambda e: e.name):
+            if e.name.endswith('.service') and e.name not in entries:
+                entries[e.name] = Path(os.path.normpath(root / os.readlink(e.path))) if e.is_symlink() else None
+    links = {(alias.removesuffix('.service'), dest.name.removesuffix('.service')) for alias, dest in entries.items()
+             if dest is not None and dest.name != alias and any(dest.is_relative_to(p) for p in paths)}
+    names = {name}
+    while grown := {alias for alias, target in links if target in names} - names:
+        names |= grown
     folders = {'service.d', *(n[:i+1] + '.service.d' for n in names for i,c in enumerate(n) if c == '-'),
                *(n + '.service.d' for n in names)}
     return sorted(str(root / f / k) for root in roots for f in folders if (root / f).is_dir()

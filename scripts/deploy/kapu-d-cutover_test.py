@@ -436,9 +436,14 @@ class Cutover(unittest.TestCase):
     def test_check_and_resume_see_dropins_attached_through_an_alias(self):
         target = self.target()
         self.seal(target)
-        (self.vendor / 'collector-alias.service').symlink_to(self.root / 'generator' / (d.C + '.service'))
+        generator = self.root / 'gen'
+        generator.mkdir()
+        (generator / (d.C + '.service')).write_bytes(b'[Unit]\n')
+        self.patch('unit_paths', lambda: [self.system, self.vendor, generator])
+        (self.vendor / 'collector-alias.service').symlink_to(generator / (d.C + '.service'))
+        (self.system / 'chained.service').symlink_to('collector-alias.service')
         self.cli('check', target)
-        for folder in (self.system / 'collector-alias.service.d', self.vendor / 'collector-.service.d'):
+        for folder in (self.system / 'collector-alias.service.d', self.vendor / 'collector-.service.d', self.vendor / 'chained.service.d'):
             folder.mkdir()
             (folder / '10-late.conf').write_bytes(b'[Service]\nEnvironment=LATE=1\n')
             with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
@@ -446,6 +451,22 @@ class Cutover(unittest.TestCase):
             with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
                 self.resume()
             (folder / '10-late.conf').unlink()
+        self.assertEqual(self.calls, [])
+
+    def test_check_ignores_links_that_systemd_does_not_treat_as_aliases(self):
+        target = self.target()
+        self.seal(target)
+        generator, outside = self.root / 'gen', self.root / 'outside'
+        generator.mkdir()
+        outside.mkdir()
+        self.patch('unit_paths', lambda: [self.system, self.vendor, generator])
+        (self.vendor / 'linked.service').symlink_to(outside / (d.C + '.service'))
+        (self.vendor / 'shadowed.service').symlink_to(generator / (d.C + '.service'))
+        (self.system / 'shadowed.service').symlink_to('/dev/null')
+        for alias in ('linked', 'shadowed'):
+            (self.vendor / (alias + '.service.d')).mkdir()
+            (self.vendor / (alias + '.service.d') / '10-own.conf').write_bytes(b'[Service]\nEnvironment=OWN=1\n')
+        self.cli('check', target)
         self.assertEqual(self.calls, [])
 
     def test_check_refuses_what_resume_refuses(self):
