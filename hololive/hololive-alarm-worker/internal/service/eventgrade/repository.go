@@ -149,11 +149,11 @@ func validateChapterBindings(bindings []ChapterBinding, conflicts []string) (map
 	seen := make(map[string]string, len(bindings)+len(conflicts))
 	for _, binding := range bindings {
 		if !gameID.MatchString(binding.EventID) || !gameID.MatchString(binding.ChapterID) {
-			return nil, errors.New("invalid chapter binding")
+			return nil, fmt.Errorf("%w: invalid chapter binding", errRejected)
 		}
 
 		if _, dup := seen[binding.ChapterID]; dup {
-			return nil, errors.New("duplicate chapter binding")
+			return nil, fmt.Errorf("%w: duplicate chapter binding", errRejected)
 		}
 
 		seen[binding.ChapterID] = binding.EventID
@@ -161,11 +161,11 @@ func validateChapterBindings(bindings []ChapterBinding, conflicts []string) (map
 
 	for _, chapterID := range conflicts {
 		if !gameID.MatchString(chapterID) {
-			return nil, errors.New("invalid conflicting chapter identity")
+			return nil, fmt.Errorf("%w: invalid conflicting chapter identity", errRejected)
 		}
 
 		if _, dup := seen[chapterID]; dup {
-			return nil, errors.New("confirmed chapter marked conflicting")
+			return nil, fmt.Errorf("%w: confirmed chapter marked conflicting", errRejected)
 		}
 
 		seen[chapterID] = ""
@@ -179,15 +179,15 @@ func validateCatalogChapters(chapters []Chapter, bindings map[string]string) err
 	for i := range chapters {
 		c := &chapters[i]
 		if !c.valid() {
-			return errors.New("invalid event grade chapter")
+			return fmt.Errorf("%w: invalid event grade chapter", errRejected)
 		}
 
 		if eventID, ok := bindings[c.ChapterID]; !ok || eventID != c.EventID {
-			return errors.New("chapter missing matching binding")
+			return fmt.Errorf("%w: chapter missing matching binding", errRejected)
 		}
 
 		if _, dup := seen[c.ChapterID]; dup {
-			return errors.New("duplicate chapter identity")
+			return fmt.Errorf("%w: duplicate chapter identity", errRejected)
 		}
 
 		seen[c.ChapterID] = struct{}{}

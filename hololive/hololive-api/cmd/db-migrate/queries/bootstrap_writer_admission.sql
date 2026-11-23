@@ -46,12 +46,17 @@ BEGIN
                 'hololive_runtime', 'hololive_alarm_worker',
                 'hololive_collector_a', 'hololive_collector_b',
                 'hololive_collector_c', 'hololive_collector_d'
-            ) AND EXISTS (
+            ) AND (EXISTS (
                 SELECT FROM pg_catalog.pg_stat_activity AS a
                 JOIN pg_catalog.pg_roles AS r ON r.oid = a.usesysid AND r.rolsuper
                 WHERE a.datname = pg_catalog.current_database()
                   AND a.application_name IN ('hololive-writers-draining', 'hololive-writers-drained')
-            ) THEN
+            ) OR EXISTS (
+                SELECT FROM pg_catalog.pg_stat_activity AS a
+                WHERE a.datname = pg_catalog.current_database()
+                  AND a.usename = 'hololive_migrator'
+                  AND a.application_name = 'hololive-migration-window'
+            )) THEN
                 RAISE EXCEPTION 'application writers are closed for the card migration window' USING ERRCODE = '57P03';
             END IF;
         END

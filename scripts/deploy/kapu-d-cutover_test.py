@@ -238,8 +238,9 @@ class Cutover(unittest.TestCase):
         (self.release / '.source-revision').write_text(target['revision'] + '\n')
         (self.release / 'd-card-candidate.json').write_text(json.dumps(target))
 
-    def cli(self, action, target, *, same_endpoint=True, anchor_uid=0):
-        args = ['kapu-d-cutover.py',action,*(['--already-direct'] if same_endpoint else []),str(self.h),
+    def cli(self, action, target, *, same_endpoint=True, pooled=False, anchor_uid=0):
+        source = ['--from-pooler'] if pooled else ['--already-direct'] if same_endpoint else []
+        args = ['kapu-d-cutover.py',action,*source,str(self.h),
                 target['revision'],*(target[k][n] for k in ('images','units') for n in d.NAMES)]
         anchors = {d.mask_anchor(self.h,n) for n in d.NAMES}
         lstat = Path.lstat
@@ -367,12 +368,9 @@ class Cutover(unittest.TestCase):
     def exercise_release(self, source_port):
         candidates = dict(self.executions)
         h = self.running_pair(source_port)
-        target = self.target() if source_port == '5433' else None
-        if target is None:
-            d.quiesce(h,source_port)
-        else:
-            self.seal(target)
-            self.cli('quiesce',target)
+        target = self.target()
+        self.seal(target)
+        self.cli('quiesce',target,pooled=source_port == '6433')
         previous = json.loads((h/'previous.json').read_bytes())
         self.assertEqual(previous['previous_endpoint']['port'],int(source_port))
         self.assertEqual(previous['old'],self.executions)
@@ -380,10 +378,7 @@ class Cutover(unittest.TestCase):
         collector_unit = self.units / d.unit(d.C)
         inode = d.number(collector_unit)
         self.executions = candidates
-        if target is None:
-            self.resume(source_port)
-        else:
-            self.cli('resume',target)
+        self.cli('resume',target,pooled=source_port == '6433')
         self.assertEqual(d.number(collector_unit) == inode,source_port == '5433')
         self.assertEqual(collector_unit.read_bytes(),(d.INPUT / d.unit(d.C)).read_bytes())
         accepted = json.loads((h/'accepted.json').read_bytes())

@@ -80,6 +80,7 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 - PostgreSQL 로그인 비밀번호는 API `HOLOLIVE_DB_PASSWORD`, alarm-worker `HOLOLIVE_ALARM_WORKER_PASSWORD`,
   collector slot별 `HOLOLIVE_COLLECTOR_A_PASSWORD`~`D_PASSWORD`로 나누고 서로·`DB_PASSWORD`와 다르게 둡니다.
   이 창의 one-shot은 여섯 업무 역할의 로그인 비밀번호와 연결 한도를 변경하지 않습니다. 배포 이미지의 `db-migrate`는 창 전용 인자가 빠지면 DB 접속 전에 거부합니다. 신규 DB의 별도 초기화에서만 같은 이미지의 `--initialize`를 명시하며, 운영 one-shot은 `--schema-only`입니다.
+  `--schema-only`가 대기 migration을 적용하려면 같은 트랜잭션에서 writer drain 가드의 superuser 세션과 그 advisory lock, login 게이트, 업무 역할 세션 0건이 모두 확인돼야 합니다. 확인 뒤 migrator 세션은 `hololive-migration-window` 표식을 달고, 게이트는 가드 세션이 끊겨도 이 세션이 끝날 때까지 업무 역할 로그인을 막습니다.
   같은 비밀번호이면 기존 SCRAM verifier를 유지합니다. 실제 비밀번호를 바꿀 때는 해당 역할의 모든 앱 frontend를 먼저 drain·종료해야 하며, 비밀번호 변경 자체가 기존 세션을 폐기하지는 않습니다.
 - compose에서 `:?`였던 필수 값(`VALKEY_SENTINEL_ADDRS`, `LIVE_LOGS_PATH`,
   `POSTGRES_PORT_BIND_IP`, `VALKEY_BIND_IP`, `HOLOLIVE_API_PORT_BIND_IP`, `HOLOLIVE_ADMIN_API_PORT_BIND_IP`,
@@ -110,12 +111,12 @@ HBA는 단일 파일 bind라서 PostgreSQL을 다시 만들 때만 바뀝니다.
    - b: [iris-seoul 절차](../podman/iris-seoul/README.md)의 `po-central-cutover.sh b quiesce`
    - a: [collector 런북](../../docs/current/runbooks/collector.md#osaka-a-w1w2-분리-정지-창)의 `ap-host-native-deploy.sh osaka --quiesce W2`. W2는 원래 6433 원점만 받습니다.
    - c: `po-central-cutover.sh c quiesce-verified`
-   - 중앙: `quadlet-redeploy-service.sh --quiesce <API image> <worker image>`. 실행 중 원본이 `holo-pgbouncer:6432`이면 설치 unit이 직접 TLS일 때만 정지하고, 원래 endpoint를 hold에 기록합니다.
+   - 중앙: 먼저 `SELECT count(*) FROM event_grade_regions r JOIN event_grade_consumer_offsets o USING (region) WHERE o.applied_seq < r.published_seq`가 0인지 확인합니다. collector가 모두 멈춘 뒤 worker가 남은 관측을 소비할 때까지 기다리며, 0이 아니면 005가 적용을 거부합니다. 이어서 `quadlet-redeploy-service.sh --quiesce <API image> <worker image>`. 실행 중 원본이 `holo-pgbouncer:6432`이면 설치 unit이 직접 TLS일 때만 정지하고, 원래 endpoint를 hold에 기록합니다.
 5. pooler 정지: 여섯 hold가 모두 완료됐는지 확인한 뒤 `systemctl stop holo-pgbouncer.service`를 실행합니다. 이어서 `SELECT count(*) FROM pg_stat_activity WHERE client_addr = inet '172.23.255.254'`가 0인지 확인합니다. 0이 아니면 진행하지 않고 남은 세션의 출처를 조사합니다. backend를 강제 종료해 0을 만들지 않습니다.
 6. 중앙 재개: `quadlet-redeploy-service.sh --resume <API release> <worker release>`. 가드가 writer 차단 게이트를 설치·확인하고 `--schema-only` migrator를 실행한 뒤 두 후보를 엽니다.
 7. 방화벽: `sudo systemctl reload admin-dashboard-ingress-firewall.service`로 6433 게시 규칙을 지웁니다.
 8. collector 재개(c→a→b→d): `po-central-cutover.sh c resume`, `ap-host-native-deploy.sh osaka --resume W2`, `po-central-cutover.sh b resume`, `kapu-d-cutover.py resume --from-pooler`. 각 후보는 활성화 전에 실제 경로의 `--check-database-endpoint`를 통과해야 합니다.
-9. 정리(별도 승인): 관리 socket에서 `DROP SCHEMA hololive_pooler_auth CASCADE`와 `DROP ROLE hololive_pgbouncer_auth`를 실행합니다. 후속 변경에서 HBA의 두 `172.23.255.254` 규칙과 퇴역 원점 허용(중앙 quiesce의 `holo-pgbouncer:6432`, AP W2의 6433, kapu `--from-pooler`)을 지우고, 다음 승인된 PostgreSQL 재생성에서 적용합니다.
+9. 정리(별도 승인): 관리 socket의 `hololive` DB에서 한 트랜잭션으로 `DROP SCHEMA hololive_pooler_auth CASCADE`, `REVOKE ALL ON DATABASE hololive FROM hololive_pgbouncer_auth`, `DROP ROLE hololive_pgbouncer_auth`를 실행하고 `pg_roles`에 역할이 남지 않았는지 확인합니다. `DROP ROLE`이 남은 권한 때문에 실패하면 트랜잭션 전체가 취소되므로, 남은 권한의 출처를 조사한 뒤 다시 실행합니다. 후속 변경에서 HBA의 두 `172.23.255.254` 규칙과 퇴역 원점 허용(c quiesce와 중앙 quiesce의 `holo-pgbouncer:6432`, AP W2·b quiesce의 6433, kapu `--from-pooler`)을 지우고, 다음 승인된 PostgreSQL 재생성에서 적용합니다. 그때까지 `hololive-net`의 `172.23.255.254`를 다른 컨테이너에 고정 배정하지 않습니다.
 
 어느 단계든 실패하면 hold와 복구 입력을 보존합니다. 이전 endpoint로의 rollback은 helper가 거부하므로 호환 후보로 fix-forward합니다.
 

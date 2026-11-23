@@ -42,7 +42,7 @@ PO_B_SSH_TARGET=iris-seoul scripts/deploy/po-central-cutover.sh b check /opt/hol
 PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_ROLLBACK=true scripts/deploy/po-central-cutover.sh b rollback /opt/hololive-bot/collector-b/backups/po-b-<TIMESTAMP>
 ```
 
-PgBouncer에서의 전환은 [퇴역 전환 절차](../../quadlet/README.md#pgbouncer-퇴역-전환)를 따릅니다. unit 교체 전에 `b quiesce`로 실행 중 이전 pair를 보존·정지하고, 설치된 후보와 중앙 재개가 끝난 뒤 `b resume <backup>`으로 재개합니다. 정지된 collector에 일반 `deploy`를 적용하지 않습니다. 실패 시 hold와 backup을 보존합니다. endpoint가 다른 이전 pair로의 `rollback`은 거부되므로 호환 후보로 fix-forward합니다.
+PgBouncer에서의 전환은 [퇴역 전환 절차](../../quadlet/README.md#pgbouncer-퇴역-전환)를 따릅니다. unit 교체 전에 `b quiesce`로 실행 중 이전 pair를 보존·정지하고, 설치된 후보와 중앙 재개가 끝난 뒤 `b resume <backup>`으로 재개합니다. `b quiesce`는 stage 완료 영수증의 seal만 요구하고, c 후보 수용 영수증(`c.accepted`)은 resume·check·rollback에서 확인합니다. 정지된 collector에 일반 `deploy`를 적용하지 않습니다. 실패 시 hold와 backup을 보존합니다. endpoint가 다른 이전 pair로의 `rollback`은 거부되므로 호환 후보로 fix-forward합니다.
 
 `b/current`는 source checkout이 아니라 release pair 저장소이므로 `.source-revision`을 만들지 않습니다.
 `quiesce`는 동일 full revision으로 빌드한 image/manifest와 bounded source checksum을 전송하고 보존합니다.

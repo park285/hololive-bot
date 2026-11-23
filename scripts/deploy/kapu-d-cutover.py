@@ -541,7 +541,7 @@ def snapshot(h, source_port, target):
         for n in NAMES:
             old = state['images'][n]
             need(target['revision'] != old['rev'] and target['images'][n] != old['id'], '이전 실행 이미지 또는 revision 재사용: ' + n)
-            verify_candidate_input(n,files[unit(n)],target)
+            verify_candidate_input(n,raw(INPUT / unit(n)),target)
         state['candidate'] = target
     state['bindings'] = bindings()
     state['previous_endpoint'] = previous_endpoint(source_port)

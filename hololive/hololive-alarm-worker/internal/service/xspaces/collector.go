@@ -81,9 +81,13 @@ type ProcessCollector struct {
 }
 
 type helperProcess struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	output *bufio.Reader
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	stdout  io.ReadCloser
+	output  *bufio.Reader
+	exited  chan struct{}
+	state   *os.ProcessState
+	waitErr error
 }
 
 type helperLine struct {
@@ -122,6 +126,12 @@ func (p *ProcessCollector) Collect(ctx context.Context, cookies sessions.Cookies
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if p.helper != nil && p.helper.hasExited() {
+		_ = p.helper.stop()
+
+		p.helper = nil
+	}
 
 	if p.helper == nil {
 		command := p.command
@@ -162,7 +172,7 @@ func nodeHelperCommand(ctx context.Context) *exec.Cmd {
 
 func startHelper(cmd *exec.Cmd) (*helperProcess, error) {
 	cmd.Env = []string{"LANG=C.UTF-8"}
-	cmd.Stderr = io.Discard
+	cmd.Stderr = nil
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -178,7 +188,23 @@ func startHelper(cmd *exec.Cmd) (*helperProcess, error) {
 		return nil, fmt.Errorf("start X collector: %w", err)
 	}
 
-	return &helperProcess{cmd: cmd, stdin: stdin, output: bufio.NewReader(stdout)}, nil
+	helper := &helperProcess{cmd: cmd, stdin: stdin, stdout: stdout, output: bufio.NewReader(stdout), exited: make(chan struct{})}
+
+	go func() {
+		helper.state, helper.waitErr = cmd.Process.Wait()
+		close(helper.exited)
+	}()
+
+	return helper, nil
+}
+
+func (h *helperProcess) hasExited() bool {
+	select {
+	case <-h.exited:
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *helperProcess) exchange(ctx context.Context, request []byte) ([]byte, error) {
@@ -210,11 +236,20 @@ func (h *helperProcess) stop() error {
 		return fmt.Errorf("stop X collector: %w", err)
 	}
 
-	if err := h.cmd.Wait(); err != nil {
-		return fmt.Errorf("wait X collector: %w", err)
-	}
+	<-h.exited
 
-	return nil
+	closeErr := errors.Join(h.stdin.Close(), h.stdout.Close())
+
+	switch {
+	case h.waitErr != nil:
+		return fmt.Errorf("wait X collector: %w", h.waitErr)
+	case !h.state.Success():
+		return fmt.Errorf("wait X collector: %w", &exec.ExitError{ProcessState: h.state})
+	case closeErr != nil:
+		return fmt.Errorf("close X collector pipes: %w", closeErr)
+	default:
+		return nil
+	}
 }
 
 func readHelperLine(output *bufio.Reader) ([]byte, error) {

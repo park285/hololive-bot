@@ -41,14 +41,16 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
   grant_name=b.current-grant
   grant_phase="$mode"
   if [[ "$mode" == check ]]; then grant_name="b.quiesce.$change_id.requested" grant_phase=quiesce; fi
-  for receipt in c.accepted "b.stage.$change_id.finished" "$grant_name"; do
+  receipts=("b.stage.$change_id.finished" "$grant_name")
+  [[ "$mode" == quiesce ]] || receipts+=(c.accepted)
+  for receipt in "${receipts[@]}"; do
     [[ -f "$receipt_dir/$receipt" && ! -L "$receipt_dir/$receipt" &&
        "$(stat -c '%u:%a' "$receipt_dir/$receipt")" == "$EUID:600" ]] || { echo "missing or untrusted $receipt" >&2; exit 1; }
   done
-  read -r accepted_revision seal extra < "$receipt_dir/c.accepted"
-  [[ "$accepted_revision" == "$revision" && "$seal" =~ ^[0-9a-f]{64}$ && -z "$extra" ]]
-  cmp -s -- "$receipt_dir/c.accepted" <(printf '%s %s\n' "$revision" "$seal")
+  read -r staged_revision seal staged_change extra < "$receipt_dir/b.stage.$change_id.finished"
+  [[ "$staged_revision" == "$revision" && "$seal" =~ ^[0-9a-f]{64}$ && "$staged_change" == "$change_id" && -z "$extra" ]]
   cmp -s -- "$receipt_dir/b.stage.$change_id.finished" <(printf '%s %s %s\n' "$revision" "$seal" "$change_id")
+  if [[ "$mode" != quiesce ]]; then cmp -s -- "$receipt_dir/c.accepted" <(printf '%s %s\n' "$revision" "$seal"); fi
   grant="$receipt_dir/$grant_name"
   if [[ "$mode" != check ]]; then [[ "$(stat -c '%h' "$grant")" == 1 ]]; fi
   read -r -a fields < "$grant"

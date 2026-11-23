@@ -90,6 +90,7 @@ proof_function = function(central, 'require_collector_lease_migration')
 for case, endpoint, success, queries in (
     ('direct', ('holo-postgres', '5432', 'hololive'), True, True),
     ('retired_pooler', ('holo-pgbouncer', '6432', 'hololive'), False, False),
+    ('retired_pooler_quiesce', ('holo-pgbouncer', '6432', 'hololive'), True, True),
     ('foreign', ('other-postgres', '5432', 'hololive'), False, False),
     ('wrong_port', ('holo-postgres', '6432', 'hololive'), False, False),
     ('wrong_database', ('holo-postgres', '5432', 'other'), False, False),
@@ -108,7 +109,8 @@ for case, endpoint, success, queries in (
         if case in ('socket_override', 'ambiguous_host'):
             with (state / 'collector.env').open('a') as env_file:
                 env_file.write('POSTGRES_SOCKET_PATH=/other\n' if case == 'socket_override' else 'POSTGRES_HOST=other\n')
-        result = run(proof_setup + proof_function + '\nrequire_collector_lease_migration applied\n', state, case)
+        mode = '\nmode=quiesce\n' if case == 'retired_pooler_quiesce' else '\nmode=resume\n'
+        result = run(proof_setup + mode + proof_function + '\nrequire_collector_lease_migration applied\n', state, case)
         require((result.returncode == 0) == success, f'{case}: primary route proof outcome', result)
         query_args = state / 'query-args'
         require(query_args.exists() == queries, f'{case}: query only after route validation', result)
@@ -964,7 +966,15 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
     grant('quiesce', stage=lost_change)
     refused = run(f'stage_id={lost_change}\n' + entry, state, 'quiesce')
     require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: a different window cannot retry unknown stage effects', refused)
+    accepted_pair = (state / 'c.accepted').read_bytes()
+    grant('resume')
+    (state / 'c.accepted').unlink()
+    refused = run(entry, state, 'resume')
+    require(refused.returncode != 0 and not (state / 'calls').exists(), 'b: resume requires the accepted c pair', refused)
     for mode in ('quiesce', 'resume'):
+        if mode == 'resume':
+            (state / 'c.accepted').write_bytes(accepted_pair)
+            (state / 'c.accepted').chmod(0o600)
         grant(mode)
         result = run(entry, state, mode)
         expected = (f'iris-seoul sudo -n bash -s -- b {mode} {slot_table["b"]["root"]}/po-staging-{change} '
@@ -1065,7 +1075,7 @@ runs += [('b', 'staged_' + scenario) for scenario in (
     'success', 'already_loaded', 'error_log', 'missing_start_record', 'archive_drift', 'partial_transport', 'origin_stale', 'unsafe_stage',
     'changed_seal', 'absent_hold', 'foreign_hold', 'missing_seal', 'other_owner', 'other_invocation', 'other_cid', 'old_start_cid',
     'candidate_check_failure', 'database_query_failure', 'profile_drift', 'wrong_window', 'wrong_boot', 'wrong_tool',
-    'expire_after_stop', 'expire_after_unmask', 'expire_after_issuer', 'expired_late_notify_client')]
+    'expire_after_stop', 'expire_after_unmask', 'expire_after_issuer', 'expired_late_notify_client', 'pooled_origin')]
 for slot, case in runs:
     expected_status, restored = central_cases.get(case, (0, False))
     service, port = slot_table[slot]['service'], int(slot_table[slot]['port'])
@@ -1237,7 +1247,13 @@ for slot, case in runs:
             elif scenario == 'unsafe_stage':
                 (staging / 'foreign').symlink_to(prior_backup)
             preflight_failure = scenario in ('candidate_check_failure', 'database_query_failure')
+            staged_unit_path = state / f'units/{container(slot)}.container'
+            if scenario == 'pooled_origin':
+                (state / 'direct-origin').touch()
+                staged_unit_path.write_text(installed_definition.replace('Environment=POSTGRES_PORT=5433', 'Environment=POSTGRES_PORT=6433'))
             result = invoke('quiesce', scenario if preflight_failure or scenario == 'expire_after_stop' else '')
+            if scenario == 'pooled_origin':
+                staged_unit_path.write_text(installed_definition)
             if scenario == 'expire_after_stop':
                 calls = calls_now()
                 require(result.returncode != 0 and '[OUTCOME] unconfirmed:' in result.stderr and
@@ -1334,7 +1350,7 @@ for slot, case in runs:
                     [held_start + u for u in (issuer_unit, collector_unit)] and not any(
                         c.startswith('pair activate ') and c.endswith('/previous') for c in after),
                     f'{label}: only guarded original start requests, no automatic restoration', result)
-            if scenario in ('success', 'already_loaded'):
+            if scenario in ('success', 'already_loaded', 'pooled_origin'):
                 require(result.returncode == 0 and not hold.exists() and active.read_text() == (backup / 'card-candidate').read_text() and
                         all((state / f'{k}.runtime').read_text() == 'new' for k in ('issuer', 'collector')),
                         'b: activates exactly the staged pair', result)

@@ -96,9 +96,16 @@ func (c *Client) Create[A, F any](ctx context.Context, request Request) (Result[
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
-	var connected atomic.Bool
+	var connected, sent atomic.Bool
 
-	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotConn: func(httptrace.GotConnInfo) { connected.Store(true) }})
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+		GotConn: func(httptrace.GotConnInfo) { connected.Store(true) },
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			if info.Err == nil {
+				sent.Store(true)
+			}
+		},
+	})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, decisionsURL, bytes.NewReader(body))
 	if err != nil {
@@ -112,7 +119,7 @@ func (c *Client) Create[A, F any](ctx context.Context, request Request) (Result[
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return Result[A, F]{}, fmt.Errorf("create decision: %w", sendFailure(err, connected.Load()))
+		return Result[A, F]{}, fmt.Errorf("create decision: %w", sendFailure(err, connected.Load(), sent.Load()))
 	}
 
 	defer resp.Body.Close()
@@ -135,12 +142,12 @@ func (c *Client) Create[A, F any](ctx context.Context, request Request) (Result[
 	return response, nil
 }
 
-func sendFailure(err error, connected bool) error {
+func sendFailure(err error, connected, sent bool) error {
 	safe := SafeClientError(err)
 
 	if urlErr, ok := errors.AsType[*url.Error](safe); ok {
 		if cause, ok := errors.AsType[transportError](urlErr.Err); ok {
-			cause.timedOut = connected && errors.Is(err, context.DeadlineExceeded)
+			cause.timedOut = sent || connected && errors.Is(err, context.DeadlineExceeded)
 			urlErr.Err = cause
 		}
 	}

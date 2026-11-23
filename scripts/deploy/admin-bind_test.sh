@@ -67,6 +67,18 @@ for filter in '.nftables[0].set.elem = []' '.nftables[0].set.elem += ["0.0.0.0/0
         exit 1
     fi
 done
+cp "$root/scripts/deploy/testdata/ingress-firewall-retiring-pooler.json" "$fixture/retiring.json"
+cp "$fixture/retiring.json" "$fixture/firewall.json"
+admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft"
+for filter in 'del(.nftables[] | select(.rule.chain == "forward" and .rule.expr[1].match.right == 6433 and .rule.expr[-1].reject != null))' \
+    'del(.nftables[] | select(.rule.chain == "forward_preserve_postgres_source" and .rule.expr[1].match.right == 6433))' \
+    '(.nftables[] | select(.rule.chain == "forward" and .rule.expr[1].match.right == 6433 and (.rule.expr[-1] | has("accept"))) | .rule.expr) |= .[0:3] + [{"accept":null}]'; do
+    jq "$filter" "$fixture/retiring.json" > "$fixture/firewall.json"
+    if admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft" > "$fixture/rejected.log" 2>&1; then
+        echo 'incomplete retiring pooler firewall accepted' >&2
+        exit 1
+    fi
+done
 cp "$fixture/valid.json" "$fixture/firewall.json"
 inactive=true
 if admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft" > "$fixture/rejected.log" 2>&1; then

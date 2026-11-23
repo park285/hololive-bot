@@ -186,6 +186,62 @@ func TestConsumeStopsAtSequenceGap(t *testing.T) {
 	require.Equal(t, first, appliedSeq(t, r))
 }
 
+func TestConsumeStopsAtMissingPublishedTail(t *testing.T) {
+	r := NewRepository(dbtest.NewPool(t))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	empty := observationcontract.CatalogObservation{Chapters: []observationcontract.Chapter{}, Bindings: []observationcontract.Binding{}, Conflicts: []string{}}
+
+	tail := publishObservation(t, r, "catalog", now.Add(-2*time.Second), now.Add(-2*time.Second), empty)
+
+	_, err := r.pool.Exec(t.Context(), deleteObservationSQL, "jp", tail)
+	require.NoError(t, err)
+
+	result, err := r.ConsumeRegion(t.Context(), "jp", 10)
+	require.ErrorContains(t, err, "is missing before published")
+	require.Equal(t, ConsumeResult{}, result)
+	require.Equal(t, tail-1, appliedSeq(t, r))
+
+	first := publishObservation(t, r, "catalog", now.Add(-time.Second), now.Add(-time.Second), empty)
+	require.Equal(t, tail+1, first)
+
+	result, err = r.ConsumeRegion(t.Context(), "jp", 10)
+	require.ErrorContains(t, err, "is missing before")
+	require.Equal(t, ConsumeResult{}, result)
+
+	r2 := NewRepository(dbtest.NewPool(t))
+	applied := publishObservation(t, r2, "catalog", now.Add(-2*time.Second), now.Add(-2*time.Second), empty)
+	missing := publishObservation(t, r2, "catalog", now.Add(-time.Second), now.Add(-time.Second), empty)
+
+	_, err = r2.pool.Exec(t.Context(), deleteObservationSQL, "jp", missing)
+	require.NoError(t, err)
+
+	result, err = r2.ConsumeRegion(t.Context(), "jp", 10)
+	require.ErrorContains(t, err, "is missing before published")
+	require.Equal(t, ConsumeResult{Applied: 1}, result)
+	require.Equal(t, applied, appliedSeq(t, r2))
+}
+
+func TestConsumeRejectsInvalidCatalogChapterAndContinues(t *testing.T) {
+	r := NewRepository(dbtest.NewPool(t))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	c := chapterAt("valid-after-bad", now.Add(time.Hour))
+	bad := chapterAt("inverted", now.Add(time.Hour))
+	bad.EndsAt = bad.StartsAt
+
+	publishObservation(t, r, "catalog", now.Add(-time.Second), now.Add(-time.Second), observationcontract.CatalogObservation{
+		Chapters: []observationcontract.Chapter{observationcontract.Chapter(bad)}, Bindings: []observationcontract.Binding{{EventID: bad.EventID, ChapterID: bad.ChapterID}}, Conflicts: []string{},
+	})
+	last := publishObservation(t, r, "catalog", now, now, observationcontract.CatalogObservation{
+		Chapters: []observationcontract.Chapter{observationcontract.Chapter(c)}, Bindings: []observationcontract.Binding{{EventID: c.EventID, ChapterID: c.ChapterID}}, Conflicts: []string{},
+	})
+
+	result, err := r.ConsumeRegion(t.Context(), "jp", 10)
+	require.NoError(t, err)
+	require.Equal(t, ConsumeResult{Applied: 1, Rejected: 1}, result)
+	require.Equal(t, last, appliedSeq(t, r))
+	require.Contains(t, collectionTargets(t, r), c.ChapterID)
+}
+
 func TestConsumeLimitsBatchAndResumes(t *testing.T) {
 	r := NewRepository(dbtest.NewPool(t))
 	now := time.Now().UTC().Truncate(time.Millisecond)

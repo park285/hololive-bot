@@ -73,10 +73,13 @@ SELECT pg_catalog.to_regclass('public.member_schedule_card_templates') IS NOT NU
        pg_catalog.has_function_privilege(r.oid,'public.event_grade_claim_cutoffs(text,text,integer,integer)','EXECUTE'))
   AND NOT pg_catalog.has_function_privilege('public', 'public.event_grade_claim_cutoffs(text,text,integer,integer)', 'EXECUTE')
   AND pg_catalog.to_regclass('public.youtube_collection_projection_guard') IS NULL
-  AND pg_catalog.to_regprocedure('public.guard_youtube_collection_runtime_bundles()') IS NULL
   AND pg_catalog.to_regprocedure('public.refresh_youtube_collection_runtime_bundles_statement()') IS NULL
-  AND NOT EXISTS (SELECT FROM pg_catalog.pg_trigger t WHERE NOT t.tgisinternal AND t.tgrelid IN (
-       pg_catalog.to_regclass('public.youtube_collection_projection_generations'), pg_catalog.to_regclass('public.youtube_collection_targets')))
+  AND (SELECT count(*) FROM pg_catalog.pg_trigger t WHERE NOT t.tgisinternal AND t.tgrelid IN (
+       pg_catalog.to_regclass('public.youtube_collection_projection_generations'), pg_catalog.to_regclass('public.youtube_collection_targets'))) = 2
+  AND (SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_proc p ON p.oid = t.tgfoid AND p.prosecdef
+       WHERE NOT t.tgisinternal AND t.tgenabled IN ('O','A') AND t.tgname = 'youtube_collection_runtime_guard' AND t.tgtype = 62
+       AND p.oid = pg_catalog.to_regprocedure('public.guard_youtube_collection_runtime_bundles()')
+       AND t.tgrelid IN (pg_catalog.to_regclass('public.youtube_collection_projection_generations'), pg_catalog.to_regclass('public.youtube_collection_targets'))) = 2
   AND pg_catalog.to_regclass('public.youtube_collection_runtime_bundles') IS NULL
   AND pg_catalog.to_regprocedure('public.refresh_youtube_collection_runtime_bundles(bigint[])') IS NULL
   AND pg_catalog.to_regprocedure('public.refresh_youtube_collection_runtime_bundle_keys(bigint[],text[],text[])') IS NULL

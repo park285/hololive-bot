@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	protocolVersion     = 1
+	protocolVersion     = 2
 	operationLimit      = 8 * time.Second
 	requestLimit        = 1 << 20
 	idleConnectionLimit = 30 * time.Second

@@ -138,6 +138,19 @@ func TestProcessCollectorReusesResidentHelper(t *testing.T) {
 	require.Equal(t, first, collectHelperPID(t, collector))
 }
 
+func TestProcessCollectorReplacesHelperThatExitedWhileIdle(t *testing.T) {
+	collector := fakeHelperCollector(t, "")
+
+	first := collectHelperPID(t, collector)
+
+	require.NoError(t, collector.helper.cmd.Process.Kill())
+	require.Eventually(t, collector.helper.hasExited, 5*time.Second, 10*time.Millisecond)
+
+	replacement := collectHelperPID(t, collector)
+	require.NotEqual(t, first, replacement)
+	require.Equal(t, replacement, collectHelperPID(t, collector))
+}
+
 func TestProcessCollectorReplacesFailedHelper(t *testing.T) {
 	cookies := sessions.Cookies{AuthToken: strings.Repeat("a", 40), CSRFToken: strings.Repeat("b", 64)}
 

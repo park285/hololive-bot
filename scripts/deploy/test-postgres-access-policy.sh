@@ -15,30 +15,31 @@ cleanup() {
   podman rm -f "$server" >/dev/null 2>&1 || true
   podman volume rm "$socket" >/dev/null 2>&1 || true
   podman network rm "$network" >/dev/null 2>&1 || true
-  rm -rf "$fixture"
+  podman unshare rm -rf "$fixture"
 }
 trap cleanup EXIT
 podman image inspect "$image" >/dev/null
+mkdir -m 0700 "$fixture/server"
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=holo-postgres \
   -addext subjectAltName=DNS:holo-postgres \
-  -keyout "$fixture/server.key" -out "$fixture/server.crt" >/dev/null 2>&1
-chmod 0644 "$fixture/server.crt"
-chmod 0600 "$fixture/server.key"
+  -keyout "$fixture/server/server.key" -out "$fixture/server/server.crt" >/dev/null 2>&1
+chmod 0644 "$fixture/server/server.crt"
+chmod 0600 "$fixture/server/server.key"
 install -m 0644 "$root/deploy/postgres/pg_hba.conf" "$fixture/pg_hba.conf"
+podman unshare chown -R 999:999 "$fixture/server"
 podman network create --internal --subnet 172.31.249.0/24 "$network" >/dev/null
 podman volume create --driver local --opt type=tmpfs --opt device=tmpfs \
   --opt o=size=16m,mode=3775,uid=999,gid=999 "$socket" >/dev/null
 podman run -d --name "$server" --pull never --security-opt label=disable --network "$network" --network-alias holo-postgres \
   --tmpfs /var/lib/postgresql:rw,size=512m \
   --mount "type=volume,src=$socket,dst=/var/run/postgresql" \
-  --mount "type=bind,src=$fixture,dst=/fixture,readonly" \
+  --mount "type=bind,src=$fixture/server,dst=/fixture,readonly" \
   --mount "type=bind,src=$fixture/pg_hba.conf,dst=/policy/pg_hba.conf,readonly" \
   -e POSTGRES_USER=postgres_admin -e POSTGRES_PASSWORD=fixture -e POSTGRES_DB=hololive \
   -e PGDATA=/var/lib/postgresql/pgdata \
   --entrypoint /bin/sh "$image" -ec '
     cp /fixture/server.crt /var/lib/postgresql/server.crt
     cp /fixture/server.key /var/lib/postgresql/server.key
-    chown postgres:postgres /var/lib/postgresql/server.*
     chmod 0600 /var/lib/postgresql/server.key
     exec docker-entrypoint.sh postgres -c ssl=on \
       -c ssl_cert_file=/var/lib/postgresql/server.crt \
@@ -76,7 +77,7 @@ podman exec "$server" psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 -
 client() {
   local role="$1" mode="$2" database="${3:-hololive}"
   podman run --rm --pull never --security-opt label=disable --network "$network" \
-    --mount "type=bind,src=$fixture/server.crt,dst=/ca.pem,readonly" \
+    --mount "type=bind,src=$fixture/server/server.crt,dst=/ca.pem,readonly" \
     -e PGPASSWORD=fixture -e PGCONNECT_TIMEOUT=3 --entrypoint psql "$image" \
     "host=holo-postgres dbname=$database user=$role sslmode=$mode sslrootcert=/ca.pem" \
     -X -v ON_ERROR_STOP=1 -Atc 'SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()'
@@ -108,7 +109,7 @@ podman run --rm --pull never --security-opt label=disable --network none \
 podman exec "$server" psql -X -U iris_db_nightly -d hololive -v ON_ERROR_STOP=1 -Atc 'SELECT 1' | grep -qx 1
 for role in postgres_admin hololive_migrator hololive_replicator; do
   if podman run --rm --pull never --security-opt label=disable --network "$network" \
-    --mount "type=bind,src=$fixture/server.crt,dst=/ca.pem,readonly" \
+    --mount "type=bind,src=$fixture/server/server.crt,dst=/ca.pem,readonly" \
     -e PGPASSWORD=fixture -e PGCONNECT_TIMEOUT=3 --entrypoint psql "$image" \
     "host=holo-postgres user=$role replication=true sslmode=verify-full sslrootcert=/ca.pem" \
     -X -c IDENTIFY_SYSTEM >"$fixture/rejected" 2>&1; then

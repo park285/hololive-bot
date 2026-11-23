@@ -1,8 +1,18 @@
 BEGIN;
 SET LOCAL lock_timeout = '3s';
+DO $precondition$
+BEGIN
+    IF EXISTS (
+        SELECT FROM public.event_grade_regions r
+        JOIN public.event_grade_consumer_offsets o ON o.region = r.region
+        WHERE o.applied_seq < r.published_seq
+    ) THEN
+        RAISE EXCEPTION 'event grade observations are not fully consumed; resume the worker until every region is caught up before 005'
+            USING ERRCODE = '55000';
+    END IF;
+END
+$precondition$;
 SELECT public.lock_youtube_collection_runtime_bundles();
-DROP TRIGGER youtube_collection_runtime_guard ON public.youtube_collection_projection_generations;
-DROP TRIGGER youtube_collection_runtime_guard ON public.youtube_collection_targets;
 DROP TRIGGER youtube_collection_runtime_insert ON public.youtube_collection_projection_generations;
 DROP TRIGGER youtube_collection_runtime_insert ON public.youtube_collection_targets;
 DROP TRIGGER youtube_collection_runtime_update ON public.youtube_collection_projection_generations;
@@ -11,7 +21,6 @@ DROP TRIGGER youtube_collection_runtime_delete ON public.youtube_collection_proj
 DROP TRIGGER youtube_collection_runtime_delete ON public.youtube_collection_targets;
 DROP TRIGGER youtube_collection_runtime_truncate ON public.youtube_collection_projection_generations;
 DROP TRIGGER youtube_collection_runtime_truncate ON public.youtube_collection_targets;
-DROP FUNCTION public.guard_youtube_collection_runtime_bundles();
 DROP FUNCTION public.refresh_youtube_collection_runtime_bundles_statement();
 
 CREATE OR REPLACE FUNCTION public.lock_youtube_collection_runtime_bundles() RETURNS void
@@ -171,6 +180,16 @@ BEGIN
     IF lease.kind = 'cutoff' THEN
         IF p_payload->>'event_id' IS DISTINCT FROM lease.event_id OR p_payload->>'chapter_id' IS DISTINCT FROM lease.chapter_id THEN
             RAISE EXCEPTION 'event grade cutoff payload does not match the claimed target' USING ERRCODE = '22023';
+        END IF;
+        IF NOT EXISTS (
+            SELECT FROM public.event_grade_chapters c
+            WHERE (c.region, c.event_id, c.chapter_id) = (lease.region, lease.event_id, lease.chapter_id)
+              AND NOT c.binding_conflicted
+              AND ((c.starts_at <= lease.claimed_at AND c.ends_at > lease.claimed_at)
+                   OR lease.claimed_at BETWEEN greatest(c.event_ends_at, c.reveals_at)
+                                           AND greatest(c.event_ends_at, c.reveals_at) + interval '24 hours')
+        ) THEN
+            RAISE EXCEPTION 'event grade cutoff target left its collection window after the claim' USING ERRCODE = '22023';
         END IF;
     ELSE
         IF jsonb_typeof(p_payload->'quarantine_missing') IS DISTINCT FROM 'boolean' THEN

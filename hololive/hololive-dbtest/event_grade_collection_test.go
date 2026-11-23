@@ -228,6 +228,39 @@ func TestEventGradeRejectsExpiredProofAfterReclaim(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEventGradeCutoffPublishRechecksTheClaimedWindow(t *testing.T) {
+	for _, change := range []string{
+		"UPDATE public.event_grade_chapters SET binding_conflicted = true WHERE chapter_id = 'ch1'",
+		"UPDATE public.event_grade_chapters SET event_ends_at = now() + interval '2 days', reveals_at = now() + interval '2 days' WHERE chapter_id = 'ch1'",
+	} {
+		pool := NewPool(t)
+		collector := eventGradeSession(t, pool, "hololive_collector_c")
+		ctx := t.Context()
+		now := time.Now().UTC().Truncate(time.Millisecond)
+
+		_, err := pool.Exec(ctx, workerChapterSQL, now.Add(-3*time.Hour), now.Add(-2*time.Hour), now.Add(-time.Hour), now.Add(-time.Hour), now)
+		require.NoError(t, err)
+
+		var final eventGradeClaim
+
+		var eventID, chapterID string
+
+		require.NoError(t, collector.QueryRow(ctx, claimCutoffsSQL, "jp", eventGradeOwner).Scan(&final.jobKey, &eventID, &chapterID, &final.epoch, &final.claimedAt))
+
+		_, err = pool.Exec(ctx, change)
+		require.NoError(t, err)
+
+		ranks := `{"event_id":"ev1","chapter_id":"ch1","board_kind":"marathon_score","final":true,"ranks":[{"rank":1,"score":"10"}]}`
+		_, err = collector.Exec(ctx, publishSQL, final.jobKey, eventGradeOwner, final.epoch, final.claimedAt, final.claimedAt, ranks)
+		requireSQLState(t, err, "22023")
+
+		var observations int
+
+		require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM public.event_grade_observations WHERE kind = 'cutoff'").Scan(&observations))
+		require.Zero(t, observations, change)
+	}
+}
+
 func TestEventGradeFinalCutoffClaimFollowsWorkerBorders(t *testing.T) {
 	pool := NewPool(t)
 	collector := eventGradeSession(t, pool, "hololive_collector_c")

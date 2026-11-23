@@ -15,6 +15,20 @@ import (
 const staleClaimPauseKey = 20261123
 
 func TestClaimDueStaleSnapshotDoesNotReleaseSettledDelivery(t *testing.T) {
+	status := claimAfterConcurrentSettle(t, `UPDATE alarm_dispatch_deliveries
+		SET status='sent', sent_at=clock_timestamp(), locked_by=NULL, locked_at=NULL, lock_expires_at=NULL WHERE id=$1`)
+	require.Equal(t, string(StatusSent), status)
+}
+
+func TestClaimDueStaleSnapshotDoesNotSkipFutureRetry(t *testing.T) {
+	status := claimAfterConcurrentSettle(t, `UPDATE alarm_dispatch_deliveries
+		SET status='retry', next_attempt_at=clock_timestamp() + interval '1 hour', locked_by=NULL, locked_at=NULL, lock_expires_at=NULL WHERE id=$1`)
+	require.Equal(t, string(StatusRetry), status)
+}
+
+func claimAfterConcurrentSettle(t *testing.T, settle string) string {
+	t.Helper()
+
 	pool := dbtest.NewPool(t)
 	repo := newTestRepository(t, pool)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
@@ -77,8 +91,7 @@ func TestClaimDueStaleSnapshotDoesNotReleaseSettledDelivery(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
 
-	_, err = pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries
-		SET status='sent', sent_at=clock_timestamp(), locked_by=NULL, locked_at=NULL, lock_expires_at=NULL WHERE id=$1`, claimed[0].ID)
+	_, err = pool.Exec(ctx, settle, claimed[0].ID)
 	require.NoError(t, err)
 
 	_, err = holder.Exec(ctx, "SELECT pg_advisory_unlock($1)", staleClaimPauseKey)
@@ -89,5 +102,6 @@ func TestClaimDueStaleSnapshotDoesNotReleaseSettledDelivery(t *testing.T) {
 	var status string
 
 	require.NoError(t, pool.QueryRow(ctx, "SELECT status FROM alarm_dispatch_deliveries WHERE id=$1", claimed[0].ID).Scan(&status))
-	require.Equal(t, string(StatusSent), status)
+
+	return status
 }

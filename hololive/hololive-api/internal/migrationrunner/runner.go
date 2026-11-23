@@ -151,6 +151,18 @@ func advance(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg C
 		return Result{}, fmt.Errorf("migration pending: %s", pending[0].Name)
 	}
 
+	if cfg.MigrationWindow && len(pending) != 0 {
+		var drained bool
+
+		if err := tx.QueryRow(ctx, mustSQL("writer_drain_state.sql")).Scan(&drained); err != nil {
+			return Result{}, fmt.Errorf("inspect writer drain: %w", err)
+		}
+
+		if !drained {
+			return Result{}, errors.New("pending migrations require the writer drain guard, its login gate and zero writer sessions")
+		}
+	}
+
 	if err := applyFiles(ctx, tx, pending); err != nil {
 		return Result{}, err
 	}

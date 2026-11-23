@@ -72,11 +72,12 @@ type consumedBatch struct {
 
 func (r *Repository) consumeBatch(ctx context.Context, tx pgx.Tx, region contract.GradeRegion, limit int) (consumedBatch, error) {
 	var (
-		out     consumedBatch
-		applied int64
+		out       consumedBatch
+		applied   int64
+		published int64
 	)
 
-	if err := tx.QueryRow(ctx, lockOffsetSQL, region).Scan(&applied); err != nil {
+	if err := tx.QueryRow(ctx, lockOffsetSQL, region).Scan(&applied, &published); err != nil {
 		return out, fmt.Errorf("lock event grade consumer offset: %w", err)
 	}
 
@@ -102,6 +103,10 @@ func (r *Repository) consumeBatch(ctx context.Context, tx pgx.Tx, region contrac
 		} else {
 			out.result.Applied++
 		}
+	}
+
+	if out.stopErr == nil && len(observations) < limit && last < published {
+		out.stopErr = fmt.Errorf("event grade observation %d is missing before published %d", last+1, published)
 	}
 
 	if last == applied {

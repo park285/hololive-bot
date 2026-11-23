@@ -154,6 +154,19 @@ func TestProjectionRetentionWaitsForProjectionWriterLock(t *testing.T) {
 		})
 }
 
+func TestProjectionDirectWritesWaitForCollectorSharedLock(t *testing.T) {
+	for _, write := range []string{
+		`UPDATE youtube_collection_targets SET enabled=false WHERE projection_generation=101`,
+		`DELETE FROM youtube_collection_targets WHERE projection_generation=102`,
+		`UPDATE youtube_collection_projection_generations SET valid_until=valid_until+interval '1 minute' WHERE generation=101`,
+	} {
+		pool := NewPool(t)
+		seedCollectionBundleHeaders(t, pool)
+		seedCollectionBundleTargets(t, pool)
+		runCollectionBundleBlockedWriter(t, pool, `SELECT generation FROM lock_current_youtube_collection_projection()`, write, nil)
+	}
+}
+
 func TestProjectionRetentionRejectsInvalidRequests(t *testing.T) {
 	t.Parallel()
 
