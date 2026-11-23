@@ -183,6 +183,12 @@ def check_origins(installed):
     service_dropins = ["service.d", *(part + ".service.d" for part in inherited),
                        service_name + ".d"]
     for root in sorted(system_roots):
+        if root.is_dir():
+            for entry in root.iterdir():
+                if entry.name != service_name and entry.is_symlink() and service_name in (
+                    os.path.basename(os.readlink(entry)), os.path.basename(os.path.realpath(entry)),
+                ):
+                    reject_origin(entry)
         for dropin in service_dropins:
             directory = root / dropin
             if directory.is_symlink():
@@ -194,7 +200,7 @@ def check_origins(installed):
         path = root / service_name
         if not os.path.lexists(path):
             continue
-        if path.is_symlink() and os.readlink(path) == "/dev/null":
+        if path == prefix / "etc/systemd/system" / service_name and path.is_symlink() and os.readlink(path) == "/dev/null":
             continue
         if root != prefix / "run/systemd/generator" or path.is_symlink():
             reject_origin(path)

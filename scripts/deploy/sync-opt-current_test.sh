@@ -37,8 +37,13 @@ case "$1" in
       *--property=NeedDaemonReload*) echo no ;;
       *--property=Names*) if [[ -e "${SYNC_TEST_EVENTS}.alias" ]]; then echo "$2 valkey-alias.service"; else echo "$2"; fi ;;
       *--property=DropInPaths*) if [[ -e "${SYNC_TEST_EVENTS}.alias-dropin" ]]; then echo /etc/systemd/system/valkey-alias.service.d/10-image.conf; fi ;;
-      *--property=LoadState*) if [[ -e "${SYNC_TEST_EVENTS}.not-found" ]]; then echo not-found; else echo loaded; fi ;;
-      *--property=FragmentPath*) [[ -e "${SYNC_TEST_EVENTS}.not-found" ]] || echo "/run/systemd/generator/$2" ;;
+      *--property=LoadState*)
+        if [[ -e "${SYNC_TEST_EVENTS}.not-found" ]]; then echo not-found
+        elif [[ -L /etc/systemd/system/$2 ]]; then echo masked
+        else echo loaded; fi ;;
+      *--property=FragmentPath*)
+        if [[ -L /etc/systemd/system/$2 ]]; then echo "/etc/systemd/system/$2"
+        elif [[ ! -e "${SYNC_TEST_EVENTS}.not-found" ]]; then echo "/run/systemd/generator/$2"; fi ;;
     esac
     ;;
 esac
@@ -363,6 +368,20 @@ rm "$host/events.alias"
 touch "$host/events.not-found"
 assert_rejected_without_change "$host" "$base_repo" "Valkey unit not loaded by systemd" "$override" --valkey-only
 rm "$host/events.not-found"
+ln -s /dev/null "$host/etc-systemd-system/valkey-cache.service"
+ln -s /run/systemd/generator/valkey-cache.service "$host/etc-systemd-system/valkey-alias.service"
+assert_rejected_without_change "$host" "$base_repo" "masked Valkey unit with an alias" "$override" --valkey-only
+rm "$host/etc-systemd-system/valkey-alias.service"
+mkdir -p "$host/run/systemd/system"
+ln -s /dev/null "$host/run/systemd/system/valkey-cache.service"
+assert_rejected_without_change "$host" "$base_repo" "Valkey runtime mask under the persistent mask" "$override" --valkey-only
+rm "$host/run/systemd/system/valkey-cache.service"
+ln -sfn /run/systemd/generator/valkey-cache.service "$host/etc-systemd-system/valkey-cache.service"
+assert_rejected_without_change "$host" "$base_repo" "Valkey mask not pointing to /dev/null" "$override" --valkey-only
+ln -sfn /dev/null "$host/etc-systemd-system/valkey-cache.service"
+run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "영속 mask만 있는 Valkey unit의 단독 게시 실패"; }
+rm "$host/etc-systemd-system/valkey-cache.service"
+printf '\n' >>"$installed/valkey-cache.container"
 mkdir "$host/etc-containers-systemd/container.d"
 printf '[Container]\nImage=localhost/other:tag\n' >"$host/etc-containers-systemd/container.d/60-image.conf"
 assert_rejected_without_change "$host" "$base_repo" "inherited Quadlet drop-in" "$override" --valkey-only

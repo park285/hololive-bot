@@ -56,6 +56,13 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
    - a: `OLD`, `RELEASE_ID`, `HOLO_BOT_VERSION`, `ARTIFACT_DIR`, 승인 기록의 `HOLO_NATIVE_PAYLOAD_SHA256`, `I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true`([W3 정지 창](collector.md#osaka-a-분리-정지-창))
    - c: 검증한 pair 디렉터리 `C_PAIR`, 승인된 transport SHA-256 `C_SEAL`, 승인된 SSH 대상 `C_HOST`
    - 중앙: 같은 revision으로 설치한 API·alarm-worker 후보 image ID `API_ID`, `WORKER_ID`(`sha256:<64자리>`)
+
+   무엇이든 멈추기 전에 b staging 후보와 c 후보가 같은지 이 release의 clean checkout에서 대조합니다. b는 staging한 revision·seal로, c는 이 checkout의 revision과 `C_SEAL`로 재개되므로 둘이 다르면 c·a를 재개한 뒤에야 b 재개가 거절됩니다.
+
+   ```bash
+   read -r b_revision b_seal b_change <"${B_ARGS[1]}/b.stage.${B_ARGS[2]}.finished"
+   [[ $b_revision == "$(git rev-parse HEAD)" && $b_seal == "$C_SEAL" && $b_change == "${B_ARGS[2]}" && -z "$(git status --porcelain)" ]]
+   ```
 2. 송신을 일시 중단하고 `/webhook/iris`의 모든 유입 경로(직접 H3 포함)를 닫습니다. 재시작·자동 복구·다른 슬롯을 통한 구 API 재기동도 차단합니다. Valkey는 그대로 둡니다.
 3. 검증한 복구점을 확보합니다. [writer 정지·재개 계약](../../../deploy/quadlet/README.md#writer-정지재개-계약)에 따라 collector를 d→b→a→c 순서로 정지한 뒤 [동시 전환](../../../deploy/quadlet/README.md#iris-소비자-동시-전환)으로 실행 중인 구 API·alarm-worker pair를 함께 정지하고 영속 mask합니다. 각 명령이 성공하고 출력과 영수증을 확인한 뒤에만 다음 명령으로 넘어갑니다.
 
@@ -89,11 +96,15 @@ tag와 `## v<version>` 절은 이전 번호 체계의 기록으로 남기고, �
    scripts/deploy/ap-host-native-deploy.sh osaka --resume W3 "$OLD" "$NONCE"
    ```
 
-   c가 b와 같은 revision·seal로 재개된 것을 승인 주체가 확인하면, b 영수증 디렉터리에 `c.accepted`와 준비한 재개 grant를 게시한 뒤 b·d를 재개합니다. `b quiesce`가 정지 grant를 소비해 지웠으므로 재개 grant는 새 파일이어야 합니다.
+   c가 실제로 재개한 후보를 `$C_BACKUP`의 `candidate.revision`·`transport.sha256`에서 읽어 b staging 영수증과 같은지 승인 주체가 확인하면, 그 값으로 `c.accepted`를 게시하고 준비한 재개 grant를 게시한 뒤 b·d를 재개합니다. `b quiesce`가 정지 grant를 소비해 지웠으므로 재개 grant는 새 파일이어야 합니다. 두 파일은 덮어쓰지 않고 새로 만들 때만 게시합니다. 이미 있으면 게시가 실패하므로, 기존 파일을 보존한 채 b 재개를 멈추고 누가 언제 썼는지 대조합니다.
 
    ```bash
-   (umask 077; read -r revision seal _ <"${B_ARGS[1]}/b.stage.${B_ARGS[2]}.finished" && printf '%s %s\n' "$revision" "$seal" >"${B_ARGS[1]}/c.accepted")
-   install -m 0600 -- "$B_RESUME_GRANT" "${B_ARGS[1]}/b.current-grant"
+   c_revision="$(ssh "$C_HOST" "sudo -n cat '$C_BACKUP/candidate.revision'")"
+   c_seal="$(ssh "$C_HOST" "sudo -n cat '$C_BACKUP/transport.sha256'")"
+   read -r b_revision b_seal _ <"${B_ARGS[1]}/b.stage.${B_ARGS[2]}.finished"
+   [[ $c_revision == "$b_revision" && $c_seal == "$b_seal" ]]
+   (umask 077; set -o noclobber; printf '%s %s\n' "$c_revision" "$c_seal" >"${B_ARGS[1]}/c.accepted")
+   (umask 077; set -o noclobber; cat -- "$B_RESUME_GRANT" >"${B_ARGS[1]}/b.current-grant")
    PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cutover.sh b resume "${B_ARGS[@]}"
    sudo -n python3 -I -B "$release/scripts/deploy/kapu-d-cutover.py" resume "$hold" "${candidate[@]}"
    ```
