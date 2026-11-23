@@ -382,6 +382,12 @@ ln -sfn /dev/null "$host/etc-systemd-system/valkey-cache.service"
 run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "영속 mask만 있는 Valkey unit의 단독 게시 실패"; }
 rm "$host/etc-systemd-system/valkey-cache.service"
 printf '\n' >>"$installed/valkey-cache.container"
+mkdir "$tmp/linked-unit"
+printf '[Service]\nExecStart=/bin/true\n' >"$tmp/linked-unit/valkey-cache.service"
+ln -s "$tmp/linked-unit/valkey-cache.service" "$host/etc-systemd-system/staging-cache.service"
+run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "검색 경로 밖의 같은 이름 파일을 가리키는 별도 linked unit이 있는 Valkey 단독 게시 실패"; }
+rm "$host/etc-systemd-system/staging-cache.service"
+printf '\n' >>"$installed/valkey-cache.container"
 mkdir "$host/etc-containers-systemd/container.d"
 printf '[Container]\nImage=localhost/other:tag\n' >"$host/etc-containers-systemd/container.d/60-image.conf"
 assert_rejected_without_change "$host" "$base_repo" "inherited Quadlet drop-in" "$override" --valkey-only
