@@ -31,6 +31,12 @@ printf 'systemctl %s\n' "$*" >>"${SYNC_TEST_EVENTS:?}"
 case "$1" in
   is-active) exit 3 ;;
   is-enabled) exit 1 ;;
+  show)
+    case "$*" in
+      *--property=UnitPath*) echo /etc/systemd/system /run/systemd/system ;;
+      *--property=NeedDaemonReload*) echo no ;;
+    esac
+    ;;
 esac
 EOF
 cat >"${fakebin}/chown" <<'EOF'
@@ -80,6 +86,8 @@ make_repo() {
   cat >"${repo}/scripts/deploy/verify-exec-tree-ownership.sh" <<'EOF'
 #!/usr/bin/env bash
 printf 'verify %s\n' "$#" >>"${SYNC_TEST_EVENTS:?}"
+printf 'verify-path %s\n' "$@" >>"${SYNC_TEST_EVENTS:?}"
+[[ ! -e "${SYNC_TEST_EVENTS:?}.ownership-denied" ]]
 EOF
   git -C "${repo}" init -q
   commit_repo "${repo}" fixture
@@ -119,6 +127,7 @@ run_sync() {
   local host="$1" repo="$2" opt="$1/opt"
   shift 2
   [[ ${1:-} != --source-only ]] || opt=/opt
+  [[ ${1:-} != --valkey-only || -n ${SYNC_TEST_OPT_ROOT:-} ]] || opt=/opt/hololive-bot/compose
   : >"${host}/events"
   # shellcheck disable=SC2016 # namespace 안의 bash가 확장한다.
   unshare --user --map-root-user --mount bash -c '
@@ -132,6 +141,14 @@ run_sync() {
     mount --bind "${host}/etc-nftables.d" /etc/nftables.d
     mount --bind "${host}/run" /run
     mount --bind "${host}/run-lock" /run/lock
+    if [[ " $* " == *" --valkey-only "* ]]; then
+      mount -t tmpfs -o mode=0755 tmpfs /opt
+      mkdir -p /opt/hololive-bot/compose
+      mount --bind "$host/opt" /opt/hololive-bot/compose
+      for directory in /usr/lib/systemd/system /usr/local/lib/systemd/system /usr/share/containers/systemd; do
+        [[ ! -d $directory ]] || mount -t tmpfs -o mode=0755 tmpfs "$directory"
+      done
+    fi
     if [[ " $* " == *" --source-only "* ]]; then
       jail="$host/jail"
       mkdir -p "$jail"
@@ -158,7 +175,7 @@ run_sync() {
     fi
     exec "$@"
   ' _ "${host}" "$repo" "$fakebin" "$ROOT_DIR/scripts/deploy/sync-opt-current.sh" env PATH="${fakebin}:${PATH}" SYNC_TEST_EVENTS="${host}/events" \
-    REPO_ROOT="${repo}" OPT_ROOT="$opt" \
+    REPO_ROOT="${repo}" OPT_ROOT="${SYNC_TEST_OPT_ROOT:-$opt}" \
     bash "${ROOT_DIR}/scripts/deploy/sync-opt-current.sh" "$@" >"${host}/out" 2>&1
 }
 
@@ -273,6 +290,65 @@ assert_rejected_without_change "$host" "$base_repo" "missing pinned Valkey image
 sed -i '/^VALKEY_IMAGE=/d' "$host/etc-stack-secrets/hololive-bot/compose.env"
 rm -f -- "$host/events.image-missing"
 pass "Valkey 단독 게시는 unit이 실제로 쓸 이미지가 없으면 거부합니다"
+
+printf '\n' >>"$installed/valkey-cache.container"
+printf 'VALKEY_IMAGE=\n' >>"$host/etc-stack-secrets/hololive-bot/compose.env"
+assert_rejected_without_change "$host" "$base_repo" "empty Valkey image" "VALKEY_IMAGE is empty" --valkey-only
+sed -i 's/^VALKEY_IMAGE=.*/VALKEY_IMAGE=""/' "$host/etc-stack-secrets/hololive-bot/compose.env"
+assert_rejected_without_change "$host" "$base_repo" "empty quoted Valkey image" "VALKEY_IMAGE is empty" --valkey-only
+sed -i 's|^VALKEY_IMAGE=.*|VALKEY_IMAGE=localhost/iris-stack-valkey:pinned|' "$host/etc-stack-secrets/hololive-bot/compose.env"
+printf 'localhost/iris-stack-valkey:9.1.3-zlib1.4-r1\n' >"$host/events.image-missing"
+run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "compose.env에 고정한 Valkey 이미지로 단독 게시 실패"; }
+cmp -s "$installed/valkey-cache.container" "$base_repo/deploy/quadlet/hololive-bot/valkey-cache.container" || fail "고정 이미지 Valkey 후보가 게시되지 않았습니다"
+sed -i '/^VALKEY_IMAGE=/d' "$host/etc-stack-secrets/hololive-bot/compose.env"
+rm -f -- "$host/events.image-missing"
+pass "Valkey 단독 게시는 비어 있는 VALKEY_IMAGE를 거부하고 compose.env에 고정한 이미지를 확인합니다"
+
+for path in /usr/local/libexec/hololive-bot/quadlet-prestart /usr/local/libexec/hololive-bot/lib/collector-slots.tsv \
+  /opt/hololive-bot/compose/current/deploy/topology/hosts.conf; do
+  grep -qxF "verify-path $path" "$host/events" || fail "Valkey 시작 검사 경로의 소유권을 확인하지 않았습니다: $path"
+done
+printf '\n' >>"$installed/valkey-cache.container"
+start_check="$host/usr-local-libexec/hololive-bot/lib/collector-slots.tsv"
+printf '\n' >>"$start_check"
+assert_rejected_without_change "$host" "$base_repo" "stale Valkey slot table" "$stale_start" --valkey-only
+cp "$base_repo/scripts/deploy/lib/collector-slots.tsv" "$start_check"
+chmod 0664 "$start_check"
+assert_rejected_without_change "$host" "$base_repo" "Valkey start check mode" "$stale_start" --valkey-only
+chmod 0644 "$start_check"
+mv "$start_check" "$start_check.real"
+ln -s collector-slots.tsv.real "$start_check"
+assert_rejected_without_change "$host" "$base_repo" "symlinked Valkey start check" "$stale_start" --valkey-only
+rm "$start_check"
+mv "$start_check.real" "$start_check"
+podman unshare /usr/bin/chown 1 "$start_check"
+assert_rejected_without_change "$host" "$base_repo" "non-root Valkey start check" "$stale_start" --valkey-only
+podman unshare /usr/bin/chown 0 "$start_check"
+touch "$host/events.ownership-denied"
+assert_rejected_without_change "$host" "$base_repo" "unsafe Valkey start check path" "installed Valkey start checks are writable by a non-root user" --valkey-only
+rm "$host/events.ownership-denied"
+SYNC_TEST_OPT_ROOT="$host/opt" assert_rejected_without_change "$host" "$base_repo" "other Valkey runtime tree" \
+  "Valkey-only publication checks the runtime tree that the prestart reads" --valkey-only
+pass "Valkey 단독 게시는 root 소유·모드·심볼릭 링크·상위 경로·실제 실행 트리가 다른 시작 검사를 거부합니다"
+
+mkdir "$installed/valkey-cache.container.d"
+printf '[Container]\nSecurityLabelLevel=s0:c900,c901\n' >"$installed/valkey-cache.container.d/50-mcs-level.conf"
+assert_rejected_without_change "$host" "$base_repo" "local Valkey drop-in" "expected an existing Valkey unit without local drop-ins" --valkey-only
+rm -r "$installed/valkey-cache.container.d"
+override="unsupported Quadlet/systemd override origin"
+mkdir "$host/etc-systemd-system/valkey-cache.service.d"
+printf '[Service]\nExecStartPre=\n' >"$host/etc-systemd-system/valkey-cache.service.d/override.conf"
+assert_rejected_without_change "$host" "$base_repo" "Valkey service drop-in" "$override" --valkey-only
+rm -r "$host/etc-systemd-system/valkey-cache.service.d"
+mkdir "$host/etc-containers-systemd/container.d"
+printf '[Container]\nImage=localhost/other:tag\n' >"$host/etc-containers-systemd/container.d/60-image.conf"
+assert_rejected_without_change "$host" "$base_repo" "inherited Quadlet drop-in" "$override" --valkey-only
+rm -r "$host/etc-containers-systemd/container.d"
+mkdir "$host/etc-containers-systemd/valkey-cache.container.d"
+printf '[Container]\nSecurityLabelLevel=s0:c900,c901\n' >"$host/etc-containers-systemd/valkey-cache.container.d/50-mcs-level.conf"
+run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "호스트 보안 MCS drop-in이 있는 Valkey 단독 게시 실패"; }
+rm -r "$host/etc-containers-systemd/valkey-cache.container.d"
+pass "Valkey 단독 게시는 MCS 범주만 정하는 호스트 drop-in 말고는 Quadlet·systemd override를 거부합니다"
 
 broken_repo="${tmp}/repo-broken-unit"
 cp -R "${base_repo}" "${broken_repo}"

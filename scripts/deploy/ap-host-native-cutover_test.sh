@@ -450,7 +450,7 @@ assert actual == 143 and (case/'recovery').exists() and not (case/'restored').ex
 os.killpg(int((case/'recovery/worker-pid').read_text()), signal.SIGKILL)
 window_lib = root / 'scripts/deploy/lib/ap-host-native-window.sh'
 release_lib = root / 'scripts/deploy/lib/ap-host-native-release-path.sh'
-release_window, old_port = 'W2', 6433
+release_window, old_port = 'W2', 5433
 def window_case(name, args, scenario):
     case = work / name
     case.mkdir(mode=0o700)

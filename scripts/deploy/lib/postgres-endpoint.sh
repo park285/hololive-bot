@@ -51,16 +51,11 @@ postgres_endpoint_container() {
   postgres_endpoint_validate "$host" "$port"
 }
 
-postgres_quadlet_environment() {
-  local unit_file="$1" compose_file="$2" installed_unit="$3" values key value source
-  shift 3
-  local -A container=() service_env=()
-  local use_compose=false
-  values="$(python3 - "$unit_file" "$installed_unit" "$@" <<'PY'
+quadlet_override_origins() {
+  python3 - "$1" <<'PY'
 import os
 import pathlib
 import re
-import shlex
 import subprocess
 import sys
 
@@ -192,8 +187,28 @@ def check_origins(installed):
             reject_origin(path)
 
 try:
+    check_origins(pathlib.Path(sys.argv[1]).absolute())
+except ValueError as error:
+    sys.exit("[postgres-endpoint] " + str(error))
+except (OSError, subprocess.CalledProcessError):
+    sys.exit("[postgres-endpoint] cannot verify Quadlet/systemd override origins")
+PY
+}
+
+postgres_quadlet_environment() {
+  local unit_file="$1" compose_file="$2" installed_unit="$3" values key value source
+  shift 3
+  local -A container=() service_env=()
+  local use_compose=false
+  quadlet_override_origins "$installed_unit" || return
+  values="$(python3 - "$unit_file" "$installed_unit" "$@" <<'PY'
+import pathlib
+import re
+import shlex
+import sys
+
+try:
     unit, installed = (pathlib.Path(path).absolute() for path in sys.argv[1:3])
-    check_origins(installed)
     wanted = sys.argv[3:]
     unsupported = set()
     environment = {"Container": {}, "Service": {}}
@@ -246,7 +261,7 @@ try:
         raise ValueError("unsupported environment directive")
     for key in sources:
         print("SERVICE_" + key + "=" + service.get(key, ""))
-except (OSError, ValueError, subprocess.CalledProcessError) as error:
+except (OSError, ValueError) as error:
     detail = str(error) if isinstance(error, ValueError) and str(error).startswith("unsupported Quadlet") else "unreviewed environment source or syntax"
     sys.exit("[postgres-endpoint] cannot interpret Quadlet environment: " + detail)
 PY

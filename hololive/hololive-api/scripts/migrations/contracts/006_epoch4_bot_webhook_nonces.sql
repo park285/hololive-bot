@@ -110,7 +110,8 @@ SELECT pg_catalog.to_regclass('public.member_schedule_card_templates') IS NOT NU
        WHERE c.oid = pg_catalog.to_regclass('public.bot_webhook_nonces') AND c.relkind = 'r' AND c.relpersistence = 'p'
          AND EXISTS (SELECT FROM pg_catalog.pg_index i WHERE i.indrelid = c.oid AND i.indisprimary AND i.indisvalid AND i.indimmediate
                      AND i.indnkeyatts = 1 AND i.indkey[0] = d.attnum)
-         AND NOT EXISTS (SELECT FROM pg_catalog.pg_index i WHERE i.indrelid = c.oid AND i.indisunique AND NOT i.indimmediate)
+         AND NOT EXISTS (SELECT FROM pg_catalog.pg_index i WHERE i.indrelid = c.oid AND i.indisunique AND NOT i.indimmediate
+                         AND i.indnkeyatts = 1 AND i.indkey[0] = d.attnum AND i.indexprs IS NULL AND i.indpred IS NULL)
          AND EXISTS (SELECT FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class idx ON idx.oid = i.indexrelid
                      JOIN pg_catalog.pg_am am ON am.oid = idx.relam
                      WHERE i.indrelid = c.oid AND i.indexrelid = pg_catalog.to_regclass('public.bot_webhook_nonces_expiry')

@@ -72,7 +72,7 @@ native_window_pins() {
   [[ "$(hostname -s)" == osaka1 && "$service" == "$slot_service" && "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ &&
      "${window_digest?}" =~ ^[0-9a-f]{64}$ && "${window_old?}" != "${release_id?}" ]] || return 1
   native_release_id_validate "$window_old" && native_release_id_validate "$release_id" || return 1
-  case "$window_name" in W1) original_port=5433 ;; W2) original_port=6433 ;; *) return 1 ;; esac
+  original_port=5433
   old_target="$releases_root/$window_old"
   window="$old_target/native-window"
   [[ -L "$current_link" && "$(realpath -e "$current_link")" == "${1:-$old_target}" ]] || return 1

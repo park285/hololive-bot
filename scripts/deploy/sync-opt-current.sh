@@ -68,27 +68,39 @@ for lib in admin-bind public-bind-mounts postgres-capacity compose-env postgres-
 done
 host_assets+=("scripts/deploy/lib/collector-slots.tsv|$LIBEXEC_DIR/lib/collector-slots.tsv|644")
 if [[ $valkey_only == true ]]; then
+  [[ $OPT_ROOT == /opt/hololive-bot/compose ]] || die "Valkey-only publication checks the runtime tree that the prestart reads: /opt/hololive-bot/compose"
   # shellcheck source=scripts/deploy/lib/compose-env.sh
   . "$REPO_ROOT/scripts/deploy/lib/compose-env.sh"
+  # shellcheck source=scripts/deploy/lib/postgres-endpoint.sh
+  . "$REPO_ROOT/scripts/deploy/lib/postgres-endpoint.sh"
   require_central_valkey_bind
   python3 -I /opt/iris-stack/valkey-ha/stage.py selected hololive || die "Valkey standalone stage is not admitted"
   unit=valkey-cache.container
   target="$QUADLET_DIR/$unit"
   [[ -f $target && ! -L $target && $(realpath -e "$target") == "$target" && ! -e $target.d && ! -L $target.d ]] ||
-    die "expected an existing Valkey unit without overrides"
+    die "expected an existing Valkey unit without local drop-ins"
+  quadlet_override_origins "$target" || die "Valkey unit has unreviewed Quadlet or systemd overrides"
   start_checks=("deploy/topology/hosts.conf|$OPT_CURRENT/deploy/topology/hosts.conf|644")
   for asset in "${host_assets[@]}"; do
     [[ $asset != *"|$LIBEXEC_DIR/"* ]] || start_checks+=("$asset")
   done
+  start_paths=()
   for asset in "${start_checks[@]}"; do
     IFS='|' read -r path dest mode <<<"$asset"
-    if ! { [[ -f $dest && ! -L $dest && $(stat -c %a -- "$dest") == "$mode" ]] && cmp -s -- "$REPO_ROOT/$path" "$dest"; }; then
+    if ! { [[ -f $dest && ! -L $dest && $(stat -c %u:%g:%a -- "$dest") == "0:0:$mode" ]] && cmp -s -- "$REPO_ROOT/$path" "$dest"; }; then
       die "installed Valkey start checks differ from the checkout; run a full sync first: $dest"
     fi
+    start_paths+=("$dest")
   done
-  image=$(env_value VALKEY_IMAGE)
-  [[ -n $image ]] || image=$(sed -n 's/^Environment=VALKEY_IMAGE=//p' "$REPO_ROOT/deploy/quadlet/hololive-bot/$unit")
-  if [[ -z $image ]] || ! podman image exists "$image"; then
+  bash "$REPO_ROOT/scripts/deploy/verify-exec-tree-ownership.sh" "${start_paths[@]}" ||
+    die "installed Valkey start checks are writable by a non-root user"
+  if compose_env_key_exists_in_file "$COMPOSE_ENV" VALKEY_IMAGE; then
+    image=$(compose_env_read_value_from_file "$COMPOSE_ENV" VALKEY_IMAGE)
+    [[ -n $image ]] || die "VALKEY_IMAGE is empty in $COMPOSE_ENV"
+  else
+    image=$(sed -n 's/^Environment=VALKEY_IMAGE=//p' "$REPO_ROOT/deploy/quadlet/hololive-bot/$unit")
+  fi
+  if ! podman image exists "$image"; then
     die "Valkey image is not present: $image"
   fi
   scratch=$(mktemp -d /run/.hololive-valkey-unit.XXXXXX)

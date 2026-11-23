@@ -216,6 +216,26 @@ func TestHeadContractRejectsDeferrableWebhookNonceKey(t *testing.T) {
 	}
 }
 
+func TestHeadContractAcceptsDeferrableKeyThatCannotArbitrateNonces(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	_, err := Run(t.Context(), pool, migrations.FS, Config{})
+	require.NoError(t, err)
+
+	_, err = pool.Exec(t.Context(), `ALTER TABLE public.bot_webhook_nonces
+		ADD CONSTRAINT bot_webhook_nonces_digest_expiry UNIQUE (digest, expires_at) DEFERRABLE INITIALLY IMMEDIATE`)
+	require.NoError(t, err)
+
+	_, err = Run(t.Context(), pool, migrations.FS, Config{VerifyOnly: true})
+	require.NoError(t, err)
+
+	var first, second bool
+
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT public.reserve_bot_webhook_nonce($1, $2)", make([]byte, 32), int64(600_000_000)).Scan(&first))
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT public.reserve_bot_webhook_nonce($1, $2)", make([]byte, 32), int64(600_000_000)).Scan(&second))
+	require.True(t, first)
+	require.False(t, second)
+}
+
 func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 
