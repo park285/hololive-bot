@@ -1016,9 +1016,16 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
         shutil.copyfile(root / name, candidate / name)
     verify = entry[:entry.index('bash "${tool_root')] + 'bash "$state/candidate/scripts/deploy/po-central-cutover.sh" c verify-pair "$state/arm64" "$2"\n'
     for label, damaged, pair_seal in (('verified pair', None, seal), ('foreign seal', None, 'd' * 64),
-                                      ('truncated issuer archive', 'image.tar', seal), ('missing collector archive', 'collector-image.tar', seal)):
+                                      ('truncated issuer archive', 'image.tar', seal), ('missing collector archive', 'collector-image.tar', seal),
+                                      ('symlinked issuer archive', 'image.tar', seal), ('symlinked collector manifest', 'collector-manifest.json', seal)):
         original = (archive / damaged).read_bytes() if damaged else None
-        if damaged == 'image.tar':
+        if label.startswith('symlinked'):
+            elsewhere = state / 'elsewhere' / damaged
+            elsewhere.parent.mkdir(exist_ok=True)
+            elsewhere.write_bytes(original)
+            (archive / damaged).unlink()
+            (archive / damaged).symlink_to(elsewhere)
+        elif damaged == 'image.tar':
             (archive / damaged).write_bytes(original[:-1])
         elif damaged:
             (archive / damaged).unlink()
@@ -1026,7 +1033,18 @@ bash "${tool_root:-$state/coordinator}/scripts/deploy/po-central-cutover.sh" b "
         require((result.returncode == 0) == (label == 'verified pair') and not (state / 'calls').exists(),
                 f'c: {label} is judged before any stop without SSH', result)
         if damaged:
+            (archive / damaged).unlink(missing_ok=True)
             (archive / damaged).write_bytes(original)
+    good_version = version_file.read_text()
+    good_sources, good_transport = (archive / 'source-files.sha256').read_text(), (archive / 'transport-files.sha256').read_text()
+    version_file.write_text('19.2.1+meta\n')
+    (archive / 'source-files.sha256').write_text(sums(candidate, [source_name] + migration_sources))
+    (archive / 'transport-files.sha256').write_text(sums(archive, names))
+    result = run(verify, state, hashlib.sha256((archive / 'transport-files.sha256').read_bytes()).hexdigest())
+    require(result.returncode != 0 and not (state / 'calls').exists(), 'c: a VERSION that quiesce rejects is judged before any stop', result)
+    version_file.write_text(good_version)
+    (archive / 'source-files.sha256').write_text(good_sources)
+    (archive / 'transport-files.sha256').write_text(good_transport)
 
 
 def manifest(revision, identity):

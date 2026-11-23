@@ -188,7 +188,10 @@ def check_origins(installed):
             for entry in root.iterdir():
                 if entry.name == service_name or not entry.is_symlink():
                     continue
-                head, tail = os.path.split(os.path.join(entry.parent, os.readlink(entry)))
+                link = os.path.join(entry.parent, os.readlink(entry))
+                while len(link) > 1 and link.endswith(("/", "/.")):
+                    link = link[:-1] if link.endswith("/") else link[:-2]
+                head, tail = os.path.split(link)
                 target = pathlib.Path(os.path.realpath(head), tail)
                 if tail == service_name and any(target.is_relative_to(directory) for directory in search_dirs):
                     reject_origin(entry)

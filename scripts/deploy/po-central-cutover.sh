@@ -143,10 +143,16 @@ if [[ "$slot" == b && ( "$mode" == quiesce || ( "$mode" =~ ^(resume|check|rollba
   exit 0
 fi
 . "$root/scripts/deploy/lib/source-revision.sh"
+version="$(cat "$root/hololive/hololive-api/VERSION")"
+[[ "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
 verify_local_pair() {
   local pair="$1" pair_seal="$2" pair_revision="$3" sources="$4" expected_sources
   (
     cd -- "$pair" || exit 1
+    for file in transport-files.sha256 source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id \
+      image.tar image.tar.sha256 collector-image.tar collector-image.tar.sha256; do
+      [[ -f "$file" && ! -L "$file" ]] || exit 1
+    done
     printf '%s  transport-files.sha256\n' "$pair_seal" | sha256sum --check --strict --status - || exit 1
     actual="$(sha256sum source-files.sha256 rootfs-manifest.json collector-manifest.json image-id collector-image-id image.tar.sha256 collector-image.tar.sha256)" || exit 1
     cmp -s transport-files.sha256 <(printf '%s\n' "$actual") || exit 1
@@ -186,8 +192,6 @@ elif [[ "$mode" == rollback ]]; then
 else
   [[ $# -eq 2 ]] || exit 2
 fi
-version="$(cat "$root/hololive/hololive-api/VERSION")"
-[[ "$version" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
 build_local_pair() {
   local_stage="$(mktemp -d)"
   trap 'rm -rf "$local_stage"' EXIT
