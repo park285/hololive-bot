@@ -433,6 +433,21 @@ class Cutover(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.cli('check', target)
 
+    def test_check_and_resume_see_dropins_attached_through_an_alias(self):
+        target = self.target()
+        self.seal(target)
+        (self.vendor / 'collector-alias.service').symlink_to(self.root / 'generator' / (d.C + '.service'))
+        self.cli('check', target)
+        for folder in (self.system / 'collector-alias.service.d', self.vendor / 'collector-.service.d'):
+            folder.mkdir()
+            (folder / '10-late.conf').write_bytes(b'[Service]\nEnvironment=LATE=1\n')
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.resume()
+            (folder / '10-late.conf').unlink()
+        self.assertEqual(self.calls, [])
+
     def test_check_refuses_what_resume_refuses(self):
         target = self.target()
         self.seal(target)

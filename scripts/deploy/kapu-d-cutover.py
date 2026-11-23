@@ -775,8 +775,12 @@ def unit_paths():
 
 
 def service_dropins(name):
-    folders = {'service.d', name + '.service.d', *(name[:i+1] + '.service.d' for i,c in enumerate(name) if c == '-')}
-    return sorted(str(root / f / k) for root in unit_paths() for f in folders if (root / f).is_dir()
+    roots = [root for root in unit_paths() if root.is_dir()]
+    names = {name, *(e.name.removesuffix('.service') for root in roots for e in os.scandir(root)
+                     if e.name.endswith('.service') and e.is_symlink() and Path(os.readlink(e.path)).name == name + '.service')}
+    folders = {'service.d', *(n[:i+1] + '.service.d' for n in names for i,c in enumerate(n) if c == '-'),
+               *(n + '.service.d' for n in names)}
+    return sorted(str(root / f / k) for root in roots for f in folders if (root / f).is_dir()
                   for k in os.listdir(root / f) if k.endswith('.conf'))
 
 
