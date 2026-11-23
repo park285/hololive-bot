@@ -124,6 +124,9 @@ class Cutover(unittest.TestCase):
         self.state['candidate'] = self.target()
         d.metadata(self.h/'previous.json',self.state)
         d.record(self.h/'quiesced', d.stop_receipt(json.loads((self.h/'previous.json').read_bytes())))
+        self.vendor = self.root / 'vendor'
+        self.vendor.mkdir()
+        self.patch('unit_paths', lambda: [self.system, self.vendor])
         self.patch('trusted', lambda *args:None)
         self.patch('raw', Path.read_bytes)
         self.patch('retained', lambda *args,**kwargs:None)
@@ -403,6 +406,32 @@ class Cutover(unittest.TestCase):
         self.assertEqual({n: os.readlink(d.mask(n)) for n in d.NAMES}, masks)
         self.assertEqual({n: (self.units / d.unit(n)).read_bytes() for n in d.NAMES}, units)
         self.assertEqual(self.calls, [])
+
+    def test_check_and_resume_refuse_an_interrupted_resume_attempt(self):
+        target = self.target()
+        self.seal(target)
+        d.metadata(self.h / 'resume-attempt.json', {**target, 'profile': self.state['profile']})
+        attempt = (self.h / 'resume-attempt.json').read_bytes()
+        with self.assertRaisesRegex(d.Refused, '재개 시도'):
+            self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, '재개 시도'):
+            self.resume()
+        self.assertEqual((self.h / 'resume-attempt.json').read_bytes(), attempt)
+        self.assertEqual(self.calls, [])
+
+    def test_check_and_resume_refuse_a_systemd_dropin_added_after_the_stop(self):
+        target = self.target()
+        self.seal(target)
+        for folder in (self.system / (d.C + '.service.d'), self.vendor / 'hololive-.service.d', self.vendor / 'service.d'):
+            folder.mkdir()
+            (folder / '10-late.conf').write_bytes(b'[Service]\nEnvironment=LATE=1\n')
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.resume()
+            (folder / '10-late.conf').unlink()
+        self.assertEqual(self.calls, [])
+        self.cli('check', target)
 
     def test_check_refuses_what_resume_refuses(self):
         target = self.target()

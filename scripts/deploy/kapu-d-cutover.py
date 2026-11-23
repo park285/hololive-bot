@@ -768,10 +768,23 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
     need(not damaged and not receipt_failed, '양쪽 소유 mask 복원 미확인: 증거와 잔여 가드 유지')
 
 
+def unit_paths():
+    paths = [Path(p) for p in run('systemctl','show','--property=UnitPath','--value').split()]
+    need(paths and all(p.is_absolute() for p in paths), '불명 systemd unit 경로')
+    return paths
+
+
+def service_dropins(name):
+    folders = {'service.d', name + '.service.d', *(name[:i+1] + '.service.d' for i,c in enumerate(name) if c == '-')}
+    return sorted(str(root / f / k) for root in unit_paths() for f in folders if (root / f).is_dir()
+                  for k in os.listdir(root / f) if k.endswith('.conf'))
+
+
 def resumable(h, target):
     trusted(h,True)
     trusted(GUARD)
     trusted(SLOTS_FILE)
+    need(not os.path.lexists(h/'resume-attempt.json'), '이 hold의 이전 재개 시도 기록 있음')
     s = json.loads(raw(h/'previous.json'))
     need(stat.S_IMODE(h.stat().st_mode) == 0o700 and raw(h/'quiesced') == stop_receipt(s),
          '선택한 모드의 새 quiesce 영수증 필요')
@@ -781,6 +794,7 @@ def resumable(h, target):
     for n in NAMES:
         require_previous_stop(h,n,s['old'][n])
         held_one(h,s,n)
+        need(not service_dropins(n), '정지 뒤 추가된 systemd drop-in: ' + n)
         candidates[n] = raw(INPUT / unit(n))
         verify_candidate_input(n,candidates[n],target)
         need(image(n,prod(n)) == s['images'][n], '이전 :prod 불일치')
