@@ -629,17 +629,8 @@ verify_candidate_images() {
   [[ "$(image_label "$collector_candidate" version)" == "$version" ]]
 }
 
-candidate_unit_path() {
-  if [[ "$mode" == quiesce && "$slot" != c ]]; then
-    printf '%s\n' "$staging/$slot_unit_dir/$collector_container.container"
-  else
-    printf '%s\n' "$unit_dir/$collector_container.container"
-  fi
-}
-
 prepare_candidate_pair() {
-  local candidate_image env_file=- expected previous_revision candidate_unit
-  candidate_unit="$(candidate_unit_path)"
+  local candidate_image env_file=- expected previous_revision
   candidate_image="$(image_id "$collector_candidate")"
   if [[ "$mode" == resume ]]; then
     if [[ "$slot" == c ]]; then
@@ -661,18 +652,18 @@ prepare_candidate_pair() {
   if [[ ! -e "$profile_release/candidate" ]]; then
     [[ "$staged_pair" != true || "$mode" != resume ]] || { echo 'preflighted candidate profile is missing' >&2; return 1; }
     writer_change python3 "$pair_tool" candidate "$service" "$profile_release/candidate" "$candidate_image" \
-      < "$candidate_unit"
+      < "$unit_dir/$collector_container.container"
   fi
   python3 "$pair_tool" verify "$service" "$profile_release/candidate" "$candidate_image"
   python3 "$pair_tool" verify-dropin "$service" "$profile_release/candidate"
-  cmp -- "$profile_release/candidate/unit.container" "$candidate_unit"
+  cmp -- "$profile_release/candidate/unit.container" "$unit_dir/$collector_container.container"
   python3 "$pair_tool" check "$service" "$profile_release/candidate"
   python3 "$pair_tool" verify-source "$service" "$profile_release/candidate"
 }
 
 validate_candidate_pair() {
   prepare_candidate_pair
-  python3 "$pair_tool" check-database "$service" "$profile_release/candidate" "$(candidate_unit_path)"
+  python3 "$pair_tool" check-database "$service" "$profile_release/candidate"
 }
 
 image_id() {
@@ -957,7 +948,7 @@ require_collector_lease_migration() {
   . "$staging/scripts/deploy/lib/migration-receipts.sh"
   if [[ "$position" == applied ]]; then
     endpoint="$(collector_database_endpoint "$collector_container")" || return 1
-    if [[ "$endpoint" != 'holo-postgres|5432' && ( "$mode" != quiesce || "$endpoint" != 'holo-pgbouncer|6432' ) ]]; then
+    if [[ "$endpoint" != 'holo-postgres|5432' ]]; then
       echo 'collector migration proof requires the local primary route' >&2
       return 1
     fi
@@ -1093,6 +1084,10 @@ if [[ "$card_transition" == false ]]; then
       archives+=("$staging/${prefix}image.tar")
     done
     [[ ! -e "$profile_release" && ! -L "$profile_release" ]]
+    cmp -- "$staging/$slot_unit_dir/$collector_container.container" "$unit_dir/$collector_container.container"
+    [[ "$(collector_database_endpoint "$collector_container")" == '100.100.1.8|5433' ]] || {
+      echo 'running b collector still uses a pre-direct endpoint; finish its retirement with the 1-9 step tree' >&2; exit 1;
+    }
   fi
 fi
 if [[ "$staged_pair" == true ]]; then (( EPOCHSECONDS < expires )); fi

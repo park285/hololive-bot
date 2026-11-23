@@ -33,7 +33,7 @@ GEN = Path('/run/systemd/generator')
 INPUT = RELEASE_ROOT / SLOT['unit_dir']
 GUARD = Path(__file__).resolve().with_name('lib') / 'systemd-stop-guard.py'
 CANDIDATE_PORT = '5433'
-QUIESCED = {'6433': b'kapu-d-guarded-stop-v4 pooled-to-direct\n', '5433': b'kapu-d-guarded-stop-v5 already-direct\n'}
+QUIESCED = b'kapu-d-guarded-stop-v5 already-direct\n'
 STORE = Path('/var/lib') / (C + '-cutover')
 D = Path('/etc/hololive-bot') / SERVICE / 'worker-profile-release'
 SECRETS = Path('/etc/stack-secrets/hololive-bot') / SERVICE
@@ -269,15 +269,12 @@ def policy(name):
     return drops
 
 
-def config(name, source_port, *, candidate_installed=False):
+def config(name):
     candidate = raw(INPUT / unit(name))
-    expected = candidate
     if name == C:
-        token = f'Environment=POSTGRES_PORT={CANDIDATE_PORT}\n'.encode()
-        need(candidate.count(token) == 1, '후보 port 선언 불일치')
-        expected = candidate.replace(token, f'Environment=POSTGRES_PORT={source_port}\n'.encode())
-    need(raw(UNIT / unit(name)) == (candidate if candidate_installed else expected), '검토한 기본 unit과 설치본이 다름: ' + name)
-    return expected, policy(name)
+        need(candidate.count(f'Environment=POSTGRES_PORT={CANDIDATE_PORT}\n'.encode()) == 1, '후보 port 선언 불일치')
+    need(raw(UNIT / unit(name)) == candidate, '검토한 기본 unit과 설치본이 다름: ' + name)
+    return candidate, policy(name)
 
 
 def container_settings(text, section):
@@ -297,7 +294,7 @@ def container_settings(text, section):
     return settings
 
 
-def origin(name, port, masked, guarded=False, allow_job=False):
+def origin(name, masked, guarded=False, allow_job=False):
     f = GEN / (name + '.service')
     text = raw(f).decode()
     need(re.findall('^SourcePath=(.*)$', text, re.M) == [str(UNIT / unit(name))] and
@@ -315,7 +312,7 @@ def origin(name, port, masked, guarded=False, allow_job=False):
     if name == C:
         settings = expected['Environment']
         port_setting = [v for v in settings if v.startswith('POSTGRES_PORT=')]
-        need(port_setting == ['POSTGRES_PORT=' + port] and
+        need(port_setting == ['POSTGRES_PORT=' + CANDIDATE_PORT] and
              all([v for v in settings if v.startswith(k + '=')] == [k + '=' + value]
                  for k,value in {**DB, **PROFILE_ENV}.items()) and
              expected['EnvironmentFile'] == [str(ENVFILE)] and expected['User'] == ['1000:1000'] and
@@ -336,14 +333,14 @@ def prereqs():
     trusted(CA)
 
 
-def collector(g, port, level):
+def collector(g, level):
     cid, pid = g['cid'], g['pid']
     effective_ids(pid, 1000, 1000, 1002)
     need(inspect('container', cid, '{{.Config.User}} {{.ProcessLabel}}') == '1000:1000 system_u:system_r:container_t:' + level,
          'collector user/MCS 불일치')
     net = json.loads(inspect('container', cid, '{{json .NetworkSettings.Networks}}'))
     need(set(net) == {NETWORK} and net[NETWORK]['IPAddress'] == '10.89.15.14', 'collector network 불일치')
-    expected = {**DB, **PROFILE_ENV, 'POSTGRES_PORT': port}
+    expected = {**DB, **PROFILE_ENV, 'POSTGRES_PORT': CANDIDATE_PORT}
     checks = []
     for key, value in expected.items():
         prefix = key + '='
@@ -429,9 +426,9 @@ def no_process(name, result, cid):
     absent('container', cid)
 
 
-def guarded_stop(h, name, g, port, candidate=False):
+def guarded_stop(h, name, g, candidate=False):
     guard('check',h,name)
-    origin(name,port,False,True)
+    origin(name,False,True)
     need(generation(name) == g, '정지 직전 세대 변경')
     event = False
     code = None
@@ -479,20 +476,20 @@ def bindings():
     return result
 
 
-def previous_endpoint(port):
-    return {'host':DB['POSTGRES_HOST'], 'port':int(port), 'role':DB['POSTGRES_USER'],
+def previous_endpoint():
+    return {'host':DB['POSTGRES_HOST'], 'port':int(CANDIDATE_PORT), 'role':DB['POSTGRES_USER'],
             'collector_user':'1000:1000', 'collector_group':1002, 'issuer_user':'65532:1000'}
 
 
-def retained(h, state, source_port, *, candidate_installed=False):
-    need(state['previous_endpoint'] == previous_endpoint(source_port), '원래 endpoint 영수증 불일치')
+def retained(h, state):
+    need(state['previous_endpoint'] == previous_endpoint(), '원래 endpoint 영수증 불일치')
     prereqs()
     need(state['hold'] == number(h) and state['boot'] == Path('/proc/sys/kernel/random/boot_id').read_text().strip(), '다른 hold/boot')
     need(state['bindings'] == bindings(), '보존 bind/envfile 파일 교체')
     data = profile()
     need(raw(h / 'profile.json') == data and sha(data) == state['profile'], '보존 profile drift')
     for n in NAMES:
-        base, drops = config(n, source_port, candidate_installed=candidate_installed)
+        base, drops = config(n)
         old = raw(h / unit(n))
         need(old == base and state['base'][n] == sha(old) and state['drops'][n] == {k:sha(v) for k,v in drops.items()} and
              all(raw(h / (n + '.' + k)) == v for k,v in drops.items()), '보존 unit/drop-in drift')
@@ -511,14 +508,14 @@ def verify_candidate_input(n, data, target):
          '후보 unit digest 또는 이미지 revision 불일치: ' + n)
 
 
-def snapshot(h, source_port, target):
+def snapshot(h, target):
     prereqs()
     state = {'boot': Path('/proc/sys/kernel/random/boot_id').read_text().strip(), 'old':{}, 'images':{}, 'drops':{}, 'base':{}}
     files = {}
     for n in NAMES:
         need(not os.path.lexists(mask(n)) and prop(n,'LoadState') == 'loaded', '기존 mask 또는 service override')
-        origin(n, source_port, False)
-        base, drops = config(n, source_port)
+        origin(n, False)
+        base, drops = config(n)
         files[unit(n)] = base
         files.update({n + '.' + k:v for k,v in drops.items()})
         state['base'][n] = sha(base)
@@ -532,19 +529,18 @@ def snapshot(h, source_port, target):
             match = re.search('^SecurityLabelLevel=(' + LEVEL + ')$', mcs, re.M)
             need(match, '고정된 collector MCS 없음')
             state['level'] = match[1]
-            files['profile.json'] = collector(g, source_port, match[1])
+            files['profile.json'] = collector(g, match[1])
             state['profile'] = sha(files['profile.json'])
         else:
             issuer(g)
         absent('image', oldtag(n,h))
-    if target is not None:
-        for n in NAMES:
-            old = state['images'][n]
-            need(target['revision'] != old['rev'] and target['images'][n] != old['id'], '이전 실행 이미지 또는 revision 재사용: ' + n)
-            verify_candidate_input(n,raw(INPUT / unit(n)),target)
-        state['candidate'] = target
+    for n in NAMES:
+        old = state['images'][n]
+        need(target['revision'] != old['rev'] and target['images'][n] != old['id'], '이전 실행 이미지 또는 revision 재사용: ' + n)
+        verify_candidate_input(n,raw(INPUT / unit(n)),target)
+    state['candidate'] = target
     state['bindings'] = bindings()
-    state['previous_endpoint'] = previous_endpoint(source_port)
+    state['previous_endpoint'] = previous_endpoint()
     h.mkdir(mode=0o700)
     sync_dir(h.parent)
     state['hold'] = number(h)
@@ -554,23 +550,20 @@ def snapshot(h, source_port, target):
     for n in NAMES:
         absent('image', oldtag(n,h))
         run('podman','tag',state['images'][n]['id'],oldtag(n,h))
-    retained(h,state,source_port)
+    retained(h,state)
     return state
 
 
-def stop_receipt(source_port, state):
-    marker = QUIESCED[source_port]
-    if source_port == CANDIDATE_PORT:
-        marker += sha(json.dumps(state,sort_keys=True).encode()).encode() + b'\n'
-    return marker
+def stop_receipt(state):
+    return QUIESCED + sha(json.dumps(state,sort_keys=True).encode()).encode() + b'\n'
 
 
-def quiesce(h, source_port, target=None):
-    need(source_port != CANDIDATE_PORT or target is not None, '같은 endpoint 교체에는 별도 후보 identity 필요')
+def quiesce(h, target):
+    need(target is not None, '같은 endpoint 교체에는 별도 후보 identity 필요')
     need(not os.path.lexists(h), '새 hold 필요')
     trusted(GUARD)
     trusted(SLOTS_FILE)
-    s = snapshot(h,source_port,target)
+    s = snapshot(h,target)
     for n in NAMES:
         need(generation(n) == s['old'][n], '정지 전 세대 교체')
     for n in NAMES:
@@ -581,21 +574,21 @@ def quiesce(h, source_port, target=None):
         guard('arm',h,n)
     for n in NAMES:
         guard('check',h,n)
-        origin(n,source_port,False,True)
+        origin(n,False,True)
     for n in (I,C):
         g = s['old'][n]
-        retained(h,s,source_port)
+        retained(h,s)
         need(image(n,prod(n)) == s['images'][n] and generation(n) == g, '정지 전 실행 세대 변경')
         if n == C:
-            need(collector(g,source_port,s['level']) == raw(h / 'profile.json'), '정지 전 profile 불일치')
+            need(collector(g,s['level']) == raw(h / 'profile.json'), '정지 전 profile 불일치')
         else:
             issuer(g)
-        guarded_stop(h,n,g,source_port)
+        guarded_stop(h,n,g)
     for n in (I,C):
         guard('seal',h,n)
     for n in NAMES:
         held_one(h,s,n)
-    record(h / 'quiesced', stop_receipt(source_port,s))
+    record(h / 'quiesced', stop_receipt(s))
     print('quiesced:', h)
 
 
@@ -684,7 +677,7 @@ def acceptance(h, s, n, g):
     if n == I:
         issuer(g)
     else:
-        need(collector(g,CANDIDATE_PORT,s['level']) == raw(h / 'profile.json'), '후보 loaded profile drift')
+        need(collector(g,s['level']) == raw(h / 'profile.json'), '후보 loaded profile drift')
         result = json.loads(run('podman','exec',g['cid'],'/app/bin/healthcheck','--body','https://127.0.0.1:' + PORT + '/ready'))
         need(result['status'] == 'ready' and result['instance_id'] == SERVICE and result['helper'] == 'ok' and
              result['first_success'] is True and result['handoff_status'] == 'PROCESSED' and result['handoff_processed'] is True and
@@ -729,7 +722,7 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
                     no_process(n,result,s['old'][n]['cid'])
                     guard('undo-unmask',h,n)
                     held_one(h,s,n)
-                    origin(n,CANDIDATE_PORT,True)
+                    origin(n,True)
                     continue
             except errors:
                 damaged = uncertain = True
@@ -737,7 +730,7 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
             continue
         try:
             guard('arm',h,n)
-            origin(n,CANDIDATE_PORT,False,True,allow_job=True)
+            origin(n,False,True,allow_job=True)
             if not uncertain:
                 armed.add(n)
         except errors:
@@ -749,11 +742,11 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
             if n in requested:
                 if n not in started:
                     started[n] = candidate(n,requested[n],s['old'][n],ids[n],guarded_hold=h)
-                guarded_stop(h,n,started[n],CANDIDATE_PORT,candidate=True)
+                guarded_stop(h,n,started[n],candidate=True)
                 stops[n] = started[n]['inv']
             else:
                 guard('check',h,n)
-                origin(n,CANDIDATE_PORT,False,True)
+                origin(n,False,True)
                 result = terminal(n)
                 need(n in before and before[n]['ActiveState'] == result['ActiveState'] == 'inactive', '후보 종료 미확인')
                 no_process(n,result,s['old'][n]['cid'])
@@ -775,17 +768,16 @@ def rehold(h, s, ids, opened, requested, started, receipt_failed):
     need(not damaged and not receipt_failed, '양쪽 소유 mask 복원 미확인: 증거와 잔여 가드 유지')
 
 
-def resume(h, target, source_port):
+def resume(h, target):
     trusted(h,True)
     trusted(GUARD)
     trusted(SLOTS_FILE)
     s = json.loads(raw(h/'previous.json'))
-    need(stat.S_IMODE(h.stat().st_mode) == 0o700 and raw(h/'quiesced') == stop_receipt(source_port,s),
+    need(stat.S_IMODE(h.stat().st_mode) == 0o700 and raw(h/'quiesced') == stop_receipt(s),
          '선택한 모드의 새 quiesce 영수증 필요')
     revision, ids, digests = target['revision'], target['images'], target['units']
-    if source_port == CANDIDATE_PORT or s.get('candidate') is not None:
-        need(s.get('candidate') == target, '이 hold에서 정지 전에 승인한 후보와 불일치')
-    retained(h,s,source_port)
+    need(s.get('candidate') == target, '이 hold에서 정지 전에 승인한 후보와 불일치')
+    retained(h,s)
     candidates = {}
     for n in NAMES:
         require_previous_stop(h,n,s['old'][n])
@@ -801,14 +793,14 @@ def resume(h, target, source_port):
     run('systemctl','daemon-reload')
 
     def inputs():
-        retained(h,s,source_port,candidate_installed=True)
+        retained(h,s)
         for name in NAMES:
             need(sha(raw(UNIT/unit(name))) == digests[name] and image(name,prod(name)) == {'id':ids[name],'rev':revision},
                  '실제 :prod 또는 설치 unit drift')
     inputs()
     for n in NAMES:
         held_one(h,s,n)
-        origin(n,CANDIDATE_PORT,True)
+        origin(n,True)
     gate(ids[C],s['level'])
     record(h/'sql-passed',b'kapu-d-v1\n')
     opened = []
@@ -832,7 +824,7 @@ def resume(h, target, source_port):
                 opened.append(n)
                 sync_dir(SYSTEM)
             run('systemctl','daemon-reload')
-            origin(n,CANDIDATE_PORT,False)
+            origin(n,False)
             need(prop(n,'LoadState') == 'loaded' and prop(n,'ActiveState') in ('inactive','failed'), '단독 기동 전 상태 불일치')
             if n == I:
                 held_one(h,s,C)
@@ -896,11 +888,6 @@ def main():
     for cmd in ('quiesce','resume'):
         p = sub.add_parser(cmd, allow_abbrev=False)
         p.add_argument('hold', type=Path)
-        source = p.add_mutually_exclusive_group(required=True)
-        source.add_argument('--already-direct', dest='source_port', action='store_const', const=CANDIDATE_PORT,
-                            help='이미 직접 TLS 5433인 d를 정지하고 같은 endpoint에서 교체')
-        source.add_argument('--from-pooler', dest='source_port', action='store_const', const='6433',
-                            help='PgBouncer 6433의 d를 정지하고 직접 TLS 5433 후보로 교체')
         for arg in ('revision','collector_id','issuer_id','collector_unit_sha256','issuer_unit_sha256'):
             p.add_argument(arg)
     a = parser.parse_args()
@@ -927,9 +914,9 @@ def main():
         stack.callback(os.close,fd)
         fcntl.flock(fd,fcntl.LOCK_EX | fcntl.LOCK_NB)
         if a.action == 'quiesce':
-            quiesce(a.hold, a.source_port, target)
+            quiesce(a.hold, target)
         else:
-            resume(a.hold, target, a.source_port)
+            resume(a.hold, target)
 
 
 if __name__ == '__main__':

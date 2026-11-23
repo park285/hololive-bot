@@ -574,13 +574,9 @@ prepare_slot() {
   [[ "$captured_id" =~ ^[0-9a-f]{64}$ ]] || die "$service has no captured container ID"
   if [[ "$mode" == quiesce ]]; then original_cids[$service]="$captured_id"; fi
   endpoint="$(postgres_endpoint_container "$captured_id")"
-  if [[ "$mode" == quiesce && "$endpoint" == 'holo-pgbouncer|6432' ]]; then
-    assert_writer_endpoint "$service"
-  else
-    [[ "$endpoint" == 'holo-postgres|5432' ]] || die "migration window requires a running direct TLS writer"
-    postgres_endpoint_require_same "$endpoint" "$(postgres_endpoint_quadlet "$quadlet_dir/$service.container" "$compose_env")" ||
-      die "$service installed endpoint differs from the captured running generation"
-  fi
+  [[ "$endpoint" == 'holo-postgres|5432' ]] || die "migration window requires a running direct TLS writer"
+  postgres_endpoint_require_same "$endpoint" "$(postgres_endpoint_quadlet "$quadlet_dir/$service.container" "$compose_env")" ||
+    die "$service installed endpoint differs from the captured running generation"
   printf '%s\n' "$endpoint" >"$release/previous.endpoint"
   python3 "$pair_tool" rollback "$service" "$release/previous" "$release/rollback.conf"
   (cd "$release" && sha256sum previous/pair.json previous.endpoint rollback.conf >rollback.sha256)

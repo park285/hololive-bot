@@ -262,17 +262,14 @@ def validate_container_pair(before, directory):
                 run(CLI, "rm", "--force", "--ignore", "--time=0", probe)
 
 
-def collector_probe_network(directory, pair, values, reviewed=None):
+def collector_probe_network(directory, pair, values):
     service = pair["service"]
     if (service not in COLLECTOR_NETWORKS or directory.name != "candidate" or directory.parent.name != service or
             "container_id" in pair):
         raise ValueError("database endpoint check requires a collector candidate")
     definition = QUADLET_UNITS[service]
-    if reviewed is None:
-        if profile_bytes(directory / UNIT_RECORD) != profile_bytes(QUADLET_DIR / definition):
-            raise ValueError("database endpoint check requires the installed candidate unit")
-    elif profile_bytes(directory / UNIT_RECORD) != profile_bytes(Path(reviewed)):
-        raise ValueError("database endpoint check requires the reviewed staged candidate unit")
+    if profile_bytes(directory / UNIT_RECORD) != profile_bytes(QUADLET_DIR / definition):
+        raise ValueError("database endpoint check requires the installed candidate unit")
     name = Path(definition).stem
     network_unit, network = COLLECTOR_NETWORKS[service]
     for key, expected in (("ContainerName", name), ("Entrypoint", "./bin/hololive-collector"),
@@ -285,10 +282,10 @@ def collector_probe_network(directory, pair, values, reviewed=None):
     return network
 
 
-def check_pair(directory, pair, *, database_check=False, reviewed=None):
+def check_pair(directory, pair, *, database_check=False):
     values = unit_values(directory / UNIT_RECORD)
     if database_check:
-        collector_probe_network(directory, pair, values["Container"], reviewed)
+        collector_probe_network(directory, pair, values["Container"])
     command = ["systemd-run", "--quiet", "--wait", "--pipe", "--collect",
                "--property=RuntimeMaxSec=60s"]
     for key, value in values["Service"]:
@@ -298,8 +295,6 @@ def check_pair(directory, pair, *, database_check=False, reviewed=None):
             command.append("--setenv=" + value)
     command.extend((sys.executable, str(Path(__file__).resolve()), "check-database-resolved" if database_check else "check-resolved",
                     pair["service"], str(directory)))
-    if reviewed is not None:
-        command.append(str(reviewed))
     subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=65)
 
 
@@ -369,10 +364,10 @@ def profile_security_level(unit):
     return dict(native).get("SecurityLabelLevel")
 
 
-def check_resolved_pair(directory, pair, *, database_check=False, reviewed=None):
+def check_resolved_pair(directory, pair, *, database_check=False):
     values = unit_values(directory / UNIT_RECORD)["Container"]
     environment = dict(os.environ)
-    network = collector_probe_network(directory, pair, values, reviewed) if database_check else "none"
+    network = collector_probe_network(directory, pair, values) if database_check else "none"
     command = [CLI, "run", "--rm", "--pull=never", "--network", network, "--read-only",
                "--read-only-tmpfs=false", "--log-driver=none", "--no-healthcheck", "--image-volume=ignore",
                "--cap-drop", "all", "--security-opt", "no-new-privileges"]
@@ -807,13 +802,10 @@ def main():
         verify(directory, service, rest[0] if rest else None)
     elif action == "verify-dropin":
         verify_dropin(directory, service, verify(directory, service), Path(rest[0]) if rest else None)
-    elif action in ("check", "check-database", "check-resolved", "check-database-resolved"):
-        database_check = action.startswith("check-database")
-        if len(rest) > database_check:
-            raise ValueError("only a database endpoint check names a reviewed staged unit")
-        reviewed = Path(rest[0]).resolve(strict=True) if rest else None
-        checker = check_resolved_pair if action.endswith("-resolved") else check_pair
-        checker(directory, verify(directory, service), database_check=database_check, reviewed=reviewed)
+    elif action in ("check", "check-database"):
+        check_pair(directory, verify(directory, service), database_check=action == "check-database")
+    elif action in ("check-resolved", "check-database-resolved"):
+        check_resolved_pair(directory, verify(directory, service), database_check=action == "check-database-resolved")
     elif action in ("verify-live", "verify-captured"):
         verify_writer(directory, service, rest[0], captured=action == "verify-captured")
     elif action == "activate":

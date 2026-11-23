@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import contextlib
 import importlib.util
-import io
 import json
 import os
 from pathlib import Path
@@ -122,8 +121,9 @@ class Cutover(unittest.TestCase):
             d.record(self.h / (n + '.stopped'), b'b'*32)
             d.metadata(self.h / (n + '.stopped.json'), {**self.props[n],'cid':self.state['old'][n]['cid'],
                        'invocation':'b'*32,'since':'@1234.000056','manager_stop':True,'container_exit':'0'})
-        d.record(self.h/'quiesced', d.QUIESCED['6433'])
+        self.state['candidate'] = self.target()
         d.metadata(self.h/'previous.json',self.state)
+        d.record(self.h/'quiesced', d.stop_receipt(json.loads((self.h/'previous.json').read_bytes())))
         self.patch('trusted', lambda *args:None)
         self.patch('raw', Path.read_bytes)
         self.patch('retained', lambda *args,**kwargs:None)
@@ -238,9 +238,8 @@ class Cutover(unittest.TestCase):
         (self.release / '.source-revision').write_text(target['revision'] + '\n')
         (self.release / 'd-card-candidate.json').write_text(json.dumps(target))
 
-    def cli(self, action, target, *, same_endpoint=True, pooled=False, anchor_uid=0):
-        source = ['--from-pooler'] if pooled else ['--already-direct'] if same_endpoint else []
-        args = ['kapu-d-cutover.py',action,*source,str(self.h),
+    def cli(self, action, target, *, anchor_uid=0):
+        args = ['kapu-d-cutover.py',action,str(self.h),
                 target['revision'],*(target[k][n] for k in ('images','units') for n in d.NAMES)]
         anchors = {d.mask_anchor(self.h,n) for n in d.NAMES}
         lstat = Path.lstat
@@ -258,10 +257,10 @@ class Cutover(unittest.TestCase):
               patch.object(d.socket,'gethostname',return_value='kapu'), patch.object(d.signal,'signal')):
             d.main()
 
-    def resume(self, source_port='6433'):
-        d.resume(self.h,self.target(),source_port)
+    def resume(self):
+        d.resume(self.h,self.target())
 
-    def running_pair(self, installed_port='6433', runtime_port=None):
+    def running_pair(self, runtime_port=None):
         self.h = self.root / 'd-cutover-running'
         self.patch('GEN',self.root / 'generator')
         d.GEN.mkdir()
@@ -272,9 +271,9 @@ class Cutover(unittest.TestCase):
         self.patch('policy',lambda n: {'50-mcs-level.conf':b'[Container]\nSecurityLabelLevel=s0:c908,c909\n'} if n == d.C else {})
         self.patch('profile',lambda:b'profile')
         self.patch('healthy',lambda n,g,**kwargs:self.assertEqual(g,self.generation(n)))
-        def collector(g,port,level):
-            expected = (runtime_port or installed_port) if g['cid'] == self.state['old'][d.C]['cid'] else '5433'
-            d.need(port == expected,'collector 실행 환경 불일치')
+        def collector(g,level):
+            running = runtime_port if g['cid'] == self.state['old'][d.C]['cid'] else None
+            d.need(running in (None, d.CANDIDATE_PORT),'collector 실행 환경 불일치')
             return b'profile'
         self.patch('collector',collector)
         self.patch('issuer',lambda *args:None)
@@ -294,7 +293,7 @@ class Cutover(unittest.TestCase):
             candidate = (self.unit_source / d.unit(n)).read_bytes()
             (self.input / d.unit(n)).write_bytes(candidate)
             self.digests[n] = d.sha(candidate)
-            (self.units / d.unit(n)).write_bytes(candidate.replace(b'POSTGRES_PORT=5433', b'POSTGRES_PORT=' + installed_port.encode()))
+            (self.units / d.unit(n)).write_bytes(candidate)
             old_image = self.state['images'][n]
             self.tags[old_image['id']] = old_image
             d.mask(n).unlink()
@@ -307,8 +306,8 @@ class Cutover(unittest.TestCase):
         h = self.running_pair()
         self.outcomes[d.I] = {'ActiveState':'failed','Result':'exit-code','ExecMainStatus':'143'}
         self.outcomes[d.C] = {'InvocationID':'','ExecMainCode':'0'}
-        d.quiesce(h,'6433')
-        self.assertEqual((h/'quiesced').read_bytes(),d.QUIESCED['6433'])
+        d.quiesce(h,self.target())
+        self.assertEqual((h/'quiesced').read_bytes(),d.stop_receipt(json.loads((h/'previous.json').read_bytes())))
         self.assertEqual([x[-1] for x in self.calls if x[:2] == ('systemctl','stop')],
                          [d.I+'.service',d.C+'.service'])
         for n in d.NAMES:
@@ -329,7 +328,7 @@ class Cutover(unittest.TestCase):
             return result
         self.patch('run',swap)
         with self.assertRaisesRegex(ValueError,'세대 변경'):
-            d.quiesce(h,'6433')
+            d.quiesce(h,self.target())
         self.assertEqual(self.guards,set(d.NAMES))
         self.assertNotIn(('systemctl','stop',d.C+'.service'),self.calls)
         self.assertFalse((h/'quiesced').exists())
@@ -338,7 +337,7 @@ class Cutover(unittest.TestCase):
         h = self.running_pair()
         self.outcomes[d.C] = {'ActiveState':'failed','Result':'exit-code','ExecMainStatus':'143'}
         with self.assertRaisesRegex(ValueError,'정상 종료 미확인'):
-            d.quiesce(h,'6433')
+            d.quiesce(h,self.target())
         result = json.loads((h/(d.C+'.stopped.json')).read_bytes())
         self.assertTrue(result['manager_stop'])
         self.assertEqual((result['Result'],result['ExecMainStatus']), ('exit-code','143'))
@@ -351,7 +350,7 @@ class Cutover(unittest.TestCase):
         self.exits[d.C] = '143'
         self.outcomes[d.C] = {'InvocationID':'','ExecMainCode':'0','ExecMainStatus':'0','Result':'success'}
         with self.assertRaisesRegex(ValueError,'정상 종료 미확인'):
-            d.quiesce(h,'6433')
+            d.quiesce(h,self.target())
         self.assertFalse((h/'quiesced').exists())
         self.assertEqual(json.loads((h/(d.C+'.stopped.json')).read_bytes())['container_exit'],'143')
         self.assertIn(d.C,self.guards)
@@ -360,65 +359,52 @@ class Cutover(unittest.TestCase):
         h = self.running_pair()
         self.guards.add(d.I)
         with self.assertRaisesRegex(ValueError,'이전 가드'):
-            d.quiesce(h,'6433')
+            d.quiesce(h,self.target())
         self.assertFalse(any(c[:2] == ('systemctl','stop') for c in self.calls))
         self.assertEqual(self.guards,set(d.NAMES))
         self.assertFalse((h/'quiesced').exists())
 
-    def exercise_release(self, source_port):
+    def test_already_direct_release_keeps_installed_endpoint(self):
         candidates = dict(self.executions)
-        h = self.running_pair(source_port)
+        h = self.running_pair()
         target = self.target()
         self.seal(target)
-        self.cli('quiesce',target,pooled=source_port == '6433')
+        self.cli('quiesce',target)
         previous = json.loads((h/'previous.json').read_bytes())
-        self.assertEqual(previous['previous_endpoint']['port'],int(source_port))
+        self.assertEqual(previous['previous_endpoint']['port'],5433)
         self.assertEqual(previous['old'],self.executions)
         self.assertEqual(previous.get('candidate'),target)
         collector_unit = self.units / d.unit(d.C)
         inode = d.number(collector_unit)
         self.executions = candidates
-        self.cli('resume',target,pooled=source_port == '6433')
-        self.assertEqual(d.number(collector_unit) == inode,source_port == '5433')
+        self.cli('resume',target)
+        self.assertEqual(d.number(collector_unit),inode)
         self.assertEqual(collector_unit.read_bytes(),(d.INPUT / d.unit(d.C)).read_bytes())
         accepted = json.loads((h/'accepted.json').read_bytes())
         self.assertEqual((accepted['generations'],accepted['port']),(candidates,5433))
         self.assertEqual([x[-1] for x in self.calls if x[:2] == ('systemctl','start')],
                          [d.I+'.service',d.C+'.service'])
 
-    def test_pooled_release_switches_installed_endpoint(self):
-        self.exercise_release('6433')
-
-    def test_already_direct_release_keeps_installed_endpoint(self):
-        self.exercise_release('5433')
-
-    def test_direct_installation_is_not_an_implicit_pooled_cutover(self):
-        h = self.running_pair('5433')
-        with self.assertRaisesRegex(d.Refused,'계약 불일치'):
-            d.quiesce(h,'6433')
-        self.assertFalse(h.exists())
-        self.assertFalse(self.calls)
-
     def test_already_direct_refuses_pooled_running_collector(self):
-        h = self.running_pair('5433',runtime_port='6433')
+        h = self.running_pair(runtime_port='6433')
         with self.assertRaisesRegex(d.Refused,'실행 환경 불일치'):
-            d.quiesce(h,'5433',self.target())
+            d.quiesce(h,self.target())
         self.assertFalse(h.exists())
         self.assertFalse(self.calls)
 
     def test_direct_resume_refuses_changed_previous_endpoint(self):
-        h = self.running_pair('5433')
-        d.quiesce(h,'5433',self.target())
+        h = self.running_pair()
+        d.quiesce(h,self.target())
         state = json.loads((h/'previous.json').read_bytes())
         state['previous_endpoint']['port'] = 6433
         (h/'previous.json').write_text(json.dumps(state))
         with self.assertRaisesRegex(d.Refused,'quiesce 영수증'):
-            self.resume('5433')
+            self.resume()
         self.assertFalse((h/'resume-attempt.json').exists())
         self.assertTrue(all(d.mask(n).is_symlink() for n in d.NAMES))
 
     def test_direct_quiesce_requires_a_new_verified_pair_before_either_stop(self):
-        h = self.running_pair('5433')
+        h = self.running_pair()
         target = self.target()
         old_ids = {n:i['id'] for n,i in self.state['images'].items()}
         old_revision = self.state['images'][d.C]['rev']
@@ -432,12 +418,12 @@ class Cutover(unittest.TestCase):
         )
         for invalid,reason in cases:
             with self.subTest(reason=reason), self.assertRaisesRegex(d.Refused,reason):
-                d.quiesce(h,'5433',invalid)
+                d.quiesce(h,invalid)
             self.assertFalse(h.exists())
             self.assertFalse(self.calls)
 
     def test_card_cli_rejects_earlier_complete_release_and_same_revision_rebuild(self):
-        h = self.running_pair('5433')
+        h = self.running_pair()
         card = self.target()
         self.seal(card)
         prior_ids = {d.C:'sha256:'+'5'*64,d.I:'sha256:'+'6'*64}
@@ -454,15 +440,8 @@ class Cutover(unittest.TestCase):
             self.assertFalse(h.exists())
             self.assertFalse(self.calls)
 
-        for action in ('quiesce','resume'):
-            with self.subTest(action=action), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as exc:
-                self.cli(action,card,same_endpoint=False)
-            self.assertEqual(exc.exception.code,2)
-            self.assertFalse(h.exists())
-            self.assertFalse(self.calls)
-
     def test_card_cli_requires_both_protected_files_before_quiesce(self):
-        h = self.running_pair('5433')
+        h = self.running_pair()
         target = self.target()
         for name in ('.source-revision','d-card-candidate.json'):
             self.seal(target)
@@ -474,7 +453,7 @@ class Cutover(unittest.TestCase):
             self.assertFalse(self.calls)
 
     def test_card_cli_rechecks_protected_inputs_before_resume(self):
-        h = self.running_pair('5433')
+        h = self.running_pair()
         target = self.target()
         self.seal(target)
         self.cli('quiesce',target)
@@ -494,7 +473,7 @@ class Cutover(unittest.TestCase):
 
     def test_card_cli_refuses_foreign_mask_anchor_before_resume(self):
         candidates = dict(self.executions)
-        h = self.running_pair('5433')
+        h = self.running_pair()
         target = self.target()
         self.seal(target)
         self.cli('quiesce',target)
@@ -508,9 +487,9 @@ class Cutover(unittest.TestCase):
             self.assertEqual(d.number(d.mask(n)),d.number(d.mask_anchor(h,n)))
 
     def test_direct_resume_only_opens_the_candidate_from_this_hold(self):
-        h = self.running_pair('5433')
+        h = self.running_pair()
         target = self.target()
-        d.quiesce(h,'5433',target)
+        d.quiesce(h,target)
         alternate = 'sha256:' + 'c'*64
         self.tags[alternate] = {'id':alternate,'rev':self.rev}
         old = self.state['images']
@@ -523,7 +502,7 @@ class Cutover(unittest.TestCase):
         self.calls.clear()
         for replacement in candidates:
             with self.subTest(candidate=replacement), self.assertRaisesRegex(d.Refused,'승인한 후보와 불일치'):
-                d.resume(h,replacement,'5433')
+                d.resume(h,replacement)
             self.assertFalse(self.calls)
             self.assertFalse((h/'resume-attempt.json').exists())
             for n in d.NAMES:
@@ -535,7 +514,7 @@ class Cutover(unittest.TestCase):
         for f in ('previous.json','quiesced'):
             (foreign/f).write_bytes((h/f).read_bytes())
         with self.assertRaisesRegex(d.Refused,'다른 hold/boot'):
-            d.resume(foreign,target,'5433')
+            d.resume(foreign,target)
         self.assertFalse(self.calls)
         self.assertFalse((foreign/'resume-attempt.json').exists())
 
@@ -544,7 +523,7 @@ class Cutover(unittest.TestCase):
         state['candidate'] = replacement
         (h/'previous.json').write_text(json.dumps(state))
         with self.assertRaisesRegex(d.Refused,'quiesce 영수증'):
-            d.resume(h,replacement,'5433')
+            d.resume(h,replacement)
         self.assertFalse(self.calls)
         self.assertFalse((h/'resume-attempt.json').exists())
 
@@ -692,7 +671,7 @@ class Cutover(unittest.TestCase):
         self.fail_write('.accepted-pending.json')
         self.rejected_but_stopped()
 
-    def test_accepted_pooledory_sync_failure_retracts_only_owned_link(self):
+    def test_accepted_directory_sync_failure_retracts_only_owned_link(self):
         self.resume_inputs()
         sync = d.sync_dir
         def fail_publish(path):
@@ -703,12 +682,11 @@ class Cutover(unittest.TestCase):
         self.rejected_but_stopped()
 
     def test_static_receipt_cannot_open_candidates(self):
-        for marker,requested in ((b'kapu-d-v1\n','6433'),(b'kapu-d-guarded-stop-v1\n','6433'),
-                                 (d.QUIESCED['5433'],'6433'),(d.QUIESCED['6433'],'5433')):
-            with self.subTest(marker=marker,requested=requested):
+        for marker in (b'kapu-d-v1\n',b'kapu-d-guarded-stop-v1\n',b'kapu-d-guarded-stop-v4 pooled-to-direct\n',d.QUIESCED):
+            with self.subTest(marker=marker):
                 (self.h/'quiesced').write_bytes(marker)
                 with self.assertRaisesRegex(ValueError,'quiesce 영수증'):
-                    self.resume(requested)
+                    self.resume()
                 self.assertFalse(self.calls)
                 self.assertFalse((self.h/'resume-attempt.json').exists())
 
@@ -779,7 +757,7 @@ class Cutover(unittest.TestCase):
         self.assertEqual(self.props[d.I]['MainPID'],'0')
         self.assertFalse((self.h/'accepted.json').exists())
 
-    def test_candidate_stop_cannot_reuse_pooled_issuer_143(self):
+    def test_candidate_stop_cannot_reuse_original_issuer_143(self):
         self.patch('gate',lambda *args:None)
         self.patch('acceptance',lambda *args: self.fail_candidate())
         self.outcomes[d.I] = {'ActiveState':'failed','InvocationID':self.state['old'][d.I]['inv'],

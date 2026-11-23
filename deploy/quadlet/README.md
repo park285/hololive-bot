@@ -97,17 +97,17 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 
 ### PgBouncer 퇴역 전환
 
-PgBouncer 경로로 운영 중인 배포를 이 release로 옮기는 절차입니다. 모든 단계는 별도 운영 승인 아래에서만 실행합니다.
+PgBouncer 경로로 운영 중인 배포를 직접 TLS로 옮기는 절차입니다. 모든 단계는 별도 운영 승인 아래에서만 실행합니다.
 
-HBA는 단일 파일 bind라서 PostgreSQL을 다시 만들 때만 바뀝니다. 중앙 hold는 PostgreSQL 실행 세대를 고정하므로 hold 안에서 PostgreSQL을 재시작할 수 없습니다. 그래서 이 release의 HBA는 직접 접속 규칙과 함께, 퇴역 중인 pooler 주소 `172.23.255.254/32`의 두 규칙(`hololive_pgbouncer_auth` 인증서, 여섯 업무 역할 SCRAM)을 유지합니다. 두 규칙은 운영 drain을 확인한 뒤 후속 변경에서 지웁니다.
+이 release는 퇴역 원점을 받지 않습니다. HBA에 pooler 주소 `172.23.255.254/32` 규칙이 없고, 중앙·c quiesce는 `holo-pgbouncer:6432` 원본을, b quiesce와 kapu d 도구는 6433 원점을 거부합니다. 따라서 1–9단계는 퇴역 원점 허용과 pooler 주소의 두 HBA 규칙(`hololive_pgbouncer_auth` 인증서, 여섯 업무 역할 SCRAM)이 남아 있는 1–9단계용 commit의 clean checkout과 그 commit의 문서로 실행합니다. 1–9단계용 commit은 `911ac8fdebfcb011951a320103f1caec83b9f14b`입니다. squash 병합하면 이 commit이 게시 이력에서 사라지므로, 이 변경은 commit을 보존하는 병합으로 게시하고 같은 SHA를 가리키는 보존 ref(게시 승인 때 이름을 정하는 태그나 브랜치)를 함께 둡니다. 실행 전에 새 clone에서 그 ref가 이 SHA로 풀리는지(`git rev-parse <보존 ref>^{commit}`) 확인합니다. 그보다 앞선 commit은 전환 도구의 수정이 빠져 있으므로 쓰지 않습니다. HBA는 단일 파일 bind라서 PostgreSQL을 다시 만들 때만 바뀌고, 중앙 hold는 PostgreSQL 실행 세대를 고정하므로 hold 안에서 PostgreSQL을 재시작할 수 없기 때문입니다. 9단계까지 끝낸 뒤 10단계에서 이 release를 설치하고 PostgreSQL을 다시 만들어 최종 HBA를 적용합니다.
 
 중앙 `--resume`의 카드 창 가드는 여섯 업무 역할의 연결이 모두 0이어야 진행합니다. pooler의 idle backend도 역할 연결 한도를 차지합니다. 따라서 writer는 정지만 먼저 하고, pooler를 멈춘 뒤 중앙부터 재개합니다. collector는 정지부터 재개까지, API·alarm-worker는 중앙 정지부터 중앙 재개까지 멈춥니다.
 
 1. 복구점: 각 writer의 실행 세대와 endpoint, `holo-postgres`·`holo-pgbouncer`의 CID·image ID·`StartedAt`, 현재 HBA mount, 적용된 migration 원장(`SELECT filename FROM public.schema_migrations ORDER BY filename`)을 기록합니다.
-2. 중앙 설치: 이 release의 clean checkout에서 `sync-opt-current.sh`로 전체 설치합니다. 설치는 `holo-pgbouncer.container`를 지웁니다. 실행 중인 pooler는 정지할 때까지 계속 동작하므로 이후 재시작하지 않습니다. 6433 게시 규칙이 사라지는 방화벽 reload는 7단계까지 미룹니다.
+2. 중앙 설치: 1–9단계용 commit의 clean checkout에서 `sync-opt-current.sh`로 전체 설치합니다. 설치는 `holo-pgbouncer.container`를 지웁니다. 실행 중인 pooler는 정지할 때까지 계속 동작하므로 이후 재시작하지 않습니다. 6433 게시 규칙이 사라지는 방화벽 reload는 7단계까지 미룹니다.
 3. PostgreSQL 재생성: `systemctl restart holo-postgres.service`로 새 HBA를 적용합니다. pooler는 `Wants=`로만 묶여 있어 함께 멈추지 않고 backend를 다시 연결합니다. `SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL`이 0이고 기존 writer가 정상인지 확인합니다.
 4. writer 정지(d→b→a→c→중앙): 첫 정지 전에 관리 socket에서 `SELECT r.rolconnlimit - count(a.pid) FROM pg_roles r LEFT JOIN pg_stat_activity a ON a.usename = r.rolname WHERE r.rolname = 'hololive_collector_b' GROUP BY r.rolconnlimit`가 1 이상인지 확인합니다. b quiesce의 후보 직접 접속 검사가 이 한 자리를 씁니다. pooler 시절의 b는 pooler backend로 역할 한도 7을 모두 채울 수 있고, 검사가 실패하면 일회성 정지 승인과 복구점이 이미 소비된 뒤입니다. 0이면 정지를 시작하지 않습니다.
-   - d: [kapu 절차](../podman/kapu/README.md)의 `kapu-d-cutover.py quiesce --from-pooler`
+   - d: 1–9단계용 commit kapu 절차의 `kapu-d-cutover.py quiesce --from-pooler`
    - b: [iris-seoul 절차](../podman/iris-seoul/README.md)의 `po-central-cutover.sh b quiesce`
    - a: [collector 런북](../../docs/current/runbooks/collector.md#osaka-a-w1w2-분리-정지-창)의 `ap-host-native-deploy.sh osaka --quiesce W2`. W2는 원래 6433 원점만 받습니다.
    - c: `po-central-cutover.sh c quiesce-verified`
@@ -116,7 +116,8 @@ HBA는 단일 파일 bind라서 PostgreSQL을 다시 만들 때만 바뀝니다.
 6. 중앙 재개: `quadlet-redeploy-service.sh --resume <API release> <worker release>`. 가드가 writer 차단 게이트를 설치·확인하고 `--schema-only` migrator를 실행한 뒤 두 후보를 엽니다.
 7. 방화벽: `sudo systemctl reload admin-dashboard-ingress-firewall.service`로 6433 게시 규칙을 지웁니다.
 8. collector 재개(c→a→b→d): `po-central-cutover.sh c resume`, `ap-host-native-deploy.sh osaka --resume W2`, `po-central-cutover.sh b resume`, `kapu-d-cutover.py resume --from-pooler`. 각 후보는 활성화 전에 실제 경로의 `--check-database-endpoint`를 통과해야 합니다.
-9. 정리(별도 승인): 관리 socket의 `hololive` DB에서 한 트랜잭션으로 `DROP SCHEMA hololive_pooler_auth CASCADE`, `REVOKE ALL ON DATABASE hololive FROM hololive_pgbouncer_auth`, `DROP ROLE hololive_pgbouncer_auth`를 실행하고 `pg_roles`에 역할이 남지 않았는지 확인합니다. `DROP ROLE`이 남은 권한 때문에 실패하면 트랜잭션 전체가 취소되므로, 남은 권한의 출처를 조사한 뒤 다시 실행합니다. 후속 변경에서 HBA의 두 `172.23.255.254` 규칙과 퇴역 원점 허용(c quiesce와 중앙 quiesce의 `holo-pgbouncer:6432`, AP W2·b quiesce의 6433, kapu `--from-pooler`)을 지우고, 다음 승인된 PostgreSQL 재생성에서 적용합니다. 그때까지 `hololive-net`의 `172.23.255.254`를 다른 컨테이너에 고정 배정하지 않습니다.
+9. 정리(별도 승인): 관리 socket의 `hololive` DB에서 한 트랜잭션으로 `DROP SCHEMA hololive_pooler_auth CASCADE`, `REVOKE ALL ON DATABASE hololive FROM hololive_pgbouncer_auth`, `DROP ROLE hololive_pgbouncer_auth`를 실행하고 `pg_roles`에 역할이 남지 않았는지 확인합니다. `DROP ROLE`이 남은 권한 때문에 실패하면 트랜잭션 전체가 취소되므로, 남은 권한의 출처를 조사한 뒤 다시 실행합니다. 10단계 전까지 `hololive-net`의 `172.23.255.254`를 다른 컨테이너에 고정 배정하지 않습니다.
+10. 최종 HBA: 이 release의 clean checkout에서 `sync-opt-current.sh`로 전체 설치하고, 승인된 PostgreSQL 재생성(`systemctl restart holo-postgres.service`)에서 새 HBA를 적용합니다. `pg_hba_file_rules`에 오류와 `172.23.255.254` 규칙이 없는지 확인합니다. AP W2 창은 osaka a의 일반 배포 창 표식과 묶여 있어 이 release에도 남아 있으며, W1/W2 창 체계를 퇴역할 때 함께 지웁니다.
 
 어느 단계든 실패하면 hold와 복구 입력을 보존합니다. 이전 endpoint로의 rollback은 helper가 거부하므로 호환 후보로 fix-forward합니다.
 

@@ -1090,19 +1090,6 @@ run_tool "$root" success "$API_HEX" "$HELPER" hololive-api localhost/hololive-ap
   { cat "$root/out" >&2; fail "완료된 과거 opening이 정상 단일 배포를 차단함"; }
 pass "coordinated resume never starts an old dependency before both candidate pairs are installed"
 
-root="${tmp}/coordinated-retiring-pooler"
-make_coordinated_case "${root}"
-printf 'POSTGRES_HOST=holo-pgbouncer\nPOSTGRES_PORT=6432\n' >"${root}/state/running-endpoint"
-quiesce_case "${root}"
-for service in hololive-api hololive-alarm-worker; do
-  [[ "$(<"$(coordinated_release "${root}" "${service}")/previous.endpoint")" == 'holo-pgbouncer|6432' ]] ||
-    fail "${service}: retiring pooler original was not recorded as the previous endpoint"
-done
-FAKE_SERVER_EPOCH=new
-run_tool "${root}" success "${API_HEX}" "${HELPER}" --resume \
-    "$(coordinated_release "${root}" hololive-api)" "$(coordinated_release "${root}" hololive-alarm-worker)" ||
-  { cat "${root}/out" >&2; fail "retiring pooler original: direct TLS resume failed"; }
-assert_candidate_pair_running "${root}"
 root="${tmp}/coordinated-pooler-installed"
 make_coordinated_case "${root}"
 printf 'POSTGRES_HOST=holo-pgbouncer\nPOSTGRES_PORT=6432\n' >"${root}/state/running-endpoint"
@@ -1113,7 +1100,7 @@ if run_tool "${root}" success "${API_HEX}" "${HELPER}" --quiesce \
   fail "pooled original quiesced without a direct TLS candidate"
 fi
 assert_no_call "${root}" pooled-candidate '^(guard arm |systemctl stop )'
-pass "the retiring pooler original is quiesced only for its direct TLS candidate and recorded for the hold"
+pass "a retired pooler original is never quiesced for a direct TLS candidate"
 
 root="${tmp}/coordinated-installed-cap"
 make_coordinated_case "${root}"

@@ -75,22 +75,6 @@ for filter in '.nftables[0].set.elem = []' '.nftables[0].set.elem += ["0.0.0.0/0
         exit 1
     fi
 done
-cp "$root/scripts/deploy/testdata/ingress-firewall-retiring-pooler.json" "$fixture/retiring.json"
-cp "$fixture/retiring.json" "$fixture/firewall.json"
-admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft"
-for filter in 'del(.nftables[] | select(.rule.chain == "forward" and .rule.expr[1].match.right == 6433 and .rule.expr[-1].reject != null))' \
-    'del(.nftables[] | select(.rule.chain == "forward_preserve_postgres_source" and .rule.expr[1].match.right == 6433))' \
-    '(.nftables[] | select(.rule.chain == "forward" and .rule.expr[1].match.right == 6433 and (.rule.expr[-1] | has("accept"))) | .rule.expr) |= .[0:3] + [{"accept":null}]' \
-    'del(.nftables[] | select(.rule.chain == "input" and .rule.expr[-1].reject.type == "tcp reset" and .rule.expr[0].match.right.set == [5433,6433]))' \
-    '(.nftables | map(.rule.chain == "input") | index(true)) as $i | .nftables |= (.[0:$i] + [{"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":{"range":[5000,6500]}}},{"accept":null}]}}] + .[$i:])' \
-    '(.nftables | map(.rule.chain == "input") | index(true)) as $i | .nftables |= (.[0:$i] + [{"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":"@wide_ports"}},{"accept":null}]}}] + .[$i:])' \
-    '(.nftables | map(.rule.chain == "input") | index(true)) as $i | .nftables |= (.[0:$i] + [{"rule":{"chain":"input","expr":[{"match":{"op":"!=","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":22}},{"accept":null}]}}] + .[$i:])'; do
-    jq "$filter" "$fixture/retiring.json" > "$fixture/firewall.json"
-    if admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft" > "$fixture/rejected.log" 2>&1; then
-        echo 'incomplete retiring pooler firewall accepted' >&2
-        exit 1
-    fi
-done
 cp "$fixture/valid.json" "$fixture/firewall.json"
 inactive=true
 if admin_network_assert_firewall "${root}/scripts/systemd/admin-dashboard-ingress.nft" "$fixture/installed.nft" > "$fixture/rejected.log" 2>&1; then
