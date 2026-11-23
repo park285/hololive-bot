@@ -490,7 +490,8 @@ mkdir -p "${tmp}/bin" "${tmp}/success" "${tmp}/failure"
 touch "${tmp}/KR.key"
 
 printf '#!/usr/bin/env bash\nexit 1\n' > "${tmp}/bin/ssh"
-chmod +x "${tmp}/bin/ssh"
+printf '#!/usr/bin/env bash\n[[ "$3" == status ]] && exit 0\nexec %q "$@"\n' "$(command -v git)" > "${tmp}/bin/git"
+chmod +x "${tmp}/bin/ssh" "${tmp}/bin/git"
 
 if PATH="${tmp}/bin:${PATH}" \
    RELEASE_ID='../active' \
@@ -571,7 +572,7 @@ for mode in --quiesce --resume; do
     "$DEPLOY" "${args[@]}" 2>&1)" || status=$?
   [[ "$status" == 1 && "$error" == *'검증 당시 native payload digest와 다릅니다.' ]] || record_fail "$mode: 검증 후 교체된 helper 허용"
   status=0
-  HOLO_NATIVE_PAYLOAD_SHA256='' RELEASE_ID=new HOLO_BOT_VERSION=123 "$DEPLOY" "${args[@]}" >/dev/null 2>&1 || status=$?
+  PATH="$tmp/bin:$PATH" HOLO_NATIVE_PAYLOAD_SHA256='' RELEASE_ID=new HOLO_BOT_VERSION=123 "$DEPLOY" "${args[@]}" >/dev/null 2>&1 || status=$?
   [[ "$status" == 2 ]] || record_fail "$mode: 독립 digest 누락 처리 오류"
 done
 
