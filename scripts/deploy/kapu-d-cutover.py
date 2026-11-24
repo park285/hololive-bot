@@ -778,21 +778,32 @@ SERVICE_NAME = re.compile(r'[A-Za-z0-9:_.\\-]+\.service')
 
 
 def chased(path):
-    current = Path(path.anchor)
-    parts = path.parts[1:]
-    for i, part in enumerate(parts):
+    current, todo, hops = Path(path.anchor), list(path.parts[1:]), 0
+    while todo:
+        part = todo.pop(0)
         if part == '..':
             current = current.parent
             continue
         step = current / part
+        if step.is_symlink():
+            hops += 1
+            if hops > 32:
+                return None
+            link = Path(os.readlink(step))
+            if link.is_absolute():
+                current = Path(link.anchor)
+            todo[:0] = link.parts[1:] if link.is_absolute() else link.parts
+            continue
         if not os.path.lexists(step):
-            return None if '..' in parts[i:] else step.joinpath(*parts[i+1:])
-        current = Path(os.path.realpath(step))
+            return None if '..' in todo else step.joinpath(*todo)
+        if not step.is_dir():
+            return None
+        current = step
     return current
 
 
 def unit_entry(root, e, search):
-    if e.name.startswith('.') or not SERVICE_NAME.fullmatch(e.name):
+    if not SERVICE_NAME.fullmatch(e.name):
         return False
     if not e.is_symlink():
         return None if e.is_file(follow_symlinks=False) else False

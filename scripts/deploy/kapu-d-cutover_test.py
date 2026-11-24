@@ -497,6 +497,74 @@ class Cutover(unittest.TestCase):
             (folder / '10-late.conf').unlink()
         self.assertEqual(self.calls, [])
 
+    def test_check_sees_aliases_whose_names_start_with_a_dot(self):
+        target = self.target()
+        self.seal(target)
+        (self.vendor / '.staged.service').symlink_to(d.C + '.service')
+        self.cli('check', target)
+        folder = self.vendor / '.staged.service.d'
+        folder.mkdir()
+        (folder / '10-late.conf').write_bytes(b'[Service]\nEnvironment=LATE=1\n')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.resume()
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_sees_aliases_behind_links_through_regular_files(self):
+        target = self.target()
+        self.seal(target)
+        generator = self.root / 'gen'
+        generator.mkdir()
+        (generator / (d.C + '.service')).write_bytes(b'[Unit]\n')
+        (self.root / 'old-release').write_bytes(b'')
+        self.patch('unit_paths', lambda: [self.system, self.vendor, generator])
+        (self.root / 'loop-a').symlink_to(self.root / 'loop-b')
+        (self.root / 'loop-b').symlink_to(self.root / 'loop-a')
+        (self.system / 'staged.service').symlink_to(self.root / 'old-release' / (d.C + '.service'))
+        (self.system / 'looped.service').symlink_to(self.root / 'loop-a' / (d.C + '.service'))
+        for alias in ('staged', 'looped'):
+            (self.vendor / (alias + '.service')).symlink_to(d.C + '.service')
+        self.cli('check', target)
+        for alias in ('staged', 'looped'):
+            folder = self.vendor / (alias + '.service.d')
+            folder.mkdir()
+            (folder / '10-late.conf').write_bytes(b'[Service]\nEnvironment=LATE=1\n')
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.resume()
+            (folder / '10-late.conf').unlink()
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_rejects_dotdot_after_missing_components_behind_symlinks(self):
+        target = self.target()
+        self.seal(target)
+        generator, outside = self.root / 'gen', self.root / 'outside'
+        generator.mkdir()
+        outside.mkdir()
+        (generator / (d.C + '.service')).write_bytes(b'[Unit]\n')
+        self.patch('unit_paths', lambda: [self.system, self.vendor, generator])
+        (self.root / 'to-gen').symlink_to('missing/../gen')
+        (self.root / 'to-outside').symlink_to('missing/../outside')
+        (self.vendor / 'phantom.service').symlink_to(self.root / 'to-gen' / (d.C + '.service'))
+        (self.system / 'shadow.service').symlink_to(self.root / 'to-outside' / (d.C + '.service'))
+        (self.vendor / 'shadow.service').symlink_to(d.C + '.service')
+        (self.vendor / 'phantom.service.d').mkdir()
+        (self.vendor / 'phantom.service.d' / '10-own.conf').write_bytes(b'[Service]\nEnvironment=OWN=1\n')
+        self.cli('check', target)
+        folder = self.vendor / 'shadow.service.d'
+        folder.mkdir()
+        (folder / '10-late.conf').write_bytes(b'[Service]\nEnvironment=LATE=1\n')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.resume()
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
     def test_check_ignores_links_that_systemd_does_not_treat_as_aliases(self):
         target = self.target()
         self.seal(target)
