@@ -2,6 +2,8 @@ package render
 
 import (
 	"bytes"
+	"image"
+	"image/color"
 	"image/png"
 	"slices"
 	"strings"
@@ -90,7 +92,25 @@ func assertCalendarAlbumBounds(t *testing.T, album [][]byte) {
 	}
 }
 
-func TestCalendarCardRenderer_SplitsBirthdayAndAnniversaryAndRotatesThemes(t *testing.T) {
+func TestCalendarThemePool_ContainsSevenLightAndDarkThemes(t *testing.T) {
+	t.Parallel()
+
+	want := []string{
+		CalendarThemePrismDaylight,
+		CalendarThemeShirokamiRisograph,
+		CalendarThemeSakuraSoraPress,
+		CalendarThemeMuseumArchive,
+		CalendarThemeCreamBromide,
+		CalendarThemeKurokamiRisograph,
+		CalendarThemeHoloStage,
+	}
+
+	if !slices.Equal(calendarThemePool, want) {
+		t.Fatalf("calendarThemePool = %v, want %v", calendarThemePool, want)
+	}
+}
+
+func TestCalendarCardRenderer_SplitsBirthdayAndAnniversaryWithMixedThemes(t *testing.T) {
 	var requests atomic.Int32
 
 	server := newPNGServer(t, &requests)
@@ -98,49 +118,115 @@ func TestCalendarCardRenderer_SplitsBirthdayAndAnniversaryAndRotatesThemes(t *te
 
 	store := newTestCalendarImageCache(t)
 	renderer := NewCalendarCardRenderer(WithCalendarImageCache(store))
-
-	renderer.variants.intN = func(int) int { return 0 }
-
 	entries := sampleSplitCalendarEntries(server.URL)
 
-	firstAlbum, err := renderer.RenderCalendarImagesContext(t.Context(), 11, 2026, entries)
-	if err != nil || len(firstAlbum) != 2 {
-		t.Fatalf("first RenderCalendarImagesContext() len=%d, err=%v; want 2 pages", len(firstAlbum), err)
+	bdayRef := make(map[string][]byte, len(calendarThemePool))
+	annivRef := make(map[string][]byte, len(calendarThemePool))
+
+	var wantColdPhotoFetches int32
+
+	for _, themeID := range calendarThemePool {
+		album, err := renderer.RenderCalendarImagesWithTheme(t.Context(), 11, 2026, themeID, entries)
+		if err != nil || len(album) != 2 {
+			t.Fatalf("RenderCalendarImagesWithTheme(%q) len=%d, err=%v; want 2 pages", themeID, len(album), err)
+		}
+
+		assertCalendarAlbumBounds(t, album)
+
+		bdayRef[themeID] = album[0]
+		annivRef[themeID] = album[1]
+
+		wantColdPhotoFetches += 3
 	}
 
-	secondAlbum, err := renderer.RenderCalendarImagesContext(t.Context(), 11, 2026, entries)
-	if err != nil || len(secondAlbum) != 2 {
-		t.Fatalf("second RenderCalendarImagesContext() len=%d, err=%v; want 2 pages", len(secondAlbum), err)
+	if got := requests.Load(); got != wantColdPhotoFetches {
+		t.Fatalf("cold photo requests = %d, want %d", got, wantColdPhotoFetches)
 	}
 
-	if bytes.Equal(firstAlbum[0], secondAlbum[0]) || bytes.Equal(firstAlbum[1], secondAlbum[1]) {
-		t.Fatal("consecutive calls returned identical theme pages, want rotating 3-A <-> 3-B")
-	}
-
-	thirdAlbum, err := renderer.RenderCalendarImagesContext(t.Context(), 11, 2026, entries)
-	if err != nil || !slices.EqualFunc(firstAlbum, thirdAlbum, bytes.Equal) {
-		t.Fatalf("third RenderCalendarImagesContext() did not cycle back to cached first theme: err=%v", err)
-	}
-
-	assertCalendarAlbumBounds(t, firstAlbum)
-	assertCalendarAlbumBounds(t, secondAlbum)
-
-	if got, want := requests.Load(), int32(6); got != want {
-		t.Fatalf("photo requests = %d, want %d", got, want)
+	mixedSequence := [4][2]string{
+		{CalendarThemeShirokamiRisograph, CalendarThemeKurokamiRisograph},
+		{CalendarThemeCreamBromide, CalendarThemeSakuraSoraPress},
+		{CalendarThemePrismDaylight, CalendarThemeMuseumArchive},
+		{CalendarThemeKurokamiRisograph, CalendarThemeHoloStage},
 	}
 
 	freshRenderer := NewCalendarCardRenderer(WithCalendarImageCache(store))
 
-	freshRenderer.variants.intN = func(int) int { return 0 }
+	var seq stepPicker
 
-	fromShared, err := freshRenderer.RenderCalendarImagesContext(t.Context(), 11, 2026, entries)
-	if err != nil || !slices.EqualFunc(firstAlbum, fromShared, bytes.Equal) {
-		t.Fatalf("shared Valkey album cache mismatch: err=%v", err)
+	freshRenderer.variants.intN = seq.next
+
+	for callIdx, pair := range mixedSequence {
+		seq.setTargets(freshRenderer.variants, "2026-11:birthday", pair[0], "2026-11:anniversary", pair[1])
+
+		album, err := freshRenderer.RenderCalendarImagesContext(t.Context(), 11, 2026, entries)
+		if err != nil || len(album) != 2 {
+			t.Fatalf("call %d RenderCalendarImagesContext() len=%d, err=%v; want 2", callIdx, len(album), err)
+		}
+
+		if !bytes.Equal(album[0], bdayRef[pair[0]]) || !bytes.Equal(album[1], annivRef[pair[1]]) {
+			t.Fatalf("call %d album pages did not match expected pair %v", callIdx, pair)
+		}
 	}
 
-	if got, want := requests.Load(), int32(6); got != want {
-		t.Fatalf("photo requests after shared cache hit = %d, want %d", got, want)
+	if got := requests.Load(); got != wantColdPhotoFetches {
+		t.Fatalf("photo requests after mixed shared-cache combinations = %d, want %d", got, wantColdPhotoFetches)
 	}
+}
+
+func TestCalendarCardRenderer_NeverRepeatsImmediatePreviousPageTheme(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewCalendarCardRenderer()
+
+	renderer.variants.intN = func(n int) int { return n - 1 }
+
+	entries := []domain.CalendarEntry{
+		{Kind: domain.CelebrationKindBirthday, Day: 7, Member: &domain.Member{ShortKoreanName: "제타"}},
+		{Kind: domain.CelebrationKindAnniversary, Day: 9, Ordinal: 2, Member: &domain.Member{ShortKoreanName: "리오나"}},
+	}
+
+	var prevBday, prevAnniv []byte
+
+	for step := range 8 {
+		album, err := renderer.RenderCalendarImagesContext(t.Context(), 11, 2026, entries)
+		if err != nil || len(album) != 2 {
+			t.Fatalf("step %d RenderCalendarImagesContext() len=%d, err=%v", step, len(album), err)
+		}
+
+		if step > 0 && (bytes.Equal(album[0], prevBday) || bytes.Equal(album[1], prevAnniv)) {
+			t.Fatalf("step %d repeated immediately preceding page theme", step)
+		}
+
+		prevBday = album[0]
+		prevAnniv = album[1]
+	}
+}
+
+type stepPicker struct {
+	picks []int
+	idx   int
+}
+
+func (s *stepPicker) setTargets(v *variantPicker, k1, t1, k2, t2 string) {
+	c1 := slices.DeleteFunc(slices.Clone(calendarThemePool), func(x string) bool { return x == v.last[k1] })
+	c2 := slices.DeleteFunc(slices.Clone(calendarThemePool), func(x string) bool { return x == v.last[k2] })
+	i1 := max(0, slices.Index(c1, t1))
+	i2 := max(0, slices.Index(c2, t2))
+
+	s.picks = []int{i1, i2}
+	s.idx = 0
+}
+
+func (s *stepPicker) next(n int) int {
+	if s.idx >= len(s.picks) {
+		return 0
+	}
+
+	val := s.picks[s.idx]
+	s.idx++
+
+	return min(val, max(0, n-1))
 }
 
 func TestCalendarCardRenderer_SixWeekBusyMonthFitsHeightBudget(t *testing.T) {
@@ -162,5 +248,58 @@ func TestCalendarCardRenderer_SixWeekBusyMonthFitsHeightBudget(t *testing.T) {
 		}
 
 		assertCalendarAlbumBounds(t, pages)
+	}
+}
+
+func TestCalendarCardRenderer_AllThemesRenderEmptyAndOverflowMonths(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewCalendarCardRenderer()
+	overflowEntries := make([]domain.CalendarEntry, 48)
+
+	for i := range overflowEntries {
+		overflowEntries[i] = domain.CalendarEntry{
+			Kind:   domain.CelebrationKindBirthday,
+			Day:    (i / 6) + 1,
+			Member: &domain.Member{ShortKoreanName: "멤버", NameKo: "테스트 멤버", Units: []string{"홀로라이브"}},
+		}
+	}
+
+	for _, themeID := range calendarThemePool {
+		emptyPages, err := renderer.RenderCalendarImagesWithTheme(t.Context(), 2, 2026, themeID, nil)
+		if err != nil || len(emptyPages) != 1 {
+			t.Fatalf("empty RenderCalendarImagesWithTheme(%q) len=%d, err=%v", themeID, len(emptyPages), err)
+		}
+
+		assertCalendarAlbumBounds(t, emptyPages)
+
+		busyPages, err := renderer.RenderCalendarImagesWithTheme(t.Context(), 11, 2026, themeID, overflowEntries)
+		if err != nil || len(busyPages) != 1 {
+			t.Fatalf("overflow RenderCalendarImagesWithTheme(%q) len=%d, err=%v", themeID, len(busyPages), err)
+		}
+
+		assertCalendarAlbumBounds(t, busyPages)
+	}
+}
+
+func TestCalCircularSafeRadius_DetectsWhiteCornerMatte(t *testing.T) {
+	t.Parallel()
+
+	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
+
+	for y := range 100 {
+		for x := range 100 {
+			dx, dy := float64(x)-50, float64(y)-50
+			if dx*dx+dy*dy <= 46*46 {
+				img.SetRGBA(x, y, color.RGBA{R: 40, G: 90, B: 180, A: 255})
+			} else {
+				img.SetRGBA(x, y, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+			}
+		}
+	}
+
+	hasMatte, safeR := calCircularSafeRadius(img)
+	if !hasMatte || safeR < 38 || safeR > 47 {
+		t.Fatalf("calCircularSafeRadius() = (%v, %v), want (true, ~44)", hasMatte, safeR)
 	}
 }

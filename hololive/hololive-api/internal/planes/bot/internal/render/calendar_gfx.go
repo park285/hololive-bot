@@ -187,11 +187,8 @@ func (b calBox) right() float64           { return b.X + b.W }
 func (b calBox) bottom() float64          { return b.Y + b.H }
 func (b calBox) cx() float64              { return b.X + b.W/2 }
 func (b calBox) cy() float64              { return b.Y + b.H/2 }
+func (b calBox) rect() calShape           { return calRect(b.X, b.Y, b.W, b.H) }
 func (b calBox) rrect(r float64) calShape { return calRRect(b.X, b.Y, b.W, b.H, r) }
-
-func (b calBox) inset(d float64) calBox {
-	return calBox{X: b.X + d, Y: b.Y + d, W: b.W - 2*d, H: b.H - 2*d}
-}
 
 type calStop struct {
 	T float64
@@ -267,6 +264,40 @@ func (c *calCanvas) Fill(s calShape, col color.RGBA) {
 	}
 
 	c.raster(s, r).Draw(c.img, r, image.NewUniform(col), image.Point{})
+}
+
+func (c *calCanvas) StrokeInsetRect(b calBox, w float64, col color.RGBA) {
+	if b.W <= 2*w || b.H <= 2*w {
+		return
+	}
+
+	c.Fill(calRect(b.X, b.Y, b.W, w), col)
+	c.Fill(calRect(b.X, b.bottom()-w, b.W, w), col)
+	c.Fill(calRect(b.X, b.Y+w, w, b.H-2*w), col)
+	c.Fill(calRect(b.right()-w, b.Y+w, w, b.H-2*w), col)
+}
+
+func (c *calCanvas) FillHatch(b calBox, baseCol, stripeCol color.RGBA, pitch, thickness float64) {
+	c.Clip(b.rect(), 1, func(l *calCanvas) {
+		l.Fill(b.rect(), baseCol)
+
+		span := b.W + b.H
+		dx := thickness * 0.7071
+
+		for d := -b.H; d < span; d += pitch {
+			x0 := b.X + d
+			y0 := b.Y + b.H
+			x1 := b.X + d + b.H
+			y1 := b.Y
+
+			l.Fill(calPoly(
+				calPt{X: x0, Y: y0},
+				calPt{X: x0 + dx, Y: y0},
+				calPt{X: x1 + dx, Y: y1},
+				calPt{X: x1, Y: y1},
+			), stripeCol)
+		}
+	})
 }
 
 func (c *calCanvas) Mask(s calShape, pad float64) (*image.Alpha, image.Rectangle) {
@@ -497,6 +528,102 @@ func (c *calCanvas) Photo(src image.Image, clip calShape, b calBox) {
 	draw.DrawMask(c.img, r, l, r.Min, m, r.Min, draw.Over)
 }
 
+func calIsWhiteMattePixel(src image.Image, x, y int) bool {
+	b := src.Bounds()
+
+	px := src.At(b.Min.X+x, b.Min.Y+y)
+	if px == nil {
+		return true
+	}
+
+	r, g, bl, a := px.RGBA()
+
+	if a < 32768 {
+		return true
+	}
+
+	return r > 60000 && g > 60000 && bl > 60000
+}
+
+func calCircularSafeRadius(src image.Image) (bool, float64) {
+	b := src.Bounds()
+	w, h := b.Dx(), b.Dy()
+
+	if w < 16 || h < 16 {
+		return false, 0
+	}
+
+	corners := 0
+
+	for _, corner := range [4][2]int{{2, 2}, {w - 3, 2}, {2, h - 3}, {w - 3, h - 3}} {
+		if calIsWhiteMattePixel(src, corner[0], corner[1]) {
+			corners++
+		}
+	}
+
+	if corners < 3 {
+		return false, 0
+	}
+
+	cx, cy := float64(w)/2, float64(h)/2
+	minR := math.Hypot(cx, cy)
+
+	for _, dir := range [4][2]float64{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}} {
+		for step := 100; step >= 40; step-- {
+			t := float64(step) / 100.0
+			px := max(0, min(w-1, int(math.Round(cx+dir[0]*cx*t))))
+			py := max(0, min(h-1, int(math.Round(cy+dir[1]*cy*t))))
+
+			if !calIsWhiteMattePixel(src, px, py) {
+				minR = min(minR, math.Hypot(float64(px)-cx, float64(py)-cy))
+
+				break
+			}
+		}
+	}
+
+	return true, minR * 0.965
+}
+
+func (c *calCanvas) PhotoFocus(src image.Image, clip calShape, b calBox, biasY float64) {
+	m, r := c.Mask(clip, 0)
+	if m == nil || src == nil {
+		return
+	}
+
+	sb := src.Bounds()
+	sw, sh := float64(max(1, sb.Dx())), float64(max(1, sb.Dy()))
+	k := max(b.W*c.s/sw, b.H*c.s/sh)
+
+	hasMatte, safeR := calCircularSafeRadius(src)
+	if hasMatte && safeR > 8 {
+		k = max(k, math.Hypot(b.W*c.s/2, b.H*c.s/2)/safeR)
+	}
+
+	scx := float64(sb.Min.X) + sw/2
+	scy := float64(sb.Min.Y) + sh*(0.5+biasY)
+
+	if hasMatte && safeR > 8 {
+		halfW := (b.W * c.s / k) / 2
+		halfH := (b.H * c.s / k) / 2
+		maxOffY := max(0, math.Sqrt(max(0, safeR*safeR-halfW*halfW))-halfH)
+		centerY := float64(sb.Min.Y) + sh/2
+
+		scy = max(centerY-maxOffY, min(centerY+maxOffY, scy))
+	} else {
+		halfVisH := (b.H * c.s / k) / 2
+
+		scy = max(float64(sb.Min.Y)+halfVisH, min(float64(sb.Max.Y)-halfVisH, scy))
+	}
+
+	cx, cy := b.cx()*c.s, b.cy()*c.s
+	aff := f64.Aff3{k, 0, cx - k*scx, 0, k, cy - k*scy}
+	l := image.NewRGBA(r)
+
+	xdraw.CatmullRom.Transform(l, aff, src, sb, xdraw.Src, nil)
+	draw.DrawMask(c.img, r, l, r.Min, m, r.Min, draw.Over)
+}
+
 func (c *calCanvas) textShape(t calText, s string, x, y float64, al calAlign) calShape {
 	f := c.f
 
@@ -573,6 +700,10 @@ func (c *calCanvas) EncodePNG(outW, outH int) ([]byte, error) {
 
 func calRect(x, y, w, h float64) calShape {
 	return calShape{subs: []calSubpath{{closed: true, pts: []calPt{{X: x, Y: y}, {X: x + w, Y: y}, {X: x + w, Y: y + h}, {X: x, Y: y + h}}}}}
+}
+
+func calPoly(pts ...calPt) calShape {
+	return calShape{subs: []calSubpath{{closed: true, pts: pts}}}
 }
 
 func calRRect(x, y, w, h, r float64) calShape {

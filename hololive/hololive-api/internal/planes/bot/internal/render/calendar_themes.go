@@ -10,24 +10,33 @@ import (
 )
 
 const (
-	CalendarThemePrismDaylight  = "prism_daylight"
-	CalendarThemeStarlightOrbit = "starlight_orbit"
+	CalendarThemePrismDaylight      = "prism_daylight"
+	CalendarThemeShirokamiRisograph = "shirokami_risograph"
+	CalendarThemeSakuraSoraPress    = "sakura_sora_press"
+	CalendarThemeMuseumArchive      = "museum_archive"
+	CalendarThemeCreamBromide       = "cream_bromide"
+	CalendarThemeKurokamiRisograph  = "kurokami_risograph"
+	CalendarThemeHoloStage          = "holo_stage"
 )
 
 var calendarThemePool = []string{
 	CalendarThemePrismDaylight,
-	CalendarThemeStarlightOrbit,
+	CalendarThemeShirokamiRisograph,
+	CalendarThemeSakuraSoraPress,
+	CalendarThemeMuseumArchive,
+	CalendarThemeCreamBromide,
+	CalendarThemeKurokamiRisograph,
+	CalendarThemeHoloStage,
+}
+
+func isFlatPosterTheme(themeID string) bool {
+	return themeID != CalendarThemePrismDaylight
 }
 
 type calTheme struct {
 	skyTop, skyBot color.RGBA
 	bloomA, bloomB color.RGBA
 	nebulaBand     color.RGBA
-	starDim        color.RGBA
-	starBri        color.RGBA
-	limbGlow       color.RGBA
-	limbRim        color.RGBA
-	limbSub        color.RGBA
 
 	accent      color.RGBA
 	accentSoft  color.RGBA
@@ -71,7 +80,6 @@ type calTheme struct {
 	indexBarEnd color.RGBA
 
 	ink, subInk, muted color.RGBA
-	dark               bool
 }
 
 type calLightSeed struct {
@@ -86,30 +94,6 @@ type calLightSeed struct {
 	cBadgeBG, cBadgeLine, cBadgeFG       uint32
 	indexFill, indexBorder, indexBarEnd  uint32
 	ink, subInk, muted                   uint32
-}
-
-type calOrbitSeed struct {
-	skyTop, skyBot, bloomA, bloomB, band uint32
-	starDim, starBri                     uint32
-	limbGlow, limbRim, limbSub           color.RGBA
-	accent, accentDeep                   uint32
-	pA, pB, pC                           color.RGBA
-	horizon, dowBG, dowFG, satBG, sunBG  uint32
-	quietFill, quietSat, quietSun        uint32
-	quietBorder, quietNum, empty         uint32
-	card0, card1, plate, plateSep        uint32
-	cardBorder, shadow, cutoutOuter      uint32
-	shadowA                              float64
-	headFG, indexFill, indexBorder       uint32
-	indexShadow, subInk, muted           uint32
-}
-
-func buildCalendarTheme(themeID string, isBday bool) calTheme {
-	if themeID == CalendarThemeStarlightOrbit {
-		return buildThemeStarlightOrbit(isBday)
-	}
-
-	return buildThemePrismDaylight(isBday)
 }
 
 func makeLightTheme(s calLightSeed) calTheme {
@@ -176,74 +160,6 @@ func buildThemePrismDaylight(isBday bool) calTheme {
 	})
 }
 
-func makeOrbitTheme(s calOrbitSeed) calTheme {
-	return calTheme{
-		skyTop: calHex(s.skyTop), skyBot: calHex(s.skyBot),
-		bloomA: calHex(s.bloomA), bloomB: calHex(s.bloomB),
-		nebulaBand: calHex(s.band), starDim: calHex(s.starDim), starBri: calHex(s.starBri),
-		limbGlow: s.limbGlow, limbRim: s.limbRim, limbSub: s.limbSub,
-
-		accent: calHex(s.accent), accentSoft: calRGBA(s.accent, 0.19), accentDeep: calHex(s.accentDeep),
-		goldAccent: calHex(0xFFF17D), prismA: s.pA, prismB: s.pB, prismC: s.pC,
-		horizonRule: calHex(s.horizon),
-
-		dowBG: calRGBA(s.dowBG, 0.85), dowFG: calHex(s.dowFG),
-		dowSatBG: calRGBA(s.satBG, 0.85), dowSatFG: calHex(0x92C6FF),
-		dowSunBG: calRGBA(s.sunBG, 0.85), dowSunFG: calHex(0xFFA6C6),
-
-		quietFill: calRGBA(s.quietFill, 0.50), quietSat: calRGBA(s.quietSat, 0.52), quietSun: calRGBA(s.quietSun, 0.52),
-		quietBorder: calRGBA(s.quietBorder, 0.30), quietStrokeW: 1.25, quietNum: calHex(s.quietNum),
-		emptySlot: calRGBA(s.empty, 0.34),
-
-		cardFill0: calHex(s.card0), cardFill1: calHex(s.card1),
-		cardPlate: calHex(s.plate), plateSep: calRGBA(s.plateSep, 0.26),
-		cardBorder: calHex(s.cardBorder), cardShadow: calRGBA(s.shadow, s.shadowA),
-		cutoutOuter: calHex(s.cutoutOuter), cutoutInner: calHex(0xFAF7FF),
-		headBadgeBG: calHex(0xFFF17D), headBadgeLine: calHex(0xFFF17D), headBadgeFG: calHex(s.headFG),
-		cellBadgeBG: calRGBA(0xFFF17D, 0.15), cellBadgeLine: calRGBA(0xFFF17D, 0.72), cellBadgeFG: calHex(0xFFF396),
-
-		indexFill: calRGBA(s.indexFill, 0.86), indexBorder: calRGBA(s.indexBorder, 0.48),
-		indexShadow: calRGBA(s.indexShadow, 0.44), indexBarEnd: calHex(0xFFF17D),
-
-		ink: calHex(0xFAF7FF), subInk: calHex(s.subInk), muted: calHex(s.muted),
-		dark: true,
-	}
-}
-
-func buildThemeStarlightOrbit(isBday bool) calTheme {
-	if isBday {
-		return makeOrbitTheme(calOrbitSeed{
-			skyTop: 0x2E1E5C, skyBot: 0x171234, bloomA: 0x5E2E72, bloomB: 0x442F7C, band: 0x522B78,
-			starDim: 0x504076, starBri: 0x826FA8,
-			limbGlow: calRGBA(0xC996E8, 0.14), limbRim: calRGBA(0xDFBEFA, 0.36), limbSub: calRGBA(0x8E6CB8, 0.28),
-			accent: 0xFF7CA9, accentDeep: 0xFF5C93,
-			pA: calRGBA(0xFF7CA9, 0.22), pB: calRGBA(0xFFF17D, 0.17), pC: calRGBA(0x9E8AF5, 0.20),
-			horizon: 0x715B98, dowBG: 0x2B2054, dowFG: 0xE0D7F5, satBG: 0x232B63, sunBG: 0x462250,
-			quietFill: 0x181136, quietSat: 0x191844, quietSun: 0x24133D,
-			quietBorder: 0x8A74C8, quietNum: 0x9687BF, empty: 0x0B0820,
-			card0: 0x422E7E, card1: 0x312160, plate: 0x24184A, plateSep: 0xC4B4F5,
-			cardBorder: 0xFF8EB6, shadow: 0x060417, cutoutOuter: 0x2A1E54, shadowA: 0.48,
-			headFG: 0x281B4E, indexFill: 0x2D215C, indexBorder: 0xA698E8,
-			indexShadow: 0x050312, subInk: 0xDBD1F2, muted: 0x9588BF,
-		})
-	}
-
-	return makeOrbitTheme(calOrbitSeed{
-		skyTop: 0x292166, skyBot: 0x151336, bloomA: 0x374B9E, bloomB: 0x4C3A8F, band: 0x354396,
-		starDim: 0x484178, starBri: 0x766FAD,
-		limbGlow: calRGBA(0xA494E8, 0.15), limbRim: calRGBA(0xC8BCFA, 0.38), limbSub: calRGBA(0x7668B2, 0.28),
-		accent: 0x5AD4FF, accentDeep: 0x2EB8F5,
-		pA: calRGBA(0x5AD4FF, 0.22), pB: calRGBA(0x9D8DF7, 0.21), pC: calRGBA(0xFFF17D, 0.16),
-		horizon: 0x6963A3, dowBG: 0x24215C, dowFG: 0xDDD9F5, satBG: 0x1F316E, sunBG: 0x3F2256,
-		quietFill: 0x131338, quietSat: 0x151D4A, quietSun: 0x211544,
-		quietBorder: 0x7882D4, quietNum: 0x8E8BC2, empty: 0x090922,
-		card0: 0x3A3686, card1: 0x2A2768, plate: 0x1E1B4E, plateSep: 0xB0BAFA,
-		cardBorder: 0x6ED8FF, shadow: 0x05051A, cutoutOuter: 0x24205C, shadowA: 0.50,
-		headFG: 0x231C4F, indexFill: 0x262563, indexBorder: 0xA0A6EE,
-		indexShadow: 0x050516, subInk: 0xD8D4F2, muted: 0x8F8CC4,
-	})
-}
-
 func paintCalendarBackdrop(c *calCanvas, th calTheme) {
 	mw, mh := 200, max(240, int(c.h*200/c.w))
 	sky := image.NewRGBA(image.Rect(0, 0, mw, mh))
@@ -267,79 +183,10 @@ func paintCalendarBackdrop(c *calCanvas, th calTheme) {
 	}
 
 	xdraw.ApproxBiLinear.Scale(c.img, c.img.Bounds(), sky, sky.Bounds(), draw.Src, nil)
-
-	if !th.dark {
-		return
-	}
-
-	seed := uint32(47)
-	next := func() float64 {
-		seed = seed*1664525 + 1013904223
-
-		return float64(seed>>8) / (1 << 24)
-	}
-
-	var dim, bri calShape
-
-	for range 260 {
-		sx, sy, sr := next()*c.w, next()*c.h, 0.6+next()*1.15
-		if sy < 210 || sx < 38 || sx > c.w-38 {
-			bri.Add(calCircle(sx, sy, sr))
-		} else {
-			dim.Add(calCircle(sx, sy, sr*0.85))
-		}
-	}
-
-	c.Fill(dim, th.starDim)
-	c.Fill(bri, th.starBri)
-
-	var limb, subLimb calShape
-
-	limb.Arc(c.w*0.52, c.h+540, 1180, 920, -0.76*math.Pi, -0.24*math.Pi)
-	subLimb.Arc(c.w*0.52, c.h+568, 1180, 920, -0.75*math.Pi, -0.25*math.Pi)
-	c.Stroke(limb, 9.0, th.limbGlow)
-	c.Stroke(limb, 2.0, th.limbRim)
-	c.Stroke(subLimb, 1.2, th.limbSub)
 }
 
 func drawCalendarPrismEmblem(c *calCanvas, rightEdge, cy float64, th calTheme) {
-	if th.dark {
-		drawOrbitEmblem(c, rightEdge-126, cy, th)
-
-		return
-	}
-
-	drawDaylightEmblem(c, rightEdge-118, cy, th)
-}
-
-func drawOrbitEmblem(c *calCanvas, cx, cy float64, th calTheme) {
-	ring := func(rx, ry, a0, a1, w float64, col color.RGBA) {
-		var s calShape
-
-		s.Arc(0, 0, rx, ry, a0, a1)
-		c.Stroke(calTransform(s, calPlace(cx, cy+3, 1, -0.28)), w, col)
-	}
-
-	ring(130, 44, 0, 2*math.Pi, 1.5, calColAlpha(th.subInk, 0.28))
-	ring(114, 37, 0, 2*math.Pi, 2.1, calColAlpha(th.accent, 0.44))
-
-	t1 := calRoundedTri(cx-6, cy, 50, 8, calDeg(-8))
-	t2 := calRoundedTri(cx+18, cy+8, 36, 6, calDeg(14))
-
-	c.Fill(t1, th.prismA)
-	c.Stroke(t1, 1.8, calColAlpha(th.accent, 0.68))
-	c.Fill(t2, th.prismB)
-	c.Stroke(t2, 1.5, calColAlpha(th.goldAccent, 0.68))
-
-	ring(114, 37, 0.06*math.Pi, 0.92*math.Pi, 4.0, th.goldAccent)
-
-	c.Fill(calSparkle(cx-90, cy-32, 11.5), th.goldAccent)
-	c.Fill(calSparkle(cx+86, cy-23, 13.5), calHex(0xFAF7FF))
-	c.Fill(calSparkle(cx+60, cy+34, 7.8), th.accent)
-	c.Fill(calSparkle(cx-56, cy+32, 6.2), calColAlpha(th.subInk, 0.78))
-}
-
-func drawDaylightEmblem(c *calCanvas, cx, cy float64, th calTheme) {
+	cx := rightEdge - 118
 	c.Glow(cx, cy, 108, calRGB24(th.accent), 0.12)
 
 	var fullOrbit, foreArc calShape

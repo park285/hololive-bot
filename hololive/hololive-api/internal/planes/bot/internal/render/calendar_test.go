@@ -443,9 +443,12 @@ func TestCalendarCacheKeyDistinguishesDelimiterCharacters(t *testing.T) {
 
 	leftKey := newCalendarCacheKey(6, 2026, CalendarThemePrismDaylight, left)
 	rightKey := newCalendarCacheKey(6, 2026, CalendarThemePrismDaylight, right)
+	otherMonthKey := newCalendarCacheKey(7, 2026, CalendarThemePrismDaylight, left)
+	otherYearKey := newCalendarCacheKey(6, 2027, CalendarThemePrismDaylight, left)
+	otherThemeKey := newCalendarCacheKey(6, 2026, CalendarThemeKurokamiRisograph, left)
 
-	if leftKey == rightKey {
-		t.Fatal("cache keys should differ for delimiter-containing fields")
+	if leftKey == rightKey || leftKey == otherMonthKey || leftKey == otherYearKey || leftKey == otherThemeKey {
+		t.Fatal("cache keys should differ for delimiter-containing fields, month, year, and theme")
 	}
 }
 

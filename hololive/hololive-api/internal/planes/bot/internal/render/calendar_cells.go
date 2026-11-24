@@ -53,18 +53,10 @@ func drawQuietDayCell(c *calCanvas, cb calBox, day, colIdx int, th calTheme) {
 	switch colIdx {
 	case 0:
 		qFill = th.quietSun
-		if th.dark {
-			nCol = calHex(0xEE98B9)
-		} else {
-			nCol = calColAlpha(th.dowSunFG, 0.76)
-		}
+		nCol = calColAlpha(th.dowSunFG, 0.76)
 	case 6:
 		qFill = th.quietSat
-		if th.dark {
-			nCol = calHex(0x90C2FA)
-		} else {
-			nCol = calColAlpha(th.dowSatFG, 0.76)
-		}
+		nCol = calColAlpha(th.dowSatFG, 0.76)
 	}
 
 	c.Fill(cb.rrect(14), qFill)
@@ -73,16 +65,15 @@ func drawQuietDayCell(c *calCanvas, cb calBox, day, colIdx int, th calTheme) {
 }
 
 func drawActiveDayCell(c *calCanvas, cb calBox, day, colIdx int, list []calEntry, isBday bool, th calTheme) {
+	if len(list) == 0 {
+		return
+	}
+
 	sh := cb.rrect(15)
 	e0 := list[0]
 	mp := calMemberPalette(e0.hue, e0.chromatic, th)
 
 	c.Shadow(sh, 0, 6, 14, th.cardShadow)
-
-	if th.dark {
-		c.Stroke(cb.inset(-1.2).rrect(16.2), 2.0, calColAlpha(mp.ring, 0.18))
-	}
-
 	c.FillLinear(sh, cb.X, cb.Y, cb.X, cb.bottom(), calStop{T: 0, C: th.cardFill0}, calStop{T: 1, C: th.cardFill1})
 
 	scale := min(1.0, cb.H/172.0)
@@ -90,15 +81,10 @@ func drawActiveDayCell(c *calCanvas, cb calBox, day, colIdx int, list []calEntry
 	plateTop := cb.bottom() - plateH
 
 	c.Clip(sh, 1, func(l *calCanvas) {
-		if th.dark {
-			l.Glow(cb.cx(), cb.Y+68*scale, 76*scale, calRGB24(mp.aura), 0.32)
-		} else {
-			auraBottom := cb.Y + 88*scale
-			l.FillLinear(calRect(cb.X, cb.Y, cb.W, auraBottom-cb.Y), cb.X, cb.Y, cb.X, auraBottom,
-				calStop{T: 0, C: mp.aura},
-				calStop{T: 1, C: th.cardFill0})
-		}
-
+		auraBottom := cb.Y + 88*scale
+		l.FillLinear(calRect(cb.X, cb.Y, cb.W, auraBottom-cb.Y), cb.X, cb.Y, cb.X, auraBottom,
+			calStop{T: 0, C: mp.aura},
+			calStop{T: 1, C: th.cardFill0})
 		l.Fill(calRect(cb.X, plateTop, cb.W, plateH), th.cardPlate)
 		l.Fill(calRect(cb.X+10, plateTop, cb.W-20, 1.2), th.plateSep)
 		l.Fill(calRect(cb.X, cb.Y, cb.W, 3.8), mp.bar)
@@ -130,20 +116,13 @@ func drawSingleMemberStage(c *calCanvas, cb calBox, plateTop, scale float64, e c
 	if !isBday {
 		drawCellBadge(c, cb.right()-8, cb.Y+7.5*scale, 19*scale, fmt.Sprintf("%d주년", e.ordinal), th)
 	} else {
-		spX, spY := cb.right()-14, cb.Y+17*scale
-
-		if th.dark {
-			c.Glow(spX, spY, 13, 0xFFF17D, 0.26)
-			c.Fill(calSparkle(spX, spY, 6.2*scale), th.goldAccent)
-		} else {
-			c.Fill(calSparkle(spX, spY, 6.0*scale), mp.bar)
-		}
+		c.Fill(calSparkle(cb.right()-14, cb.Y+17*scale, 6.0*scale), mp.bar)
 	}
 
 	stageTop := cb.Y + 26.5*scale
 	stageCY := (stageTop + plateTop) / 2
 	r := min(36.5*scale, (plateTop-stageTop)/2-7.0)
-	drawHeroPortrait(c, cb.cx(), stageCY, r, e, mp, th)
+	drawHeroPortrait(c, cb.cx(), stageCY, r, e, mp)
 
 	nt := calText{Size: 16.5 * scale, Face: calFaceXBold, Track: -0.3}
 
@@ -167,6 +146,8 @@ func drawMultiMemberStage(c *calCanvas, cb calBox, plateTop, scale float64, list
 
 func drawMultiMemberPortraits(c *calCanvas, cb calBox, stageCY, scale float64, list []calEntry, th calTheme) {
 	switch len(list) {
+	case 0, 1:
+		return
 	case 2:
 		r := 21.5 * scale
 		sp := 36.0 * scale
@@ -260,12 +241,7 @@ func drawMultiMemberLabels(c *calCanvas, cb calBox, plateTop, scale float64, lis
 		}
 	}
 
-	subCol := th.accent
-	if th.dark {
-		subCol = th.goldAccent
-	}
-
-	c.textMid(calText{Size: 11 * scale, Face: calFaceXBold}, subInfo, cb.cx(), plateTop+34*scale, calAlignC, subCol)
+	c.textMid(calText{Size: 11 * scale, Face: calFaceXBold}, subInfo, cb.cx(), plateTop+34*scale, calAlignC, th.accent)
 }
 
 func drawCellBadge(c *calCanvas, rightX, topY, h float64, tag string, th calTheme) {
@@ -279,28 +255,16 @@ func drawCellBadge(c *calCanvas, rightX, topY, h float64, tag string, th calThem
 	c.textMid(bt, tag, bx+bw/2, topY+h/2, calAlignC, th.cellBadgeFG)
 }
 
-func drawHeroPortrait(c *calCanvas, cx, cy, r float64, e calEntry, mp calMemberColors, th calTheme) {
-	if th.dark {
-		c.Glow(cx, cy, r*1.32, calRGB24(mp.ring), 0.24)
-		c.Fill(calCircle(cx, cy, r+4.0), mp.ring)
-		c.Fill(calCircle(cx, cy, r+1.8), calHex(0xFAF7FF))
-	} else {
-		c.Shadow(calCircle(cx, cy, r+3.8), 0, 3, 6, calRGBA(0x142038, 0.14))
-		c.Fill(calCircle(cx, cy, r+4.0), mp.ring)
-		c.Fill(calCircle(cx, cy, r+1.8), calHex(0xFFFFFF))
-	}
-
+func drawHeroPortrait(c *calCanvas, cx, cy, r float64, e calEntry, mp calMemberColors) {
+	c.Shadow(calCircle(cx, cy, r+3.8), 0, 3, 6, calRGBA(0x142038, 0.14))
+	c.Fill(calCircle(cx, cy, r+4.0), mp.ring)
+	c.Fill(calCircle(cx, cy, r+1.8), calHex(0xFFFFFF))
 	drawPortraitFill(c, cx, cy, r, e, mp.ring)
 }
 
 func drawCutoutPortrait(c *calCanvas, cx, cy, r float64, e calEntry, th calTheme) {
-	if th.dark {
-		c.Fill(calCircle(cx, cy, r+2.6), th.cutoutOuter)
-		c.Fill(calCircle(cx, cy, r+1.4), th.cutoutInner)
-	} else {
-		c.Shadow(calCircle(cx, cy, r+2.2), 0, 2, 4, th.cutoutOuter)
-		c.Fill(calCircle(cx, cy, r+2.4), th.cutoutInner)
-	}
+	c.Shadow(calCircle(cx, cy, r+2.2), 0, 2, 4, th.cutoutOuter)
+	c.Fill(calCircle(cx, cy, r+2.4), th.cutoutInner)
 
 	mp := calMemberPalette(e.hue, e.chromatic, th)
 	drawPortraitFill(c, cx, cy, r, e, mp.ring)
@@ -491,13 +455,8 @@ func drawIndexEntryRow(c *calCanvas, spec calPageSpec, e calEntry, ix, iy, colW 
 	ordStr := fmt.Sprintf("%d주년", e.ordinal)
 	ot := calText{Size: 11.8, Face: calFaceXBold}
 	ow := c.f.width(ot, ordStr)
-	ordCol := th.accent
 
-	if th.dark {
-		ordCol = th.goldAccent
-	}
-
-	c.textMid(ot, ordStr, ix+colW, iy, calAlignR, ordCol)
+	c.textMid(ot, ordStr, ix+colW, iy, calAlignR, th.accent)
 
 	nt := calText{Size: 13.2, Face: calFaceXBold}
 	c.textMid(nt, c.f.clamp(nt, e.shortName, ix+colW-ow-6-nameX), nameX, iy, calAlignL, th.ink)
@@ -579,7 +538,7 @@ func drawSingleMultiDayCard(c *calCanvas, sb calBox, scale float64, spec calPage
 
 		scx := ix + float64(i)*slotW + slotW/2
 		mp := calMemberPalette(e.hue, e.chromatic, th)
-		drawHeroPortrait(c, scx, sb.Y+82*scale, 29.5*scale, e, mp, th)
+		drawHeroPortrait(c, scx, sb.Y+82*scale, 29.5*scale, e, mp)
 		c.textMid(nameT, c.f.clamp(nameT, e.shortName, slotW-12), scx, sb.Y+127*scale, calAlignC, th.ink)
 		c.textMid(fullT, c.f.clamp(fullT, e.fullName, slotW-12), scx, sb.Y+144*scale, calAlignC, th.subInk)
 	}

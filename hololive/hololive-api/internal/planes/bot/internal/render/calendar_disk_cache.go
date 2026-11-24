@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	calendarImageCacheVersion = "v6"
+	calendarImageCacheVersion = "v7"
 	calendarImageCacheTTL     = 7 * 24 * time.Hour
 )
 
@@ -48,7 +48,8 @@ func (r *CalendarCardRenderer) storeSharedCachedAlbum(ctx context.Context, key c
 }
 
 func calendarAlbumCacheKey(key calendarCacheKey) string {
+	kind := cmp.Or(string(key.kind), string(calendarPageEmpty))
 	theme := cmp.Or(key.theme, CalendarThemePrismDaylight)
 
-	return fmt.Sprintf("bot:calendar:album:%s:%04d-%02d:%s", calendarImageCacheVersion, key.year, key.month, theme)
+	return fmt.Sprintf("bot:calendar:album:%s:%04d-%02d:%s:%s", calendarImageCacheVersion, key.year, key.month, kind, theme)
 }
