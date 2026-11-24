@@ -580,6 +580,8 @@ def quiesce(h, target):
     for n in NAMES:
         guard('check',h,n)
         origin(n,False,True)
+        need(set(service_dropins(n)) <= {str(SYSTEM / (n + '.service.d/90-hololive-stop-guard.conf'))},
+             '정지 전 systemd drop-in 또는 의존성 링크: ' + n)
     for n in (I,C):
         g = s['old'][n]
         retained(h,s)
@@ -812,7 +814,12 @@ def service_dropins(name):
              *(n + '.service' for n in names)}
     return sorted(str(root / (s + x) / k) for root in roots for s in stems for x in DROPIN_SUFFIXES
                   if (root / (s + x)).is_dir()
-                  for k in os.listdir(root / (s + x)) if x != '.d' or k.endswith('.conf'))
+                  for k in os.listdir(root / (s + x))
+                  if (k.endswith('.conf') if x == '.d' else dependency_link(root / (s + x) / k)))
+
+
+def dependency_link(path):
+    return path.is_symlink() and os.path.realpath(path) != '/dev/null'
 
 
 def resumable(h, target):
@@ -885,8 +892,9 @@ def resume(h, target):
                 opened.append(n)
                 sync_dir(SYSTEM)
             run('systemctl','daemon-reload')
-            origin(n,False)
-            need(not service_dropins(n), '재개 중 추가된 systemd drop-in 또는 의존성 링크: ' + n)
+            for m in opened:
+                origin(m,False)
+                need(not service_dropins(m), '재개 중 추가된 systemd drop-in 또는 의존성 링크: ' + m)
             need(prop(n,'LoadState') == 'loaded' and prop(n,'ActiveState') in ('inactive','failed'), '단독 기동 전 상태 불일치')
             if n == I:
                 held_one(h,s,C)

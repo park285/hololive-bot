@@ -318,6 +318,48 @@ class Cutover(unittest.TestCase):
         self.reload()
         return self.h
 
+    def test_quiesce_refuses_dependency_links_a_guard_reload_brings_in(self):
+        h = self.running_pair()
+        reload = self.reload
+        def reload_with_link():
+            reload()
+            folder = self.system / (d.C + '.service.requires')
+            if self.guards and not folder.exists():
+                folder.mkdir()
+                (folder / 'probe.service').symlink_to('../probe.service')
+        self.reload = reload_with_link
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            d.quiesce(h, self.target())
+        self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','stop')])
+
+    def test_dependency_dirs_ignore_entries_systemd_ignores(self):
+        target = self.target()
+        self.seal(target)
+        folder = self.system / (d.C + '.service.wants')
+        folder.mkdir()
+        (folder / 'README').write_bytes(b'note\n')
+        (folder / 'masked.service').symlink_to('/dev/null')
+        self.cli('check', target)
+        (folder / 'probe.service').symlink_to('../probe.service')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+
+    def test_resume_refuses_a_dropin_on_the_open_issuer_before_collector_start(self):
+        target = self.target()
+        self.seal(target)
+        reload = self.reload
+        def reload_with_issuer_dropin():
+            reload()
+            folder = self.system / (d.I + '.service.d')
+            if not os.path.lexists(d.mask(d.C)) and not folder.exists():
+                folder.mkdir()
+                (folder / '10-late.conf').write_bytes(b'[Service]\nRestart=no\n')
+        self.reload = reload_with_issuer_dropin
+        self.resume_inputs()
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.resume()
+        self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','start') and c[-1] == d.C + '.service'])
+
     def test_quiesce_refuses_dependency_links_before_any_stop(self):
         h = self.running_pair()
         folder = self.system / (d.C + '.service.requires')
