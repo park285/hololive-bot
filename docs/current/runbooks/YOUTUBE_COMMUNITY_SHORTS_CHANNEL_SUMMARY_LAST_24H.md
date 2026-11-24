@@ -9,7 +9,7 @@
 - 집계 단위는 room 이벤트가 아니라 게시물(post)입니다. 같은 게시물에서 room별 재시도나 fan-out이 여러 번 있어도 채널 집계에서는 같은 post를 1건으로 계산합니다.
 - `alarm_sent_post_count` 는 해당 post가 발송 파이프라인에 진입했거나(`outbox_count > 0`, 또는 outbox가 정리된 뒤 남은 원장 SENT·QUARANTINED room) tracking `alarm_sent_at`(최초 발송 완료 시각)이 남은 경우를 뜻합니다.
 - `success_post_count` 는 SENT delivery 또는 원장 SENT room이 있는 post 수입니다. tracking `alarm_sent_at`은 최초 Iris 접수 시각이라 handoff 실패 뒤에도 남으므로 성공 근거로 쓰지 않습니다. handoff 확인을 기다리는 SENT도 포함하므로 확정 여부는 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `in_progress`로 봅니다.
-- `failure_post_count` 는 `FAILED`·`QUARANTINED` delivery나 실패한 시도가 있었던(`attempt_count > 0`) delivery가 하나라도 있는 post 수입니다. 이후 성공해도 실패 흔적은 채널 집계에 남습니다. 시도마다 남던 telemetry 행은 더 쓰지 않으므로, revive로 `attempt_count`가 0으로 돌아간 뒤 성공한 delivery의 이전 실패는 세지 못합니다.
+- `failure_post_count` 는 `FAILED`·`QUARANTINED` delivery나 실패한 시도가 있었던(`attempt_count > 0`) delivery, 또는 원장 QUARANTINED room이 하나라도 있는 post 수입니다. 원장 격리는 outbox가 정리된 뒤에도 남습니다. 이후 성공해도 실패 흔적은 채널 집계에 남습니다. 시도마다 남던 telemetry 행은 더 쓰지 않으므로, revive로 `attempt_count`가 0으로 돌아간 뒤 성공한 delivery의 이전 실패는 세지 못합니다.
 - delivery 행은 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 지워집니다.
 - `detected_unsent_post_count` 는 감지됐지만 SENT delivery도 원장 SENT room도 없고 격리된 room도 없는 post 수입니다.
 - `unknown_outcome_post_count` 는 성공 근거 없이 delivery 또는 원장이 QUARANTINED이거나, delivery가 SENDING(응답을 받지 못해 stale sweep 격리를 기다리는 경우 포함)이거나, outbox가 정리돼 tracking `alarm_sent_at`만 남은 post 수입니다([Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `tracking_only_outbox_cleaned`). 결과를 알 수 없어 미발송에서 뺍니다. 구독 room이 없어 delivery 없이 끝난 post(`no_target_post_count`)는 뺍니다.
@@ -95,7 +95,7 @@ SELECT
         ELSE 0
     END), 0) AS success_post_count,
     COALESCE(SUM(CASE
-        WHEN failed_attempt_count > 0 THEN 1
+        WHEN failed_attempt_count > 0 OR ledger_quarantined_room_count > 0 THEN 1
         ELSE 0
     END), 0) AS failure_post_count,
     COALESCE(SUM(CASE
