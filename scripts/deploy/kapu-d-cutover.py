@@ -30,6 +30,7 @@ PORT = SLOT['port']
 UNIT = Path('/etc/containers/systemd')
 SYSTEM = Path('/etc/systemd/system')
 GEN = Path('/run/systemd/generator')
+QUADLET = Path('/usr/lib/systemd/system-generators/podman-system-generator')
 INPUT = RELEASE_ROOT / SLOT['unit_dir']
 GUARD = Path(__file__).resolve().with_name('lib') / 'systemd-stop-guard.py'
 CANDIDATE_PORT = '5433'
@@ -304,15 +305,38 @@ def origin(name, masked, guarded=False, allow_job=False):
          (masked or prop(name, 'Type') == 'notify'), '불명 systemd drop-in/job/type')
 
 
+def quadlet_lines(text, image):
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith('ExecStart='):
+            words = line.split(' ')
+            need(words.count(image) == 1, '생성된 Quadlet과 설치본 불일치')
+            cut = words.index(image)
+            lines[i] = (sorted(words[:cut]), words[cut:])
+    return lines
+
+
 def generated(name):
-    text = raw(GEN / (name + '.service')).decode()
-    need(re.findall('^SourcePath=(.*)$', text, re.M) == [str(UNIT / unit(name))], '생성된 unit 원천 불일치')
-    base = raw(UNIT / unit(name)).decode()
-    for drop in sorted(policy(name).items()):
-        base += '\n' + drop[1].decode()
-    expected = container_settings(base, '[Container]')
-    need(container_settings(text, '[X-Container]') == expected and expected.get('Image') == [prod(name)] and
-         expected.get('Pull') == ['never'] and expected.get('ContainerName') == [name], '생성된 Quadlet과 설치본 불일치')
+    source = raw(UNIT / unit(name))
+    drops = policy(name)
+    expected = container_settings(source.decode() + ''.join('\n' + v.decode() for _, v in sorted(drops.items())), '[Container]')
+    need(expected.get('Image') == [prod(name)] and expected.get('Pull') == ['never'] and
+         expected.get('ContainerName') == [name], '생성된 Quadlet과 설치본 불일치')
+    with tempfile.TemporaryDirectory() as tmp:
+        src, out = Path(tmp) / 'src', Path(tmp) / 'out'
+        (src / (unit(name) + '.d')).mkdir(parents=True)
+        out.mkdir()
+        (src / unit(name)).write_bytes(source)
+        for f, value in drops.items():
+            (src / (unit(name) + '.d') / f).write_bytes(value)
+        for ref in expected.get('Network', []) + [v.partition(':')[0] for v in expected.get('Volume', [])]:
+            if ref.endswith(('.network', '.volume')) and Path(ref).name == ref:
+                (src / ref).write_bytes(raw(UNIT / ref))
+        run(str(QUADLET), '-no-kmsg-log', str(out), env={'QUADLET_UNIT_DIRS': str(src)})
+        made = (out / (name + '.service')).read_text()
+    made = made.replace('\nSourcePath=' + str(src / unit(name)) + '\n', '\nSourcePath=' + str(UNIT / unit(name)) + '\n')
+    need(quadlet_lines(raw(GEN / (name + '.service')).decode(), prod(name)) == quadlet_lines(made, prod(name)),
+         '생성된 Quadlet과 설치본 불일치')
     if name == C:
         settings = expected['Environment']
         port_setting = [v for v in settings if v.startswith('POSTGRES_PORT=')]
@@ -798,14 +822,25 @@ PULLS = ('Wants', 'Requires', 'Requisite', 'BindsTo', 'Upholds')
 
 
 def service_dropins(name):
+    owned = {tuple(number(mask(n))) for n in NAMES if os.path.lexists(mask(n))}
     with tempfile.TemporaryDirectory() as tmp:
         fragment = Path(tmp) / 'unit' / (name + '.service')
         fragment.parent.mkdir()
         fragment.write_bytes(raw(GEN / (name + '.service')))
-        aliases, drops, pulls, mounts = systemd_view(fragment, unit_paths())
+        aliases, drops, masked, pulls, mounts = systemd_view(fragment, unit_paths())
         need(not aliases, 'systemd unit 별칭 있음: ' + name + ' ← ' + ', '.join(aliases))
-        _, _, own, _ = systemd_view(fragment, [Path(tmp) / 'none'])
-    return drops + sorted(pulls - own) + sorted(dep for dep in mounts if not mounted(dep.partition(': ')[2]))
+        _, _, _, own, _ = systemd_view(fragment, [Path(tmp) / 'none'])
+    return (drops + sorted(dep + ' ← ' + path for dep, path in masked if owned_link(path, owned)) + sorted(pulls - own) +
+            sorted(dep for dep in mounts if not mounted(dep.partition(': ')[2])))
+
+
+def owned_link(path, owned):
+    for _ in range(64):
+        st = os.lstat(path)
+        if (st.st_dev, st.st_ino) in owned or not stat.S_ISLNK(st.st_mode):
+            return (st.st_dev, st.st_ino) in owned
+        path = os.path.join(os.path.dirname(path), os.readlink(path))
+    return True
 
 
 def mounted(name):
@@ -814,7 +849,7 @@ def mounted(name):
 
 def systemd_view(fragment, paths):
     proc = subprocess.run(['systemd-analyze', 'verify', '--man=no', '--generators=no', str(fragment)],
-                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=60, cwd='/',
+                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60, cwd='/',
                           env={**COMMAND_ENV, 'SYSTEMD_UNIT_PATH': ':'.join(map(str, paths)),
                                'SYSTEMD_LOG_LEVEL': 'debug', 'SYSTEMD_LOG_TARGET': 'console', 'LC_ALL': 'C'})
     head = '-> Unit ' + fragment.name + ':\n'
@@ -826,7 +861,9 @@ def systemd_view(fragment, paths):
     pulls = [(dep, origin.rstrip(')').split()) for dep, _, origin in (line.partition(' (') for line in lines)
              if dep.split(':')[0] in PULLS]
     aliases = sorted(line.removeprefix('Alias: ') for line in lines if line.startswith('Alias: '))
-    return aliases, drops, {dep for dep, origins in pulls if 'origin-file' in origins}, {dep for dep, origins in pulls if 'origin-path' in origins}
+    masked = re.findall('^' + re.escape(fragment.name) + ': (\\w+ dependency on \\S+) is masked by (.*), ignoring\\.$',
+                        proc.stderr.decode(errors='replace'), re.M)
+    return aliases, drops, masked, {dep for dep, origins in pulls if 'origin-file' in origins}, {dep for dep, origins in pulls if 'origin-path' in origins}
 
 
 def resumable(h, target):

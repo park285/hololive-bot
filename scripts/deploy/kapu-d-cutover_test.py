@@ -60,6 +60,52 @@ class Commands(unittest.TestCase):
         self.assertEqual(d.run('sh', '-c', 'echo listed; echo noise >&2'), 'listed')
 
 
+class GeneratedUnit(unittest.TestCase):
+    def setUp(self):
+        self.stack = contextlib.ExitStack()
+        self.addCleanup(self.stack.close)
+        root = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
+        self.units, self.extra, self.gen = root / 'units', root / 'extra', root / 'generator'
+        for path in self.units, self.extra, self.gen:
+            path.mkdir()
+        for source in d.INPUT.iterdir():
+            if source.suffix in ('.container', '.network', '.volume'):
+                (self.units / source.name).write_bytes(source.read_bytes())
+        drops = self.units / (d.unit(d.C) + '.d')
+        drops.mkdir()
+        (drops / '50-mcs-level.conf').write_text('[Container]\nSecurityLabelLevel=s0:c908,c909\n')
+        (drops / '90-resolved-dns.conf').write_text('[Container]\nDNS=\nDNS=127.0.0.53\n')
+        for k, v in [('UNIT', self.units), ('GEN', self.gen), ('trusted', lambda *args: None), ('raw', Path.read_bytes),
+                     ('policy', lambda n: {f.name: f.read_bytes() for f in sorted((self.units / (d.unit(n) + '.d')).glob('*.conf'))})]:
+            self.stack.enter_context(patch.object(d, k, v))
+
+    def install(self, *dirs):
+        with tempfile.TemporaryDirectory() as out:
+            d.run(str(d.QUADLET), '-no-kmsg-log', out, env={'QUADLET_UNIT_DIRS': ':'.join(map(str, [self.units, *dirs]))})
+            for n in d.NAMES:
+                (self.gen / (n + '.service')).write_bytes((Path(out) / (n + '.service')).read_bytes())
+
+    def test_generated_accepts_every_generator_run_of_the_reviewed_sources(self):
+        for _ in range(6):
+            self.install()
+            for n in d.NAMES:
+                d.generated(n)
+
+    def test_generated_refuses_settings_a_quadlet_dropin_outside_the_reviewed_set_adds(self):
+        for n in d.NAMES:
+            for section, line in [('[Unit]', 'Wants=probe.service'), ('[Unit]', 'Requires=probe.service'),
+                                  ('[Service]', 'ExecStartPre=/bin/true')]:
+                with self.subTest(unit=n, line=line):
+                    folder = self.extra / (d.unit(n) + '.d')
+                    folder.mkdir(exist_ok=True)
+                    (folder / '10-x.conf').write_text(section + '\n' + line + '\n')
+                    self.install(self.extra)
+                    self.assertIn(line, (self.gen / (n + '.service')).read_text())
+                    with self.assertRaisesRegex(d.Refused, '생성된 Quadlet과 설치본 불일치'):
+                        d.generated(n)
+                    (folder / '10-x.conf').unlink()
+
+
 class Cutover(unittest.TestCase):
     def test_profile_and_sql_isolate_runtime_inputs(self):
         image = 'sha256:' + 'a' * 64
@@ -635,6 +681,24 @@ class Cutover(unittest.TestCase):
         self.assertEqual(checked, [d.NAMES[0]] * 2)
         self.assertEqual(self.calls, [])
         self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_and_resume_refuse_dependency_links_the_owned_masks_hide(self):
+        target = self.target()
+        self.seal(target)
+        wants = self.system / (d.I + '.service.wants')
+        wants.mkdir()
+        for entry, link in [(d.C, '../' + d.C + '.service'), ('probe', '../' + d.C + '.service'), (d.C, str(d.mask(d.C))),
+                            ('probe', '../' + d.mask_anchor(self.h, d.I).name)]:
+            with self.subTest(entry=entry, link=link):
+                (wants / (entry + '.service')).symlink_to(link)
+                with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                    self.cli('check', target)
+                with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                    self.resume()
+                self.assertEqual(self.calls, [])
+                self.assertFalse((self.h / 'resume-attempt.json').exists())
+                (wants / (entry + '.service')).unlink()
+        self.cli('check', target)
 
     def test_check_accepts_a_sealed_hold_whose_manager_still_lists_the_removed_guard(self):
         target = self.target()
