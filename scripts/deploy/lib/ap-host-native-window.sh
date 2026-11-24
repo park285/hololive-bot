@@ -434,6 +434,53 @@ native_window_resume_claim() {
   printf '%s\n' "$owner" | sudo -n tee "$native_recovery_dir/owner-pid" >/dev/null
 }
 
+native_window_settle() {
+  local n id since archive owner="$BASHPID"
+  local -a attempt=(resuming issuer-lease "$po_service.since")
+  native_window_pins "$releases_root/$release_id"
+  [[ "${window_nonce?}" =~ ^[0-9a-f-]{36}$ && "$(sudo -n cat "$native_recovery_dir/claim")" == "$window_nonce" &&
+     "$(sudo -n cat "$native_recovery_dir/release")" == "$releases_root/$release_id" &&
+     "$(sudo -n cat "$native_recovery_dir/step")" == collector-start && "$(sudo -n cat "$native_recovery_dir/terminal")" == 0 ]]
+  sudo -n test -f "$native_recovery_dir/outcome"
+  sudo -n test ! -L "$native_recovery_dir/outcome"
+  [[ "$(sudo -n cat "$native_recovery_dir/outcome")" == outcome_unknown ]]
+  native_claim_nonce="$window_nonce"
+  native_window_verify_quiesced
+  [[ "$(native_payload_digest "$payload")" == "$window_digest" ]]
+  sudo -n test -f "$window/blocked"
+  [[ "$(sudo -n readlink "$window/policy")" == observing ]]
+  sudo -n test ! -e "$window/await-observation"
+  sudo -n test ! -e "$window/closing"
+  native_window_inputs
+  for n in rotation "${window_units[@]}"; do
+    sudo -n test ! -e "$(native_window_permit "$n")"
+    sudo -n test ! -L "$(native_window_permit "$n")"
+  done
+  since="@$(sudo -n sh -c 'stat -c %Y -- "$1"' sh "$native_recovery_dir/outcome")"
+  for n in "${window_units[@]}"; do
+    native_window_terminal "$n"
+    id="$(native_window_prop "$n" InvocationID)"
+    if [[ "$n" == "$po_service" ]]; then
+      [[ "$(native_window_prop "$n" ExecMainCode)" == 1 && "$(native_window_prop "$n" ExecMainStatus)" == 0 ]]
+    else
+      [[ "$(sudo -n cat "$window/$n.started")" =~ ^[0-9a-f]{32}\ [1-9][0-9]*\ $id$ ]]
+      native_window_stop_receipt "$n" "$id" "$since" >/dev/null
+    fi
+    attempt+=("$n.requesting" "$n.job" "$n.started")
+  done
+  for n in "${attempt[@]}"; do sudo -n test -e "$window/$n"; done
+  archive="$window/settled-$(sudo -n cat "$native_recovery_dir/worker-pid")"
+  sudo -n mkdir -m 0700 -- "$archive"
+  for n in "${attempt[@]}"; do sudo -n mv -T -- "$window/$n" "$archive/$n"; done
+  native_window_barriers rearm
+  native_window_barriers check
+  sudo -n sync -f "$window"
+  sudo -n mv -T -- "$native_recovery_dir/outcome" "$archive/outcome"
+  printf '%s\n' "$owner" | sudo -n tee "$native_recovery_dir/owner-pid" >/dev/null
+  sudo -n sync -f "$native_recovery_dir"
+  sudo -n sync -f "$window"
+}
+
 native_window_admit_candidate() {
   local n
   [[ "$(realpath -e "$current_link")" == "$release_dir" ]]

@@ -303,7 +303,7 @@ Osaka의 일반 `--apply`는 최초 설치나 창 전환 명령이 아닙니다.
 
 아래는 **별도 운영 승인을 받은 뒤** kapu에서 실행할 절차입니다. 이 release의 `WINDOW=W3`만 허용합니다. 일반 `--apply`의 자동 복원을 쓰지 않습니다. `RELEASE_ID`(새 ID), `HOLO_BOT_VERSION`, `ARTIFACT_DIR`, `I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true`를 명시합니다. `OLD`는 osaka1의 실제 `current`가 가리키는 `releases/` 바로 아래 릴리스 이름입니다. 원 프로세스의 endpoint는 `100.100.1.8:5433`이며 이전 창의 OLD·nonce는 재사용할 수 없습니다.
 
-각 창에서 깨끗한 source의 `osaka --dry-run`은 빌드한 **전체** 디렉터리의 `HOLO_NATIVE_PAYLOAD_SHA256`을 출력합니다. qualification 완료 시 같은 `source scripts/deploy/lib/ap-host-native-window.sh; native_payload_digest "$ARTIFACT_DIR"`로 일치하는 값을 확인해 산출물 밖의 승인 기록에 revision·release ID와 함께 보존하십시오. `--quiesce`와 `--resume` 둘 다 그 **기록의 값**을 `export HOLO_NATIVE_PAYLOAD_SHA256=…`로 요구합니다. 실행 직전 디렉터리를 다시 해시해 입력을 대체하지 않습니다.
+각 창에서 깨끗한 source의 `osaka --dry-run`은 빌드한 **전체** 디렉터리의 `HOLO_NATIVE_PAYLOAD_SHA256`을 출력합니다. qualification 완료 시 같은 `source scripts/deploy/lib/ap-host-native-window.sh; native_payload_digest "$ARTIFACT_DIR"`로 일치하는 값을 확인해 산출물 밖의 승인 기록에 revision·release ID와 함께 보존하십시오. `--quiesce`·`--resume`·`--settle` 모두 그 **기록의 값**을 `export HOLO_NATIVE_PAYLOAD_SHA256=…`로 요구합니다. 실행 직전 디렉터리를 다시 해시해 입력을 대체하지 않습니다.
 
 1. `scripts/deploy/ap-host-native-deploy.sh osaka --quiesce "$WINDOW" "$OLD"` — 빌드하지 않고 검증 payload를 새 staging에 전송합니다. 기존 rollback 입력을 덮어쓰지 않습니다. 실행 binary·profile, 실제 프로세스 DB endpoint, issuer rootfs와 unit, 원 `current`/`previous`를 대조합니다. socket·issuer·collector의 고유 invocation을 기록하고, root 소유 guard/drop-in으로 부팅·의존·명시적 start를 차단합니다. 서비스의 `Restart=no`도 manager에서 확인한 다음 socket+issuer, collector 순으로 정지합니다. 각 원 invocation의 이번 stop job journal과 PID·job 없는 정상 비활성 상태, 원본 checksum까지 확인한 `quiesced`와 출력 nonce 없이는 다음 단계로 가지 않습니다. `disable`이나 `inactive` 출력만으로 대체할 수 없습니다.
 2. 세 writer가 정지한 뒤에만 해당 창의 다른 서비스·DB 절차로 진행합니다. 이 창을 연 중앙 정비(예: [webhook nonce 저장소 전환](release.md#iris-webhook-nonce-저장소-전환))의 writer 정지·재개 순서를 따릅니다. native 영수증은 타 슬롯 정지나 DB 원장을 증명하지 않습니다.
@@ -312,6 +312,12 @@ Osaka의 일반 `--apply`는 최초 설치나 창 전환 명령이 아닙니다.
    - issuer의 최초 영수증은 덮어쓰지 않습니다. 정상 종료(`success/exited/0`) 직후 host 정리 훅이 PID 1에 다음 start job을 요청하고, 기동 훅은 같은 job ID만 한 번 허용합니다. 취소된 job의 허가는 다른 job에서 쓸 수 없고, socket 접속만으로 다음 세대를 열 수 없습니다. 같은 boot의 정상 종료·다음 완료 job·새 invocation에 더해 실제 실행 파일·rootfs·broker health와 collector의 `PROCESSED`를 수용 직전에 확인합니다. 허가가 만료되거나 교체 세대를 입증하지 못하면 수용하지 않습니다.
    - 방금 교체된 issuer의 health가 아직 응답하지 않으면, 같은 기동의 SDK 초기화 한도(최대 90초)와 남은 관찰 허가 안에서만 기다립니다. guard 인계 중에는 서비스의 host `ExecCondition`이 자동 재시작에서도 본 프로세스의 기동을 막습니다.
 4. 실패하면 원 `release/native-window`, `rollback-contract`, 후보 release, staging, `cutover-recovery`를 보존합니다. 판정 가능한 실패는 후보만 보호 정지하며 재개 권리를 다시 발급하지 않습니다. 전송 단절·신호·불명확한 manager job은 `outcome_unknown` 취급하고 경쟁하는 stop/start나 자동 재시도를 하지 않습니다. 어떤 경우에도 이전 release의 marker와 이를 참조하는 systemd drop-in을 삭제하지 않습니다. 완료 뒤에도 `current/native-window`가 있는 퇴역 release의 기동과 수동 rollback을 거절합니다. **재개 뒤 `OLD` release는 복구 대상이 아닙니다.** 승인된 호환 후보로만 fix-forward합니다.
+5. 후보 collector 기동(`collector-start`)까지 마친 뒤 관찰 검사만 결과 불명으로 끝났다면, collector와 socket·issuer를 정지한 다음 같은 payload·인수로 `scripts/deploy/ap-host-native-deploy.sh osaka --settle "$WINDOW" "$OLD" "$NONCE"`를 한 번 실행합니다. 도구는 다음이 모두 맞을 때만 진행합니다.
+   - guard가 같은 nonce·후보 release를 가리키고, 단계가 `collector-start`, 종료 상태가 0, 결과가 `outcome_unknown`입니다.
+   - 같은 부팅이고, 관찰 기록(`await-observation`)·인계(`closing`)·살아 있는 `/run` 허가가 없으며, 차단 정책이 `observing`입니다.
+   - socket과 collector는 기록한 invocation 그대로 정지 완료 journal이 있고, issuer는 정상 종료(`exited/0`)했으며, 세 unit 모두 job 없이 비활성입니다.
+
+   조건이 맞으면 결과 표식과 1차 시도 영수증을 `native-window/settled-<worker-pid>/`로 옮기고(삭제·수기 작성 없음) 차단 정책을 held로 되돌립니다. 이어서 `--resume`의 admit 단계부터 같은 검사로 후보를 다시 열고 외부 관찰과 수용까지 진행합니다. 이 경우 외의 결과 불명과 판정 가능한 실패에는 재개 권리를 다시 발급하지 않습니다.
 
 ### 일반 native 배포
 

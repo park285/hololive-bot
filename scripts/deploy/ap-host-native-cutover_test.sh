@@ -564,7 +564,7 @@ systemctl() {
       [[ "$fault" != restore_lost || "$2" != "$po_socket" ]] ;;
     stop)
       shift; printf '%s\n' "$*" >> calls
-      for n in "$@"; do touch "down-$n"; rm -f "live-$n"; done
+      for n in "$@"; do touch "down-$n"; done
       [[ "$fault" != stop_client_error || "$1" != "$po_socket" ]] ;;
     *) return 92 ;;
   esac
@@ -883,6 +883,50 @@ for name, action, mutation, expected in (
     if name == 'issuer-retired-before-brake':
         expected_stops[0] = 'issuer.socket'
     assert stops == expected_stops, (name, stops)
+
+failed_stage = candidate_stage.replace('native_window_await_observation\n', 'native_window_uncertain || true\n')
+stopped_after_unknown = '''
+systemctl --job-mode=fail stop "$po_socket" "$unit"
+retire_issuer stop
+rmdir "$(native_window_permit rotation)"
+'''
+settled_reentry = '''
+native_window_settle
+: >issuer.journal
+rm "$window/blocked"
+for target in "$po_socket" "$po_service"; do native_cutover_run issuer native_window_start "$target"; done
+native_window_open_rotation
+native_cutover_run collector-start native_window_start "$unit"
+native_window_await_observation
+window_action=accepted
+native_window_close_observation
+'''
+case, result = window_case('settle-unknown-reentry', [release_window, str(old_port), 'normal'], failed_stage + stopped_after_unknown + settled_reentry)
+assert result.returncode == 0, result.stderr
+hold = case/'releases/old/native-window'
+archives = list(hold.glob('settled-*'))
+assert len(archives) == 1 and (archives[0]/'outcome').read_text() == 'outcome_unknown\n', archives
+assert {p.name for p in archives[0].iterdir()} >= {'outcome', 'resuming', 'issuer-lease', 'issuer.service.since', 'collector.service.started'}
+assert (case/'current/accepted-window').is_file() and (hold/'accepted-guard').is_dir() and not (case/'recovery').exists()
+for name, scenario in (
+    ('settle-refuses-running-collector', failed_stage + 'systemctl --job-mode=fail stop "$po_socket"\nretire_issuer stop\nrmdir "$(native_window_permit rotation)"\n'),
+    ('settle-refuses-live-lease', failed_stage + 'systemctl --job-mode=fail stop "$po_socket" "$unit"\nretire_issuer stop\n'),
+    ('settle-refuses-other-step', failed_stage + stopped_after_unknown + 'printf "accept\\n" >"$native_recovery_dir/step"\n'),
+    ('settle-refuses-without-outcome', candidate_stage.replace('native_window_await_observation\n', 'touch "$window/blocked"\n') + stopped_after_unknown),
+    ('settle-refuses-awaited-observation', candidate_stage + 'native_window_uncertain || true\n' + stopped_after_unknown),
+    ('settle-refuses-missing-stop-receipt', failed_stage + stopped_after_unknown + '''
+eval "fixture_$(declare -f journalctl)"
+journalctl() {
+  if [[ "$*" == *MESSAGE_ID=9d1aaa27d60140bd96365438aad20286* && " $* " == *" UNIT=$unit "* ]]; then return 0; fi
+  fixture_journalctl "$@"
+}
+'''),
+):
+    case, result = window_case(name, [release_window, str(old_port), 'normal'], scenario + 'native_window_settle\n')
+    hold = case/'releases/old/native-window'
+    assert result.returncode != 0, (name, result.stderr)
+    assert not list(hold.glob('settled-*')), name
+    assert (case/'recovery/outcome').exists() == (name != 'settle-refuses-without-outcome'), (name, result.stderr)
 
 for fault in ('wrong_start_job','foreign_start','missing_anchor'):
     case, result = window_case(fault, [release_window, str(old_port), fault], candidate_stage)
