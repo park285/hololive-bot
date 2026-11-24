@@ -654,7 +654,7 @@ native_window_issuer_ready() {
   local current after ready start state deadline=$((SECONDS+90))
   while (( SECONDS < deadline )); do
     native_window_lease_live && native_window_probe_units "${window_units[@]}" || return 1
-    current="$(native_window_live_generation "$po_service")" || return 1
+    current="$(native_window_live_generation "$po_service")" || continue
     state=cold
     if po_health_ready "$release_dir"; then
       state=not_ready
@@ -662,7 +662,7 @@ native_window_issuer_ready() {
           collector_readiness_json_field "$ready" instance_id "\"$service\""; then state=ready; fi
     fi
     native_window_probe_units "${window_units[@]}" || return 1
-    after="$(native_window_live_generation "$po_service")" || return 1
+    after="$(native_window_live_generation "$po_service")" || continue
     if [[ "$after" != "$current" ]]; then continue; fi
     case "$state" in
       ready) return 0 ;;
@@ -677,23 +677,30 @@ native_window_issuer_ready() {
 }
 
 native_window_issuer_state() {
-  local mode="$1" state attempt id
+  local mode="$1" state attempt id pid
   for attempt in {1..6}; do
     state="$(native_window_prop "$po_service" ActiveState)" || return 1
     case "$state" in
       active)
         id="$(native_window_prop "$po_service" InvocationID)" || return 1
         if native_window_owned "$po_service"; then echo live; return; fi
-        [[ "$(native_window_prop "$po_service" ActiveState)" != active || "$(native_window_prop "$po_service" InvocationID)" != "$id" ]] || return 1
+        if [[ "$(native_window_prop "$po_service" ActiveState)" == active && "$(native_window_prop "$po_service" InvocationID)" == "$id" ]]; then
+          pid="$(native_window_prop "$po_service" MainPID)" || return 1
+          [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+          if [[ "$pid" != 0 ]] && sudo -n test -e "/proc/$pid/exe"; then return 1; fi
+        fi
         ;;
       inactive)
-        if [[ -z "$(native_window_prop "$po_service" Job)" ]]; then
-          [[ "$mode" == brake ]] && native_window_owned "$po_service" retired && echo retired
+        if [[ "$mode" == brake && -z "$(native_window_prop "$po_service" Job)" ]]; then
+          native_window_owned "$po_service" retired && echo retired
           return
         fi
         ;;
       activating|deactivating)
-        case "$(native_window_prop "$po_service" SubState)" in start-pre|start|stop-post) ;; *) return 1 ;; esac
+        case "$(native_window_prop "$po_service" SubState)" in
+          condition|start-pre|start|stop-post) ;;
+          *) [[ "$(native_window_prop "$po_service" ActiveState)" != "$state" ]] || return 1 ;;
+        esac
         ;;
       *) return 1 ;;
     esac
@@ -766,7 +773,7 @@ native_window_commit_policy() {
   local n pid
   native_window_probe_units "${window_units[@]}"
   pid="$(native_window_prop "$unit" MainPID)"; [[ "$pid" =~ ^[1-9][0-9]*$ ]]
-  for n in "${window_units[@]}"; do native_window_candidate_runtime "$n"; done
+  for n in "$po_socket" "$unit"; do native_window_candidate_runtime "$n"; done
   native_window_process_endpoint "$pid" 5433
   native_window_lease_live || { native_window_uncertain; return 1; }
   native_window_barriers observing "$@"

@@ -519,6 +519,7 @@ sudo() {
     test) case "$2" in
       /proc/*/exe) [[ "$3" == -ef && ( "$4" == "$release_dir/bin/hololive-collector" || "$4" == "$release_dir/po-sandbox/rootfs/app/bin/po-broker" ) ]] ;;
       /proc/*/root) [[ "$3" == -ef && "$4" == "$release_dir/po-sandbox/rootfs" ]] ;;
+      -e) if [[ "$3" == /proc/*/exe ]]; then [[ ! -f issuer-exited ]]; else "$@"; fi ;;
       *) "$@" ;;
     esac ;;
     install) mkdir -p -- "${!#}" ;;
@@ -773,10 +774,85 @@ assert (case/'current/accepted-window').read_text().splitlines()[0] == release_w
 assert (case/'w1-adoption/original-guard/outcome').read_text() == 'outcome_unknown\n'
 assert (case/'releases/old/accepted-window').samefile(case/'releases/old/seed-guard/accepted-window')
 
+exit_during_probe = '''
+eval "fixture_$(declare -f sudo)"
+sudo() {
+  if [[ "$2" == test && "$3" == /proc/*/exe && "$5" == */po-broker && -f exit-during-probe ]]; then rm exit-during-probe; touch issuer-exited; return 1; fi
+  if [[ "$2" == test && "$3" == -e && "$4" == /proc/*/exe && -f issuer-exited ]]; then rm issuer-exited; retire_issuer rotate; return 1; fi
+  fixture_sudo "$@"
+}
+touch exit-during-probe
+'''
+wrong_live_runtime = '''
+eval "fixture_$(declare -f sudo)"
+sudo() {
+  if [[ "$2" == test && "$3" == /proc/*/exe && "$5" == */po-broker ]]; then return 1; fi
+  fixture_sudo "$@"
+}
+'''
+straddled_restart = '''
+eval "fixture_$(declare -f sudo)"
+eval "fixture_$(declare -f native_window_prop)"
+sudo() {
+  if [[ "$2" == test && "$3" == /proc/*/exe && "$5" == */po-broker && -f exit-during-probe ]]; then rm exit-during-probe; touch issuer-stopping; return 1; fi
+  fixture_sudo "$@"
+}
+native_window_prop() {
+  if [[ "$1" == "$po_service" && "$2" == ActiveState && -f issuer-stopping ]]; then rm issuer-stopping; touch issuer-starting; echo deactivating; return; fi
+  if [[ "$1" == "$po_service" && "$2" == ActiveState && -f issuer-starting ]]; then echo activating; return; fi
+  if [[ "$1" == "$po_service" && "$2" == SubState && -f issuer-starting ]]; then rm issuer-starting; retire_issuer rotate; echo running; return; fi
+  fixture_native_window_prop "$@"
+}
+touch exit-during-probe
+'''
+stuck_transition = '''
+eval "fixture_$(declare -f native_window_prop)"
+native_window_prop() {
+  if [[ "$1" == "$po_service" && "$2" == ActiveState ]]; then echo activating; return; fi
+  if [[ "$1" == "$po_service" && "$2" == SubState ]]; then echo auto-restart; return; fi
+  fixture_native_window_prop "$@"
+}
+'''
+rotation_after_ready_probe = '''
+eval "fixture_$(declare -f native_window_prop)"
+eval "fixture_$(declare -f native_window_probe_units)"
+native_window_probe_units() {
+  fixture_native_window_probe_units "$@" || return
+  if [[ "${FUNCNAME[1]}" == native_window_issuer_ready && -f rotate-after-probe ]]; then rm rotate-after-probe; touch issuer-starting; fi
+}
+native_window_prop() {
+  if [[ "$1" == "$po_service" && "$2" == ActiveState && -f issuer-starting ]]; then rm issuer-starting; retire_issuer rotate; echo activating; return; fi
+  fixture_native_window_prop "$@"
+}
+touch rotate-after-probe
+'''
+idle_before_socket_start = '''
+eval "fixture_$(declare -f native_window_prop)"
+native_window_prop() {
+  if [[ "$1" == "$po_service" && "$2" == ActiveState && -f issuer-idle ]]; then rm issuer-idle; retire_issuer rotate; echo inactive; return; fi
+  fixture_native_window_prop "$@"
+}
+touch issuer-idle
+'''
+exit_after_commit_probe = exit_during_probe.replace('touch exit-during-probe\n', '') + '''
+eval "fixture_$(declare -f native_window_probe_units)"
+native_window_probe_units() {
+  fixture_native_window_probe_units "$@" || return
+  if [[ "${FUNCNAME[1]}" == native_window_commit_policy && -f exit-after-probe ]]; then rm exit-after-probe; touch exit-during-probe; fi
+}
+touch exit-after-probe
+'''
 for name, action, mutation, expected in (
     ('accepted', 'accepted', '', 'accepted'),
     ('failed', 'observation-failed', '', 'stopped'),
     ('issuer-rotated', 'accepted', 'retire_issuer rotate; retire_issuer rotate', 'accepted'),
+    ('issuer-exits-during-probe', 'accepted', exit_during_probe, 'accepted'),
+    ('issuer-alive-wrong-runtime', 'accepted', wrong_live_runtime, 'unknown'),
+    ('issuer-restart-straddles-read', 'accepted', straddled_restart, 'accepted'),
+    ('issuer-stuck-in-transition', 'accepted', stuck_transition, 'unknown'),
+    ('issuer-idle-before-socket-start', 'accepted', idle_before_socket_start, 'accepted'),
+    ('issuer-rotates-after-ready-probe', 'accepted', rotation_after_ready_probe, 'accepted'),
+    ('issuer-exits-after-commit-probe', 'accepted', exit_after_commit_probe, 'accepted'),
     ('issuer-failed-then-replaced', 'accepted', 'retire_issuer rotate 23', 'unknown'),
     ('issuer-unowned-replacement', 'accepted', 'retire_issuer foreign', 'unknown'),
     ('issuer-canceled-job-replaced', 'accepted', 'retire_issuer canceled', 'unknown'),
