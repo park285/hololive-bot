@@ -100,6 +100,7 @@ with_ledger AS (
 SELECT
     CASE
         WHEN quarantined_delivery_count > 0 OR ledger_quarantined_room_count > 0 THEN 'quarantined'
+        WHEN outbox_count = 0 AND ledger_handoff_pending_room_count > 0 THEN 'in_progress'
         WHEN outbox_count = 0 AND ledger_sent_room_count > 0 THEN 'sent_outbox_cleaned'
         WHEN outbox_count = 0 AND alarm_sent_at IS NOT NULL THEN 'tracking_only_outbox_cleaned'
         WHEN outbox_count = 0 THEN 'outbox_missing'
@@ -147,7 +148,7 @@ SQL
 - `status = no_target_rooms`: 구독 room이 없어 outbox가 delivery 없이 SENT로 끝났고 원장 SENT room도 없습니다. 발송할 대상이 없었던 정상 상태입니다.
 - `status = no_success`: 진행 중인 room 없이 SENT delivery도 원장 SENT room도 없습니다. room이 모두 실패했거나, fan-out이 실패해 delivery 없이 outbox가 FAILED로 끝났습니다. 후자는 outbox `error`로 확인합니다.
 - `status = outbox_missing`: 게시물 추적 레코드는 있으나 outbox row도, 원장 SENT도, `alarm_sent_at`도 없습니다. 전송 파이프라인 진입 전 누락 후보입니다.
-- `status = sent_outbox_cleaned`: 끝난 outbox가 보존 기간을 넘겨 지워졌고 원장 SENT가 남아 있습니다.
+- `status = sent_outbox_cleaned`: 끝난 outbox가 보존 기간을 넘겨 지워졌고 원장 SENT가 남아 있으며, 그 room의 요청이 handoff 확인을 기다리지 않습니다. 기다리는 요청이 남아 있으면 `in_progress`입니다.
 - `status = tracking_only_outbox_cleaned`: outbox와 원장 SENT 없이 tracking `alarm_sent_at`만 남았습니다. 구독 room 없이 끝난 outbox의 `sent_at`이 복사됐거나, Iris가 접수한 뒤 handoff 실패로 재시도가 소진돼 원장 SENT가 지워졌을 수 있으므로 최종 결과는 알 수 없습니다.
 - `status = in_progress`: outbox fan-out을 기다리거나, `PENDING`·`SENDING` room이 남았거나, SENT room의 handoff 확인(`handoff_pending_delivery_count`, 또는 원장 `source_delivery_id`를 member로 가진 요청이 확인을 기다리는 `ledger_handoff_pending_room_count`)이 끝나지 않았습니다. 요청 없이 함께 SENT가 된 별칭 delivery만 남거나 실제 발송 delivery가 정리돼도 요청이 남아 있으면 원장 쪽 값으로 잡힙니다. 확인 결과에 따라 재발급·실패·격리로 바뀔 수 있습니다. `target_room_count = 0`인데 outbox 생성 뒤 활성 프로필의 `queue.max_age`가 지났으면 fan-out이 다시 잡지 않고 정리 작업이 발송 없이 지우므로 `no_success`로 봅니다.
 - `status = failed_attempts`: 성공(SENT delivery 또는 원장 SENT room)은 있었지만 `FAILED` delivery나 실패한 시도가 있었던 delivery, 또는 delivery 없이 FAILED로 끝난 다른 outbox(같은 게시물의 별칭 outbox fan-out 실패)도 있습니다. 시도별 사유는 [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 로그로 확인합니다.
