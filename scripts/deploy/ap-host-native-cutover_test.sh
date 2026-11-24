@@ -519,6 +519,7 @@ sudo() {
     test) case "$2" in
       /proc/*/exe) [[ "$3" == -ef && ( "$4" == "$release_dir/bin/hololive-collector" || "$4" == "$release_dir/po-sandbox/rootfs/app/bin/po-broker" ) ]] ;;
       /proc/*/root) [[ "$3" == -ef && "$4" == "$release_dir/po-sandbox/rootfs" ]] ;;
+      -e) if [[ "$3" == /proc/*/exe ]]; then [[ ! -f issuer-exited ]]; else "$@"; fi ;;
       *) "$@" ;;
     esac ;;
     install) mkdir -p -- "${!#}" ;;
@@ -563,7 +564,7 @@ systemctl() {
       [[ "$fault" != restore_lost || "$2" != "$po_socket" ]] ;;
     stop)
       shift; printf '%s\n' "$*" >> calls
-      for n in "$@"; do touch "down-$n"; rm -f "live-$n"; done
+      for n in "$@"; do touch "down-$n"; done
       [[ "$fault" != stop_client_error || "$1" != "$po_socket" ]] ;;
     *) return 92 ;;
   esac
@@ -773,10 +774,85 @@ assert (case/'current/accepted-window').read_text().splitlines()[0] == release_w
 assert (case/'w1-adoption/original-guard/outcome').read_text() == 'outcome_unknown\n'
 assert (case/'releases/old/accepted-window').samefile(case/'releases/old/seed-guard/accepted-window')
 
+exit_during_probe = '''
+eval "fixture_$(declare -f sudo)"
+sudo() {
+  if [[ "$2" == test && "$3" == /proc/*/exe && "$5" == */po-broker && -f exit-during-probe ]]; then rm exit-during-probe; touch issuer-exited; return 1; fi
+  if [[ "$2" == test && "$3" == -e && "$4" == /proc/*/exe && -f issuer-exited ]]; then rm issuer-exited; retire_issuer rotate; return 1; fi
+  fixture_sudo "$@"
+}
+touch exit-during-probe
+'''
+wrong_live_runtime = '''
+eval "fixture_$(declare -f sudo)"
+sudo() {
+  if [[ "$2" == test && "$3" == /proc/*/exe && "$5" == */po-broker ]]; then return 1; fi
+  fixture_sudo "$@"
+}
+'''
+straddled_restart = '''
+eval "fixture_$(declare -f sudo)"
+eval "fixture_$(declare -f native_window_prop)"
+sudo() {
+  if [[ "$2" == test && "$3" == /proc/*/exe && "$5" == */po-broker && -f exit-during-probe ]]; then rm exit-during-probe; touch issuer-stopping; return 1; fi
+  fixture_sudo "$@"
+}
+native_window_prop() {
+  if [[ "$1" == "$po_service" && "$2" == ActiveState && -f issuer-stopping ]]; then rm issuer-stopping; touch issuer-starting; echo deactivating; return; fi
+  if [[ "$1" == "$po_service" && "$2" == ActiveState && -f issuer-starting ]]; then echo activating; return; fi
+  if [[ "$1" == "$po_service" && "$2" == SubState && -f issuer-starting ]]; then rm issuer-starting; retire_issuer rotate; echo running; return; fi
+  fixture_native_window_prop "$@"
+}
+touch exit-during-probe
+'''
+stuck_transition = '''
+eval "fixture_$(declare -f native_window_prop)"
+native_window_prop() {
+  if [[ "$1" == "$po_service" && "$2" == ActiveState ]]; then echo activating; return; fi
+  if [[ "$1" == "$po_service" && "$2" == SubState ]]; then echo auto-restart; return; fi
+  fixture_native_window_prop "$@"
+}
+'''
+rotation_after_ready_probe = '''
+eval "fixture_$(declare -f native_window_prop)"
+eval "fixture_$(declare -f native_window_probe_units)"
+native_window_probe_units() {
+  fixture_native_window_probe_units "$@" || return
+  if [[ "${FUNCNAME[1]}" == native_window_issuer_ready && -f rotate-after-probe ]]; then rm rotate-after-probe; touch issuer-starting; fi
+}
+native_window_prop() {
+  if [[ "$1" == "$po_service" && "$2" == ActiveState && -f issuer-starting ]]; then rm issuer-starting; retire_issuer rotate; echo activating; return; fi
+  fixture_native_window_prop "$@"
+}
+touch rotate-after-probe
+'''
+idle_before_socket_start = '''
+eval "fixture_$(declare -f native_window_prop)"
+native_window_prop() {
+  if [[ "$1" == "$po_service" && "$2" == ActiveState && -f issuer-idle ]]; then rm issuer-idle; retire_issuer rotate; echo inactive; return; fi
+  fixture_native_window_prop "$@"
+}
+touch issuer-idle
+'''
+exit_after_commit_probe = exit_during_probe.replace('touch exit-during-probe\n', '') + '''
+eval "fixture_$(declare -f native_window_probe_units)"
+native_window_probe_units() {
+  fixture_native_window_probe_units "$@" || return
+  if [[ "${FUNCNAME[1]}" == native_window_commit_policy && -f exit-after-probe ]]; then rm exit-after-probe; touch exit-during-probe; fi
+}
+touch exit-after-probe
+'''
 for name, action, mutation, expected in (
     ('accepted', 'accepted', '', 'accepted'),
     ('failed', 'observation-failed', '', 'stopped'),
     ('issuer-rotated', 'accepted', 'retire_issuer rotate; retire_issuer rotate', 'accepted'),
+    ('issuer-exits-during-probe', 'accepted', exit_during_probe, 'accepted'),
+    ('issuer-alive-wrong-runtime', 'accepted', wrong_live_runtime, 'unknown'),
+    ('issuer-restart-straddles-read', 'accepted', straddled_restart, 'accepted'),
+    ('issuer-stuck-in-transition', 'accepted', stuck_transition, 'unknown'),
+    ('issuer-idle-before-socket-start', 'accepted', idle_before_socket_start, 'accepted'),
+    ('issuer-rotates-after-ready-probe', 'accepted', rotation_after_ready_probe, 'accepted'),
+    ('issuer-exits-after-commit-probe', 'accepted', exit_after_commit_probe, 'accepted'),
     ('issuer-failed-then-replaced', 'accepted', 'retire_issuer rotate 23', 'unknown'),
     ('issuer-unowned-replacement', 'accepted', 'retire_issuer foreign', 'unknown'),
     ('issuer-canceled-job-replaced', 'accepted', 'retire_issuer canceled', 'unknown'),
@@ -807,6 +883,82 @@ for name, action, mutation, expected in (
     if name == 'issuer-retired-before-brake':
         expected_stops[0] = 'issuer.socket'
     assert stops == expected_stops, (name, stops)
+
+failed_stage = candidate_stage.replace('native_window_await_observation\n', 'native_window_uncertain || true\n')
+real_inputs = '''
+eval "$(sed -n '/^native_window_inputs() {/,/^}/p' "WINDOW_LIB")"
+native_rollback_validate() { test -d "$old_target/rollback-contract"; }
+po_unit_file="$PWD/system/$po_service"
+touch "$unit_file" "$po_unit_file" "$po_socket_file"
+: "${slot_host_env:=$host_env}"
+ln -sfn "$old_target" "$previous_link"
+{ cat "$host_env"; printf 'candidate=1\\n'; } >"$release_dir/${slot_host_env##*/}"
+for installed in "$unit_file" "$po_unit_file" "$po_socket_file"; do { cat "$installed"; printf 'candidate=1\\n'; } >"$release_dir/${installed##*/}.next"; done
+for installed in "$unit_file" "$po_unit_file" "$po_socket_file"; do mv "$release_dir/${installed##*/}.next" "$release_dir/${installed##*/}"; done
+'''.replace('WINDOW_LIB', str(window_lib))
+installed_candidate = real_inputs + '''
+cp "$release_dir/${slot_host_env##*/}" "$host_env"
+for installed in "$unit_file" "$po_unit_file" "$po_socket_file"; do cp "$release_dir/${installed##*/}" "$installed"; done
+'''
+stopped_after_unknown = installed_candidate + '''
+systemctl --job-mode=fail stop "$po_socket" "$unit"
+retire_issuer stop
+rmdir "$(native_window_permit rotation)"
+'''
+settled_reentry = '''
+native_window_settle
+: >issuer.journal
+rm "$window/blocked"
+for target in "$po_socket" "$po_service"; do native_cutover_run issuer native_window_start "$target"; done
+native_window_open_rotation
+native_cutover_run collector-start native_window_start "$unit"
+native_window_await_observation
+window_action=accepted
+native_window_close_observation
+'''
+case, result = window_case('settle-unknown-reentry', [release_window, str(old_port), 'normal'], failed_stage + stopped_after_unknown + settled_reentry)
+assert result.returncode == 0, result.stderr
+hold = case/'releases/old/native-window'
+archives = list(hold.glob('settled-*'))
+assert len(archives) == 1 and (archives[0]/'outcome').read_text() == 'outcome_unknown\n', archives
+assert {p.name for p in archives[0].iterdir()} >= {'outcome', 'resuming', 'issuer-lease', 'issuer.service.since', 'collector.service.started'}
+assert (case/'current/accepted-window').is_file() and (hold/'accepted-guard').is_dir() and not (case/'recovery').exists()
+check_fails_once = '''
+eval "fixture_$(declare -f native_window_barriers)"
+native_window_barriers() {
+  if [[ "$1" == check && -f fail-check-once ]]; then rm fail-check-once; return 1; fi
+  fixture_native_window_barriers "$@"
+}
+touch fail-check-once
+set +e
+(set -e; native_window_settle)
+first=$?
+set -e
+[[ "$first" != 0 && -f "$native_recovery_dir/outcome" && $(readlink "$window/policy") == held ]]
+'''
+case, result = window_case('settle-rerun-after-partial', [release_window, str(old_port), 'normal'], failed_stage + stopped_after_unknown + check_fails_once + settled_reentry)
+assert result.returncode == 0, result.stderr
+assert (case/'current/accepted-window').is_file() and len(list((case/'releases/old/native-window').glob('settled-*/outcome'))) == 1
+for name, scenario in (
+    ('settle-refuses-contract-installed', failed_stage + stopped_after_unknown.replace(installed_candidate, real_inputs)),
+    ('settle-refuses-running-collector', failed_stage + installed_candidate + 'systemctl --job-mode=fail stop "$po_socket"\nretire_issuer stop\nrmdir "$(native_window_permit rotation)"\n'),
+    ('settle-refuses-live-lease', failed_stage + installed_candidate + 'systemctl --job-mode=fail stop "$po_socket" "$unit"\nretire_issuer stop\n'),
+    ('settle-refuses-other-step', failed_stage + stopped_after_unknown + 'printf "accept\\n" >"$native_recovery_dir/step"\n'),
+    ('settle-refuses-without-outcome', candidate_stage.replace('native_window_await_observation\n', 'touch "$window/blocked"\n') + stopped_after_unknown),
+    ('settle-refuses-awaited-observation', candidate_stage + 'native_window_uncertain || true\n' + stopped_after_unknown),
+    ('settle-refuses-missing-stop-receipt', failed_stage + stopped_after_unknown + '''
+eval "fixture_$(declare -f journalctl)"
+journalctl() {
+  if [[ "$*" == *MESSAGE_ID=9d1aaa27d60140bd96365438aad20286* && " $* " == *" UNIT=$unit "* ]]; then return 0; fi
+  fixture_journalctl "$@"
+}
+'''),
+):
+    case, result = window_case(name, [release_window, str(old_port), 'normal'], scenario + 'native_window_settle\n')
+    hold = case/'releases/old/native-window'
+    assert result.returncode != 0, (name, result.stderr)
+    assert not list(hold.glob('settled-*')), name
+    assert (case/'recovery/outcome').exists() == (name != 'settle-refuses-without-outcome'), (name, result.stderr)
 
 for fault in ('wrong_start_job','foreign_start','missing_anchor'):
     case, result = window_case(fault, [release_window, str(old_port), fault], candidate_stage)

@@ -29,6 +29,7 @@ window_action="${9:?native command required}"
 # shellcheck disable=SC2034
 window_name="${10:-}" window_old="${11:-}" window_digest="${12:-}" window_nonce="${13:-}"
 same_window=false
+settled=false
 if [[ "$window_action" == same-window || "$window_action" == apply-origin || "$window_action" == apply-accepted ]]; then
   [[ "$(hostname -s)" == osaka1 && "$service" == "$slot_service" ]]
   native_release_id_validate "$release_id"
@@ -98,6 +99,7 @@ native_same_window_baseline() {
 case "$window_action" in
   quiesce) [[ $# == 13 && -z "$window_nonce" ]]; native_window_quiesce; exit ;;
   resume) [[ $# == 13 && -n "$window_nonce" ]]; native_window_resume_claim ;;
+  settle) [[ $# == 13 && -n "$window_nonce" ]]; native_window_settle; window_action=resume settled=true ;;
   accepted|observation-failed) [[ $# == 13 && -n "$window_nonce" ]]; native_window_close_observation; exit ;;
   apply-origin)
     [[ $# == 13 && ! -e "$payload" && ! -L "$payload" ]]
@@ -226,6 +228,16 @@ if [[ -z "$old_target" && -n "$old_previous_target" ]]; then
   echo 'refusing initial native install with stale previous release pointer' >&2
   exit 1
 fi
+if [[ "$settled" == true ]]; then
+  release_dir="$releases_root/$release_id"
+  for reserved in accepted-window native-window native-observation; do
+    sudo -n test ! -e "$release_dir/$reserved" && sudo -n test ! -L "$release_dir/$reserved" || exit 1
+  done
+  [[ "$(cat "$release_dir/po-sandbox/revision")" == "${EXPECTED_REVISION:?expected native source SHA missing}" ]]
+  (cd "$release_dir/po-sandbox" && sudo -n sha256sum --check --strict rootfs.tar.sha256)
+  po_validate_release "$release_dir"
+  sudo -n sh -c 'cd "$1" && sha256sum --check --strict --status SHA256SUMS' sh "$release_dir"
+else
 release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$current_link")"
 
 sudo -n mkdir "$release_dir"
@@ -259,10 +271,16 @@ sudo -n systemd-run --quiet --wait --pipe --collect \
   /usr/bin/env "STACK_WORKER_PROFILE_FILE=$release_dir/worker-profile.json" \
   "$release_dir/bin/hololive-collector-wrapper" "$release_dir/bin/hololive-collector" --check-worker-profile
 sudo -n sh -c 'cd "$1" && sha256sum bin/hololive-collector worker-profile.json > SHA256SUMS && chmod 0444 SHA256SUMS' sh "$release_dir"
+fi
 
 if [[ "$window_action" == resume ]]; then
-  native_window_pins
-  native_window_inputs
+  if [[ "$settled" == true ]]; then
+    native_window_pins "$release_dir"
+    native_window_inputs "$release_dir"
+  else
+    native_window_pins
+    native_window_inputs
+  fi
 else
   if [[ "$same_window" == true ]] && sudo -n test -d "$old_target/rollback-contract"; then
     native_rollback_validate "$old_target"

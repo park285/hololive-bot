@@ -297,12 +297,17 @@ for row,action in zip(rows,("consume","grant")):
 }
 
 native_window_inputs() {
-  local contract="$old_target/rollback-contract" n
+  local contract="$old_target/rollback-contract" n installed="${1:-}"
   native_rollback_validate "$old_target"
-  [[ "$(native_window_previous)" == "$(sudo -n cat "$contract/previous-before-cutover")" ]]
-  sudo -n cmp -s "$host_env" "$contract/${slot_host_env##*/}"
+  if [[ -n "$installed" ]]; then
+    [[ "$(realpath -e "$previous_link")" == "$old_target" ]]
+  else
+    [[ "$(native_window_previous)" == "$(sudo -n cat "$contract/previous-before-cutover")" ]]
+    installed="$contract"
+  fi
+  sudo -n cmp -s "$host_env" "$installed/${slot_host_env##*/}"
   [[ "$(native_root_endpoint "$host_env")" == "100.100.1.8|$original_port" ]]
-  for n in "$unit_file" "${po_unit_file?}" "${po_socket_file?}"; do sudo -n cmp -s "$n" "$contract/${n##*/}"; done
+  for n in "$unit_file" "${po_unit_file?}" "${po_socket_file?}"; do sudo -n cmp -s "$n" "$installed/${n##*/}"; done
   sudo -n sha256sum --strict --check --status "$window/inputs.sha256"
 }
 
@@ -432,6 +437,60 @@ native_window_resume_claim() {
   for n in "${window_units[@]}"; do native_window_terminal "$n"; done
   sudo -n mkdir -m 0700 "$window/resuming"
   printf '%s\n' "$owner" | sudo -n tee "$native_recovery_dir/owner-pid" >/dev/null
+}
+
+native_window_settle() {
+  local n id since archive policy receipt owner="$BASHPID" candidate="$releases_root/$release_id"
+  local -a attempt=(resuming issuer-lease "$po_service.since")
+  native_window_pins "$candidate"
+  [[ "${window_nonce?}" =~ ^[0-9a-f-]{36}$ && "$(sudo -n cat "$native_recovery_dir/claim")" == "$window_nonce" &&
+     "$(sudo -n cat "$native_recovery_dir/release")" == "$candidate" &&
+     "$(sudo -n cat "$native_recovery_dir/step")" == collector-start && "$(sudo -n cat "$native_recovery_dir/terminal")" == 0 ]]
+  sudo -n test -f "$native_recovery_dir/outcome"
+  sudo -n test ! -L "$native_recovery_dir/outcome"
+  [[ "$(sudo -n cat "$native_recovery_dir/outcome")" == outcome_unknown ]]
+  native_claim_nonce="$window_nonce"
+  native_window_verify_quiesced
+  [[ "$(native_payload_digest "$payload")" == "$window_digest" ]]
+  sudo -n test -f "$window/blocked"
+  sudo -n test ! -e "$window/await-observation"
+  sudo -n test ! -e "$window/closing"
+  native_window_inputs "$candidate"
+  policy="$(sudo -n readlink "$window/policy")"
+  case "$policy" in observing) native_window_barriers observing ;; held) native_window_barriers check ;; *) return 1 ;; esac
+  for n in rotation "${window_units[@]}"; do
+    sudo -n test ! -e "$(native_window_permit "$n")"
+    sudo -n test ! -L "$(native_window_permit "$n")"
+  done
+  archive="$window/settled-$(sudo -n cat "$native_recovery_dir/worker-pid")"
+  since="@$(sudo -n sh -c 'stat -c %Y -- "$1"' sh "$native_recovery_dir/outcome")"
+  for n in "${window_units[@]}"; do
+    native_window_terminal "$n"
+    id="$(native_window_prop "$n" InvocationID)"
+    attempt+=("$n.requesting" "$n.job" "$n.started")
+    if [[ "$n" == "$po_service" ]]; then
+      [[ "$(native_window_prop "$n" ExecMainCode)" == 1 && "$(native_window_prop "$n" ExecMainStatus)" == 0 ]]
+      continue
+    fi
+    receipt="$window/$n.started"
+    if ! sudo -n test -e "$receipt"; then receipt="$archive/$n.started"; fi
+    [[ "$(sudo -n cat "$receipt")" =~ ^[0-9a-f]{32}\ [1-9][0-9]*\ $id$ ]]
+    native_window_stop_receipt "$n" "$id" "$since" >/dev/null
+  done
+  for n in "${attempt[@]}"; do
+    if sudo -n test -e "$window/$n"; then sudo -n test ! -e "$archive/$n"; else sudo -n test -e "$archive/$n"; fi
+  done
+  if ! sudo -n test -d "$archive"; then sudo -n mkdir -m 0700 -- "$archive"; fi
+  for n in "${attempt[@]}"; do
+    if sudo -n test -e "$window/$n"; then sudo -n mv -T -- "$window/$n" "$archive/$n"; fi
+  done
+  if [[ "$policy" == observing ]]; then native_window_barriers rearm; fi
+  native_window_barriers check
+  sudo -n sync -f "$window"
+  sudo -n mv -T -- "$native_recovery_dir/outcome" "$archive/outcome"
+  printf '%s\n' "$owner" | sudo -n tee "$native_recovery_dir/owner-pid" >/dev/null
+  sudo -n sync -f "$native_recovery_dir"
+  sudo -n sync -f "$window"
 }
 
 native_window_admit_candidate() {
@@ -654,7 +713,7 @@ native_window_issuer_ready() {
   local current after ready start state deadline=$((SECONDS+90))
   while (( SECONDS < deadline )); do
     native_window_lease_live && native_window_probe_units "${window_units[@]}" || return 1
-    current="$(native_window_live_generation "$po_service")" || return 1
+    current="$(native_window_live_generation "$po_service")" || continue
     state=cold
     if po_health_ready "$release_dir"; then
       state=not_ready
@@ -662,7 +721,7 @@ native_window_issuer_ready() {
           collector_readiness_json_field "$ready" instance_id "\"$service\""; then state=ready; fi
     fi
     native_window_probe_units "${window_units[@]}" || return 1
-    after="$(native_window_live_generation "$po_service")" || return 1
+    after="$(native_window_live_generation "$po_service")" || continue
     if [[ "$after" != "$current" ]]; then continue; fi
     case "$state" in
       ready) return 0 ;;
@@ -677,23 +736,30 @@ native_window_issuer_ready() {
 }
 
 native_window_issuer_state() {
-  local mode="$1" state attempt id
+  local mode="$1" state attempt id pid
   for attempt in {1..6}; do
     state="$(native_window_prop "$po_service" ActiveState)" || return 1
     case "$state" in
       active)
         id="$(native_window_prop "$po_service" InvocationID)" || return 1
         if native_window_owned "$po_service"; then echo live; return; fi
-        [[ "$(native_window_prop "$po_service" ActiveState)" != active || "$(native_window_prop "$po_service" InvocationID)" != "$id" ]] || return 1
+        if [[ "$(native_window_prop "$po_service" ActiveState)" == active && "$(native_window_prop "$po_service" InvocationID)" == "$id" ]]; then
+          pid="$(native_window_prop "$po_service" MainPID)" || return 1
+          [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+          if [[ "$pid" != 0 ]] && sudo -n test -e "/proc/$pid/exe"; then return 1; fi
+        fi
         ;;
       inactive)
-        if [[ -z "$(native_window_prop "$po_service" Job)" ]]; then
-          [[ "$mode" == brake ]] && native_window_owned "$po_service" retired && echo retired
+        if [[ "$mode" == brake && -z "$(native_window_prop "$po_service" Job)" ]]; then
+          native_window_owned "$po_service" retired && echo retired
           return
         fi
         ;;
       activating|deactivating)
-        case "$(native_window_prop "$po_service" SubState)" in start-pre|start|stop-post) ;; *) return 1 ;; esac
+        case "$(native_window_prop "$po_service" SubState)" in
+          condition|start-pre|start|stop-post) ;;
+          *) [[ "$(native_window_prop "$po_service" ActiveState)" != "$state" ]] || return 1 ;;
+        esac
         ;;
       *) return 1 ;;
     esac
@@ -766,7 +832,7 @@ native_window_commit_policy() {
   local n pid
   native_window_probe_units "${window_units[@]}"
   pid="$(native_window_prop "$unit" MainPID)"; [[ "$pid" =~ ^[1-9][0-9]*$ ]]
-  for n in "${window_units[@]}"; do native_window_candidate_runtime "$n"; done
+  for n in "$po_socket" "$unit"; do native_window_candidate_runtime "$n"; done
   native_window_process_endpoint "$pid" 5433
   native_window_lease_live || { native_window_uncertain; return 1; }
   native_window_barriers observing "$@"
