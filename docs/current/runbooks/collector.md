@@ -312,12 +312,12 @@ Osaka의 일반 `--apply`는 최초 설치나 창 전환 명령이 아닙니다.
    - issuer의 최초 영수증은 덮어쓰지 않습니다. 정상 종료(`success/exited/0`) 직후 host 정리 훅이 PID 1에 다음 start job을 요청하고, 기동 훅은 같은 job ID만 한 번 허용합니다. 취소된 job의 허가는 다른 job에서 쓸 수 없고, socket 접속만으로 다음 세대를 열 수 없습니다. 같은 boot의 정상 종료·다음 완료 job·새 invocation에 더해 실제 실행 파일·rootfs·broker health와 collector의 `PROCESSED`를 수용 직전에 확인합니다. 허가가 만료되거나 교체 세대를 입증하지 못하면 수용하지 않습니다.
    - 방금 교체된 issuer의 health가 아직 응답하지 않으면, 같은 기동의 SDK 초기화 한도(최대 90초)와 남은 관찰 허가 안에서만 기다립니다. guard 인계 중에는 서비스의 host `ExecCondition`이 자동 재시작에서도 본 프로세스의 기동을 막습니다.
 4. 실패하면 원 `release/native-window`, `rollback-contract`, 후보 release, staging, `cutover-recovery`를 보존합니다. 판정 가능한 실패는 후보만 보호 정지하며 재개 권리를 다시 발급하지 않습니다. 전송 단절·신호·불명확한 manager job은 `outcome_unknown` 취급하고 경쟁하는 stop/start나 자동 재시도를 하지 않습니다. 어떤 경우에도 이전 release의 marker와 이를 참조하는 systemd drop-in을 삭제하지 않습니다. 완료 뒤에도 `current/native-window`가 있는 퇴역 release의 기동과 수동 rollback을 거절합니다. **재개 뒤 `OLD` release는 복구 대상이 아닙니다.** 승인된 호환 후보로만 fix-forward합니다.
-5. 후보 collector 기동(`collector-start`)까지 마친 뒤 관찰 검사만 결과 불명으로 끝났다면, collector와 socket·issuer를 정지한 다음 같은 payload·인수로 `scripts/deploy/ap-host-native-deploy.sh osaka --settle "$WINDOW" "$OLD" "$NONCE"`를 한 번 실행합니다. 도구는 다음이 모두 맞을 때만 진행합니다.
-   - guard가 같은 nonce·후보 release를 가리키고, 단계가 `collector-start`, 종료 상태가 0, 결과가 `outcome_unknown`입니다.
-   - 같은 부팅이고, 관찰 기록(`await-observation`)·인계(`closing`)·살아 있는 `/run` 허가가 없으며, 차단 정책이 `observing`입니다.
-   - socket과 collector는 기록한 invocation 그대로 정지 완료 journal이 있고, issuer는 정상 종료(`exited/0`)했으며, 세 unit 모두 job 없이 비활성입니다.
+5. 후보 collector 기동(`collector-start`)까지 마친 뒤 관찰 검사가 결과 불명으로 끝났거나, 외부 관찰 뒤 수용(`accept`)이 차단 정책을 확정하기 전에 결과 불명으로 끝났다면, collector를 정지하고 socket·issuer가 끝나기를 확인한 다음 같은 payload·인수로 `scripts/deploy/ap-host-native-deploy.sh osaka --settle "$WINDOW" "$OLD" "$NONCE"`를 실행합니다. 도구는 다음이 모두 맞을 때만 진행합니다.
+   - guard가 같은 nonce·후보 release를 가리키고 결과가 `outcome_unknown`입니다. 단계가 `collector-start`이면 종료 상태가 0이고 관찰 기록(`await-observation`)·인계(`closing`)가 없어야 합니다. 단계가 `accept`이면 guard와 후보 release에 `accepted-window`가 없고 guard의 `accepting`과 창의 `await-observation`·`closing`이 있어야 합니다.
+   - 같은 부팅이고, 살아 있는 `/run` 허가가 없으며, 차단 정책이 `observing`(중간에 멈춘 정산을 다시 실행하면 `held`)입니다.
+   - collector는 기록한 invocation 그대로 정지 완료 journal이 있고, issuer는 정상 종료(`exited/0`)했습니다. socket은 정지 완료 journal이 있거나, issuer가 다시 기동하지 못해 기록한 invocation이 `trigger-limit-hit`으로 실패한 journal이 있어야 합니다. 후자이면 도구가 `systemctl reset-failed`로 socket을 비활성으로 되돌립니다. 세 unit 모두 job 없이 비활성이어야 합니다.
 
-   조건이 맞으면 결과 표식과 1차 시도 영수증을 `native-window/settled-<worker-pid>/`로 옮기고(삭제·수기 작성 없음) 차단 정책을 held로 되돌립니다. 이어서 `--resume`의 admit 단계부터 같은 검사로 후보를 다시 열고 외부 관찰과 수용까지 진행합니다. 이 경우 외의 결과 불명과 판정 가능한 실패에는 재개 권리를 다시 발급하지 않습니다.
+   조건이 맞으면 결과 표식과 직전 시도의 영수증(수용 단계였다면 관찰 기록·인계·`accepting`까지)을 `native-window/settled-<worker-pid>/`로 옮기고(삭제·수기 작성 없음) 차단 정책을 held로 되돌립니다. 이어서 `--resume`의 admit 단계부터 같은 검사로 후보를 다시 열고 외부 관찰과 수용까지 진행합니다. 정산이 결과 표식을 옮기기 전에 멈추면 같은 명령을 다시 실행할 수 있습니다. 이 경우 외의 결과 불명과 판정 가능한 실패에는 재개 권리를 다시 발급하지 않습니다.
 
 ### 일반 native 배포
 

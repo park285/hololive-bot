@@ -127,6 +127,13 @@ native_window_terminal() {
   [[ "$target" == "$po_socket" || "$(native_window_prop "$target" MainPID)" == 0 ]]
 }
 
+native_window_trip_receipt() {
+  local n="$1" id="$2" since="$3" record
+  record="$(sudo -n journalctl --boot --quiet --no-pager -o json --output-fields=INVOCATION_ID,UNIT_RESULT --since="$since" \
+    _PID=1 "UNIT=$n" "INVOCATION_ID=$id" UNIT_RESULT=trigger-limit-hit MESSAGE_ID=d9b373ed55a64feb8242e02dbe79a49c)" || return 1
+  python3 -I -B -c 'import json,sys; r=json.loads(sys.stdin.readline()); assert r["INVOCATION_ID"]==sys.argv[1] and r["UNIT_RESULT"]=="trigger-limit-hit"' "$id" <<< "$record"
+}
+
 native_window_permit() { printf '/run/hololive-native-%s-%s\n' "$native_claim_nonce" "$1"; }
 
 native_window_boot() {
@@ -440,12 +447,26 @@ native_window_resume_claim() {
 }
 
 native_window_settle() {
-  local n id since archive policy receipt owner="$BASHPID" candidate="$releases_root/$release_id"
-  local -a attempt=(resuming issuer-lease "$po_service.since")
+  local n id since archive policy receipt step owner="$BASHPID" candidate="$releases_root/$release_id"
+  local -a attempt=(issuer-lease "$po_service.since") optional=(resuming observed.tmp)
   native_window_pins "$candidate"
   [[ "${window_nonce?}" =~ ^[0-9a-f-]{36}$ && "$(sudo -n cat "$native_recovery_dir/claim")" == "$window_nonce" &&
-     "$(sudo -n cat "$native_recovery_dir/release")" == "$candidate" &&
-     "$(sudo -n cat "$native_recovery_dir/step")" == collector-start && "$(sudo -n cat "$native_recovery_dir/terminal")" == 0 ]]
+     "$(sudo -n cat "$native_recovery_dir/release")" == "$candidate" ]]
+  step="$(sudo -n cat "$native_recovery_dir/step")"
+  case "$step" in
+    collector-start)
+      [[ "$(sudo -n cat "$native_recovery_dir/terminal")" == 0 ]]
+      sudo -n test ! -e "$window/await-observation"
+      sudo -n test ! -e "$window/closing" ;;
+    accept)
+      [[ "$(sudo -n cat "$native_recovery_dir/terminal")" =~ ^[0-9]+$ ]]
+      for n in "$native_recovery_dir/accepted-window" "$candidate/accepted-window"; do
+        sudo -n test ! -e "$n"
+        sudo -n test ! -L "$n"
+      done
+      attempt+=(await-observation closing) ;;
+    *) return 1 ;;
+  esac
   sudo -n test -f "$native_recovery_dir/outcome"
   sudo -n test ! -L "$native_recovery_dir/outcome"
   [[ "$(sudo -n cat "$native_recovery_dir/outcome")" == outcome_unknown ]]
@@ -453,8 +474,6 @@ native_window_settle() {
   native_window_verify_quiesced
   [[ "$(native_payload_digest "$payload")" == "$window_digest" ]]
   sudo -n test -f "$window/blocked"
-  sudo -n test ! -e "$window/await-observation"
-  sudo -n test ! -e "$window/closing"
   native_window_inputs "$candidate"
   policy="$(sudo -n readlink "$window/policy")"
   case "$policy" in observing) native_window_barriers observing ;; held) native_window_barriers check ;; *) return 1 ;; esac
@@ -465,8 +484,14 @@ native_window_settle() {
   archive="$window/settled-$(sudo -n cat "$native_recovery_dir/worker-pid")"
   since="@$(sudo -n sh -c 'stat -c %Y -- "$1"' sh "$native_recovery_dir/outcome")"
   for n in "${window_units[@]}"; do
-    native_window_terminal "$n"
     id="$(native_window_prop "$n" InvocationID)"
+    if [[ "$n" == "$po_socket" && "$(native_window_prop "$n" ActiveState)" == failed ]]; then
+      [[ "$(native_window_prop "$n" Result)" == trigger-limit-hit && -z "$(native_window_prop "$n" Job)" ]]
+      native_window_trip_receipt "$n" "$id" "$since"
+      sudo -n systemctl reset-failed "$n"
+      [[ "$(native_window_prop "$n" InvocationID)" == "$id" ]]
+    fi
+    native_window_terminal "$n"
     attempt+=("$n.requesting" "$n.job" "$n.started")
     if [[ "$n" == "$po_service" ]]; then
       [[ "$(native_window_prop "$n" ExecMainCode)" == 1 && "$(native_window_prop "$n" ExecMainStatus)" == 0 ]]
@@ -475,15 +500,27 @@ native_window_settle() {
     receipt="$window/$n.started"
     if ! sudo -n test -e "$receipt"; then receipt="$archive/$n.started"; fi
     [[ "$(sudo -n cat "$receipt")" =~ ^[0-9a-f]{32}\ [1-9][0-9]*\ $id$ ]]
-    native_window_stop_receipt "$n" "$id" "$since" >/dev/null
+    if ! native_window_stop_receipt "$n" "$id" "$since" >/dev/null; then
+      [[ "$n" == "$po_socket" ]]
+      native_window_trip_receipt "$n" "$id" "$since"
+    fi
   done
   for n in "${attempt[@]}"; do
     if sudo -n test -e "$window/$n"; then sudo -n test ! -e "$archive/$n"; else sudo -n test -e "$archive/$n"; fi
   done
+  for n in "${optional[@]}"; do
+    if sudo -n test -e "$window/$n"; then sudo -n test ! -e "$archive/$n"; fi
+  done
+  if [[ "$step" == accept ]]; then
+    if sudo -n test -d "$native_recovery_dir/accepting"; then sudo -n test ! -e "$archive/accepting"; else sudo -n test -d "$archive/accepting"; fi
+  else
+    sudo -n test ! -e "$native_recovery_dir/accepting"
+  fi
   if ! sudo -n test -d "$archive"; then sudo -n mkdir -m 0700 -- "$archive"; fi
-  for n in "${attempt[@]}"; do
+  for n in "${attempt[@]}" "${optional[@]}"; do
     if sudo -n test -e "$window/$n"; then sudo -n mv -T -- "$window/$n" "$archive/$n"; fi
   done
+  if sudo -n test -d "$native_recovery_dir/accepting"; then sudo -n mv -T -- "$native_recovery_dir/accepting" "$archive/accepting"; fi
   if [[ "$policy" == observing ]]; then native_window_barriers rearm; fi
   native_window_barriers check
   sudo -n sync -f "$window"
@@ -725,7 +762,7 @@ native_window_issuer_ready() {
     if [[ "$after" != "$current" ]]; then continue; fi
     case "$state" in
       ready) return 0 ;;
-      not_ready) return 1 ;;
+      not_ready) sleep 2; continue ;;
     esac
     start="$(native_window_prop "$po_service" ExecMainStartTimestampMonotonic)" || return 1
     [[ "$start" =~ ^[1-9][0-9]*$ ]] || return 1
