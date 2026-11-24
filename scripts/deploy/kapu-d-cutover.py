@@ -774,64 +774,24 @@ def unit_paths():
     return paths
 
 
-SERVICE_NAME = re.compile(r'[A-Za-z0-9:_.\\-]+\.service')
+UNIT_ID = re.compile(r'ids: (\S+) (?:\u2192|->) (\S.*)')
 
 
-def chased(path):
-    current, todo, hops = Path(path.anchor), list(path.parts[1:]), 0
-    while todo:
-        part = todo.pop(0)
-        if part == '..':
-            current = current.parent
-            continue
-        step = current / part
-        if step.is_symlink():
-            hops += 1
-            if hops > 32:
-                return None
-            link = Path(os.readlink(step))
-            if link.is_absolute():
-                current = Path(link.anchor)
-            todo[:0] = link.parts[1:] if link.is_absolute() else link.parts
-            continue
-        if not os.path.lexists(step):
-            return None if '..' in todo else step.joinpath(*todo)
-        if not step.is_dir():
-            return None
-        current = step
-    return current
-
-
-def unit_entry(root, e, search):
-    if not SERVICE_NAME.fullmatch(e.name):
-        return False
-    if not e.is_symlink():
-        return None if e.is_file(follow_symlinks=False) else False
-    target = root / os.readlink(e.path)
-    parent = chased(target.parent)
-    if parent is None:
-        return False
-    if not any((parent / target.name).is_relative_to(p) for p in search):
-        return None
-    if target.name == e.name or not SERVICE_NAME.fullmatch(target.name):
-        return False
-    return target.name
+def unit_names(name):
+    ids = {}
+    for line in run('systemd-analyze','unit-files').splitlines():
+        if found := UNIT_ID.fullmatch(line.strip()):
+            ids[found[1]] = found[2]
+    need(name + '.service' in ids, '불명 systemd unit 이름 맵: ' + name)
+    names = {name + '.service'}
+    while grown := {alias for alias, target in ids.items() if target in names} - names:
+        names |= grown
+    return {n.removesuffix('.service') for n in names}
 
 
 def service_dropins(name):
-    paths = unit_paths()
-    roots = [root for root in paths if root.is_dir()]
-    search = [Path(os.path.realpath(p)) for p in paths]
-    entries = {}
-    for root in roots:
-        for e in os.scandir(root):
-            entry = unit_entry(root, e, search)
-            if entry is not False and e.name not in entries:
-                entries[e.name] = entry
-    names = {name}
-    while grown := {alias.removesuffix('.service') for alias, target in entries.items()
-                    if target and target.removesuffix('.service') in names} - names:
-        names |= grown
+    names = unit_names(name)
+    roots = [root for root in unit_paths() if root.is_dir()]
     folders = {'service.d', *(n[:i+1] + '.service.d' for n in names for i,c in enumerate(n) if c == '-'),
                *(n + '.service.d' for n in names)}
     return sorted(str(root / f / k) for root in roots for f in folders if (root / f).is_dir()
