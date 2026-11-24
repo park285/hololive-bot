@@ -13,9 +13,9 @@ alarm-worker는 발송 시도마다 DB 행을 쓰지 않습니다. 전이 트랜
 
 | 근거 | 단위 | 내용 |
 | --- | --- | --- |
-| `message="YouTube community/shorts delivery attempt started"` | delivery 시도 | claim한 delivery의 발송 준비(메시지 포맷·요청 고정)와 SENDING 전이가 성공한 뒤 delivery마다 한 줄을 남깁니다. 준비 단계에서 실패한 claim은 이 줄 없이 delivery result 줄만 남으므로, 이 줄로 claim 횟수나 최초 대기 시간을 복원할 수 없습니다. `attempt_ordinal`은 claim 시점 `attempt_count + 1`이며, revive가 `attempt_count`를 0으로 되돌리면 1부터 다시 셉니다. 같은 `(delivery_id, attempt_ordinal)`이 두 번 나오면 `attempt_started_at`으로 시도를 구분합니다. |
+| `message="YouTube community/shorts delivery attempt started"` | delivery 시도 | claim한 delivery의 발송 준비(메시지 포맷·요청 고정)와 SENDING 전이가 성공한 뒤 delivery마다 한 줄을 남깁니다. 준비 단계에서 실패한 claim은 이 줄 없이 delivery result 줄만 남고, grouped 발송이 room별 발송으로 나뉠 때 room별 발송도 이 줄을 따로 남기지 않으므로, 이 줄로 claim 횟수나 최초 대기 시간을 복원할 수 없습니다. `attempt_ordinal`은 claim 시점 `attempt_count + 1`이며, revive가 `attempt_count`를 0으로 되돌리면 1부터 다시 셉니다. 같은 `(delivery_id, attempt_ordinal)`이 두 번 나오면 `attempt_started_at`으로 시도를 구분합니다. |
 | `message="YouTube community/shorts delivery result"` | 발송 한 번(grouped 또는 per_room) | 대상·성공·실패 알람 수와 room 수, room이 하나면 `room_id`, 실패면 `failure_reason`(100자까지)을 남깁니다. |
-| `message="YouTube community/shorts delivery audit"`, `telemetry_source = outbox_final_result` | 게시물(outbox) | delivery 발송을 거쳐 outbox가 SENT 또는 FAILED로 끝나면 한 줄을 남깁니다. 아래 필드 표를 따릅니다. fan-out 단계에서 끝난 outbox(구독 room 조회 재시도 소진으로 delivery 없이 FAILED, 구독 room 없이 SENT)는 이 줄을 남기지 않으므로 Fallback SQL의 `outbox_status`로 확인합니다. |
+| `message="YouTube community/shorts delivery audit"`, `telemetry_source = outbox_final_result` | 게시물(outbox) | delivery 발송을 거쳐 outbox가 SENT 또는 FAILED로 끝나면 한 줄을 남깁니다. 아래 필드 표를 따릅니다. fan-out 단계에서 끝난 outbox(구독 room 조회 재시도 소진으로 delivery 없이 FAILED, 구독 room 없이 SENT)와 PENDING delivery가 `delivery freshness expired`로 만료돼 FAILED가 된 outbox는 이 줄을 남기지 않으므로 Fallback SQL의 `outbox_status`와 delivery `error`로 확인합니다. |
 | `youtube_notification_delivery` | room별 delivery | `status`, `attempt_count`, `sent_at`, `error`의 현재 값입니다. outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 outbox와 함께 지워집니다. |
 | `youtube_notification_delivery_ledger` | `(kind, logical_id, room_id)` | room별 `SENT`·`QUARANTINED` 확정 원장입니다. `logical_id`는 `short:…`, `community:…` 형식입니다. |
 | `youtube_content_alarm_tracking` | 게시물 | `actual_published_at`, `detected_at`, `alarm_sent_at`, `alarm_latency_millis`, `alarm_latency_exceeded`입니다. |
@@ -23,7 +23,7 @@ alarm-worker는 발송 시도마다 DB 행을 쓰지 않습니다. 전이 트랜
 - 최종 결과 줄의 `send_result = success`는 Iris가 요청을 접수(202)해 delivery가 SENT로 바뀐 시점의 판정입니다. 그 뒤 handoff 확인(`youtube-delivery-handoff-reconciler`)이 정산하면 delivery·outbox 상태와 SENT 원장이 바뀝니다. 재발급이면 outbox가 PENDING으로 돌아가 다시 발송한 뒤 같은 `outbox_id`의 최종 결과 줄이 한 번 더 남으므로, 같은 `outbox_id`의 마지막 줄이 최신 판정입니다. 재시도 소진·격리로 정산되면 최종 결과 줄은 다시 남지 않습니다.
 - 결과 불명 시도(오래 남은 SENDING)는 stale sweep이 `QUARANTINED`로 격리하고 건수를 로그로 남깁니다. 재발송하지 않으며, 운영자는 해당 delivery를 전송 증거로 검토합니다.
 - 시도 단위 결과를 게시물과 잇는 공통 식별자는 없습니다. attempt started 줄에는 `delivery_id`·`outbox_id`·`post_id`·`room_id`·`attempt_started_at`이 있고, delivery result 줄에는 발송 한 번의 room(대상 room이 하나일 때 `room_id`)과 결과만 있습니다. grouped 발송은 한 room의 여러 게시물을 요청 하나로 보내므로 같은 결과를 공유합니다. 그래서 같은 `room_id`와 시각으로 두 줄을 대조하고, 게시물별 최종 결과는 최종 결과 줄과 delivery의 현재 상태로 확인합니다.
-- 결과 줄이 남지 않는 경로가 있습니다. per-room 메시지 누락과 발송 전 식별자 오류는 Warn 줄과 지표만 남기고, stale sweep 격리는 건수만 남깁니다. 이때는 delivery의 `status`와 마지막 실패 사유 `error`(시도마다 덮어씀)로 확인합니다.
+- 결과 줄이 남지 않는 경로가 있습니다. per-room 메시지 누락은 지표만, 발송 전 식별자 오류는 `Failed to resolve delivery logical identity before send` Warn 줄과 지표만 남기고, stale sweep 격리는 건수만 남깁니다. 이때는 delivery의 `status`와 마지막 실패 사유 `error`(시도마다 덮어씀)로 확인합니다.
 - `post_id`는 content_id와 payload `canonical_post_id`가 일치함을 검증한 logical key(`short:…`, `community:…`)입니다. 식별자가 잘못되면 대체 ID 없이 `invalid:<kind>:<reason>` 라벨을 남깁니다.
 
 ## Canonical Validation Log
@@ -51,7 +51,7 @@ alarm-worker는 발송 시도마다 DB 행을 쓰지 않습니다. 전이 트랜
 | `sent_at` | outbox가 SENT면 그 발송 시각, 아니면 최종 결과를 기록한 시각입니다. | `RFC3339 timestamp string` | `2026-04-10T00:02:05Z` |
 | `target_room_count`, `successful_room_count`, `failed_room_count` | 게시물의 대상·성공·실패 room 수입니다. | `integer` | `3` |
 | `actual_published_at` | tracking의 실제 게시 시각입니다. 없으면 빠집니다. | `RFC3339 timestamp string` | `2026-04-10T00:01:10Z` |
-| `alarm_sent_at` | tracking의 최초 발송 완료 시각입니다. Iris 접수 시각이거나, 구독 room이 없어 delivery 없이 끝난 outbox의 `sent_at`입니다. handoff 확인이 실패로 정산돼도 지워지지 않습니다. tracking 행이 없으면 outbox `sent_at`입니다. tracking 조회가 실패하면 `actual_published_at`·`alarm_sent_at`·`alarm_latency_millis`·`alarm_latency_exceeded`가 모두 빠지고 `YouTube community/shorts final result tracking unavailable` Warn 줄이 `outbox_ids`와 함께 남습니다. | `RFC3339 timestamp string` | `2026-04-10T00:02:05Z` |
+| `alarm_sent_at` | tracking의 최초 발송 완료 시각입니다. Iris 접수 시각이거나, 같은 게시물의 다른 outbox가 구독 room 없이 끝나 collector가 옮겨 적은 그 outbox의 `sent_at`입니다. handoff 확인이 실패로 정산돼도 지워지지 않습니다. tracking 행이 없으면 outbox `sent_at`입니다. tracking 조회가 실패하면 `actual_published_at`·`alarm_sent_at`·`alarm_latency_millis`·`alarm_latency_exceeded`가 모두 빠지고 `YouTube community/shorts final result tracking unavailable` Warn 줄이 `outbox_ids`와 함께 남습니다. | `RFC3339 timestamp string` | `2026-04-10T00:02:05Z` |
 | `alarm_latency_millis` | `alarm_sent_at - actual_published_at`입니다. 둘 중 하나라도 없으면 빠집니다. | `integer(int64)` | `55000` |
 | `alarm_latency_exceeded` | 실제 게시 시각 기준 2분(120000ms) 초과 여부입니다. 내부 원인이어도 늦게나마 1회 발송돼야 하며 이 값은 기록용입니다. | `bool` | `false` |
 | `failure_reason` | 실패한 room들의 사유를 모은 값입니다. 성공이면 빠집니다. | `string` | `provider_rate_limited` |
