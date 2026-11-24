@@ -57,7 +57,7 @@ func TestApplyPreparedFailureRejectsStaleClaim(t *testing.T) {
 
 	result, err := first.ApplyPreparedFailure(
 		ctx, firstClaim.rows, firstClaim.outboxes,
-		lifecycle.FailurePermanent, lifecycle.Reason("message_missing"), 0, DeliveryModePerRoom,
+		lifecycle.FailurePermanent, lifecycle.Reason("message_missing"), 0,
 	)
 	requireClaimFenceMiss(t, err, deliveryID, sendfence.ReasonVersionChanged)
 	require.Equal(t, ApplyConflict, result.Outcome)
@@ -125,7 +125,7 @@ func TestSettlementAfterSendingIgnoresExpiredLease(t *testing.T) {
 		{
 			name: "complete sent",
 			settle: func(ctx context.Context, transition *TransitionStore, operation StartedOperation, admission HandoffAdmission) (ApplyResult, error) {
-				return transition.CompleteSent(ctx, operation, DeliveryModePerRoom, admission)
+				return transition.CompleteSent(ctx, operation, admission)
 			},
 			status: domain.OutboxStatusSent,
 		},
@@ -133,7 +133,7 @@ func TestSettlementAfterSendingIgnoresExpiredLease(t *testing.T) {
 			name: "retryable provider failure",
 			settle: func(ctx context.Context, transition *TransitionStore, operation StartedOperation, _ HandoffAdmission) (ApplyResult, error) {
 				return transition.ApplyStartedFailure(
-					ctx, operation, lifecycle.FailureRetryable, lifecycle.Reason("provider_transport"), 0, DeliveryModePerRoom,
+					ctx, operation, lifecycle.FailureRetryable, lifecycle.Reason("provider_transport"), 0,
 				)
 			},
 			status: domain.OutboxStatusPending, attempt: 1,

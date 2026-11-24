@@ -19,8 +19,8 @@ const (
 	sendResultSuccess = "success"
 	sendResultFailure = "failure"
 
-	deliveryModeGrouped = string(store.DeliveryModeGrouped)
-	deliveryModePerRoom = string(store.DeliveryModePerRoom)
+	deliveryModeGrouped = "grouped"
+	deliveryModePerRoom = "per_room"
 )
 
 type AuditLogger struct {

@@ -132,7 +132,7 @@ func (s *TransitionStore) quarantineStaleTx(
 
 	cutoff := checkedAt.Add(-s.config.LockTimeout)
 
-	result, transitions, writes, attempts, err := buildQuarantineChanges(resolved, transitionRowIDSet(candidates), cutoff)
+	result, transitions, writes, err := buildQuarantineChanges(resolved, transitionRowIDSet(candidates), cutoff)
 	if err != nil {
 		return QuarantineResult{}, transitions, writes, fmt.Errorf("quarantine logical groups: build changes: %w", err)
 	}
@@ -150,10 +150,6 @@ func (s *TransitionStore) quarantineStaleTx(
 
 	if err := RecordDeliveryLedgerWrites(ctx, tx, LedgerStatusQuarantined, writes); err != nil {
 		return result, transitions, writes, fmt.Errorf("quarantine logical groups: record ledger: %w", err)
-	}
-
-	if err := recordAttemptTelemetry(ctx, tx, deliveryModeStaleSweep, attempts, quarantinedAt); err != nil {
-		return result, transitions, writes, fmt.Errorf("quarantine logical groups: record telemetry: %w", err)
 	}
 
 	result.ApplyResult = newApplyResult(ApplyApplied, touched)
@@ -175,12 +171,11 @@ func buildQuarantineChanges(
 	resolved resolvedLogicalGroups,
 	candidateIDs map[int64]struct{},
 	cutoff time.Time,
-) (QuarantineResult, []rowTransition, []LedgerWrite, []deliveryAttempt, error) {
+) (QuarantineResult, []rowTransition, []LedgerWrite, error) {
 	var (
 		result      QuarantineResult
 		transitions []rowTransition
 		writes      []LedgerWrite
-		attempts    []deliveryAttempt
 	)
 
 	for i := range resolved.resolutions {
@@ -188,7 +183,7 @@ func buildQuarantineChanges(
 			resolved.resolutions[i], resolved, candidateIDs, cutoff,
 		)
 		if err != nil {
-			return result, transitions, writes, attempts, fmt.Errorf("quarantine logical groups: resolution %d: %w", i, err)
+			return result, transitions, writes, fmt.Errorf("quarantine logical groups: resolution %d: %w", i, err)
 		}
 
 		transitions = append(transitions, change.transitions...)
@@ -197,22 +192,17 @@ func buildQuarantineChanges(
 			writes = append(writes, *change.write)
 		}
 
-		if change.attempt != nil {
-			attempts = append(attempts, *change.attempt)
-		}
-
 		if change.blocked != nil {
 			result.Blocked = append(result.Blocked, *change.blocked)
 		}
 	}
 
-	return result, transitions, writes, attempts, nil
+	return result, transitions, writes, nil
 }
 
 type quarantineResolutionChange struct {
 	transitions []rowTransition
 	write       *LedgerWrite
-	attempt     *deliveryAttempt
 	blocked     *BlockedLogicalGroup
 }
 
@@ -276,19 +266,9 @@ func quarantineInFlightResolution(
 		transitions = append(transitions, quarantineTransition(row))
 	}
 
-	ownerRow, err := transitionRowFromSnapshot(owner, rowsByID)
-	if err != nil {
-		return quarantineResolutionChange{}, fmt.Errorf("quarantine logical groups: owner row: %w", err)
-	}
-
 	write := &LedgerWrite{Key: resolution.Key(), SourceDeliveryID: owner.DeliveryID}
-	attempt := &deliveryAttempt{
-		group:  startedLogicalGroup{key: resolution.Key(), ownerBefore: ownerRow, ownerAfter: ownerRow},
-		result: attemptResultOutcomeUnknown,
-		reason: staleSendingOutcomeUnknownReason,
-	}
 
-	return quarantineResolutionChange{transitions: transitions, write: write, attempt: attempt}, nil
+	return quarantineResolutionChange{transitions: transitions, write: write}, nil
 }
 
 func quarantineFulfilledResolution(

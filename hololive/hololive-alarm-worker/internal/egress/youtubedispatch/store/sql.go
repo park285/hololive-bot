@@ -58,7 +58,6 @@ var (
 	transitionReadRowsSQL                        = mustSQL("transition_read_rows.sql")
 	transitionReviveCandidatesSQL                = mustSQL("transition_revive_candidates.sql")
 	transitionStaleSendingSQL                    = mustSQL("transition_stale_sending.sql")
-	transitionTelemetryLastAttemptSQL            = mustSQL("transition_telemetry_last_attempt.sql")
 )
 
 var (

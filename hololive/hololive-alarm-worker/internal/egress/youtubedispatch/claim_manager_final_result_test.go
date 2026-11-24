@@ -148,8 +148,6 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 	assertLogIntField(t, entry, FieldSuccessfulRoomCount, 1)
 	assertLogIntField(t, entry, FieldFailedRoomCount, 0)
 	assertLogTimeField(t, entry, FieldSentAt)
-
-	require.NotContains(t, entry, FieldLatencyClassification)
 }
 
 func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult(t *testing.T) {
@@ -209,8 +207,6 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 	assertLogIntField(t, entry, FieldSuccessfulRoomCount, 1)
 	assertLogIntField(t, entry, FieldFailedRoomCount, 0)
 	assertLogTimeField(t, entry, FieldSentAt)
-
-	require.NotContains(t, entry, FieldLatencyClassification)
 }
 
 func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testing.T) {
@@ -268,8 +264,6 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	assertLogIntField(t, entry, FieldSuccessfulRoomCount, 0)
 	assertLogIntField(t, entry, FieldFailedRoomCount, 1)
 	assertLogTimeField(t, entry, FieldSentAt)
-
-	require.NotContains(t, entry, FieldLatencyClassification)
 }
 
 func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *pgxpool.Pool, sender *finalResultTestSender, config *Config) (*Dispatcher, *bytes.Buffer) {

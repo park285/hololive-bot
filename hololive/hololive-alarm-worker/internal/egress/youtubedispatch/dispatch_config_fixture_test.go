@@ -22,10 +22,6 @@ func testDispatchConfig() Config {
 		DeliverySendTimeout:         10 * time.Second,
 		SubscriberLookupParallelism: 16,
 		AggregateSyncInterval:       30 * time.Second,
-		TelemetryPollInterval:       30 * time.Second,
-		TelemetryFlushBatch:         200,
-		TelemetryRetryBackoff:       30 * time.Second,
-		TelemetryRetention:          24 * time.Hour,
 		HandoffHorizon:              5 * time.Minute,
 	}
 }
@@ -53,10 +49,6 @@ func withTestDispatchConfigDefaults(config *Config) *Config {
 		DeliverySendTimeout:         cmp.Or(config.DeliverySendTimeout, base.DeliverySendTimeout),
 		SubscriberLookupParallelism: cmp.Or(config.SubscriberLookupParallelism, base.SubscriberLookupParallelism),
 		AggregateSyncInterval:       cmp.Or(config.AggregateSyncInterval, base.AggregateSyncInterval),
-		TelemetryPollInterval:       cmp.Or(config.TelemetryPollInterval, base.TelemetryPollInterval),
-		TelemetryFlushBatch:         cmp.Or(config.TelemetryFlushBatch, base.TelemetryFlushBatch),
-		TelemetryRetryBackoff:       cmp.Or(config.TelemetryRetryBackoff, base.TelemetryRetryBackoff),
-		TelemetryRetention:          cmp.Or(config.TelemetryRetention, base.TelemetryRetention),
 		HandoffHorizon:              cmp.Or(config.HandoffHorizon, base.HandoffHorizon),
 	}
 

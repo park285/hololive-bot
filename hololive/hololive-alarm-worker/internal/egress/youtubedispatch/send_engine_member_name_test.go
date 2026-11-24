@@ -11,7 +11,6 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
@@ -71,7 +70,7 @@ func TestDispatchDeliveryRows_GroupedFormatFailureRetriesWholeGroup(t *testing.T
 				t.Fatalf("transition = %T, want lifecycle spy", d.send.transition)
 			}
 
-			want := []string{fmt.Sprintf("%v/%v/%v", ytlifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModeGrouped)}
+			want := []string{fmt.Sprintf("%v/%v", ytlifecycle.FailureRetryable, lifecycleReasonFormat)}
 			if got := spy.recordedPreparedFailures(); !slices.Equal(got, want) {
 				t.Fatalf("prepared failures = %v, want %v", got, want)
 			}
@@ -145,7 +144,7 @@ func TestDispatchDeliveryRows_PerRoomMemberNameLookupFailureRetriesWithoutSendin
 		t.Fatalf("transition = %T, want lifecycle spy", d.send.transition)
 	}
 
-	want := []string{fmt.Sprintf("%v/%v/%v", ytlifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModePerRoom)}
+	want := []string{fmt.Sprintf("%v/%v", ytlifecycle.FailureRetryable, lifecycleReasonFormat)}
 	if got := spy.recordedPreparedFailures(); !slices.Equal(got, want) {
 		t.Fatalf("prepared failures = %v, want %v", got, want)
 	}

@@ -257,19 +257,8 @@ func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation
 		return errors.New("advance request generation: generation fence changed")
 	}
 
-	_, failedAt, err := applyRowTransitions(ctx, tx, "advance request generation", transitions)
-	if err != nil {
+	if _, _, err := applyRowTransitions(ctx, tx, "advance request generation", transitions); err != nil {
 		return fmt.Errorf("advance request generation: retry transition: %w", err)
-	}
-
-	mode := DeliveryModePerRoom
-
-	if operation.OwnerCount() > 1 {
-		mode = DeliveryModeGrouped
-	}
-
-	if err := recordAttemptTelemetry(ctx, tx, mode, ownerAttempts(operation.groups, attemptResultFailure, "provider_transport"), failedAt); err != nil {
-		return fmt.Errorf("advance request generation: telemetry: %w", err)
 	}
 
 	return nil

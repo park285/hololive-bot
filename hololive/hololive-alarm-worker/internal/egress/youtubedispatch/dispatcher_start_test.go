@@ -87,8 +87,6 @@ func TestDispatcherRunProcessesPendingOutboxImmediately(t *testing.T) {
 		DeliveryParallelism: 2,
 	})
 
-	dispatcher.telemetry = nil
-
 	item := domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
 		ChannelID:     "UCstart",
@@ -126,7 +124,6 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 		CleanupEnabled:      false,
 	})
 
-	dispatcher.telemetry = nil
 	dispatcher.setOnProcessOnce(probe.tick)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -209,7 +206,6 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 		CleanupEnabled: true,
 	})
 
-	dispatcher.telemetry = nil
 	dispatcher.cleanupInterval = 10 * time.Millisecond
 	dispatcher.setOnCleanup(probe.tick)
 
@@ -241,7 +237,6 @@ func TestDispatcherRunWaitsForDelayedBackgroundLoopExit(t *testing.T) {
 	dispatcher := newDispatcherForTest(t, nil, nil, nil, nil, slog.New(slog.DiscardHandler), &Config{
 		PollInterval:          time.Hour,
 		AggregateSyncInterval: time.Hour,
-		TelemetryPollInterval: time.Hour,
 		CleanupEnabled:        false,
 		ReviveEnabled:         false,
 	})

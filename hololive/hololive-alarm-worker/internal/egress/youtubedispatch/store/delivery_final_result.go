@@ -33,6 +33,7 @@ type TerminalCommunityShortsOutboxResult struct {
 
 type terminalCommunityShortsOutbox struct {
 	domain.YouTubeNotificationOutbox
+
 	Tracked            bool       `db:"tracked"`
 	ActualPublishedAt  *time.Time `db:"tracked_actual_published_at"`
 	AlarmSentAt        *time.Time `db:"tracked_alarm_sent_at"`

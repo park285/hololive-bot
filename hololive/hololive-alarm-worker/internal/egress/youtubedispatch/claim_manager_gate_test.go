@@ -101,7 +101,6 @@ func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, confi
 		slog.New(slog.DiscardHandler), config,
 	)
 
-	dispatcher.telemetry = nil
 	dispatcher.send.transition = &lifecycleTransitionSpy{complete: store.ApplyResult{Outcome: store.ApplyApplied}}
 
 	return dispatcher, db

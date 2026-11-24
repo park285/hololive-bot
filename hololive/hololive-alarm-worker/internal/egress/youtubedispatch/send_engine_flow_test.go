@@ -89,7 +89,7 @@ func TestDispatchDeliveryRowsPassesProviderRetryAfterToFailureTransition(t *test
 		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
 
-	want := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 2*time.Second, store.DeliveryModePerRoom)}
+	want := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 2*time.Second)}
 	if got := transitionSpy(t, d).recordedStartedFailures(); !slices.Equal(got, want) {
 		t.Fatalf("started failures = %v, want %v", got, want)
 	}

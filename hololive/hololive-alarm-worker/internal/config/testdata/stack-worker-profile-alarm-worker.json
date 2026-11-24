@@ -51,10 +51,6 @@
         "revive_freshness_window_ms": 3600000,
         "subscriber_lookup_parallelism": 16,
         "aggregate_sync_interval_ms": 30000,
-        "telemetry_poll_interval_ms": 30000,
-        "telemetry_flush_batch": 200,
-        "telemetry_retry_backoff_ms": 30000,
-        "telemetry_retention_ms": 86400000,
         "handoff_horizon_ms": 300000
       }
     }

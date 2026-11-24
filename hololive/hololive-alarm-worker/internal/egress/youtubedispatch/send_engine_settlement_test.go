@@ -54,10 +54,10 @@ func (s *settlementTransition) boundary() {
 	s.db.armed = true
 }
 
-func (s *settlementTransition) CompleteSent(ctx context.Context, op store.StartedOperation, mode store.DeliveryMode, admission store.HandoffAdmission) (store.ApplyResult, error) {
+func (s *settlementTransition) CompleteSent(ctx context.Context, op store.StartedOperation, admission store.HandoffAdmission) (store.ApplyResult, error) {
 	s.boundary()
 
-	result, err := s.TransitionStore.CompleteSent(ctx, op, mode, admission)
+	result, err := s.TransitionStore.CompleteSent(ctx, op, admission)
 
 	s.results = append(s.results, result)
 
@@ -68,10 +68,10 @@ func (s *settlementTransition) CompleteSent(ctx context.Context, op store.Starte
 	return result, nil
 }
 
-func (s *settlementTransition) ApplyStartedFailure(ctx context.Context, op store.StartedOperation, kind lifecycle.FailureKind, reason lifecycle.Reason, after time.Duration, mode store.DeliveryMode) (store.ApplyResult, error) {
+func (s *settlementTransition) ApplyStartedFailure(ctx context.Context, op store.StartedOperation, kind lifecycle.FailureKind, reason lifecycle.Reason, after time.Duration) (store.ApplyResult, error) {
 	s.boundary()
 
-	result, err := s.TransitionStore.ApplyStartedFailure(ctx, op, kind, reason, after, mode)
+	result, err := s.TransitionStore.ApplyStartedFailure(ctx, op, kind, reason, after)
 
 	s.results = append(s.results, result)
 
@@ -430,7 +430,7 @@ func assertSettlementState(t *testing.T, f *settlementFixture, path, outcome str
 	success := outcome == sendResultSuccess || outcome == settlementOutcomeCommitLost
 	unknown := outcome == settlementOutcomeUnknown
 	assertSettlementRows(t, f, outcome, success, unknown)
-	assertSettlementEffects(t, f, path, success, unknown, result)
+	assertSettlementEffects(t, f, success, unknown, result)
 	assertSettlementFrozenRequests(t, f, path, outcome)
 }
 
@@ -475,23 +475,18 @@ func assertSettlementRows(t *testing.T, f *settlementFixture, outcome string, su
 	}
 }
 
-func assertSettlementEffects(t *testing.T, f *settlementFixture, path string, success, unknown bool, result DispatchResult) {
+func assertSettlementEffects(t *testing.T, f *settlementFixture, success, unknown bool, result DispatchResult) {
 	t.Helper()
 
-	var ledger, alarmTracking, telemetry int
+	var ledger, alarmTracking int
 
 	require.NoError(t, f.pool.QueryRow(t.Context(), `SELECT count(*) FROM youtube_notification_delivery_ledger WHERE status='SENT'`).Scan(&ledger))
 	require.NoError(t, f.pool.QueryRow(t.Context(), `SELECT count(*) FROM youtube_community_shorts_alarm_states WHERE alarm_sent_at IS NOT NULL`).Scan(&alarmTracking))
-	require.NoError(t, f.pool.QueryRow(t.Context(), `SELECT count(*) FROM youtube_notification_delivery_telemetry`).Scan(&telemetry))
 
-	wantSuccess, wantTelemetry := 0, len(f.rows)
+	wantSuccess := 0
 
 	if success {
 		wantSuccess = len(f.rows)
-	}
-
-	if unknown {
-		wantTelemetry = 0
 	}
 
 	require.Equal(t, wantSuccess, ledger)
@@ -506,7 +501,6 @@ func assertSettlementEffects(t *testing.T, f *settlementFixture, path string, su
 	}
 
 	require.Len(t, result.SuccessDeliveryIDs, wantSuccess)
-	require.Equal(t, wantTelemetry, telemetry)
 
 	if !success && !unknown {
 		require.Equal(t, len(f.rows), result.FailedDeliveries)
@@ -514,23 +508,6 @@ func assertSettlementEffects(t *testing.T, f *settlementFixture, path string, su
 
 	if unknown {
 		require.Zero(t, result.FailedDeliveries)
-	}
-
-	if !unknown {
-		mode, sendResult := string(store.DeliveryModePerRoom), sendResultFailure
-
-		if path == "grouped" || path == "frozen_grouped" {
-			mode = "grouped"
-		}
-
-		if success {
-			sendResult = sendResultSuccess
-		}
-
-		var matching int
-
-		require.NoError(t, f.pool.QueryRow(t.Context(), `SELECT count(*) FROM youtube_notification_delivery_telemetry WHERE delivery_mode=$1 AND send_result=$2 AND attempt_ordinal=1`, mode, sendResult).Scan(&matching))
-		require.Equal(t, wantTelemetry, matching)
 	}
 }
 
@@ -924,13 +901,11 @@ func assertReissuedSettlementSent(t *testing.T, f *settlementFixture, request *s
 	require.Len(t, f.transition.results, 1)
 	require.Equal(t, store.ApplyApplied, f.transition.results[0].Outcome)
 
-	var sent, ledger, failedAttempts, successfulAttempts int
+	var sent, ledger int
 
 	require.NoError(t, f.pool.QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM youtube_notification_delivery WHERE status='SENT' AND attempt_count=1 AND row_version=6 AND locked_at IS NULL),
-		(SELECT count(*) FROM youtube_notification_delivery_ledger WHERE status='SENT'),
-		(SELECT count(*) FROM youtube_notification_delivery_telemetry WHERE send_result='failure' AND attempt_ordinal=1),
-		(SELECT count(*) FROM youtube_notification_delivery_telemetry WHERE send_result='success' AND attempt_ordinal=2)
-	`).Scan(&sent, &ledger, &failedAttempts, &successfulAttempts))
-	require.Equal(t, []int{len(f.rows), len(f.rows), len(f.rows), len(f.rows)}, []int{sent, ledger, failedAttempts, successfulAttempts})
+		(SELECT count(*) FROM youtube_notification_delivery_ledger WHERE status='SENT')
+	`).Scan(&sent, &ledger))
+	require.Equal(t, []int{len(f.rows), len(f.rows)}, []int{sent, ledger})
 }

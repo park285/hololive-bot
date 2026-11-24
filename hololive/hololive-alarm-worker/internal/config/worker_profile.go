@@ -69,9 +69,6 @@ func positiveValueProblems(profile *AlarmWorkerProfile) []string {
 		"youtube_delivery.revive_interval_ms":         profile.YouTubeDelivery.ReviveIntervalMS,
 		"youtube_delivery.revive_freshness_window_ms": profile.YouTubeDelivery.ReviveFreshnessWindowMS,
 		"youtube_delivery.aggregate_sync_interval_ms": profile.YouTubeDelivery.AggregateSyncIntervalMS,
-		"youtube_delivery.telemetry_poll_interval_ms": profile.YouTubeDelivery.TelemetryPollIntervalMS,
-		"youtube_delivery.telemetry_retry_backoff_ms": profile.YouTubeDelivery.TelemetryRetryBackoffMS,
-		"youtube_delivery.telemetry_retention_ms":     profile.YouTubeDelivery.TelemetryRetentionMS,
 		"youtube_delivery.handoff_horizon_ms":         profile.YouTubeDelivery.HandoffHorizonMS,
 	})
 }
@@ -84,7 +81,6 @@ func positiveIntProblems(profile *AlarmWorkerProfile) []string {
 		"youtube_delivery.batch_size":                    profile.YouTubeDelivery.BatchSize,
 		"youtube_delivery.max_retries":                   profile.YouTubeDelivery.MaxRetries,
 		"youtube_delivery.subscriber_lookup_parallelism": profile.YouTubeDelivery.SubscriberLookupParallelism,
-		"youtube_delivery.telemetry_flush_batch":         profile.YouTubeDelivery.TelemetryFlushBatch,
 	})
 }
 

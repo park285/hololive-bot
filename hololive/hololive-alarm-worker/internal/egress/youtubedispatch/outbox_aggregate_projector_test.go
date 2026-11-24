@@ -269,7 +269,7 @@ func completeAggregateProjectionDelivery(
 	require.Equal(t, store.ApplyApplied, begin.Outcome)
 	require.True(t, operation.Valid())
 
-	completed, err := transition.CompleteSent(ctx, operation, store.DeliveryModePerRoom, store.HandoffAdmission{
+	completed, err := transition.CompleteSent(ctx, operation, store.HandoffAdmission{
 		RequestBaseID: frozen.BaseID, RequestGeneration: frozen.Generation, IrisRequestID: "iris-aggregate-race", Horizon: time.Minute,
 	})
 	require.NoError(t, err)

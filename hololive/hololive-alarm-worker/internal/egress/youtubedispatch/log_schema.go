@@ -23,7 +23,6 @@ const (
 	FieldDedupeKey                        = "dedupe_key"
 	FieldAttemptOrdinal                   = "attempt_ordinal"
 	FieldAttemptStartedAt                 = "attempt_started_at"
-	FieldLatencyClassification            = "latency_classification"
 	FieldTelemetrySource                  = "telemetry_source"
 	FieldTargetAlarmCount                 = "target_alarm_count"
 	FieldSuccessfulAlarmCount             = "successful_alarm_count"
@@ -31,7 +30,6 @@ const (
 	FieldTargetRoomCount                  = "target_room_count"
 	FieldSuccessfulRoomCount              = "successful_room_count"
 	FieldFailedRoomCount                  = "failed_room_count"
-	TelemetrySourcePersistentBuffer       = "persistent_buffer"
 	TelemetrySourceOutboxFinalResult      = "outbox_final_result"
 	DeliveryModeFinalResult               = "final_result"
 )

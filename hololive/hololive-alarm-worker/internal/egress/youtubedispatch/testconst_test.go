@@ -37,7 +37,6 @@ const (
 
 	testTableOutbox               = "youtube_notification_outbox"
 	testTableDelivery             = "youtube_notification_delivery"
-	testTableDeliveryTelemetry    = "youtube_notification_delivery_telemetry"
 	testTableContentAlarmTracking = "youtube_content_alarm_tracking"
 
 	testPayloadVideoOne = `{"video_id":"v1","title":"영상1"}`

@@ -413,10 +413,6 @@ func youtubeDispatchConfig(appConfig *workerconfig.RuntimeConfig) youtubedispatc
 		DeliverySendTimeout:         attemptTimeout,
 		SubscriberLookupParallelism: profile.SubscriberLookupParallelism,
 		AggregateSyncInterval:       workercontract.Milliseconds(profile.AggregateSyncIntervalMS),
-		TelemetryPollInterval:       workercontract.Milliseconds(profile.TelemetryPollIntervalMS),
-		TelemetryFlushBatch:         profile.TelemetryFlushBatch,
-		TelemetryRetryBackoff:       workercontract.Milliseconds(profile.TelemetryRetryBackoffMS),
-		TelemetryRetention:          workercontract.Milliseconds(profile.TelemetryRetentionMS),
 		HandoffHorizon:              workercontract.Milliseconds(profile.HandoffHorizonMS),
 	}
 }

@@ -44,11 +44,11 @@ type lifecycleTransitionSpy struct {
 	startedFailures   []string
 }
 
-func (s *lifecycleTransitionSpy) recordMode(operation string, mode store.DeliveryMode) {
+func (s *lifecycleTransitionSpy) recordMode(operation string) {
 	s.modesMu.Lock()
 	defer s.modesMu.Unlock()
 
-	s.modes = append(s.modes, operation+":"+string(mode))
+	s.modes = append(s.modes, operation)
 }
 
 func (s *lifecycleTransitionSpy) recordedModes() []string {
@@ -79,10 +79,9 @@ func (s *lifecycleTransitionSpy) ApplyPreparedFailure(
 	kind ytlifecycle.FailureKind,
 	reason ytlifecycle.Reason,
 	_ time.Duration,
-	mode store.DeliveryMode,
 ) (store.ApplyResult, error) {
-	s.recordMode("prepared_failure", mode)
-	s.recordPreparedFailure(kind, reason, mode)
+	s.recordMode("prepared_failure")
+	s.recordPreparedFailure(kind, reason)
 
 	return store.ApplyResult{Outcome: store.ApplyApplied}, nil
 }
@@ -93,11 +92,10 @@ func (s *lifecycleTransitionSpy) ApplyStartedFailure(
 	kind ytlifecycle.FailureKind,
 	reason ytlifecycle.Reason,
 	retryAfter time.Duration,
-	mode store.DeliveryMode,
 ) (store.ApplyResult, error) {
 	s.startedFailureCalls.Add(1)
-	s.recordMode("started_failure", mode)
-	s.recordStartedFailure(kind, reason, retryAfter, mode)
+	s.recordMode("started_failure")
+	s.recordStartedFailure(kind, reason, retryAfter)
 
 	return store.ApplyResult{Outcome: store.ApplyApplied}, nil
 }
@@ -105,11 +103,10 @@ func (s *lifecycleTransitionSpy) ApplyStartedFailure(
 func (s *lifecycleTransitionSpy) CompleteSent(
 	_ context.Context,
 	_ store.StartedOperation,
-	mode store.DeliveryMode,
 	_ store.HandoffAdmission,
 ) (store.ApplyResult, error) {
 	s.completeCalls.Add(1)
-	s.recordMode("complete_sent", mode)
+	s.recordMode("complete_sent")
 
 	return s.complete, s.completeErr
 }
@@ -241,11 +238,11 @@ func (s *lifecycleTransitionSpy) FreezeFallbackRequests(_ context.Context, _ sto
 	return requests, nil
 }
 
-func (s *lifecycleTransitionSpy) recordPreparedFailure(kind ytlifecycle.FailureKind, reason ytlifecycle.Reason, mode store.DeliveryMode) {
+func (s *lifecycleTransitionSpy) recordPreparedFailure(kind ytlifecycle.FailureKind, reason ytlifecycle.Reason) {
 	s.preparedFailuresMu.Lock()
 	defer s.preparedFailuresMu.Unlock()
 
-	s.preparedFailures = append(s.preparedFailures, preparedFailureRecord(kind, reason, mode))
+	s.preparedFailures = append(s.preparedFailures, preparedFailureRecord(kind, reason))
 }
 
 func (s *lifecycleTransitionSpy) recordedPreparedFailures() []string {
@@ -259,12 +256,11 @@ func (s *lifecycleTransitionSpy) recordStartedFailure(
 	kind ytlifecycle.FailureKind,
 	reason ytlifecycle.Reason,
 	retryAfter time.Duration,
-	mode store.DeliveryMode,
 ) {
 	s.startedFailuresMu.Lock()
 	defer s.startedFailuresMu.Unlock()
 
-	s.startedFailures = append(s.startedFailures, startedFailureRecord(kind, reason, retryAfter, mode))
+	s.startedFailures = append(s.startedFailures, startedFailureRecord(kind, reason, retryAfter))
 }
 
 func (s *lifecycleTransitionSpy) recordedStartedFailures() []string {
@@ -274,12 +270,12 @@ func (s *lifecycleTransitionSpy) recordedStartedFailures() []string {
 	return slices.Clone(s.startedFailures)
 }
 
-func startedFailureRecord(kind ytlifecycle.FailureKind, reason ytlifecycle.Reason, retryAfter time.Duration, mode store.DeliveryMode) string {
-	return fmt.Sprintf("%v/%v/%s/%v", kind, reason, retryAfter, mode)
+func startedFailureRecord(kind ytlifecycle.FailureKind, reason ytlifecycle.Reason, retryAfter time.Duration) string {
+	return fmt.Sprintf("%v/%v/%s", kind, reason, retryAfter)
 }
 
-func preparedFailureRecord(kind ytlifecycle.FailureKind, reason ytlifecycle.Reason, mode store.DeliveryMode) string {
-	return fmt.Sprintf("%v/%v/%v", kind, reason, mode)
+func preparedFailureRecord(kind ytlifecycle.FailureKind, reason ytlifecycle.Reason) string {
+	return fmt.Sprintf("%v/%v", kind, reason)
 }
 
 func transitionSpy(t *testing.T, d *Dispatcher) *lifecycleTransitionSpy {

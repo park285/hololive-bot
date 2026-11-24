@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
@@ -82,34 +80,6 @@ func markSentDeliveryTracking(
 ) error {
 	if err := observation.NewRepository(tx).MarkAlarmSentBatch(ctx, trackingMarks); err != nil {
 		return fmt.Errorf("update tracking rows: %w", err)
-	}
-
-	return nil
-}
-
-func persistSentTrackingLatencyClassifications(
-	ctx context.Context,
-	tx dbx.Querier,
-	trackingMarks []observation.AlarmSentMark,
-) error {
-	if len(trackingMarks) == 0 {
-		return nil
-	}
-
-	identities := make([]timeline.PostTrackingIdentity, 0, len(trackingMarks))
-	for i := range trackingMarks {
-		identities = append(identities, timeline.PostTrackingIdentity{
-			Kind: trackingMarks[i].Kind, ContentID: trackingMarks[i].ContentID,
-		})
-	}
-
-	repository, err := telemetry.NewRepository(tx)
-	if err != nil {
-		return fmt.Errorf("persist tracking latency classifications: new telemetry repository: %w", err)
-	}
-
-	if err := repository.PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
-		return fmt.Errorf("persist tracking latency classifications: %w", err)
 	}
 
 	return nil

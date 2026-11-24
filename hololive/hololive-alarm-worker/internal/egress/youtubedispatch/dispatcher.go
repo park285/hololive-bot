@@ -21,7 +21,6 @@ const outboxCleanupLoopInterval = 1 * time.Hour
 type Dispatcher struct {
 	claim           *ClaimManager
 	send            *SendEngine
-	telemetry       *TelemetryProcessor
 	audit           *AuditLogger
 	metrics         *MetricsRecorder
 	grouper         *OutboxGrouper
@@ -63,12 +62,6 @@ func (d *Dispatcher) startBackgroundLoopsWithWait(ctx context.Context, waitGroup
 	if d.claim != nil && d.claim.delivery != nil {
 		d.startBackgroundLoop(ctx, waitGroup, "youtube-outbox-aggregate-sync", func(ctx context.Context) {
 			d.aggregateSyncLoop(ctx)
-		})
-	}
-
-	if d.telemetry != nil {
-		d.startBackgroundLoop(ctx, waitGroup, "youtube-outbox-telemetry", func(ctx context.Context) {
-			d.telemetry.telemetryLoop(ctx)
 		})
 	}
 
@@ -249,10 +242,6 @@ func (d *Dispatcher) cleanup(ctx context.Context) {
 	}
 
 	d.claim.cleanupOutbox(ctx)
-
-	if d.telemetry != nil {
-		d.telemetry.cleanup(ctx)
-	}
 }
 
 func logTickerStop(logger *slog.Logger, msg string, err error) {
