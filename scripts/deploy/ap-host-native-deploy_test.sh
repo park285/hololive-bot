@@ -563,9 +563,9 @@ mkdir -p "$tmp/payload/bin" "$tmp/transfer-home"
 printf 'qualified\n' > "$tmp/payload/bin/worker-profile-pair.py"
 qualified_digest="$(native_payload_digest "$tmp/payload")"
 printf 'different\n' > "$tmp/payload/bin/worker-profile-pair.py"
-for mode in --quiesce --resume; do
+for mode in --quiesce --resume --settle; do
   args=(osaka "$mode" "$native_release_window" old)
-  if [[ "$mode" == --resume ]]; then args+=(12345678-1234-1234-1234-123456789012); fi
+  if [[ "$mode" != --quiesce ]]; then args+=(12345678-1234-1234-1234-123456789012); fi
   status=0
   error="$(PATH="$tmp/bin:$PATH" RELEASE_ID=new HOLO_BOT_VERSION=123 ARTIFACT_DIR="$tmp/payload" \
     SSH_KEY="$tmp/KR.key" I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true HOLO_NATIVE_PAYLOAD_SHA256="$qualified_digest" \
@@ -588,7 +588,7 @@ ap_rsync_target() { printf '%s' "$1"; }
 rsync() { printf '%s' "$MODE" > "$HOME/$payload_name/last-transfer"; }
 '''
 receipt = temp/'transfer-home/claimed/last-transfer'
-for mode, expected in [('--quiesce', True), ('--apply', False), ('--resume', True)]:
+for mode, expected in [('--quiesce', True), ('--apply', False), ('--resume', True), ('--settle', True)]:
     result = subprocess.run(['bash','-c',fixture+body,'fixture',str(temp),mode],capture_output=True)
     assert (result.returncode == 0) == expected and receipt.read_text() == '--quiesce', (mode, result.stderr)
 PY

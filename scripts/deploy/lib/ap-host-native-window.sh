@@ -297,12 +297,17 @@ for row,action in zip(rows,("consume","grant")):
 }
 
 native_window_inputs() {
-  local contract="$old_target/rollback-contract" n
+  local contract="$old_target/rollback-contract" n installed="${1:-}"
   native_rollback_validate "$old_target"
-  [[ "$(native_window_previous)" == "$(sudo -n cat "$contract/previous-before-cutover")" ]]
-  sudo -n cmp -s "$host_env" "$contract/${slot_host_env##*/}"
+  if [[ -n "$installed" ]]; then
+    [[ "$(realpath -e "$previous_link")" == "$old_target" ]]
+  else
+    [[ "$(native_window_previous)" == "$(sudo -n cat "$contract/previous-before-cutover")" ]]
+    installed="$contract"
+  fi
+  sudo -n cmp -s "$host_env" "$installed/${slot_host_env##*/}"
   [[ "$(native_root_endpoint "$host_env")" == "100.100.1.8|$original_port" ]]
-  for n in "$unit_file" "${po_unit_file?}" "${po_socket_file?}"; do sudo -n cmp -s "$n" "$contract/${n##*/}"; done
+  for n in "$unit_file" "${po_unit_file?}" "${po_socket_file?}"; do sudo -n cmp -s "$n" "$installed/${n##*/}"; done
   sudo -n sha256sum --strict --check --status "$window/inputs.sha256"
 }
 
@@ -435,11 +440,11 @@ native_window_resume_claim() {
 }
 
 native_window_settle() {
-  local n id since archive owner="$BASHPID"
+  local n id since archive policy receipt owner="$BASHPID" candidate="$releases_root/$release_id"
   local -a attempt=(resuming issuer-lease "$po_service.since")
-  native_window_pins "$releases_root/$release_id"
+  native_window_pins "$candidate"
   [[ "${window_nonce?}" =~ ^[0-9a-f-]{36}$ && "$(sudo -n cat "$native_recovery_dir/claim")" == "$window_nonce" &&
-     "$(sudo -n cat "$native_recovery_dir/release")" == "$releases_root/$release_id" &&
+     "$(sudo -n cat "$native_recovery_dir/release")" == "$candidate" &&
      "$(sudo -n cat "$native_recovery_dir/step")" == collector-start && "$(sudo -n cat "$native_recovery_dir/terminal")" == 0 ]]
   sudo -n test -f "$native_recovery_dir/outcome"
   sudo -n test ! -L "$native_recovery_dir/outcome"
@@ -448,31 +453,38 @@ native_window_settle() {
   native_window_verify_quiesced
   [[ "$(native_payload_digest "$payload")" == "$window_digest" ]]
   sudo -n test -f "$window/blocked"
-  [[ "$(sudo -n readlink "$window/policy")" == observing ]]
   sudo -n test ! -e "$window/await-observation"
   sudo -n test ! -e "$window/closing"
-  native_window_inputs
+  native_window_inputs "$candidate"
+  policy="$(sudo -n readlink "$window/policy")"
+  case "$policy" in observing) native_window_barriers observing ;; held) native_window_barriers check ;; *) return 1 ;; esac
   for n in rotation "${window_units[@]}"; do
     sudo -n test ! -e "$(native_window_permit "$n")"
     sudo -n test ! -L "$(native_window_permit "$n")"
   done
+  archive="$window/settled-$(sudo -n cat "$native_recovery_dir/worker-pid")"
   since="@$(sudo -n sh -c 'stat -c %Y -- "$1"' sh "$native_recovery_dir/outcome")"
   for n in "${window_units[@]}"; do
     native_window_terminal "$n"
     id="$(native_window_prop "$n" InvocationID)"
+    attempt+=("$n.requesting" "$n.job" "$n.started")
     if [[ "$n" == "$po_service" ]]; then
       [[ "$(native_window_prop "$n" ExecMainCode)" == 1 && "$(native_window_prop "$n" ExecMainStatus)" == 0 ]]
-    else
-      [[ "$(sudo -n cat "$window/$n.started")" =~ ^[0-9a-f]{32}\ [1-9][0-9]*\ $id$ ]]
-      native_window_stop_receipt "$n" "$id" "$since" >/dev/null
+      continue
     fi
-    attempt+=("$n.requesting" "$n.job" "$n.started")
+    receipt="$window/$n.started"
+    if ! sudo -n test -e "$receipt"; then receipt="$archive/$n.started"; fi
+    [[ "$(sudo -n cat "$receipt")" =~ ^[0-9a-f]{32}\ [1-9][0-9]*\ $id$ ]]
+    native_window_stop_receipt "$n" "$id" "$since" >/dev/null
   done
-  for n in "${attempt[@]}"; do sudo -n test -e "$window/$n"; done
-  archive="$window/settled-$(sudo -n cat "$native_recovery_dir/worker-pid")"
-  sudo -n mkdir -m 0700 -- "$archive"
-  for n in "${attempt[@]}"; do sudo -n mv -T -- "$window/$n" "$archive/$n"; done
-  native_window_barriers rearm
+  for n in "${attempt[@]}"; do
+    if sudo -n test -e "$window/$n"; then sudo -n test ! -e "$archive/$n"; else sudo -n test -e "$archive/$n"; fi
+  done
+  if ! sudo -n test -d "$archive"; then sudo -n mkdir -m 0700 -- "$archive"; fi
+  for n in "${attempt[@]}"; do
+    if sudo -n test -e "$window/$n"; then sudo -n mv -T -- "$window/$n" "$archive/$n"; fi
+  done
+  if [[ "$policy" == observing ]]; then native_window_barriers rearm; fi
   native_window_barriers check
   sudo -n sync -f "$window"
   sudo -n mv -T -- "$native_recovery_dir/outcome" "$archive/outcome"

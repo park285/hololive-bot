@@ -274,8 +274,13 @@ sudo -n sh -c 'cd "$1" && sha256sum bin/hololive-collector worker-profile.json >
 fi
 
 if [[ "$window_action" == resume ]]; then
-  if [[ "$settled" == true ]]; then native_window_pins "$release_dir"; else native_window_pins; fi
-  native_window_inputs
+  if [[ "$settled" == true ]]; then
+    native_window_pins "$release_dir"
+    native_window_inputs "$release_dir"
+  else
+    native_window_pins
+    native_window_inputs
+  fi
 else
   if [[ "$same_window" == true ]] && sudo -n test -d "$old_target/rollback-contract"; then
     native_rollback_validate "$old_target"

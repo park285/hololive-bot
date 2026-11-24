@@ -885,7 +885,22 @@ for name, action, mutation, expected in (
     assert stops == expected_stops, (name, stops)
 
 failed_stage = candidate_stage.replace('native_window_await_observation\n', 'native_window_uncertain || true\n')
-stopped_after_unknown = '''
+real_inputs = '''
+eval "$(sed -n '/^native_window_inputs() {/,/^}/p' "WINDOW_LIB")"
+native_rollback_validate() { test -d "$old_target/rollback-contract"; }
+po_unit_file="$PWD/system/$po_service"
+touch "$unit_file" "$po_unit_file" "$po_socket_file"
+: "${slot_host_env:=$host_env}"
+ln -sfn "$old_target" "$previous_link"
+{ cat "$host_env"; printf 'candidate=1\\n'; } >"$release_dir/${slot_host_env##*/}"
+for installed in "$unit_file" "$po_unit_file" "$po_socket_file"; do { cat "$installed"; printf 'candidate=1\\n'; } >"$release_dir/${installed##*/}.next"; done
+for installed in "$unit_file" "$po_unit_file" "$po_socket_file"; do mv "$release_dir/${installed##*/}.next" "$release_dir/${installed##*/}"; done
+'''.replace('WINDOW_LIB', str(window_lib))
+installed_candidate = real_inputs + '''
+cp "$release_dir/${slot_host_env##*/}" "$host_env"
+for installed in "$unit_file" "$po_unit_file" "$po_socket_file"; do cp "$release_dir/${installed##*/}" "$installed"; done
+'''
+stopped_after_unknown = installed_candidate + '''
 systemctl --job-mode=fail stop "$po_socket" "$unit"
 retire_issuer stop
 rmdir "$(native_window_permit rotation)"
@@ -908,9 +923,26 @@ archives = list(hold.glob('settled-*'))
 assert len(archives) == 1 and (archives[0]/'outcome').read_text() == 'outcome_unknown\n', archives
 assert {p.name for p in archives[0].iterdir()} >= {'outcome', 'resuming', 'issuer-lease', 'issuer.service.since', 'collector.service.started'}
 assert (case/'current/accepted-window').is_file() and (hold/'accepted-guard').is_dir() and not (case/'recovery').exists()
+check_fails_once = '''
+eval "fixture_$(declare -f native_window_barriers)"
+native_window_barriers() {
+  if [[ "$1" == check && -f fail-check-once ]]; then rm fail-check-once; return 1; fi
+  fixture_native_window_barriers "$@"
+}
+touch fail-check-once
+set +e
+(set -e; native_window_settle)
+first=$?
+set -e
+[[ "$first" != 0 && -f "$native_recovery_dir/outcome" && $(readlink "$window/policy") == held ]]
+'''
+case, result = window_case('settle-rerun-after-partial', [release_window, str(old_port), 'normal'], failed_stage + stopped_after_unknown + check_fails_once + settled_reentry)
+assert result.returncode == 0, result.stderr
+assert (case/'current/accepted-window').is_file() and len(list((case/'releases/old/native-window').glob('settled-*/outcome'))) == 1
 for name, scenario in (
-    ('settle-refuses-running-collector', failed_stage + 'systemctl --job-mode=fail stop "$po_socket"\nretire_issuer stop\nrmdir "$(native_window_permit rotation)"\n'),
-    ('settle-refuses-live-lease', failed_stage + 'systemctl --job-mode=fail stop "$po_socket" "$unit"\nretire_issuer stop\n'),
+    ('settle-refuses-contract-installed', failed_stage + stopped_after_unknown.replace(installed_candidate, real_inputs)),
+    ('settle-refuses-running-collector', failed_stage + installed_candidate + 'systemctl --job-mode=fail stop "$po_socket"\nretire_issuer stop\nrmdir "$(native_window_permit rotation)"\n'),
+    ('settle-refuses-live-lease', failed_stage + installed_candidate + 'systemctl --job-mode=fail stop "$po_socket" "$unit"\nretire_issuer stop\n'),
     ('settle-refuses-other-step', failed_stage + stopped_after_unknown + 'printf "accept\\n" >"$native_recovery_dir/step"\n'),
     ('settle-refuses-without-outcome', candidate_stage.replace('native_window_await_observation\n', 'touch "$window/blocked"\n') + stopped_after_unknown),
     ('settle-refuses-awaited-observation', candidate_stage + 'native_window_uncertain || true\n' + stopped_after_unknown),
