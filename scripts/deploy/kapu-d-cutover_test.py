@@ -139,6 +139,7 @@ class Cutover(unittest.TestCase):
         self.patch('raw', Path.read_bytes)
         self.patch('retained', lambda *args,**kwargs:None)
         self.patch('origin', lambda *args,**kwargs:None)
+        self.patch('generated', lambda *args:None)
         self.patch('absent', lambda *args:None)
         self.patch('image', lambda name,tag:self.tags[tag])
         self.patch('prop', lambda n,k:self.props[n][k])
@@ -317,6 +318,16 @@ class Cutover(unittest.TestCase):
         self.reload()
         return self.h
 
+    def test_quiesce_refuses_dependency_links_before_any_stop(self):
+        h = self.running_pair()
+        folder = self.system / (d.C + '.service.requires')
+        folder.mkdir()
+        (folder / (d.I + '.service')).symlink_to('../' + d.I + '.service')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            d.quiesce(h, self.target())
+        self.assertFalse(os.path.lexists(h))
+        self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','stop')])
+
     def test_original_jobs_finish_before_any_seal(self):
         h = self.running_pair()
         self.outcomes[d.I] = {'ActiveState':'failed','Result':'exit-code','ExecMainStatus':'143'}
@@ -489,17 +500,42 @@ class Cutover(unittest.TestCase):
         target = self.target()
         self.seal(target)
         checked = []
-        def origin(name, masked, *args, **kwargs):
-            checked.append((name, masked))
+        def generated(name):
+            checked.append(name)
             d.need(False, '생성된 unit 원천 불일치')
-        self.patch('origin', origin)
+        self.patch('generated', generated)
         with self.assertRaisesRegex(d.Refused, '생성된 unit 원천'):
             self.cli('check', target)
         with self.assertRaisesRegex(d.Refused, '생성된 unit 원천'):
             self.resume()
-        self.assertEqual(checked, [(d.NAMES[0], True)] * 2)
+        self.assertEqual(checked, [d.NAMES[0]] * 2)
         self.assertEqual(self.calls, [])
         self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_accepts_a_sealed_hold_whose_manager_still_lists_the_removed_guard(self):
+        target = self.target()
+        self.seal(target)
+        self.patch('origin', self.origin)
+        for n in d.NAMES:
+            self.props[n]['DropInPaths'] = str(self.system / (n + '.service.d/90-hololive-stop-guard.conf'))
+        self.cli('check', target)
+        self.assertEqual(self.calls, [])
+
+    def test_resume_refuses_dependency_links_the_resume_reload_creates(self):
+        target = self.target()
+        self.seal(target)
+        reload = self.reload
+        def reload_with_generated_link():
+            reload()
+            if not os.path.lexists(d.mask(d.I)):
+                folder = self.system / (d.I + '.service.wants')
+                folder.mkdir(exist_ok=True)
+                if not os.path.lexists(folder / 'probe.service'):
+                    (folder / 'probe.service').symlink_to('../probe.service')
+        self.reload = reload_with_generated_link
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.resume()
+        self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','start')])
 
     def test_check_and_resume_refuse_unit_files_hidden_behind_the_mask(self):
         target = self.target()

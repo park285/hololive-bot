@@ -296,14 +296,17 @@ def container_settings(text, section):
 
 
 def origin(name, masked, guarded=False, allow_job=False):
-    f = GEN / (name + '.service')
-    text = raw(f).decode()
-    need(re.findall('^SourcePath=(.*)$', text, re.M) == [str(UNIT / unit(name))] and
-         prop(name, 'FragmentPath') == str(mask(name) if masked else f) and
+    generated(name)
+    need(prop(name, 'FragmentPath') == str(mask(name) if masked else GEN / (name + '.service')) and
          prop(name, 'NeedDaemonReload') == 'no', '생성된 unit 원천 불일치')
     drops = str(SYSTEM / (name + '.service.d/90-hololive-stop-guard.conf')) if guarded else ''
     need(prop(name, 'DropInPaths') == drops and (allow_job or not prop(name, 'Job')) and
          (masked or prop(name, 'Type') == 'notify'), '불명 systemd drop-in/job/type')
+
+
+def generated(name):
+    text = raw(GEN / (name + '.service')).decode()
+    need(re.findall('^SourcePath=(.*)$', text, re.M) == [str(UNIT / unit(name))], '생성된 unit 원천 불일치')
     base = raw(UNIT / unit(name)).decode()
     for drop in sorted(policy(name).items()):
         base += '\n' + drop[1].decode()
@@ -516,6 +519,7 @@ def snapshot(h, target):
     for n in NAMES:
         need(not os.path.lexists(mask(n)) and prop(n,'LoadState') == 'loaded', '기존 mask 또는 service override')
         origin(n, False)
+        need(not service_dropins(n), '정지 전 systemd drop-in 또는 의존성 링크: ' + n)
         base, drops = config(n)
         files[unit(n)] = base
         files.update({n + '.' + k:v for k,v in drops.items()})
@@ -825,7 +829,7 @@ def resumable(h, target):
     for n in NAMES:
         require_previous_stop(h,n,s['old'][n])
         held_one(h,s,n)
-        origin(n,True)
+        generated(n)
         need(not foreign_units(n), '정지 뒤 추가된 systemd unit 파일: ' + n)
         need(not service_dropins(n), '정지 뒤 추가된 systemd drop-in: ' + n)
         candidates[n] = raw(INPUT / unit(n))
@@ -882,6 +886,7 @@ def resume(h, target):
                 sync_dir(SYSTEM)
             run('systemctl','daemon-reload')
             origin(n,False)
+            need(not service_dropins(n), '재개 중 추가된 systemd drop-in 또는 의존성 링크: ' + n)
             need(prop(n,'LoadState') == 'loaded' and prop(n,'ActiveState') in ('inactive','failed'), '단독 기동 전 상태 불일치')
             if n == I:
                 held_one(h,s,C)
