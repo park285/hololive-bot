@@ -127,7 +127,7 @@ SQL
 
 ## Readout
 
-- `detected_post_count > alarm_sent_post_count`: outbox도 원장 room도 tracking `alarm_sent_at`도 없는 post가 있다는 뜻입니다. 발송 파이프라인에 진입하지 못했거나, 실패로 끝난 outbox가 정리됐거나, 구독 room 없이 끝난 outbox가 tracking에 완료 시각이 옮겨지기 전에 정리된 post입니다. 셋 다 원장을 남기지 않아 DB로는 구분할 수 없으므로 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `outbox_missing` 기준대로 로그로 확인합니다.
+- `detected_post_count > alarm_sent_post_count`: outbox도 원장 room도 tracking `alarm_sent_at`도 없는 post가 있다는 뜻입니다. 발송 파이프라인에 진입하지 못했거나, fan-out 전에 `queue.max_age`가 지난 PENDING outbox가 정리됐거나, 실패로 끝난 outbox가 정리됐거나, 구독 room 없이 끝난 outbox가 tracking에 완료 시각이 옮겨지기 전에 정리된 post입니다. 넷 다 원장을 남기지 않아 DB로는 구분할 수 없으므로 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `outbox_missing` 기준대로 로그로 확인합니다.
 - `success_post_count < detected_post_count`: 아직 성공하지 못한 post가 남아 있습니다. `detected_unsent_post_count` 와 같이 봅니다.
 - `failure_post_count > 0`: 해당 채널에서 실패 또는 재시도 흔적이 남은 post가 있다는 뜻입니다. 성공 후 회복된 건도 포함될 수 있습니다. revive가 켜져 있으면 revive 창 안의 실패는 다시 발송될 수 있으므로 post별 최종 여부는 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 운영 기준으로 판정합니다. 정리된 outbox의 실패는 원장 격리를 빼면 이 값에서 빠집니다.
 - `unknown_outcome_post_count > 0`: 결과를 알 수 없는 post가 있습니다. 격리된 post는 재발송하지 않으므로 room에 도착했는지 직접 확인하고, SENDING이 남은 post는 stale sweep 뒤 다시 판정하고, tracking 시각만 남은 post는 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `tracking_only_outbox_cleaned` 기준을 따릅니다.
