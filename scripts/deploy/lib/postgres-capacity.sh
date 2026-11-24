@@ -40,20 +40,18 @@ postgres_capacity_read_override() {
 }
 
 postgres_capacity_parse_policy_target() {
-    if [[ $# -ne 3 ]]; then
-        echo "[pg-capacity] internal usage: postgres_capacity_parse_policy_target <policy-file> <target-env-file> <role-capacities>" >&2
+    if [[ $# -ne 2 ]]; then
+        echo "[pg-capacity] internal usage: postgres_capacity_parse_policy_target <policy-file> <target-env-file>" >&2
         return 2
     fi
     local policy_file="$1"
     local target_env_file="$2"
-    local -n parsed_role_capacities="$3"
     local raw line owner service_name _env_key source_key instances default_value role maximum
     local pipes capacity reserve
     local server_limit="" server_limit_rows=0 used=0
     local superuser_reserved="" superuser_reserved_rows=0
     local min_reserve=3
     local -A seen_owners=() role_limits=() role_used=() role_reserves=()
-    parsed_role_capacities=()
 
     [[ -f "${policy_file}" && -r "${policy_file}" ]] || {
         echo "[pg-capacity] policy file is not readable: ${policy_file}" >&2
@@ -179,10 +177,6 @@ postgres_capacity_parse_policy_target() {
         echo "[pg-capacity] connection budget exhausted: max=${server_limit} superuser_reserved=${superuser_reserved} allocated=${used} reserve=${reserve}, want reserve >= ${min_reserve}" >&2
         return 1
     fi
-    for role in "${!role_used[@]}"; do
-        # shellcheck disable=SC2034
-        parsed_role_capacities["${role}"]="${role_used[${role}]}"
-    done
     echo "[pg-capacity] source=target-env:${target_env_file} max=${server_limit} superuser_reserved=${superuser_reserved} allocated=${used} reserve=${reserve}; runtime, migrator, exporter and nightly allocations included"
 }
 
@@ -191,8 +185,7 @@ postgres_capacity_assert_policy_target() {
         echo "[pg-capacity] internal usage: postgres_capacity_assert_policy_target <policy-file> <target-env-file>" >&2
         return 2
     fi
-    local -A capacities=()
-    postgres_capacity_parse_policy_target "$1" "$2" capacities
+    postgres_capacity_parse_policy_target "$1" "$2"
 }
 
 postgres_capacity_assert_target() {
