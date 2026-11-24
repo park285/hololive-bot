@@ -129,7 +129,7 @@ may see a unit whose handoff is still unconfirmed for up to the horizon.
 YouTube delivery keeps the check on its pinned request, `youtube_notification_send_request` (migrations 336 and
 339), because one Iris request carries every pinned member of a room. `CompleteSent` locks the pinned request before
 its member deliveries (the claim order), requires the request generation and member set to equal the started
-owners, and in the same transaction as the `SENT` transition, tracking marks, telemetry and the `SENT` ledger stores
+owners, and in the same transaction as the `SENT` transition, tracking marks and the `SENT` ledger stores
 the 202 Iris request ID in `handoff_request_id` and schedules `handoff_next_check_at` min(5s, `youtube_delivery`
 setting `handoff_horizon_ms`) after the owners' `sent_at`, on the transition's database clock. A mismatched request or
 an empty request ID applies nothing; the rows stay `SENDING` for the stale sweep.

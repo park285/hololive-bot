@@ -10,7 +10,7 @@ public path closeout은 `hololive-shared/pkg` 디렉터리 전체 삭제가 아�
 - YouTube 수집 scheduler는 `hololive-collector/internal/runtime/collectorruntime`, provider별 수집기는 `internal/runtime/{holodexcollector,officialcollector,youtubejscollector}`가 소유합니다.
 - shared `pkg/service/delivery`에는 요청·결과·sender interface와 Iris transport만 남습니다.
 - runtime 설정 집계는 API `internal/config`(`BotPlaneConfig`·`AdminPlaneConfig`·`APIWorkerProfile`)와 worker `internal/config`(`RuntimeConfig`·`AlarmWorkerProfile`)가 소유하고, shared `pkg/config/settings`에는 설정 구획 타입·loader·순수 검증만 남습니다. shared provider는 `pkg/providers/{database,holodex,iris,modules}` 하위 package만 두며 root `providers` package는 삭제했습니다.
-- YouTube 발송 원장 SQL·telemetry·timeline은 alarm-worker `internal/egress/youtubeoutbox/{deliverysql,telemetry,timeline}`이 소유합니다. shared `pkg/service/youtube`에는 API와 worker가 함께 쓰는 `tracking/observation`·`contentid`, API·collector와 shared 내부가 쓰는 `timestamp`, worker와 shared `tracking/observation`이 쓰는 `alarmtiming`만 남습니다. YouTube store·format과 dispatch 설정·결과(`youtubedispatch`)는 alarm-worker `internal/`이 소유합니다.
+- YouTube 발송 원장 SQL과 감사 로그 값 도우미는 alarm-worker `internal/egress/youtubeoutbox/{deliverysql,telemetry}`가 소유합니다. shared `pkg/service/youtube`에는 API와 worker가 함께 쓰는 `tracking/observation`·`contentid`, API·collector와 shared 내부가 쓰는 `timestamp`, worker와 shared `tracking/observation`이 쓰는 `alarmtiming`만 남습니다. YouTube store·format과 dispatch 설정·결과(`youtubedispatch`)는 alarm-worker `internal/`이 소유합니다.
 - alarm HTTP provider(handler·route registrar·binding DTO)는 alarm-worker `internal/service/alarm/httpapi`로 이관을 마쳤습니다. shared `pkg/service/alarmhttp`에는 hololive-api bot/admin이 쓰는 client만 남습니다.
 - `repository-ownership.allowlist`는 table owner/writer/reader 정본이고 import graph로 재해석하지 않습니다.
 

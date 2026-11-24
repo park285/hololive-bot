@@ -7,9 +7,10 @@
 - 대상은 `COMMUNITY_POST`, `NEW_SHORT` 두 종류만 포함합니다.
 - 최근 24시간 판단 기준은 `youtube_content_alarm_tracking.actual_published_at`이고, 실제 게시 시각이 비어 있으면 `detected_at`로 대체합니다.
 - 집계 단위는 room 이벤트가 아니라 게시물(post)입니다. 같은 게시물에서 room별 재시도나 fan-out이 여러 번 있어도 채널 집계에서는 같은 post를 1건으로 계산합니다.
-- `alarm_sent_post_count` 는 해당 post가 발송 파이프라인에 진입했거나(`outbox_count > 0`) 실제 발송 이벤트가 남은 경우를 뜻합니다.
-- `success_post_count` 는 `alarm_sent_at` 또는 성공 telemetry가 존재하는 post 수입니다.
-- `failure_post_count` 는 실패 telemetry가 1회 이상 기록된 post 수입니다. 이후 성공해도 실패 흔적은 채널 집계에 남습니다.
+- `alarm_sent_post_count` 는 해당 post가 발송 파이프라인에 진입했거나(`outbox_count > 0`) canonical 성공 시각이 남은 경우를 뜻합니다.
+- `success_post_count` 는 `alarm_sent_at` 또는 SENT delivery가 존재하는 post 수입니다.
+- `failure_post_count` 는 `FAILED`·`QUARANTINED` delivery나 재시도한(`attempt_count > 1`) delivery가 하나라도 있는 post 수입니다. 이후 성공해도 실패 흔적은 채널 집계에 남습니다. 시도마다 남던 telemetry 행은 더 쓰지 않으므로, revive로 `attempt_count`가 0으로 돌아간 재시도는 세지 못합니다.
+- delivery 행은 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 지워집니다.
 - `detected_unsent_post_count` 는 감지됐지만 canonical 성공 시각(`alarm_sent_at`)이 아직 없는 post 수입니다.
 
 ## Execute
@@ -39,15 +40,14 @@ WITH per_post AS (
         COALESCE(track.actual_published_at, track.detected_at) AS observed_at,
         track.alarm_sent_at AS alarm_sent_at,
         COUNT(DISTINCT o.id) AS outbox_count,
-        COALESCE(SUM(CASE WHEN t.send_result = 'success' THEN 1 ELSE 0 END), 0) AS success_send_count,
-        COALESCE(SUM(CASE WHEN t.send_result <> 'success' THEN 1 ELSE 0 END), 0) AS failed_attempt_count
+        COUNT(d.id) FILTER (WHERE d.status = 'SENT') AS success_send_count,
+        COUNT(d.id) FILTER (WHERE d.status IN ('FAILED', 'QUARANTINED') OR d.attempt_count > 1) AS failed_attempt_count
     FROM youtube_content_alarm_tracking AS track
     LEFT JOIN youtube_notification_outbox AS o
         ON o.kind = track.kind
        AND o.content_id = track.content_id
-    LEFT JOIN youtube_notification_delivery_telemetry AS t
-        ON t.outbox_id = o.id
-       AND t.event_at >= NOW() - INTERVAL '24 hours'
+    LEFT JOIN youtube_notification_delivery AS d
+        ON d.outbox_id = o.id
     WHERE track.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
       AND COALESCE(track.actual_published_at, track.detected_at) >= NOW() - INTERVAL '24 hours'
     GROUP BY

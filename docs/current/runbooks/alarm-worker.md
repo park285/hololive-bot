@@ -375,10 +375,11 @@ sudo podman exec hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007
   설정을 유지한 채 이전 image만 재기동하는 rollback은 지원하지 않습니다.
 - paired rollback이 준비되지 않았거나 send-unit schema 호환성이 확인되지 않으면 이전
   image로 전환하지 않고 current revision을 fix-forward합니다.
-- delivery telemetry 단일 경로 이전
-  image로 되돌리려면 운영 profile에 `youtube_delivery.telemetry_backfill_batch`를 다시 넣고
-  같은 유지보수 단계에서 image를 전환합니다. exact-key 디코더라 키가 없으면 이전 image가
-  기동하지 않습니다(`rollback.md`).
+- 발송 시도 telemetry를 없앤 image보다 이전 image로 되돌리려면 운영 profile에
+  `youtube_delivery.telemetry_poll_interval_ms`·`telemetry_flush_batch`·`telemetry_retry_backoff_ms`·
+  `telemetry_retention_ms`를 다시 넣고 같은 유지보수 단계에서 image를 전환합니다. delivery telemetry 단일 경로
+  이전 image라면 `youtube_delivery.telemetry_backfill_batch`도 다시 넣습니다. exact-key 디코더라 키가 맞지 않으면
+  이전 image가 기동하지 않습니다(`rollback.md`). 되돌린 image는 제거 기간에 생긴 시도의 telemetry 행을 만들지 않습니다.
 - Preserve and inspect `alarm:dispatch:*` queues before replaying or deleting queue data.
 
 ## Related contracts

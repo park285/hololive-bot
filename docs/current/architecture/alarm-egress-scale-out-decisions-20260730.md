@@ -107,7 +107,7 @@ alarm-worker 쪽은 `hololive/hololive-alarm-worker/internal/egress/alarmdispatc
 
 **(a) send unit 재발송 구간의 cross-instance 경합.** 동시 claim에서 한 send unit이 한 워커에만 가는 것은 위 통합 테스트가 고정합니다. claim의 row lock은 statement가 끝나면 풀리므로, 그 뒤의 재시도·`RecoverExpiredLeased`(lease 만료 회수)·`QuarantineStaleSending` 경로에서 두 인스턴스가 같은 send unit을 다루는 경우는 테스트로 고정되지 않았습니다. 같은 unit의 재발송은 같은 저장 `ClientRequestID`를 쓰므로 Iris admission 중복 제거가 전제이며, replica>1 전에 이 전제를 경합 테스트로 확인해야 합니다.
 
-**(b) YouTube dispatcher 내부 background loop 조율.** `Dispatcher.Run`이 `aggregateSyncLoop`, `telemetryLoop`, `cleanupLoop`, `reviveLoop`를 인스턴스 간 조율 없이 인스턴스마다 기동합니다(`cleanupLoop`·`reviveLoop`는 설정으로 켠 경우). 인스턴스가 늘면 이 루프들이 그대로 중복 수행됩니다.
+**(b) YouTube dispatcher 내부 background loop 조율.** `Dispatcher.Run`이 `aggregateSyncLoop`, `cleanupLoop`, `reviveLoop`를 인스턴스 간 조율 없이 인스턴스마다 기동합니다(`cleanupLoop`·`reviveLoop`는 설정으로 켠 경우). 인스턴스가 늘면 이 루프들이 그대로 중복 수행됩니다.
 
 **(c) Quadlet `ContainerName`과 고정 호스트 포트.** 현재 단일 인스턴스를 강제하는 바로 그 장치가 replica>1을 물리적으로 막습니다. 스케일 배선 자체가 선행 작업입니다.
 
@@ -166,7 +166,7 @@ hololive/hololive-alarm-worker/internal/egress/alarmdispatch/alarm_dispatch_metr
   현재 메트릭 집합 — 분절 counter 없음
 
 hololive/hololive-alarm-worker/internal/egress/youtubedispatch/dispatcher_run.go, dispatcher.go
-  Dispatcher.Run → startBackgroundLoopsWithWait — aggregateSyncLoop / telemetryLoop / cleanupLoop / reviveLoop
+  Dispatcher.Run → startBackgroundLoopsWithWait — aggregateSyncLoop / cleanupLoop / reviveLoop
 
 hololive/hololive-shared/pkg/service/alarm/dedup/fallback.go (`2bc32799f`에서 삭제)
   LocalFallback.TryClaimOnOutage — fail-open

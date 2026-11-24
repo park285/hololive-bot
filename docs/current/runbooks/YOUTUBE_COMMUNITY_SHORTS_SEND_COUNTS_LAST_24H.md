@@ -1,30 +1,104 @@
 # YouTube Community Shorts Send Counts
 
-최근 24시간 recent window 동안 실제 게시된 유튜브 커뮤니티/쇼츠 게시물별 알람 발송 횟수와 중복 여부를 운영자가 확인할 때 사용하는 조회 절차입니다.
+최근 24시간 동안 실제 게시된 유튜브 커뮤니티/쇼츠 게시물별 알람 발송 횟수와 중복 여부를 운영자가 확인할 때 사용하는 조회 절차입니다.
 
 ## Scope
 
 - 대상은 `COMMUNITY_POST`, `NEW_SHORT` 두 종류만 포함합니다.
-- recent window 조회는 `youtube_content_alarm_tracking.actual_published_at` 를 우선 사용하고, 값이 비어 있으면 `detected_at` 으로 대체해 최근 24시간 게시물을 고릅니다.
-- `0회 발송` 게시물도 결과에 남아야 하므로 텔레메트리만이 아니라 추적 테이블(`youtube_content_alarm_tracking`)을 기준 집합으로 사용합니다.
-- 게시물 식별자는 저장된 `youtube_notification_delivery_telemetry.post_id` 를 우선 사용하고, 비어 있으면 canonical `content_id` 로 대체합니다.
+- recent window 조회는 `youtube_content_alarm_tracking.actual_published_at`를 우선 사용하고, 값이 비어 있으면 `detected_at`으로 대체해 최근 24시간 게시물을 고릅니다.
+- `0회 발송` 게시물도 결과에 남아야 하므로 추적 테이블(`youtube_content_alarm_tracking`)을 기준 집합으로 사용합니다.
+- 발송 횟수는 room별 delivery(`youtube_notification_delivery`)의 현재 상태로 셉니다. 시도마다 남던 telemetry 행은 더 쓰지 않으므로, 실패 흔적은 `FAILED`·`QUARANTINED` 상태와 `attempt_count > 1`로만 남습니다.
+- delivery 행은 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 지워집니다. 이 값이 24시간보다 짧으면 오래된 게시물이 `outbox_missing`으로 보일 수 있습니다.
 
 ## Execute
 
-전용 리포트 CLI는 없다. 아래 Readout 필드와 `youtube_content_alarm_tracking` / `youtube_notification_delivery_telemetry`를 직접 조회한다.
+전용 리포트 CLI는 없으며 PostgreSQL을 직접 조회합니다.
+DB 조회는 stack-platform-ops의 guarded read 경로(iris-stack
+`.agents/skills/stack-platform-ops/references/postgres.md`)를 따릅니다. 중앙 `hololive-seoul`의
+`holo-postgres`에 컨테이너 socket으로 접속하고, 조회 전에 read-only guard를 먼저 증명합니다.
+비밀 env 파일을 셸에 source하거나 `PGPASSWORD`를 쓰지 않습니다.
 
-- 운영자가 중복/누락 후보를 바로 읽을 수 있도록 `status`, `alarm_type`, `channel_id`, `post_id`, `actual_published_at`, `alarm_sent_at`, `delay_seconds`, 발송 횟수, room 수와 함께 `delay_source`, `publish_to_detect_ms`, `internal_delay_cause`, `queue_wait_ms`, `retry_accumulation_ms`, `job_failure_detected`를 함께 본다.
-- 운영 기준은 `duplicate_success_posts == 0` 이다. 이 값이 `pass` 이고 `duplicate_posts = 0` 이어야 중복 알람 0건으로 판정한다.
+```bash
+# 1. read-only guard 증명: 결과가 정확히 `on`이 아니면 중단합니다.
+ssh 100.100.1.8 \
+  'sudo podman exec -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1 -At -c "show transaction_read_only"'
+
+# 2. 같은 guard로 조회합니다. SQL을 표준 입력으로 넘기므로 podman exec에 -i를 씁니다.
+ssh 100.100.1.8 \
+  'sudo podman exec -i -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1' <<'SQL'
+WITH per_post AS (
+    SELECT
+        track.kind,
+        track.channel_id,
+        track.content_id,
+        track.actual_published_at,
+        track.detected_at,
+        track.alarm_sent_at,
+        track.alarm_latency_millis,
+        track.alarm_latency_exceeded,
+        COUNT(DISTINCT o.id) AS outbox_count,
+        COUNT(d.id) FILTER (WHERE d.status = 'SENT') AS success_send_count,
+        COUNT(DISTINCT d.room_id) FILTER (WHERE d.status = 'SENT') AS success_room_count,
+        COUNT(DISTINCT d.room_id) AS target_room_count,
+        COUNT(d.id) FILTER (WHERE d.status IN ('FAILED', 'QUARANTINED')) AS failed_delivery_count,
+        COUNT(d.id) FILTER (WHERE d.attempt_count > 1) AS retried_delivery_count,
+        MAX(d.sent_at) AS last_sent_at
+    FROM youtube_content_alarm_tracking AS track
+    LEFT JOIN youtube_notification_outbox AS o
+        ON o.kind = track.kind
+       AND o.content_id = track.content_id
+    LEFT JOIN youtube_notification_delivery AS d
+        ON d.outbox_id = o.id
+    WHERE track.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
+      AND COALESCE(track.actual_published_at, track.detected_at) >= NOW() - INTERVAL '24 hours'
+    GROUP BY
+        track.kind,
+        track.channel_id,
+        track.content_id,
+        track.actual_published_at,
+        track.detected_at,
+        track.alarm_sent_at,
+        track.alarm_latency_millis,
+        track.alarm_latency_exceeded
+)
+SELECT
+    CASE
+        WHEN outbox_count = 0 THEN 'outbox_missing'
+        WHEN success_send_count > success_room_count THEN 'duplicate_success'
+        WHEN success_send_count = 0 THEN 'no_success'
+        WHEN failed_delivery_count > 0 OR retried_delivery_count > 0 THEN 'failed_attempts'
+        ELSE 'ok'
+    END AS status,
+    CASE kind WHEN 'COMMUNITY_POST' THEN 'COMMUNITY' ELSE 'SHORTS' END AS alarm_type,
+    channel_id,
+    content_id,
+    actual_published_at,
+    detected_at,
+    alarm_sent_at,
+    ROUND(alarm_latency_millis / 1000.0) AS delay_seconds,
+    alarm_latency_exceeded,
+    ROUND(EXTRACT(EPOCH FROM (detected_at - actual_published_at)) * 1000)::BIGINT AS publish_to_detect_ms,
+    ROUND(EXTRACT(EPOCH FROM (alarm_sent_at - detected_at)) * 1000)::BIGINT AS detect_to_sent_ms,
+    outbox_count,
+    target_room_count,
+    success_send_count,
+    success_room_count,
+    failed_delivery_count,
+    retried_delivery_count,
+    last_sent_at
+FROM per_post
+ORDER BY COALESCE(actual_published_at, detected_at) DESC, channel_id ASC, content_id ASC;
+SQL
+```
+
+운영 기준은 `duplicate_success` 행 0건입니다. 같은 CTE 뒤에 `SELECT COUNT(*) FILTER (WHERE success_send_count > success_room_count) AS duplicate_success_posts FROM per_post;`를 붙이면 한 줄로 판정할 수 있습니다.
 
 ## Readout
 
 - `status = ok`: 성공 발송이 room별 1회씩만 기록된 정상 상태입니다.
-- `duplicate alarm verdict = pass`: 집계 윈도우에서 `duplicate_success_posts = 0` 이 확인된 상태입니다. 운영 기준의 중복 알람 0건 판정은 이 줄을 기준으로 합니다.
-- `status = duplicate_success`: 같은 게시물에서 `success_send_count > success_room_count` 가 관측된 건입니다. 즉 최소 1개 room에 2회 이상 성공 발송이 남은 중복 알람입니다.
-- `status = no_success`: 성공 발송이 없습니다. `last_event_at` 도 비어 있으면 시도 자체가 없었던 것입니다.
-- `status = outbox_missing`: 게시물 추적 레코드는 있으나 outbox row가 만들어지지 않았습니다. 전송 파이프라인 진입 전 누락 후보입니다.
-- `status = failed_attempts`: 성공은 있었지만 실패 또는 재시도 이벤트도 함께 남아 있습니다.
-- `delay_source = external_collection`: 실제 게시 이후 최초 감지까지(`actual_published_at -> detected_at`)가 대표 지연 구간인 케이스입니다.
-- `delay_source = internal_delivery`: 감지 이후 내부 전달(`detected_at -> alarm_sent_at`)이 더 큰 비중을 차지한 케이스입니다.
-- `delay_source = mixed`: 외부 수집과 내부 전달 구간이 같은 크기로 지연에 기여했거나 둘 다 무시할 수 없게 관측된 케이스입니다.
-- `actual_published_at`, `detected_at`, `alarm_sent_at`, `delay_seconds`: 실제 게시 시각, 내부 최초 감지 시각, canonical 알람 발송 시각, 초 단위 지연을 함께 기록합니다. `delay_seconds > 120` 이면 2분 초과 후보이며, 최종 판정은 `latency_classification.status` 로 함께 확인합니다.
+- `duplicate_success_posts = 0`: 집계 창에서 중복 알람이 없습니다. 운영 기준의 중복 알람 0건 판정은 이 값으로 합니다.
+- `status = duplicate_success`: 같은 게시물에서 `success_send_count > success_room_count`입니다. 최소 1개 room에 SENT delivery가 2개 이상 남은 중복 알람입니다.
+- `status = no_success`: SENT delivery가 없습니다. `alarm_sent_at`도 비어 있으면 아직 성공하지 못한 게시물입니다.
+- `status = outbox_missing`: 게시물 추적 레코드는 있으나 outbox row가 없습니다. 전송 파이프라인 진입 전 누락 후보이거나, 끝난 outbox가 보존 기간을 넘겨 지워진 경우입니다.
+- `status = failed_attempts`: 성공은 있었지만 실패·격리된 delivery나 재시도한 delivery도 있습니다. 시도별 사유는 [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 로그로 확인합니다.
+- `publish_to_detect_ms`, `detect_to_sent_ms`: 외부 수집 구간과 내부 전달 구간입니다. `delay_seconds > 120`이면 2분 초과이며, 구간 판정은 [Latency Cause Report](YOUTUBE_COMMUNITY_SHORTS_LATENCY_CAUSE_REPORT.md)를 따릅니다.
