@@ -304,8 +304,8 @@ if [[ "$backup" == "$fixture_root/staged-po-b-"* ]]; then
   set -- "$@" "${origin_fields[@]}"
 fi
 ref_file() { printf '%s/images/%s\n' "$fixture_root" "${1//[\/:]/_}"; }
-hex_of() { if [[ "$1" == old ]]; then printf '%064d\n' 0 | tr 0 a; else printf '%064d\n' 0 | tr 0 b; fi; }
-revision_of() { if [[ "$1" == old ]]; then printf '%040d\n' 0 | tr 0 a; else printf '%040d\n' 0 | tr 0 b; fi; }
+hex_of() { case "$1" in old) printf '%064d\n' 0 | tr 0 a ;; mixed) printf '%064d\n' 0 | tr 0 c ;; *) printf '%064d\n' 0 | tr 0 b ;; esac; }
+revision_of() { case "$1" in old) printf '%040d\n' 0 | tr 0 a ;; mixed) printf '%040d\n' 0 | tr 0 c ;; *) printf '%040d\n' 0 | tr 0 b ;; esac; }
 fixture_exit_status() {
   local unit="$1" cid="$2" since="$3" until="$EPOCHREALTIME" id at code found=''
   [[ "$since" =~ ^@[0-9]+\.[0-9]{6}$ && "$cid" =~ ^[0-9a-f]{64}$ &&
@@ -498,7 +498,7 @@ podman() {
       case "$format" in
         '{{.Id}}') hex_of "$value" ;;
         *image.revision*) revision_of "$value" ;;
-        *image.version*) if [[ "$value" == old ]]; then printf '6.0.0\n'; else printf '6.0.1\n'; fi ;;
+        *image.version*) case "$value" in old) printf '6.0.0\n' ;; mixed) printf '5.9.0\n' ;; *) printf '6.0.1\n' ;; esac ;;
         '{{.Os}}/{{.Architecture}}') printf 'linux/arm64\n' ;;
         *) return 2 ;;
       esac
@@ -828,6 +828,72 @@ for slot in ('c', 'b'):
         result = run(slot_preamble(slot) + 'set -- ' + shlex.join(args) + '\n' + central[:central.index('install -d -m 0755 /run/lock')], root, 'paths')
         require((result.returncode == 0) == accepted, f'{slot}: W2 resume requires its card backup and staging', result)
 
+with tempfile.TemporaryDirectory(prefix='c-verified-transfer-') as raw:
+    state = Path(raw)
+    tool, pair, remote, bin_dir = state / 'tool', state / 'pair', state / 'remote', state / 'bin'
+    payload = (root / 'scripts/deploy/po-central-files.txt').read_text().splitlines()
+    migration_names = [line.split()[1] for line in
+                       (root / 'hololive/hololive-api/scripts/migrations/manifest.txt').read_text().splitlines() if line.strip()]
+    payload += [f'hololive/hololive-api/scripts/migrations/{prefix}{name}' for name in migration_names[1:] for prefix in ('', 'contracts/')]
+    for name in payload + ['scripts/deploy/po-central-cutover.sh', 'scripts/deploy/lib/source-revision.sh',
+                           'scripts/deploy/lib/po-central-remote.sh', 'scripts/deploy/po-central-files.txt', 'hololive/hololive-api/VERSION']:
+        (tool / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(root / name, tool / name)
+    for directory in (pair, remote, bin_dir):
+        directory.mkdir()
+    def sums(directory, names):
+        return ''.join(f'{hashlib.sha256((directory / n).read_bytes()).hexdigest()}  {n}\n' for n in names)
+    for prefix, meta in (('', 'rootfs-manifest.json'), ('collector-', 'collector-manifest.json')):
+        (pair / (prefix + 'image.tar')).write_bytes((prefix + 'image').encode())
+        (pair / (prefix + 'image.tar.sha256')).write_text(sums(pair, [prefix + 'image.tar']))
+        (pair / (prefix + 'image-id')).write_text(new_id + '\n')
+        (pair / meta).write_text(json.dumps({'source_revision': new_revision, 'architecture': 'arm64', 'go': {'goarch': 'arm64'}}))
+    (pair / 'source-files.sha256').write_text(sums(tool, payload))
+    (pair / 'transport-files.sha256').write_text(sums(pair, ('source-files.sha256', 'rootfs-manifest.json', 'collector-manifest.json',
+                                                            'image-id', 'collector-image-id', 'image.tar.sha256', 'collector-image.tar.sha256')))
+    seal = hashlib.sha256((pair / 'transport-files.sha256').read_bytes()).hexdigest()
+    (bin_dir / 'ssh').write_text('#!/bin/bash\nshift\ncommand="$*"\nexec bash -c "${command//"$REMOTE_ROOT"/"$FAKE_REMOTE"}"\n')
+    (bin_dir / 'ssh').chmod(0o755)
+    entry = r'''
+set -eu
+state="$1"
+hostname() { printf 'kapu\n'; }
+git() {
+  [[ "$1" == -C && "$2" == */tool ]] || return 2
+  case "$3" in
+    status) ;;
+    rev-parse) printf '%040d\n' 0 | tr 0 b ;;
+    *) return 2 ;;
+  esac
+}
+sudo() { [[ "$1" != -n ]] || shift; "$@"; }
+ssh() {
+  local command="${*:2}"
+  command="${command//"$REMOTE_ROOT"/"$FAKE_REMOTE"}"
+  case "$command" in
+    'sudo -n mkdir '*) eval "${command#sudo -n }" ;;
+    'sudo -n chown '*) ;;
+    'sudo -n bash -s -- c quiesce-verified '*) cat > "$state/remote-body" ;;
+    *) return 2 ;;
+  esac
+}
+export -f hostname git sudo ssh
+export state REMOTE_ROOT=/opt/hololive-bot/compose FAKE_REMOTE="$state/remote" PATH="$state/bin:$PATH" PO_C_SSH_TARGET=hololive-seoul APPROVE_PO_C_DEPLOY=true
+bash "$state/tool/scripts/deploy/po-central-cutover.sh" c quiesce-verified "$state/pair" "$3"
+'''
+    result = subprocess.run(['bash', '-s', '--', str(state), 'transfer', seal], input=entry, capture_output=True, text=True, timeout=60)
+    staged = list(remote.glob('po-staging-*'))
+    require(result.returncode == 0 and len(staged) == 1 and (state / 'remote-body').is_file(),
+            'c: verified pair transfer reaches the remote quiesce with the installed rsync', result)
+    pair_files = ['image.tar', 'image.tar.sha256', 'image-id', 'rootfs-manifest.json', 'collector-image.tar', 'collector-image.tar.sha256',
+                  'collector-image-id', 'collector-manifest.json', 'source-files.sha256', 'transport-files.sha256']
+    copied = sorted(str(p.relative_to(staged[0])) for p in staged[0].rglob('*') if p.is_file())
+    require(copied == sorted(payload + pair_files) and
+            all((staged[0] / n).read_bytes() == (tool / n).read_bytes() for n in payload) and
+            all((staged[0] / n).read_bytes() == (pair / n).read_bytes() for n in pair_files),
+            'c: staging holds exactly the payload and the sealed pair', result)
+    print('[PASS] c verified pair transfer')
+
 with tempfile.TemporaryDirectory(prefix='b-staged-cli-') as raw:
     state = Path(raw)
     tool = state / 'coordinator'
@@ -1074,7 +1140,7 @@ maintenance_cases = (
     'candidate_image_overlay_changed', 'candidate_endpoint_overlay_changed',
     'rollback_cross', 'rollback_coordinated', 'capacity_exhausted',
     'previous_candidate', 'origin_receipt_changed', 'copied_hold_receipt', 'lost_seal', 'seal_changed',
-    'rollback_replaced', *recovery_cases,
+    'rollback_replaced', 'mixed_issuer', *recovery_cases,
 )
 runs += [(slot, 'maintenance_' + case) for slot in slots for case in maintenance_cases
          if (slot == 'c' or not case.startswith('capacity_')) and (slot == 'b' or case != 'installed_unit_changed')]
@@ -1174,6 +1240,15 @@ for slot, case in runs:
         if case != 'missing_receipt' and not issuer_absent:
             (live_po / 'rootfs-manifest.json').write_text(manifest(new_revision if initial == 'new' else old_revision, new_id if initial == 'new' else old_id))
             (live_po / 'image-id').write_text(new_id if initial == 'new' else old_id)
+        if case == 'maintenance_mixed_issuer':
+            mixed_id = 'sha256:' + 'c' * 64
+            image_file(state, issuer_prod).write_text('mixed')
+            image_file(state, mixed_id).write_text('mixed')
+            (state / 'issuer.runtime').write_text('mixed')
+            (live_po / 'rootfs-manifest.json').write_text(manifest('c' * 40, mixed_id))
+            (live_po / 'image-id').write_text(mixed_id)
+            if slot == 'c':
+                active.write_text(origin_pair)
         if is_check or is_rollback:
             image_file(state, collector_rollback).write_text('old')
             image_file(state, issuer_rollback).write_text('old')
@@ -1666,10 +1741,17 @@ for slot, case in runs:
                             'c: pending target cannot activate candidate or release either writer', blocked)
                     assert_held(blocked)
                     (state / 'pending-suffix').unlink()
+                if scenario == 'mixed_issuer':
+                    failed = invoke('resume', 'candidate_check_failure')
+                    require(failed.returncode != 0 and 'loaded issuer image ID/revision/architecture differs' not in failed.stderr and
+                            not any(c.startswith(('pair activate ', held_start, 'systemctl restart ')) for c in calls_now()[before:]),
+                            f'{slot}: failed resume of a mixed-revision origin keeps the hold without activation', failed)
+                    assert_held(failed)
+                    before = len(calls_now())
                 failure = scenario if scenario in ('activation_failure', 'candidate_check_failure', 'database_query_failure',
                                                    'substitution_failure', 'error_log', 'unmask_failure', 'signal_TERM', 'error_log_seal_failure', *recovery_cases) else ''
                 result = invoke('resume', failure)
-                success = scenario in ('success', 'reboot')
+                success = scenario in ('success', 'reboot', 'mixed_issuer')
                 require((result.returncode == 0) == success, f'{slot} {scenario}: resume outcome', result)
                 subsequent = calls_now()[before:]
                 require(not any(c.startswith('podman load ') or c.startswith('pair capture ') for c in subsequent),

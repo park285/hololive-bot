@@ -638,7 +638,7 @@ candidate_unit_path() {
 }
 
 prepare_candidate_pair() {
-  local candidate_image env_file=- expected previous_revision candidate_unit
+  local candidate_image env_file=- expected previous_revision previous_po_revision candidate_unit
   candidate_unit="$(candidate_unit_path)"
   candidate_image="$(image_id "$collector_candidate")"
   if [[ "$mode" == resume ]]; then
@@ -654,7 +654,9 @@ prepare_candidate_pair() {
     previous_revision="$(cat "$backup/collector.revision")"
     verify_collector "$collector_rollback" "$backup/collector-prechange-manifest.json" "$previous_revision" "$backup/collector-prechange.image-id"
     [[ "$(<"$backup/issuer.state")" == present ]]
-    po_verify_image "$issuer_rollback" "$backup/po-prechange-manifest.json" "$previous_revision" arm64 "$backup/po-prechange.image-id"
+    previous_po_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_revision"])' "$backup/po-prechange-manifest.json")"
+    [[ "$card_transition" == true || "$previous_po_revision" == "$previous_revision" ]]
+    po_verify_image "$issuer_rollback" "$backup/po-prechange-manifest.json" "$previous_po_revision" arm64 "$backup/po-prechange.image-id"
     python3 "$pair_tool" verify "$service" "$profile_release/previous" "$collector_rollback"
     require_card_candidate || return 1
   fi
@@ -1145,10 +1147,12 @@ if [[ "$issuer_state" == present ]]; then
   old_po_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_revision"])' "$current/$manifest")"
   po_verify_image "$issuer" "$current/$manifest" "$old_po_revision" arm64 "$current/$image_id_file"
   if [[ "$mode" == quiesce ]]; then verify_issuer_runtime "$old_po_revision" "$issuer_image_id"; fi
-  [[ "$old_po_revision" == "$old_revision" ]]
   old_po_version="$(image_label "$issuer" version)"
   old_version="$(image_label "$collector" version)"
-  [[ -n "$old_version" && "$old_po_version" == "$old_version" ]]
+  [[ -n "$old_version" && -n "$old_po_version" ]]
+  if [[ "$card_transition" == false ]]; then
+    [[ "$old_po_revision" == "$old_revision" && "$old_po_version" == "$old_version" ]]
+  fi
   cp "$current/$manifest" "$backup/po-prechange-manifest.json"
   cp "$current/$image_id_file" "$backup/po-prechange.image-id"
   writer_change podman tag "$issuer_image_id" "$issuer_rollback"
