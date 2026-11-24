@@ -52,6 +52,14 @@ class ReceiptStore(unittest.TestCase):
             self.assertTrue(link.is_symlink())
 
 
+class Commands(unittest.TestCase):
+    def test_clean_commands_refuse_diagnostics_even_on_success(self):
+        self.assertEqual(d.run('sh', '-c', 'echo listed', clean=True), 'listed')
+        with self.assertRaises(d.Refused):
+            d.run('sh', '-c', 'echo listed; echo partial >&2', clean=True)
+        self.assertEqual(d.run('sh', '-c', 'echo listed; echo noise >&2'), 'listed')
+
+
 class Cutover(unittest.TestCase):
     def test_profile_and_sql_isolate_runtime_inputs(self):
         image = 'sha256:' + 'a' * 64
@@ -170,6 +178,7 @@ class Cutover(unittest.TestCase):
             props = self.props[args[-1].removesuffix('.service')]
             return '\n'.join(k + '=' + props[k] for k in args[3].removeprefix('--property=').split(','))
         if args == ('systemd-analyze','unit-files'):
+            self.assertEqual(kwargs, {'env': {'SYSTEMD_UNIT_PATH': ':'.join(map(str, d.unit_paths()))}, 'clean': True})
             return self.unit_files
         self.calls.append(args)
         if args[:4] == ('python3','-I','-B',str(d.GUARD)):

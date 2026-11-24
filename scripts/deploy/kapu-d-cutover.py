@@ -64,12 +64,13 @@ def need(ok, reason):
         raise Refused(reason)
 
 
-def run(*args, timeout=35, status=False):
-    proc = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                          timeout=timeout, env=COMMAND_ENV)
+def run(*args, timeout=35, status=False, env=None, clean=False):
+    proc = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE if clean else subprocess.DEVNULL,
+                          timeout=timeout, env={**COMMAND_ENV, **(env or {})})
     if status:
         return proc.returncode
-    need(not proc.returncode, f'{args[0]} {args[1]} 실패 ({proc.returncode})')
+    need(not proc.returncode and not (clean and proc.stderr.strip()), f'{args[0]} {args[1]} 실패 ({proc.returncode})')
     return proc.stdout.decode().strip()
 
 
@@ -777,9 +778,10 @@ def unit_paths():
 UNIT_ID = re.compile(r'ids: (\S+) (?:\u2192|->) (\S.*)')
 
 
-def unit_names(name):
+def unit_names(name, paths):
     ids = {}
-    for line in run('systemd-analyze','unit-files').splitlines():
+    listing = run('systemd-analyze', 'unit-files', env={'SYSTEMD_UNIT_PATH': ':'.join(map(str, paths))}, clean=True)
+    for line in listing.splitlines():
         if found := UNIT_ID.fullmatch(line.strip()):
             ids[found[1]] = found[2]
     need(name + '.service' in ids, '불명 systemd unit 이름 맵: ' + name)
@@ -796,8 +798,9 @@ def foreign_units(name):
 
 
 def service_dropins(name):
-    names = unit_names(name)
-    roots = [root for root in unit_paths() if root.is_dir()]
+    paths = unit_paths()
+    names = unit_names(name, paths)
+    roots = [root for root in paths if root.is_dir()]
     folders = {'service.d', *(n[:i+1] + '.service.d' for n in names for i,c in enumerate(n) if c == '-'),
                *(n + '.service.d' for n in names)}
     return sorted(str(root / f / k) for root in roots for f in folders if (root / f).is_dir()
