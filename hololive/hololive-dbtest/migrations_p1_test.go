@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -127,7 +126,7 @@ type observationGrantRoles struct {
 func createObservationGrantRoles(t *testing.T, pool *pgxpool.Pool) observationGrantRoles {
 	t.Helper()
 
-	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
+	suffix := fmt.Sprintf("%d_%d", time.Now().UnixNano(), dbSeq.Add(1))
 	roles := observationGrantRoles{
 		scraper: "dbtest_observation_scraper_" + suffix,
 		runtime: "dbtest_observation_runtime_" + suffix,

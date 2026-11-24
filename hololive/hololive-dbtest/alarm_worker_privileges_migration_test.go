@@ -2,7 +2,7 @@ package dbtest
 
 import (
 	"context"
-	"strconv"
+	"fmt"
 	"testing"
 	"time"
 
@@ -94,7 +94,7 @@ func TestAlarmWorkerRoleGrantsAreLeastPrivilege(t *testing.T) {
 func createAlarmWorkerGrantRole(t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 
-	role := "dbtest_alarm_worker_" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	role := fmt.Sprintf("dbtest_alarm_worker_%d_%d", time.Now().UnixNano(), dbSeq.Add(1))
 	quoted := pgx.Identifier{role}.Sanitize()
 
 	if _, err := pool.Exec(t.Context(), "CREATE ROLE "+quoted+" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"); err != nil {
