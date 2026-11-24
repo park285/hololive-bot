@@ -797,14 +797,18 @@ def foreign_units(name):
                   if os.path.lexists(root / (name + '.service')) and root / (name + '.service') not in own)
 
 
+DROPIN_SUFFIXES = ('.d', '.wants', '.requires', '.upholds')
+
+
 def service_dropins(name):
     paths = unit_paths()
     names = unit_names(name, paths)
     roots = [root for root in paths if root.is_dir()]
-    folders = {'service.d', *(n[:i+1] + '.service.d' for n in names for i,c in enumerate(n) if c == '-'),
-               *(n + '.service.d' for n in names)}
-    return sorted(str(root / f / k) for root in roots for f in folders if (root / f).is_dir()
-                  for k in os.listdir(root / f) if k.endswith('.conf'))
+    stems = {'service', *(n[:i+1] + '.service' for n in names for i,c in enumerate(n) if c == '-'),
+             *(n + '.service' for n in names)}
+    return sorted(str(root / (s + x) / k) for root in roots for s in stems for x in DROPIN_SUFFIXES
+                  if (root / (s + x)).is_dir()
+                  for k in os.listdir(root / (s + x)) if x != '.d' or k.endswith('.conf'))
 
 
 def resumable(h, target):
@@ -821,6 +825,7 @@ def resumable(h, target):
     for n in NAMES:
         require_previous_stop(h,n,s['old'][n])
         held_one(h,s,n)
+        origin(n,True)
         need(not foreign_units(n), '정지 뒤 추가된 systemd unit 파일: ' + n)
         need(not service_dropins(n), '정지 뒤 추가된 systemd drop-in: ' + n)
         candidates[n] = raw(INPUT / unit(n))

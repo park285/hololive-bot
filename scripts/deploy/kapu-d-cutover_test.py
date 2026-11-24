@@ -468,6 +468,39 @@ class Cutover(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertFalse((self.h / 'resume-attempt.json').exists())
 
+    def test_check_and_resume_refuse_dependency_links_added_after_the_stop(self):
+        target = self.target()
+        self.seal(target)
+        self.unit_files += f'ids: collector-alias.service \u2192 {d.C}.service\n'
+        for folder in (self.system / (d.C + '.service.requires'), self.vendor / 'hololive-.service.wants',
+                       self.vendor / 'service.upholds', self.system / 'collector-alias.service.wants'):
+            folder.mkdir()
+            (folder / 'probe.service').symlink_to('../probe.service')
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.resume()
+            (folder / 'probe.service').unlink()
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+        self.cli('check', target)
+
+    def test_check_and_resume_verify_generated_fragments_before_the_attempt_record(self):
+        target = self.target()
+        self.seal(target)
+        checked = []
+        def origin(name, masked, *args, **kwargs):
+            checked.append((name, masked))
+            d.need(False, '생성된 unit 원천 불일치')
+        self.patch('origin', origin)
+        with self.assertRaisesRegex(d.Refused, '생성된 unit 원천'):
+            self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, '생성된 unit 원천'):
+            self.resume()
+        self.assertEqual(checked, [(d.NAMES[0], True)] * 2)
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
     def test_check_and_resume_refuse_unit_files_hidden_behind_the_mask(self):
         target = self.target()
         self.seal(target)
