@@ -21,8 +21,16 @@ type calendarRenderCall struct {
 	waiters int
 }
 
-func (r *CalendarCardRenderer) renderCoalesced(ctx context.Context, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) ([][]byte, error) {
-	call := r.acquireCalendarRenderCall(ctx, cacheKey, month, year, entries)
+type calendarPagePlan struct {
+	kind            calendarPageKind
+	isBday          bool
+	themeID         string
+	entries         []domain.CalendarEntry
+	globalTruncated bool
+}
+
+func (r *CalendarCardRenderer) renderCoalesced(ctx context.Context, cacheKey calendarCacheKey, month, year int, plan calendarPagePlan) ([][]byte, error) {
+	call := r.acquireCalendarRenderCall(ctx, cacheKey, month, year, plan)
 
 	out, err := r.awaitCalendarRenderCall(ctx, cacheKey, call)
 	if err != nil {
@@ -32,13 +40,13 @@ func (r *CalendarCardRenderer) renderCoalesced(ctx context.Context, cacheKey cal
 	return out, nil
 }
 
-func (r *CalendarCardRenderer) acquireCalendarRenderCall(ctx context.Context, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) *calendarRenderCall {
+func (r *CalendarCardRenderer) acquireCalendarRenderCall(ctx context.Context, cacheKey calendarCacheKey, month, year int, plan calendarPagePlan) *calendarRenderCall {
 	r.renderMu.Lock()
 	defer r.renderMu.Unlock()
 
 	call := r.inflight[cacheKey]
 	if call == nil {
-		call = r.startCalendarRenderCall(ctx, cacheKey, month, year, entries)
+		call = r.startCalendarRenderCall(ctx, cacheKey, month, year, plan)
 	}
 
 	call.waiters++
@@ -74,7 +82,7 @@ func completedCalendarRenderPages(call *calendarRenderCall) ([][]byte, error) {
 	return cloneSchedulePages(call.pages), nil
 }
 
-func (r *CalendarCardRenderer) startCalendarRenderCall(ctx context.Context, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) *calendarRenderCall {
+func (r *CalendarCardRenderer) startCalendarRenderCall(ctx context.Context, cacheKey calendarCacheKey, month, year int, plan calendarPagePlan) *calendarRenderCall {
 	if r.inflight == nil {
 		r.inflight = make(map[calendarCacheKey]*calendarRenderCall)
 	}
@@ -84,16 +92,18 @@ func (r *CalendarCardRenderer) startCalendarRenderCall(ctx context.Context, cach
 
 	r.inflight[cacheKey] = call
 
-	entrySnapshot := append([]domain.CalendarEntry(nil), entries...)
+	planSnapshot := plan
+
+	planSnapshot.entries = append([]domain.CalendarEntry(nil), plan.entries...)
 
 	go panicguard.Run(slog.Default(), panicscope.BackgroundTask, "calendar-render", func() {
-		r.runCalendarRenderCall(workCtx, call, cacheKey, month, year, entrySnapshot)
+		r.runCalendarRenderCall(workCtx, call, cacheKey, month, year, planSnapshot)
 	})
 
 	return call
 }
 
-func (r *CalendarCardRenderer) runCalendarRenderCall(ctx context.Context, call *calendarRenderCall, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) {
+func (r *CalendarCardRenderer) runCalendarRenderCall(ctx context.Context, call *calendarRenderCall, cacheKey calendarCacheKey, month, year int, plan calendarPagePlan) {
 	var (
 		pages [][]byte
 		err   error
@@ -118,7 +128,7 @@ func (r *CalendarCardRenderer) runCalendarRenderCall(ctx context.Context, call *
 		r.renderMu.Unlock()
 	}()
 
-	pages, err = r.renderCalendarAlbumOnce(ctx, cacheKey, month, year, entries)
+	pages, err = r.renderCalendarPageOnce(ctx, cacheKey, month, year, plan)
 }
 
 func (r *CalendarCardRenderer) cancelCalendarRenderWaiter(cacheKey calendarCacheKey, call *calendarRenderCall) {

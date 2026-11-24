@@ -224,16 +224,6 @@ func calHueDist(a, b float64) float64 {
 
 func calMemberPalette(hue float64, hasChromatic bool, th calTheme) calMemberColors {
 	if !hasChromatic {
-		if th.dark {
-			return calMemberColors{
-				bar:    th.accent,
-				ring:   calMix(th.accent, calHex(0xFAF7FF), 0.25),
-				border: calMix(th.cardBorder, calHex(0xFAF7FF), 0.18),
-				aura:   th.accent,
-				dot:    th.accent,
-			}
-		}
-
 		return calMemberColors{
 			bar:    th.accent,
 			ring:   th.accent,
@@ -247,19 +237,6 @@ func calMemberPalette(hue float64, hasChromatic bool, th calTheme) calMemberColo
 	wGrn := math.Exp(-math.Pow(calHueDist(hue, 128)/34, 2))
 	wDeep := math.Exp(-math.Pow(calHueDist(hue, 248)/34, 2))
 	adjH := math.Mod(hue-10*wYel+360, 360)
-
-	if th.dark {
-		col := calHSL(adjH, 0.80, 0.68-0.04*wYel+0.09*wDeep)
-
-		return calMemberColors{
-			bar:    col,
-			ring:   col,
-			border: calMix(col, calHex(0xFAF7FF), 0.20),
-			aura:   col,
-			dot:    col,
-		}
-	}
-
 	col := calHSL(adjH, 0.72-0.08*wGrn, 0.50-0.06*wYel-0.05*wGrn+0.07*wDeep)
 
 	return calMemberColors{
@@ -277,6 +254,7 @@ const (
 	calFaceRegular calFace = iota
 	calFaceBold
 	calFaceXBold
+	calFaceDisplay
 	calFaceCount
 )
 
@@ -312,6 +290,7 @@ var loadCalendarFontSet = sync.OnceValues(func() (*calFontSet, error) {
 		calFaceRegular: data.PretendardRegular,
 		calFaceBold:    data.PretendardBold,
 		calFaceXBold:   data.PretendardExtraBold,
+		calFaceDisplay: data.BlackHanSans,
 	}
 
 	fs := &calFontSet{cache: make(map[calGlyphKey]*calGlyph)}
@@ -340,26 +319,32 @@ var loadCalendarFontSet = sync.OnceValues(func() (*calFontSet, error) {
 })
 
 func (f *calFontSet) lookupLocked(src *sfnt.Font, r rune) (sfnt.GlyphIndex, bool) {
+	if src == nil {
+		return 0, false
+	}
+
 	gi, err := src.GlyphIndex(&f.buf, r)
 
 	return gi, err == nil && gi != 0
+}
+
+func (f *calFontSet) resolveGlyphFontLocked(fc calFace, r rune) (*sfnt.Font, sfnt.GlyphIndex, bool) {
+	for _, candidate := range [4]*sfnt.Font{f.faces[fc], f.faces[calFaceXBold], f.faces[calFaceBold], f.jp} {
+		if gi, ok := f.lookupLocked(candidate, r); ok {
+			return candidate, gi, true
+		}
+	}
+
+	return nil, 0, false
 }
 
 func (f *calFontSet) glyph(fc calFace, r rune) *calGlyph {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	src := f.faces[fc]
-
-	gi, ok := f.lookupLocked(src, r)
+	src, gi, ok := f.resolveGlyphFontLocked(fc, r)
 	if !ok {
-		src = f.faces[calFaceBold]
-		if gi, ok = f.lookupLocked(src, r); !ok {
-			src = f.jp
-			if gi, ok = f.lookupLocked(src, r); !ok {
-				return &calGlyph{}
-			}
-		}
+		return &calGlyph{}
 	}
 
 	key := calGlyphKey{f: src, r: r}

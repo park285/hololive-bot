@@ -66,9 +66,11 @@ func (r *CalendarCardRenderer) RenderCalendarImagesContext(ctx context.Context, 
 		return nil, fmt.Errorf("calendar album render request: %w", err)
 	}
 
-	themeID := r.variants.pick(fmt.Sprintf("%04d-%02d", year, month), calendarThemePool)
+	plans := r.planPages(month, year, entries, func(kind calendarPageKind) string {
+		return r.variants.pick(fmt.Sprintf("%04d-%02d:%s", year, month, kind), calendarThemePool)
+	})
 
-	return r.RenderCalendarImagesWithTheme(ctx, month, year, themeID, entries)
+	return r.renderPlannedPages(ctx, month, year, plans)
 }
 
 func (r *CalendarCardRenderer) RenderCalendarImagesWithTheme(ctx context.Context, month, year int, themeID string, entries []domain.CalendarEntry) ([][]byte, error) {
@@ -76,20 +78,81 @@ func (r *CalendarCardRenderer) RenderCalendarImagesWithTheme(ctx context.Context
 		return nil, fmt.Errorf("calendar album render request: %w", err)
 	}
 
-	themeID = normalizeCalendarTheme(themeID)
+	normalized := normalizeCalendarTheme(themeID)
+	plans := r.planPages(month, year, entries, func(calendarPageKind) string {
+		return normalized
+	})
 
-	cacheKey := newCalendarCacheKey(month, year, themeID, entries)
+	return r.renderPlannedPages(ctx, month, year, plans)
+}
 
-	if pages, ok := r.cachedAlbum(cacheKey); ok {
-		return pages, nil
+func (r *CalendarCardRenderer) planPages(_, _ int, entries []domain.CalendarEntry, pickTheme func(calendarPageKind) string) []calendarPagePlan {
+	_, globalTruncated := uniqueCalendarPhotoURLs(entries, calendarPhotoMaxFetches)
+
+	if len(entries) == 0 {
+		return []calendarPagePlan{{
+			kind:            calendarPageEmpty,
+			themeID:         normalizeCalendarTheme(pickTheme(calendarPageEmpty)),
+			globalTruncated: globalTruncated,
+		}}
 	}
 
-	pages, err := r.renderCoalesced(ctx, cacheKey, month, year, entries)
-	if err != nil {
-		return nil, fmt.Errorf("render coalesced: %w", err)
+	var bdays, annivs []domain.CalendarEntry
+
+	for _, e := range entries {
+		if e.Kind == domain.CelebrationKindBirthday {
+			bdays = append(bdays, e)
+		} else {
+			annivs = append(annivs, e)
+		}
 	}
 
-	return pages, nil
+	plans := make([]calendarPagePlan, 0, 2)
+
+	if len(bdays) > 0 {
+		plans = append(plans, calendarPagePlan{
+			kind:            calendarPageBirthday,
+			isBday:          true,
+			themeID:         normalizeCalendarTheme(pickTheme(calendarPageBirthday)),
+			entries:         bdays,
+			globalTruncated: globalTruncated,
+		})
+	}
+
+	if len(annivs) > 0 {
+		plans = append(plans, calendarPagePlan{
+			kind:            calendarPageAnniversary,
+			isBday:          false,
+			themeID:         normalizeCalendarTheme(pickTheme(calendarPageAnniversary)),
+			entries:         annivs,
+			globalTruncated: globalTruncated,
+		})
+	}
+
+	return plans
+}
+
+func (r *CalendarCardRenderer) renderPlannedPages(ctx context.Context, month, year int, plans []calendarPagePlan) ([][]byte, error) {
+	out := make([][]byte, 0, len(plans))
+
+	for _, plan := range plans {
+		cacheKey := newCalendarPageCacheKey(month, year, plan.kind, plan.themeID, plan.entries)
+
+		if cached, ok := r.cachedAlbum(cacheKey); ok && len(cached) > 0 {
+			out = append(out, cached[0])
+
+			continue
+		}
+
+		rendered, err := r.renderCoalesced(ctx, cacheKey, month, year, plan)
+		if err != nil {
+			return nil, fmt.Errorf("render coalesced: %w", err)
+		}
+
+		out = append(out, rendered...)
+	}
+
+	return out, nil
 }
 
 func normalizeCalendarTheme(themeID string) string {
@@ -100,7 +163,7 @@ func normalizeCalendarTheme(themeID string) string {
 	return CalendarThemePrismDaylight
 }
 
-func (r *CalendarCardRenderer) renderCalendarAlbumOnce(ctx context.Context, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) ([][]byte, error) {
+func (r *CalendarCardRenderer) renderCalendarPageOnce(ctx context.Context, cacheKey calendarCacheKey, month, year int, plan calendarPagePlan) ([][]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("calendar album render attempt: %w", err)
 	}
@@ -119,7 +182,7 @@ func (r *CalendarCardRenderer) renderCalendarAlbumOnce(ctx context.Context, cach
 		return pages, nil
 	}
 
-	rendered, err := r.renderCalendarAlbum(ctx, month, year, normalizeCalendarTheme(cacheKey.theme), entries)
+	rendered, err := r.renderSingleCalendarPage(ctx, month, year, plan)
 	if err != nil {
 		return nil, fmt.Errorf("render calendar album: %w", err)
 	}
@@ -150,10 +213,14 @@ func (r *CalendarCardRenderer) storeRenderedAlbum(ctx context.Context, cacheKey 
 	}
 }
 
-func (r *CalendarCardRenderer) renderCalendarAlbum(ctx context.Context, month, year int, themeID string, entries []domain.CalendarEntry) (renderedCalendarAlbum, error) {
-	photoResult, err := fetchMemberPhotos(ctx, entries)
+func (r *CalendarCardRenderer) renderSingleCalendarPage(ctx context.Context, month, year int, plan calendarPagePlan) (renderedCalendarAlbum, error) {
+	photoResult, err := fetchMemberPhotos(ctx, plan.entries)
 	if err != nil {
 		return renderedCalendarAlbum{}, fmt.Errorf("fetch member photos: %w", err)
+	}
+
+	if plan.globalTruncated {
+		photoResult.cachePolicy.markUncacheable()
 	}
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
@@ -169,29 +236,24 @@ func (r *CalendarCardRenderer) renderCalendarAlbum(ctx context.Context, month, y
 		return renderedCalendarAlbum{}, fmt.Errorf("after calendar font load: %w", ctxErr)
 	}
 
-	specs := r.buildPageSpecs(ctx, month, year, themeID, entries, photoResult)
-	pages := make([][]byte, 0, len(specs))
+	spec := r.buildSinglePageSpec(ctx, month, year, plan, photoResult)
 
-	for _, spec := range specs {
-		data, renderErr := renderCalendarPagePNG(fs, spec)
-		if renderErr != nil {
-			return renderedCalendarAlbum{}, fmt.Errorf("render page: %w", renderErr)
-		}
+	data, renderErr := renderCalendarPagePNG(fs, spec)
+	if renderErr != nil {
+		return renderedCalendarAlbum{}, fmt.Errorf("render page: %w", renderErr)
+	}
 
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return renderedCalendarAlbum{}, fmt.Errorf("after calendar draw: %w", ctxErr)
-		}
-
-		pages = append(pages, data)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return renderedCalendarAlbum{}, fmt.Errorf("after calendar draw: %w", ctxErr)
 	}
 
 	return renderedCalendarAlbum{
-		pages:       pages,
+		pages:       [][]byte{data},
 		cachePolicy: photoResult.cachePolicy,
 	}, nil
 }
 
-func (r *CalendarCardRenderer) buildPageSpecs(ctx context.Context, month, year int, themeID string, entries []domain.CalendarEntry, photoResult calendarPhotoFetchResult) []calPageSpec {
+func (r *CalendarCardRenderer) buildSinglePageSpec(ctx context.Context, month, year int, plan calendarPagePlan, photoResult calendarPhotoFetchResult) calPageSpec {
 	var stringsStore *messagestrings.Store
 
 	if r != nil {
@@ -202,54 +264,14 @@ func (r *CalendarCardRenderer) buildPageSpecs(ctx context.Context, month, year i
 
 	m.strings = stringsStore
 
-	emptyLabel := cmp.Or(m.emptyText(ctx), "등록된 기념일이 없습니다.")
-
-	all := buildCalEntries(ctx, stringsStore, entries, photoResult.photos)
-	if len(all) == 0 {
-		return []calPageSpec{{
-			year:    year,
-			month:   month,
-			themeID: themeID,
-			isBday:  false,
-			empty:   emptyLabel,
-		}}
+	return calPageSpec{
+		year:    year,
+		month:   month,
+		themeID: normalizeCalendarTheme(plan.themeID),
+		isBday:  plan.isBday,
+		entries: buildCalEntries(ctx, stringsStore, plan.entries, photoResult.photos),
+		empty:   cmp.Or(m.emptyText(ctx), "등록된 기념일이 없습니다."),
 	}
-
-	var bdays, annivs []calEntry
-
-	for _, e := range all {
-		if e.kind == domain.CelebrationKindBirthday {
-			bdays = append(bdays, e)
-		} else {
-			annivs = append(annivs, e)
-		}
-	}
-
-	var specs []calPageSpec
-
-	if len(bdays) > 0 {
-		specs = append(specs, calPageSpec{
-			year:    year,
-			month:   month,
-			themeID: themeID,
-			isBday:  true,
-			entries: bdays,
-			empty:   emptyLabel,
-		})
-	}
-
-	if len(annivs) > 0 {
-		specs = append(specs, calPageSpec{
-			year:    year,
-			month:   month,
-			themeID: themeID,
-			isBday:  false,
-			entries: annivs,
-			empty:   emptyLabel,
-		})
-	}
-
-	return specs
 }
 
 func entryDisplayName(ctx context.Context, m *calendarMetrics, member *domain.Member) string {

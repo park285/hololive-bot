@@ -213,7 +213,6 @@ func tightenCalBoardLayout(lay *calBoardLayout, totalEntries int) {
 }
 
 func renderCalendarPagePNG(fs *calFontSet, spec calPageSpec) ([]byte, error) {
-	th := buildCalendarTheme(spec.themeID, spec.isBday)
 	byDay := make(map[int][]calEntry)
 
 	for _, e := range spec.entries {
@@ -222,6 +221,11 @@ func renderCalendarPagePNG(fs *calFontSet, spec calPageSpec) ([]byte, error) {
 		}
 	}
 
+	if isFlatPosterTheme(spec.themeID) {
+		return renderFlatPosterPagePNG(fs, spec, byDay)
+	}
+
+	th := buildThemePrismDaylight(spec.isBday)
 	lay := computeCalBoardLayout(spec.year, spec.month, byDay, len(spec.entries))
 	c := newCalCanvas(calendarOutputWidth, lay.totalH, calSupersample, fs)
 
@@ -257,14 +261,8 @@ func drawCalendarPageHeader(c *calCanvas, spec calPageSpec, lay calBoardLayout, 
 
 	hy := lay.headTop + lay.headH + 3
 	c.Fill(calRect(calGridPadX+8, hy-0.8, w-calGridPadX*2-16, 1.5), th.horizonRule)
-
-	finialCol := th.accent
-	if th.dark {
-		finialCol = th.goldAccent
-	}
-
-	c.Fill(calSparkle(calGridPadX, hy, 6.2), finialCol)
-	c.Fill(calSparkle(w-calGridPadX, hy, 6.2), finialCol)
+	c.Fill(calSparkle(calGridPadX, hy, 6.2), th.accent)
+	c.Fill(calSparkle(w-calGridPadX, hy, 6.2), th.accent)
 }
 
 func drawHeaderNumeral(c *calCanvas, hb calBox, month int, numScale float64, th calTheme) (inkTop, inkRight, inkBot float64) {
@@ -275,16 +273,6 @@ func drawHeaderNumeral(c *calCanvas, hb calBox, month int, numScale float64, th 
 
 	ns := calTransform(rawNum, calMove(hb.X-nx0, hb.cy()-(ny0+ny1)/2))
 	inkLeft, inkTop, inkRight, inkBot := ns.Bounds()
-
-	if th.dark {
-		c.Glow((inkLeft+inkRight)/2, hb.cy(), 82*numScale, calRGB24(th.accent), 0.24)
-		c.Fill(calTransform(ns, calMove(0, 4)), calRGBA(0x08061D, 0.55))
-		c.FillLinear(ns, inkLeft, inkTop, inkLeft, inkBot,
-			calStop{T: 0, C: calHex(0xFFFFFF)},
-			calStop{T: 1, C: calMix(calHex(0xFFFFFF), th.accent, 0.34)})
-
-		return inkTop, inkRight, inkBot
-	}
 
 	c.Fill(calTransform(ns, calMove(3, 4)), calColAlpha(th.accent, 0.16))
 	c.FillLinear(ns, inkLeft, inkTop, inkLeft, inkBot,
@@ -349,14 +337,9 @@ func drawCalendarWeekdays(c *calCanvas, lay calBoardLayout, th calTheme) {
 func drawCalendarPageFooter(c *calCanvas, spec calPageSpec, lay calBoardLayout, th calTheme) {
 	w := float64(calendarOutputWidth)
 	fy := float64(lay.totalH) - 18
-	finialCol := th.accent
-
-	if th.dark {
-		finialCol = th.goldAccent
-	}
 
 	c.Fill(calRect(calGridPadX, fy-14, w-calGridPadX*2-14, 1.2), calColAlpha(th.horizonRule, 0.78))
-	c.Fill(calSparkle(w-calGridPadX, fy-13.4, 4.6), finialCol)
+	c.Fill(calSparkle(w-calGridPadX, fy-13.4, 4.6), th.accent)
 	c.textMid(calText{Size: 12, Face: calFaceBold}, "한국 표준시(KST) 기준", calGridPadX, fy, calAlignL, th.muted)
 	c.textMid(calText{Size: 12, Face: calFaceBold, Track: 0.3}, fmt.Sprintf("%d년 %d월", spec.year, spec.month), w-calGridPadX, fy, calAlignR, th.muted)
 }

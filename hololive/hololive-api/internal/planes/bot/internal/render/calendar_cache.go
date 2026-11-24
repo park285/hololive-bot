@@ -12,11 +12,20 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-const calendarImageCacheLimit = 32
+const calendarImageCacheLimit = 64
+
+type calendarPageKind string
+
+const (
+	calendarPageEmpty       calendarPageKind = "empty"
+	calendarPageBirthday    calendarPageKind = "birthday"
+	calendarPageAnniversary calendarPageKind = "anniversary"
+)
 
 type calendarCacheKey struct {
 	month       int
 	year        int
+	kind        calendarPageKind
 	theme       string
 	entriesHash string
 }
@@ -95,18 +104,38 @@ func (r *CalendarCardRenderer) cachedAlbum(key calendarCacheKey) ([][]byte, bool
 }
 
 func newCalendarCacheKey(month, year int, theme string, entries []domain.CalendarEntry) calendarCacheKey {
+	return newCalendarPageCacheKey(month, year, calendarKindForEntries(entries), theme, entries)
+}
+
+func newCalendarPageCacheKey(month, year int, kind calendarPageKind, theme string, entries []domain.CalendarEntry) calendarCacheKey {
 	return calendarCacheKey{
 		month:       month,
 		year:        year,
+		kind:        kind,
 		theme:       normalizeCalendarTheme(theme),
-		entriesHash: hashCalendarEntries(month, year, entries),
+		entriesHash: hashCalendarEntries(month, year, kind, entries),
 	}
 }
 
-func hashCalendarEntries(month, year int, entries []domain.CalendarEntry) string {
+func calendarKindForEntries(entries []domain.CalendarEntry) calendarPageKind {
+	if len(entries) == 0 {
+		return calendarPageEmpty
+	}
+
+	for _, e := range entries {
+		if e.Kind == domain.CelebrationKindBirthday {
+			return calendarPageBirthday
+		}
+	}
+
+	return calendarPageAnniversary
+}
+
+func hashCalendarEntries(month, year int, kind calendarPageKind, entries []domain.CalendarEntry) string {
 	hash := sha256.New()
 	writeCacheInt(hash, year)
 	writeCacheInt(hash, month)
+	writeCacheString(hash, string(kind))
 	writeCacheInt(hash, len(entries))
 
 	for _, entry := range entries {

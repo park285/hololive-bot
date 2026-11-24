@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **`!달력` 플랫 포스터 테마 6종 추가·7종 페이지별 독립 랜덤 회전:** 기존 다크(`starlight_orbit`)의 그라데이션·글로우·반투명 장식을 걷어내고 `Alpha=255` 솔리드 색지·`136px×7열` 정수 격자·`BlackHanSans` 조판 기반 플랫 포스터 테마 6종(다크 3종 `cream_bromide`·`kurokami_risograph`·`holo_stage`, 라이트 3종 `shirokami_risograph`·`sakura_sora_press`·`museum_archive`)을 추가했습니다. 기존 라이트(`prism_daylight`) 1세트와 합쳐 총 7종 테마 풀을 다크·라이트 구분 없이 운영하며, 생일 달력(1/2)과 데뷔 기념일 달력(2/2)이 각자 직전 테마만 피해 독립적으로 테마를 뽑으므로 `라이트+다크`·`다크+라이트`·`라이트+라이트`·`다크+다크` 모든 조합이 허용됩니다. 메모리(상한 64장)와 공유 Valkey 캐시(`bot:calendar:album:v7:<YYYY-MM>:<kind>:<theme>`)를 페이지 종류·테마 단위로 분리해 교차 조합 시에도 이미 렌더된 페이지를 재사용합니다.
+
 ## r1.2.1 - 2026-11-24
 
 - 중앙 API와 alarm-worker는 Valkey에 TLS로 직접 연결합니다. Sentinel 발견용 비밀번호를 컨테이너에 마운트하지 않습니다. Valkey 이미지에서 서버·Sentinel 실행 모드를 뺐으므로 태그를 `localhost/iris-stack-valkey:9.1.3-zlib1.4-r1`로 올렸습니다. `--valkey-only` 게시와 `valkey-cache` 기동 전 검사는 중앙 tailnet 주소가 아닌 `VALKEY_BIND_IP`를 거부합니다. `--valkey-only`는 설치된 기동 전 검사가 checkout과 다르거나 root 소유가 아니거나, `/opt/iris-stack/valkey-ha/stage.py`와 그 상위 경로를 root 외 사용자가 쓸 수 있거나, Valkey unit에 MCS 범주 지정 외의 Quadlet·systemd override(별칭에 붙은 drop-in 포함)가 있거나, `VALKEY_IMAGE`가 비어 있거나 unit이 쓸 이미지가 없으면 unit을 바꾸지 않습니다. 전체 동기화와 `--preserve-runtime`도 같은 `stage.py` 소유권 검사를 통과해야 단계 판정을 실행합니다. Quadlet·systemd override 검사는 systemd가 unit을 불러오지 않았으면(`not-found` 등) 거부하고, mask된 unit은 `/etc/systemd/system`의 `/dev/null` 링크일 때만 받아들이고, mask된 동안 systemd가 보여 주지 않는 alias 링크는 unit 경로에서 직접 찾아 거부합니다. 검색 경로 아래의 하위 디렉터리나 아직 없는 파일을 가리키는 링크도, 끝에 `/`나 `/.`를 붙인 링크도 alias로 봅니다. 상위 경로를 실제 경로로 풀었을 때 검색 경로 밖의 파일을 가리키는 별도 linked unit은 alias로 보지 않습니다. 그래서 정지 창의 hold가 건 mask는 중앙 정지·재개와 기동 전 검사를 막지 않습니다.
