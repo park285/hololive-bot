@@ -369,7 +369,11 @@ class Cutover(unittest.TestCase):
         folder = self.system / (d.C + '.service.wants')
         folder.mkdir()
         (folder / 'README').write_bytes(b'note\n')
+        (folder / 'NOTES').symlink_to('../probe.service')
         (folder / 'masked.service').symlink_to('/dev/null')
+        (folder / 'zero.service').symlink_to('/dev/zero')
+        (self.root / 'empty.service').write_bytes(b'')
+        (folder / 'empty.service').symlink_to(self.root / 'empty.service')
         self.cli('check', target)
         (folder / 'probe.service').symlink_to('../probe.service')
         with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):

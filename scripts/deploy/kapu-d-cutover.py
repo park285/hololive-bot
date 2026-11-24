@@ -825,10 +825,17 @@ def service_dropins(name):
     return sorted(found)
 
 
+UNIT_FILE_NAME = re.compile(r'[^/]+\.(service|socket|target|device|mount|automount|swap|timer|path|slice|scope)')
+
+
 def applied_entry(path, suffix):
-    if path.is_symlink() and os.readlink(path) == '/dev/null':
+    if not (path.name.endswith('.conf') if suffix == '.d' else path.is_symlink() and UNIT_FILE_NAME.fullmatch(path.name)):
         return False
-    return path.name.endswith('.conf') if suffix == '.d' else path.is_symlink()
+    try:
+        st = os.stat(path)
+    except OSError:
+        return True
+    return not (stat.S_ISCHR(st.st_mode) or (stat.S_ISREG(st.st_mode) and st.st_size == 0))
 
 
 def resumable(h, target):
