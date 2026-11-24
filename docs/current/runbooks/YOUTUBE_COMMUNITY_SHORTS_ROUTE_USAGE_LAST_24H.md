@@ -47,6 +47,7 @@ SELECT
     COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'PENDING') AS pending_outbox_count,
     COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'SENT') AS sent_outbox_count,
     COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'FAILED') AS failed_outbox_count,
+    MAX(o.created_at) FILTER (WHERE o.status = 'FAILED' AND o.sent_at IS NULL) AS last_unsent_failed_outbox_created_at,
     COUNT(d.id) AS delivery_count,
     MIN(d.sent_at) FILTER (WHERE d.status = 'SENT') AS first_success_at,
     MAX(d.sent_at) FILTER (WHERE d.status = 'SENT') AS last_success_at,
@@ -80,5 +81,5 @@ SQL
 - `success_send_count > 0`: outbox delivery 발송이 성공했습니다. 같은 `outbox_id`의 최종 결과 로그에서 `delivery_path = youtube_outbox_dispatcher`를 확인합니다.
 - `pending_outbox_count > 0`이고 `delivery_count = 0`: outbox가 room별 delivery로 아직 fan-out되지 않았습니다. 미발송 후보입니다.
 - `outbox_count > 0`, `sent_outbox_count = outbox_count`, `delivery_count = 0`, `ledger_sent_room_count = 0`, `ledger_quarantined_room_count = 0`: 구독 room이 없어 outbox가 delivery 없이 SENT로 끝난 게시물입니다. 미발송이 아닙니다. 원장 room이 있으면 정리된 다른 outbox가 그 room에 발송했거나 격리된 것이므로 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)로 판정합니다.
-- `failed_outbox_count > 0`이고 `delivery_count = 0`: 구독 조회 등 fan-out이 재시도 한도까지 실패해 room별 delivery 없이 끝났습니다. 발송 누락이므로 outbox의 `error`를 확인합니다.
-- `outbox_count = 0`: alarm-worker 경로에 진입하지 않았습니다. 끝난 outbox가 `youtube_delivery.cleanup_after_ms`를 넘겨 지워진 경우도 여기에 해당하므로 원장 room 수(`ledger_sent_room_count`, `ledger_quarantined_room_count`)와 함께 봅니다([Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `sent_outbox_cleaned`).
+- `failed_outbox_count > 0`, `delivery_count = 0`, `ledger_sent_room_count = 0`: 구독 조회 등 fan-out이 재시도 한도까지 실패해 room별 delivery 없이 끝났습니다. `youtube_delivery.revive_enabled`가 켜져 있으면 `last_unsent_failed_outbox_created_at`부터 `youtube_delivery.revive_freshness_window_ms`가 지나기 전까지 revive가 outbox를 PENDING으로 되돌려 fan-out을 다시 하므로 아직 최종이 아닙니다. 그 뒤에도 남으면 발송 누락이므로 outbox의 `error`를 확인합니다. `ledger_sent_room_count > 0`이면 정리된 다른 outbox가 이미 그 room에 발송했으므로 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)로 판정합니다.
+- `outbox_count = 0`: outbox가 없습니다. alarm-worker 경로에 진입하지 않았거나, 끝난 outbox가 `youtube_delivery.cleanup_after_ms`를 넘겨 지워졌습니다. 원장 room 수(`ledger_sent_room_count`, `ledger_quarantined_room_count`)가 있으면 정리된 경우입니다([Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `sent_outbox_cleaned`). 원장 room도 없으면 진입 전 누락과 실패 뒤 정리를 DB로 구분할 수 없으므로 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `outbox_missing` 기준대로 로그로 확인합니다.
