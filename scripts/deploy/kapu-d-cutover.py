@@ -783,10 +783,15 @@ def unit_paths():
 
 def foreign_units(name):
     paths = unit_paths()
-    need(GEN in paths, '불명 systemd generator 경로')
-    return sorted(str(root / (name + '.service')) for root in paths[:paths.index(GEN)]
-                  if (os.path.islink(root / (name + '.service')) or (root / (name + '.service')).is_file())
-                  and root / (name + '.service') != mask(name))
+    need(GEN in paths and SYSTEM in paths, '불명 systemd unit 경로')
+    proc = subprocess.run(['systemd-analyze', 'unit-files'], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, timeout=60, cwd='/',
+                          env={**COMMAND_ENV, 'LC_ALL': 'C',
+                               'SYSTEMD_UNIT_PATH': ':'.join(map(str, [p for p in paths if p != SYSTEM] + [SYSTEM]))})
+    need(proc.returncode == 0, 'systemd unit 이름 판정 불가: ' + name)
+    picked = re.findall('^ids: ' + re.escape(name + '.service') + ' (?:→|->) (.*)$',
+                        proc.stdout.decode(errors='replace'), re.M)
+    return [] if picked == [str(GEN / (name + '.service'))] else picked or [name + '.service']
 
 
 PULLS = ('Wants', 'Requires', 'Requisite', 'BindsTo', 'Upholds')

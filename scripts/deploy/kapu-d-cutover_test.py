@@ -671,6 +671,24 @@ class Cutover(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertFalse((self.h / 'resume-attempt.json').exists())
 
+    def test_check_ignores_a_self_alias_but_not_the_unit_behind_it(self):
+        target = self.target()
+        self.seal(target)
+        later = self.root / 'later'
+        later.mkdir()
+        self.patch('unit_paths', lambda: [self.system, self.early, later, d.GEN, self.vendor])
+        for name in d.NAMES:
+            (self.early / (name + '.service')).symlink_to(d.GEN / (name + '.service'))
+        (later / (d.I + '.service')).symlink_to('../generator/' + d.I + '.service')
+        self.cli('check', target)
+        (later / (d.C + '.service')).write_bytes(b'[Service]\nExecStart=/bin/true\n')
+        with self.assertRaisesRegex(d.Refused, 'systemd unit 파일'):
+            self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, 'systemd unit 파일'):
+            self.resume()
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
     def test_check_and_resume_refuse_a_unit_systemd_cannot_load(self):
         target = self.target()
         self.seal(target)
