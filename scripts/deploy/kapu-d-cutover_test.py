@@ -137,6 +137,7 @@ class Cutover(unittest.TestCase):
         self.assertFalse(any('PASSWORD' in arg or '.key' in arg for arg in sql))
 
     def setUp(self):
+        self.addCleanup(os.chdir, os.getcwd())
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
@@ -707,6 +708,20 @@ class Cutover(unittest.TestCase):
                 self.assertFalse((self.h / 'resume-attempt.json').exists())
                 (wants / (entry + '.service')).unlink()
         self.cli('check', target)
+
+    def test_check_resolves_process_relative_links_from_the_root_like_systemd(self):
+        target = self.target()
+        self.seal(target)
+        op = self.root / 'op'
+        decoy = op / d.mask(d.C).relative_to('/')
+        decoy.parent.mkdir(parents=True)
+        decoy.symlink_to('/dev/null')
+        upholds = self.system / (d.I + '.service.upholds')
+        upholds.mkdir()
+        (upholds / 'evil.service').symlink_to('/proc/self/cwd' + str(d.mask(d.C)))
+        os.chdir(op)
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
 
     def test_check_accepts_dependency_links_masked_by_a_link_resume_keeps(self):
         target = self.target()

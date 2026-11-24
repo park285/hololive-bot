@@ -1012,6 +1012,7 @@ def main():
                                {C:a.collector_unit_sha256,I:a.issuer_unit_sha256})
     need(os.geteuid() == 0 and socket.gethostname().split('.')[0] == 'kapu' and os.uname().machine == 'x86_64', 'kapu rootful amd64 전용')
     need(a.hold.parent == STORE and re.fullmatch('d-cutover-[a-zA-Z0-9][a-zA-Z0-9-]{0,63}',a.hold.name), 'hold 경로 불일치')
+    os.chdir('/')
     trusted(Path(__file__).resolve())
     need(raw(RELEASE_ROOT / '.source-revision').removesuffix(b'\n') == a.revision.encode(),
          '배포 트리의 source revision과 불일치')
