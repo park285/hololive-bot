@@ -370,16 +370,14 @@ class Cutover(unittest.TestCase):
             self.cli('check', target)
         self.assertFalse((self.h / 'resume-attempt.json').exists())
 
-    def test_dropin_precedence_follows_unit_name_then_alias_then_type_level(self):
+    def test_dropin_precedence_follows_unit_name_then_prefix_then_type_level(self):
         target = self.target()
         self.seal(target)
-        (self.system / 'collector-alias.service').symlink_to(d.GEN / (d.C + '.service'))
         cases = [
             ((self.system, 'service'), (self.vendor, d.C + '.service'), True),
-            ((self.system, 'collector-alias.service'), (self.vendor, d.C + '.service'), True),
-            ((self.system, 'collector-alias.service'), (self.vendor, 'hololive-.service'), True),
+            ((self.system, 'service'), (self.vendor, 'hololive-.service'), True),
             ((self.vendor, d.C + '.service'), (self.system, 'service'), False),
-            ((self.vendor, 'hololive-.service'), (self.system, 'collector-alias.service'), False),
+            ((self.vendor, 'hololive-.service'), (self.system, 'service'), False),
             ((self.system, d.C + '.service'), (self.system, 'hololive-.service'), False),
         ]
         for (mroot, mstem), (lroot, lstem), refused in cases:
@@ -578,18 +576,24 @@ class Cutover(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.cli('check', target)
 
-    def test_check_and_resume_see_dropins_attached_through_an_alias(self):
+    def test_check_and_resume_refuse_aliases_but_not_aliases_of_other_units(self):
         target = self.target()
         self.seal(target)
-        (self.system / 'collector-alias.service').symlink_to(d.GEN / (d.C + '.service'))
-        (self.system / 'chained.service').symlink_to('collector-alias.service')
+        for alias in (self.system / 'collector-alias.service', self.system / 'chained.service'):
+            alias.symlink_to(d.GEN / (d.C + '.service') if alias.name == 'collector-alias.service' else 'collector-alias.service')
+            with self.assertRaisesRegex(d.Refused, 'systemd unit 별칭'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd unit 별칭'):
+                self.resume()
+        (self.system / 'chained.service').unlink()
+        (self.system / 'collector-alias.service').unlink()
         (self.vendor / 'other.service').write_bytes(b'[Service]\nExecStart=/bin/true\n')
         (self.vendor / 'unrelated.service').symlink_to('other.service')
         for folder in (self.vendor / 'unrelated.service.d', self.vendor / 'other.service.d'):
             folder.mkdir()
             (folder / '10-own.conf').write_bytes(b'[Service]\nEnvironment=OWN=1\n')
         self.cli('check', target)
-        for folder in (self.system / 'collector-alias.service.d', self.vendor / 'collector-.service.d', self.vendor / 'chained.service.d'):
+        for folder in (self.vendor / (d.C.rpartition('-')[0] + '-.service.d'),):
             folder.mkdir()
             (folder / '10-late.conf').write_bytes(b'[Service]\nEnvironment=LATE=1\n')
             with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
@@ -603,9 +607,8 @@ class Cutover(unittest.TestCase):
     def test_check_and_resume_refuse_dependency_links_added_after_the_stop(self):
         target = self.target()
         self.seal(target)
-        (self.system / 'collector-alias.service').symlink_to(d.GEN / (d.C + '.service'))
         for folder in (self.system / (d.C + '.service.requires'), self.vendor / 'hololive-.service.wants',
-                       self.vendor / 'service.upholds', self.system / 'collector-alias.service.wants'):
+                       self.vendor / 'service.upholds'):
             folder.mkdir()
             (folder / 'probe.service').symlink_to('../probe.service')
             with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
@@ -739,23 +742,25 @@ class Cutover(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertFalse((self.h / 'resume-attempt.json').exists())
 
-    def test_check_follows_systemd_for_crossed_alias_masks_relative_dirs_and_invalid_names(self):
+    def test_check_and_resume_refuse_an_alias_whose_masked_dependency_systemd_picks_at_random(self):
         target = self.target()
         self.seal(target)
         for alias in ('alpha', 'beta'):
             (self.system / (alias + '.service')).symlink_to(d.GEN / (d.C + '.service'))
             (self.system / (alias + '.service.wants')).mkdir()
-            (self.vendor / (alias + '.service.wants')).mkdir()
-        (self.system / 'alpha.service.wants' / 'probe-a.service').symlink_to('/dev/null')
-        (self.system / 'beta.service.wants' / 'probe-b.service').symlink_to('/dev/null')
-        (self.vendor / 'alpha.service.wants' / 'probe-b.service').symlink_to('../probe.service')
-        (self.vendor / 'beta.service.wants' / 'probe-a.service').symlink_to('../probe.service')
-        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
-            self.cli('check', target)
-        for alias in ('alpha', 'beta'):
-            for root in (self.system, self.vendor):
-                for entry in (root / (alias + '.service.wants')).iterdir():
-                    entry.unlink()
+        (self.system / 'alpha.service.wants' / 'probe.service').symlink_to('/dev/null')
+        (self.system / 'beta.service.wants' / 'probe.service').symlink_to('../probe.service')
+        for _ in range(16):
+            with self.assertRaisesRegex(d.Refused, 'systemd unit 별칭'):
+                self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, 'systemd unit 별칭'):
+            self.resume()
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_follows_systemd_for_relative_dirs_and_invalid_names(self):
+        target = self.target()
+        self.seal(target)
         (self.system / 'links').mkdir()
         (self.system / 'links' / 'probe.service').symlink_to('/dev/null')
         (self.system / (d.C + '.service.wants')).symlink_to('links')

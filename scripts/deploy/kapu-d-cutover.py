@@ -802,8 +802,9 @@ def service_dropins(name):
         fragment = Path(tmp) / 'unit' / (name + '.service')
         fragment.parent.mkdir()
         fragment.write_bytes(raw(GEN / (name + '.service')))
-        drops, pulls, mounts = systemd_view(fragment, unit_paths())
-        _, own, _ = systemd_view(fragment, [Path(tmp) / 'none'])
+        aliases, drops, pulls, mounts = systemd_view(fragment, unit_paths())
+        need(not aliases, 'systemd unit 별칭 있음: ' + name + ' ← ' + ', '.join(aliases))
+        _, _, own, _ = systemd_view(fragment, [Path(tmp) / 'none'])
     return drops + sorted(pulls - own) + sorted(dep for dep in mounts if not mounted(dep.partition(': ')[2]))
 
 
@@ -824,7 +825,8 @@ def systemd_view(fragment, paths):
     drops = sorted(line.removeprefix('DropIn Path: ') for line in lines if line.startswith('DropIn Path: '))
     pulls = [(dep, origin.rstrip(')').split()) for dep, _, origin in (line.partition(' (') for line in lines)
              if dep.split(':')[0] in PULLS]
-    return drops, {dep for dep, origins in pulls if 'origin-file' in origins}, {dep for dep, origins in pulls if 'origin-path' in origins}
+    aliases = sorted(line.removeprefix('Alias: ') for line in lines if line.startswith('Alias: '))
+    return aliases, drops, {dep for dep, origins in pulls if 'origin-file' in origins}, {dep for dep, origins in pulls if 'origin-path' in origins}
 
 
 def resumable(h, target):
