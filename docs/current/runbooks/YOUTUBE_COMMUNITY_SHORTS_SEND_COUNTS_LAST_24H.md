@@ -54,7 +54,8 @@ per_post AS (
         COUNT(DISTINCT o.id) AS outbox_count,
         COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'PENDING') AS pending_outbox_count,
         COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'SENT') AS sent_outbox_count,
-        MAX(o.created_at) FILTER (WHERE o.status = 'FAILED' AND o.sent_at IS NULL) AS last_unsent_failed_outbox_created_at,
+        MAX(o.created_at) FILTER (WHERE o.status = 'FAILED' AND o.sent_at IS NULL AND (d.id IS NULL OR (d.status = 'FAILED' AND COALESCE(d.error, '') NOT IN ('delivery freshness expired', 'client request id generations exhausted')))) AS last_revivable_outbox_created_at,
+        MAX(o.created_at) FILTER (WHERE o.status = 'PENDING' AND d.id IS NULL) AS last_undelivered_pending_outbox_created_at,
         COUNT(d.id) FILTER (WHERE d.status IN ('PENDING', 'SENDING')) AS in_progress_delivery_count,
         COUNT(d.id) FILTER (WHERE d.status = 'SENT' AND request.handoff_next_check_at IS NOT NULL) AS handoff_pending_delivery_count,
         COUNT(d.id) FILTER (WHERE d.status = 'SENT') AS success_send_count,
@@ -85,20 +86,40 @@ per_post AS (
         track.alarm_latency_millis,
         track.alarm_latency_exceeded
 ),
+ledger_request AS (
+    SELECT DISTINCT ON (l.kind, l.logical_id, l.room_id)
+        l.kind,
+        l.logical_id,
+        l.status,
+        r.handoff_next_check_at
+    FROM youtube_notification_delivery_ledger AS l
+    LEFT JOIN (
+        youtube_notification_send_request AS r
+        CROSS JOIN LATERAL unnest(r.member_ids) AS member(delivery_id)
+    ) ON member.delivery_id = l.source_delivery_id
+    WHERE (l.kind, l.logical_id) IN (SELECT kind, canonical_content_id FROM per_post)
+    ORDER BY l.kind, l.logical_id, l.room_id, r.created_at DESC, r.base_id DESC
+),
+ledger_post AS (
+    SELECT
+        kind,
+        logical_id,
+        COUNT(*) FILTER (WHERE status = 'QUARANTINED') AS ledger_quarantined_room_count,
+        COUNT(*) FILTER (WHERE status = 'SENT') AS ledger_sent_room_count,
+        COUNT(*) FILTER (WHERE status = 'SENT' AND handoff_next_check_at IS NOT NULL) AS ledger_handoff_pending_room_count
+    FROM ledger_request
+    GROUP BY kind, logical_id
+),
 with_ledger AS (
     SELECT
         p.*,
-        (SELECT COUNT(*) FROM youtube_notification_delivery_ledger AS l
-          WHERE l.kind = p.kind AND l.logical_id = p.canonical_content_id AND l.status = 'QUARANTINED') AS ledger_quarantined_room_count,
-        (SELECT COUNT(*) FROM youtube_notification_delivery_ledger AS l
-          WHERE l.kind = p.kind AND l.logical_id = p.canonical_content_id AND l.status = 'SENT') AS ledger_sent_room_count,
-        (SELECT COUNT(*) FROM youtube_notification_delivery_ledger AS l
-          WHERE l.kind = p.kind AND l.logical_id = p.canonical_content_id AND l.status = 'SENT'
-            AND (SELECT r.handoff_next_check_at IS NOT NULL FROM youtube_notification_send_request AS r
-                  WHERE l.source_delivery_id = ANY(r.member_ids)
-                  ORDER BY r.created_at DESC, r.base_id DESC
-                  LIMIT 1)) AS ledger_handoff_pending_room_count
+        COALESCE(lp.ledger_quarantined_room_count, 0) AS ledger_quarantined_room_count,
+        COALESCE(lp.ledger_sent_room_count, 0) AS ledger_sent_room_count,
+        COALESCE(lp.ledger_handoff_pending_room_count, 0) AS ledger_handoff_pending_room_count
     FROM per_post AS p
+    LEFT JOIN ledger_post AS lp
+        ON lp.kind = p.kind
+       AND lp.logical_id = p.canonical_content_id
 )
 SELECT
     CASE
@@ -135,14 +156,15 @@ SELECT
     ledger_sent_room_count,
     failed_delivery_count,
     failed_attempt_delivery_count,
-    last_unsent_failed_outbox_created_at,
+    last_revivable_outbox_created_at,
+    last_undelivered_pending_outbox_created_at,
     last_sent_at
 FROM with_ledger
 ORDER BY COALESCE(actual_published_at, detected_at) DESC, channel_id ASC, content_id ASC;
 SQL
 ```
 
-운영 기준은 `quarantined` 행 0건이며, `in_progress` 행이 남아 있으면 최종 판정이 아닙니다. `youtube_delivery.revive_enabled`가 켜져 있으면 `last_unsent_failed_outbox_created_at`부터 `youtube_delivery.revive_freshness_window_ms`가 지나지 않은 행도 revive가 FAILED outbox나 room을 다시 PENDING으로 돌릴 수 있으므로 최종 판정이 아닙니다. 같은 CTE 뒤에 `SELECT COUNT(*) FILTER (WHERE quarantined_delivery_count > 0 OR ledger_quarantined_room_count > 0) AS quarantined_posts FROM with_ledger;`를 붙이면 한 줄로 판정할 수 있습니다.
+운영 기준은 `quarantined` 행 0건이며, `in_progress` 행이 남아 있으면 최종 판정이 아닙니다. `youtube_delivery.revive_enabled`가 켜져 있으면 `last_revivable_outbox_created_at`부터 `youtube_delivery.revive_freshness_window_ms`가 지나지 않은 행도 revive가 FAILED outbox나 room을 다시 PENDING으로 돌릴 수 있으므로 최종 판정이 아닙니다. 이 값은 `sent_at` 없이 FAILED로 끝난 outbox 가운데 revive 대상(delivery 없는 fan-out 실패, 또는 `error`가 `delivery freshness expired`·`client request id generations exhausted`가 아닌 FAILED delivery)이 있는 outbox의 가장 나중 생성 시각이며, 비어 있으면 revive로 바뀔 실패가 없습니다. 같은 CTE 뒤에 `SELECT COUNT(*) FILTER (WHERE quarantined_delivery_count > 0 OR ledger_quarantined_room_count > 0) AS quarantined_posts FROM with_ledger;`를 붙이면 한 줄로 판정할 수 있습니다.
 
 ## Readout
 
@@ -150,10 +172,10 @@ SQL
 - `quarantined_posts = 0`: 조회 시점에 집계 창에서 격리된 delivery나 원장 항목이 없다는 뜻입니다. provider 응답 타임아웃 같은 결과 불명 시도는 stale sweep이 격리하기 전까지 SENDING(`in_progress`)으로 보이므로, `in_progress` 행이 있으면 stale sweep 뒤에 다시 판정합니다.
 - `status = quarantined`: provider가 받았는지 모르는 시도가 격리됐습니다. 재발송하지 않으므로 room에 도착했는지 전송 증거로 검토합니다. 받았다면 1회, 받지 못했다면 누락입니다.
 - `status = no_target_rooms`: 구독 room이 없어 outbox가 delivery 없이 SENT로 끝났고 원장 SENT room도 없습니다. 발송할 대상이 없었던 정상 상태입니다.
-- `status = no_success`: 진행 중인 room 없이 SENT delivery도 원장 SENT room도 없습니다. room이 모두 실패했거나, fan-out이 실패해 delivery 없이 outbox가 FAILED로 끝났습니다. 후자는 outbox `error`로 확인합니다. revive 창 안이면(위 운영 기준) 다시 발송될 수 있습니다.
-- `status = outbox_missing`: 게시물 추적 레코드는 있으나 outbox row도, 원장 room도, `alarm_sent_at`도 없습니다. 전송 파이프라인에 진입하지 못했거나, 실패로 끝난 outbox가 `youtube_delivery.cleanup_after_ms` 뒤 정리됐습니다. 실패한 room과 fan-out 실패는 원장을 남기지 않으므로 둘은 DB로 구분되지 않습니다. alarm-worker 로그에 그 게시물의 fan-out 실패나 room 실패 결과가 있으면 실패 후 정리된 것이고, 없으면 진입 전 누락입니다. 어느 쪽이든 발송되지 않았습니다.
+- `status = no_success`: 진행 중인 room 없이 SENT delivery도 원장 SENT room도 없습니다. room이 모두 실패했거나, fan-out이 실패해 delivery 없이 outbox가 FAILED로 끝났습니다. 후자는 outbox `error`로 확인합니다. `last_revivable_outbox_created_at`이 revive 창 안이면(위 운영 기준) 다시 발송될 수 있습니다.
+- `status = outbox_missing`: 게시물 추적 레코드는 있으나 outbox row도, 원장 room도, `alarm_sent_at`도 없습니다. 전송 파이프라인에 진입하지 못했거나, 실패로 끝난 outbox가 `youtube_delivery.cleanup_after_ms` 뒤 정리됐거나, 구독 room 없이 SENT로 끝난 outbox가 hololive-api가 그 완료 시각을 tracking `alarm_sent_at`에 옮기기 전에 정리됐습니다. 실패한 room, fan-out 실패, 구독 room 없는 종료는 원장을 남기지 않으므로 셋은 DB로 구분되지 않습니다. alarm-worker 로그에 그 게시물의 fan-out 실패나 room 실패 결과가 있으면 실패 후 정리된 것입니다. 구독 room 없는 종료는 게시물별 로그를 남기지 않으므로, 실패 로그가 없으면 그 채널을 구독한 room이 있었는지로 진입 전 누락과 구분합니다. 어느 쪽이든 room에 발송되지 않았습니다.
 - `status = sent_outbox_cleaned`: 끝난 outbox가 보존 기간을 넘겨 지워졌고 원장 SENT가 남아 있으며, 그 room의 요청이 handoff 확인을 기다리지 않습니다. 기다리는 요청이 남아 있으면 `in_progress`입니다.
 - `status = tracking_only_outbox_cleaned`: outbox와 원장 SENT 없이 tracking `alarm_sent_at`만 남았습니다. 구독 room 없이 끝난 outbox의 `sent_at`이 복사됐거나, Iris가 접수한 뒤 handoff 실패로 재시도가 소진돼 원장 SENT가 지워졌을 수 있으므로 최종 결과는 알 수 없습니다.
-- `status = in_progress`: outbox fan-out을 기다리거나, `PENDING`·`SENDING` room이 남았거나, SENT room의 handoff 확인(`handoff_pending_delivery_count`, 또는 원장 `source_delivery_id`를 member로 가진 가장 나중 요청이 확인을 기다리는 `ledger_handoff_pending_room_count`)이 끝나지 않았습니다. 요청 없이 함께 SENT가 된 별칭 delivery만 남거나 실제 발송 delivery가 정리돼도 요청이 남아 있으면 원장 쪽 값으로 잡힙니다. 확인 결과에 따라 재발급·실패·격리로 바뀔 수 있습니다. `target_room_count = 0`인데 outbox 생성 뒤 활성 프로필의 `queue.max_age`가 지났으면 fan-out이 다시 잡지 않고 정리 작업이 발송 없이 지우므로 `no_success`로 봅니다.
-- `status = failed_attempts`: 성공(SENT delivery 또는 원장 SENT room)은 있었지만 `FAILED` delivery나 실패한 시도가 있었던 delivery, 또는 delivery 없이 FAILED로 끝난 다른 outbox(같은 게시물의 별칭 outbox fan-out 실패)도 있습니다. revive 창 안이면 실패한 room이나 outbox가 다시 시도될 수 있습니다. 시도별 사유는 [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 로그로 확인합니다.
+- `status = in_progress`: outbox fan-out을 기다리거나, `PENDING`·`SENDING` room이 남았거나, SENT room의 handoff 확인(`handoff_pending_delivery_count`, 또는 원장 `source_delivery_id`를 member로 가진 가장 나중 요청이 확인을 기다리는 `ledger_handoff_pending_room_count`)이 끝나지 않았습니다. 요청 없이 함께 SENT가 된 별칭 delivery만 남거나 실제 발송 delivery가 정리돼도 요청이 남아 있으면 원장 쪽 값으로 잡힙니다. 확인 결과에 따라 재발급·실패·격리로 바뀔 수 있습니다. delivery 없는 PENDING outbox는 생성 뒤 활성 프로필의 `queue.max_age`가 지나면 fan-out이 다시 잡지 않고 정리 작업이 발송 없이 지웁니다. `last_undelivered_pending_outbox_created_at`부터 그 시간이 지났고 `in_progress_delivery_count`, `handoff_pending_delivery_count`, `ledger_handoff_pending_room_count`가 모두 0이면, 그 outbox는 빼고 나머지 outbox와 원장 값으로 위 판정 순서를 다시 적용합니다. 그 outbox밖에 없고 성공 근거(`success_send_count`, `ledger_sent_room_count`)도 없으면 `no_success`입니다.
+- `status = failed_attempts`: 성공(SENT delivery 또는 원장 SENT room)은 있었지만 `FAILED` delivery나 실패한 시도가 있었던 delivery, 또는 delivery 없이 FAILED로 끝난 다른 outbox(같은 게시물의 별칭 outbox fan-out 실패)도 있습니다. `last_revivable_outbox_created_at`이 revive 창 안이면 실패한 room이나 outbox가 다시 시도될 수 있습니다. 시도별 사유는 [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 로그로 확인합니다.
 - `publish_to_detect_ms`, `detect_to_sent_ms`: 외부 수집 구간과 내부 전달 구간입니다. `delay_seconds > 120`이면 2분 초과이며, 구간 판정은 [Latency Cause Report](YOUTUBE_COMMUNITY_SHORTS_LATENCY_CAUSE_REPORT.md)를 따릅니다.
