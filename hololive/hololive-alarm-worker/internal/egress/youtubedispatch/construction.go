@@ -117,7 +117,7 @@ func assembleDispatcher(
 	deliveryRepo := store.NewDeliveryRepository(deps.DB, logger)
 
 	tp := newTelemetryProcessor(telemetryRepository, logger, &config)
-	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, &config)
+	al := newAuditLogger(deliveryRepo, logger, &config)
 	grouper := newOutboxGrouper(deps.DB, deps.Cache, logger, &config)
 	formatter := format.NewMessageFormatter(deps.Renderer, deps.MemberNames, deps.MessageStrings)
 

@@ -8,25 +8,35 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type TerminalCommunityShortsOutboxResult struct {
-	OutboxID              int64
-	Kind                  domain.OutboxKind
-	ChannelID             string
-	ContentID             string
-	Payload               string
-	Status                domain.OutboxStatus
-	SentAt                *time.Time
-	Error                 string
-	TargetRoomCount       int
-	SuccessfulRoomCount   int
-	FailedRoomCount       int
-	AggregatedFailReason  string
-	LatencyClassification timeline.PostLatencyClassificationResult
+	OutboxID             int64
+	Kind                 domain.OutboxKind
+	ChannelID            string
+	ContentID            string
+	Payload              string
+	Status               domain.OutboxStatus
+	SentAt               *time.Time
+	Error                string
+	TargetRoomCount      int
+	SuccessfulRoomCount  int
+	FailedRoomCount      int
+	AggregatedFailReason string
+	Tracked              bool
+	ActualPublishedAt    *time.Time
+	AlarmSentAt          *time.Time
+	AlarmLatencyMillis   *int64
+}
+
+type terminalCommunityShortsOutbox struct {
+	domain.YouTubeNotificationOutbox
+	Tracked            bool       `db:"tracked"`
+	ActualPublishedAt  *time.Time `db:"tracked_actual_published_at"`
+	AlarmSentAt        *time.Time `db:"tracked_alarm_sent_at"`
+	AlarmLatencyMillis *int64     `db:"tracked_alarm_latency_millis"`
 }
 
 var (
@@ -40,7 +50,7 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 		return nil, nil
 	}
 
-	var outboxes []domain.YouTubeNotificationOutbox
+	var outboxes []terminalCommunityShortsOutbox
 
 	if err := dbx.SelectSQL(ctx, r.db, &outboxes, "load terminal community/shorts outboxes", loadTerminalCommunityShortsOutboxResultsSQL,
 		uniqueIDs, terminalCommunityShortsOutboxKinds, terminalCommunityShortsOutboxStatuses); err != nil {
@@ -51,7 +61,10 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 		return nil, nil
 	}
 
-	outboxResultIDs := collectOutboxIDs(outboxes)
+	outboxResultIDs := make([]int64, 0, len(outboxes))
+	for i := range outboxes {
+		outboxResultIDs = append(outboxResultIDs, outboxes[i].ID)
+	}
 
 	var deliveries []domain.YouTubeNotificationDelivery
 
@@ -76,19 +89,23 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 }
 
 func summarizeTerminalCommunityShortsOutbox(
-	outbox *domain.YouTubeNotificationOutbox,
+	outbox *terminalCommunityShortsOutbox,
 	deliveries []domain.YouTubeNotificationDelivery,
 ) TerminalCommunityShortsOutboxResult {
 	result := TerminalCommunityShortsOutboxResult{
-		OutboxID:        outbox.ID,
-		Kind:            outbox.Kind,
-		ChannelID:       outbox.ChannelID,
-		ContentID:       strings.TrimSpace(outbox.ContentID),
-		Payload:         outbox.Payload,
-		Status:          outbox.Status,
-		SentAt:          outbox.SentAt,
-		Error:           strings.TrimSpace(outbox.Error),
-		TargetRoomCount: len(deliveries),
+		OutboxID:           outbox.ID,
+		Kind:               outbox.Kind,
+		ChannelID:          outbox.ChannelID,
+		ContentID:          strings.TrimSpace(outbox.ContentID),
+		Payload:            outbox.Payload,
+		Status:             outbox.Status,
+		SentAt:             outbox.SentAt,
+		Error:              strings.TrimSpace(outbox.Error),
+		TargetRoomCount:    len(deliveries),
+		Tracked:            outbox.Tracked,
+		ActualPublishedAt:  outbox.ActualPublishedAt,
+		AlarmSentAt:        outbox.AlarmSentAt,
+		AlarmLatencyMillis: outbox.AlarmLatencyMillis,
 	}
 
 	result.SuccessfulRoomCount, result.FailedRoomCount, result.AggregatedFailReason = summarizeTerminalCommunityShortsDeliveries(deliveries)
@@ -150,17 +167,4 @@ func appendUniqueTerminalCommunityShortsDeliveryReason(reasons []string, seenRea
 	seenReasons[reason] = struct{}{}
 
 	return append(reasons, reason)
-}
-
-func collectOutboxIDs(items []domain.YouTubeNotificationOutbox) []int64 {
-	if len(items) == 0 {
-		return nil
-	}
-
-	ids := make([]int64, 0, len(items))
-	for i := range items {
-		ids = append(ids, items[i].ID)
-	}
-
-	return ids
 }

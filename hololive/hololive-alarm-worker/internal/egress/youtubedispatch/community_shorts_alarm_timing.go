@@ -3,8 +3,8 @@ package youtubedispatch
 import (
 	"log/slog"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
-	timeline "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 )
 
@@ -28,6 +28,10 @@ func appendCommunityShortsAlarmTimingLogAttrs(attrs []any, timing alarmtiming.Sn
 	return attrs
 }
 
-func communityShortsAlarmTimingForTimeline(row *timeline.PostDeliveryTimeline) alarmtiming.Snapshot {
-	return telemetry.CommunityShortsAlarmTimingForTracking(row.ActualPublishedAt, row.AlarmSentAt, row.AlarmLatencyMillis)
+func finalizedCommunityShortsAlarmTiming(result *store.TerminalCommunityShortsOutboxResult) alarmtiming.Snapshot {
+	if !result.Tracked {
+		return alarmtiming.Build(nil, result.SentAt)
+	}
+
+	return telemetry.CommunityShortsAlarmTimingForTracking(result.ActualPublishedAt, result.AlarmSentAt, result.AlarmLatencyMillis)
 }

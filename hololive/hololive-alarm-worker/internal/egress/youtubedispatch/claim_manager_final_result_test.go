@@ -13,7 +13,6 @@ import (
 	"github.com/park285/iris-client-go/v5/iris"
 	"github.com/stretchr/testify/require"
 
-	timeline "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -150,12 +149,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 	assertLogIntField(t, entry, FieldFailedRoomCount, 0)
 	assertLogTimeField(t, entry, FieldSentAt)
 
-	classification := readLatencyClassificationField(t, entry)
-	assertLogObjectStringField(t, classification, "status", string(timeline.PostLatencyClassificationStatusExceeded))
-	assertLogObjectIntField(t, classification, "threshold_millis", int(timeline.PostLatencyExceededThresholdMillis))
-	assertLogObjectStringField(t, classification, "delay_source", string(timeline.PostDelaySourceInternalDelivery))
-	assertLogObjectStringField(t, classification, "internal_delay_cause", string(timeline.PostInternalDelayCauseQueueWait))
-	assertLogObjectStringField(t, classification, "reason_code", string(timeline.PostLatencyReasonCodeQueueWait))
+	require.NotContains(t, entry, FieldLatencyClassification)
 }
 
 func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult(t *testing.T) {
@@ -216,63 +210,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 	assertLogIntField(t, entry, FieldFailedRoomCount, 0)
 	assertLogTimeField(t, entry, FieldSentAt)
 
-	classification := readLatencyClassificationField(t, entry)
-	assertLogObjectStringField(t, classification, "status", string(timeline.PostLatencyClassificationStatusExceeded))
-	assertLogObjectIntField(t, classification, "threshold_millis", int(timeline.PostLatencyExceededThresholdMillis))
-	assertLogObjectStringField(t, classification, "delay_source", string(timeline.PostDelaySourceInternalDelivery))
-	assertLogObjectStringField(t, classification, "internal_delay_cause", string(timeline.PostInternalDelayCauseQueueWait))
-	assertLogObjectStringField(t, classification, "reason_code", string(timeline.PostLatencyReasonCodeQueueWait))
-}
-
-func TestProcessPendingDeliveries_LogsCommunityShortsFinalExternalDelayReasonCode(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	db := newDeliveryPool(t)
-
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	actualPublishedAt := now.Add(-210 * time.Second)
-	detectedAt := now.Add(-15 * time.Second)
-	item := finalResultOutboxModel{
-		Kind:          string(domain.OutboxKindNewShort),
-		ChannelID:     "UC_final_external_delay",
-		ContentID:     "short-final-external-delay",
-		Payload:       `{"canonical_post_id":"short:short-final-external-delay","video_id":"short-final-external-delay","title":"short title"}`,
-		Status:        string(domain.OutboxStatusPending),
-		NextAttemptAt: now,
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &finalResultTrackingModel{
-		Kind:              string(domain.OutboxKindNewShort),
-		ContentID:         item.ContentID,
-		ChannelID:         item.ChannelID,
-		ActualPublishedAt: &actualPublishedAt,
-		DetectedAt:        detectedAt,
-	}).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &finalResultDeliveryModel{
-		OutboxID:      item.ID,
-		RoomID:        "room-external-delay",
-		Status:        string(domain.OutboxStatusPending),
-		NextAttemptAt: now,
-	}).Error)
-
-	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &Config{
-		BatchSize:           10,
-		LockTimeout:         time.Minute,
-		PollInterval:        time.Second,
-		MaxRetries:          3,
-		RetryBackoff:        time.Minute,
-		DeliveryParallelism: 1,
-	})
-
-	dispatcher.claim.processPendingDeliveries(ctx)
-
-	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
-	classification := readLatencyClassificationField(t, entry)
-	assertLogObjectStringField(t, classification, "status", string(timeline.PostLatencyClassificationStatusExceeded))
-	assertLogObjectStringField(t, classification, "delay_source", string(timeline.PostDelaySourceExternalCollection))
-	assertLogObjectStringField(t, classification, "internal_delay_cause", string(timeline.PostInternalDelayCauseQueueWait))
-	assertLogObjectStringField(t, classification, "reason_code", string(timeline.PostLatencyReasonCodeExternalCollection))
+	require.NotContains(t, entry, FieldLatencyClassification)
 }
 
 func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testing.T) {
@@ -331,12 +269,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	assertLogIntField(t, entry, FieldFailedRoomCount, 1)
 	assertLogTimeField(t, entry, FieldSentAt)
 
-	classification := readLatencyClassificationField(t, entry)
-	assertLogObjectStringField(t, classification, "status", string(timeline.PostLatencyClassificationStatusExceeded))
-	assertLogObjectIntField(t, classification, "threshold_millis", int(timeline.PostLatencyExceededThresholdMillis))
-	assertLogObjectStringField(t, classification, "delay_source", string(timeline.PostDelaySourceNone))
-	assertLogObjectStringField(t, classification, "internal_delay_cause", string(timeline.PostInternalDelayCauseJobFailure))
-	assertLogObjectStringField(t, classification, "reason_code", string(timeline.PostLatencyReasonCodeJobFailure))
+	require.NotContains(t, entry, FieldLatencyClassification)
 }
 
 func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *pgxpool.Pool, sender *finalResultTestSender, config *Config) (*Dispatcher, *bytes.Buffer) {
@@ -413,60 +346,6 @@ func readLogStringField(t *testing.T, entry map[string]any, field string) string
 	return value
 }
 
-func readLatencyClassificationField(t *testing.T, entry map[string]any) map[string]any {
-	t.Helper()
-
-	field := FieldLatencyClassification
-	raw, ok := entry[field]
-
-	if !ok {
-		t.Fatalf("log entry missing %q: %#v", field, entry)
-	}
-
-	value, ok := raw.(map[string]any)
-	if !ok {
-		t.Fatalf("log field %q type = %T, want object", field, raw)
-	}
-
-	return value
-}
-
-func readLogObjectStringField(t *testing.T, entry map[string]any, field string) string {
-	t.Helper()
-
-	raw, ok := entry[field]
-	if !ok {
-		t.Fatalf("log object missing %q: %#v", field, entry)
-	}
-
-	value, ok := raw.(string)
-	if !ok {
-		t.Fatalf("log object field %q type = %T, want string", field, raw)
-	}
-
-	return value
-}
-
-func readLogObjectIntField(t *testing.T, entry map[string]any, field string) int {
-	t.Helper()
-
-	raw, ok := entry[field]
-	if !ok {
-		t.Fatalf("log object missing %q: %#v", field, entry)
-	}
-
-	switch value := raw.(type) {
-	case float64:
-		return int(value)
-	case int:
-		return value
-	default:
-		t.Fatalf("log object field %q type = %T, want number", field, raw)
-	}
-
-	return 0
-}
-
 func readLogTimeField(t *testing.T, entry map[string]any, field string) time.Time {
 	t.Helper()
 
@@ -521,22 +400,6 @@ func assertLogStringField(t *testing.T, entry map[string]any, field, want string
 
 	if got := readLogStringField(t, entry, field); got != want {
 		t.Fatalf("log field %q = %q, want %q", field, got, want)
-	}
-}
-
-func assertLogObjectStringField(t *testing.T, entry map[string]any, field, want string) {
-	t.Helper()
-
-	if got := readLogObjectStringField(t, entry, field); got != want {
-		t.Fatalf("log object field %q = %q, want %q", field, got, want)
-	}
-}
-
-func assertLogObjectIntField(t *testing.T, entry map[string]any, field string, want int) {
-	t.Helper()
-
-	if got := readLogObjectIntField(t, entry, field); got != want {
-		t.Fatalf("log object field %q = %d, want %d", field, got, want)
 	}
 }
 
