@@ -723,6 +723,16 @@ class Cutover(unittest.TestCase):
         with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
             self.cli('check', target)
 
+    def test_check_accepts_dependency_links_masked_by_another_holds_anchor(self):
+        target = self.target()
+        self.seal(target)
+        old = self.system / ('.' + d.I + '.pair-old.mask')
+        old.symlink_to('/dev/null')
+        wants = self.system / (d.C + '.service.wants')
+        wants.mkdir()
+        (wants / 'probe.service').symlink_to(old)
+        self.cli('check', target)
+
     def test_check_accepts_dependency_links_masked_by_a_link_resume_keeps(self):
         target = self.target()
         self.seal(target)
