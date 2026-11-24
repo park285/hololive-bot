@@ -13,9 +13,9 @@ alarm-worker는 발송 시도마다 DB 행을 쓰지 않습니다. 전이 트랜
 
 | 근거 | 단위 | 내용 |
 | --- | --- | --- |
-| `message="YouTube community/shorts delivery attempt started"` | delivery 시도 | claim 직후 delivery마다 한 줄을 남깁니다. `attempt_ordinal`은 claim 시점 `attempt_count + 1`이며, revive가 `attempt_count`를 0으로 되돌리면 1부터 다시 셉니다. 같은 `(delivery_id, attempt_ordinal)`이 두 번 나오면 `attempt_started_at`으로 시도를 구분합니다. |
+| `message="YouTube community/shorts delivery attempt started"` | delivery 시도 | claim한 delivery의 발송 준비(메시지 포맷·요청 고정)와 SENDING 전이가 성공한 뒤 delivery마다 한 줄을 남깁니다. 준비 단계에서 실패한 claim은 이 줄 없이 delivery result 줄만 남으므로, 이 줄로 claim 횟수나 최초 대기 시간을 복원할 수 없습니다. `attempt_ordinal`은 claim 시점 `attempt_count + 1`이며, revive가 `attempt_count`를 0으로 되돌리면 1부터 다시 셉니다. 같은 `(delivery_id, attempt_ordinal)`이 두 번 나오면 `attempt_started_at`으로 시도를 구분합니다. |
 | `message="YouTube community/shorts delivery result"` | 발송 한 번(grouped 또는 per_room) | 대상·성공·실패 알람 수와 room 수, room이 하나면 `room_id`, 실패면 `failure_reason`(100자까지)을 남깁니다. |
-| `message="YouTube community/shorts delivery audit"`, `telemetry_source = outbox_final_result` | 게시물(outbox) | outbox가 SENT 또는 FAILED로 끝나면 한 줄을 남깁니다. 아래 필드 표를 따릅니다. |
+| `message="YouTube community/shorts delivery audit"`, `telemetry_source = outbox_final_result` | 게시물(outbox) | delivery 발송을 거쳐 outbox가 SENT 또는 FAILED로 끝나면 한 줄을 남깁니다. 아래 필드 표를 따릅니다. fan-out 단계에서 끝난 outbox(구독 room 조회 재시도 소진으로 delivery 없이 FAILED, 구독 room 없이 SENT)는 이 줄을 남기지 않으므로 Fallback SQL의 `outbox_status`로 확인합니다. |
 | `youtube_notification_delivery` | room별 delivery | `status`, `attempt_count`, `sent_at`, `error`의 현재 값입니다. outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 outbox와 함께 지워집니다. |
 | `youtube_notification_delivery_ledger` | `(kind, logical_id, room_id)` | room별 `SENT`·`QUARANTINED` 확정 원장입니다. `logical_id`는 `short:…`, `community:…` 형식입니다. |
 | `youtube_content_alarm_tracking` | 게시물 | `actual_published_at`, `detected_at`, `alarm_sent_at`, `alarm_latency_millis`, `alarm_latency_exceeded`입니다. |
@@ -107,7 +107,7 @@ SELECT
     track.detected_at,
     track.alarm_sent_at
 FROM outbox_post AS o
-JOIN youtube_notification_delivery AS d
+LEFT JOIN youtube_notification_delivery AS d
     ON d.outbox_id = o.id
 LEFT JOIN youtube_notification_send_request AS request
     ON request.base_id = d.send_request_id
@@ -124,6 +124,7 @@ SQL
 ## Readout
 
 - `delivery_status = SENT`: Iris가 해당 room 요청을 접수했습니다. `sent_at`이 접수 시각입니다. `handoff_next_check_at`이 있으면 handoff 확인을 기다리는 중입니다. `handoff_checked_at`은 확인 절차가 닫힌 시각일 뿐 성공 판정이 아닙니다. 확인이 실패로 정산되면 delivery가 SENT에서 벗어나지만, frozen member가 바뀌어 정산하지 못하고 닫힌 경우(`youtube delivery handoff check closed; frozen members changed since admission` Error 로그)에는 SENT와 `handoff_checked_at`이 함께 남습니다. reconciler 로그에는 Iris 요청 ID가 없고 `delivery_ids.first_id`·`generation`만 있으므로, SENT를 확정하려면 `handoff_first_delivery_id`·`handoff_generation`과 같은 값의 로그에 이 닫힘 로그나 `youtube delivery handoff failed`·`handoff outcome unknown` 로그가 없는지 확인합니다. 그 기간의 로그를 볼 수 없으면 결과를 미확정으로 둡니다.
+- `delivery_status`가 비어 있는 행: delivery 없이 끝난 outbox입니다. `outbox_status = FAILED`면 구독 room 조회 실패로 발송하지 못한 누락이고, `outbox_status = SENT`면 구독 room이 없었던 정상 종료입니다.
 - `delivery_status = PENDING`: 아직 보내지 않았거나 재시도를 기다립니다. `error`에 마지막 실패 사유가 남습니다.
 - `delivery_status = SENDING`: 발송 중입니다. 오래 남으면 stale sweep이 `QUARANTINED`로 격리합니다.
 - `delivery_status = FAILED`: 영구 실패 또는 재시도 한도 소진입니다. `youtube_delivery.revive_enabled`가 켜져 있으면 revive가 최근 FAILED 중 부모 outbox의 `sent_at`(`outbox_sent_at`)이 비어 있고 `error`가 `delivery freshness expired`·`client request id generations exhausted`가 아닌 행만 다시 PENDING으로 돌립니다. 부모 outbox가 SENT에 도달해 `outbox_sent_at`이 채워진 뒤 handoff 실패로 FAILED가 된 room은 되살아나지 않지만, 다른 room이 아직 진행 중이라 `outbox_sent_at`이 비어 있을 때 handoff 실패로 FAILED가 된 room은 되살아날 수 있습니다. `error`로 사유를 확인합니다.

@@ -132,12 +132,12 @@ ORDER BY COALESCE(actual_published_at, detected_at) DESC, channel_id ASC, conten
 SQL
 ```
 
-운영 기준은 `quarantined` 행 0건입니다. 같은 CTE 뒤에 `SELECT COUNT(*) FILTER (WHERE quarantined_delivery_count > 0 OR ledger_quarantined_room_count > 0) AS quarantined_posts FROM with_ledger;`를 붙이면 한 줄로 판정할 수 있습니다.
+운영 기준은 `quarantined` 행 0건이며, `in_progress` 행이 남아 있으면 최종 판정이 아닙니다. 같은 CTE 뒤에 `SELECT COUNT(*) FILTER (WHERE quarantined_delivery_count > 0 OR ledger_quarantined_room_count > 0) AS quarantined_posts FROM with_ledger;`를 붙이면 한 줄로 판정할 수 있습니다.
 
 ## Readout
 
 - `status = ok`: 진행 중·실패·격리 room 없이 대상 room이 모두 SENT이고 handoff 확인을 기다리는 room도 없습니다. frozen member가 바뀌어 정산하지 못하고 닫힌 확인도 SENT로 남으므로, 확정하려면 [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 handoff 로그 대조를 따릅니다.
-- `quarantined_posts = 0`: 집계 창에 결과 불명으로 격리된 delivery나 원장 항목이 없으므로 중복 발송 후보도 없습니다.
+- `quarantined_posts = 0`: 조회 시점에 집계 창에서 격리된 delivery나 원장 항목이 없다는 뜻입니다. provider 응답 타임아웃 같은 결과 불명 시도는 stale sweep이 격리하기 전까지 SENDING(`in_progress`)으로 보이므로, `in_progress` 행이 있으면 stale sweep 뒤에 다시 판정합니다.
 - `status = quarantined`: provider가 받았는지 모르는 시도가 격리됐습니다. 재발송하지 않으므로 room에 도착했는지 전송 증거로 검토합니다. 받았다면 1회, 받지 못했다면 누락입니다.
 - `status = no_target_rooms`: 구독 room이 없어 outbox가 delivery 없이 SENT로 끝났습니다. 발송할 대상이 없었던 정상 상태입니다.
 - `status = no_success`: 진행 중인 room 없이 SENT delivery가 하나도 없습니다. room이 모두 실패했거나, fan-out이 실패해 delivery 없이 outbox가 FAILED로 끝났습니다. 후자는 outbox `error`로 확인합니다.
