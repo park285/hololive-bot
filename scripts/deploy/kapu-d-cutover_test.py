@@ -453,6 +453,50 @@ class Cutover(unittest.TestCase):
             (folder / '10-late.conf').unlink()
         self.assertEqual(self.calls, [])
 
+    def test_check_resolves_symlinked_directories_in_alias_targets(self):
+        target = self.target()
+        self.seal(target)
+        generator = self.root / 'gen'
+        generator.mkdir()
+        (generator / (d.C + '.service')).write_bytes(b'[Unit]\n')
+        (self.root / 'gen-link').symlink_to('gen')
+        self.patch('unit_paths', lambda: [self.system, self.vendor, generator])
+        (self.vendor / 'collector-alias.service').symlink_to(self.root / 'gen-link' / (d.C + '.service'))
+        self.cli('check', target)
+        folder = self.vendor / 'collector-alias.service.d'
+        folder.mkdir()
+        (folder / '10-late.conf').write_bytes(b'[Service]\nEnvironment=LATE=1\n')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.resume()
+        self.assertEqual(self.calls, [])
+
+    def test_check_sees_aliases_behind_entries_that_systemd_skips(self):
+        target = self.target()
+        self.seal(target)
+        generator = self.root / 'gen'
+        generator.mkdir()
+        (generator / (d.C + '.service')).write_bytes(b'[Unit]\n')
+        (generator / 'self.service').write_bytes(b'[Unit]\n')
+        self.patch('unit_paths', lambda: [self.system, self.vendor, generator])
+        (self.system / 'self.service').symlink_to(generator / 'self.service')
+        (self.system / 'dir.service').mkdir()
+        (self.system / 'socket.service').symlink_to(generator / (d.C + '.socket'))
+        for alias in ('self', 'dir', 'socket'):
+            (self.vendor / (alias + '.service')).symlink_to(d.C + '.service')
+        self.cli('check', target)
+        for alias in ('self', 'dir', 'socket'):
+            folder = self.system / (alias + '.service.d')
+            folder.mkdir()
+            (folder / '10-late.conf').write_bytes(b'[Service]\nEnvironment=LATE=1\n')
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.resume()
+            (folder / '10-late.conf').unlink()
+        self.assertEqual(self.calls, [])
+
     def test_check_ignores_links_that_systemd_does_not_treat_as_aliases(self):
         target = self.target()
         self.seal(target)
@@ -463,7 +507,9 @@ class Cutover(unittest.TestCase):
         (self.vendor / 'linked.service').symlink_to(outside / (d.C + '.service'))
         (self.vendor / 'shadowed.service').symlink_to(generator / (d.C + '.service'))
         (self.system / 'shadowed.service').symlink_to('/dev/null')
-        for alias in ('linked', 'shadowed'):
+        (self.system / 'blue@x.service').symlink_to(d.C + '.service')
+        os.symlink(str(self.root / 'missing') + '/../gen/' + d.C + '.service', self.vendor / 'dangling.service')
+        for alias in ('linked', 'shadowed', 'blue@x', 'dangling'):
             (self.vendor / (alias + '.service.d')).mkdir()
             (self.vendor / (alias + '.service.d') / '10-own.conf').write_bytes(b'[Service]\nEnvironment=OWN=1\n')
         self.cli('check', target)

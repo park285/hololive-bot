@@ -774,18 +774,52 @@ def unit_paths():
     return paths
 
 
+SERVICE_NAME = re.compile(r'[A-Za-z0-9:_.\\-]+\.service')
+
+
+def chased(path):
+    current = Path(path.anchor)
+    parts = path.parts[1:]
+    for i, part in enumerate(parts):
+        if part == '..':
+            current = current.parent
+            continue
+        step = current / part
+        if not os.path.lexists(step):
+            return None if '..' in parts[i:] else step.joinpath(*parts[i+1:])
+        current = Path(os.path.realpath(step))
+    return current
+
+
+def unit_entry(root, e, search):
+    if e.name.startswith('.') or not SERVICE_NAME.fullmatch(e.name):
+        return False
+    if not e.is_symlink():
+        return None if e.is_file(follow_symlinks=False) else False
+    target = root / os.readlink(e.path)
+    parent = chased(target.parent)
+    if parent is None:
+        return False
+    if not any((parent / target.name).is_relative_to(p) for p in search):
+        return None
+    if target.name == e.name or not SERVICE_NAME.fullmatch(target.name):
+        return False
+    return target.name
+
+
 def service_dropins(name):
     paths = unit_paths()
     roots = [root for root in paths if root.is_dir()]
+    search = [Path(os.path.realpath(p)) for p in paths]
     entries = {}
     for root in roots:
-        for e in sorted(os.scandir(root), key=lambda e: e.name):
-            if e.name.endswith('.service') and e.name not in entries:
-                entries[e.name] = Path(os.path.normpath(root / os.readlink(e.path))) if e.is_symlink() else None
-    links = {(alias.removesuffix('.service'), dest.name.removesuffix('.service')) for alias, dest in entries.items()
-             if dest is not None and dest.name != alias and any(dest.is_relative_to(p) for p in paths)}
+        for e in os.scandir(root):
+            entry = unit_entry(root, e, search)
+            if entry is not False and e.name not in entries:
+                entries[e.name] = entry
     names = {name}
-    while grown := {alias for alias, target in links if target in names} - names:
+    while grown := {alias.removesuffix('.service') for alias, target in entries.items()
+                    if target and target.removesuffix('.service') in names} - names:
         names |= grown
     folders = {'service.d', *(n[:i+1] + '.service.d' for n in names for i,c in enumerate(n) if c == '-'),
                *(n + '.service.d' for n in names)}
