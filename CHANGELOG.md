@@ -6,7 +6,10 @@
 
 ## 미출시
 
+## r1.2.2 - 2026-11-24
+
 - **`!달력` 플랫 포스터 테마 6종 추가·7종 페이지별 독립 랜덤 회전:** 기존 다크(`starlight_orbit`)의 그라데이션·글로우·반투명 장식을 걷어내고 `Alpha=255` 솔리드 색지·`136px×7열` 정수 격자·`BlackHanSans` 조판 기반 플랫 포스터 테마 6종(다크 3종 `cream_bromide`·`kurokami_risograph`·`holo_stage`, 라이트 3종 `shirokami_risograph`·`sakura_sora_press`·`museum_archive`)을 추가했습니다. 기존 라이트(`prism_daylight`) 1세트와 합쳐 총 7종 테마 풀을 다크·라이트 구분 없이 운영하며, 생일 달력(1/2)과 데뷔 기념일 달력(2/2)이 각자 직전 테마만 피해 독립적으로 테마를 뽑으므로 `라이트+다크`·`다크+라이트`·`라이트+라이트`·`다크+다크` 모든 조합이 허용됩니다. 메모리(상한 64장)와 공유 Valkey 캐시(`bot:calendar:album:v7:<YYYY-MM>:<kind>:<theme>`)를 페이지 종류·테마 단위로 분리해 교차 조합 시에도 이미 렌더된 페이지를 재사용합니다.
+- **PO 검증 쌍 전송:** kapu의 rsync가 3.5.0으로 올라간 뒤 `po-central-cutover.sh`의 `--files-from=<(...)`가 `/dev/fd/63`을 열지 못해, c `quiesce-verified`와 deploy 전송이 원격 단계에 들어가기 전에 실패했습니다. 파일 목록을 표준 입력(`--files-from=-`)으로 넘깁니다.
 
 ## r1.2.1 - 2026-11-24
 
@@ -41,9 +44,3 @@
 - **의존성:** Go 모듈(klauspost/compress 1.20.5, mongo-driver/v2 2.10.1, x/net 0.63.0, google.golang.org/api 0.316.0, otel auto/sdk 1.2.2 등)과 xspaces·po-sandbox·youtubejs의 npm lockfile을 최신 안정판으로 올렸습니다. Node는 26.13.1(이미지 `NODE_VERSION`, CI, 이벤트 등급 helper의 정확한 버전 검사와 `engines`), npm `packageManager`는 12.2.3, Dockerfile 프런트엔드는 1.29.0입니다. ingress nginx 기반은 1.31.9로 올리고 이미지 태그를 `localhost/iris-stack-nginx:1.31.9-zlib1.4-r0`로 바꿨으며, Quadlet의 `NGINX_IMAGE`도 같은 태그를 가리킵니다. PostgreSQL 이미지의 gosu는 1.20(moby/sys/user 0.5.0, x/sys 0.50.0)으로 빌드하고, golang·distroless·node 기반 이미지 digest와 govulncheck 기본값(v1.10.0)을 갱신했습니다. ChatBotGo·TwentyQ가 쓰는 PostgreSQL 이미지는 `5e9b9b1f8` 빌드를 계속 요구하므로, 새 recipe는 다시 빌드하고 두 저장소의 provenance 값을 옮길 때 반영됩니다. Valkey 9.1.3은 스택 계약 고정값이라 그대로 둡니다.
 
 - **CI:** 배포 스크립트 시험이 `ap-host-native-cutover_test.sh`를 실행하는 user unit의 시간 상한을 120초에서 300초로 늘렸습니다. 이 시험은 단독으로 67~86초가 걸리는데, 호스트 부하가 높을 때 120초에서 끊겨 pre-push 게이트가 실패한 일이 있었습니다. 멈춘 시험을 끊는 역할은 그대로입니다.
-
-## r1.1.0 - 2026-11-22
-
-- PostgreSQL 18 전용이던 pg_jsonschema 실험의 재현 파일(`Dockerfile.jsonschema`, `jsonschema.py`, `testqueries/jsonschema.sql`)을 지웠습니다. pg_jsonschema v0.3.4에는 PostgreSQL 19용 바이너리가 없습니다. [실험 README](scripts/experiments/postgres-extensions/README.md)에는 측정 결과와 보류 판단만 남깁니다. 운영 이미지와 배포는 바뀌지 않습니다.
-
-- **`!스케쥴` 카드 시안 회전:** 쿄코·소피아·메라·츠즈리의 3:4 classic 일정 카드가 요청마다 기존 디자인과 새 포스터 시안(쿄코 2종, 나머지 멤버 각 3종) 중 하나를 무작위로 고르며, 같은 멤버에게 직전에 고른 시안은 다시 고르지 않습니다. 직전 시안은 프로세스 메모리에만 남으므로 재시작 뒤에는 전체에서 다시 고릅니다. orbit 템플릿, 16:9·4:3 형식, 다른 멤버는 기존 디자인 하나를 그대로 씁니다. 렌더 캐시는 시안별로 따로 두고 메모리 상한을 32장으로 늘렸으며, 공유 캐시 키가 `bot:schedule:card:v4:…`로 바뀌어 v3 항목은 읽지 않습니다. 저장된 카드 양식이 orbit인 멤버는 회전하지 않으며, 기본 스키마가 소피아를 orbit으로 넣으므로 운영 값이 orbit이면 Iris Console에서 classic으로 바꿔야 소피아 카드가 회전합니다.
