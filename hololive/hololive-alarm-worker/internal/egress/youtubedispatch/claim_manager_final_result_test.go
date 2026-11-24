@@ -199,6 +199,55 @@ func TestProcessPendingDeliveries_FinalResultReadsTrackingByCanonicalID(t *testi
 	require.GreaterOrEqual(t, readLogIntField(t, entry, FieldAlarmLatencyMillis), 190000)
 }
 
+func TestProcessPendingDeliveries_FinalResultReadsCommunityTrackingThroughPostURL(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	db := newDeliveryPool(t)
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	actualPublishedAt := now.Add(-200 * time.Second)
+	item := finalResultOutboxModel{
+		Kind:          string(domain.OutboxKindCommunityPost),
+		ChannelID:     "UC_final_community_url",
+		ContentID:     "https://www.youtube.com/post/UgkxCommunityURL",
+		Payload:       `{"canonical_post_id":"community:UgkxCommunityURL","post_id":"UgkxCommunityURL","content_text":"community title"}`,
+		Status:        string(domain.OutboxStatusPending),
+		NextAttemptAt: now,
+	}
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultTrackingModel{
+		Kind:              string(domain.OutboxKindCommunityPost),
+		ContentID:         "UgkxCommunityURL",
+		ChannelID:         item.ChannelID,
+		ActualPublishedAt: &actualPublishedAt,
+		DetectedAt:        now.Add(-150 * time.Second),
+	}).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultDeliveryModel{
+		OutboxID:      item.ID,
+		RoomID:        "room-community-url",
+		Status:        string(domain.OutboxStatusPending),
+		NextAttemptAt: now,
+	}).Error)
+
+	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &Config{
+		BatchSize:           10,
+		LockTimeout:         time.Minute,
+		PollInterval:        time.Second,
+		MaxRetries:          3,
+		RetryBackoff:        time.Minute,
+		DeliveryParallelism: 1,
+	})
+
+	dispatcher.claim.processPendingDeliveries(ctx)
+
+	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
+	assertLogStringField(t, entry, FieldPostID, "community:UgkxCommunityURL")
+	assertLogStringField(t, entry, FieldSendResult, sendResultSuccess)
+	assertLogTimeField(t, entry, FieldActualPublishedAt, actualPublishedAt)
+	require.GreaterOrEqual(t, readLogIntField(t, entry, FieldAlarmLatencyMillis), 200000)
+}
+
 func TestProcessPendingDeliveries_FinalResultWithoutTrackingUsesOutboxSentAt(t *testing.T) {
 	t.Parallel()
 
@@ -238,6 +287,62 @@ func TestProcessPendingDeliveries_FinalResultWithoutTrackingUsesOutboxSentAt(t *
 	require.NotContains(t, entry, FieldActualPublishedAt)
 	require.NotContains(t, entry, FieldAlarmLatencyMillis)
 	require.Equal(t, readLogTimeField(t, entry, FieldSentAt), readLogTimeField(t, entry, FieldAlarmSentAt))
+}
+
+func TestProcessPendingDeliveries_FinalResultSurvivesTrackingLookupFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	db := newDeliveryPool(t)
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	actualPublishedAt := now.Add(-190 * time.Second)
+	item := finalResultOutboxModel{
+		Kind:          string(domain.OutboxKindNewShort),
+		ChannelID:     "UC_final_tracking_down",
+		ContentID:     "short-final-tracking-down",
+		Payload:       `{"canonical_post_id":"short:short-final-tracking-down","video_id":"short-final-tracking-down","title":"short title"}`,
+		Status:        string(domain.OutboxStatusSent),
+		NextAttemptAt: now,
+		SentAt:        &now,
+	}
+	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultTrackingModel{
+		Kind:              string(domain.OutboxKindNewShort),
+		ContentID:         item.ContentID,
+		ChannelID:         item.ChannelID,
+		ActualPublishedAt: &actualPublishedAt,
+		DetectedAt:        now.Add(-150 * time.Second),
+	}).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &finalResultDeliveryModel{
+		OutboxID:      item.ID,
+		RoomID:        "room-tracking-down",
+		Status:        string(domain.OutboxStatusSent),
+		NextAttemptAt: now,
+		SentAt:        &now,
+	}).Error)
+
+	dispatcher, logBuffer := newLoggedSQLiteDispatcherForFinalResultTest(t, db, &finalResultTestSender{failRoom: map[string]bool{}}, &Config{
+		BatchSize:           10,
+		LockTimeout:         time.Minute,
+		PollInterval:        time.Second,
+		MaxRetries:          3,
+		RetryBackoff:        time.Minute,
+		DeliveryParallelism: 1,
+	})
+
+	_, err := db.Exec(ctx, `ALTER TABLE youtube_content_alarm_tracking RENAME TO youtube_content_alarm_tracking_unavailable`)
+	require.NoError(t, err)
+
+	require.NoError(t, dispatcher.claim.logFinalizedCommunityShortsOutboxResults(ctx, []int64{item.ID}))
+
+	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
+	assertLogStringField(t, entry, FieldSendResult, sendResultSuccess)
+	assertLogIntField(t, entry, FieldSuccessfulRoomCount, 1)
+	require.NotContains(t, entry, FieldActualPublishedAt)
+	require.NotContains(t, entry, FieldAlarmSentAt)
+	require.NotContains(t, entry, FieldAlarmLatencyMillis)
+	require.NotEmpty(t, findAllLogEntriesByMessage(t, logBuffer, CommunityShortsFinalResultTrackingUnavailableMessage))
 }
 
 func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult(t *testing.T) {

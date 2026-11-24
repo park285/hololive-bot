@@ -85,48 +85,55 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 		deliveriesByOutbox[row.OutboxID] = append(deliveriesByOutbox[row.OutboxID], row)
 	}
 
-	tracking, err := r.loadTerminalCommunityShortsTracking(ctx, outboxes)
-	if err != nil {
-		return nil, err
-	}
-
 	results := make([]TerminalCommunityShortsOutboxResult, 0, len(outboxes))
 	for i := range outboxes {
-		result := summarizeTerminalCommunityShortsOutbox(&outboxes[i], deliveriesByOutbox[outboxes[i].ID])
-
-		if key, ok := terminalTrackingKeyFor(&outboxes[i]); ok {
-			if track, found := tracking[key]; found {
-				result.Tracked = true
-				result.ActualPublishedAt = track.ActualPublishedAt
-				result.AlarmSentAt = track.AlarmSentAt
-				result.AlarmLatencyMillis = track.AlarmLatencyMillis
-			}
-		}
-
-		results = append(results, result)
+		results = append(results, summarizeTerminalCommunityShortsOutbox(&outboxes[i], deliveriesByOutbox[outboxes[i].ID]))
 	}
 
 	return results, nil
 }
 
-func terminalTrackingKeyFor(outbox *domain.YouTubeNotificationOutbox) (terminalTrackingKey, bool) {
-	canonicalContentID, err := CanonicalDeliveryPostID(outbox.Kind, outbox.ContentID)
+func terminalTrackingKeyFor(result *TerminalCommunityShortsOutboxResult) (terminalTrackingKey, bool) {
+	canonicalContentID, err := CanonicalDeliveryPostID(result.Kind, result.ContentID)
 	if err != nil {
 		return terminalTrackingKey{}, false
 	}
 
-	return terminalTrackingKey{kind: outbox.Kind, canonicalContentID: canonicalContentID}, true
+	return terminalTrackingKey{kind: result.Kind, canonicalContentID: canonicalContentID}, true
+}
+
+func (r *DeliveryRepository) AttachTerminalCommunityShortsTracking(ctx context.Context, results []TerminalCommunityShortsOutboxResult) error {
+	tracking, err := r.loadTerminalCommunityShortsTracking(ctx, results)
+	if err != nil {
+		return err
+	}
+
+	for i := range results {
+		key, ok := terminalTrackingKeyFor(&results[i])
+		if !ok {
+			continue
+		}
+
+		if track, found := tracking[key]; found {
+			results[i].Tracked = true
+			results[i].ActualPublishedAt = track.ActualPublishedAt
+			results[i].AlarmSentAt = track.AlarmSentAt
+			results[i].AlarmLatencyMillis = track.AlarmLatencyMillis
+		}
+	}
+
+	return nil
 }
 
 func (r *DeliveryRepository) loadTerminalCommunityShortsTracking(
 	ctx context.Context,
-	outboxes []domain.YouTubeNotificationOutbox,
+	results []TerminalCommunityShortsOutboxResult,
 ) (map[terminalTrackingKey]terminalCommunityShortsTracking, error) {
-	kinds := make([]string, 0, len(outboxes))
-	canonicalIDs := make([]string, 0, len(outboxes))
+	kinds := make([]string, 0, len(results))
+	canonicalIDs := make([]string, 0, len(results))
 
-	for i := range outboxes {
-		if key, ok := terminalTrackingKeyFor(&outboxes[i]); ok {
+	for i := range results {
+		if key, ok := terminalTrackingKeyFor(&results[i]); ok {
 			kinds = append(kinds, string(key.kind))
 			canonicalIDs = append(canonicalIDs, key.canonicalContentID)
 		}

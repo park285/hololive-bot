@@ -40,7 +40,7 @@ Community/shorts 수집 evidence는 `collector` observation, canonical consume�
 - `actual`: 최근 관측 창에서 실제 게시물이 alarm-worker outbox·delivery를 거쳤는지 요약한 상태입니다. 경로 값은 행에 저장하지 않고 코드 상수(`youtube_outbox_dispatcher`) 하나만 로그에 쓰므로, 다른 경로나 복수 경로는 관측될 수 없습니다.
   - `delivery_observed`: 최근 게시물이 outbox와 room별 delivery로 진입했습니다.
   - `no_recent_posts`: 최근 창에 해당 채널/타입 게시물이 없어 실제 사용을 관측하지 못했습니다.
-  - `no_delivery_observed`: 최근 게시물은 있었지만 outbox 또는 delivery가 없었습니다. 구독 room이 없는 outbox는 delivery 없이 SENT로 끝나므로 [Route Usage](YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md)의 `pending_outbox_count`와 함께 봅니다.
+  - `no_delivery_observed`: 최근 게시물은 있었지만 outbox 또는 delivery가 없었습니다. 구독 room이 없는 outbox는 delivery 없이 SENT로 끝나고 fan-out이 실패한 outbox는 delivery 없이 FAILED로 끝나므로 [Route Usage](YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md)의 `sent_outbox_count`·`failed_outbox_count`와 함께 봅니다.
 
 ## 운영 판독 기준
 

@@ -381,7 +381,9 @@ sudo podman exec hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007
   `youtube_delivery.telemetry_backfill_batch`도 요구합니다. exact-key 디코더라 새 image는 이 키들이 든 profile을
   거부하므로 stack-secrets 원본에 다시 넣지 않습니다. 배포 helper가 보존한 이전 image·profile·unit pair를
   `quadlet-rollback-service.sh --check`로 검사하고 별도 승인 뒤 `--apply`로 되돌립니다(`rollback.md`).
-  되돌린 image는 제거 기간에 생긴 시도의 telemetry 행을 만들지 않습니다.
+  되돌린 image는 제거 기간에 생긴 시도의 telemetry 행을 시도 당시에 기록하지 않습니다. backfill이 있는 image
+  (delivery telemetry 단일 경로 이전)는 보존 기간 안의 delivery 현재 상태로 `delivery_mode = recovered` 행을 만들 수 있는데,
+  이 행은 남은 상태에서 다시 만든 기록이지 시도 당시의 증거가 아닙니다.
 - Preserve and inspect `alarm:dispatch:*` queues before replaying or deleting queue data.
 
 ## Related contracts

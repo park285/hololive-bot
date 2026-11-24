@@ -152,10 +152,21 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResults(ctx context.Cont
 		return nil
 	}
 
+	trackingErr := al.delivery.AttachTerminalCommunityShortsTracking(ctx, results)
+	if trackingErr != nil {
+		al.logger.Warn(CommunityShortsFinalResultTrackingUnavailableMessage, slog.Any("error", trackingErr))
+	}
+
 	finalizedAt := time.Now().UTC()
 
 	for i := range results {
-		al.logFinalizedCommunityShortsOutboxResult(&results[i], finalizedAt, finalizedCommunityShortsAlarmTiming(&results[i]))
+		timing := alarmtiming.Snapshot{}
+
+		if trackingErr == nil {
+			timing = finalizedCommunityShortsAlarmTiming(&results[i])
+		}
+
+		al.logFinalizedCommunityShortsOutboxResult(&results[i], finalizedAt, timing)
 	}
 
 	return nil
