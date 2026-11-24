@@ -798,9 +798,10 @@ def unit_names(name, paths):
 
 
 def foreign_units(name):
-    own = {mask(name), GEN / (name + '.service')}
-    return sorted(str(root / (name + '.service')) for root in unit_paths()
-                  if os.path.lexists(root / (name + '.service')) and root / (name + '.service') not in own)
+    paths = unit_paths()
+    need(GEN in paths, '불명 systemd generator 경로')
+    return sorted(str(root / (name + '.service')) for root in paths[:paths.index(GEN)]
+                  if os.path.lexists(root / (name + '.service')) and root / (name + '.service') != mask(name))
 
 
 DROPIN_SUFFIXES = ('.d', '.wants', '.requires', '.upholds')
@@ -812,14 +813,22 @@ def service_dropins(name):
     roots = [root for root in paths if root.is_dir()]
     stems = {'service', *(n[:i+1] + '.service' for n in names for i,c in enumerate(n) if c == '-'),
              *(n + '.service' for n in names)}
-    return sorted(str(root / (s + x) / k) for root in roots for s in stems for x in DROPIN_SUFFIXES
-                  if (root / (s + x)).is_dir()
-                  for k in os.listdir(root / (s + x))
-                  if (k.endswith('.conf') if x == '.d' else dependency_link(root / (s + x) / k)))
+    found = []
+    for x in DROPIN_SUFFIXES:
+        seen = set()
+        for root in roots:
+            dirs = [root / (s + x) for s in sorted(stems) if (root / (s + x)).is_dir()]
+            entries = {k for folder in dirs for k in os.listdir(folder) if not k.startswith('.')}
+            found += [str(folder / k) for k in entries - seen for folder in dirs
+                      if os.path.lexists(folder / k) and applied_entry(folder / k, x)]
+            seen |= entries
+    return sorted(found)
 
 
-def dependency_link(path):
-    return path.is_symlink() and os.path.realpath(path) != '/dev/null'
+def applied_entry(path, suffix):
+    if path.is_symlink() and os.readlink(path) == '/dev/null':
+        return False
+    return path.name.endswith('.conf') if suffix == '.d' else path.is_symlink()
 
 
 def resumable(h, target):

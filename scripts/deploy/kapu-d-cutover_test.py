@@ -134,7 +134,11 @@ class Cutover(unittest.TestCase):
         d.record(self.h/'quiesced', d.stop_receipt(json.loads((self.h/'previous.json').read_bytes())))
         self.vendor = self.root / 'vendor'
         self.vendor.mkdir()
-        self.patch('unit_paths', lambda: [self.system, self.vendor])
+        self.early = self.root / 'early'
+        self.early.mkdir()
+        self.patch('GEN', self.root / 'generator')
+        d.GEN.mkdir()
+        self.patch('unit_paths', lambda: [self.system, self.early, d.GEN, self.vendor])
         self.patch('trusted', lambda *args:None)
         self.patch('raw', Path.read_bytes)
         self.patch('retained', lambda *args,**kwargs:None)
@@ -278,8 +282,6 @@ class Cutover(unittest.TestCase):
 
     def running_pair(self, runtime_port=None):
         self.h = self.root / 'd-cutover-running'
-        self.patch('GEN',self.root / 'generator')
-        d.GEN.mkdir()
         self.patch('origin',self.origin)
         self.patch('retained',self.retained)
         self.patch('prereqs',lambda:None)
@@ -331,6 +333,35 @@ class Cutover(unittest.TestCase):
         with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
             d.quiesce(h, self.target())
         self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','stop')])
+
+    def test_dependency_masks_are_only_exact_dev_null_links(self):
+        target = self.target()
+        self.seal(target)
+        folder = self.system / (d.C + '.service.wants')
+        folder.mkdir()
+        (folder / 'probe.service').symlink_to('/dev/null/')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+
+    def test_higher_priority_masks_and_hidden_entries_hide_lower_dependencies(self):
+        target = self.target()
+        self.seal(target)
+        upper = self.system / (d.C + '.service.wants')
+        lower = self.vendor / (d.C + '.service.wants')
+        upper.mkdir()
+        lower.mkdir()
+        (upper / 'probe.service').symlink_to('/dev/null')
+        (lower / 'probe.service').symlink_to('../probe.service')
+        drops = self.system / (d.C + '.service.d')
+        drops.mkdir(exist_ok=True)
+        (drops / '.pending.conf').write_bytes(b'[Service]\nRestart=no\n')
+        (self.vendor / (d.C + '.service.d')).mkdir()
+        (self.vendor / (d.C + '.service.d' ) / '20-x.conf').write_bytes(b'[Service]\nRestart=no\n')
+        (drops / '20-x.conf').symlink_to('/dev/null')
+        self.cli('check', target)
+        (upper / 'probe.service').unlink()
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
 
     def test_dependency_dirs_ignore_entries_systemd_ignores(self):
         target = self.target()
@@ -583,13 +614,14 @@ class Cutover(unittest.TestCase):
         target = self.target()
         self.seal(target)
         for name in d.NAMES:
-            entry = self.vendor / (name + '.service')
+            entry = self.early / (name + '.service')
             entry.symlink_to('x.service')
             with self.assertRaisesRegex(d.Refused, 'systemd unit 파일'):
                 self.cli('check', target)
             with self.assertRaisesRegex(d.Refused, 'systemd unit 파일'):
                 self.resume()
             entry.unlink()
+            (self.vendor / (name + '.service')).write_bytes(b'[Service]\nExecStart=/bin/true\n')
         self.cli('check', target)
         self.assertEqual(self.calls, [])
         self.assertFalse((self.h / 'resume-attempt.json').exists())
