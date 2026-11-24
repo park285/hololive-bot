@@ -102,7 +102,7 @@ SELECT
         WHEN pending_outbox_count > 0 OR in_progress_delivery_count > 0 OR handoff_pending_delivery_count > 0 THEN 'in_progress'
         WHEN target_room_count = 0 AND sent_outbox_count = outbox_count THEN 'no_target_rooms'
         WHEN success_send_count = 0 THEN 'no_success'
-        WHEN failed_delivery_count > 0 OR failed_attempt_delivery_count > 0 THEN 'failed_attempts'
+        WHEN failed_delivery_count > 0 OR failed_attempt_delivery_count > 0 OR outbox_count > sent_outbox_count + pending_outbox_count THEN 'failed_attempts'
         ELSE 'ok'
     END AS status,
     CASE kind WHEN 'COMMUNITY_POST' THEN 'COMMUNITY' ELSE 'SHORTS' END AS alarm_type,
@@ -144,6 +144,6 @@ SQL
 - `status = outbox_missing`: 게시물 추적 레코드는 있으나 outbox row도, 원장 SENT도, `alarm_sent_at`도 없습니다. 전송 파이프라인 진입 전 누락 후보입니다.
 - `status = sent_outbox_cleaned`: 끝난 outbox가 보존 기간을 넘겨 지워졌고 원장 SENT가 남아 있습니다.
 - `status = tracking_only_outbox_cleaned`: outbox와 원장 SENT 없이 tracking `alarm_sent_at`만 남았습니다. 구독 room 없이 끝난 outbox의 `sent_at`이 복사됐거나, Iris가 접수한 뒤 handoff 실패로 재시도가 소진돼 원장 SENT가 지워졌을 수 있으므로 최종 결과는 알 수 없습니다.
-- `status = in_progress`: outbox fan-out을 기다리거나, `PENDING`·`SENDING` room이 남았거나, SENT room의 handoff 확인(`handoff_pending_delivery_count`)이 끝나지 않았습니다. 확인 결과에 따라 재발급·실패·격리로 바뀔 수 있습니다.
-- `status = failed_attempts`: 성공은 있었지만 `FAILED` delivery나 실패한 시도가 있었던 delivery도 있습니다. 시도별 사유는 [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 로그로 확인합니다.
+- `status = in_progress`: outbox fan-out을 기다리거나, `PENDING`·`SENDING` room이 남았거나, SENT room의 handoff 확인(`handoff_pending_delivery_count`)이 끝나지 않았습니다. 확인 결과에 따라 재발급·실패·격리로 바뀔 수 있습니다. `target_room_count = 0`인데 outbox 생성 뒤 활성 프로필의 `queue.max_age`가 지났으면 fan-out이 다시 잡지 않고 정리 작업이 발송 없이 지우므로 `no_success`로 봅니다.
+- `status = failed_attempts`: 성공은 있었지만 `FAILED` delivery나 실패한 시도가 있었던 delivery, 또는 delivery 없이 FAILED로 끝난 다른 outbox(같은 게시물의 별칭 outbox fan-out 실패)도 있습니다. 시도별 사유는 [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 로그로 확인합니다.
 - `publish_to_detect_ms`, `detect_to_sent_ms`: 외부 수집 구간과 내부 전달 구간입니다. `delay_seconds > 120`이면 2분 초과이며, 구간 판정은 [Latency Cause Report](YOUTUBE_COMMUNITY_SHORTS_LATENCY_CAUSE_REPORT.md)를 따릅니다.

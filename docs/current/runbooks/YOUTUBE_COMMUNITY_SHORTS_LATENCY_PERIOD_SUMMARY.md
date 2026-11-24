@@ -82,7 +82,7 @@ SQL
 ## Readout
 
 - `total_post_count`: 기간 내 실제 게시 또는 감지된 community/shorts 게시물 수입니다.
-- `alarm_sent_post_count`: 최초 성공 발송 시각(`alarm_sent_at`)이 기록된 게시물 수입니다.
+- `alarm_sent_post_count`: 최초 발송 완료 시각(`alarm_sent_at`)이 기록된 게시물 수입니다. 이 시각은 Iris 접수나 구독 room 없는 종료 시각이라 성공 근거가 아닙니다.
 - `pending_post_count`: 기간 안에 게시물은 있었지만 아직 발송 완료 시각이 기록되지 않은 건수입니다. 늦더라도 1회 발송돼야 하는 미완료 후보입니다.
 - `latency_measured_post_count`: 실제 게시 시각과 발송 시각이 모두 있어 지연 계산이 확정된 게시물 수입니다.
 - `average_latency_millis`, `p95_latency_millis`, `max_latency_millis`: 측정 가능한 게시물만 기준으로 계산된 평균, p95, 최대 지연입니다.

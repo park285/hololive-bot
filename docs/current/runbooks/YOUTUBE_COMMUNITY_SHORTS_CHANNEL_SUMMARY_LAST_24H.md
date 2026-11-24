@@ -12,7 +12,7 @@
 - `failure_post_count` 는 `FAILED`·`QUARANTINED` delivery나 실패한 시도가 있었던(`attempt_count > 0`) delivery가 하나라도 있는 post 수입니다. 이후 성공해도 실패 흔적은 채널 집계에 남습니다. 시도마다 남던 telemetry 행은 더 쓰지 않으므로, revive로 `attempt_count`가 0으로 돌아간 뒤 성공한 delivery의 이전 실패는 세지 못합니다.
 - delivery 행은 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 지워집니다.
 - `detected_unsent_post_count` 는 감지됐지만 SENT delivery도 원장 SENT room도 없고 격리된 room도 없는 post 수입니다.
-- `unknown_outcome_post_count` 는 성공 근거 없이 delivery 또는 원장이 QUARANTINED이거나, outbox가 정리돼 tracking `alarm_sent_at`만 남은 post 수입니다([Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `tracking_only_outbox_cleaned`). 결과를 알 수 없어 미발송에서 뺍니다. 구독 room이 없어 delivery 없이 끝난 post(`no_target_post_count`)는 뺍니다.
+- `unknown_outcome_post_count` 는 성공 근거 없이 delivery 또는 원장이 QUARANTINED이거나, delivery가 SENDING(응답을 받지 못해 stale sweep 격리를 기다리는 경우 포함)이거나, outbox가 정리돼 tracking `alarm_sent_at`만 남은 post 수입니다([Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `tracking_only_outbox_cleaned`). 결과를 알 수 없어 미발송에서 뺍니다. 구독 room이 없어 delivery 없이 끝난 post(`no_target_post_count`)는 뺍니다.
 - 게시물과 outbox는 outbox `content_id`를 worker와 같은 규칙으로 정규화한 `post_id`와 tracking `canonical_content_id`로 잇습니다. 공백이 다른 `content_id` 같은 별칭 outbox도 같은 post로 묶입니다.
 
 ## Execute
@@ -61,6 +61,7 @@ per_post AS (
         COUNT(d.id) AS delivery_count,
         COUNT(d.id) FILTER (WHERE d.status = 'SENT') AS success_send_count,
         COUNT(d.id) FILTER (WHERE d.status = 'QUARANTINED') AS quarantined_delivery_count,
+        COUNT(d.id) FILTER (WHERE d.status = 'SENDING') AS sending_delivery_count,
         (SELECT COUNT(*) FROM youtube_notification_delivery_ledger AS l
           WHERE l.kind = track.kind AND l.logical_id = track.canonical_content_id AND l.status = 'QUARANTINED') AS ledger_quarantined_room_count,
         COUNT(d.id) FILTER (WHERE d.status IN ('FAILED', 'QUARANTINED') OR d.attempt_count > 0) AS failed_attempt_count
@@ -102,11 +103,11 @@ SELECT
     END), 0) AS no_target_post_count,
     COALESCE(SUM(CASE
         WHEN success_send_count = 0 AND ledger_sent_room_count = 0
-             AND (quarantined_delivery_count > 0 OR ledger_quarantined_room_count > 0 OR (outbox_count = 0 AND alarm_sent_at IS NOT NULL)) THEN 1
+             AND (quarantined_delivery_count > 0 OR ledger_quarantined_room_count > 0 OR sending_delivery_count > 0 OR (outbox_count = 0 AND alarm_sent_at IS NOT NULL)) THEN 1
         ELSE 0
     END), 0) AS unknown_outcome_post_count,
     COALESCE(SUM(CASE
-        WHEN success_send_count = 0 AND ledger_sent_room_count = 0 AND quarantined_delivery_count = 0 AND ledger_quarantined_room_count = 0
+        WHEN success_send_count = 0 AND ledger_sent_room_count = 0 AND quarantined_delivery_count = 0 AND ledger_quarantined_room_count = 0 AND sending_delivery_count = 0
              AND NOT (outbox_count = 0 AND alarm_sent_at IS NOT NULL)
              AND NOT (outbox_count > 0 AND sent_outbox_count = outbox_count AND delivery_count = 0) THEN 1
         ELSE 0
@@ -126,7 +127,7 @@ SQL
 - `detected_post_count > alarm_sent_post_count`: 감지된 post 중 발송 파이프라인에 아직 진입하지 못한 건이 있다는 뜻입니다.
 - `success_post_count < detected_post_count`: 아직 성공하지 못한 post가 남아 있습니다. `detected_unsent_post_count` 와 같이 봅니다.
 - `failure_post_count > 0`: 해당 채널에서 실패 또는 재시도 흔적이 남은 post가 있다는 뜻입니다. 성공 후 회복된 건도 포함될 수 있습니다.
-- `unknown_outcome_post_count > 0`: 결과를 알 수 없는 post가 있습니다. 격리된 post는 재발송하지 않으므로 room에 도착했는지 직접 확인하고, tracking 시각만 남은 post는 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `tracking_only_outbox_cleaned` 기준을 따릅니다.
+- `unknown_outcome_post_count > 0`: 결과를 알 수 없는 post가 있습니다. 격리된 post는 재발송하지 않으므로 room에 도착했는지 직접 확인하고, SENDING이 남은 post는 stale sweep 뒤 다시 판정하고, tracking 시각만 남은 post는 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `tracking_only_outbox_cleaned` 기준을 따릅니다.
 - `no_target_post_count`: 구독 room이 없어 delivery 없이 outbox가 SENT로 끝난 post 수입니다. 발송 대상이 없었으므로 `detected_unsent_post_count`에서 뺍니다.
 - `detected_unsent_post_count > 0`: 감지 후 아직 성공한 room이 없는 post가 있습니다. 늦더라도 반드시 1회 발송돼야 하는 추적 대상입니다.
 - `community_detected_post_count`, `shorts_detected_post_count`: 어떤 타입에서 채널 부하가 생겼는지 빠르게 나눠 볼 때 사용합니다.
