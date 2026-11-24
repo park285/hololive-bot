@@ -809,20 +809,25 @@ DROPIN_SUFFIXES = ('.d', '.wants', '.requires', '.upholds')
 
 def service_dropins(name):
     paths = unit_paths()
-    names = unit_names(name, paths)
+    aliases = sorted(unit_names(name, paths) - {name})
     roots = [root for root in paths if root.is_dir()]
-    stems = {'service', *(n[:i+1] + '.service' for n in names for i,c in enumerate(n) if c == '-'),
-             *(n + '.service' for n in names)}
+    slots = [[(root, stem + '.service')] for root in roots for stem in (name, *dash_prefixes(name))]
+    slots += [[(root, stem + '.service') for alias in aliases for stem in (alias, *dash_prefixes(alias))] for root in roots]
+    slots += [[(root, 'service')] for root in roots]
     found = []
     for x in DROPIN_SUFFIXES:
         seen = set()
-        for root in roots:
-            dirs = [root / (s + x) for s in sorted(stems) if (root / (s + x)).is_dir()]
+        for slot in slots:
+            dirs = [root / (stem + x) for root, stem in slot if (root / (stem + x)).is_dir()]
             entries = {k for folder in dirs for k in os.listdir(folder) if not k.startswith('.')}
             found += [str(folder / k) for k in entries - seen for folder in dirs
                       if os.path.lexists(folder / k) and applied_entry(folder / k, x)]
             seen |= entries
-    return sorted(found)
+    return sorted(set(found))
+
+
+def dash_prefixes(name):
+    return [name[:i+1] for i in range(len(name) - 1, -1, -1) if name[i] == '-']
 
 
 UNIT_FILE_NAME = re.compile(r'[^/]+\.(service|socket|target|device|mount|automount|swap|timer|path|slice|scope)')

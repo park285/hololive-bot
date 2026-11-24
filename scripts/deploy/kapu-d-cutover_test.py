@@ -363,6 +363,43 @@ class Cutover(unittest.TestCase):
         with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
             self.cli('check', target)
 
+    def test_dropin_precedence_follows_unit_name_then_alias_then_type_level(self):
+        target = self.target()
+        self.seal(target)
+        self.unit_files += f'ids: collector-alias.service \u2192 {d.C}.service\n'
+        cases = [
+            ((self.system, 'service'), (self.vendor, d.C + '.service'), True),
+            ((self.system, 'collector-alias.service'), (self.vendor, d.C + '.service'), True),
+            ((self.system, 'collector-alias.service'), (self.vendor, 'hololive-.service'), True),
+            ((self.vendor, d.C + '.service'), (self.system, 'service'), False),
+            ((self.vendor, 'hololive-.service'), (self.system, 'collector-alias.service'), False),
+            ((self.system, d.C + '.service'), (self.system, 'hololive-.service'), False),
+        ]
+        for (mroot, mstem), (lroot, lstem), refused in cases:
+            for suffix, entry in (('.wants', 'probe.service'), ('.d', '50-x.conf')):
+                masked = mroot / (mstem + suffix) / entry
+                live = lroot / (lstem + suffix) / entry
+                masked.parent.mkdir(exist_ok=True)
+                live.parent.mkdir(exist_ok=True)
+                masked.symlink_to('/dev/null')
+                own = mroot / (d.I + '.service' + suffix) / entry
+                if not refused:
+                    own.parent.mkdir(exist_ok=True)
+                    own.symlink_to('/dev/null')
+                if suffix == '.wants':
+                    live.symlink_to('../probe.service')
+                else:
+                    live.write_bytes(b'[Service]\nRestart=no\n')
+                if refused:
+                    with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                        self.cli('check', target)
+                else:
+                    self.cli('check', target)
+                masked.unlink()
+                live.unlink()
+                if not refused:
+                    own.unlink()
+
     def test_dependency_dirs_ignore_entries_systemd_ignores(self):
         target = self.target()
         self.seal(target)
