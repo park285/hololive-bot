@@ -55,7 +55,7 @@ func secretText(s string, limit int) bool {
 }
 
 func readPrivateConfig(path string) ([]byte, error) {
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0) //nolint:gosec // 절대 경로·일반 파일·권한·symlink 거부를 아래에서 검증한다.
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0) // #nosec G304 -- 운영 설정이 절대 경로를 검증하고, symlink·일반 파일·권한·크기는 아래에서 검증한다.
 	if err != nil {
 		return nil, errors.New("event grade secret file unavailable")
 	}
