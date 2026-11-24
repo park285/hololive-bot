@@ -8,8 +8,8 @@
 - recent window 조회는 `youtube_content_alarm_tracking.actual_published_at`를 우선 사용하고, 값이 비어 있으면 `detected_at`으로 대체해 최근 24시간 게시물을 고릅니다.
 - `0회 발송` 게시물도 결과에 남아야 하므로 추적 테이블(`youtube_content_alarm_tracking`)을 기준 집합으로 사용합니다.
 - 발송 횟수는 room별 delivery(`youtube_notification_delivery`)의 현재 상태로 셉니다. 시도마다 남던 telemetry 행은 더 쓰지 않으므로, 실패 흔적은 `FAILED`·`QUARANTINED` 상태와 `attempt_count > 0`으로만 남습니다. `attempt_count`는 실패한 시도에서만 올라가고 성공은 올리지 않으며, revive가 0으로 되돌립니다.
-- DB에는 같은 게시물·room의 SENT가 둘 생길 수 없습니다. delivery는 `(outbox_id, room_id)`, outbox는 `(kind, content_id)`가 유일하고, 원장 `youtube_notification_delivery_ledger`는 `(kind, logical_id, room_id)`가 기본 키입니다. 중복 발송 위험은 provider가 받았는지 모르는 시도에 남으며, 이런 delivery는 `QUARANTINED`로 격리되고 재발송하지 않습니다.
-- delivery 행은 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 지워집니다. 이 값이 24시간보다 짧으면 오래된 게시물이 `outbox_missing`으로 보일 수 있습니다.
+- 게시물은 payload `canonical_post_id`(tracking의 `canonical_content_id`와 같은 값)로 outbox와 잇습니다. 공백이 다른 `content_id` 같은 별칭 outbox가 한 게시물에 여럿일 수 있고, 같은 room의 별칭 delivery는 실제 발송 없이 fulfilled로 SENT가 되므로 `success_send_count`는 실제 발송 횟수보다 클 수 있습니다. 게시물·room당 성공은 원장 `youtube_notification_delivery_ledger`의 기본 키 `(kind, logical_id, room_id)`로 한 번만 기록되므로 room 단위 판단은 `success_room_count`와 `ledger_sent_room_count`로 합니다. 중복 발송 위험은 provider가 받았는지 모르는 시도에 남으며, 이런 delivery는 `QUARANTINED`로 격리되고 재발송하지 않습니다.
+- delivery 행은 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 지워집니다. 지워진 뒤에는 원장(`youtube_notification_delivery_ledger`, `logical_id`는 tracking의 `canonical_content_id`와 같은 값)의 SENT·QUARANTINED room 수와 tracking의 `alarm_sent_at`으로 판정합니다.
 
 ## Execute
 
@@ -32,12 +32,16 @@ WITH per_post AS (
         track.kind,
         track.channel_id,
         track.content_id,
+        track.canonical_content_id,
         track.actual_published_at,
         track.detected_at,
         track.alarm_sent_at,
         track.alarm_latency_millis,
         track.alarm_latency_exceeded,
         COUNT(DISTINCT o.id) AS outbox_count,
+        COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'PENDING') AS pending_outbox_count,
+        COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'SENT') AS sent_outbox_count,
+        COUNT(d.id) FILTER (WHERE d.status IN ('PENDING', 'SENDING')) AS in_progress_delivery_count,
         COUNT(d.id) FILTER (WHERE d.status = 'SENT') AS success_send_count,
         COUNT(DISTINCT d.room_id) FILTER (WHERE d.status = 'SENT') AS success_room_count,
         COUNT(DISTINCT d.room_id) AS target_room_count,
@@ -48,7 +52,7 @@ WITH per_post AS (
     FROM youtube_content_alarm_tracking AS track
     LEFT JOIN youtube_notification_outbox AS o
         ON o.kind = track.kind
-       AND o.content_id = track.content_id
+       AND o.payload->>'canonical_post_id' = track.canonical_content_id
     LEFT JOIN youtube_notification_delivery AS d
         ON d.outbox_id = o.id
     WHERE track.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
@@ -57,16 +61,29 @@ WITH per_post AS (
         track.kind,
         track.channel_id,
         track.content_id,
+        track.canonical_content_id,
         track.actual_published_at,
         track.detected_at,
         track.alarm_sent_at,
         track.alarm_latency_millis,
         track.alarm_latency_exceeded
+),
+with_ledger AS (
+    SELECT
+        p.*,
+        (SELECT COUNT(*) FROM youtube_notification_delivery_ledger AS l
+          WHERE l.kind = p.kind AND l.logical_id = p.canonical_content_id AND l.status = 'QUARANTINED') AS ledger_quarantined_room_count,
+        (SELECT COUNT(*) FROM youtube_notification_delivery_ledger AS l
+          WHERE l.kind = p.kind AND l.logical_id = p.canonical_content_id AND l.status = 'SENT') AS ledger_sent_room_count
+    FROM per_post AS p
 )
 SELECT
     CASE
+        WHEN quarantined_delivery_count > 0 OR ledger_quarantined_room_count > 0 THEN 'quarantined'
+        WHEN outbox_count = 0 AND (ledger_sent_room_count > 0 OR alarm_sent_at IS NOT NULL) THEN 'sent_outbox_cleaned'
         WHEN outbox_count = 0 THEN 'outbox_missing'
-        WHEN quarantined_delivery_count > 0 THEN 'quarantined'
+        WHEN pending_outbox_count > 0 OR in_progress_delivery_count > 0 THEN 'in_progress'
+        WHEN target_room_count = 0 AND sent_outbox_count = outbox_count THEN 'no_target_rooms'
         WHEN success_send_count = 0 THEN 'no_success'
         WHEN failed_delivery_count > 0 OR failed_attempt_delivery_count > 0 THEN 'failed_attempts'
         ELSE 'ok'
@@ -85,23 +102,29 @@ SELECT
     target_room_count,
     success_send_count,
     success_room_count,
+    in_progress_delivery_count,
     quarantined_delivery_count,
+    ledger_quarantined_room_count,
+    ledger_sent_room_count,
     failed_delivery_count,
     failed_attempt_delivery_count,
     last_sent_at
-FROM per_post
+FROM with_ledger
 ORDER BY COALESCE(actual_published_at, detected_at) DESC, channel_id ASC, content_id ASC;
 SQL
 ```
 
-운영 기준은 `quarantined` 행 0건입니다. 같은 CTE 뒤에 `SELECT COUNT(*) FILTER (WHERE quarantined_delivery_count > 0) AS quarantined_posts FROM per_post;`를 붙이면 한 줄로 판정할 수 있습니다.
+운영 기준은 `quarantined` 행 0건입니다. 같은 CTE 뒤에 `SELECT COUNT(*) FILTER (WHERE quarantined_delivery_count > 0 OR ledger_quarantined_room_count > 0) AS quarantined_posts FROM with_ledger;`를 붙이면 한 줄로 판정할 수 있습니다.
 
 ## Readout
 
-- `status = ok`: 성공 발송이 room별 1회씩만 기록된 정상 상태입니다.
-- `quarantined_posts = 0`: 집계 창에 결과 불명으로 격리된 delivery가 없으므로 중복 발송 후보도 없습니다.
+- `status = ok`: 진행 중·실패·격리 room 없이 대상 room이 모두 SENT입니다.
+- `quarantined_posts = 0`: 집계 창에 결과 불명으로 격리된 delivery나 원장 항목이 없으므로 중복 발송 후보도 없습니다.
 - `status = quarantined`: provider가 받았는지 모르는 시도가 격리됐습니다. 재발송하지 않으므로 room에 도착했는지 전송 증거로 검토합니다. 받았다면 1회, 받지 못했다면 누락입니다.
-- `status = no_success`: SENT delivery가 없습니다. `alarm_sent_at`도 비어 있으면 아직 성공하지 못한 게시물입니다.
-- `status = outbox_missing`: 게시물 추적 레코드는 있으나 outbox row가 없습니다. 전송 파이프라인 진입 전 누락 후보이거나, 끝난 outbox가 보존 기간을 넘겨 지워진 경우입니다.
+- `status = no_target_rooms`: 구독 room이 없어 outbox가 delivery 없이 SENT로 끝났습니다. 발송할 대상이 없었던 정상 상태입니다.
+- `status = no_success`: 진행 중인 room 없이 SENT delivery가 하나도 없습니다. 모든 room이 실패로 끝났습니다.
+- `status = outbox_missing`: 게시물 추적 레코드는 있으나 outbox row도, 원장 SENT도, `alarm_sent_at`도 없습니다. 전송 파이프라인 진입 전 누락 후보입니다.
+- `status = sent_outbox_cleaned`: 끝난 outbox가 보존 기간을 넘겨 지워졌고 원장 SENT 또는 `alarm_sent_at`이 남아 있습니다.
+- `status = in_progress`: outbox fan-out을 기다리거나 `PENDING`·`SENDING` room이 남아 있습니다. 성공한 room이 있어도 아직 끝나지 않았습니다.
 - `status = failed_attempts`: 성공은 있었지만 `FAILED` delivery나 실패한 시도가 있었던 delivery도 있습니다. 시도별 사유는 [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 로그로 확인합니다.
 - `publish_to_detect_ms`, `detect_to_sent_ms`: 외부 수집 구간과 내부 전달 구간입니다. `delay_seconds > 120`이면 2분 초과이며, 구간 판정은 [Latency Cause Report](YOUTUBE_COMMUNITY_SHORTS_LATENCY_CAUSE_REPORT.md)를 따릅니다.

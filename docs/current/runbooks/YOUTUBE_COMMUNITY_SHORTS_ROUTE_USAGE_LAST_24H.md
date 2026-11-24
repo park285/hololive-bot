@@ -31,6 +31,7 @@ SELECT
     track.actual_published_at,
     track.detected_at,
     COUNT(DISTINCT o.id) AS outbox_count,
+    COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'PENDING') AS pending_outbox_count,
     COUNT(d.id) AS delivery_count,
     MIN(d.sent_at) FILTER (WHERE d.status = 'SENT') AS first_success_at,
     MAX(d.sent_at) FILTER (WHERE d.status = 'SENT') AS last_success_at,
@@ -39,7 +40,7 @@ SELECT
 FROM youtube_content_alarm_tracking AS track
 LEFT JOIN youtube_notification_outbox AS o
     ON o.kind = track.kind
-   AND o.content_id = track.content_id
+   AND o.payload->>'canonical_post_id' = track.canonical_content_id
 LEFT JOIN youtube_notification_delivery AS d
     ON d.outbox_id = o.id
 WHERE track.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
@@ -57,6 +58,6 @@ SQL
 ## Readout
 
 - `success_send_count > 0`: outbox delivery 발송이 성공했습니다. 같은 `outbox_id`의 최종 결과 로그에서 `delivery_path = youtube_outbox_dispatcher`를 확인합니다.
-- `outbox_count > 0`이고 `delivery_count = 0`: outbox는 있지만 room별 delivery가 아직 만들어지지 않았습니다. 미발송 후보입니다.
+- `pending_outbox_count > 0`이고 `delivery_count = 0`: outbox가 room별 delivery로 아직 fan-out되지 않았습니다. 미발송 후보입니다.
+- `outbox_count > 0`, `pending_outbox_count = 0`, `delivery_count = 0`: 구독 room이 없어 outbox가 delivery 없이 SENT로 끝난 게시물입니다. 미발송이 아닙니다.
 - `outbox_count = 0`: alarm-worker 경로에 진입하지 않았습니다. 끝난 outbox가 `youtube_delivery.cleanup_after_ms`를 넘겨 지워진 경우도 여기에 해당하므로 tracking의 `alarm_sent_at`과 함께 봅니다.
-- 감사 로그의 `delivery_path`가 `youtube_outbox_dispatcher` 외 값이면 예상 밖 경로이므로 별도 조사합니다.

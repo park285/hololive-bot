@@ -20,13 +20,16 @@ alarm-worker는 발송 시도마다 DB 행을 쓰지 않습니다. 전이 트랜
 | `youtube_notification_delivery_ledger` | `(kind, logical_id, room_id)` | room별 `SENT`·`QUARANTINED` 확정 원장입니다. `logical_id`는 `short:…`, `community:…` 형식입니다. |
 | `youtube_content_alarm_tracking` | 게시물 | `actual_published_at`, `detected_at`, `alarm_sent_at`, `alarm_latency_millis`, `alarm_latency_exceeded`입니다. |
 
+- 최종 결과 줄의 `send_result = success`는 Iris가 요청을 접수(202)해 delivery가 SENT로 바뀐 시점의 판정입니다. 그 뒤 handoff 확인(`youtube-delivery-handoff-reconciler`)이 재발급·재시도 소진·격리로 정산하면 delivery·outbox 상태와 SENT 원장이 바뀌지만 최종 결과 줄은 다시 남지 않습니다.
 - 결과 불명 시도(오래 남은 SENDING)는 stale sweep이 `QUARANTINED`로 격리하고 건수를 로그로 남깁니다. 재발송하지 않으며, 운영자는 해당 delivery를 전송 증거로 검토합니다.
+- 시도 단위 결과를 게시물과 잇는 공통 식별자는 없습니다. attempt started 줄에는 `delivery_id`·`outbox_id`·`post_id`·`room_id`·`attempt_started_at`이 있고, delivery result 줄에는 발송 한 번의 room(대상 room이 하나일 때 `room_id`)과 결과만 있습니다. grouped 발송은 한 room의 여러 게시물을 요청 하나로 보내므로 같은 결과를 공유합니다. 그래서 같은 `room_id`와 시각으로 두 줄을 대조하고, 게시물별 최종 결과는 최종 결과 줄과 delivery의 현재 상태로 확인합니다.
+- 결과 줄이 남지 않는 경로가 있습니다. per-room 메시지 누락과 발송 전 식별자 오류는 Warn 줄과 지표만 남기고, stale sweep 격리는 건수만 남깁니다. 이때는 delivery의 `status`와 마지막 실패 사유 `error`(시도마다 덮어씀)로 확인합니다.
 - `post_id`는 content_id와 payload `canonical_post_id`가 일치함을 검증한 logical key(`short:…`, `community:…`)입니다. 식별자가 잘못되면 대체 ID 없이 `invalid:<kind>:<reason>` 라벨을 남깁니다.
 
 ## Canonical Validation Log
 
-- 게시물 단위 합격 판정과 중복·누락 판단의 기준 로그는 `message="YouTube community/shorts delivery audit"`, `telemetry_source = outbox_final_result` 줄입니다.
-- 시도별 실패·재시도 흐름은 `delivery attempt started`와 `delivery result` 줄로 읽습니다.
+- 게시물 단위 결과의 1차 근거는 `message="YouTube community/shorts delivery audit"`, `telemetry_source = outbox_final_result` 줄입니다. 이 줄은 Iris 접수 시점의 판정이므로, 합격 판정 전에 아래 Fallback SQL로 delivery의 현재 상태와 handoff 확인 상태를 함께 확인합니다.
+- 시도별 실패·재시도 흐름은 `delivery attempt started`와 `delivery result` 줄을 room과 시각으로 대조해 읽습니다. 게시물 단위로 정확히 잇는 근거는 아니므로 위 감사 기록 계약의 한계를 함께 봅니다.
 - 2분 SLA는 최종 결과 줄의 `alarm_latency_exceeded`와 `alarm_latency_millis`로 판정합니다. 외부 수집과 내부 전달 구간 분리는 [Latency Cause Report](YOUTUBE_COMMUNITY_SHORTS_LATENCY_CAUSE_REPORT.md)를 따릅니다.
 
 ## 최종 결과 줄 필드
@@ -80,15 +83,19 @@ SELECT
     d.attempt_count,
     d.sent_at,
     d.error,
+    request.handoff_next_check_at,
+    request.handoff_checked_at,
     track.actual_published_at,
     track.detected_at,
     track.alarm_sent_at
 FROM youtube_notification_outbox AS o
 JOIN youtube_notification_delivery AS d
     ON d.outbox_id = o.id
+LEFT JOIN youtube_notification_send_request AS request
+    ON request.base_id = d.send_request_id
 LEFT JOIN youtube_content_alarm_tracking AS track
     ON track.kind = o.kind
-   AND track.content_id = o.content_id
+   AND track.canonical_content_id = o.payload->>'canonical_post_id'
 WHERE o.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
   AND COALESCE(track.actual_published_at, track.detected_at, o.created_at) >= NOW() - INTERVAL '24 hours'
 ORDER BY COALESCE(track.actual_published_at, track.detected_at, o.created_at) DESC, o.id ASC, d.room_id ASC
@@ -98,10 +105,10 @@ SQL
 
 ## Readout
 
-- `delivery_status = SENT`: 해당 room에 발송이 성공했습니다. `sent_at`이 성공 시각입니다.
+- `delivery_status = SENT`: Iris가 해당 room 요청을 접수했습니다. `sent_at`이 접수 시각입니다. `handoff_next_check_at`이 있으면 handoff 확인을 기다리는 중이고, `handoff_checked_at`이 있고 여전히 SENT면 확인까지 끝난 성공입니다. 확인이 실패로 정산되면 delivery가 SENT에서 벗어납니다.
 - `delivery_status = PENDING`: 아직 보내지 않았거나 재시도를 기다립니다. `error`에 마지막 실패 사유가 남습니다.
 - `delivery_status = SENDING`: 발송 중입니다. 오래 남으면 stale sweep이 `QUARANTINED`로 격리합니다.
-- `delivery_status = FAILED`: 더는 재시도하지 않는 실패(영구 실패 또는 재시도 한도 소진)입니다. `error`로 사유를 확인합니다.
+- `delivery_status = FAILED`: 영구 실패 또는 재시도 한도 소진입니다. `youtube_delivery.revive_enabled`가 켜져 있으면 revive가 최근 FAILED를 다시 PENDING으로 돌립니다. `error`로 사유를 확인합니다.
 - `delivery_status = QUARANTINED`: 결과 불명으로 격리됐습니다. 재발송하지 않으므로 전송 증거로 검토합니다.
 - `attempt_count > 0`: 실패한 시도가 그만큼 있었습니다. 성공은 이 값을 올리지 않고 revive가 0으로 되돌리므로 실패 횟수의 하한입니다.
 - 행이 없으면 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나 지워졌을 수 있습니다. 이때는 `youtube_notification_delivery_ledger`와 tracking의 `alarm_sent_at`으로 확인합니다.

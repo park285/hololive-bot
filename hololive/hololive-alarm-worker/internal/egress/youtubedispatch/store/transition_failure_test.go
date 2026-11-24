@@ -89,11 +89,6 @@ func TestApplyPreparedFailureConfirmsLostCommitResponse(t *testing.T) {
 
 	require.NoError(t, pool.QueryRow(ctx, `SELECT attempt_count FROM youtube_notification_delivery WHERE id = $1`, ownerID).Scan(&attemptCount))
 	require.Equal(t, 1, attemptCount)
-
-	var spooled int
-
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM youtube_notification_delivery_telemetry`).Scan(&spooled))
-	require.Zero(t, spooled)
 }
 
 func seedTransitionShortLogicalGroup(t *testing.T, pool *pgxpool.Pool, videoID, roomID string) (int64, int64) {

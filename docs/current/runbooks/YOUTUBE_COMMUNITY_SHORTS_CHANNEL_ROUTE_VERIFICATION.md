@@ -37,13 +37,10 @@ Community/shorts 수집 evidence는 `collector` observation, canonical consume�
   - `disabled`: 현재 typed 알람 구독이 없습니다.
   - `pending_cutover`: 컷오버 시각 전이라 신규 경로 단일 활성로 판정하면 안 됩니다.
 - `deployment`: 현재 런타임이 최종 owner로 해석한 경로입니다. 운영 목표값은 `alarm-worker.youtube_outbox_dispatcher` 입니다.
-- `actual`: 최근 관측 창에서 실제 게시물의 delivery 행과 감사 로그 경로를 요약한 상태입니다.
-  - `new_only_verified`: 최근 게시물들이 모두 `youtube_outbox_dispatcher` 로만 관측됐습니다.
-  - `no_recent_posts`: 최근 창에 해당 채널/타입 게시물이 없어 실제 경로를 관측하지 못했습니다.
-  - `no_path_observed`: 최근 게시물은 있었지만 alarm-worker delivery 행과 감사 로그가 없었습니다.
-  - `unexpected_path_detected`: `youtube_outbox_dispatcher` 외 단일 경로가 관측됐습니다.
-  - `mixed_paths_detected`: 같은 라우트 창에서 복수 경로가 함께 관측됐습니다.
-- `observed_paths`: 최근 창에서 실제 관측된 `delivery_path` 집합입니다.
+- `actual`: 최근 관측 창에서 실제 게시물이 alarm-worker outbox·delivery를 거쳤는지 요약한 상태입니다. 경로 값은 행에 저장하지 않고 코드 상수(`youtube_outbox_dispatcher`) 하나만 로그에 쓰므로, 다른 경로나 복수 경로는 관측될 수 없습니다.
+  - `delivery_observed`: 최근 게시물이 outbox와 room별 delivery로 진입했습니다.
+  - `no_recent_posts`: 최근 창에 해당 채널/타입 게시물이 없어 실제 사용을 관측하지 못했습니다.
+  - `no_delivery_observed`: 최근 게시물은 있었지만 outbox 또는 delivery가 없었습니다. 구독 room이 없는 outbox는 delivery 없이 SENT로 끝나므로 [Route Usage](YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md)의 `pending_outbox_count`와 함께 봅니다.
 
 ## 운영 판독 기준
 
@@ -53,15 +50,13 @@ Community/shorts 수집 evidence는 `collector` observation, canonical consume�
 - 헤더에서 `big-bang enabled = true`
 - 대상 라우트의 `activation = new_only`
 - 대상 라우트의 `deployment = alarm-worker.youtube_outbox_dispatcher`
-- 대상 라우트의 `actual = new_only_verified`
-- 대상 라우트의 `observed_paths` 에 `youtube_outbox_dispatcher` 외 값이 없음
+- 대상 라우트의 `actual = delivery_observed`
 
 다음 상태는 즉시 합격 근거로 쓰면 안 됩니다.
 
 - `pending_cutover`: 컷오버 전 상태
 - `no_recent_posts`: 실제 사용 경로를 아직 관측하지 못한 상태
-- `no_path_observed`: 게시물은 있었지만 delivery 행과 감사 로그 근거가 빈 상태
-- `unexpected_path_detected`, `mixed_paths_detected`: 신규 경로 단일 사용 위반 후보
+- `no_delivery_observed`: 게시물은 있었지만 outbox·delivery 근거가 빈 상태
 
 `no_recent_posts` 가 많으면 관측 창을 늘려 다시 실행합니다.
 
@@ -73,7 +68,7 @@ Community/shorts 수집 evidence는 `collector` observation, canonical consume�
 
 ## 로컬 검증
 
-- `go -C hololive/hololive-alarm-worker test ./internal/egress/youtubeoutbox/...`
+- `go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/...`
 
 관련 참고:
 

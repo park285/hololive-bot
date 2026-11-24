@@ -821,9 +821,31 @@ func runCanceledReissueCommitLoss(t *testing.T, path string, count int) {
 
 	preparations := f.sender.prepareCalls
 	result := newDeliveryDispatchResult(count)
+
+	var audit bytes.Buffer
+
+	f.engine.auditLogger.logger = slog.New(slog.NewJSONHandler(&audit, nil))
 	f.engine.dispatchFrozenGroup(t.Context(), group, f.messages, nil, &result)
 	require.Equal(t, preparations, f.sender.prepareCalls)
 	assertReissuedSettlementSent(t, f, &request, result.DispatchResult)
+	assertFrozenAttemptStartedLogged(t, &audit, f.rows)
+}
+
+func assertFrozenAttemptStartedLogged(t *testing.T, audit *bytes.Buffer, rows []domain.YouTubeNotificationDelivery) {
+	t.Helper()
+
+	mode := deliveryModeGrouped
+
+	if len(rows) == 1 {
+		mode = deliveryModePerRoom
+	}
+
+	started := findAllLogEntriesByMessage(t, audit, CommunityShortsDeliveryAttemptMessage)
+	require.Len(t, started, len(rows))
+
+	for i := range started {
+		assertLogStringField(t, started[i], FieldDeliveryMode, mode)
+	}
 }
 
 func assertReissueCommitLossPending(t *testing.T, f *settlementFixture, result DispatchResult) store.FrozenRequest {

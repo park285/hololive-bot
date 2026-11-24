@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
 
@@ -181,6 +182,8 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 	if len(attempt.members) == 1 {
 		mode = deliveryModePerRoom
 	}
+
+	d.logCommunityShortsDeliveryAttemptStarted(attempt.rows, attempt.outboxes, time.Now().UTC(), mode)
 
 	if sendErr := d.sendFrozenDelivery(ctx, &attempt); sendErr != nil {
 		if mode == deliveryModePerRoom {

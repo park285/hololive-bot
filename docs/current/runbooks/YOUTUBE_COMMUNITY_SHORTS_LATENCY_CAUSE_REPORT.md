@@ -8,7 +8,7 @@
 - 기간 경계는 `[period_start_at, period_end_at)`이고, 판정 시각은 `actual_published_at`이며 비어 있으면 `detected_at`으로 대체합니다.
 - 2분 초과 여부는 저장된 `alarm_latency_exceeded = true` 기준입니다.
 - 외부 수집 구간은 `actual_published_at -> detected_at`, 내부 전달 구간은 `detected_at -> alarm_sent_at`입니다.
-- 내부 세부 원인(큐 대기, 재시도 누적, job 실패)은 발송 시도 telemetry를 없애면서 더는 계산하지 않습니다. 필요하면 해당 게시물의 attempt started·result 로그([Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md))를 봅니다.
+- 내부 세부 원인(큐 대기, 재시도 누적, job 실패)은 발송 시도 telemetry를 없애면서 더는 계산하지 않습니다. 필요하면 해당 게시물의 delivery 상태(`attempt_count`, `error`)와 attempt started·result 로그를 room과 시각으로 대조합니다([Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 감사 기록 계약 참고).
 - tracking의 `latency_classification_status`, `delay_source`, `internal_delay_cause` 열은 분류를 없애기 전 image가 쓴 값만 남은 동결 자료이므로 이 보고서는 읽지 않습니다.
 
 ## 판정 규칙
@@ -99,7 +99,7 @@ ORDER BY observed_at DESC;
 
 ## Readout
 
-- `internal_over_target_posts > 0`: 감지 이후 내부 전달만으로 2분을 넘긴 게시물이 있습니다. 해당 게시물의 delivery 상태와 attempt 로그로 재시도·대기를 확인합니다.
+- `internal_over_target_posts > 0`: 감지 이후 내부 전달만으로 2분을 넘긴 게시물이 있습니다. 해당 게시물의 delivery 상태(`attempt_count`, `error`)로 재시도 흔적을 확인합니다. 대기 시간은 attempt started 줄의 `attempt_started_at`과 tracking의 `detected_at`을 비교합니다.
 - `internal_dominant_posts`: 외부와 내부가 함께 늦었고 내부가 더 길었던 건입니다. 내부 원인 후보로 봅니다.
 - `external_dominant_posts`: 외부 수집 지연이 우세한 건입니다. 실패 집계에서 제외하는 참고 정보입니다.
 - `insufficient_evidence_posts`: 실제 게시 시각이나 발송 시각이 없어 구간을 나누지 못한 건입니다.
