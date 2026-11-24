@@ -331,7 +331,7 @@ def generated(name):
             (src / (unit(name) + '.d') / f).write_bytes(value)
         for ref in expected.get('Network', []) + [v.partition(':')[0] for v in expected.get('Volume', [])]:
             if ref.endswith(('.network', '.volume')) and Path(ref).name == ref:
-                (src / ref).write_bytes(raw(UNIT / ref))
+                (src / ref).write_bytes(raw(INPUT / ref))
         run(str(QUADLET), '-no-kmsg-log', str(out), env={'QUADLET_UNIT_DIRS': str(src)})
         made = (out / (name + '.service')).read_text()
     made = made.replace('\nSourcePath=' + str(src / unit(name)) + '\n', '\nSourcePath=' + str(UNIT / unit(name)) + '\n')
@@ -822,7 +822,8 @@ PULLS = ('Wants', 'Requires', 'Requisite', 'BindsTo', 'Upholds')
 
 
 def service_dropins(name):
-    owned = {tuple(number(mask(n))) for n in NAMES if os.path.lexists(mask(n))}
+    top = SYSTEM.stat()
+    owned = {(top.st_dev, top.st_ino, path.name) for n in NAMES for path in [mask(n), *SYSTEM.glob('.' + n + '.*.mask')]}
     with tempfile.TemporaryDirectory() as tmp:
         fragment = Path(tmp) / 'unit' / (name + '.service')
         fragment.parent.mkdir()
@@ -836,9 +837,11 @@ def service_dropins(name):
 
 def owned_link(path, owned):
     for _ in range(64):
-        st = os.lstat(path)
-        if (st.st_dev, st.st_ino) in owned or not stat.S_ISLNK(st.st_mode):
-            return (st.st_dev, st.st_ino) in owned
+        parent = os.stat(os.path.dirname(path))
+        if (parent.st_dev, parent.st_ino, os.path.basename(path)) in owned:
+            return True
+        if not os.path.islink(path):
+            return False
         path = os.path.join(os.path.dirname(path), os.readlink(path))
     return True
 

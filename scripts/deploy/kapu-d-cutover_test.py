@@ -91,6 +91,14 @@ class GeneratedUnit(unittest.TestCase):
             for n in d.NAMES:
                 d.generated(n)
 
+    def test_generated_finds_referenced_units_wherever_quadlet_does(self):
+        (self.units / 'infra').mkdir()
+        for ref in (d.NETWORK_UNIT, d.I + '.volume'):
+            (self.units / ref).rename(self.units / 'infra' / ref)
+        self.install()
+        for n in d.NAMES:
+            d.generated(n)
+
     def test_generated_refuses_settings_a_quadlet_dropin_outside_the_reviewed_set_adds(self):
         for n in d.NAMES:
             for section, line in [('[Unit]', 'Wants=probe.service'), ('[Unit]', 'Requires=probe.service'),
@@ -699,6 +707,20 @@ class Cutover(unittest.TestCase):
                 self.assertFalse((self.h / 'resume-attempt.json').exists())
                 (wants / (entry + '.service')).unlink()
         self.cli('check', target)
+
+    def test_check_accepts_dependency_links_masked_by_a_link_resume_keeps(self):
+        target = self.target()
+        self.seal(target)
+        keep = self.system / '.keep-mask'
+        os.link(d.mask(d.C), keep, follow_symlinks=False)
+        wants = self.system / (d.I + '.service.wants')
+        wants.mkdir()
+        (wants / 'probe.service').symlink_to('../.keep-mask')
+        self.cli('check', target)
+        (wants / 'probe.service').unlink()
+        (wants / 'probe.service').symlink_to('../' + d.C + '.service')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
 
     def test_check_accepts_a_sealed_hold_whose_manager_still_lists_the_removed_guard(self):
         target = self.target()
