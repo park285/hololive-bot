@@ -781,66 +781,40 @@ def unit_paths():
     return paths
 
 
-UNIT_ID = re.compile(r'ids: (\S+) (?:\u2192|->) (\S.*)')
-
-
-def unit_names(name, paths):
-    ids = {}
-    listing = run('systemd-analyze', 'unit-files', env={'SYSTEMD_UNIT_PATH': ':'.join(map(str, paths))}, clean=True)
-    for line in listing.splitlines():
-        if found := UNIT_ID.fullmatch(line.strip()):
-            ids[found[1]] = found[2]
-    need(name + '.service' in ids, '불명 systemd unit 이름 맵: ' + name)
-    names = {name + '.service'}
-    while grown := {alias for alias, target in ids.items() if target in names} - names:
-        names |= grown
-    return {n.removesuffix('.service') for n in names}
-
-
 def foreign_units(name):
     paths = unit_paths()
     need(GEN in paths, '불명 systemd generator 경로')
     return sorted(str(root / (name + '.service')) for root in paths[:paths.index(GEN)]
-                  if os.path.lexists(root / (name + '.service')) and root / (name + '.service') != mask(name))
+                  if (os.path.islink(root / (name + '.service')) or (root / (name + '.service')).is_file())
+                  and root / (name + '.service') != mask(name))
 
 
-DROPIN_SUFFIXES = ('.d', '.wants', '.requires', '.upholds')
+PULLS = ('Wants', 'Requires', 'Requisite', 'BindsTo', 'Upholds')
 
 
 def service_dropins(name):
-    paths = unit_paths()
-    aliases = sorted(unit_names(name, paths) - {name})
-    roots = [root for root in paths if root.is_dir()]
-    slots = [[(root, stem + '.service')] for root in roots for stem in (name, *dash_prefixes(name))]
-    slots += [[(root, stem + '.service') for alias in aliases for stem in (alias, *dash_prefixes(alias))] for root in roots]
-    slots += [[(root, 'service')] for root in roots]
-    found = []
-    for x in DROPIN_SUFFIXES:
-        seen = set()
-        for slot in slots:
-            dirs = [root / (stem + x) for root, stem in slot if (root / (stem + x)).is_dir()]
-            entries = {k for folder in dirs for k in os.listdir(folder) if not k.startswith('.')}
-            found += [str(folder / k) for k in entries - seen for folder in dirs
-                      if os.path.lexists(folder / k) and applied_entry(folder / k, x)]
-            seen |= entries
-    return sorted(set(found))
+    with tempfile.TemporaryDirectory() as tmp:
+        fragment = Path(tmp) / 'unit' / (name + '.service')
+        fragment.parent.mkdir()
+        fragment.write_bytes(raw(GEN / (name + '.service')))
+        drops, pulls = systemd_view(fragment, unit_paths())
+        _, own = systemd_view(fragment, [Path(tmp) / 'none'])
+    return drops + sorted(pulls - own)
 
 
-def dash_prefixes(name):
-    return [name[:i+1] for i in range(len(name) - 1, -1, -1) if name[i] == '-']
-
-
-UNIT_FILE_NAME = re.compile(r'[^/]+\.(service|socket|target|device|mount|automount|swap|timer|path|slice|scope)')
-
-
-def applied_entry(path, suffix):
-    if not (path.name.endswith('.conf') if suffix == '.d' else path.is_symlink() and UNIT_FILE_NAME.fullmatch(path.name)):
-        return False
-    try:
-        st = os.stat(path)
-    except OSError:
-        return True
-    return not (stat.S_ISCHR(st.st_mode) or (stat.S_ISREG(st.st_mode) and st.st_size == 0))
+def systemd_view(fragment, paths):
+    proc = subprocess.run(['systemd-analyze', 'verify', '--man=no', '--generators=no', str(fragment)],
+                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60, cwd='/',
+                          env={**COMMAND_ENV, 'SYSTEMD_UNIT_PATH': ':'.join(map(str, paths)),
+                               'SYSTEMD_LOG_LEVEL': 'debug', 'SYSTEMD_LOG_TARGET': 'console', 'LC_ALL': 'C'})
+    head = '-> Unit ' + fragment.name + ':\n'
+    text = proc.stdout.decode(errors='replace')
+    need(text.count(head) == 1, 'systemd unit 판정 없음: ' + fragment.name)
+    lines = [line.strip() for line in text.split(head)[1].split('\n-> ')[0].splitlines()]
+    need('Unit Load State: loaded' in lines, 'systemd unit 판정 불가: ' + fragment.name)
+    drops = sorted(line.removeprefix('DropIn Path: ') for line in lines if line.startswith('DropIn Path: '))
+    return drops, {line.split(' (')[0] for line in lines
+                   if line.split(':')[0] in PULLS and 'origin-file' in line.partition(' (')[2].rstrip(')').split()}
 
 
 def resumable(h, target):

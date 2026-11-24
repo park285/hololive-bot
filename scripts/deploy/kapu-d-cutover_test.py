@@ -149,8 +149,10 @@ class Cutover(unittest.TestCase):
         self.patch('prop', lambda n,k:self.props[n][k])
         self.patch('generation', self.generation)
         self.calls = []
-        self.unit_files = ''.join(f'ids: {n}.service \u2192 {self.system / (n + ".service")}\n' for n in d.NAMES)
+        for n in d.NAMES:
+            (d.GEN / (n + '.service')).write_text('[Unit]\nDescription=x\n[Service]\nType=notify\nExecStart=/bin/true\n')
         self.patch('run', self.command)
+        self.real_run = d.subprocess.run
         self.stack.enter_context(patch.object(d.subprocess,'run',self.start_client))
 
     def patch(self, name, value):
@@ -165,6 +167,8 @@ class Cutover(unittest.TestCase):
             self.props[n]['LoadState'] = 'masked' if os.path.lexists(d.mask(n)) else 'loaded'
 
     def start_client(self, argv, *, stdout, **kwargs):
+        if argv[0] == 'systemd-analyze':
+            return self.real_run(argv, stdout=stdout, **kwargs)
         self.assertEqual(argv[:3],['systemctl','start','--show-transaction'])
         n = argv[-1].removesuffix('.service')
         self.assertNotIn(n,self.guards)
@@ -182,9 +186,6 @@ class Cutover(unittest.TestCase):
         if args[:3] == ('systemctl','show','--all'):
             props = self.props[args[-1].removesuffix('.service')]
             return '\n'.join(k + '=' + props[k] for k in args[3].removeprefix('--property=').split(','))
-        if args == ('systemd-analyze','unit-files'):
-            self.assertEqual(kwargs, {'env': {'SYSTEMD_UNIT_PATH': ':'.join(map(str, d.unit_paths()))}, 'clean': True})
-            return self.unit_files
         self.calls.append(args)
         if args[:4] == ('python3','-I','-B',str(d.GUARD)):
             if args[4] == 'exit-status':
@@ -302,7 +303,8 @@ class Cutover(unittest.TestCase):
                 base = self.units / d.unit(n)
                 f = d.GEN / (n + '.service')
                 text = base.read_text() + '\n' + '\n'.join(v.decode() for v in d.policy(n).values())
-                f.write_text('SourcePath=' + str(base) + '\n' + text.replace('[Container]', '[X-Container]'))
+                f.write_text('[Unit]\nSourcePath=' + str(base) + '\n' + text.replace('[Container]', '[X-Container]') +
+                             '\n[Service]\nType=notify\nExecStart=/bin/true\n')
                 self.props[n].update(FragmentPath=str(d.mask(n) if self.props[n]['LoadState'] == 'masked' else f),
                                      NeedDaemonReload='no', Type='notify', DropInPaths=(
                                          str(self.system / (n+'.service.d/90-hololive-stop-guard.conf')) if n in self.guards else ''))
@@ -355,18 +357,20 @@ class Cutover(unittest.TestCase):
         drops = self.system / (d.C + '.service.d')
         drops.mkdir(exist_ok=True)
         (drops / '.pending.conf').write_bytes(b'[Service]\nRestart=no\n')
-        (self.vendor / (d.C + '.service.d')).mkdir()
-        (self.vendor / (d.C + '.service.d' ) / '20-x.conf').write_bytes(b'[Service]\nRestart=no\n')
-        (drops / '20-x.conf').symlink_to('/dev/null')
         self.cli('check', target)
+        (drops / '20-x.conf').symlink_to('/dev/null')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+        (drops / '20-x.conf').unlink()
         (upper / 'probe.service').unlink()
         with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
             self.cli('check', target)
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
 
     def test_dropin_precedence_follows_unit_name_then_alias_then_type_level(self):
         target = self.target()
         self.seal(target)
-        self.unit_files += f'ids: collector-alias.service \u2192 {d.C}.service\n'
+        (self.system / 'collector-alias.service').symlink_to(d.GEN / (d.C + '.service'))
         cases = [
             ((self.system, 'service'), (self.vendor, d.C + '.service'), True),
             ((self.system, 'collector-alias.service'), (self.vendor, d.C + '.service'), True),
@@ -382,6 +386,7 @@ class Cutover(unittest.TestCase):
                 masked.parent.mkdir(exist_ok=True)
                 live.parent.mkdir(exist_ok=True)
                 masked.symlink_to('/dev/null')
+                refused = refused or suffix == '.d'
                 own = mroot / (d.I + '.service' + suffix) / entry
                 if not refused:
                     own.parent.mkdir(exist_ok=True)
@@ -436,7 +441,7 @@ class Cutover(unittest.TestCase):
         h = self.running_pair()
         folder = self.system / (d.C + '.service.requires')
         folder.mkdir()
-        (folder / (d.I + '.service')).symlink_to('../' + d.I + '.service')
+        (folder / 'probe.service').symlink_to('../probe.service')
         with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
             d.quiesce(h, self.target())
         self.assertFalse(os.path.lexists(h))
@@ -573,11 +578,10 @@ class Cutover(unittest.TestCase):
     def test_check_and_resume_see_dropins_attached_through_an_alias(self):
         target = self.target()
         self.seal(target)
-        self.unit_files += (f'ids: collector-alias.service \u2192 {d.C}.service\n'
-                            'ids: chained.service -> collector-alias.service\n'
-                            f'ids: other.service \u2192 {self.vendor}/other.service\n'
-                            'ids: unrelated.service \u2192 other.service\n'
-                            f'aliases: {d.C}.service \u2190 {d.C}.service, collector-alias.service\n')
+        (self.system / 'collector-alias.service').symlink_to(d.GEN / (d.C + '.service'))
+        (self.system / 'chained.service').symlink_to('collector-alias.service')
+        (self.vendor / 'other.service').write_bytes(b'[Service]\nExecStart=/bin/true\n')
+        (self.vendor / 'unrelated.service').symlink_to('other.service')
         for folder in (self.vendor / 'unrelated.service.d', self.vendor / 'other.service.d'):
             folder.mkdir()
             (folder / '10-own.conf').write_bytes(b'[Service]\nEnvironment=OWN=1\n')
@@ -596,7 +600,7 @@ class Cutover(unittest.TestCase):
     def test_check_and_resume_refuse_dependency_links_added_after_the_stop(self):
         target = self.target()
         self.seal(target)
-        self.unit_files += f'ids: collector-alias.service \u2192 {d.C}.service\n'
+        (self.system / 'collector-alias.service').symlink_to(d.GEN / (d.C + '.service'))
         for folder in (self.system / (d.C + '.service.requires'), self.vendor / 'hololive-.service.wants',
                        self.vendor / 'service.upholds', self.system / 'collector-alias.service.wants'):
             folder.mkdir()
@@ -667,17 +671,46 @@ class Cutover(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertFalse((self.h / 'resume-attempt.json').exists())
 
-    def test_check_and_resume_refuse_an_unreadable_systemd_name_map(self):
+    def test_check_and_resume_refuse_a_unit_systemd_cannot_load(self):
         target = self.target()
         self.seal(target)
-        for listing in ('', 'Failed to resolve symlink x\n', self.unit_files.replace(d.C + '.service \u2192', 'x.service \u2192')):
-            self.unit_files = listing
-            with self.assertRaisesRegex(d.Refused, 'systemd unit 이름 맵'):
-                self.cli('check', target)
-            with self.assertRaisesRegex(d.Refused, 'systemd unit 이름 맵'):
-                self.resume()
+        (d.GEN / (d.C + '.service')).write_bytes(b'')
+        with self.assertRaisesRegex(d.Refused, 'systemd unit 판정'):
+            self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, 'systemd unit 판정'):
+            self.resume()
         self.assertEqual(self.calls, [])
         self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_follows_systemd_for_crossed_alias_masks_relative_dirs_and_invalid_names(self):
+        target = self.target()
+        self.seal(target)
+        for alias in ('alpha', 'beta'):
+            (self.system / (alias + '.service')).symlink_to(d.GEN / (d.C + '.service'))
+            (self.system / (alias + '.service.wants')).mkdir()
+            (self.vendor / (alias + '.service.wants')).mkdir()
+        (self.system / 'alpha.service.wants' / 'probe-a.service').symlink_to('/dev/null')
+        (self.system / 'beta.service.wants' / 'probe-b.service').symlink_to('/dev/null')
+        (self.vendor / 'alpha.service.wants' / 'probe-b.service').symlink_to('../probe.service')
+        (self.vendor / 'beta.service.wants' / 'probe-a.service').symlink_to('../probe.service')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+        for alias in ('alpha', 'beta'):
+            for root in (self.system, self.vendor):
+                for entry in (root / (alias + '.service.wants')).iterdir():
+                    entry.unlink()
+        (self.system / 'links').mkdir()
+        (self.system / 'links' / 'probe.service').symlink_to('/dev/null')
+        (self.system / (d.C + '.service.wants')).symlink_to('links')
+        (self.vendor / (d.C + '.service.wants')).mkdir()
+        (self.vendor / (d.C + '.service.wants') / 'probe.service').symlink_to('../probe.service')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+        (self.vendor / (d.C + '.service.wants') / 'probe.service').unlink()
+        (self.vendor / (d.C + '.service.wants') / 'bad name.service').symlink_to('../probe.service')
+        (self.early / (d.C + '.service')).mkdir()
+        self.cli('check', target)
+        self.assertEqual(self.calls, [])
 
     def test_check_refuses_what_resume_refuses(self):
         target = self.target()
