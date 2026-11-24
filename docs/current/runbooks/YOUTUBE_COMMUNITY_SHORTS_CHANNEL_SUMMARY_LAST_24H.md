@@ -131,6 +131,6 @@ SQL
 - `success_post_count < detected_post_count`: 아직 성공하지 못한 post가 남아 있습니다. `detected_unsent_post_count` 와 같이 봅니다.
 - `failure_post_count > 0`: 해당 채널에서 실패 또는 재시도 흔적이 남은 post가 있다는 뜻입니다. 성공 후 회복된 건도 포함될 수 있습니다. revive가 켜져 있으면 revive 창 안의 실패는 다시 발송될 수 있으므로 post별 최종 여부는 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 운영 기준으로 판정합니다. 정리된 outbox의 실패는 원장 격리를 빼면 이 값에서 빠집니다.
 - `unknown_outcome_post_count > 0`: 결과를 알 수 없는 post가 있습니다. 격리된 post는 재발송하지 않으므로 room에 도착했는지 직접 확인하고, SENDING이 남은 post는 stale sweep 뒤 다시 판정하고, tracking 시각만 남은 post는 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `tracking_only_outbox_cleaned` 기준을 따릅니다.
-- `no_target_post_count`: 구독 room이 없어 delivery 없이 outbox가 SENT로 끝났고 원장 SENT·QUARANTINED room도 없는 post 수입니다. 발송 대상이 없었으므로 `detected_unsent_post_count`에서 뺍니다.
+- `no_target_post_count`: 구독 room이 없어 delivery 없이 outbox가 SENT로 끝났고 원장 SENT·QUARANTINED room도 없는 post 수입니다. 발송 대상이 없었으므로 `detected_unsent_post_count`에서 뺍니다. 같은 post의 다른 outbox가 실패한 뒤 정리됐으면 그 실패가 보이지 않아 여기에 들어가므로, `youtube_delivery.cleanup_after_ms`가 24시간보다 짧으면 이 post는 alarm-worker 실패 로그를 확인한 뒤 정상으로 셉니다.
 - `detected_unsent_post_count > 0`: 감지 후 아직 성공한 room이 없는 post가 있습니다. 늦더라도 반드시 1회 발송돼야 하는 추적 대상입니다. 다만 `detected_post_count - alarm_sent_post_count`만큼은 근거가 모두 정리된 post라 구독 room 없는 정상 종료일 수도 있으므로 위 기준대로 확인한 뒤 누락으로 셉니다.
 - `community_detected_post_count`, `shorts_detected_post_count`: 어떤 타입에서 채널 부하가 생겼는지 빠르게 나눠 볼 때 사용합니다.
