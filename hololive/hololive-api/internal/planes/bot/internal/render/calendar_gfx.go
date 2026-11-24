@@ -530,7 +530,13 @@ func (c *calCanvas) Photo(src image.Image, clip calShape, b calBox) {
 
 func calIsWhiteMattePixel(src image.Image, x, y int) bool {
 	b := src.Bounds()
-	r, g, bl, a := src.At(b.Min.X+x, b.Min.Y+y).RGBA()
+
+	px := src.At(b.Min.X+x, b.Min.Y+y)
+	if px == nil {
+		return true
+	}
+
+	r, g, bl, a := px.RGBA()
 
 	if a < 32768 {
 		return true

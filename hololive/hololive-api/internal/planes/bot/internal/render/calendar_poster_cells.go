@@ -519,7 +519,9 @@ func drawPosterRosterRows(c *calCanvas, spec calPageSpec, lay calPosterLayout, b
 	ry := startY
 
 	for _, d := range lay.multiDays {
-		drawPosterRosterRow(c, spec, d, byDay[d], ry, lay.rosterRowH, p)
+		if list, ok := byDay[d]; ok {
+			drawPosterRosterRow(c, spec, d, list, ry, lay.rosterRowH, p)
+		}
 
 		ry += lay.rosterRowH
 	}
