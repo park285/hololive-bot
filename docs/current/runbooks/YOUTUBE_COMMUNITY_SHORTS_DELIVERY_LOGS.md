@@ -103,5 +103,5 @@ SQL
 - `delivery_status = SENDING`: 발송 중입니다. 오래 남으면 stale sweep이 `QUARANTINED`로 격리합니다.
 - `delivery_status = FAILED`: 더는 재시도하지 않는 실패(영구 실패 또는 재시도 한도 소진)입니다. `error`로 사유를 확인합니다.
 - `delivery_status = QUARANTINED`: 결과 불명으로 격리됐습니다. 재발송하지 않으므로 전송 증거로 검토합니다.
-- `attempt_count > 1`: 재시도가 있었습니다. revive가 0으로 되돌리므로 실제 시도 수의 하한입니다.
+- `attempt_count > 0`: 실패한 시도가 그만큼 있었습니다. 성공은 이 값을 올리지 않고 revive가 0으로 되돌리므로 실패 횟수의 하한입니다.
 - 행이 없으면 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나 지워졌을 수 있습니다. 이때는 `youtube_notification_delivery_ledger`와 tracking의 `alarm_sent_at`으로 확인합니다.

@@ -9,7 +9,7 @@
 - 집계 단위는 room 이벤트가 아니라 게시물(post)입니다. 같은 게시물에서 room별 재시도나 fan-out이 여러 번 있어도 채널 집계에서는 같은 post를 1건으로 계산합니다.
 - `alarm_sent_post_count` 는 해당 post가 발송 파이프라인에 진입했거나(`outbox_count > 0`) canonical 성공 시각이 남은 경우를 뜻합니다.
 - `success_post_count` 는 `alarm_sent_at` 또는 SENT delivery가 존재하는 post 수입니다.
-- `failure_post_count` 는 `FAILED`·`QUARANTINED` delivery나 재시도한(`attempt_count > 1`) delivery가 하나라도 있는 post 수입니다. 이후 성공해도 실패 흔적은 채널 집계에 남습니다. 시도마다 남던 telemetry 행은 더 쓰지 않으므로, revive로 `attempt_count`가 0으로 돌아간 재시도는 세지 못합니다.
+- `failure_post_count` 는 `FAILED`·`QUARANTINED` delivery나 실패한 시도가 있었던(`attempt_count > 0`) delivery가 하나라도 있는 post 수입니다. 이후 성공해도 실패 흔적은 채널 집계에 남습니다. 시도마다 남던 telemetry 행은 더 쓰지 않으므로, revive로 `attempt_count`가 0으로 돌아간 뒤 성공한 delivery의 이전 실패는 세지 못합니다.
 - delivery 행은 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 지워집니다.
 - `detected_unsent_post_count` 는 감지됐지만 canonical 성공 시각(`alarm_sent_at`)이 아직 없는 post 수입니다.
 
@@ -41,7 +41,7 @@ WITH per_post AS (
         track.alarm_sent_at AS alarm_sent_at,
         COUNT(DISTINCT o.id) AS outbox_count,
         COUNT(d.id) FILTER (WHERE d.status = 'SENT') AS success_send_count,
-        COUNT(d.id) FILTER (WHERE d.status IN ('FAILED', 'QUARANTINED') OR d.attempt_count > 1) AS failed_attempt_count
+        COUNT(d.id) FILTER (WHERE d.status IN ('FAILED', 'QUARANTINED') OR d.attempt_count > 0) AS failed_attempt_count
     FROM youtube_content_alarm_tracking AS track
     LEFT JOIN youtube_notification_outbox AS o
         ON o.kind = track.kind

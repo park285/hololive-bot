@@ -6,9 +6,8 @@
 
 - 대상은 `COMMUNITY_POST`, `NEW_SHORT` 두 종류만 포함합니다.
 - 최근 24시간 판단 기준은 `youtube_content_alarm_tracking.actual_published_at`이고, 실제 게시 시각이 비어 있으면 `detected_at`로 대체합니다.
-- 발송 경로 값은 행에 저장하지 않습니다. 경로 근거는 두 가지입니다.
-  - alarm-worker 감사 로그의 `delivery_path`입니다. 값은 `youtube_outbox_dispatcher` 하나이며 [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 최종 결과 줄에서 읽습니다.
-  - `youtube_notification_delivery` 행입니다. 이 표의 INSERT 권한은 `hololive_alarm_worker`에만 있고 alarm-worker는 `youtube_outbox_dispatcher` 경로로만 delivery를 만듭니다. 따라서 SENT delivery가 있으면 이 경로로 발송된 것입니다.
+- 발송 경로 값은 행에 저장하지 않습니다. 경로 근거는 alarm-worker 감사 로그의 `delivery_path`이며, 값은 `youtube_outbox_dispatcher` 하나입니다. [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 최종 결과 줄에서 읽습니다.
+- 아래 조회는 게시물이 outbox와 room별 delivery로 진입했고 성공했는지를 보여 줍니다. 경로 값 자체는 로그로 대조합니다.
 
 ## Execute
 DB 조회는 stack-platform-ops의 guarded read 경로(iris-stack
@@ -57,7 +56,7 @@ SQL
 
 ## Readout
 
-- `success_send_count > 0`: alarm-worker `youtube_outbox_dispatcher` 경로로 발송이 성공했습니다.
+- `success_send_count > 0`: outbox delivery 발송이 성공했습니다. 같은 `outbox_id`의 최종 결과 로그에서 `delivery_path = youtube_outbox_dispatcher`를 확인합니다.
 - `outbox_count > 0`이고 `delivery_count = 0`: outbox는 있지만 room별 delivery가 아직 만들어지지 않았습니다. 미발송 후보입니다.
 - `outbox_count = 0`: alarm-worker 경로에 진입하지 않았습니다. 끝난 outbox가 `youtube_delivery.cleanup_after_ms`를 넘겨 지워진 경우도 여기에 해당하므로 tracking의 `alarm_sent_at`과 함께 봅니다.
 - 감사 로그의 `delivery_path`가 `youtube_outbox_dispatcher` 외 값이면 예상 밖 경로이므로 별도 조사합니다.
