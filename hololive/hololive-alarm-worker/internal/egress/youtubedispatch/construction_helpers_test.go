@@ -86,7 +86,6 @@ func newDispatcherWithDepsForTest(
 
 	if unitTransition {
 		dispatcher.send.transition = &lifecycleTransitionSpy{complete: store.ApplyResult{Outcome: store.ApplyApplied}}
-		dispatcher.audit.telemetry = nil
 	}
 
 	return dispatcher

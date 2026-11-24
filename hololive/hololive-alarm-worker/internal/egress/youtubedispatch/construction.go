@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/format"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	"github.com/kapu/hololive-alarm-worker/internal/leaseowner"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -60,17 +59,12 @@ func NewDispatcher(deps Dependencies, logger *slog.Logger, config *Config) (*Dis
 		return nil, fmt.Errorf("initialize youtube dispatcher: %w", err)
 	}
 
-	telemetryRepository, err := telemetry.NewRepository(deps.DB)
-	if err != nil {
-		return nil, fmt.Errorf("initialize youtube dispatcher: telemetry repository: %w", err)
-	}
-
 	idle, err := wakeupwait.NewDelivery(deps.WakeupCache, wakeup.YouTubeDelivery, validConfig.PollInterval, logger)
 	if err != nil {
 		return nil, fmt.Errorf("initialize youtube dispatcher: %w", err)
 	}
 
-	dispatcher := assembleDispatcher(deps, logger, validConfig, telemetryRepository, transitionStore)
+	dispatcher := assembleDispatcher(deps, logger, validConfig, transitionStore)
 
 	dispatcher.idle = idle
 
@@ -111,13 +105,11 @@ func assembleDispatcher(
 	deps Dependencies,
 	logger *slog.Logger,
 	config Config,
-	telemetryRepository *telemetry.Repository,
 	transitionStore *store.TransitionStore,
 ) *Dispatcher {
 	deliveryRepo := store.NewDeliveryRepository(deps.DB, logger)
 
-	tp := newTelemetryProcessor(telemetryRepository, logger, &config)
-	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, &config)
+	al := newAuditLogger(deliveryRepo, logger, &config)
 	grouper := newOutboxGrouper(deps.DB, deps.Cache, logger, &config)
 	formatter := format.NewMessageFormatter(deps.Renderer, deps.MemberNames, deps.MessageStrings)
 
@@ -128,7 +120,6 @@ func assembleDispatcher(
 	return &Dispatcher{
 		claim:           claimManager,
 		send:            sendEngine,
-		telemetry:       tp,
 		audit:           al,
 		metrics:         metricsRecorder,
 		grouper:         grouper,

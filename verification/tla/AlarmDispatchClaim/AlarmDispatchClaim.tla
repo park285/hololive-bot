@@ -38,10 +38,15 @@ SkipLocked(w) == /\ pc[w] = "candidate" /\ unitLock # ""
                  /\ UNCHANGED <<clock, status, lockedBy, expiresAt, sendingStartedAt, sentAtSet,
                                 claimClock, unitLock, calls, invalidBegin, invalidSettlement>>
 
-ClaimDue(w) == /\ pc[w] = "picked" /\ unitLock = w
+ClaimDue(w) == /\ pc[w] = "picked" /\ unitLock = w /\ status \in {"pending", "retry"}
                /\ status' = "leased" /\ lockedBy' = w /\ expiresAt' = claimClock[w] + LeaseTTL
                /\ unitLock' = "" /\ pc' = [pc EXCEPT ![w] = "claimed"]
                /\ UNCHANGED <<clock, sendingStartedAt, sentAtSet, claimClock, calls, invalidBegin, invalidSettlement>>
+
+SkipSettledClaim(w) == /\ pc[w] = "picked" /\ unitLock = w /\ status \notin {"pending", "retry"}
+                       /\ unitLock' = "" /\ pc' = [pc EXCEPT ![w] = "done"]
+                       /\ UNCHANGED <<clock, status, lockedBy, expiresAt, sendingStartedAt, sentAtSet,
+                                      claimClock, calls, invalidBegin, invalidSettlement>>
 
 BeginSendRequest(w) == /\ pc[w] = "claimed" /\ unitLock = ""
                        /\ status = "leased" /\ lockedBy = w /\ expiresAt > clock
@@ -74,7 +79,7 @@ QuarantineStaleSending == /\ status = "sending" /\ clock > sendingStartedAt + St
 
 Next == \/ ClockTick \/ RecoverExpiredLeased \/ QuarantineStaleSending
         \/ \E w \in Workers : ClaimSnapshot(w) \/ SampleClaimClock(w) \/ LockSendUnit(w) \/ SkipLocked(w)
-                              \/ ClaimDue(w) \/ BeginSendRequest(w) \/ SendPinnedRequest(w) \/ MarkSent(w)
+                              \/ ClaimDue(w) \/ SkipSettledClaim(w) \/ BeginSendRequest(w) \/ SendPinnedRequest(w) \/ MarkSent(w)
         \/ UNCHANGED vars
 
 Spec == Init /\ [][Next]_vars

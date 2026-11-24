@@ -49,10 +49,7 @@ func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher, com
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		testParamAction: testActionAdd,
-		paramMember:     testMemberAqua,
-	})
+	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.AlarmParams{Action: testActionAdd, Member: testMemberAqua})
 	require.NoError(t, err)
 	require.NotEmpty(t, captured, "alarm should emit ambiguous-member message")
 
@@ -91,9 +88,7 @@ func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewLiveCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: testMemberAqua,
-	})
+	err := NewLiveCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.LiveParams{Member: testMemberAqua})
 	require.NoError(t, err)
 	assert.False(t, sendErrSeen, "live should not fall through to a not-found error on ambiguity")
 	assert.Equal(t, want, gotMessage)
@@ -123,9 +118,7 @@ func TestScheduleCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewScheduleCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: testMemberAqua,
-	})
+	err := NewScheduleCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.ScheduleParams{Member: testMemberAqua})
 	require.NoError(t, err)
 	assert.False(t, sendErrSeen, "schedule should not fall through to a not-found error on ambiguity")
 	assert.Equal(t, want, gotMessage)
@@ -155,9 +148,7 @@ func TestUpcomingCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewUpcomingCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: testMemberAqua,
-	})
+	err := NewUpcomingCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.UpcomingParams{Member: testMemberAqua})
 	require.NoError(t, err)
 	assert.False(t, sendErrSeen, "upcoming should not fall through to a not-found error on ambiguity")
 	assert.Equal(t, want, gotMessage)

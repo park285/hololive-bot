@@ -1,7 +1,6 @@
-
-			SELECT id, kind, channel_id, content_id, payload::text AS payload, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, COALESCE(error, '') AS error
-		FROM youtube_notification_outbox
-		WHERE id = ANY($1::bigint[])
-		  AND kind = ANY($2::text[])
-		  AND status = ANY($3::text[])
-		ORDER BY id ASC
+SELECT o.id, o.kind, o.channel_id, o.content_id, o.payload::text AS payload, o.status, o.attempt_count, o.next_attempt_at, o.created_at, o.locked_at, o.sent_at, COALESCE(o.error, '') AS error
+FROM youtube_notification_outbox AS o
+WHERE o.id = ANY($1::bigint[])
+  AND o.kind = ANY($2::text[])
+  AND o.status = ANY($3::text[])
+ORDER BY o.id ASC

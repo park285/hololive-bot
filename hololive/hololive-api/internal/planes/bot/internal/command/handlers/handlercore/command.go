@@ -3,6 +3,7 @@ package handlercore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -16,10 +17,40 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+type Handler[P botcommand.Params] interface {
+	Name() string
+	Description() string
+	Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params P) error
+}
+
 type Command interface {
 	Name() string
 	Description() string
-	Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error
+	Dispatch(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.Params) error
+}
+
+var ErrParamsMismatch = errors.New("command params type mismatch")
+
+func Bind[P botcommand.Params](handler Handler[P]) Command {
+	return boundHandler[P]{handler}
+}
+
+type boundHandler[P botcommand.Params] struct {
+	Handler[P]
+}
+
+func (b boundHandler[P]) Dispatch(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.Params) error {
+	var typed P
+
+	if params != nil {
+		var ok bool
+
+		if typed, ok = params.(P); !ok {
+			return fmt.Errorf("%w: %s received %T, want %T", ErrParamsMismatch, b.Name(), params, typed)
+		}
+	}
+
+	return b.Execute(ctx, cmdCtx, typed)
 }
 
 type CelebrationCalendarFinder interface {
@@ -35,8 +66,7 @@ type HelpImageProvider interface {
 }
 
 type SchedulePosterReader interface {
-	MemberCardTemplate(ctx context.Context, memberID int) (cardtemplate.ID, error)
-	PublishedRows(ctx context.Context, channelID string, day time.Time) (scheduleposter.PublishedSchedule, bool, error)
+	PublishedMemberRows(ctx context.Context, memberID int, channelID string, day time.Time) (scheduleposter.PublishedSchedule, cardtemplate.ID, bool, error)
 }
 
 type ScheduleCardRenderer interface {

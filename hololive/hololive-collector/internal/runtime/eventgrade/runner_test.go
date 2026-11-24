@@ -84,6 +84,18 @@ func collectorSession(t *testing.T) (*pgxpool.Pool, *pgxpool.Pool) {
 	return admin, dbtest.NewCollectorSessionPool(t, admin, CollectorRole)
 }
 
+func applyWorkerChapter(t *testing.T, admin *pgxpool.Pool, now time.Time) {
+	t.Helper()
+
+	_, err := admin.Exec(t.Context(), `WITH catalog AS (
+		INSERT INTO public.event_grade_catalogs(region, observed_at) VALUES ('jp', $1) RETURNING region
+	)
+	INSERT INTO public.event_grade_chapters(region,event_id,chapter_id,event_type,starts_at,ends_at,event_ends_at,reveals_at,observed_at)
+	SELECT region,'ev1','ch1','normal',$1::timestamptz - interval '1 hour',$1::timestamptz + interval '1 hour',
+	       $1::timestamptz + interval '2 hours',$1::timestamptz + interval '2 hours',$1 FROM catalog`, now)
+	require.NoError(t, err)
+}
+
 func observations(t *testing.T, admin *pgxpool.Pool) []string {
 	t.Helper()
 
@@ -111,6 +123,7 @@ func TestRunnerPublishesCatalogThenCutoffAndAcknowledgesAfterPublish(t *testing.
 
 	game := &fakeGame{now: time.Now().UTC().Truncate(time.Millisecond), conflicts: []string{"gone"}}
 	runner := NewRunner(session, game, collectorInstance, slog.New(slog.DiscardHandler))
+	applyWorkerChapter(t, admin, game.now)
 
 	runner.Cycle(t.Context())
 
@@ -125,6 +138,7 @@ func TestRunnerReleasesCutoffLeaseWhenCollectionFails(t *testing.T) {
 	admin, session := collectorSession(t)
 	game := &fakeGame{now: time.Now().UTC().Truncate(time.Millisecond), borderErr: errors.New("upstream unavailable")}
 	runner := NewRunner(session, game, collectorInstance, slog.New(slog.DiscardHandler))
+	applyWorkerChapter(t, admin, game.now)
 
 	runner.Cycle(t.Context())
 	require.Equal(t, []string{observation.KindCatalog, observation.KindCatalog, observation.KindCatalog}, observations(t, admin))

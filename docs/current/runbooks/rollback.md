@@ -102,11 +102,11 @@ migration 231~233 이전 image의 image-only rollback, session 일괄 삭제, sy
 소유자의 검증·복구 절차로 처리합니다. 데이터/세션 파괴나 서비스 자동 기동 정책 변경을
 routine rollback에 묶지 않습니다. 호환성이 입증되지 않으면 현재 revision으로 fix-forward합니다.
 
-### 직접 DB와 pooler 경로 사이의 복구
+### 퇴역한 pooler 경로로의 복구
 
 이전 image/profile만으로는 접속 경로를 복구할 수 없습니다. 중앙·b·native helper는 현재 env/drop-in의 effective host·port와 복구점의 값을 비교하고, 다르면 재기동 전에 거절합니다. 자동 복원 중 교차 경로를 발견한 경우 collector/issuer 정지와 복구 입력을 유지합니다.
 
-별도 승인 아래 영향받는 writer 전체를 정지·hold하고 pooler도 정지한 뒤, 이전 HBA·DB 설정과 앱 endpoint를 함께 정합화합니다. 단일 파일 bind의 이전 inode가 남지 않도록 PostgreSQL을 재생성하고 pooler backend 세션이 남지 않았는지 확인한 다음 기존 `--check`/`--apply`를 다시 실행합니다. frontend만 닫아서는 pooler의 idle backend가 즉시 없어지지 않으므로 직접 접속 복구와 겹치게 두지 않습니다. native recovery guard도 기존 절차로 처리합니다. 새 pooler-only HBA에 이전 direct 앱을 먼저 띄우거나 임시 direct 허용·우회 flag를 추가하지 않습니다. kapu d의 수동 복구도 같은 순서를 따릅니다. [상세 계약](../../../deploy/quadlet/README.md#복구와-자격-증명-변경)을 확인합니다.
+PgBouncer 퇴역 전환 뒤 pooler 경로로 되돌리는 rollback은 지원하지 않습니다. 이전 HBA·pooler unit·인증 객체를 다시 세워야 하므로 호환 후보로 fix-forward합니다. 전환 중 실패는 [퇴역 전환 절차](../../../deploy/quadlet/README.md#pgbouncer-퇴역-전환)대로 hold와 복구 입력을 보존합니다. 임시 pooler 허용·우회 flag를 추가하지 않습니다. [상세 계약](../../../deploy/quadlet/README.md#복구와-자격-증명-변경)을 확인합니다.
 
 ## Contract Rollback
 

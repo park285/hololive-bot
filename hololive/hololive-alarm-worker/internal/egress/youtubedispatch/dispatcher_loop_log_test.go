@@ -102,28 +102,6 @@ func TestDispatcherAggregateSyncLoopDoesNotWarnWhenContextCanceled(t *testing.T)
 	waitLoopStopWithoutWarn(t, done, &logs)
 }
 
-func TestDispatcherTelemetryLoopDoesNotWarnWhenContextCanceled(t *testing.T) {
-	t.Parallel()
-
-	var logs bytes.Buffer
-
-	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	dispatcher := newCanceledTickerDispatcher(t, logger)
-
-	dispatcher.telemetry.telemetry = nil
-
-	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan struct{})
-
-	go func() {
-		dispatcher.telemetry.telemetryLoop(ctx)
-		close(done)
-	}()
-
-	cancel()
-	waitLoopStopWithoutWarn(t, done, &logs)
-}
-
 func newCanceledTickerDispatcher(t *testing.T, logger *slog.Logger) *Dispatcher {
 	t.Helper()
 
@@ -132,7 +110,6 @@ func newCanceledTickerDispatcher(t *testing.T, logger *slog.Logger) *Dispatcher 
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
 		AggregateSyncInterval: time.Hour,
-		TelemetryPollInterval: time.Hour,
 		ReviveInterval:        time.Hour,
 		MaxRetries:            3,
 		RetryBackoff:          time.Minute,

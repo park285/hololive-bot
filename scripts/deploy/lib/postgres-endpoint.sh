@@ -51,16 +51,11 @@ postgres_endpoint_container() {
   postgres_endpoint_validate "$host" "$port"
 }
 
-postgres_quadlet_environment() {
-  local unit_file="$1" compose_file="$2" installed_unit="$3" values key value source
-  shift 3
-  local -A container=() service_env=()
-  local use_compose=false
-  values="$(python3 - "$unit_file" "$installed_unit" "$@" <<'PY'
+quadlet_override_origins() {
+  python3 - "$1" <<'PY'
 import os
 import pathlib
 import re
-import shlex
 import subprocess
 import sys
 
@@ -117,12 +112,28 @@ def check_origins(installed):
         if not unit_paths or any(not path.startswith("/") or "\\" in path for path in unit_paths):
             reject_origin("systemd manager UnitPath")
         system_roots.update(map(pathlib.Path, unit_paths))
-        reload_needed = subprocess.run(
-            ["systemctl", "show", installed.stem + ".service", "--property=NeedDaemonReload", "--value"],
-            check=True, capture_output=True, text=True,
-        ).stdout.strip()
-        if reload_needed != "no":
+        service = installed.stem + ".service"
+
+        def loaded(prop):
+            return subprocess.run(
+                ["systemctl", "show", service, "--property=" + prop, "--value"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+        if loaded("NeedDaemonReload") != "no":
             reject_origin("systemd loaded unit requires daemon-reload")
+        load_state = loaded("LoadState")
+        if load_state == "masked":
+            mask = prefix / "etc/systemd/system" / service
+            if loaded("FragmentPath") != "/etc/systemd/system/" + service or not (
+                mask.is_symlink() and os.readlink(mask) == "/dev/null"
+            ):
+                reject_origin("systemd masked unit fragment")
+        elif load_state != "loaded":
+            reject_origin("systemd unit load state " + load_state)
+        elif loaded("Names") != service or loaded("DropInPaths"):
+            reject_origin("systemd loaded unit aliases or drop-ins")
+        elif loaded("FragmentPath") != "/run/systemd/generator/" + service:
+            reject_origin("systemd loaded unit fragment")
     name = installed.stem
     inherited = [name[:index + 1] for index, char in enumerate(name) if char == "-"]
     quadlet_dropins = {"container.d", *(part + ".container.d" for part in inherited),
@@ -171,7 +182,19 @@ def check_origins(installed):
     service_name = name + ".service"
     service_dropins = ["service.d", *(part + ".service.d" for part in inherited),
                        service_name + ".d"]
+    search_dirs = system_roots | {pathlib.Path(os.path.realpath(root)) for root in system_roots}
     for root in sorted(system_roots):
+        if root.is_dir():
+            for entry in root.iterdir():
+                if entry.name == service_name or not entry.is_symlink():
+                    continue
+                link = os.path.join(entry.parent, os.readlink(entry))
+                while len(link) > 1 and link.endswith(("/", "/.")):
+                    link = link[:-1] if link.endswith("/") else link[:-2]
+                head, tail = os.path.split(link)
+                target = pathlib.Path(os.path.realpath(head), tail)
+                if tail == service_name and any(target.is_relative_to(directory) for directory in search_dirs):
+                    reject_origin(entry)
         for dropin in service_dropins:
             directory = root / dropin
             if directory.is_symlink():
@@ -183,7 +206,7 @@ def check_origins(installed):
         path = root / service_name
         if not os.path.lexists(path):
             continue
-        if path.is_symlink() and os.readlink(path) == "/dev/null":
+        if path == prefix / "etc/systemd/system" / service_name and path.is_symlink() and os.readlink(path) == "/dev/null":
             continue
         if root != prefix / "run/systemd/generator" or path.is_symlink():
             reject_origin(path)
@@ -192,8 +215,28 @@ def check_origins(installed):
             reject_origin(path)
 
 try:
+    check_origins(pathlib.Path(sys.argv[1]).absolute())
+except ValueError as error:
+    sys.exit("[postgres-endpoint] " + str(error))
+except (OSError, subprocess.CalledProcessError):
+    sys.exit("[postgres-endpoint] cannot verify Quadlet/systemd override origins")
+PY
+}
+
+postgres_quadlet_environment() {
+  local unit_file="$1" compose_file="$2" installed_unit="$3" values key value source
+  shift 3
+  local -A container=() service_env=()
+  local use_compose=false
+  quadlet_override_origins "$installed_unit" || return
+  values="$(python3 - "$unit_file" "$installed_unit" "$@" <<'PY'
+import pathlib
+import re
+import shlex
+import sys
+
+try:
     unit, installed = (pathlib.Path(path).absolute() for path in sys.argv[1:3])
-    check_origins(installed)
     wanted = sys.argv[3:]
     unsupported = set()
     environment = {"Container": {}, "Service": {}}
@@ -218,8 +261,6 @@ try:
                 section == "Container" and directive in ("PodmanArgs", "GlobalArgs", "EnvironmentHost")
             ) or directive == "ServiceName":
                 raise ValueError(f"unsupported Quadlet execution override: {path}")
-            if installed.name == "holo-pgbouncer.container" and section == "Container" and directive in ("Exec", "Entrypoint"):
-                raise ValueError(f"unsupported Quadlet pooler command override: {path}")
             if section in environment and directive == "Environment":
                 if not raw:
                     environment[section].clear()
@@ -248,7 +289,7 @@ try:
         raise ValueError("unsupported environment directive")
     for key in sources:
         print("SERVICE_" + key + "=" + service.get(key, ""))
-except (OSError, ValueError, subprocess.CalledProcessError) as error:
+except (OSError, ValueError) as error:
     detail = str(error) if isinstance(error, ValueError) and str(error).startswith("unsupported Quadlet") else "unreviewed environment source or syntax"
     sys.exit("[postgres-endpoint] cannot interpret Quadlet environment: " + detail)
 PY

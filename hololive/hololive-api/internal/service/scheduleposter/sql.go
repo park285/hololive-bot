@@ -68,7 +68,7 @@ var (
 	revokePostSQL      = withFragment("revoke_post.sql", "post_window", postWindowSQL)
 	publishedPosterSQL = mustSQL("published_poster.sql")
 	publishedRowsSQL   = withFragment("published_rows.sql", "published_poster", publishedPosterSQL)
-	lockPosterSQL      = posterScheduleSQL + "\nFOR UPDATE"
+	lockPosterSQL      = mustSQL("lock_poster_schedule.sql")
 )
 
 func withFragment(name, marker, fragment string) string {

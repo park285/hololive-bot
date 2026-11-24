@@ -43,11 +43,11 @@ func TestBroadcastTimeCommandQueriesMemberPeriod(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		params   map[string]any
+		params   botcommand.BroadcastTimeParams
 		wantDays int
 	}{
-		{map[string]any{paramMember: broadcastTimeTestMember}, defaultBroadcastTimeDays},
-		{map[string]any{paramMember: broadcastTimeTestMember, paramDays: 30}, 30},
+		{botcommand.BroadcastTimeParams{Member: broadcastTimeTestMember}, defaultBroadcastTimeDays},
+		{botcommand.BroadcastTimeParams{Member: broadcastTimeTestMember, Days: 30}, 30},
 	} {
 		repo := &stubBroadcastHistoryRepository{entries: []handlercore.BroadcastHistoryEntry{{VideoID: "AqxEw3kXcgU", BroadcastType: "game"}}}
 
@@ -80,7 +80,7 @@ func TestBroadcastTimeCommandMarksPartialAtCap(t *testing.T) {
 	var sent []string
 
 	err := NewBroadcastTimeCommand(newBroadcastTimeTestDeps(repo, &sent)).Execute(t.Context(),
-		&botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{paramMember: broadcastTimeTestMember})
+		&botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastTimeParams{Member: broadcastTimeTestMember})
 	require.NoError(t, err)
 	require.Len(t, sent, 1)
 	require.Contains(t, sent[0], "조회 한도에 도달해 최근 방송 일부만 합산했습니다.")
@@ -94,7 +94,7 @@ func TestBroadcastTimeCommandWithoutMemberSendsUsage(t *testing.T) {
 	var sent []string
 
 	err := NewBroadcastTimeCommand(newBroadcastTimeTestDeps(repo, &sent)).Execute(t.Context(),
-		&botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{})
+		&botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastTimeParams{})
 	require.NoError(t, err)
 	require.Zero(t, repo.listCalls)
 	require.Equal(t, []string{formatter.NewResponseFormatter("!", nil).BroadcastTimeUsage()}, sent)
@@ -108,7 +108,7 @@ func TestBroadcastTimeCommandListErrorSendsOneUserMessage(t *testing.T) {
 	var sent []string
 
 	err := NewBroadcastTimeCommand(newBroadcastTimeTestDeps(repo, &sent)).Execute(t.Context(),
-		&botcommand.CommandContext{Room: testHistoryRoom}, map[string]any{paramMember: broadcastTimeTestMember})
+		&botcommand.CommandContext{Room: testHistoryRoom}, botcommand.BroadcastTimeParams{Member: broadcastTimeTestMember})
 	require.NoError(t, err)
 	require.Equal(t, []string{messaging.ErrBroadcastTimeQueryFailed}, sent)
 }

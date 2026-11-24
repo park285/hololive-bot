@@ -635,7 +635,7 @@ func TestDispatchDeliveryRows_GroupedFormatFailureDoesNotSend(t *testing.T) {
 		t.Fatalf("success=%v failed=%d; want no success and two format failures", result.SuccessDeliveryIDs, result.FailedDeliveries)
 	}
 
-	wantPrepared := []string{preparedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModeGrouped)}
+	wantPrepared := []string{preparedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonFormat)}
 	if got := transitionSpy(t, d).recordedPreparedFailures(); !slices.Equal(got, wantPrepared) {
 		t.Fatalf("prepared failures = %v, want %v", got, wantPrepared)
 	}
@@ -908,7 +908,7 @@ func TestDispatchDeliveryRows_MultiRoomPartialFailureIsolatesHealthyRoom(t *test
 		t.Fatalf("failedDeliveries = %d, want 1 (failing room only)", result.FailedDeliveries)
 	}
 
-	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 0, store.DeliveryModePerRoom)}
+	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 0)}
 	if got := transitionSpy(t, d).recordedStartedFailures(); !slices.Equal(got, wantStarted) {
 		t.Fatalf("started failures = %v, want %v (failing room only)", got, wantStarted)
 	}
@@ -941,7 +941,7 @@ func TestDispatchDeliveryRows_RetryResendsOnlyFailedRowsNotHealthyRooms(t *testi
 		t.Fatalf("first pass failedDeliveries = %d, want 1", first.FailedDeliveries)
 	}
 
-	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 0, store.DeliveryModePerRoom)}
+	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 0)}
 	if got := transitionSpy(t, d).recordedStartedFailures(); !slices.Equal(got, wantStarted) {
 		t.Fatalf("first pass started failures = %v, want %v", got, wantStarted)
 	}
@@ -999,7 +999,7 @@ func TestDispatchDeliveryRows_InvalidLogicalIdentityFailsBeforeSending(t *testin
 		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
 
-	wantPrepared := []string{preparedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonPreSendClaim, store.DeliveryModePerRoom)}
+	wantPrepared := []string{preparedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonPreSendClaim)}
 	if got := transitionSpy(t, d).recordedPreparedFailures(); !slices.Equal(got, wantPrepared) {
 		t.Fatalf("prepared failures = %v, want %v", got, wantPrepared)
 	}
@@ -1377,7 +1377,7 @@ func TestDispatchDeliveryRows_PerRoomSuccessPassesPerRoomModeToTransition(t *tes
 		t.Fatalf("transition = %T, want *lifecycleTransitionSpy", d.send.transition)
 	}
 
-	if got := spy.recordedModes(); !sameStrings(got, []string{"complete_sent:" + deliveryModePerRoom}) {
+	if got := spy.recordedModes(); !sameStrings(got, []string{"complete_sent"}) {
 		t.Fatalf("transition modes = %#v, want complete_sent:%s", got, deliveryModePerRoom)
 	}
 
@@ -1413,7 +1413,7 @@ func TestDispatchDeliveryRows_GroupedFailurePassesGroupedModeToTransition(t *tes
 		t.Fatalf("transition = %T, want *lifecycleTransitionSpy", d.send.transition)
 	}
 
-	if got := spy.recordedModes(); !sameStrings(got, []string{"started_failure:" + deliveryModeGrouped}) {
+	if got := spy.recordedModes(); !sameStrings(got, []string{"started_failure"}) {
 		t.Fatalf("transition modes = %#v, want started_failure:%s", got, deliveryModeGrouped)
 	}
 
@@ -1844,7 +1844,7 @@ func TestNewDispatcherRejectsMissingOrInvalidConfig(t *testing.T) {
 func newOutcomeUnknownTestEngine(sender messagedelivery.PreparedMessageSender, renderer *template.Renderer, timeout time.Duration) *SendEngine {
 	logger := slog.New(slog.DiscardHandler)
 	cfg := &Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2, HandoffHorizon: timeout}
-	auditLogger := newAuditLogger(nil, nil, logger, cfg)
+	auditLogger := newAuditLogger(nil, logger, cfg)
 	formatter := format.NewMessageFormatter(renderer, staticMemberNames{}, nil)
 
 	return newSendEngine(sender, formatter, logger, cfg, auditLogger, newMetricsRecorder(logger, auditLogger), &lifecycleTransitionSpy{})
@@ -1909,7 +1909,7 @@ func TestDispatchClaimedDeliveryRow_PreSendCancelSchedulesRetry(t *testing.T) {
 		t.Fatalf("transition = %T, want *lifecycleTransitionSpy", engine.transition)
 	}
 
-	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonTransport, 0, store.DeliveryModePerRoom)}
+	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonTransport, 0)}
 	if got := spy.recordedStartedFailures(); !slices.Equal(got, wantStarted) {
 		t.Fatalf("started failures = %v, want %v", got, wantStarted)
 	}

@@ -8,25 +8,40 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type TerminalCommunityShortsOutboxResult struct {
-	OutboxID              int64
-	Kind                  domain.OutboxKind
-	ChannelID             string
-	ContentID             string
-	Payload               string
-	Status                domain.OutboxStatus
-	SentAt                *time.Time
-	Error                 string
-	TargetRoomCount       int
-	SuccessfulRoomCount   int
-	FailedRoomCount       int
-	AggregatedFailReason  string
-	LatencyClassification timeline.PostLatencyClassificationResult
+	OutboxID             int64
+	Kind                 domain.OutboxKind
+	ChannelID            string
+	ContentID            string
+	Payload              string
+	Status               domain.OutboxStatus
+	SentAt               *time.Time
+	Error                string
+	TargetRoomCount      int
+	SuccessfulRoomCount  int
+	FailedRoomCount      int
+	AggregatedFailReason string
+	Tracked              bool
+	ActualPublishedAt    *time.Time
+	AlarmSentAt          *time.Time
+	AlarmLatencyMillis   *int64
+}
+
+type terminalCommunityShortsTracking struct {
+	Kind               domain.OutboxKind `db:"kind"`
+	CanonicalContentID string            `db:"canonical_content_id"`
+	ActualPublishedAt  *time.Time        `db:"actual_published_at"`
+	AlarmSentAt        *time.Time        `db:"alarm_sent_at"`
+	AlarmLatencyMillis *int64            `db:"alarm_latency_millis"`
+}
+
+type terminalTrackingKey struct {
+	kind               domain.OutboxKind
+	canonicalContentID string
 }
 
 var (
@@ -51,7 +66,10 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 		return nil, nil
 	}
 
-	outboxResultIDs := collectOutboxIDs(outboxes)
+	outboxResultIDs := make([]int64, 0, len(outboxes))
+	for i := range outboxes {
+		outboxResultIDs = append(outboxResultIDs, outboxes[i].ID)
+	}
 
 	var deliveries []domain.YouTubeNotificationDelivery
 
@@ -73,6 +91,70 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 	}
 
 	return results, nil
+}
+
+func terminalTrackingKeyFor(result *TerminalCommunityShortsOutboxResult) (terminalTrackingKey, bool) {
+	canonicalContentID, err := CanonicalDeliveryPostID(result.Kind, result.ContentID)
+	if err != nil {
+		return terminalTrackingKey{}, false
+	}
+
+	return terminalTrackingKey{kind: result.Kind, canonicalContentID: canonicalContentID}, true
+}
+
+func (r *DeliveryRepository) AttachTerminalCommunityShortsTracking(ctx context.Context, results []TerminalCommunityShortsOutboxResult) error {
+	tracking, err := r.loadTerminalCommunityShortsTracking(ctx, results)
+	if err != nil {
+		return err
+	}
+
+	for i := range results {
+		key, ok := terminalTrackingKeyFor(&results[i])
+		if !ok {
+			continue
+		}
+
+		if track, found := tracking[key]; found {
+			results[i].Tracked = true
+			results[i].ActualPublishedAt = track.ActualPublishedAt
+			results[i].AlarmSentAt = track.AlarmSentAt
+			results[i].AlarmLatencyMillis = track.AlarmLatencyMillis
+		}
+	}
+
+	return nil
+}
+
+func (r *DeliveryRepository) loadTerminalCommunityShortsTracking(
+	ctx context.Context,
+	results []TerminalCommunityShortsOutboxResult,
+) (map[terminalTrackingKey]terminalCommunityShortsTracking, error) {
+	kinds := make([]string, 0, len(results))
+	canonicalIDs := make([]string, 0, len(results))
+
+	for i := range results {
+		if key, ok := terminalTrackingKeyFor(&results[i]); ok {
+			kinds = append(kinds, string(key.kind))
+			canonicalIDs = append(canonicalIDs, key.canonicalContentID)
+		}
+	}
+
+	if len(kinds) == 0 {
+		return map[terminalTrackingKey]terminalCommunityShortsTracking{}, nil
+	}
+
+	var rows []terminalCommunityShortsTracking
+
+	if err := dbx.SelectSQL(ctx, r.db, &rows, "load terminal community/shorts tracking", loadTerminalCommunityShortsTrackingSQL, kinds, canonicalIDs); err != nil {
+		return nil, fmt.Errorf("load terminal community/shorts tracking: %w", err)
+	}
+
+	tracking := make(map[terminalTrackingKey]terminalCommunityShortsTracking, len(rows))
+	for i := range rows {
+		tracking[terminalTrackingKey{kind: rows[i].Kind, canonicalContentID: rows[i].CanonicalContentID}] = rows[i]
+	}
+
+	return tracking, nil
 }
 
 func summarizeTerminalCommunityShortsOutbox(
@@ -150,17 +232,4 @@ func appendUniqueTerminalCommunityShortsDeliveryReason(reasons []string, seenRea
 	seenReasons[reason] = struct{}{}
 
 	return append(reasons, reason)
-}
-
-func collectOutboxIDs(items []domain.YouTubeNotificationOutbox) []int64 {
-	if len(items) == 0 {
-		return nil
-	}
-
-	ids := make([]int64, 0, len(items))
-	for i := range items {
-		ids = append(ids, items[i].ID)
-	}
-
-	return ids
 }

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -34,8 +35,8 @@ func (c *BroadcastTimeCommand) Description() string {
 	return "특정 멤버의 최근 방송 시각 조회"
 }
 
-func (c *BroadcastTimeCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	memberName := stringParam(params, paramMember)
+func (c *BroadcastTimeCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.BroadcastTimeParams) error {
+	memberName := params.Member
 	if memberName == "" {
 		if err := c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.BroadcastTimeUsage()); err != nil {
 			return fmt.Errorf("send message: %w", err)
@@ -53,7 +54,7 @@ func (c *BroadcastTimeCommand) Execute(ctx context.Context, cmdCtx *botcommand.C
 		return fmt.Errorf("find member: %w", err)
 	}
 
-	days := normalizeBroadcastHistoryDays(intParam(params, paramDays, defaultBroadcastTimeDays))
+	days := normalizeBroadcastHistoryDays(cmp.Or(params.Days, defaultBroadcastTimeDays))
 	now := time.Now()
 
 	result, err := c.Deps().BroadcastHistory.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{

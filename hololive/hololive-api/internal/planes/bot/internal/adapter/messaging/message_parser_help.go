@@ -11,7 +11,7 @@ func (ma *MessageAdapter) tryHelpCommand(command, raw string) (*ParsedCommand, b
 		return nil, false
 	}
 
-	return &ParsedCommand{Type: botcommand.CommandHelp, Params: make(map[string]any), RawMessage: raw}, true
+	return &ParsedCommand{Type: botcommand.CommandHelp, Params: botcommand.NoParams{}, RawMessage: raw}, true
 }
 
 var helpCommandAliases = []string{"도움말", "도움", "help", "명령어", "commands"}

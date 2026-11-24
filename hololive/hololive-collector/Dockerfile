@@ -28,9 +28,10 @@ COPY hololive/hololive-collector/youtubejs/src ./src
 RUN chmod -R u=rwX,go=rX ./src && rm -f ./src/*.test.mjs
 
 FROM --platform=$BUILDPLATFORM docker.io/library/node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS eventgrade-build
+ARG NODE_VERSION
 WORKDIR /app/eventgrade
 COPY hololive/hololive-collector/eventgrade/server.mjs ./
-RUN chmod -R u=rwX,go=rX /app/eventgrade
+RUN test "$(node --version)" = "v${NODE_VERSION}" && chmod -R u=rwX,go=rX /app/eventgrade
 
 # npm은 빌드 호스트에서 실행하고 배포할 Node·라이브러리는 대상 플랫폼에서 가져온다.
 # 따라서 x86_64에서 빌드해도 linux/arm64 릴리스의 아키텍처가 일치한다.

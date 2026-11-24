@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -43,7 +42,7 @@ func TestDispatchClaimedDeliveryRow_StoredLegacyRouteFailsWithoutProvider(t *tes
 
 	require.Zero(t, sender.calls.Load(), "provider must not be called")
 
-	wantStarted := []string{startedFailureRecord(ytlifecycle.FailurePermanent, lifecycleReasonRequest, 0, store.DeliveryModePerRoom)}
+	wantStarted := []string{startedFailureRecord(ytlifecycle.FailurePermanent, lifecycleReasonRequest, 0)}
 	require.Equal(t, wantStarted, engineTransitionSpy(t, engine).recordedStartedFailures())
 	require.Equal(t, 1, result.FailedDeliveries)
 }
@@ -71,7 +70,7 @@ func TestDispatchGroupedClaimedRows_StoredLegacyRouteFailsGroupWithoutFallback(t
 
 	require.Zero(t, sender.calls.Load(), "provider must not be called")
 
-	wantStarted := []string{startedFailureRecord(ytlifecycle.FailurePermanent, lifecycleReasonRequest, 0, store.DeliveryModeGrouped)}
+	wantStarted := []string{startedFailureRecord(ytlifecycle.FailurePermanent, lifecycleReasonRequest, 0)}
 	require.Equal(t, wantStarted, engineTransitionSpy(t, engine).recordedStartedFailures())
 }
 

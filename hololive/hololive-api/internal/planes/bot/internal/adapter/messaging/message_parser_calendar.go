@@ -29,8 +29,8 @@ func (ma *MessageAdapter) isCalendarCommand(cmd string) bool {
 	return slices.Contains(calendarCommandAliases, cmd)
 }
 
-func (ma *MessageAdapter) parseCalendarArgs(args []string) map[string]any {
-	params := make(map[string]any)
+func (ma *MessageAdapter) parseCalendarArgs(args []string) botcommand.CalendarParams {
+	var params botcommand.CalendarParams
 
 	if len(args) == 0 {
 		return params
@@ -38,11 +38,11 @@ func (ma *MessageAdapter) parseCalendarArgs(args []string) map[string]any {
 
 	arg := stringutil.Normalize(args[0])
 	if offset, ok := calendarMonthOffset(arg); ok {
-		params["monthOffset"] = offset
+		params.MonthOffset = offset
 	}
 
 	if month, ok := calendarMonth(arg); ok {
-		params["month"] = month
+		params.Month = month
 	}
 
 	return params

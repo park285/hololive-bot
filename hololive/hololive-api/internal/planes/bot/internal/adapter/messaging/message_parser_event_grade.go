@@ -16,7 +16,7 @@ func parseEventGrade(command string, args []string, _ string) (*ParsedCommand, b
 		return nil, false
 	}
 
-	cmd := &ParsedCommand{Type: botcommand.CommandEventGrade}
+	cmd := &ParsedCommand{Type: botcommand.CommandEventGrade, Params: botcommand.EventGradeParams{}}
 
 	if len(args) < 1 || len(args) > 2 || len(args[0]) > 25 || !eventScore.MatchString(args[0]) {
 		return cmd, true
@@ -41,7 +41,7 @@ func parseEventGrade(command string, args []string, _ string) (*ParsedCommand, b
 		}
 	}
 
-	cmd.Params = map[string]any{"score": score, "region": region}
+	cmd.Params = botcommand.EventGradeParams{Score: score, Region: region}
 
 	return cmd, true
 }

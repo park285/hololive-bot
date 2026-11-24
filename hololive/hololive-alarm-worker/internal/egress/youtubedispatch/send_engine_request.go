@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"time"
 
 	"github.com/park285/iris-client-go/v5/iris"
 
@@ -150,7 +151,7 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 		return
 	}
 
-	attempt := newDeliveryAttempt(d.selectDeliverableMembers(ctx, group.rows, group.outboxes, store.DeliveryModeGrouped, result))
+	attempt := newDeliveryAttempt(d.selectDeliverableMembers(ctx, group.rows, group.outboxes, result))
 	selected := collectDeliveryIDs(attempt.rows)
 	slices.Sort(selected)
 
@@ -176,14 +177,16 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 		return
 	}
 
-	mode := store.DeliveryModeGrouped
+	mode := deliveryModeGrouped
 
 	if len(attempt.members) == 1 {
-		mode = store.DeliveryModePerRoom
+		mode = deliveryModePerRoom
 	}
 
+	d.logCommunityShortsDeliveryAttemptStarted(attempt.rows, attempt.outboxes, time.Now().UTC(), mode)
+
 	if sendErr := d.sendFrozenDelivery(ctx, &attempt); sendErr != nil {
-		if mode == store.DeliveryModePerRoom {
+		if mode == deliveryModePerRoom {
 			d.handlePerRoomSendFailure(ctx, &attempt, sendErr, result)
 		} else {
 			d.handleGroupedSendFailure(ctx, group, &attempt, formattedMessages, formatFailures, sendErr, result)
@@ -192,7 +195,7 @@ func (d *SendEngine) dispatchFrozenGroup(ctx context.Context, group *deliveryGro
 		return
 	}
 
-	if !d.completeLifecycleSent(ctx, &attempt, mode, result) {
+	if !d.completeLifecycleSent(ctx, &attempt, result) {
 		return
 	}
 

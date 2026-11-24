@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -127,7 +126,7 @@ type observationGrantRoles struct {
 func createObservationGrantRoles(t *testing.T, pool *pgxpool.Pool) observationGrantRoles {
 	t.Helper()
 
-	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
+	suffix := fmt.Sprintf("%d_%d", time.Now().UnixNano(), dbSeq.Add(1))
 	roles := observationGrantRoles{
 		scraper: "dbtest_observation_scraper_" + suffix,
 		runtime: "dbtest_observation_runtime_" + suffix,
@@ -270,7 +269,6 @@ var sourceObservationTables = []string{
 	"observation_contract_generations",
 	"youtube_collection_projection_generations",
 	"youtube_collection_targets",
-	"youtube_collection_projection_guard",
 	"youtube_collection_target_reasons",
 	"youtube_collection_job_leases",
 	"source_collection_checkpoints",
@@ -327,7 +325,6 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"observation_contract_generations":          observationPrivileges("SELECT"),
 			"youtube_collection_projection_generations": observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_collection_targets":                observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
-			"youtube_collection_projection_guard":       observationPrivileges("SELECT"),
 			"youtube_collection_target_reasons":         observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_collection_job_leases":             observationPrivileges("SELECT"),
 			sourceObservationsTable:                     observationPrivileges("SELECT", "DELETE"),
@@ -802,13 +799,8 @@ func seedScraperCollectionMembership(t *testing.T, tx pgx.Tx, role, jobKey strin
 func assertScraperProjectionGuardDenied(t *testing.T, tx pgx.Tx, role string) {
 	t.Helper()
 
-	for _, query := range []string{
-		"SELECT guard_key FROM youtube_collection_projection_guard WHERE guard_key FOR SHARE",
-		"DELETE FROM youtube_collection_projection_guard",
-	} {
-		if err := expectObservationPermissionDenied(t.Context(), tx, query); err != nil {
-			failObservationRoleTx(t, tx, role, "scraper guard access: %v", err)
-		}
+	if err := expectObservationPermissionDenied(t.Context(), tx, "SELECT lock_youtube_collection_runtime_bundles()"); err != nil {
+		failObservationRoleTx(t, tx, role, "scraper projection writer lock: %v", err)
 	}
 }
 
@@ -832,22 +824,7 @@ func assertRuntimeProjectionGuardAccess(t *testing.T, pool *pgxpool.Pool, role, 
 		failObservationRoleTx(t, tx, role, "lock projection guard as runtime: %v", err)
 	}
 
-	var oldColumnWritable, writerColumnWritable bool
-
-	if err := tx.QueryRow(ctx, `SELECT
-		has_column_privilege(current_user,'youtube_collection_projection_guard','guard_key','UPDATE'),
-		has_column_privilege(current_user,'youtube_collection_projection_guard','runtime_writer','UPDATE')`).
-		Scan(&oldColumnWritable, &writerColumnWritable); err != nil {
-		failObservationRoleTx(t, tx, role, "read projection guard column privileges: %v", err)
-	}
-
-	if !oldColumnWritable || writerColumnWritable {
-		failObservationRoleTx(t, tx, role, "guard column privileges: guard_key=%t runtime_writer=%t", oldColumnWritable, writerColumnWritable)
-	}
-
 	for _, query := range []string{
-		"DELETE FROM youtube_collection_projection_guard",
-		"INSERT INTO youtube_collection_projection_guard(guard_key) VALUES (TRUE) ON CONFLICT DO NOTHING",
 		"SELECT generation FROM lock_current_youtube_collection_projection()",
 		"SELECT youtube_collection_membership_valid(ARRAY['video_list']::text[], TRUE, 'UCgrantcheck0000000000ab', 1, 1)",
 	} {

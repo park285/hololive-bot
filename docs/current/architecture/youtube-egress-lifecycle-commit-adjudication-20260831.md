@@ -216,7 +216,7 @@ Success command는 다음을 포함합니다.
 
 - Provider operation owner와 exact Send fence
 - Same-logical follower projection ID와 pre-state
-- `sent_at`은 SENT 전이 문장이 돌려준 DB 시계이며, 같은 transaction의 tracking·ledger·telemetry가 그 값을 씁니다
+- `sent_at`은 SENT 전이 문장이 돌려준 DB 시계이며, 같은 transaction의 tracking·ledger가 그 값을 씁니다
 - Canonical post별 deduplicated tracking requirement
 - `(kind, logical_id, room_id)` ledger key와 expected pre-state
 - Expected latency/tracking identities

@@ -29,8 +29,8 @@ func (c *MemberInfoCommand) Description() string {
 	return "등록된 멤버 기본 정보"
 }
 
-func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	rawQuery := getStringParam(params, "query")
+func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.MemberInfoParams) error {
+	rawQuery := strings.TrimSpace(params.Query)
 
 	if hasNoMemberInfoQuery(rawQuery) {
 		if err := c.renderMemberDirectory(ctx, cmdCtx); err != nil {
@@ -215,22 +215,4 @@ func memberInfoMatchRank(member *domain.Member, query string) int {
 
 func normalizeMemberInfoTerm(value string) string {
 	return strings.Join(strings.Fields(matcher.NormalizeSuffix(value)), " ")
-}
-
-func getStringParam(params map[string]any, key string) string {
-	if params == nil {
-		return ""
-	}
-
-	val, ok := params[key]
-	if !ok {
-		return ""
-	}
-
-	switch v := val.(type) {
-	case string:
-		return strings.TrimSpace(v)
-	default:
-		return strings.TrimSpace(fmt.Sprintf("%v", v))
-	}
 }

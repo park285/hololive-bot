@@ -51,14 +51,11 @@ Community/Shorts:
 (kind, outbox.content_id, room_id)
 ```
 
-Community/Shorts의 `canonical_post_id`는 claim, telemetry, sibling 조회가 같은 resolver를 사용해야 합니다. Payload와 `content_id` 해석을 package별로 복제해서는 안 됩니다.
+Community/Shorts의 `canonical_post_id`는 claim, 감사 로그, sibling 조회가 같은 resolver를 사용해야 합니다. Payload와 `content_id` 해석을 package별로 복제해서는 안 됩니다.
 
-현재 상태: 모든 소비자가 `contentid.ResolveDeliveryLogicalID`(room 없는 logical ID, `contentid.ResolveDeliveryKey`의 앞 단계) 하나를 씁니다. 시도 telemetry의 `post_id`는 전이 트랜잭션이 검증한 logical key이고, alarm-worker 발송 전 선택의 logical identity 검증·같은 방 SENT sibling 판정은 같은 resolver 결과를 쓰며 누락·파싱 실패·불일치는 오류(발송 전 retry 실패)로 드러냅니다. attempt started·발송 전 식별자 오류·`outbox_final_result` 감사 로그의 `post_id`는 `telemetry.PostIDLogValue`가 같은 resolver 값을 쓰고, invalid identity는 대체 ID 없이 `invalid:<kind>:<reason>` 라벨로 남깁니다. telemetry 버퍼 적재는 `post_id`를 `content_id`로 채우지 않고 빈 값을 오류로 거절합니다. NEW_VIDEO·LIVE_STREAM·MILESTONE은 payload `canonical_post_id`를 보지 않고 `content_id`만 씁니다. 과거의 `canonical_post_id → content_id → video_id/post_id` 폴백(감사 행 `holo-youtube-telemetry-post-id-fallback`)은 삭제했습니다. 삭제 전 운영 DB 읽기 전용 측정: COMMUNITY_POST 23건·NEW_SHORT 36건 모두 canonical_post_id가 있고 문자열 타입이었습니다(NEW_VIDEO 3건은 canonical_post_id가 없지만 content_id 계약이라 영향 없음).
+현재 상태: 모든 소비자가 `contentid.ResolveDeliveryLogicalID`(room 없는 logical ID, `contentid.ResolveDeliveryKey`의 앞 단계) 하나를 씁니다. alarm-worker 발송 전 선택의 logical identity 검증·같은 방 SENT sibling 판정은 같은 resolver 결과를 쓰며 누락·파싱 실패·불일치는 오류(발송 전 retry 실패)로 드러냅니다. attempt started·발송 전 식별자 오류·`outbox_final_result` 감사 로그의 `post_id`는 `telemetry.PostIDLogValue`가 같은 resolver 값을 쓰고, invalid identity는 대체 ID 없이 `invalid:<kind>:<reason>` 라벨로 남깁니다. NEW_VIDEO·LIVE_STREAM·MILESTONE은 payload `canonical_post_id`를 보지 않고 `content_id`만 씁니다. 과거의 `canonical_post_id → content_id → video_id/post_id` 폴백은 삭제했습니다. 발송 시도마다 쓰던 telemetry 행과 그 버퍼 적재도 삭제했으므로 `youtube_notification_delivery_telemetry`에는 삭제 전 행만 남습니다. 삭제 전 운영 DB 읽기 전용 측정: COMMUNITY_POST 23건·NEW_SHORT 36건 모두 canonical_post_id가 있고 문자열 타입이었습니다(NEW_VIDEO 3건은 canonical_post_id가 없지만 content_id 계약이라 영향 없음).
 
-같은 감사 행의 빈 `delivery_path` 대체도 제거했습니다. 기록 주체는 `CommunityShortsDeliveryPath`를 명시하며 버퍼 적재는 빈 경로를 batch 전체의 오류로 반환합니다. 방출 로그는 저장된 경로를 trim해서 쓰되 비어 있는 과거 값을 정상 경로로 꾸미지 않습니다. 삭제 전 guarded 운영 조회에서 telemetry 9행의 빈 `post_id`·빈 `delivery_path`는 각각 0건이었으므로 과거 row 호환 변환은 하지 않습니다. 기존 non-empty 값의 trim은 유지합니다.
-
-방출 전 지연 분류(`latency_classification`) 조회가 실패하면 telemetry processor는 Warn 로그 "Failed to load delivery telemetry latency classifications"를 남기고, 그 batch를 분류 필드 없이 방출해 logged로 닫습니다. 분류는 방출 로그의 부가 필드이고, 조회 실패마다 batch를 재시도로 미루면 장애가 이어지는 동안 버퍼가 쌓이기 때문입니다. 방출 자체가 실패한 행(빈 room ID)만 `TelemetryRetryBackoff` 뒤 재시도합니다.
-
+감사 로그의 `delivery_path`는 `telemetry.CommunityShortsDeliveryPath` 상수 하나만 씁니다. 빈 경로를 정상 경로로 꾸미던 대체는 제거했습니다.
 `(outbox_id, room_id)` unique index는 physical duplicate만 막습니다. Community/Shorts에서는 서로 다른 outbox/content ID가 같은 canonical post를 표현할 수 있고, 모든 kind에서 cleanup 뒤 같은 content의 outbox ID가 달라질 수 있으므로 logical duplicate 방어를 대체하지 않습니다.
 
 Canonical resolver는 Community/Shorts의 alias를 하나의 `canonical_post_id`로 정규화하고, 그 밖의 kind는 trim된 non-empty `content_id`를 사용합니다. Invalid payload/identity를 raw ID로 대체하지 않고 preparation 또는 backfill을 fail closed합니다.
@@ -148,7 +145,7 @@ Physical row가 logical delivery 충족 상태로 local commit된 시각입니�
 - Provider success finalization 시각
 - Same-logical `SENT` evidence reconciliation 시각
 
-항상 provider response timestamp라는 뜻은 아닙니다. Transport latency는 telemetry evidence를 사용합니다.
+항상 provider response timestamp라는 뜻은 아닙니다. Transport latency는 attempt started·delivery result 로그의 시각으로 읽습니다.
 
 ### `attempt_count`
 
@@ -194,7 +191,7 @@ Claim한 워커 인스턴스 ID(`youtube-dispatcher:<hostname>:<pid>`)입니다.
 
 claim·만료·신선도 판정과 `locked_at`·`sent_at`·`next_attempt_at`·`terminal_at` 기록은 모두 PostgreSQL 시계가 정합니다. 각 SQL 문장은 `clock AS MATERIALIZED (SELECT clock_timestamp() AS at)`에서 시계를 한 번 채취하고, 조건에서는 `(SELECT at FROM clock)` 스칼라 하위 질의로 참조해 PENDING·SENDING 부분 인덱스 조건으로 쓰이게 합니다. Go는 시각 대신 `lease_ms`·`freshness_ms`·지연(`delay_ms`)과 DB에서 읽은 하한만 넘깁니다.
 
-- 전이 문장(`transition_apply_rows.sql`)은 대상 행을 잠근 뒤 시계를 채취하고, 그 값을 전이 시각으로 돌려줍니다. 같은 트랜잭션의 ledger 관측 시각·tracking 발송 표시·시도 telemetry는 이 값을 씁니다. fanout 실패 문장(`fanout_fail.sql`)도 claim fence를 통과한 outbox 행을 잠근 뒤 시계를 채취합니다.
+- 전이 문장(`transition_apply_rows.sql`)은 대상 행을 잠근 뒤 시계를 채취하고, 그 값을 전이 시각으로 돌려줍니다. 같은 트랜잭션의 ledger 관측 시각·tracking 발송 표시는 이 값을 씁니다. fanout 실패 문장(`fanout_fail.sql`)도 claim fence를 통과한 outbox 행을 잠근 뒤 시계를 채취합니다.
 - 집계 문장(`delivery_repository_aggregate_sync.sql`)은 같은 트랜잭션의 앞 문장이 부모 outbox를 ID 순서로 잠근 뒤 실행되므로, 새로 기록하는 outbox `sent_at`·`terminal_at`도 부모 잠금 뒤의 DB 시계 하나로 정합니다.
 - 후보 문장(claim·stale SENDING·만료 PENDING·revive)은 행을 잠그기 전에 시계를 채취합니다. 만료 판정은 실제 잠금 시점보다 보수적이고, claim이 기록한 lease도 그만큼 일찍 끝납니다. 후보 문장은 판정 시계를 `checked_at`으로 돌려주고 Go의 그룹 재확인은 이 값만 씁니다.
 - `next_attempt_at`은 `GREATEST(clock + delay, floor)`입니다. floor는 owner `next_attempt_at` 또는 in-flight `locked_at + LockTimeout`처럼 DB 행에서 온 값만 씁니다.
@@ -494,7 +491,7 @@ Stable request ID의 존재만으로 retry-safe가 되지는 않습니다. Provi
 
 Provider 호출 전에 발송 경로가 요청을 거절한 오류는 `ProviderKnownNotDeliveredPermanent`입니다. 대상은 빈 room·본문·dedupe key, 저장 요청이 없거나 route가 `text`·`richtext`가 아닌 요청, 빈 client request ID입니다. 요청이 나가지 않았으므로 outcome unknown으로 남기지 않고, owner/group을 `invalid_send_request` 사유의 permanent 실패로 전이합니다. 이 오류는 Iris `ErrPermanent`가 아니므로 grouped fallback의 trigger가 아닙니다. 저장 요청 table CHECK가 아직 허용하는 구형 route(`markdown`, `sender`)도 이 경로로 거절합니다.
 
-`CLIENT_REQUEST_ID_FAILED`의 확정 pre-handoff 실패만 SDK r1/r2 재발급을 허용합니다. generation과 owner/group retry·telemetry는 한 transaction으로 저장하고 다음 정규 attempt에서 전송합니다. 기존 MaxRetries·freshness·시간 한도를 확장하지 않으며 unknown·payload mismatch·already exists·code 없는 409에는 재발급하지 않습니다. generation 소진은 terminal 처리하고 revive로 초기화하지 않습니다.
+`CLIENT_REQUEST_ID_FAILED`의 확정 pre-handoff 실패만 SDK r1/r2 재발급을 허용합니다. generation과 owner/group retry는 한 transaction으로 저장하고 다음 정규 attempt에서 전송합니다. 기존 MaxRetries·freshness·시간 한도를 확장하지 않으며 unknown·payload mismatch·already exists·code 없는 409에는 재발급하지 않습니다. generation 소진은 terminal 처리하고 revive로 초기화하지 않습니다.
 
 ### Grouped fallback
 
@@ -720,7 +717,7 @@ FAILED -> SENT            -> 집계 문장의 clock
 terminal -> same terminal -> existing terminal_at 보존
 ```
 
-Aggregate transaction과 delivery/tracking/ledger transaction은 분리합니다. Projector failure는 telemetry와 background convergence 대상이며 provider 또는 lifecycle command를 재실행하지 않습니다. 예외인 handoff 실패 정산은 같은 lock·sync 문장을 정산 transaction 끝에서 실행하므로 집계 실패가 정산 전체를 rollback하고, 다음 handoff 확인이 정산을 다시 시도합니다.
+Aggregate transaction과 delivery/tracking/ledger transaction은 분리합니다. Projector failure는 로그와 background convergence 대상이며 provider 또는 lifecycle command를 재실행하지 않습니다. 예외인 handoff 실패 정산은 같은 lock·sync 문장을 정산 transaction 끝에서 실행하므로 집계 실패가 정산 전체를 rollback하고, 다음 handoff 확인이 정산을 다시 시도합니다.
 
 ## 만료 대기 종료
 

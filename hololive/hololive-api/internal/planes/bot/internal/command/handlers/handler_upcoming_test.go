@@ -96,7 +96,7 @@ func TestUpcomingCommand_Execute_AllUpcoming_GoldenPath(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.UpcomingParams{})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestUpcomingCommand_Execute_DisplayNameLookupError(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	if err := NewUpcomingCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{}); err != nil {
+	if err := NewUpcomingCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.UpcomingParams{}); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
@@ -166,9 +166,7 @@ func TestUpcomingCommand_Execute_AllUpcoming_WithOverflow(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		testParamLimit: 5,
-	})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.UpcomingParams{Limit: 5})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -202,7 +200,7 @@ func TestUpcomingCommand_Execute_AllUpcoming_QueryError(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.UpcomingParams{})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -242,9 +240,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_GoldenPath(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: "미코",
-	})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.UpcomingParams{Member: "미코"})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -283,9 +279,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_NoStreams(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: "미코",
-	})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.UpcomingParams{Member: "미코"})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -324,9 +318,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_QueryError(t *testing.T) {
 
 	cmd := NewUpcomingCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: "미코",
-	})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.UpcomingParams{Member: "미코"})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -357,9 +349,7 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 	}
 
 	cmd := NewUpcomingCommand(deps)
-	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: "존재하지않는멤버",
-	}); err != nil {
+	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.UpcomingParams{Member: "존재하지않는멤버"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 

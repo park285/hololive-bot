@@ -35,6 +35,9 @@ var dropSchemaVersionCheckSQL string
 //go:embed testdata/bump_schema_version.sql
 var bumpSchemaVersionSQL string
 
+//go:embed testdata/delete_observation.sql
+var deleteObservationSQL string
+
 func outboxPublisher(t *testing.T, r *Repository) writerPublisher {
 	t.Helper()
 
@@ -142,6 +145,126 @@ func TestConsumeStopsRegionOnUnsupportedSchemaVersion(t *testing.T) {
 	require.Zero(t, appliedSeq(t, r))
 }
 
+func TestConsumeCommitsBatchPrefixBeforeUnsupportedSchemaVersion(t *testing.T) {
+	r := NewRepository(dbtest.NewPool(t))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	empty := observationcontract.CatalogObservation{Chapters: []observationcontract.Chapter{}, Bindings: []observationcontract.Binding{}, Conflicts: []string{}}
+
+	_, err := r.pool.Exec(t.Context(), dropSchemaVersionCheckSQL)
+	require.NoError(t, err)
+
+	publishObservation(t, r, "catalog", now, now, empty)
+	publishObservation(t, r, "cutoff", now, now, cutoffPayload(Chapter{EventID: "absent", ChapterID: "absent"}, false, 5))
+
+	seq := publishObservation(t, r, "catalog", now, now, empty)
+	publishObservation(t, r, "catalog", now, now, empty)
+
+	_, err = r.pool.Exec(t.Context(), bumpSchemaVersionSQL, "jp", seq)
+	require.NoError(t, err)
+
+	result, err := r.ConsumeRegion(t.Context(), "jp", 10)
+	require.ErrorContains(t, err, "unsupported schema version")
+	require.Equal(t, ConsumeResult{Applied: 1, Rejected: 1}, result)
+	require.Equal(t, seq-1, appliedSeq(t, r))
+}
+
+func TestConsumeStopsAtSequenceGap(t *testing.T) {
+	r := NewRepository(dbtest.NewPool(t))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	empty := observationcontract.CatalogObservation{Chapters: []observationcontract.Chapter{}, Bindings: []observationcontract.Binding{}, Conflicts: []string{}}
+
+	first := publishObservation(t, r, "catalog", now, now, empty)
+	gap := publishObservation(t, r, "catalog", now, now, empty)
+	publishObservation(t, r, "catalog", now, now, empty)
+
+	_, err := r.pool.Exec(t.Context(), deleteObservationSQL, "jp", gap)
+	require.NoError(t, err)
+
+	result, err := r.ConsumeRegion(t.Context(), "jp", 10)
+	require.ErrorContains(t, err, "is missing before")
+	require.Equal(t, ConsumeResult{Applied: 1}, result)
+	require.Equal(t, first, appliedSeq(t, r))
+}
+
+func TestConsumeStopsAtMissingPublishedTail(t *testing.T) {
+	r := NewRepository(dbtest.NewPool(t))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	empty := observationcontract.CatalogObservation{Chapters: []observationcontract.Chapter{}, Bindings: []observationcontract.Binding{}, Conflicts: []string{}}
+
+	tail := publishObservation(t, r, "catalog", now.Add(-2*time.Second), now.Add(-2*time.Second), empty)
+
+	_, err := r.pool.Exec(t.Context(), deleteObservationSQL, "jp", tail)
+	require.NoError(t, err)
+
+	result, err := r.ConsumeRegion(t.Context(), "jp", 10)
+	require.ErrorContains(t, err, "is missing before published")
+	require.Equal(t, ConsumeResult{}, result)
+	require.Equal(t, tail-1, appliedSeq(t, r))
+
+	first := publishObservation(t, r, "catalog", now.Add(-time.Second), now.Add(-time.Second), empty)
+	require.Equal(t, tail+1, first)
+
+	result, err = r.ConsumeRegion(t.Context(), "jp", 10)
+	require.ErrorContains(t, err, "is missing before")
+	require.Equal(t, ConsumeResult{}, result)
+
+	r2 := NewRepository(dbtest.NewPool(t))
+	applied := publishObservation(t, r2, "catalog", now.Add(-2*time.Second), now.Add(-2*time.Second), empty)
+	missing := publishObservation(t, r2, "catalog", now.Add(-time.Second), now.Add(-time.Second), empty)
+
+	_, err = r2.pool.Exec(t.Context(), deleteObservationSQL, "jp", missing)
+	require.NoError(t, err)
+
+	result, err = r2.ConsumeRegion(t.Context(), "jp", 10)
+	require.ErrorContains(t, err, "is missing before published")
+	require.Equal(t, ConsumeResult{Applied: 1}, result)
+	require.Equal(t, applied, appliedSeq(t, r2))
+}
+
+func TestConsumeRejectsInvalidCatalogChapterAndContinues(t *testing.T) {
+	r := NewRepository(dbtest.NewPool(t))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	c := chapterAt("valid-after-bad", now.Add(time.Hour))
+	bad := chapterAt("inverted", now.Add(time.Hour))
+
+	bad.EndsAt = bad.StartsAt
+
+	publishObservation(t, r, "catalog", now.Add(-time.Second), now.Add(-time.Second), observationcontract.CatalogObservation{
+		Chapters: []observationcontract.Chapter{observationcontract.Chapter(bad)}, Bindings: []observationcontract.Binding{{EventID: bad.EventID, ChapterID: bad.ChapterID}}, Conflicts: []string{},
+	})
+
+	last := publishObservation(t, r, "catalog", now, now, observationcontract.CatalogObservation{
+		Chapters: []observationcontract.Chapter{observationcontract.Chapter(c)}, Bindings: []observationcontract.Binding{{EventID: c.EventID, ChapterID: c.ChapterID}}, Conflicts: []string{},
+	})
+
+	result, err := r.ConsumeRegion(t.Context(), "jp", 10)
+	require.NoError(t, err)
+	require.Equal(t, ConsumeResult{Applied: 1, Rejected: 1}, result)
+	require.Equal(t, last, appliedSeq(t, r))
+	require.Contains(t, collectionTargets(t, r), c.ChapterID)
+}
+
+func TestConsumeLimitsBatchAndResumes(t *testing.T) {
+	r := NewRepository(dbtest.NewPool(t))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	empty := observationcontract.CatalogObservation{Chapters: []observationcontract.Chapter{}, Bindings: []observationcontract.Binding{}, Conflicts: []string{}}
+
+	for i := range 3 {
+		observed := now.Add(time.Duration(i-3) * time.Second)
+		publishObservation(t, r, "catalog", observed, observed, empty)
+	}
+
+	result, err := r.ConsumeRegion(t.Context(), "jp", 2)
+	require.NoError(t, err)
+	require.Equal(t, ConsumeResult{Applied: 2}, result)
+	require.Equal(t, int64(2), appliedSeq(t, r))
+
+	result, err = r.ConsumeRegion(t.Context(), "jp", 2)
+	require.NoError(t, err)
+	require.Equal(t, ConsumeResult{Applied: 1}, result)
+	require.Equal(t, int64(3), appliedSeq(t, r))
+}
+
 func TestFinalizeWaitsForTimelyFinalPublishedBeforeDeadline(t *testing.T) {
 	r := NewRepository(dbtest.NewPool(t))
 	ctx := t.Context()
@@ -176,7 +299,7 @@ func TestFinalizeDefersWhileCutoffLeaseIsInFlight(t *testing.T) {
 
 	require.NoError(t, r.pool.QueryRow(ctx, seedRequestSQL, "1", "2", 90, "jp", c.EventID, c.ChapterID).Scan(&id))
 
-	_, err := r.pool.Exec(ctx, inflightLeaseSQL, contract.GradeRegion("jp"), c.EventID, c.ChapterID, c.StartsAt, c.EndsAt, c.RevealsAt)
+	_, err := r.pool.Exec(ctx, inflightLeaseSQL, contract.GradeRegion("jp"), c.EventID, c.ChapterID)
 	require.NoError(t, err)
 
 	require.NoError(t, r.FinalizeRegions(ctx, outboxPublisher(t, r), []string{"jp"}))

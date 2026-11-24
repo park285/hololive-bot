@@ -3,11 +3,13 @@ package handlers_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	handlers "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
 type recordingCommand struct {
@@ -19,7 +21,7 @@ type recordingCommand struct {
 func (c *recordingCommand) Name() string        { return c.name }
 func (c *recordingCommand) Description() string { return c.name }
 
-func (c *recordingCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
+func (c *recordingCommand) Dispatch(context.Context, *botcommand.CommandContext, botcommand.Params) error {
 	c.calls++
 
 	return c.err
@@ -74,5 +76,39 @@ func TestRegistryExecuteWrapsHandlerFailure(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "command live") {
 		t.Fatalf("error = %q, want command name in wrapping", err)
+	}
+}
+
+type liveRecorder struct {
+	got []botcommand.LiveParams
+}
+
+func (c *liveRecorder) Name() string        { return "live" }
+func (c *liveRecorder) Description() string { return "live" }
+
+func (c *liveRecorder) Execute(_ context.Context, _ *botcommand.CommandContext, params botcommand.LiveParams) error {
+	c.got = append(c.got, params)
+
+	return nil
+}
+
+func TestRegistryDispatchesTypedParams(t *testing.T) {
+	handler := &liveRecorder{}
+	registry := handlers.NewRegistry()
+	registry.Register(handlercore.Bind(handler))
+
+	for _, params := range []botcommand.Params{botcommand.LiveParams{Member: "미코"}, nil} {
+		if err := registry.Execute(t.Context(), &botcommand.CommandContext{}, "live", params); err != nil {
+			t.Fatalf("Execute(%#v) error = %v", params, err)
+		}
+	}
+
+	if want := []botcommand.LiveParams{{Member: "미코"}, {}}; !slices.Equal(handler.got, want) {
+		t.Fatalf("handler params = %#v, want %#v", handler.got, want)
+	}
+
+	err := registry.Execute(t.Context(), &botcommand.CommandContext{}, "live", botcommand.UpcomingParams{Member: "미코"})
+	if !errors.Is(err, handlercore.ErrParamsMismatch) || len(handler.got) != 2 {
+		t.Fatalf("mismatched params error = %v, handler calls = %d", err, len(handler.got))
 	}
 }

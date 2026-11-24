@@ -69,7 +69,7 @@ type trackedRouterCommand struct {
 
 func (c *trackedRouterCommand) Name() string        { return c.name }
 func (c *trackedRouterCommand) Description() string { return c.name }
-func (c *trackedRouterCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
+func (c *trackedRouterCommand) Dispatch(context.Context, *botcommand.CommandContext, botcommand.Params) error {
 	c.executed++
 	return nil
 }
@@ -363,11 +363,10 @@ func newTestCommandAdmissionPolicy(t *testing.T) (*commandAdmissionPolicy, *atom
 	}
 
 	cacheClient, err := cache.NewCacheService(t.Context(), cache.Config{
-		Host:              host,
-		Port:              port,
-		DB:                0,
-		DisableCache:      true,
-		ForceSingleClient: true,
+		Host:         host,
+		Port:         port,
+		DB:           0,
+		DisableCache: true,
 	}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("new cache service: %v", err)

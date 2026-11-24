@@ -31,6 +31,21 @@ printf 'systemctl %s\n' "$*" >>"${SYNC_TEST_EVENTS:?}"
 case "$1" in
   is-active) exit 3 ;;
   is-enabled) exit 1 ;;
+  show)
+    case "$*" in
+      *--property=UnitPath*) echo /etc/systemd/system /run/systemd/system ;;
+      *--property=NeedDaemonReload*) echo no ;;
+      *--property=Names*) if [[ -e "${SYNC_TEST_EVENTS}.alias" ]]; then echo "$2 valkey-alias.service"; else echo "$2"; fi ;;
+      *--property=DropInPaths*) if [[ -e "${SYNC_TEST_EVENTS}.alias-dropin" ]]; then echo /etc/systemd/system/valkey-alias.service.d/10-image.conf; fi ;;
+      *--property=LoadState*)
+        if [[ -e "${SYNC_TEST_EVENTS}.not-found" ]]; then echo not-found
+        elif [[ -L /etc/systemd/system/$2 ]]; then echo masked
+        else echo loaded; fi ;;
+      *--property=FragmentPath*)
+        if [[ -L /etc/systemd/system/$2 ]]; then echo "/etc/systemd/system/$2"
+        elif [[ ! -e "${SYNC_TEST_EVENTS}.not-found" ]]; then echo "/run/systemd/generator/$2"; fi ;;
+    esac
+    ;;
 esac
 EOF
 cat >"${fakebin}/chown" <<'EOF'
@@ -42,6 +57,19 @@ cat >"${fakebin}/mv" <<'EOF'
 if [[ -f "$SYNC_TEST_EVENTS.fail-before" && "${!#}" == "$(<"$SYNC_TEST_EVENTS.fail-before")" ]]; then exit 92; fi
 exec /usr/bin/mv "$@"
 EOF
+cat >"${fakebin}/podman" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1 $2 $#" == "image exists 3" ]] || exit 64
+! grep -qxF -- "$3" "$SYNC_TEST_EVENTS.image-missing" 2>/dev/null
+EOF
+cat >"${fakebin}/python3" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == '-I /opt/iris-stack/valkey-ha/stage.py selected hololive' ]]; then
+  [[ ! -e "$SYNC_TEST_EVENTS.stage-denied" ]]
+  exit $?
+fi
+exec /usr/bin/python3 "$@"
+EOF
 chmod +x "${fakebin}"/*
 
 slot_table_files=(scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv)
@@ -52,13 +80,14 @@ make_repo() {
     scripts/deploy/lib/compose-env.sh scripts/deploy/quadlet-prestart.sh \
     scripts/deploy/sync-opt-current.sh \
     scripts/deploy/quadlet-{redeploy,rollback}-service.sh \
-    scripts/deploy/lib/{card-migration-guard,worker-profile-pair,systemd-stop-guard}.py \
+    scripts/deploy/lib/{writer-drain-guard,worker-profile-pair,systemd-stop-guard}.py \
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     scripts/deploy/lib/admin-bind.sh scripts/deploy/lib/public-bind-mounts.sh \
     scripts/deploy/lib/postgres-endpoint.sh scripts/deploy/lib/source-revision.sh \
     scripts/systemd/admin-dashboard-ingress-firewall.service scripts/systemd/admin-dashboard-ingress.nft \
     verification/tla/{AlarmDispatchClaim,CollectionJobLease}/COVERAGE.md \
-    hololive/hololive-api/scripts/init-db deploy "${slot_table_files[@]}"; do
+    hololive/hololive-api/scripts/init-db hololive/hololive-api/cmd/db-migrate/queries/bootstrap_writer_admission.sql \
+    deploy "${slot_table_files[@]}"; do
     mkdir -p "${repo}/$(dirname "${path}")"
     cp -R "${ROOT_DIR}/${path}" "${repo}/${path}"
   done
@@ -66,6 +95,11 @@ make_repo() {
   cat >"${repo}/scripts/deploy/verify-exec-tree-ownership.sh" <<'EOF'
 #!/usr/bin/env bash
 printf 'verify %s\n' "$#" >>"${SYNC_TEST_EVENTS:?}"
+printf 'verify-path %s\n' "$@" >>"${SYNC_TEST_EVENTS:?}"
+if [[ -e "${SYNC_TEST_EVENTS}.ownership-denied" ]]; then
+  denied="$(cat "${SYNC_TEST_EVENTS}.ownership-denied")"
+  for path in "$@"; do [[ "$path" != "$denied" ]] || exit 1; done
+fi
 EOF
   git -C "${repo}" init -q
   commit_repo "${repo}" fixture
@@ -79,9 +113,9 @@ commit_repo() {
 make_host() {
   local host="$1" x_spaces="$2" installed="${1}/etc-containers-systemd/hololive-bot"
   mkdir -p "${host}"/{etc-containers-systemd,usr-local-libexec,etc-stack-secrets/hololive-bot,etc-systemd-system,etc-nftables.d,run-lock}
-  mkdir -p "${host}/run/hololive-bot/pgbouncer" "${host}/run/lock"
+  mkdir -p "${host}/run/hololive-bot" "${host}/run/lock"
   mkdir -m 0700 "${host}/run/mount"
-  printf 'accepted pool configuration\n' >"${host}/run/hololive-bot/pgbouncer/pgbouncer.ini"
+  printf 'accepted runtime state\n' >"${host}/run/hololive-bot/marker"
   mkdir -p "${installed}/hololive-api.container.d" "${installed}/hololive-alarm-worker.container.d"
   printf '[Container]\nContainerName=stale\nImage=localhost/stale:old\n' >"${installed}/stale.container"
   printf '[Container]\nLabel=io.hololive.test.worker-profile=1\n' \
@@ -90,7 +124,7 @@ make_host() {
     >"${installed}/hololive-alarm-worker.container.d/40-x-spaces.conf"
   mkdir -p "${host}/opt/current"
   printf 'old current\n' >"${host}/opt/current/marker"
-  printf 'HOLOLIVE_VALKEY_HA_ENABLED=1\nVALKEY_SENTINEL_ADDRS=100.100.1.3:26379,100.100.1.8:26379\nHOLOLIVE_X_SPACES_ENABLED=%s\n' \
+  printf 'VALKEY_BIND_IP=100.100.1.8\nHOLOLIVE_X_SPACES_ENABLED=%s\n' \
     "${x_spaces}" >"${host}/etc-stack-secrets/hololive-bot/compose.env"
 }
 
@@ -105,6 +139,7 @@ run_sync() {
   local host="$1" repo="$2" opt="$1/opt"
   shift 2
   [[ ${1:-} != --source-only ]] || opt=/opt
+  [[ ${1:-} != --valkey-only || -n ${SYNC_TEST_OPT_ROOT:-} ]] || opt=/opt/hololive-bot/compose
   : >"${host}/events"
   # shellcheck disable=SC2016 # namespace 안의 bash가 확장한다.
   unshare --user --map-root-user --mount bash -c '
@@ -118,6 +153,18 @@ run_sync() {
     mount --bind "${host}/etc-nftables.d" /etc/nftables.d
     mount --bind "${host}/run" /run
     mount --bind "${host}/run-lock" /run/lock
+    if [[ " $* " != *" --source-only "* ]]; then
+      mount -t tmpfs -o mode=0755 tmpfs /opt
+      mkdir -p /opt/iris-stack/valkey-ha
+      : >/opt/iris-stack/valkey-ha/stage.py
+    fi
+    if [[ " $* " == *" --valkey-only "* ]]; then
+      mkdir -p /opt/hololive-bot/compose
+      mount --bind "$host/opt" /opt/hololive-bot/compose
+      for directory in /usr/lib/systemd/system /usr/local/lib/systemd/system /usr/share/containers/systemd; do
+        [[ ! -d $directory ]] || mount -t tmpfs -o mode=0755 tmpfs "$directory"
+      done
+    fi
     if [[ " $* " == *" --source-only "* ]]; then
       jail="$host/jail"
       mkdir -p "$jail"
@@ -144,7 +191,7 @@ run_sync() {
     fi
     exec "$@"
   ' _ "${host}" "$repo" "$fakebin" "$ROOT_DIR/scripts/deploy/sync-opt-current.sh" env PATH="${fakebin}:${PATH}" SYNC_TEST_EVENTS="${host}/events" \
-    REPO_ROOT="${repo}" OPT_ROOT="$opt" \
+    REPO_ROOT="${repo}" OPT_ROOT="${SYNC_TEST_OPT_ROOT:-$opt}" \
     bash "${ROOT_DIR}/scripts/deploy/sync-opt-current.sh" "$@" >"${host}/out" 2>&1
 }
 
@@ -171,6 +218,11 @@ assert_rejected_without_change() {
 base_repo="${tmp}/repo-base"
 make_repo "${base_repo}"
 
+host="${tmp}/host-unadmitted"
+make_host "${host}" 1
+touch "${host}/events.stage-denied"
+assert_rejected_without_change "${host}" "${base_repo}" "Valkey admission" "Valkey standalone stage is not admitted"
+
 host="${tmp}/host-ok"
 make_host "${host}" 1
 run_sync "${host}" "${base_repo}" || { cat "${host}/out" >&2; fail "valid units were rejected"; }
@@ -195,17 +247,11 @@ bash -c 'source "$1"; source "$2"; postgres_endpoint_quadlet "$3" "$4"' _ \
   "${host}/usr-local-libexec/hololive-bot/lib/postgres-endpoint.sh" \
   "${installed}/hololive-api.container" "${host}/etc-stack-secrets/hololive-bot/compose.env" >/dev/null ||
   fail "installed endpoint library cannot resolve the effective application endpoint"
-bash -c 'source "$1"; postgres_capacity_write_pgbouncer_config "$2" "$3" "$4"' _ \
+bash -c 'source "$1"; postgres_capacity_assert_policy_target "$2" "$3"' _ \
   "${host}/usr-local-libexec/hololive-bot/lib/postgres-capacity.sh" \
   "${host}/opt/current/scripts/ci/postgres-capacity-policy.tsv" \
-  "${host}/etc-stack-secrets/hololive-bot/compose.env" "${host}/pgbouncer.ini" ||
-  fail "installed capacity library cannot generate the pooler configuration"
-[[ -s "${host}/pgbouncer.ini" && "$(stat -c '%a' "${host}/pgbouncer.ini")" == 644 ]] ||
-  fail "pooler configuration is missing or unreadable by the container"
-for config in pg_hba.conf stats-users.txt; do
-  cmp -s "${base_repo}/deploy/pgbouncer/${config}" "${host}/opt/current/deploy/pgbouncer/${config}" ||
-    fail "pooler configuration not installed: ${config}"
-done
+  "${host}/etc-stack-secrets/hololive-bot/compose.env" >/dev/null ||
+  fail "installed capacity library cannot validate the connection budget"
 installed_validator="${host}/usr-local-libexec/hololive-bot/lib/compose-env.sh"
 bash -c '. "$1"; compose_env_validate_file_format "$2"' _ \
   "$installed_validator" "${host}/etc-stack-secrets/hololive-bot/compose.env" ||
@@ -224,6 +270,140 @@ grep -qx 'systemctl daemon-reload' "${host}/events" || fail "daemon-reload did n
 grep -q '^verify ' "${host}/events" || fail "exec-tree ownership verification did not run"
 ! compgen -G "${host}/opt/.quadlet-check.*" >/dev/null || fail "Quadlet check directory was left behind"
 pass "valid units install with x-spaces drop-ins, keep the worker-profile drop-in and record the source revision"
+
+preserved=$(stat -c '%i:%Y' "$installed/hololive-api.container" "$installed/holo-postgres.container" "$host/opt/current/.source-revision")
+backups=$(find "$host/opt" -maxdepth 1 -name 'current.bak-*' -printf '%i\n' | sort)
+printf '\n' >>"$installed/valkey-cache.container"
+run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "Valkey 단독 게시 실패"; }
+cmp -s "$installed/valkey-cache.container" "$base_repo/deploy/quadlet/hololive-bot/valkey-cache.container" || fail "Valkey 후보가 게시되지 않았습니다"
+[[ $preserved == "$(stat -c '%i:%Y' "$installed/hololive-api.container" "$installed/holo-postgres.container" "$host/opt/current/.source-revision")" &&
+   $backups == "$(find "$host/opt" -maxdepth 1 -name 'current.bak-*' -printf '%i\n' | sort)" ]] || fail "Valkey 단독 게시가 다른 리소스를 변경했습니다"
+pass "Valkey 단독 게시는 앱·DB·실행 트리·기존 복구점에 손대지 않습니다"
+
+printf '\n' >>"$installed/valkey-cache.container"
+sed -i 's/^VALKEY_BIND_IP=.*/VALKEY_BIND_IP=0.0.0.0/' "$host/etc-stack-secrets/hololive-bot/compose.env"
+assert_rejected_without_change "$host" "$base_repo" "Valkey wildcard bind" "VALKEY_BIND_IP must select the central Valkey endpoint" --valkey-only
+pass "Valkey 단독 게시는 중앙 주소가 아닌 VALKEY_BIND_IP를 거부합니다"
+
+sed -i 's/^VALKEY_BIND_IP=.*/VALKEY_BIND_IP=100.100.1.8/' "$host/etc-stack-secrets/hololive-bot/compose.env"
+stale_start="installed Valkey start checks differ from the checkout; run a full sync first"
+printf '\n' >>"$host/usr-local-libexec/hololive-bot/quadlet-prestart"
+assert_rejected_without_change "$host" "$base_repo" "stale Valkey prestart" "$stale_start" --valkey-only
+cp "$base_repo/scripts/deploy/quadlet-prestart.sh" "$host/usr-local-libexec/hololive-bot/quadlet-prestart"
+printf '\n' >>"$host/usr-local-libexec/hololive-bot/lib/admin-bind.sh"
+assert_rejected_without_change "$host" "$base_repo" "stale Valkey bind check" "$stale_start" --valkey-only
+cp "$base_repo/scripts/deploy/lib/admin-bind.sh" "$host/usr-local-libexec/hololive-bot/lib/admin-bind.sh"
+printf '\n' >>"$host/opt/current/deploy/topology/hosts.conf"
+assert_rejected_without_change "$host" "$base_repo" "stale Valkey topology" "$stale_start" --valkey-only
+cp "$base_repo/deploy/topology/hosts.conf" "$host/opt/current/deploy/topology/hosts.conf"
+pass "Valkey 단독 게시는 설치된 시작 검사·토폴로지가 checkout과 다르면 거부합니다"
+
+printf 'localhost/iris-stack-valkey:9.1.3-zlib1.4-r1\n' >"$host/events.image-missing"
+assert_rejected_without_change "$host" "$base_repo" "missing Valkey image" "Valkey image is not present: localhost/iris-stack-valkey:9.1.3-zlib1.4-r1" --valkey-only
+printf 'VALKEY_IMAGE=localhost/iris-stack-valkey:pinned\n' >>"$host/etc-stack-secrets/hololive-bot/compose.env"
+printf 'localhost/iris-stack-valkey:pinned\n' >"$host/events.image-missing"
+assert_rejected_without_change "$host" "$base_repo" "missing pinned Valkey image" "Valkey image is not present: localhost/iris-stack-valkey:pinned" --valkey-only
+sed -i '/^VALKEY_IMAGE=/d' "$host/etc-stack-secrets/hololive-bot/compose.env"
+rm -f -- "$host/events.image-missing"
+pass "Valkey 단독 게시는 unit이 실제로 쓸 이미지가 없으면 거부합니다"
+
+printf '\n' >>"$installed/valkey-cache.container"
+printf 'VALKEY_IMAGE=\n' >>"$host/etc-stack-secrets/hololive-bot/compose.env"
+assert_rejected_without_change "$host" "$base_repo" "empty Valkey image" "VALKEY_IMAGE is empty" --valkey-only
+sed -i 's/^VALKEY_IMAGE=.*/VALKEY_IMAGE=""/' "$host/etc-stack-secrets/hololive-bot/compose.env"
+assert_rejected_without_change "$host" "$base_repo" "empty quoted Valkey image" "VALKEY_IMAGE is empty" --valkey-only
+sed -i 's|^VALKEY_IMAGE=.*|VALKEY_IMAGE=localhost/iris-stack-valkey:pinned|' "$host/etc-stack-secrets/hololive-bot/compose.env"
+printf 'localhost/iris-stack-valkey:9.1.3-zlib1.4-r1\n' >"$host/events.image-missing"
+run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "compose.env에 고정한 Valkey 이미지로 단독 게시 실패"; }
+cmp -s "$installed/valkey-cache.container" "$base_repo/deploy/quadlet/hololive-bot/valkey-cache.container" || fail "고정 이미지 Valkey 후보가 게시되지 않았습니다"
+sed -i '/^VALKEY_IMAGE=/d' "$host/etc-stack-secrets/hololive-bot/compose.env"
+rm -f -- "$host/events.image-missing"
+pass "Valkey 단독 게시는 비어 있는 VALKEY_IMAGE를 거부하고 compose.env에 고정한 이미지를 확인합니다"
+
+for path in /usr/local/libexec/hololive-bot/quadlet-prestart /usr/local/libexec/hololive-bot/lib/collector-slots.tsv \
+  /opt/hololive-bot/compose/current/deploy/topology/hosts.conf /opt/iris-stack/valkey-ha/stage.py; do
+  grep -qxF "verify-path $path" "$host/events" || fail "Valkey 시작 검사 경로의 소유권을 확인하지 않았습니다: $path"
+done
+printf '\n' >>"$installed/valkey-cache.container"
+start_check="$host/usr-local-libexec/hololive-bot/lib/collector-slots.tsv"
+printf '\n' >>"$start_check"
+assert_rejected_without_change "$host" "$base_repo" "stale Valkey slot table" "$stale_start" --valkey-only
+cp "$base_repo/scripts/deploy/lib/collector-slots.tsv" "$start_check"
+chmod 0664 "$start_check"
+assert_rejected_without_change "$host" "$base_repo" "Valkey start check mode" "$stale_start" --valkey-only
+chmod 0644 "$start_check"
+mv "$start_check" "$start_check.real"
+ln -s collector-slots.tsv.real "$start_check"
+assert_rejected_without_change "$host" "$base_repo" "symlinked Valkey start check" "$stale_start" --valkey-only
+rm "$start_check"
+mv "$start_check.real" "$start_check"
+podman unshare /usr/bin/chown 1 "$start_check"
+assert_rejected_without_change "$host" "$base_repo" "non-root Valkey start check" "$stale_start" --valkey-only
+podman unshare /usr/bin/chown 0 "$start_check"
+printf '%s\n' /usr/local/libexec/hololive-bot/lib/collector-slots.tsv >"$host/events.ownership-denied"
+assert_rejected_without_change "$host" "$base_repo" "unsafe Valkey start check path" "installed Valkey start checks are writable by a non-root user" --valkey-only
+printf '%s\n' /opt/iris-stack/valkey-ha/stage.py >"$host/events.ownership-denied"
+assert_rejected_without_change "$host" "$base_repo" "unsafe Valkey stage tool path" "Valkey stage tool is missing or writable by a non-root user" --valkey-only
+assert_rejected_without_change "$host" "$base_repo" "unsafe Valkey stage tool path in a full sync" "Valkey stage tool is missing or writable by a non-root user"
+rm "$host/events.ownership-denied"
+SYNC_TEST_OPT_ROOT="$host/opt" assert_rejected_without_change "$host" "$base_repo" "other Valkey runtime tree" \
+  "Valkey-only publication checks the runtime tree that the prestart reads" --valkey-only
+pass "Valkey 단독 게시는 root 소유·모드·심볼릭 링크·상위 경로·실제 실행 트리가 다른 시작 검사를 거부합니다"
+
+mkdir "$installed/valkey-cache.container.d"
+printf '[Container]\nSecurityLabelLevel=s0:c900,c901\n' >"$installed/valkey-cache.container.d/50-mcs-level.conf"
+assert_rejected_without_change "$host" "$base_repo" "local Valkey drop-in" "expected an existing Valkey unit without local drop-ins" --valkey-only
+rm -r "$installed/valkey-cache.container.d"
+override="unsupported Quadlet/systemd override origin"
+mkdir "$host/etc-systemd-system/valkey-cache.service.d"
+printf '[Service]\nExecStartPre=\n' >"$host/etc-systemd-system/valkey-cache.service.d/override.conf"
+assert_rejected_without_change "$host" "$base_repo" "Valkey service drop-in" "$override" --valkey-only
+rm -r "$host/etc-systemd-system/valkey-cache.service.d"
+touch "$host/events.alias-dropin"
+assert_rejected_without_change "$host" "$base_repo" "Valkey alias drop-in" "$override" --valkey-only
+rm "$host/events.alias-dropin"
+touch "$host/events.alias"
+assert_rejected_without_change "$host" "$base_repo" "Valkey alias name" "$override" --valkey-only
+rm "$host/events.alias"
+touch "$host/events.not-found"
+assert_rejected_without_change "$host" "$base_repo" "Valkey unit not loaded by systemd" "$override" --valkey-only
+rm "$host/events.not-found"
+ln -s /dev/null "$host/etc-systemd-system/valkey-cache.service"
+ln -s /run/systemd/generator/valkey-cache.service "$host/etc-systemd-system/valkey-alias.service"
+assert_rejected_without_change "$host" "$base_repo" "masked Valkey unit with an alias" "$override" --valkey-only
+rm "$host/etc-systemd-system/valkey-alias.service"
+for alias_target in /etc/systemd/system/held/valkey-cache.service held/valkey-cache.service \
+  /etc/systemd/system/multi-user.target.wants/valkey-cache.service ../system/held/../valkey-cache.service \
+  held/valkey-cache.service/ /etc/systemd/system/held/valkey-cache.service/. held/valkey-cache.service//; do
+  ln -s "$alias_target" "$host/etc-systemd-system/valkey-alias.service"
+  assert_rejected_without_change "$host" "$base_repo" "masked Valkey unit with an alias to $alias_target" "$override" --valkey-only
+  rm "$host/etc-systemd-system/valkey-alias.service"
+done
+mkdir -p "$host/run/systemd/system"
+ln -s /dev/null "$host/run/systemd/system/valkey-cache.service"
+assert_rejected_without_change "$host" "$base_repo" "Valkey runtime mask under the persistent mask" "$override" --valkey-only
+rm "$host/run/systemd/system/valkey-cache.service"
+ln -sfn /run/systemd/generator/valkey-cache.service "$host/etc-systemd-system/valkey-cache.service"
+assert_rejected_without_change "$host" "$base_repo" "Valkey mask not pointing to /dev/null" "$override" --valkey-only
+ln -sfn /dev/null "$host/etc-systemd-system/valkey-cache.service"
+run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "영속 mask만 있는 Valkey unit의 단독 게시 실패"; }
+rm "$host/etc-systemd-system/valkey-cache.service"
+printf '\n' >>"$installed/valkey-cache.container"
+mkdir "$tmp/linked-unit"
+printf '[Service]\nExecStart=/bin/true\n' >"$tmp/linked-unit/valkey-cache.service"
+ln -s "$tmp/linked-unit/valkey-cache.service" "$host/etc-systemd-system/staging-cache.service"
+run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "검색 경로 밖의 같은 이름 파일을 가리키는 별도 linked unit이 있는 Valkey 단독 게시 실패"; }
+rm "$host/etc-systemd-system/staging-cache.service"
+printf '\n' >>"$installed/valkey-cache.container"
+mkdir "$host/etc-containers-systemd/container.d"
+printf '[Container]\nImage=localhost/other:tag\n' >"$host/etc-containers-systemd/container.d/60-image.conf"
+assert_rejected_without_change "$host" "$base_repo" "inherited Quadlet drop-in" "$override" --valkey-only
+rm -r "$host/etc-containers-systemd/container.d"
+mkdir "$host/etc-containers-systemd/valkey-cache.container.d"
+printf '[Container]\nSecurityLabelLevel=s0:c900,c901\n' >"$host/etc-containers-systemd/valkey-cache.container.d/50-mcs-level.conf"
+run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "호스트 보안 MCS drop-in이 있는 Valkey 단독 게시 실패"; }
+rm -r "$host/etc-containers-systemd/valkey-cache.container.d"
+pass "Valkey 단독 게시는 MCS 범주만 정하는 호스트 drop-in 말고는 Quadlet·systemd override를 거부합니다"
 
 broken_repo="${tmp}/repo-broken-unit"
 cp -R "${base_repo}" "${broken_repo}"
@@ -284,8 +464,8 @@ pass "artifact-only sync preserves runtime bytes and metadata without copying ru
 migrator_path=deploy/quadlet/hololive-bot/hololive-db-migrate.container
 w1_repo="${tmp}/repo-pool"
 cp -a "${base_repo}" "${w1_repo}"
-sed -e 's/^Exec=--schema-only$/Exec=--pool-only=auth/' \
-  -e 's/ hololive-db-migrate schema$/ hololive-db-migrate pool-auth/' \
+sed -e 's/^Exec=--schema-only$/Exec=--configure-login-roles/' \
+  -e 's/ hololive-db-migrate schema$/ hololive-db-migrate admin-bootstrap/' \
   "${base_repo}/${migrator_path}" >"${w1_repo}/${migrator_path}"
 commit_repo "${w1_repo}" pool-window
 w1_host="${tmp}/host-pool"
@@ -295,27 +475,24 @@ for path in data logs backups runtime-config artifacts/worker-profile; do
   mkdir -p "${w1_host}/opt/current/${path}"
   printf 'accepted runtime\n' >"${w1_host}/opt/current/${path}/accepted"
 done
-pool_dropin="${w1_host}/etc-containers-systemd/hololive-bot/holo-pgbouncer.container.d"
-mkdir -p "$pool_dropin"
-printf '[Container]\nImage=sha256:%064d\n' 1 >"$pool_dropin/50-pooler-image.conf"
 touch -d @1 "${w1_host}/opt/current/deploy/postgres/pg_hba.conf" \
-  "${w1_host}/opt/current/deploy/pgbouncer/"* "${w1_host}/opt/current/hololive/hololive-api/scripts/init-db/"*
+  "${w1_host}/opt/current/hololive/hololive-api/scripts/init-db/"*
 
 protected_snapshot() (
   cd "$1"
   find etc-containers-systemd usr-local-libexec etc-systemd-system etc-nftables.d etc-stack-secrets run/hololive-bot \
-    opt/current/{deploy/{pgbouncer,postgres,nginx,topology},hololive/hololive-api/scripts/init-db,data,logs,backups,runtime-config,artifacts/worker-profile} \
+    opt/current/{deploy/{postgres,nginx,topology},hololive/hololive-api/scripts/init-db,data,logs,backups,runtime-config,artifacts/worker-profile} \
     -type f ! -name hololive-db-migrate.container -printf '%p %i %m %U:%G %T@ %C@\n' -exec sha256sum {} + | LC_ALL=C sort
 )
 w2_repo="${tmp}/repo-card"
 cp -a "${base_repo}" "$w2_repo"
 printf 'card release\n' >"$w2_repo/hololive/hololive-api/VERSION"
-commit_repo "$w2_repo" card-window
+commit_repo "$w2_repo" writer-drain
 host="${tmp}/host-card"
 cp -a "$w1_host" "$host"
 before="$(protected_snapshot "$host")"
-run_sync "$host" "$w2_repo" --application-only || { cat "$host/out" >&2; fail "card-window publication failed"; }
-[[ "$(protected_snapshot "$host")" == "$before" ]] || fail "card window changed a protected inode, mode or content"
+run_sync "$host" "$w2_repo" --application-only || { cat "$host/out" >&2; fail "writer-drain publication failed"; }
+[[ "$(protected_snapshot "$host")" == "$before" ]] || fail "writer drain changed a protected inode, mode or content"
 ! grep -q '^systemctl ' "$host/events" || fail "source publication changed daemon state"
 cmp "$w2_repo/$migrator_path" "$host/etc-containers-systemd/hololive-bot/${migrator_path##*/}"
 cmp "$w2_repo/$migrator_path" "$host/opt/current/$migrator_path"
@@ -333,7 +510,7 @@ source_repo="$tmp/repo-source"
 cp -a "$host" "$source_host"
 cp -a "$w2_repo" "$source_repo"
 installed_revision="$(git -C "$source_repo" rev-parse HEAD)"
-chmod -R go-w "$source_host/opt/current/scripts"
+chmod -R go-w "$source_host/opt/current/scripts" "$source_host/opt/current/hololive"
 chmod go-w "$source_host/opt" "$source_host/opt/current"
 chmod go-w "$source_host/usr-local-libexec"
 cp "$ROOT_DIR/scripts/deploy/sync-opt-current.sh" "$source_repo/scripts/deploy/sync-opt-current.sh"
@@ -413,9 +590,9 @@ for path in scripts/deploy/sync-opt-current.sh hololive/hololive-api/VERSION; do
 done
 pass "source-only publishes existing app files from the proven precursor without replacing installed definitions or bind inodes"
 
-for path in opt/current/deploy/postgres/pg_hba.conf opt/current/deploy/pgbouncer/stats-users.txt \
+for path in opt/current/deploy/postgres/pg_hba.conf \
     opt/current/hololive/hololive-api/scripts/init-db/00-assert-pg19-runtime.sql \
-    etc-containers-systemd/hololive-bot/{hololive-api,holo-pgbouncer,hololive-alarm-worker}.container \
+    etc-containers-systemd/hololive-bot/{hololive-api,holo-postgres,hololive-alarm-worker}.container \
     etc-containers-systemd/hololive-bot/hololive-api.container.d/40-x-spaces.conf \
     usr-local-libexec/hololive-bot/quadlet-prestart etc-nftables.d/admin-dashboard-ingress.nft; do
   host="$(mktemp -d "${tmp}/host-drift.XXXXXX")"
@@ -427,12 +604,12 @@ host="${tmp}/host-override"
 cp -a "$w1_host" "$host"
 dropin="$host/etc-containers-systemd/hololive-bot/hololive-db-migrate.container.d"
 mkdir -p "$dropin"
-printf '[Container]\nExec=--pool-only=auth\n' >"$dropin/60-command.conf"
+printf '[Container]\nExec=--configure-login-roles\n' >"$dropin/60-command.conf"
 assert_rejected_without_change "$host" "$w2_repo" "migrator override" "requires the schema-only migrator" --application-only
 assert_rejected_without_change "$w1_host" "$w1_repo" "pool candidate" "requires the schema-only migrator" --application-only
 drift_repo="${tmp}/repo-infra-change"
 cp -a "$w2_repo" "$drift_repo"
-printf 'drift\n' >"$drift_repo/deploy/pgbouncer/unreviewed.conf"
+printf 'drift\n' >"$drift_repo/deploy/postgres/unreviewed.conf"
 commit_repo "$drift_repo" changed-infrastructure
 assert_rejected_without_change "$w1_host" "$drift_repo" "candidate infrastructure" "application-only tree drift" --application-only
 pass "application-only rejects candidate, installed, drop-in and privileged bind drift before backup or publication"

@@ -42,7 +42,7 @@ func (c *CalendarCommand) Description() string {
 	return "기념일 달력 조회: 이번달/다음달/저번달"
 }
 
-func (c *CalendarCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
+func (c *CalendarCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.CalendarParams) error {
 	month, year := c.targetMonthYear(params)
 
 	entries, err := c.memberRepo.FindMembersWithCelebrationsInMonth(ctx, month, year)
@@ -77,17 +77,17 @@ func (c *CalendarCommand) Execute(ctx context.Context, cmdCtx *botcommand.Comman
 	return nil
 }
 
-func (c *CalendarCommand) targetMonthYear(params map[string]any) (month, year int) {
+func (c *CalendarCommand) targetMonthYear(params botcommand.CalendarParams) (month, year int) {
 	now := c.nowKST()
 
 	month = int(now.Month())
 	year = now.Year()
 
-	if m, ok := params["month"].(int); ok && m >= 1 && m <= 12 {
+	if m := params.Month; m >= 1 && m <= 12 {
 		return m, year
 	}
 
-	if offset, ok := params["monthOffset"].(int); ok && offset != 0 {
+	if offset := params.MonthOffset; offset != 0 {
 		base := time.Date(year, now.Month(), 1, 0, 0, 0, 0, now.Location())
 		target := base.AddDate(0, offset, 0)
 

@@ -21,10 +21,6 @@ func validConfig() Config {
 		DeliverySendTimeout:         10 * time.Second,
 		SubscriberLookupParallelism: 16,
 		AggregateSyncInterval:       30 * time.Second,
-		TelemetryPollInterval:       30 * time.Second,
-		TelemetryFlushBatch:         200,
-		TelemetryRetryBackoff:       30 * time.Second,
-		TelemetryRetention:          24 * time.Hour,
 		HandoffHorizon:              5 * time.Minute,
 	}
 }
@@ -46,7 +42,6 @@ func TestConfigValidateRejectsNonPositiveSettings(t *testing.T) {
 		"retry backoff":                 func(c *Config) { c.RetryBackoff = -time.Second },
 		"delivery parallelism":          func(c *Config) { c.DeliveryParallelism = 0 },
 		"subscriber lookup parallelism": func(c *Config) { c.SubscriberLookupParallelism = 0 },
-		"telemetry retention":           func(c *Config) { c.TelemetryRetention = 0 },
 	}
 
 	for setting, mutate := range cases {

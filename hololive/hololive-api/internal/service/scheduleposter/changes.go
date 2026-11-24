@@ -11,6 +11,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 func (s *Store) InsertPosts(ctx context.Context, posterID int64, posts []Post) (int64, error) {
@@ -132,7 +134,7 @@ func (s *Store) RecordMatch(ctx context.Context, schedule PublishedSchedule, pos
 
 	recorded := false
 
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		tag, markErr := tx.Exec(ctx, recordMatchSQL, post.ID, schedule.PosterID, schedule.ExtractedAt, result.Status, result.Reason,
 			post.Status, readPosterID, readRowsAt)
 		if markErr != nil {
@@ -245,7 +247,7 @@ func (s *Store) PurgePosts(ctx context.Context, before time.Time, limit int) (in
 }
 
 func (s *Store) RevokePost(ctx context.Context, posterID, postID int64) error {
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		if err := setPostState(ctx, tx, revokePostSQL, posterID, postID); err != nil {
 			return err
 		}
@@ -264,7 +266,7 @@ func (s *Store) RevokePost(ctx context.Context, posterID, postID int64) error {
 }
 
 func (s *Store) RestorePost(ctx context.Context, posterID, postID int64) error {
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		return setPostState(ctx, tx, restorePostSQL, posterID, postID)
 	})
 	if err != nil {
@@ -319,7 +321,7 @@ const (
 func (s *Store) PosterPosts(ctx context.Context, posterID int64) ([]PosterPost, error) {
 	var posts []PosterPost
 
-	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, getSQL, posterID)
 		if err != nil {
 			return fmt.Errorf("load poster: %w", err)

@@ -46,9 +46,7 @@ bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 �
 논리 호출당 최대 한 번 epoch를 갱신하고 재서명합니다. 일반 401·5xx·전송 오류는 이 인증 복구 경로로
 재시도하지 않으며 기존 owner 재시도·handoff·결과 불명·webhook v3·inbox 계약은 그대로입니다.
 새 Iris와 소비자를 같은 배포 창에서 교체하고 롤백도 인증 호환 조합으로 수행해야 합니다. 일정표 파일 응답(`text_file`)을 기록하기 전에 모든 봇 outbox 발송기를 해당 형식을 읽는 버전으로 전환하세요. 구버전으로 되돌릴 때는 새 명령 수신을 멈추고 미발송 파일 응답을 먼저 정산하세요.
-`hololive-api`만 webhook nonce 저장에 별도 모듈 `github.com/park285/iris-client-go/adapters/valkeydedup`을 사용합니다.
-개발 `go.work`는 형제 저장소의 어댑터 소스를 읽고, 운영 이미지는 `GOWORK=off`에서 `hololive/hololive-api/go.mod`의 pin을 사용합니다.
-`adapters/valkeydedup/v1.0.0` 태그 게시와 공식 Go checksum 확인 전에는 운영 빌드·배포하지 않습니다.
+`hololive-api`는 PostgreSQL에 서명 nonce를 예약합니다. Valkey가 비워져도 아직 유효한 서명의 재사용을 허용하지 않으며, DB 오류는 admission 전에 요청을 거절합니다.
 
 ---
 
@@ -58,7 +56,7 @@ bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 �
 
 다섯 업무 모듈은 shared-go의 `/v2 v2.25.0`과 `/postgres v1.0.3`을 고정합니다. `hololive-dbtest`를 제외한 네 모듈은 `/core v1.0.0`과 `/transport v1.0.1`도 사용합니다. 개발용 `go.work`에서 형제 소스를 읽더라도 운영 이미지와 격리 CI는 각 모듈의 정식 tag와 `go.sum`으로 빌드합니다. [릴리스 수용 기준](docs/current/runbooks/release.md#1921-의존성-수용-기준)은 Hololive inbox와 공용 pgstore의 전환 조건을 구분합니다.
 
-세 runtime의 `--check-worker-profile`은 같은 runtime 환경과 로컬 CA를 받아 profile 관계·DB 옵션·제어 예약을 무접속으로 검증합니다. 출력은 기존 식별 형식을 유지하며 성공이 원격 TLS·권한·pooler 호환성의 증거는 아닙니다. 로그는 임의 map/slice 대신 승인된 최소 필드와 count를 같은 키 아래 typed group으로 투영합니다.
+세 runtime의 `--check-worker-profile`은 같은 runtime 환경과 로컬 CA를 받아 profile 관계·DB 옵션·제어 예약을 무접속으로 검증합니다. 출력은 기존 식별 형식을 유지하며 성공이 원격 TLS·권한의 증거는 아닙니다. 로그는 임의 map/slice 대신 승인된 최소 필드와 count를 같은 키 아래 typed group으로 투영합니다.
 
 ## 개발 및 검증 (Development & Test)
 

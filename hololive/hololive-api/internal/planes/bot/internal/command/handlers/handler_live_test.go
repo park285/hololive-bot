@@ -60,7 +60,7 @@ func TestLiveCommand_Execute_AllLiveSendsText(t *testing.T) {
 
 	deps.LiveQuery = &liveQueryStub{result: livequery.Result{Status: livequery.Complete, Items: []livequery.Item{{VideoID: "video-x", ChannelID: "ch-x", ChannelName: "Member X", Title: "방송"}}}}
 
-	err := NewLiveCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{})
+	err := NewLiveCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.LiveParams{})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -99,9 +99,7 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 
 	ctx := context.WithValue(t.Context(), testContextKey("request-id"), "live-propagation")
 
-	err := NewLiveCommand(deps).Execute(ctx, &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: testMemberAqua,
-	})
+	err := NewLiveCommand(deps).Execute(ctx, &botcommand.CommandContext{Room: testRoomID}, botcommand.LiveParams{Member: testMemberAqua})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}

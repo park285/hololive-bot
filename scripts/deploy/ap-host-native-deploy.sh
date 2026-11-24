@@ -8,9 +8,9 @@ REPO_ROOT="$(realpath -e -- "${REPO_ROOT:-$tool_root}")"
 MODE="${2:---dry-run}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 AP_SWAPFILE_SIZE_MIB="${AP_SWAPFILE_SIZE_MIB:-2048}"
-AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-6433}"
-if [[ "$AP_POSTGRES_PORT" != 6433 ]]; then
-  echo "AP_POSTGRES_PORT must be the collector pooler port (6433)" >&2
+AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-5433}"
+if [[ "$AP_POSTGRES_PORT" != 5433 ]]; then
+  echo "AP_POSTGRES_PORT must be the central PostgreSQL TLS port (5433)" >&2
   exit 2
 fi
 for checkout in "$tool_root" "$REPO_ROOT"; do
@@ -69,7 +69,7 @@ case "$MODE" in
     if [[ "$MODE" == --quiesce ]]; then [[ $# == 4 ]]; else [[ $# == 5 && "$5" =~ ^[0-9a-f-]{36}$ ]]; fi
     ;;
   *)
-    echo "Usage: $0 <ap-host> [--dry-run|--apply|--prepare-profile] | osaka --install-initial | osaka --quiesce|--resume W1|W2 <old-release> [nonce]" >&2
+    echo "Usage: $0 <ap-host> [--dry-run|--apply|--prepare-profile] | osaka --install-initial | osaka --quiesce|--resume W3 <old-release> [nonce]" >&2
     exit 2
     ;;
 esac

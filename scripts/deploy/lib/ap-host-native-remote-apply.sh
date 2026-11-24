@@ -65,7 +65,7 @@ native_same_window_baseline() {
   native_release_pin check profile "$host_env" "$old_target" "$release_dir" "$1"
   native_release_pin check issuer "$po_unit_file" "$old_target" "$release_dir" "$3"
   [[ "$(native_file_digest "$unit_file")" == "$2" && "$(native_file_digest "$po_socket_file")" == "$4" ]]
-  original_port=6433 native_window_verify_original
+  original_port=5433 native_window_verify_original
   [[ "$(realpath -e "${unit_file%/*}")" == "${unit_file%/*}" ]]
   for n in "${window_units[@]}"; do
     native_window_live_generation "$n" >/dev/null
@@ -280,8 +280,8 @@ sudo -n cmp -s "$worker_profile" "$release_dir/worker-profile.json" || {
   exit 1
 }
 candidate_endpoint="$(native_root_endpoint "$release_dir/${slot_host_env##*/}")"
-if [[ "$candidate_endpoint" != '100.100.1.8|6433' ]]; then
-  echo 'candidate must use the native collector pooler endpoint; writer unchanged' >&2
+if [[ "$candidate_endpoint" != '100.100.1.8|5433' ]]; then
+  echo 'candidate must use the central PostgreSQL direct TLS endpoint; writer unchanged' >&2
   exit 1
 fi
 
@@ -373,7 +373,7 @@ native_same_window_stop() {
     [[ "$(native_window_prop "$n" ControlPID)" == 0 ]]
     printf 'InvocationID=%s\nUnitFileState=%s\n' "${original[$n]}" "$persistent" | sudo -n tee "$window/$n.before" >/dev/null
   done
-  original_port=6433 native_window_verify_original
+  original_port=5433 native_window_verify_original
   for n in "${window_units[@]}"; do [[ "$(native_window_live_generation "$n")" == "${original[$n]}" ]]; done
   since="@$EPOCHREALTIME"
   sudo -n systemctl --job-mode=fail stop "$po_socket" "$po_service"
@@ -468,7 +468,7 @@ native_same_window_restore() {
   done
   native_same_window_restore_state
   collector_readiness_poll 90 2 collector_readiness_fetch >/dev/null
-  original_port=6433 native_window_verify_original
+  original_port=5433 native_window_verify_original
   native_same_window_restore_state
 }
 
@@ -496,7 +496,7 @@ native_restore_recorded_runtime() {
   fi
   stop_native_units_and_require_inactive
   if [[ "${native_pool_check_pending:-false}" == true ]]; then
-    echo 'pooled database proof incomplete; collector and issuer remain disabled; recovery guard retained' >&2
+    echo 'database endpoint proof incomplete; collector and issuer remain disabled; recovery guard retained' >&2
     return 1
   fi
   if [[ -n "$old_target" && -d "$old_target" ]]; then
@@ -610,7 +610,7 @@ if [[ "$same_window" == true ]]; then
   apply_start_since="@$EPOCHREALTIME"
 fi
 native_pool_check_pending=true
-native_cutover_run pooled-database sudo -n systemd-run --quiet --wait --pipe --collect \
+native_cutover_run database-endpoint sudo -n systemd-run --quiet --wait --pipe --collect \
   --property=User=hololive --property=Group=opc --property=NoNewPrivileges=yes --property=RuntimeMaxSec=40s \
   --property="WorkingDirectory=$release_dir" --property=ProtectHome=yes --property=ProtectSystem=strict \
   --property=PrivateTmp=yes --property=RestrictAddressFamilies=AF_INET \
@@ -620,7 +620,7 @@ native_cutover_run pooled-database sudo -n systemd-run --quiet --wait --pipe --c
   --property=EnvironmentFile=/etc/stack-secrets/hololive-bot/collector.env \
   --property="EnvironmentFile=$host_env" \
   /usr/bin/env "STACK_WORKER_PROFILE_FILE=$release_dir/worker-profile.json" \
-  "$release_dir/bin/hololive-collector-wrapper" "$release_dir/bin/hololive-collector" --check-pooled-database
+  "$release_dir/bin/hololive-collector-wrapper" "$release_dir/bin/hololive-collector" --check-database-endpoint
 native_pool_check_pending=false
 
 if [[ "${same_window:-false}" == true ]]; then

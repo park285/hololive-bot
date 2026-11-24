@@ -25,13 +25,11 @@ const payloadBoundaryDeferredState = "DEFERRED"
 
 func TestCommunityRPCPayloadStorageBoundaryAndScheduler(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		extra   int
-		publish bool
+		name  string
+		extra int
 	}{
 		{name: "exact JSONB ceiling"},
 		{name: "one over from real runner", extra: 1},
-		{name: "one over at publisher", extra: 1, publish: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var (
@@ -46,10 +44,7 @@ func TestCommunityRPCPayloadStorageBoundaryAndScheduler(t *testing.T) {
 			realRunner := youtubejscollector.NewCommunityRunner(rpc)
 			runner := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
 
-			var (
-				collectCause error
-				oversized    []byte
-			)
+			var collectCause error
 
 			runner.collect = func(ctx context.Context, input *collection.RunInput) (collection.CollectResult, error) {
 				result, err := realRunner.Collect(ctx, input)
@@ -60,15 +55,7 @@ func TestCommunityRPCPayloadStorageBoundaryAndScheduler(t *testing.T) {
 					return result, fmt.Errorf("collect community boundary fixture: %w", err)
 				}
 
-				if !tc.publish {
-					return result, nil
-				}
-
-				observations := result.Output().Observations()
-
-				observations[0].Payload = oversized
-
-				return collection.CompleteFromEnvelopes(observations, time.Now())
+				return result, nil
 			}
 
 			executor, spec := newExecutorFixture(t, runner, &fatal)
@@ -77,14 +64,14 @@ func TestCommunityRPCPayloadStorageBoundaryAndScheduler(t *testing.T) {
 
 			pool := executor.publisher.contracts.pool
 
-			oversized, body = communityBoundaryInputs(t, pool, tc.extra, tc.publish)
+			body = communityBoundaryBody(t, pool, tc.extra)
 
 			runAdmittedSpec(t.Context(), t, executor, spec)
 
 			require.Empty(t, fatal)
 			require.EqualValues(t, 1, calls.Load())
 
-			if tc.extra != 0 && !tc.publish {
+			if tc.extra != 0 {
 				require.ErrorIs(t, collectCause, contract.ErrPayloadTooLarge)
 				require.Equal(t, contract.ClassResourceLimit, collecterr.ClassOf(collectCause))
 			}
@@ -131,28 +118,17 @@ func newCommunityBoundaryServer(t *testing.T, calls *atomic.Int32, body *[]byte)
 	return server
 }
 
-func communityBoundaryInputs(t *testing.T, pool *pgxpool.Pool, extra int, publish bool) ([]byte, []byte) {
+func communityBoundaryBody(t *testing.T, pool *pgxpool.Pool, extra int) []byte {
 	t.Helper()
 
-	payload, wire := communityStorageBoundary(t, pool, extra)
-	oversized, err := jsonv2.Marshal(payload)
-	require.NoError(t, err)
-
-	oversized, err = contract.CanonicalizeJSON(oversized)
-	require.NoError(t, err)
-
-	if publish {
-		_, wire = communityStorageBoundary(t, pool, 0)
-	}
-
-	body, err := jsonv2.Marshal(wire)
+	body, err := jsonv2.Marshal(communityStorageBoundary(t, pool, extra))
 	require.NoError(t, err)
 	require.Less(t, len(body), contract.MaxPayloadBytes)
 
-	return oversized, body
+	return body
 }
 
-func communityStorageBoundary(t *testing.T, pool *pgxpool.Pool, extra int) (contract.CommunityPayloadV1, youtubejs.CommunityResult) {
+func communityStorageBoundary(t *testing.T, pool *pgxpool.Pool, extra int) youtubejs.CommunityResult {
 	t.Helper()
 
 	payload := contract.CommunityPayloadV1{
@@ -199,9 +175,7 @@ func communityStorageBoundary(t *testing.T, pool *pgxpool.Pool, extra int) (cont
 	require.Equal(t, contract.MaxPayloadBytes+extra, storedSize)
 	require.LessOrEqual(t, len(raw), contract.MaxPayloadBytes)
 
-	wire := communityBoundaryWire(&payload, &photo)
-
-	return payload, wire
+	return communityBoundaryWire(&payload, &photo)
 }
 
 func communityBoundaryWire(payload *contract.CommunityPayloadV1, photo *contract.Thumbnail) youtubejs.CommunityResult {

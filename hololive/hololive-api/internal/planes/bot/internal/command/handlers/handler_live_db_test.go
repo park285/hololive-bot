@@ -54,7 +54,7 @@ func TestLiveCommandDatabaseSmoke(t *testing.T) {
 		t.Helper()
 
 		for range 2 {
-			require.NoError(t, command.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil))
+			require.NoError(t, command.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.LiveParams{}))
 		}
 
 		require.Zero(t, errorsSent)
@@ -79,10 +79,10 @@ func TestLiveCommandDatabaseSmoke(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	require.ErrorIs(t, command.Execute(ctx, &botcommand.CommandContext{Room: testRoomID}, nil), context.Canceled)
+	require.ErrorIs(t, command.Execute(ctx, &botcommand.CommandContext{Room: testRoomID}, botcommand.LiveParams{}), context.Canceled)
 	require.Zero(t, errorsSent)
 	pool.Close()
-	require.NoError(t, command.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil))
+	require.NoError(t, command.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.LiveParams{}))
 	require.Equal(t, 1, errorsSent)
 	t.Log("actual command/repository/template: cold/warm upstream=0; unknown, partial without diagnostics, confirmed-empty, cancellation and DB error preserved")
 }

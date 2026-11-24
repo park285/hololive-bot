@@ -121,7 +121,7 @@ func TestCalendarCommand_Execute_AlbumSuccess(t *testing.T) {
 	cmd := NewCalendarCommand(deps, repo, renderer)
 	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
 
-	err := cmd.Execute(t.Context(), cmdCtx, map[string]any{testParamMonth: 6})
+	err := cmd.Execute(t.Context(), cmdCtx, botcommand.CalendarParams{Month: 6})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -146,7 +146,7 @@ func TestCalendarCommand_Execute_NextMonthAcrossYear(t *testing.T) {
 		return time.Date(2026, time.December, 15, 12, 0, 0, 0, time.FixedZone("KST", 9*60*60))
 	}
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testCalendarRoom}, map[string]any{"monthOffset": 1})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testCalendarRoom}, botcommand.CalendarParams{MonthOffset: 1})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -175,7 +175,7 @@ func TestCalendarCommand_Execute_PreviousMonthAcrossYear(t *testing.T) {
 		return time.Date(2026, time.January, 15, 12, 0, 0, 0, time.FixedZone("KST", 9*60*60))
 	}
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testCalendarRoom}, map[string]any{"monthOffset": -1})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testCalendarRoom}, botcommand.CalendarParams{MonthOffset: -1})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -343,7 +343,7 @@ func TestCalendarCommand_Execute_ImageFailureFallsBackToText(t *testing.T) {
 	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
 	before := imageTextFallbackCount("calendar", imageTextFallbackReasonRenderFailed)
 
-	err := cmd.Execute(t.Context(), cmdCtx, map[string]any{testParamMonth: 3})
+	err := cmd.Execute(t.Context(), cmdCtx, botcommand.CalendarParams{Month: 3})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -385,7 +385,7 @@ func TestCalendarCommand_Execute_ImageSendFailureFallsBackToText(t *testing.T) {
 	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
 	before := imageTextFallbackCount("calendar", imageTextFallbackReasonSendFailed)
 
-	err := cmd.Execute(t.Context(), cmdCtx, map[string]any{testParamMonth: 3})
+	err := cmd.Execute(t.Context(), cmdCtx, botcommand.CalendarParams{Month: 3})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -415,7 +415,7 @@ func TestCalendarCommand_Execute_ImageOutcomeUnknownSuppressesTextFallback(t *te
 			repo := &calendarRepoStub{entries: []domain.CalendarEntry{{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 5}}}
 			command := NewCalendarCommand(deps, repo, &calendarImageRendererStub{pages: [][]byte{[]byte("png-data")}})
 			before := imageTextFallbackCount("calendar", imageTextFallbackReasonOutcomeUnknown)
-			err := command.Execute(t.Context(), &botcommand.CommandContext{Room: testCalendarRoom}, map[string]any{testParamMonth: 3})
+			err := command.Execute(t.Context(), &botcommand.CommandContext{Room: testCalendarRoom}, botcommand.CalendarParams{Month: 3})
 
 			if !errors.Is(err, imageErr) {
 				t.Fatalf("Execute() error = %v, want preserved outcome uncertainty", err)
@@ -452,7 +452,7 @@ func TestCalendarCommand_Execute_RepoError(t *testing.T) {
 	cmd := NewCalendarCommand(deps, repo, &calendarImageRendererStub{pages: [][]byte{[]byte("png-data")}})
 	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
 
-	err := cmd.Execute(t.Context(), cmdCtx, nil)
+	err := cmd.Execute(t.Context(), cmdCtx, botcommand.CalendarParams{})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

@@ -107,7 +107,7 @@ func sendYouTubeHandoffFixture(t *testing.T) youtubeHandoffFixture {
 	require.NoError(t, engine.sendFrozenDelivery(ctx, &attempt))
 
 	result := newDeliveryDispatchResult(1)
-	require.True(t, engine.completeLifecycleSent(ctx, &attempt, store.DeliveryModePerRoom, &result))
+	require.True(t, engine.completeLifecycleSent(ctx, &attempt, &result))
 	require.Len(t, sender.ids, 1)
 
 	require.NoError(t, newOutboxAggregateProjector(store.NewDeliveryRepository(pool, logger)).Project(ctx, result.TouchedOutboxIDs))

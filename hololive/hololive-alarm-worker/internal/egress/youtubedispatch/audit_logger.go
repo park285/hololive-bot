@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
-	deliverytimeline "github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
@@ -20,28 +19,25 @@ const (
 	sendResultSuccess = "success"
 	sendResultFailure = "failure"
 
-	deliveryModeGrouped = string(store.DeliveryModeGrouped)
-	deliveryModePerRoom = string(store.DeliveryModePerRoom)
+	deliveryModeGrouped = "grouped"
+	deliveryModePerRoom = "per_room"
 )
 
 type AuditLogger struct {
-	telemetry *telemetry.Repository
-	delivery  *store.DeliveryRepository
-	logger    *slog.Logger
-	config    Config
+	delivery *store.DeliveryRepository
+	logger   *slog.Logger
+	config   Config
 }
 
 func newAuditLogger(
-	telemetryRepo *telemetry.Repository,
 	deliveryRepo *store.DeliveryRepository,
 	logger *slog.Logger,
 	config *Config,
 ) *AuditLogger {
 	return &AuditLogger{
-		telemetry: telemetryRepo,
-		delivery:  deliveryRepo,
-		logger:    logger,
-		config:    *config,
+		delivery: deliveryRepo,
+		logger:   logger,
+		config:   *config,
 	}
 }
 
@@ -156,59 +152,24 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResults(ctx context.Cont
 		return nil
 	}
 
-	timelinesByOutboxID, err := al.loadFinalizedCommunityShortsTimelines(ctx, outboxIDs, len(results))
-	if err != nil {
-		return fmt.Errorf("load finalized community shorts timelines: %w", err)
+	trackingErr := al.delivery.AttachTerminalCommunityShortsTracking(ctx, results)
+	if trackingErr != nil {
+		al.logger.Warn(CommunityShortsFinalResultTrackingUnavailableMessage, slog.Any("outbox_ids", outboxIDs), slog.Any("error", trackingErr))
 	}
 
 	finalizedAt := time.Now().UTC()
 
 	for i := range results {
-		al.logFinalizedCommunityShortsOutboxResultWithTimeline(&results[i], timelinesByOutboxID, finalizedAt)
+		timing := alarmtiming.Snapshot{}
+
+		if trackingErr == nil {
+			timing = finalizedCommunityShortsAlarmTiming(&results[i])
+		}
+
+		al.logFinalizedCommunityShortsOutboxResult(&results[i], finalizedAt, timing)
 	}
 
 	return nil
-}
-
-func (al *AuditLogger) loadFinalizedCommunityShortsTimelines(
-	ctx context.Context,
-	outboxIDs []int64,
-	resultCount int,
-) (map[int64]deliverytimeline.PostDeliveryTimeline, error) {
-	timelinesByOutboxID := make(map[int64]deliverytimeline.PostDeliveryTimeline, resultCount)
-
-	if al.telemetry == nil {
-		return timelinesByOutboxID, nil
-	}
-
-	timelines, err := al.telemetry.ListPostDeliveryTimelinesByOutboxIDs(ctx, outboxIDs)
-	if err != nil {
-		return nil, fmt.Errorf("list post delivery timelines by outbox ids: %w", err)
-	}
-
-	for i := range timelines {
-		if timelines[i].OutboxID == 0 {
-			continue
-		}
-
-		timelinesByOutboxID[timelines[i].OutboxID] = timelines[i]
-	}
-
-	return timelinesByOutboxID, nil
-}
-
-func (al *AuditLogger) logFinalizedCommunityShortsOutboxResultWithTimeline(
-	result *store.TerminalCommunityShortsOutboxResult,
-	timelinesByOutboxID map[int64]deliverytimeline.PostDeliveryTimeline,
-	finalizedAt time.Time,
-) {
-	timing := alarmtiming.Build(nil, result.SentAt)
-	if timeline, ok := timelinesByOutboxID[result.OutboxID]; ok {
-		result.LatencyClassification = timeline.LatencyClassification
-		timing = communityShortsAlarmTimingForTimeline(&timeline)
-	}
-
-	al.logFinalizedCommunityShortsOutboxResult(result, finalizedAt, timing)
 }
 
 func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
@@ -257,8 +218,6 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
 	if result.AggregatedFailReason != "" {
 		attrs = append(attrs, slog.String(FieldFailureReason, result.AggregatedFailReason))
 	}
-
-	attrs = appendLatencyClassificationLogAttr(attrs, &result.LatencyClassification)
 
 	al.logger.Info(CommunityShortsDeliveryAuditMessage, attrs...)
 }

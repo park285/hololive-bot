@@ -242,12 +242,10 @@ func TestDecideDoesNotExposeAnInvalidRedirectLocation(t *testing.T) {
 		w.WriteHeader(http.StatusTemporaryRedirect)
 	})
 	_, err := client.Decide(t.Context(), validRequest())
-	require.ErrorIs(t, err, ErrUnavailable)
 
-	urlErr, ok := errors.AsType[*url.Error](err)
+	status, ok := errors.AsType[*StatusError](err)
 	require.True(t, ok)
-	require.Equal(t, baseURL, urlErr.URL)
-	requireNoKeyInDiagnostics(t, urlErr)
+	require.Equal(t, http.StatusTemporaryRedirect, status.HTTPStatus)
 	requireNoKeyInDiagnostics(t, err)
 }
 
@@ -433,7 +431,7 @@ func TestDecideDoesNotReplayRefusedHTTP2Stream(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnavailable)
 }
 
-func TestDecideCapsResponseBeforeSDKDecode(t *testing.T) {
+func TestDecideCapsResponseBeforeDecode(t *testing.T) {
 	t.Parallel()
 
 	for _, status := range []int{http.StatusOK, http.StatusBadRequest} {

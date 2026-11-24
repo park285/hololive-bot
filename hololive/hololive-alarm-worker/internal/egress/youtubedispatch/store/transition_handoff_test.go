@@ -57,7 +57,7 @@ func sendHandoffTestUnit(
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, begin.Outcome)
 
-	completed, err := transition.CompleteSent(t.Context(), operation, DeliveryModePerRoom, admission)
+	completed, err := transition.CompleteSent(t.Context(), operation, admission)
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, completed.Outcome)
 
@@ -198,7 +198,7 @@ func TestCompleteSentRejectsAdmissionForAnotherGeneration(t *testing.T) {
 	operation, _, err := transition.BeginSending(ctx, prepared.ActiveRows, outboxes)
 	require.NoError(t, err)
 
-	completed, err := transition.CompleteSent(ctx, operation, DeliveryModePerRoom, admission)
+	completed, err := transition.CompleteSent(ctx, operation, admission)
 	require.NoError(t, err)
 	require.Equal(t, ApplyConflict, completed.Outcome)
 
@@ -405,7 +405,7 @@ func resendHandoffTestUnit(t *testing.T, pool *pgxpool.Pool, transition *Transit
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, begin.Outcome)
 
-	resent, err := transition.CompleteSent(ctx, operation, DeliveryModePerRoom, HandoffAdmission{
+	resent, err := transition.CompleteSent(ctx, operation, HandoffAdmission{
 		RequestBaseID: frozen.BaseID, RequestGeneration: frozen.Generation, IrisRequestID: "iris:resent", Horizon: testHandoffHorizon,
 	})
 	require.NoError(t, err)

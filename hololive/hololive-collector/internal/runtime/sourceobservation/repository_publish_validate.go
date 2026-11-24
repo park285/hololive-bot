@@ -62,12 +62,9 @@ func validatePublishBatchObservation(input *PublishBatchInput, index int, seen m
 		return fmt.Errorf("%w: observation %d lease proof mismatch", ErrInvalidEnvelope, index)
 	}
 
-	canonicalPayload, err := observation.ValidateAndCanonicalPayload()
-	if err != nil {
+	if err := observation.ValidatePrepared(); err != nil {
 		return fmt.Errorf("%w: observation %d: %w", ErrInvalidEnvelope, index, err)
 	}
-
-	observation.Payload = canonicalPayload
 
 	identity := observationIdentity(observation)
 	if _, ok := seen[identity]; ok {

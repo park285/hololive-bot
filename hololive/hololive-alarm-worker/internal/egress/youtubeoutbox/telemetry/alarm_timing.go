@@ -1,27 +1,10 @@
 package telemetry
 
 import (
-	"strings"
 	"time"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 )
-
-func communityShortsAlarmTimingForTelemetryRow(row *YouTubeNotificationDeliveryTelemetry) alarmtiming.Snapshot {
-	return CommunityShortsAlarmTimingForTelemetryRow(row)
-}
-
-func CommunityShortsAlarmTimingForTelemetryRow(row *YouTubeNotificationDeliveryTelemetry) alarmtiming.Snapshot {
-	alarmSentAt := row.AlarmSentAt
-	if alarmSentAt == nil && strings.EqualFold(strings.TrimSpace(row.SendResult), "success") && !row.EventAt.IsZero() {
-		eventAt := row.EventAt.UTC()
-
-		alarmSentAt = &eventAt
-	}
-
-	return CommunityShortsAlarmTimingForTracking(row.ActualPublishedAt, alarmSentAt, row.AlarmLatencyMillis)
-}
 
 func CommunityShortsAlarmTimingForTracking(
 	actualPublishedAt *time.Time,
@@ -30,7 +13,9 @@ func CommunityShortsAlarmTimingForTracking(
 ) alarmtiming.Snapshot {
 	timing := alarmtiming.Build(actualPublishedAt, alarmSentAt)
 	if timing.AlarmLatencyMillis == nil && alarmLatencyMillis != nil {
-		timing.AlarmLatencyMillis = timeline.ClonePostLatencyInt64(alarmLatencyMillis)
+		latency := *alarmLatencyMillis
+
+		timing.AlarmLatencyMillis = &latency
 	}
 
 	return timing

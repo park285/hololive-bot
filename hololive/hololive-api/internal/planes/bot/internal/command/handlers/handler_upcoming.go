@@ -28,12 +28,11 @@ func (c *UpcomingCommand) Description() string {
 	return "예정된 방송 목록"
 }
 
-func (c *UpcomingCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
+func (c *UpcomingCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.UpcomingParams) error {
 	options := parseUpcomingOptions(params)
 
-	memberName, hasMember := params[paramMember].(string)
-	if hasMember && memberName != "" {
-		if err := c.executeMemberUpcoming(ctx, cmdCtx.Room, memberName, options.hours); err != nil {
+	if params.Member != "" {
+		if err := c.executeMemberUpcoming(ctx, cmdCtx.Room, params.Member, options.hours); err != nil {
 			return fmt.Errorf("execute member upcoming: %w", err)
 		}
 
@@ -54,9 +53,8 @@ type upcomingOptions struct {
 	displayLimit int
 }
 
-func parseUpcomingOptions(params map[string]any) upcomingOptions {
-	showAll := boolParam(params, "all")
-	displayLimit := normalizeUpcomingDisplayLimit(intParam(params, "limit", 0), showAll)
+func parseUpcomingOptions(params botcommand.UpcomingParams) upcomingOptions {
+	displayLimit := normalizeUpcomingDisplayLimit(params.Limit, params.All)
 
 	return upcomingOptions{
 		hours:        upcomingHours,

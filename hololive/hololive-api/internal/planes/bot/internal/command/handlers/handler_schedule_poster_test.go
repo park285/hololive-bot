@@ -26,26 +26,19 @@ import (
 )
 
 type schedulePosterStub struct {
-	selected    cardtemplate.ID
-	templateErr error
-	memberID    int
-	schedule    scheduleposter.PublishedSchedule
-	found       bool
-	err         error
-	channelID   string
-	day         time.Time
+	selected  cardtemplate.ID
+	memberID  int
+	schedule  scheduleposter.PublishedSchedule
+	found     bool
+	err       error
+	channelID string
+	day       time.Time
 }
 
-func (s *schedulePosterStub) PublishedRows(_ context.Context, channelID string, day time.Time) (scheduleposter.PublishedSchedule, bool, error) {
-	s.channelID, s.day = channelID, day
+func (s *schedulePosterStub) PublishedMemberRows(_ context.Context, memberID int, channelID string, day time.Time) (scheduleposter.PublishedSchedule, cardtemplate.ID, bool, error) {
+	s.memberID, s.channelID, s.day = memberID, channelID, day
 
-	return s.schedule, s.found, s.err
-}
-
-func (s *schedulePosterStub) MemberCardTemplate(_ context.Context, id int) (cardtemplate.ID, error) {
-	s.memberID = id
-
-	return s.selected, s.templateErr
+	return s.schedule, s.selected, s.found, s.err
 }
 
 type scheduleCardStub struct {
@@ -116,7 +109,7 @@ func schedulePosterDeps(t *testing.T, posters handlercore.SchedulePosterReader, 
 	}
 }
 
-func executeSchedulePoster(t *testing.T, deps *handlercore.Dependencies, params map[string]any) error {
+func executeSchedulePoster(t *testing.T, deps *handlercore.Dependencies, params botcommand.SchedulePosterParams) error {
 	t.Helper()
 
 	return NewSchedulePosterCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, params)
@@ -141,7 +134,7 @@ func TestSchedulePosterCommandSendsRenderedCardAsPNG(t *testing.T) {
 
 	cmd.now = func() time.Time { return time.Date(2026, time.November, 10, 16, 30, 0, 0, time.UTC) }
 
-	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{paramMember: "미코"}); err != nil {
+	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.SchedulePosterParams{Member: "미코"}); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
@@ -163,12 +156,12 @@ func TestSchedulePosterCommandReportsInputAndLookupErrorsWithSeededText(t *testi
 
 	for _, tc := range []struct {
 		name    string
-		params  map[string]any
+		params  botcommand.SchedulePosterParams
 		posters *schedulePosterStub
 		want    string
 	}{
-		{name: "member omitted", params: map[string]any{}, posters: &schedulePosterStub{}, want: "❌ 멤버 이름을 입력해주세요.\n예) !스케쥴 소피아"},
-		{name: "lookup failed", params: map[string]any{paramMember: "미코"}, posters: &schedulePosterStub{err: errors.New("db down")}, want: "❌ 일정 포스터 조회 중 오류가 발생했습니다."},
+		{name: "member omitted", params: botcommand.SchedulePosterParams{}, posters: &schedulePosterStub{}, want: "❌ 멤버 이름을 입력해주세요.\n예) !스케쥴 소피아"},
+		{name: "lookup failed", params: botcommand.SchedulePosterParams{Member: "미코"}, posters: &schedulePosterStub{err: errors.New("db down")}, want: "❌ 일정 포스터 조회 중 오류가 발생했습니다."},
 	} {
 		replies := &posterReplies{}
 		cards := &scheduleCardStub{}
@@ -193,7 +186,7 @@ func TestSchedulePosterCommandReportsInputAndLookupErrorsWithSeededText(t *testi
 func TestSchedulePosterCommandRejectsEmptyNotFoundText(t *testing.T) {
 	replies := &posterReplies{}
 
-	err := executeSchedulePoster(t, schedulePosterDeps(t, &schedulePosterStub{}, &scheduleCardStub{}, replies, nil), map[string]any{paramMember: "미코"})
+	err := executeSchedulePoster(t, schedulePosterDeps(t, &schedulePosterStub{}, &scheduleCardStub{}, replies, nil), botcommand.SchedulePosterParams{Member: "미코"})
 	if err == nil || len(replies.messages) != 0 {
 		t.Fatalf("Execute = %v, messages = %q; want error and no message", err, replies.messages)
 	}
@@ -206,7 +199,7 @@ func TestSchedulePosterCommandExplainsMissingRowsFromSeededString(t *testing.T) 
 
 	deps.Formatter = newSeededTestFormatter(t)
 
-	if err := executeSchedulePoster(t, deps, map[string]any{paramMember: "미코"}); err != nil {
+	if err := executeSchedulePoster(t, deps, botcommand.SchedulePosterParams{Member: "미코"}); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
@@ -221,7 +214,7 @@ func TestSchedulePosterCommandReturnsRenderFailureWithoutAnyReply(t *testing.T) 
 	replies := &posterReplies{}
 	deps := schedulePosterDeps(t, &schedulePosterStub{schedule: publishedMikoSchedule(), found: true}, &scheduleCardStub{err: renderErr}, replies, nil)
 
-	err := executeSchedulePoster(t, deps, map[string]any{paramMember: "미코"})
+	err := executeSchedulePoster(t, deps, botcommand.SchedulePosterParams{Member: "미코"})
 	if !errors.Is(err, renderErr) {
 		t.Fatalf("Execute error = %v, want render failure", err)
 	}
@@ -234,7 +227,7 @@ func TestSchedulePosterCommandReturnsRenderFailureWithoutAnyReply(t *testing.T) 
 func TestSchedulePosterCommandReturnsSendFailures(t *testing.T) {
 	posters := &schedulePosterStub{schedule: publishedMikoSchedule(), found: true}
 
-	err := executeSchedulePoster(t, schedulePosterDeps(t, posters, &scheduleCardStub{data: [][]byte{[]byte("card")}}, &posterReplies{}, transport.ErrReplyOutcomeUnknown), map[string]any{paramMember: "미코"})
+	err := executeSchedulePoster(t, schedulePosterDeps(t, posters, &scheduleCardStub{data: [][]byte{[]byte("card")}}, &posterReplies{}, transport.ErrReplyOutcomeUnknown), botcommand.SchedulePosterParams{Member: "미코"})
 	if !transport.IsReplyOutcomeUnknown(err) {
 		t.Fatalf("Execute error = %v, want reply outcome unknown", err)
 	}
@@ -254,7 +247,7 @@ func TestSchedulePosterUsesNamedMemberOnSharedChannel(t *testing.T) {
 
 	deps.Matcher = matcher.NewMatcher(provider, slog.New(slog.DiscardHandler))
 
-	if err := executeSchedulePoster(t, deps, map[string]any{paramMember: "유키"}); err != nil {
+	if err := executeSchedulePoster(t, deps, botcommand.SchedulePosterParams{Member: "유키"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -262,7 +255,7 @@ func TestSchedulePosterUsesNamedMemberOnSharedChannel(t *testing.T) {
 		t.Fatalf("lookup ID=%d, rendered=%+v, replies=%+v", posters.memberID, cards.member, replies)
 	}
 
-	if err := executeSchedulePoster(t, deps, map[string]any{paramMember: "Group"}); err != nil {
+	if err := executeSchedulePoster(t, deps, botcommand.SchedulePosterParams{Member: "Group"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -296,7 +289,12 @@ func TestSchedulePosterCommandSwitchesMemberTemplateAndSendsPagesInOrder(t *test
 			t.Fatalf("%s: not a schedule poster command", tc.label)
 		}
 
-		err := executeSchedulePoster(t, deps, command.Params)
+		params, ok := command.Params.(botcommand.SchedulePosterParams)
+		if !ok {
+			t.Fatalf("%s: params = %T", tc.label, command.Params)
+		}
+
+		err := executeSchedulePoster(t, deps, params)
 
 		if err != nil || cards.member == nil || cards.member.ChannelID != testChannelMiko || cards.template != tc.template {
 			t.Fatalf("%s: member = %+v, template = %q, err = %v", tc.label, cards.member, cards.template, err)
@@ -311,18 +309,6 @@ func TestSchedulePosterCommandSwitchesMemberTemplateAndSendsPagesInOrder(t *test
 				t.Fatalf("%s: page %d = %v, want %v", tc.label, i+1, page, cards.data[i])
 			}
 		}
-	}
-}
-
-func TestSchedulePosterCommandDoesNotRenderWhenMemberTemplateReadFails(t *testing.T) {
-	readErr := errors.New("template read failed")
-	posters := &schedulePosterStub{schedule: publishedMikoSchedule(), found: true, templateErr: readErr}
-	cards := &scheduleCardStub{}
-	deps := schedulePosterDeps(t, posters, cards, &posterReplies{}, nil)
-	err := executeSchedulePoster(t, deps, map[string]any{paramMember: "미코"})
-
-	if !errors.Is(err, readErr) || cards.calls != 0 || posters.memberID != 37 {
-		t.Fatalf("error = %v, render calls = %d, template member = %d", err, cards.calls, posters.memberID)
 	}
 }
 
@@ -345,7 +331,7 @@ func TestSchedulePosterSendsDenseScheduleAsOneCompleteFile(t *testing.T) {
 	replies := &posterReplies{}
 	deps := schedulePosterDeps(t, &schedulePosterStub{found: true, selected: cardtemplate.Orbit, schedule: schedule}, render.NewScheduleCardRenderer(nil), replies, nil)
 
-	if err := executeSchedulePoster(t, deps, map[string]any{paramMember: "미코"}); err != nil {
+	if err := executeSchedulePoster(t, deps, botcommand.SchedulePosterParams{Member: "미코"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -371,7 +357,7 @@ func TestSchedulePosterSendsDenseScheduleAsOneCompleteFile(t *testing.T) {
 func TestSchedulePosterFileFailureDoesNotSendAnImage(t *testing.T) {
 	replies := &posterReplies{}
 	deps := schedulePosterDeps(t, &schedulePosterStub{found: true, schedule: publishedMikoSchedule()}, &scheduleCardStub{err: schedulecard.ErrRenderBudget}, replies, transport.ErrReplyOutcomeUnknown)
-	err := executeSchedulePoster(t, deps, map[string]any{paramMember: "미코"})
+	err := executeSchedulePoster(t, deps, botcommand.SchedulePosterParams{Member: "미코"})
 
 	if !transport.IsReplyOutcomeUnknown(err) || len(replies.files) != 1 || len(replies.images) != 0 {
 		t.Fatalf("err=%v, replies=%+v", err, replies)

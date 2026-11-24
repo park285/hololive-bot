@@ -57,7 +57,7 @@ func (c *Client) UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) (do
 		return result, fmt.Errorf("update alarm advance minutes: validate response: %w", responseErr)
 	}
 
-	data, err := decodeAPIEnvelope[contractsalarm.MinutesResponse](contractsalarm.SettingsPath, resp.Body)
+	data, err := readAPIEnvelope[contractsalarm.MinutesResponse](contractsalarm.SettingsPath, resp.Body)
 	if err != nil {
 		c.setTargetMinutes(nil)
 

@@ -88,7 +88,7 @@ API의 감사 어휘 cutover까지 포함한 315–321과 호환 API·collector�
 
 Payload는 raw/canonical JSON과 PostgreSQL `jsonb::text` 각각 기존 1MiB 상한을 만족해야 합니다. 문자열 내부 구분자·escape와 canonical 정수 규약을 구별하여 저장 크기를 판정하며, 임의 slack·절단·DB 상한 확대는 없습니다. 초과 원인은 `ErrPayloadTooLarge`로 보존하고 기존 `response_too_large/RESOURCE_LIMIT`의 bounded DEFER를 사용합니다. scope/cursor 오류를 이 분류로 바꾸거나 INTERNAL fatal로 승격하지 않습니다.
 
-Repository는 소유한 입력 복사본에서 `ValidateAndCanonicalPayload`가 반환한 검증 완료 payload를 그대로 저장합니다. 원본 표현이 typed 정규화로 달라지는 경우에도 저장 크기와 digest가 같은 표현을 가리키며 caller bytes·identity·checkpoint binding·중복/충돌 guard는 유지합니다. 정상 stream 종료의 `rows.Err()`는 completeness 검사보다 먼저 반환하고, 앞선 Scan·행 불변식 오류의 우선순위와 배치 전체 rollback은 유지합니다.
+정규화·크기 제한·digest 계산은 `PrepareEnvelope` 한 곳이 맡습니다. Repository는 소유한 입력 복사본에서 `ValidatePrepared`로 envelope 구조와 payload bytes·`payload_sha256` 일치만 확인하고 그 bytes를 그대로 저장합니다. 준비 뒤 바뀐 payload는 `ErrInvalidEnvelope`로 배치 전체를 거부하며, identity·checkpoint binding·중복/충돌 guard는 유지합니다. 정상 stream 종료의 `rows.Err()`는 completeness 검사보다 먼저 반환하고, 앞선 Scan·행 불변식 오류의 우선순위와 배치 전체 rollback은 유지합니다.
 
 Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 경우에만 candidate가 되며 매 cycle 무조건 enqueue하지 않습니다. Local queue FULL은 성공이 아니라 explicit `EnqueueFull`이며 해당 discovery cycle의 남은 admission을 중단합니다. Scheduler instance는 single-use입니다. Start는 NEW에서만 성공하고 Stop 또는 fatal 이후 STOPPED instance는 재사용하지 않습니다.
 

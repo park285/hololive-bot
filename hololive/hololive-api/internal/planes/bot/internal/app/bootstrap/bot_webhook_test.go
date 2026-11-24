@@ -9,36 +9,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v5/webhook"
 	"github.com/park285/iris-client-go/v5/webhooksign"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valkey-io/valkey-go"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestBuildDurableBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *testing.T) {
-	const (
-		token     = "test-token"
-		messageID = "message-id-malformed-first"
-	)
+	const messageID = "message-id-malformed-first"
 
 	admitter := &recordingWebhookAdmitter{messages: make(chan *webhook.Message, 1)}
 	handler := buildDurableBotWebhookHandlerForTest(t, admitter)
 
-	malformedRequest := newSignedBotWebhookTestRequest(t, token, messageID, "{invalid-json")
+	malformedRequest := newSignedBotWebhookTestRequest(t, messageID, "{invalid-json")
 	malformedResponse := httptest.NewRecorder()
 	handler.ServeHTTP(malformedResponse, malformedRequest)
 	assert.Equal(t, http.StatusBadRequest, malformedResponse.Code)
 
 	validRequest := newSignedBotWebhookTestRequest(
 		t,
-		token,
 		messageID,
 		`{"messageId":"message-id-malformed-first","text":"hello","room":"room-1","sender":"tester","userId":"user-1"}`,
 	)
@@ -57,11 +52,9 @@ func TestBuildDurableBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *te
 }
 
 func TestBuildDurableBotWebhookHandlerWiresPrometheusMetrics(t *testing.T) {
-	const token = "test-token"
-
 	handler := buildDurableBotWebhookHandlerForTest(t, &recordingWebhookAdmitter{messages: make(chan *webhook.Message, 1)})
 
-	request := newSignedBotWebhookTestRequest(t, token, "message-id-metrics", "{invalid-json")
+	request := newSignedBotWebhookTestRequest(t, "message-id-metrics", "{invalid-json")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 
@@ -73,21 +66,7 @@ func TestBuildDurableBotWebhookHandlerWiresPrometheusMetrics(t *testing.T) {
 func TestBuildDurableBotWebhookHandlerRequiresHMAC(t *testing.T) {
 	const token = "test-token"
 
-	valkeyClient, _ := sharedtestutil.NewTestValkeyClient(t)
-	cacheClient := cachemocks.NewLenientClient()
-
-	cacheClient.GetClientFunc = func() valkey.Client { return valkeyClient }
-
-	appConfig := testDurableWebhookConfig()
-
-	handler, err := BuildDurableBotWebhookHandler(
-		appConfig,
-		&recordingWebhookAdmitter{messages: make(chan *webhook.Message, 1)},
-		BotWebhookRuntimeDependencies{Cache: cacheClient},
-		slog.New(slog.DiscardHandler),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, handler.Close()) })
+	handler := buildDurableBotWebhookHandlerForTest(t, &recordingWebhookAdmitter{messages: make(chan *webhook.Message, 1)})
 
 	request := newBotWebhookTestRequest(
 		t.Context(),
@@ -104,15 +83,16 @@ func TestBuildDurableBotWebhookHandlerRequiresHMAC(t *testing.T) {
 func buildDurableBotWebhookHandlerForTest(t *testing.T, admitter webhook.MessageAdmitter) *webhook.Handler {
 	t.Helper()
 
-	valkeyClient, _ := sharedtestutil.NewTestValkeyClient(t)
-	cacheClient := cachemocks.NewLenientClient()
+	return newDurableTestHandler(t, admitter, dbtest.NewPool(t))
+}
 
-	cacheClient.GetClientFunc = func() valkey.Client { return valkeyClient }
+func newDurableTestHandler(t *testing.T, admitter webhook.MessageAdmitter, pool *pgxpool.Pool) *webhook.Handler {
+	t.Helper()
 
 	handler, err := BuildDurableBotWebhookHandler(
 		testDurableWebhookConfig(),
 		admitter,
-		BotWebhookRuntimeDependencies{Cache: cacheClient},
+		pool,
 		slog.New(slog.DiscardHandler),
 	)
 	require.NoError(t, err)
@@ -123,7 +103,7 @@ func buildDurableBotWebhookHandlerForTest(t *testing.T, admitter webhook.Message
 
 func testDurableWebhookConfig() *apiconfig.BotPlaneConfig {
 	return &apiconfig.BotPlaneConfig{
-		Iris: settings.IrisConfig{WebhookToken: "test-token"},
+		Iris: settings.IrisConfig{WebhookToken: testWebhookToken},
 		Webhook: apiconfig.WebhookConfig{
 			MaxBodyBytes: 1024,
 			DedupTimeout: 500 * time.Millisecond,
@@ -171,11 +151,13 @@ func newBotWebhookTestRequest(ctx context.Context, token, messageID, body string
 	return request
 }
 
-func newSignedBotWebhookTestRequest(t *testing.T, token, messageID, body string) *http.Request {
+const testWebhookToken = "test-token"
+
+func newSignedBotWebhookTestRequest(t *testing.T, messageID, body string) *http.Request {
 	t.Helper()
 
-	request := newBotWebhookTestRequest(t.Context(), token, messageID, body)
-	require.NoError(t, webhooksign.SignRequest(request, token, []byte(body)))
+	request := newBotWebhookTestRequest(t.Context(), testWebhookToken, messageID, body)
+	require.NoError(t, webhooksign.SignRequest(request, testWebhookToken, []byte(body)))
 
 	return request
 }

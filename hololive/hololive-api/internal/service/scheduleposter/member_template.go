@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -37,7 +38,7 @@ func (s *Store) SetMemberCardTemplate(ctx context.Context, memberID int, expecte
 		return ErrInvalidCardTemplate
 	}
 
-	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
+	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
 		locked, err := tx.Exec(ctx, lockTemplateMemberSQL, memberID)
 		if err != nil {
 			return fmt.Errorf("lock template member: %w", err)

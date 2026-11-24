@@ -2,14 +2,79 @@ package cache
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/tls"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCacheServiceConnectsWithDirectTLSCredentials(t *testing.T) {
+	t.Parallel()
+
+	fixture := httptest.NewTLSServer(nil)
+	certificate := fixture.TLS.Certificates[0]
+	fixture.Close()
+
+	caFile := filepath.Join(t.TempDir(), "ca.pem")
+	require.NoError(t, os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Certificate[0]}), 0o600))
+
+	server := miniredis.NewMiniRedis()
+	require.NoError(t, server.StartTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}))
+	t.Cleanup(server.Close)
+
+	password := rand.Text()
+	server.RequireUserAuth("cache", password)
+
+	port, err := strconv.Atoi(server.Port())
+	require.NoError(t, err)
+
+	service, err := NewCacheService(t.Context(), Config{
+		Host: server.Host(), Port: port, DB: 2, Username: "cache", Password: password, TLSCAFile: caFile, DisableCache: true,
+	}, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, service.Close()) })
+
+	require.NoError(t, service.Set(t.Context(), "route", 42, 0))
+
+	value, err := server.DB(2).Get("route")
+	require.NoError(t, err)
+	assert.Equal(t, "42", value)
+}
+
+func TestCacheClientDialsDevelopmentUnixSocket(t *testing.T) {
+	t.Parallel()
+
+	socket := filepath.Join(t.TempDir(), "valkey.sock")
+	listener, err := new(net.ListenConfig).Listen(t.Context(), "unix", socket)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, listener.Close()) })
+
+	opts, err := cacheClientOptions(Config{SocketPath: socket}, socket)
+	require.NoError(t, err)
+	require.NotNil(t, opts.DialCtxFn)
+
+	conn, err := opts.DialCtxFn(t.Context(), socket, &opts.Dialer, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, conn.Close()) })
+
+	addr := conn.RemoteAddr()
+	require.NotNil(t, addr)
+	assert.Equal(t, "unix", addr.Network())
+	assert.Equal(t, socket, addr.String())
+}
 
 func TestCacheServiceScanKeyPagesAdditional(t *testing.T) {
 	t.Parallel()

@@ -38,7 +38,7 @@ func (c *EventGradeCommand) CheckDependencies() error {
 	return nil
 }
 
-func (c *EventGradeCommand) Execute(ctx context.Context, cmd *botcommand.CommandContext, params map[string]any) error {
+func (c *EventGradeCommand) Execute(ctx context.Context, cmd *botcommand.CommandContext, params botcommand.EventGradeParams) error {
 	text := c.responseText(ctx, cmd, params)
 	if err := c.Deps().SendMessage(ctx, cmd.Room, text); err != nil {
 		return fmt.Errorf("send event grade response: %w", err)
@@ -47,11 +47,10 @@ func (c *EventGradeCommand) Execute(ctx context.Context, cmd *botcommand.Command
 	return nil
 }
 
-func (c *EventGradeCommand) responseText(ctx context.Context, cmd *botcommand.CommandContext, params map[string]any) string {
-	score, scoreOK := params["score"].(int64)
-	region, regionOK := params["region"].(contract.GradeRegion)
+func (c *EventGradeCommand) responseText(ctx context.Context, cmd *botcommand.CommandContext, params botcommand.EventGradeParams) string {
+	score, region := params.Score, params.Region
 
-	if !scoreOK || !regionOK || !region.Valid() || score <= 0 {
+	if !region.Valid() || score <= 0 {
 		return "사용법: !이벤트등급 <점수> [jp|us|global] (기본: jp)"
 	}
 

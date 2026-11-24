@@ -80,7 +80,12 @@ case "${format}" in
     esac
     ;;
   %g) echo 0 ;;
-  %a) echo 0755 ;;
+  %a)
+    case "${path}" in
+      */root-group-writable) echo 0775 ;;
+      *) echo 0755 ;;
+    esac
+    ;;
   *)
     echo "unsupported stat format: ${format}" >&2
     exit 2
@@ -106,6 +111,27 @@ if PATH="${mockbin}:${PATH}" "${VERIFY}" "${mock_safe_file}" >/dev/null 2>&1; th
   pass "root-owned parent chain accepted"
 else
   record_fail "root-owned parent chain should be accepted"
+fi
+
+mock_group_root="${TMP_DIR}/root-group-writable"
+mkdir -p "${mock_group_root}"
+printf '#!/bin/sh\n' > "${mock_group_root}/compose.sh"
+if PATH="${mockbin}:${PATH}" "${VERIFY}" "${mock_group_root}/compose.sh" >/dev/null 2>&1; then
+  record_fail "root-group-writable parent directory must be rejected"
+else
+  pass "root-group-writable parent directory rejected"
+fi
+
+mock_acl_root="${TMP_DIR}/root-owned-acl"
+mkdir -p "${mock_acl_root}"
+printf '#!/bin/sh\n' > "${mock_acl_root}/compose.sh"
+python3 -I -S -c 'import os, struct, sys
+entries = [(0x01, 7, 0xFFFFFFFF), (0x02, 7, 65534), (0x04, 5, 0xFFFFFFFF), (0x10, 7, 0xFFFFFFFF), (0x20, 5, 0xFFFFFFFF)]
+os.setxattr(sys.argv[1], "system.posix_acl_access", struct.pack("<I", 2) + b"".join(struct.pack("<HHI", *entry) for entry in entries))' "${mock_acl_root}"
+if PATH="${mockbin}:${PATH}" "${VERIFY}" "${mock_acl_root}/compose.sh" >/dev/null 2>&1; then
+  record_fail "parent directory with a user write ACL must be rejected"
+else
+  pass "parent directory with a user write ACL rejected"
 fi
 
 if (( failures > 0 )); then

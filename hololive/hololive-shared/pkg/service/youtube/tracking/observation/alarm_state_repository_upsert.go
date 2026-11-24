@@ -12,15 +12,6 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-const alarmStateFinalAlarmSentExpr = `CASE
-                WHEN youtube_community_shorts_alarm_states.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
-                WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_community_shorts_alarm_states.alarm_sent_at
-                WHEN EXCLUDED.alarm_sent_at < youtube_community_shorts_alarm_states.alarm_sent_at THEN EXCLUDED.alarm_sent_at
-                ELSE youtube_community_shorts_alarm_states.alarm_sent_at
-            END`
-
-var alarmStateDeliveryStatusExpr = buildAlarmStateDeliveryStatusExpr(alarmStateFinalAlarmSentExpr)
-
 func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsAlarmState) error {
 	if len(records) == 0 {
 		return nil
@@ -36,9 +27,7 @@ func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, record
 	}
 
 	now := yttimestamp.Normalize(time.Now())
-	query, args := buildAlarmStateUpsertQuery(normalized, now, alarmStateFinalAlarmSentExpr, alarmStateDeliveryStatusExpr)
-
-	if _, err := dbx.ExecSQL(ctx, r.db, "upsert alarm state batch: exec query", query, args...); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "upsert alarm state batch: exec query", upsertAlarmStateBatchSQL, alarmStateUpsertArgs(normalized, now)...); err != nil {
 		return fmt.Errorf("exec SQL: %w", err)
 	}
 
@@ -52,51 +41,29 @@ func normalizeAlarmStateBatchRecords(records []*domain.YouTubeCommunityShortsAla
 		}, mergeNormalizedAlarmState)
 }
 
-func buildAlarmStateUpsertQuery(
-	normalized []*domain.YouTubeCommunityShortsAlarmState,
-	now time.Time,
-	finalAlarmSentExpr string,
-	deliveryStatusExpr string,
-) (string, []any) {
-	const columnsPerRow = 10
-
-	args := make([]any, 0, len(normalized)*columnsPerRow)
-
-	var sb strings.Builder
-
-	sb.WriteString(buildAlarmStateUpsertQuerySQL)
+func alarmStateUpsertArgs(normalized []*domain.YouTubeCommunityShortsAlarmState, now time.Time) []any {
+	size := len(normalized)
+	kinds := make([]string, size)
+	postIDs := make([]string, size)
+	contentIDs := make([]string, size)
+	channelIDs := make([]string, size)
+	actualPublishedAts := make([]*time.Time, size)
+	detectedAts := make([]time.Time, size)
+	alarmSentAts := make([]*time.Time, size)
+	deliveryStatuses := make([]string, size)
 
 	for i, record := range normalized {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-
-		dbx.WriteRowPlaceholders(&sb, i, columnsPerRow)
-
-		args = append(args,
-			record.Kind,
-			record.PostID,
-			record.ContentID,
-			record.ChannelID,
-			record.ActualPublishedAt,
-			record.DetectedAt,
-			record.AlarmSentAt,
-			record.DeliveryStatus,
-			now,
-			now,
-		)
+		kinds[i] = string(record.Kind)
+		postIDs[i] = record.PostID
+		contentIDs[i] = record.ContentID
+		channelIDs[i] = record.ChannelID
+		actualPublishedAts[i] = record.ActualPublishedAt
+		detectedAts[i] = record.DetectedAt
+		alarmSentAts[i] = record.AlarmSentAt
+		deliveryStatuses[i] = string(record.DeliveryStatus)
 	}
 
-	sb.WriteString(buildAlarmStateUpsertQuery2SQL)
-	sb.WriteString(finalAlarmSentExpr)
-	sb.WriteString(`,
-            delivery_status = `)
-	sb.WriteString(deliveryStatusExpr)
-	sb.WriteString(`,
-            updated_at = EXCLUDED.updated_at
-    `)
-
-	return sb.String(), args
+	return []any{kinds, postIDs, contentIDs, channelIDs, actualPublishedAts, detectedAts, alarmSentAts, deliveryStatuses, now}
 }
 
 func normalizeAlarmState(record *domain.YouTubeCommunityShortsAlarmState) (*domain.YouTubeCommunityShortsAlarmState, error) {
@@ -185,15 +152,4 @@ func earliestAlarmStateTimestamp(existing, next *time.Time) *time.Time {
 	}
 
 	return existing
-}
-
-func buildAlarmStateDeliveryStatusExpr(alarmSentExpr string) string {
-	return fmt.Sprintf(`CASE
-                WHEN (%s) IS NOT NULL THEN '%s'
-                ELSE '%s'
-            END`,
-		alarmSentExpr,
-		domain.YouTubeCommunityShortsAlarmStateStatusSent,
-		domain.YouTubeCommunityShortsAlarmStateStatusDetected,
-	)
 }

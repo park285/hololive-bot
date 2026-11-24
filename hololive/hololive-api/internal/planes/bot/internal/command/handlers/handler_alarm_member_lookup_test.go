@@ -48,10 +48,7 @@ func TestAlarmAmbiguousMemberUsesAddExampleForEveryAction(t *testing.T) {
 				Logger: logger,
 			}
 
-			err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-				testParamAction: action,
-				paramMember:     testMemberAqua,
-			})
+			err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.AlarmParams{Action: action, Member: testMemberAqua})
 			require.NoError(t, err)
 			require.Len(t, sent, 1)
 			require.Contains(t, sent[0], "!알람 추가 ")
@@ -97,10 +94,7 @@ func TestAlarmGraduationBlocksOnlyAdd(t *testing.T) {
 				Logger: logger,
 			}
 
-			err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-				testParamAction: tc.action,
-				paramMember:     tc.member,
-			})
+			err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.AlarmParams{Action: tc.action, Member: tc.member})
 			require.NoError(t, err)
 			require.Empty(t, recorder.added)
 

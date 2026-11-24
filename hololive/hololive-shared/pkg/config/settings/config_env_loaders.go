@@ -21,35 +21,14 @@ func LoadValkeyConfig() (ValkeyConfig, error) {
 		return ValkeyConfig{}, fmt.Errorf("load CACHE_PASSWORD: %w", err)
 	}
 
-	sentinelPassword, err := sharedenv.StringOrSecretFile("CACHE_SENTINEL_PASSWORD")
-	if err != nil {
-		return ValkeyConfig{}, fmt.Errorf("load CACHE_SENTINEL_PASSWORD: %w", err)
-	}
-
-	masterSet := sharedenv.String("CACHE_SENTINEL_MASTER_SET", "")
-	defaultHost := "localhost"
-
-	if masterSet != "" {
-		defaultHost = ""
-	}
-
 	config := ValkeyConfig{
-		Host:              sharedenv.String("CACHE_HOST", defaultHost),
-		Port:              env.Int("CACHE_PORT", 6379),
-		Username:          sharedenv.String("CACHE_USERNAME", ""),
-		Password:          password,
-		DB:                env.Int("CACHE_DB", 0),
-		SocketPath:        sharedenv.String("CACHE_SOCKET_PATH", ""),
-		SentinelMasterSet: masterSet,
-		SentinelUsername:  sharedenv.String("CACHE_SENTINEL_USERNAME", ""),
-		SentinelPassword:  sentinelPassword,
-		TLSCAFile:         sharedenv.String("CACHE_TLS_CA_FILE", ""),
-	}
-	if addresses := sharedenv.String("CACHE_SENTINEL_ADDRS", ""); addresses != "" {
-		config.SentinelAddrs = strings.Split(addresses, ",")
-		for i := range config.SentinelAddrs {
-			config.SentinelAddrs[i] = strings.TrimSpace(config.SentinelAddrs[i])
-		}
+		Host:       sharedenv.String("CACHE_HOST", "localhost"),
+		Port:       env.Int("CACHE_PORT", 6379),
+		Username:   sharedenv.String("CACHE_USERNAME", ""),
+		Password:   password,
+		DB:         env.Int("CACHE_DB", 0),
+		SocketPath: sharedenv.String("CACHE_SOCKET_PATH", ""),
+		TLSCAFile:  sharedenv.String("CACHE_TLS_CA_FILE", ""),
 	}
 
 	if err := env.Err(); err != nil {

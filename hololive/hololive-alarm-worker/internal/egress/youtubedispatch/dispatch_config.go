@@ -22,10 +22,6 @@ type Config struct {
 	DeliverySendTimeout         time.Duration
 	SubscriberLookupParallelism int
 	AggregateSyncInterval       time.Duration
-	TelemetryPollInterval       time.Duration
-	TelemetryFlushBatch         int
-	TelemetryRetryBackoff       time.Duration
-	TelemetryRetention          time.Duration
 	HandoffHorizon              time.Duration
 }
 
@@ -52,10 +48,6 @@ func (c *Config) Validate() error {
 		{"delivery send timeout", c.DeliverySendTimeout > 0},
 		{"subscriber lookup parallelism", c.SubscriberLookupParallelism > 0},
 		{"aggregate sync interval", c.AggregateSyncInterval > 0},
-		{"telemetry poll interval", c.TelemetryPollInterval > 0},
-		{"telemetry flush batch", c.TelemetryFlushBatch > 0},
-		{"telemetry retry backoff", c.TelemetryRetryBackoff > 0},
-		{"telemetry retention", c.TelemetryRetention > 0},
 		{"handoff horizon", c.HandoffHorizon > 0},
 	}
 

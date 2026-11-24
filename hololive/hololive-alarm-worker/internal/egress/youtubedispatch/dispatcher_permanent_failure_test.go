@@ -13,7 +13,6 @@ import (
 	"github.com/park285/iris-client-go/v5/iris"
 
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -88,7 +87,7 @@ func TestDispatcherFlowCategorizesPermanentSentinel(t *testing.T) {
 				t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 			}
 
-			want := []string{startedFailureRecord(ytlifecycle.FailurePermanent, tt.lifecycleReason, 0, store.DeliveryModePerRoom)}
+			want := []string{startedFailureRecord(ytlifecycle.FailurePermanent, tt.lifecycleReason, 0)}
 			if got := transitionSpy(t, dispatcher).recordedStartedFailures(); !slices.Equal(got, want) {
 				t.Fatalf("started failures = %v, want %v", got, want)
 			}

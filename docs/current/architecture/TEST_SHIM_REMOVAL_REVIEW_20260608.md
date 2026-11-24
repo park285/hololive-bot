@@ -11,7 +11,7 @@
 
 1. `delivery_test_db_test.go`와 `dispatcher_integration_db_test.go`를 reflection 기반 fluent shim에서 명시 SQL helper로 교체한다.
 2. 테스트 호출부를 `db.Create(...).Error` 같은 형태에서 `insertDeliveryTestRows(db, ...).Error`, `firstDeliveryTestRow(db, ...)`, `findDeliveryTestRowsWhere(...)`, `updateDeliveryTestRowsWhere(...)` 형태로 전환한다.
-3. helper는 `pgxpool.Pool`을 직접 다룬다. primary 엔티(outbox/delivery/tracking/community-shorts/telemetry/alarm)는 명시적 type switch로 테이블·insert를 처리하고, test-local telemetry 모델(`deliveryTelemetryTest*Model`)은 `TableName()`/`db` 태그 기반 generic fallback(`deliveryTestTableName`, `insertDeliveryTestRowsGeneric`)으로 처리한다. read 경로는 pgxscan을 사용하므로 reflection이 완전히 제거되지는 않는다.
+3. helper는 `pgxpool.Pool`을 직접 다룬다. primary 엔티(outbox/delivery/tracking/community-shorts/alarm)는 명시적 type switch로 테이블·insert를 처리하고, 그 밖의 test-local 모델(`finalResultOutboxModel` 등)은 `TableName()`/`db` 태그 기반 generic fallback(`deliveryTestTableName`, `insertDeliveryTestRowsGeneric`)으로 처리한다. read 경로는 pgxscan을 사용하므로 reflection이 완전히 제거되지는 않는다.
 4. 기존 default 의미론은 유지한다.
    - `CreatedAt`, `UpdatedAt`, `NextAttemptAt` zero value는 `time.Now().UTC()`로 보정
    - `*time.Time`과 `time.Time`은 UTC 정규화

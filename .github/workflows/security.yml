@@ -64,21 +64,6 @@ jobs:
             shared-go/**/go.sum
             iris-client-go/go.sum
 
-      - name: Load checksummed Valkey adapter into the security workspace
-        working-directory: hololive-bot/hololive/hololive-api
-        env:
-          GOWORK: "off"
-          GOPROXY: https://proxy.golang.org
-          GOMODCACHE: ${{ runner.temp }}/valkey-adapter-modcache
-        run: |
-          module=github.com/park285/iris-client-go/adapters/valkeydedup
-          src="$(go mod download -json "${module}" | jq -er '.Dir')"
-          git diff --exit-code -- go.mod go.sum
-          dest="${GITHUB_WORKSPACE}/iris-client-go/adapters/valkeydedup"
-          test ! -e "${dest}"
-          mkdir -p "$(dirname "${dest}")"
-          cp -RT "${src}" "${dest}"
-
       - name: Prepare tool directory
         id: tools
         run: |

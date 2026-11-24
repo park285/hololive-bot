@@ -176,7 +176,7 @@ func newBotReadinessCacheService(t *testing.T) *cache.Service {
 	}
 
 	service, err := cache.NewCacheService(t.Context(), cache.Config{
-		Host: mini.Host(), Port: port, DisableCache: true, ForceSingleClient: true,
+		Host: mini.Host(), Port: port, DisableCache: true,
 	}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)

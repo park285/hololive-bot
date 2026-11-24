@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 type ReviewStatus string
@@ -416,7 +418,7 @@ func (s *Store) UpdateWeek(ctx context.Context, id, expectedRevision int64, week
 }
 
 func (s *Store) withChannelLock(ctx context.Context, id int64, fn func(tx pgx.Tx) error) error {
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		if err := lockChannelConfirm(ctx, tx, id); err != nil {
 			return err
 		}

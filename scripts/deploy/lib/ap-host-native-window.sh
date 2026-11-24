@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-native_release_window=W2
+native_release_window=W3
 
 native_payload_digest() (
   set -o pipefail
@@ -42,7 +42,7 @@ def identity(w, record):
     return f'{w}\n{release.name}\n{revision}\n{s.st_dev}:{s.st_ino}:{record.st_ino}\n'.encode('ascii')
 
 if action == 'stage':
-    assert family in ('W1','W2') and expected_id and expected_rev and not os.path.lexists(marker)
+    assert family in ('W1','W2','W3') and expected_id and expected_rev and not os.path.lexists(marker)
     owned(guard, stat.S_ISDIR)
     with os.fdopen(os.open(guard/'accepted-window', os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600), 'wb') as f:
         f.write(identity(family, os.fstat(f.fileno())))
@@ -51,10 +51,11 @@ if action == 'stage':
 elif action == 'quiesce' and family == 'W1':
     assert not os.path.lexists(marker) and not os.path.lexists(release/'native-observation')
 else:
-    assert action in ('apply','quiesce') and family in ('W1','W2')
+    assert action in ('apply','quiesce') and family in ('W1','W2','W3')
     record = owned(marker, stat.S_ISREG)
     assert stat.S_IMODE(record.st_mode) == 0o600
-    families = ('W1','W2') if action == 'quiesce' else (family,)
+    origins = {('quiesce','W2'): ('W1','W2'), ('quiesce','W3'): ('W2','W3'), ('apply','W3'): ('W2','W3')}
+    families = origins.get((action, family), (family,))
     data = marker.read_bytes()
     assert data in [identity(w, record) for w in families], '현재 릴리스는 요청한 창에서 수용되지 않았습니다'
     print(' '.join(data.decode('ascii').splitlines()[1:]))
@@ -72,7 +73,7 @@ native_window_pins() {
   [[ "$(hostname -s)" == osaka1 && "$service" == "$slot_service" && "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ &&
      "${window_digest?}" =~ ^[0-9a-f]{64}$ && "${window_old?}" != "${release_id?}" ]] || return 1
   native_release_id_validate "$window_old" && native_release_id_validate "$release_id" || return 1
-  case "$window_name" in W1) original_port=5433 ;; W2) original_port=6433 ;; *) return 1 ;; esac
+  original_port=5433
   old_target="$releases_root/$window_old"
   window="$old_target/native-window"
   [[ -L "$current_link" && "$(realpath -e "$current_link")" == "${1:-$old_target}" ]] || return 1
@@ -766,7 +767,7 @@ native_window_commit_policy() {
   native_window_probe_units "${window_units[@]}"
   pid="$(native_window_prop "$unit" MainPID)"; [[ "$pid" =~ ^[1-9][0-9]*$ ]]
   for n in "${window_units[@]}"; do native_window_candidate_runtime "$n"; done
-  native_window_process_endpoint "$pid" 6433
+  native_window_process_endpoint "$pid" 5433
   native_window_lease_live || { native_window_uncertain; return 1; }
   native_window_barriers observing "$@"
   native_window_issuer_ready || { native_window_uncertain; return 1; }
@@ -782,10 +783,10 @@ native_apply_before_stop() {
      "$(sudo -n cat "$native_recovery_dir/claim")" == "$native_claim_nonce" &&
      "$(sudo -n cat "$native_recovery_dir/owner-pid")" == "$BASHPID" && "$(sudo -n cat "$native_recovery_dir/release")" == "$release_dir" ]]
   sudo -n test ! -e "$native_recovery_dir/outcome"
-  [[ "$(native_root_endpoint "$host_env")" == '100.100.1.8|6433' ]]
+  [[ "$(native_root_endpoint "$host_env")" == '100.100.1.8|5433' ]]
   local release_dir="$old_target"
   for n in "${window_units[@]}"; do native_window_candidate_runtime "$n"; done
-  native_window_process_endpoint "$(native_window_prop "$unit" MainPID)" 6433
+  native_window_process_endpoint "$(native_window_prop "$unit" MainPID)" 5433
 }
 
 native_apply_observation_record() { printf '%s\n' "$native_release_window" "$release_id" "$EXPECTED_REVISION" "$1"; }

@@ -61,17 +61,6 @@ func normalizeRecord(record *domain.YouTubeContentAlarmTracking) (*domain.YouTub
 	}, nil
 }
 
-func buildDeliveryStatusExpr(alarmSentExpr string) string {
-	return fmt.Sprintf(`CASE
-	        WHEN %s IS NULL THEN '%s'
-	        ELSE '%s'
-	    END`,
-		alarmSentExpr,
-		domain.YouTubeContentAlarmDeliveryStatusPending,
-		domain.YouTubeContentAlarmDeliveryStatusSent,
-	)
-}
-
 func trackingCanonicalKey(kind domain.OutboxKind, canonicalContentID string) string {
 	return string(kind) + "\x00" + strings.TrimSpace(canonicalContentID)
 }
@@ -151,19 +140,4 @@ func canonicalTrackingIdentity(kind domain.OutboxKind, contentID string) (string
 	}
 
 	return canonicalContentID, nil
-}
-
-func buildLatencyMillisExpr(startExpr, endExpr string) string {
-	return fmt.Sprintf(`CASE
-		        WHEN (%s) IS NULL OR (%s) IS NULL THEN NULL
-		        ELSE CAST(ROUND(EXTRACT(EPOCH FROM (((%s)) - ((%s)))) * 1000) AS BIGINT)
-		    END`, startExpr, endExpr, endExpr, startExpr)
-}
-
-func buildLatencyExceededExpr(latencyMillisExpr string) string {
-	return fmt.Sprintf(`CASE
-		        WHEN (%s) IS NULL THEN NULL
-		        WHEN (%s) > %d THEN TRUE
-		        ELSE FALSE
-		    END`, latencyMillisExpr, latencyMillisExpr, alarmLatencyExceededThresholdMillis)
 }

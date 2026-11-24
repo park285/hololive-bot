@@ -38,7 +38,7 @@ func (r *Registry) Register(handler handlercore.Command) {
 	r.handlers[name] = handler
 }
 
-func (r *Registry) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, key string, params map[string]any) error {
+func (r *Registry) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, key string, params botcommand.Params) error {
 	if r == nil {
 		return errors.New("command registry is nil")
 	}
@@ -48,7 +48,7 @@ func (r *Registry) Execute(ctx context.Context, cmdCtx *botcommand.CommandContex
 		return fmt.Errorf("%w: %s", ErrUnknownCommand, key)
 	}
 
-	if err := handler.Execute(ctx, cmdCtx, params); err != nil {
+	if err := handler.Dispatch(ctx, cmdCtx, params); err != nil {
 		return fmt.Errorf("command %s: %w", key, err)
 	}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/migrationsource"
 )
 
@@ -27,7 +28,7 @@ const (
 )
 
 type Config struct {
-	CardWindow       bool
+	MigrationWindow  bool
 	VerifyOnly       bool
 	InitializeOnly   bool
 	StatementTimeout time.Duration
@@ -107,15 +108,14 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, files []migrationsourc
 		opts.AccessMode = pgx.ReadOnly
 	}
 
-	err := pgx.BeginTxFunc(ctx, conn, opts, func(tx pgx.Tx) error {
-		if _, pathErr := tx.Exec(ctx, "SET LOCAL search_path = pg_catalog, public, pg_temp"); pathErr != nil {
+	err := dbx.InPgxTxOptions(ctx, conn, opts, func(tx pgx.Tx) error {
+		if _, pathErr := tx.Exec(ctx, mustSQL("migration_search_path.sql")); pathErr != nil {
 			return fmt.Errorf("select migration namespace: %w", pathErr)
 		}
 
 		var migrations, checksums bool
 
-		if err := tx.QueryRow(ctx, `SELECT to_regclass('public.schema_migrations') IS NOT NULL,
-			to_regclass('public.schema_migration_checksums') IS NOT NULL`).Scan(&migrations, &checksums); err != nil {
+		if err := tx.QueryRow(ctx, mustSQL("migration_ledgers_present.sql")).Scan(&migrations, &checksums); err != nil {
 			return fmt.Errorf("inspect migration ledgers: %w", err)
 		}
 
@@ -141,7 +141,7 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, files []migrationsourc
 }
 
 func advance(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg Config) (Result, error) {
-	epoch, applied, err := verifyHead(ctx, tx, files, cfg.CardWindow)
+	epoch, applied, err := verifyHead(ctx, tx, files, cfg.MigrationWindow)
 	if err != nil {
 		return Result{}, err
 	}
@@ -149,6 +149,17 @@ func advance(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg C
 	pending := files[1+applied:]
 	if (cfg.VerifyOnly || cfg.InitializeOnly) && len(pending) != 0 {
 		return Result{}, fmt.Errorf("migration pending: %s", pending[0].Name)
+	}
+
+	if cfg.MigrationWindow && len(pending) != 0 {
+		drained, err := openMigrationWindow(ctx, tx)
+		if err != nil {
+			return Result{}, err
+		}
+
+		if !drained {
+			return Result{}, errors.New("pending migrations require the writer drain guard, its login gate and zero writer sessions")
+		}
 	}
 
 	if err := applyFiles(ctx, tx, pending); err != nil {
@@ -164,8 +175,22 @@ func advance(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg C
 	return Result{Skipped: skipped, Applied: len(pending), Total: skipped + len(pending)}, nil
 }
 
+func openMigrationWindow(ctx context.Context, tx pgx.Tx) (bool, error) {
+	if _, err := tx.Exec(ctx, mustSQL("migration_window_marker.sql")); err != nil {
+		return false, fmt.Errorf("publish migration window marker: %w", err)
+	}
+
+	var drained bool
+
+	if err := tx.QueryRow(ctx, mustSQL("writer_drain_state.sql")).Scan(&drained); err != nil {
+		return false, fmt.Errorf("inspect writer drain: %w", err)
+	}
+
+	return drained, nil
+}
+
 func bootstrap(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg Config) (Result, error) {
-	if cfg.CardWindow || cfg.VerifyOnly {
+	if cfg.MigrationWindow || cfg.VerifyOnly {
 		return Result{}, errors.New("an initialized migration lineage is required; hold writers")
 	}
 
@@ -204,7 +229,7 @@ func bootstrap(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg
 	return Result{Applied: len(files), Total: len(files)}, nil
 }
 
-func verifyHead(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cardWindow bool) (int, int, error) {
+func verifyHead(ctx context.Context, tx pgx.Tx, files []migrationsource.File, migrationWindow bool) (int, int, error) {
 	var epoch, applied, pending int
 
 	if err := tx.QueryRow(ctx, mustSQL("lineage_head.sql"), migrationsource.Receipts(files)).Scan(&epoch, &applied, &pending); err != nil {
@@ -219,15 +244,15 @@ func verifyHead(ctx context.Context, tx pgx.Tx, files []migrationsource.File, ca
 		return 0, 0, fmt.Errorf("verify applied schema: %w", err)
 	}
 
-	if cardWindow {
-		var admitted bool
+	if migrationWindow {
+		var private bool
 
-		if err := tx.QueryRow(ctx, mustSQL("card_window_state.sql")).Scan(&admitted); err != nil {
+		if err := tx.QueryRow(ctx, mustSQL("migration_window_state.sql")).Scan(&private); err != nil {
 			return 0, 0, fmt.Errorf("inspect protected migration endpoint: %w", err)
 		}
 
-		if !admitted {
-			return 0, 0, errors.New("schema-only requires the reviewed pool authentication and private migrator connection")
+		if !private {
+			return 0, 0, errors.New("migration window requires the private migrator connection")
 		}
 	}
 
@@ -257,7 +282,7 @@ func applyFiles(ctx context.Context, tx pgx.Tx, files []migrationsource.File) er
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, `LOCK TABLE public.schema_migrations, public.schema_migration_checksums IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+	if _, err := tx.Exec(ctx, mustSQL("lock_migration_ledgers.sql")); err != nil {
 		return fmt.Errorf("protect migration ledgers: %w", err)
 	}
 
@@ -303,7 +328,7 @@ func applyFile(ctx context.Context, tx pgx.Tx, file migrationsource.File) error 
 		return fmt.Errorf("record checksum for %s: %w", file.Name, err)
 	}
 
-	if _, err := tx.Exec(ctx, `INSERT INTO public.schema_migrations(filename) VALUES($1)`, file.Name); err != nil {
+	if _, err := tx.Exec(ctx, mustSQL("record_migration_application.sql"), file.Name); err != nil {
 		return fmt.Errorf("record application of %s: %w", file.Name, err)
 	}
 

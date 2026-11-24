@@ -8,7 +8,7 @@ git -C "${ROOT_DIR}" ls-files --cached -z | (
   status=0
   while IFS= read -r -d '' path; do
     case "${path}" in
-      scripts/ci/nilaway-models/models.patch|deploy/images/pgbouncer/unreported-startup-parameters.patch|logs/.gitkeep|runtime-config/.gitkeep|runtime-config/README.md|runtime-config/*.example)
+      scripts/ci/nilaway-models/models.patch|logs/.gitkeep|runtime-config/.gitkeep|runtime-config/README.md|runtime-config/*.example)
         continue ;;
       logs/*|data/*|backups/*|.review-bundles/*|runtime-config/*|.env|.env.local|.env.*.local|\
       .env.osaka|.env.seoul|.env.main-ap|.env.prod|.env.production|.env.staging|\

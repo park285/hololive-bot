@@ -42,7 +42,7 @@ bot/admin plane과 YouTube Community consume plane을 한 프로세스에서 호
 
 | Dependency | Purpose | Failure impact |
 |---|---|---|
-| PostgreSQL | command/domain/admin data, subscriptions, outbox | command/admin failures, stale reads |
+| PostgreSQL | command/domain/admin data, subscriptions, outbox, Iris webhook nonce | command/admin failures; nonce 판정 실패 시 webhook 503 |
 | Valkey | cache, rate limit, outbox wakeup, member epoch Pub/Sub, coordination(job lock) | degraded command, admin, and cache behavior |
 | Iris | KakaoTalk ingress/reply automation | webhook/reply delivery failure |
 | Alarm API | alarm CRUD/query | alarm commands and admin operations fail |
@@ -54,6 +54,12 @@ Admin 조립·수명은 `internal/planes/admin/runtime`, router와 Stream handle
 admin·bot ACL)은 `internal/app`이 같은 프로세스 인스턴스를 주입하며 loopback HTTP를 쓰지 않습니다.
 Observation consume·canonical/retention과 private reducer는 `internal/youtube/`가 소유합니다.
 Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-process alarm service를 생성하지 않습니다.
+
+### Iris webhook 재전송 판정
+
+서명이 유효하면 bot plane은 기존 PostgreSQL 풀에서 `public.reserve_bot_webhook_nonce`를 실행한 뒤에만 본문을 전달합니다. `bot_webhook_nonces`의 기본 키는 SDK가 만든 식별자(메서드·대상·timestamp·nonce)의 SHA-256입니다. 원문이나 메시지 본문은 저장하지 않습니다. DB 시각으로 10분(서명 허용 오차 ±5분의 두 배) 안에는 중복을 401로 거부하며 재전송이 만료를 연장하지 않습니다. 동시 요청도 하나만 통과합니다. 만료된 동일 키는 다시 선점할 수 있고, 각 판정은 만료 행을 최대 64개씩 정리합니다. 유휴 중 정리가 밀려도 인증 시한은 변하지 않습니다.
+
+API 계정에는 선점 함수의 `EXECUTE`만 부여하며 원장 행을 직접 읽거나 지울 수 없습니다. 저장 실패·timeout이면 SDK가 503을 반환하며 다른 저장소로 대체하지 않습니다. 이 원장은 서명 재사용만 막습니다. 새 서명으로 재전송한 같은 메시지는 기존 PostgreSQL inbox가 메시지 ID로 판정합니다. [저장소 전환·롤백 격리 순서](../runbooks/release.md#iris-webhook-nonce-저장소-전환)를 따릅니다.
 
 ## Must not own
 

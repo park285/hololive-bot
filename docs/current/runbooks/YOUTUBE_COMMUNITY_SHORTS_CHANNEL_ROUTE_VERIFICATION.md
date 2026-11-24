@@ -8,13 +8,13 @@
 
 - 배포 대상: 현재 런타임 env가 해석한 `final_delivery_owner`
 - 활성 상태: `members` + `alarms` 기준 채널/타입별 현재 활성 여부
-- 실제 사용 경로: `youtube_content_alarm_tracking` + `youtube_notification_delivery_telemetry` 기준 최근 게시물의 관측 경로
+- 실제 사용 경로: `youtube_content_alarm_tracking` + alarm-worker가 만든 `youtube_notification_delivery`·`youtube_notification_delivery_ledger` 행과 감사 로그 `delivery_path` 기준 최근 게시물의 관측 경로
 
 ## 실행
 
 전용 리포트 CLI는 없으며 PostgreSQL을 직접 조회한다.
 
-Community/shorts 수집 evidence는 `collector` observation, canonical consume는 `hololive-api` YouTube plane, 최종 발송은 `alarm-worker`다. 운영 조회는 `members`/`alarms`와 `youtube_content_alarm_tracking` + `youtube_notification_delivery_telemetry`를 직접 대조한다.
+Community/shorts 수집 evidence는 `collector` observation, canonical consume는 `hololive-api` YouTube plane, 최종 발송은 `alarm-worker`다. 운영 조회는 `members`/`alarms`와 `youtube_content_alarm_tracking` + `youtube_notification_delivery`·`youtube_notification_delivery_ledger`를 직접 대조하고, 경로 값은 alarm-worker 감사 로그의 `delivery_path`로 확인한다.
 
 필요 조건:
 
@@ -27,7 +27,7 @@ Community/shorts 수집 evidence는 `collector` observation, canonical consume�
 
 - `runtime final owner`: 현재 최종 발송 owner입니다. 운영 목표값은 `alarm-worker` 입니다.
 - `big-bang enabled`: 운영 목표값은 `true` 입니다.
-- `telemetry path expectation`: 실제 전송 텔레메트리에서 기대하는 신규 경로 값입니다. 현재 기준값은 `youtube_outbox_dispatcher` 입니다.
+- `path expectation`: 감사 로그 `delivery_path`에서 기대하는 경로 값입니다. 현재 기준값은 `youtube_outbox_dispatcher` 입니다.
 - `summary`: 채널/라우트 수를 보여 주고, 실제 사용 상태 집계는 현재 활성 라우트 기준으로 계산합니다.
 
 채널 섹션의 각 라인은 `COMMUNITY` 또는 `SHORTS` 한 라우트를 뜻합니다.
@@ -37,13 +37,10 @@ Community/shorts 수집 evidence는 `collector` observation, canonical consume�
   - `disabled`: 현재 typed 알람 구독이 없습니다.
   - `pending_cutover`: 컷오버 시각 전이라 신규 경로 단일 활성로 판정하면 안 됩니다.
 - `deployment`: 현재 런타임이 최종 owner로 해석한 경로입니다. 운영 목표값은 `alarm-worker.youtube_outbox_dispatcher` 입니다.
-- `actual`: 최근 관측 창에서 실제 게시물의 텔레메트리 경로를 요약한 상태입니다.
-  - `new_only_verified`: 최근 게시물들이 모두 `youtube_outbox_dispatcher` 로만 관측됐습니다.
-  - `no_recent_posts`: 최근 창에 해당 채널/타입 게시물이 없어 실제 경로를 관측하지 못했습니다.
-  - `no_path_observed`: 최근 게시물은 있었지만 경로 텔레메트리가 없었습니다.
-  - `unexpected_path_detected`: `youtube_outbox_dispatcher` 외 단일 경로가 관측됐습니다.
-  - `mixed_paths_detected`: 같은 라우트 창에서 복수 경로가 함께 관측됐습니다.
-- `observed_paths`: 최근 창에서 실제 관측된 `delivery_path` 집합입니다.
+- `actual`: 최근 관측 창에서 실제 게시물이 alarm-worker outbox·delivery를 거쳤는지 요약한 상태입니다. 경로 값은 행에 저장하지 않고 코드 상수(`youtube_outbox_dispatcher`) 하나만 로그에 쓰므로, 다른 경로나 복수 경로는 관측될 수 없습니다.
+  - `delivery_observed`: 최근 게시물이 outbox와 room별 delivery로 진입했거나, outbox와 delivery가 정리된 뒤에도 원장 room([Route Usage](YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md)의 `ledger_sent_room_count`·`ledger_quarantined_room_count`)으로 진입이 확인됩니다. 원장은 alarm-worker 발송 경로만 씁니다.
+  - `no_recent_posts`: 최근 창에 해당 채널/타입 게시물이 없어 실제 사용을 관측하지 못했습니다.
+  - `no_delivery_observed`: 최근 게시물은 있었지만 delivery도 원장 room도 없었습니다. 구독 room이 없는 outbox는 delivery 없이 SENT로 끝나고 fan-out이 실패한 outbox는 delivery 없이 FAILED로 끝나므로 [Route Usage](YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md)의 `sent_outbox_count`·`failed_outbox_count`와 함께 봅니다. 발송 결과는 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `status`로 판정합니다.
 
 ## 운영 판독 기준
 
@@ -53,15 +50,13 @@ Community/shorts 수집 evidence는 `collector` observation, canonical consume�
 - 헤더에서 `big-bang enabled = true`
 - 대상 라우트의 `activation = new_only`
 - 대상 라우트의 `deployment = alarm-worker.youtube_outbox_dispatcher`
-- 대상 라우트의 `actual = new_only_verified`
-- 대상 라우트의 `observed_paths` 에 `youtube_outbox_dispatcher` 외 값이 없음
+- 대상 라우트의 `actual = delivery_observed`
 
 다음 상태는 즉시 합격 근거로 쓰면 안 됩니다.
 
 - `pending_cutover`: 컷오버 전 상태
 - `no_recent_posts`: 실제 사용 경로를 아직 관측하지 못한 상태
-- `no_path_observed`: 게시물은 있었지만 텔레메트리 근거가 빈 상태
-- `unexpected_path_detected`, `mixed_paths_detected`: 신규 경로 단일 사용 위반 후보
+- `no_delivery_observed`: 게시물은 있었지만 delivery·원장 근거가 빈 상태
 
 `no_recent_posts` 가 많으면 관측 창을 늘려 다시 실행합니다.
 
@@ -73,7 +68,7 @@ Community/shorts 수집 evidence는 `collector` observation, canonical consume�
 
 ## 로컬 검증
 
-- `go -C hololive/hololive-alarm-worker test ./internal/egress/youtubeoutbox/...`
+- `go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/...`
 
 관련 참고:
 

@@ -109,7 +109,7 @@ func (d *SendEngine) dispatchGroup(
 		return
 	}
 
-	members := d.selectDeliverableMembers(ctx, validRows, validOutboxes, store.DeliveryModeGrouped, result)
+	members := d.selectDeliverableMembers(ctx, validRows, validOutboxes, result)
 	if len(members) == 0 {
 		return
 	}
@@ -134,7 +134,7 @@ func (d *SendEngine) dispatchClaimedGroup(
 
 	message, err := d.formatGroupedMessage(ctx, group, attempt.outboxes)
 	if err != nil {
-		if d.applyPreparedLifecycleFailure(ctx, attempt.rows, attempt.outboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModeGrouped, result) {
+		if d.applyPreparedLifecycleFailure(ctx, attempt.rows, attempt.outboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, result) {
 			d.recordGroupedFormatFailure(group, attempt, err, result)
 		}
 
@@ -159,7 +159,7 @@ func (d *SendEngine) dispatchDeliveryRow(
 		return
 	}
 
-	members := d.selectDeliverableMembers(ctx, []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{outbox}, store.DeliveryModePerRoom, result)
+	members := d.selectDeliverableMembers(ctx, []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{outbox}, result)
 	if len(members) == 0 {
 		return
 	}
@@ -197,7 +197,7 @@ func (d *SendEngine) dispatchClaimedDeliveryRow(
 		return
 	}
 
-	if d.completeLifecycleSent(ctx, attempt, store.DeliveryModePerRoom, result) {
+	if d.completeLifecycleSent(ctx, attempt, result) {
 		d.recordPerRoomSuccess(ctx, attempt, result)
 	}
 }
@@ -213,7 +213,7 @@ func (d *SendEngine) preparePerRoomSend(
 	rows, outboxes := attempt.rows, attempt.outboxes
 
 	if formatFailures[row.OutboxID] {
-		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, store.DeliveryModePerRoom, result) {
+		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonFormat, result) {
 			d.recordPerRoomFormatFailure(attempt, result)
 		}
 
@@ -222,7 +222,7 @@ func (d *SendEngine) preparePerRoomSend(
 
 	message, ok := formattedMessages[row.OutboxID]
 	if !ok {
-		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonMessage, store.DeliveryModePerRoom, result) {
+		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonMessage, result) {
 			d.recordPerRoomMissingMessage(attempt, result)
 		}
 
@@ -231,7 +231,7 @@ func (d *SendEngine) preparePerRoomSend(
 
 	sendReq, err := buildDeliverySendRequest(row.RoomID, message, outboxes)
 	if err != nil {
-		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailurePermanent, lifecycleReasonRequest, store.DeliveryModePerRoom, result) {
+		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailurePermanent, lifecycleReasonRequest, result) {
 			d.recordPerRoomRequestBuildFailure(attempt, err, result)
 		}
 
@@ -282,7 +282,7 @@ func (d *SendEngine) applyPerRoomLifecycleFailure(
 		return false
 	}
 
-	return d.applyStartedLifecycleFailure(ctx, operation, kind, reason, retryAfter, store.DeliveryModePerRoom, result)
+	return d.applyStartedLifecycleFailure(ctx, operation, kind, reason, retryAfter, result)
 }
 
 func (d *SendEngine) dispatchGroupedClaimedRows(
@@ -316,7 +316,7 @@ func (d *SendEngine) dispatchGroupedClaimedRows(
 		return
 	}
 
-	if d.completeLifecycleSent(ctx, attempt, store.DeliveryModeGrouped, result) {
+	if d.completeLifecycleSent(ctx, attempt, result) {
 		d.recordGroupedSuccess(group, attempt, result)
 	}
 }
@@ -335,7 +335,7 @@ func (d *SendEngine) prepareGroupedSend(
 		return sendReq, true
 	}
 
-	if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailurePermanent, lifecycleReasonRequest, store.DeliveryModeGrouped, result) {
+	if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailurePermanent, lifecycleReasonRequest, result) {
 		d.recordGroupedRequestBuildFailure(group, attempt, err, result)
 	}
 
@@ -375,7 +375,7 @@ func (d *SendEngine) handleGroupedSendFailure(
 		return
 	}
 
-	if !d.applyStartedLifecycleFailure(ctx, operation, kind, reason, retryAfter, store.DeliveryModeGrouped, result) {
+	if !d.applyStartedLifecycleFailure(ctx, operation, kind, reason, retryAfter, result) {
 		return
 	}
 
@@ -470,7 +470,7 @@ func (d *SendEngine) dispatchStartedRowsIndividually(
 			continue
 		}
 
-		if d.completeLifecycleSent(ctx, &singleton, store.DeliveryModePerRoom, result) {
+		if d.completeLifecycleSent(ctx, &singleton, result) {
 			d.recordPerRoomSuccess(ctx, &singleton, result)
 		}
 	}

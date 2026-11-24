@@ -12,12 +12,7 @@ func (ma *MessageAdapter) tryMemberInfoCommand(command string, args []string, ra
 		return nil, false
 	}
 
-	query := strings.TrimSpace(strings.Join(args, " "))
-	params := make(map[string]any)
-
-	if query != "" {
-		params["query"] = query
-	}
+	params := botcommand.MemberInfoParams{Query: strings.TrimSpace(strings.Join(args, " "))}
 
 	return &ParsedCommand{Type: botcommand.CommandMemberInfo, Params: params, RawMessage: raw}, true
 }

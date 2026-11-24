@@ -3,19 +3,21 @@ set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 image="localhost/hololive-postgres-test:ci-$$"
+valkey_image="localhost/hololive-valkey-test:ci-$$"
 cleanup() {
-  podman image rm "$image" >/dev/null 2>&1 || true
+  podman image rm "$image" "$valkey_image" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 podman build --platform linux/amd64 --build-arg REVISION=test --tag "$image" "$root_dir/deploy/images/postgres"
 
-for user in 0:0 999:999; do
-  podman run --rm --platform linux/amd64 --security-opt label=disable --network none --read-only --memory 256m --pids-limit 128 --user "$user" \
-    --tmpfs /var/lib/postgresql:rw,mode=0755,U \
-    --tmpfs /var/run/postgresql:rw,mode=0755,U \
-    --tmpfs /tmp:rw,mode=1777 \
-    --mount "type=bind,src=$root_dir/deploy/images/postgres/test.sh,dst=/test.sh,readonly" \
-    -e PGDATA=/var/lib/postgresql/testdata -e POSTGRES_HOST_AUTH_METHOD=trust \
-    "$image" sh /test.sh
-done
+podman run --rm --platform linux/amd64 --security-opt label=disable --network none --read-only --memory 256m --pids-limit 128 --user 999:999 \
+  --tmpfs /var/lib/postgresql:rw,mode=0755,U \
+  --tmpfs /var/run/postgresql:rw,mode=0755,U \
+  --tmpfs /tmp:rw,mode=1777 \
+  --mount "type=bind,src=$root_dir/deploy/images/postgres/test.sh,dst=/test.sh,readonly" \
+  -e PGDATA=/var/lib/postgresql/testdata -e POSTGRES_HOST_AUTH_METHOD=trust \
+  "$image" sh /test.sh
+
+podman build --platform linux/amd64 --build-arg REVISION=test --tag "$valkey_image" "$root_dir/deploy/images/valkey"
+bash "$root_dir/deploy/images/valkey/test.sh" "$valkey_image"

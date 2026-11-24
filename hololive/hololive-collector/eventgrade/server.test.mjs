@@ -33,7 +33,20 @@ test('only fixed collection operations and canonical regions are accepted', () =
 });
 
 test('body limits, duplicate keys and malformed UTF-8 are rejected', () => {
-  for (const raw of [Buffer.alloc(16385), Buffer.from('{"x":1,"x":2}'), Buffer.from([0xff])]) assert.throws(() => parseRequest(raw));
+  for (const raw of [Buffer.alloc(16385), Buffer.from('{"x":1,"x":2}'), Buffer.from('{"x":1,"\\u0078":2}'), Buffer.from('{"a":{"y":1,"y":2}}'),
+    Buffer.from('[{"z":1},{"y":[1,{"q":1,"q":1}]}]'), Buffer.from([0xff])]) assert.throws(() => parseRequest(raw));
+});
+
+test('any valid JSON encoding of a request is accepted', () => {
+  const expected = { version: 1, operation: 'ack', region: 'jp', conflicts: ['a', 'b'] };
+  for (const raw of ['{"version":1,"operation":"ack","region":"jp","conflicts":["a","b"]}',
+    '{ "region" : "jp", "conflicts": [ "a", "b" ], "operation": "ack", "version": 1.0 }',
+    '{"version":1,"operation":"\\u0061ck","region":"jp","conflicts":["a","b"]}',
+    '{"version":1,"operation":"ack","region":"jp","conflicts":["a","b"],"x\\"y":{"version":2}}']) {
+    const parsed = parseRequest(Buffer.from(raw));
+    if (Object.hasOwn(parsed, 'x"y')) delete parsed['x"y'];
+    assert.deepEqual(parsed, expected);
+  }
 });
 
 function varint(value) {

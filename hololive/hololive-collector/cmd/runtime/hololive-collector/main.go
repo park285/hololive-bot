@@ -26,13 +26,13 @@ import (
 var Version = "dev"
 
 func main() {
-	if len(os.Args) == 2 && os.Args[1] == "--check-pooled-database" {
-		if err := checkPooledDatabase(context.Background()); err != nil {
-			fmt.Fprintln(os.Stderr, "collector pooled database check failed:", err)
+	if len(os.Args) == 2 && os.Args[1] == "--check-database-endpoint" {
+		if err := checkDatabaseEndpoint(context.Background()); err != nil {
+			fmt.Fprintln(os.Stderr, "collector database endpoint check failed:", err)
 			os.Exit(1)
 		}
 
-		fmt.Println("collector pooled database verified")
+		fmt.Println("collector database endpoint verified")
 
 		return
 	}

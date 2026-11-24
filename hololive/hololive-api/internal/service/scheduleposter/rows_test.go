@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/service/scheduleposter"
+	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
@@ -105,6 +106,36 @@ func publishedTitles(t *testing.T, store *scheduleposter.Store, channelID, day s
 	}
 
 	return schedule.PosterID, titles
+}
+
+func TestStorePublishedMemberRowsReadsTheMemberCardTemplate(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store, pool := newRowsStore(t)
+	confirmPoster101(t, store)
+
+	off := scheduleposter.Row{Day: date(t, "2026-11-11"), Status: scheduleposter.RowOff, SourceText: "お休み", Badges: []string{"休み"}, TitleKo: "휴방"}
+	recorded, err := store.RecordRows(ctx, onlyPendingRows(t, store), []scheduleposter.Row{off}, 0)
+	require.NoError(t, err)
+	require.True(t, recorded)
+
+	var memberID int
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT min(id) FROM members`).Scan(&memberID))
+
+	schedule, template, found, err := store.PublishedMemberRows(ctx, memberID, sophiaChannel, date(t, "2026-11-12"))
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, int64(101), schedule.PosterID)
+	require.Equal(t, cardtemplate.Classic, template)
+
+	require.NoError(t, store.SetMemberCardTemplate(ctx, memberID, cardtemplate.Classic, cardtemplate.Orbit))
+
+	_, template, found, err = store.PublishedMemberRows(ctx, memberID, sophiaChannel, date(t, "2026-11-12"))
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, cardtemplate.Orbit, template)
 }
 
 func TestStoreRecordRowsStoresEveryColumn(t *testing.T) {

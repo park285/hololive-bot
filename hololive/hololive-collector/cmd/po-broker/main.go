@@ -331,7 +331,7 @@ func check(path string) error {
 	}
 
 	if json.Unmarshal(data, &value, json.RejectUnknownMembers(true)) != nil ||
-		value.ProtocolVersion != 1 || value.Generation == "" || value.Revision != revision {
+		value.ProtocolVersion != 2 || value.Generation == "" || value.Revision != revision {
 		return errors.New("invalid health")
 	}
 

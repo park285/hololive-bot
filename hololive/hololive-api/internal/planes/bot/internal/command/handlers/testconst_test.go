@@ -20,9 +20,5 @@ const (
 	testTypeSourceTopic = "topic"
 	testTypeSourceTitle = "title"
 
-	testParamAction = "action"
-	testActionAdd   = "add"
-	testParamLimit  = "limit"
-	testParamMonth  = "month"
-	testParamQuery  = "query"
+	testActionAdd = "add"
 )

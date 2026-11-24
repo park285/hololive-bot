@@ -20,7 +20,6 @@ if ! result=$(psql -X -w -qAt --dbname='connect_timeout=5' -v ON_ERROR_STOP=1 \
             END IF;
         END \$guard\$;
         SELECT current_setting('transaction_read_only');" \
-    -f "${SCRIPT_DIR}/queries/collection_runtime_bundles_drift.sql" \
     -f "${SCRIPT_DIR}/queries/live_runtime_state_drift.sql" \
     -c 'COMMIT'); then
     echo '집계 정합 확인 실패: 조회 결과를 확정할 수 없습니다.' >&2
@@ -28,21 +27,17 @@ if ! result=$(psql -X -w -qAt --dbname='connect_timeout=5' -v ON_ERROR_STOP=1 \
 fi
 
 mapfile -t rows <<<"${result}"
-if (( ${#rows[@]} != 3 )) || [[ ${rows[0]} != on ]] \
-    || [[ ! ${rows[1]} =~ ^[0-9]+\|[0-9]+\|[0-9]+\|[0-9]+$ ]] \
-    || [[ ! ${rows[2]} =~ ^[0-9]+\|[0-9]+\|[0-9]+$ ]]; then
+if (( ${#rows[@]} != 2 )) || [[ ${rows[0]} != on ]] \
+    || [[ ! ${rows[1]} =~ ^[0-9]+\|[0-9]+\|[0-9]+$ ]]; then
     echo '집계 정합 확인 실패: 읽기 전용 guard 또는 결과 형식이 잘못되었습니다.' >&2
     exit 2
 fi
 
-IFS='|' read -r bundle_missing bundle_extra bundle_changed mapping_changed <<<"${rows[1]}"
-IFS='|' read -r live_missing live_extra live_changed <<<"${rows[2]}"
+IFS='|' read -r live_missing live_extra live_changed <<<"${rows[1]}"
 printf 'transaction_read_only=on\n'
-printf 'collection_runtime_bundles missing=%s extra=%s changed=%s mapping_changed=%s\n' \
-    "${bundle_missing}" "${bundle_extra}" "${bundle_changed}" "${mapping_changed}"
 printf 'live_runtime_state missing=%s extra=%s changed=%s\n' \
     "${live_missing}" "${live_extra}" "${live_changed}"
 
-if [[ ${rows[1]} != '0|0|0|0' || ${rows[2]} != '0|0|0' ]]; then
+if [[ ${rows[1]} != '0|0|0' ]]; then
     exit 1
 fi

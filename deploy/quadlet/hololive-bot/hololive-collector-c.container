@@ -3,10 +3,8 @@
 # compose.env의 HOLOLIVE_DISABLE_COLLECTOR=1이면 ExecCondition이 기동을 건너뛴다.
 [Unit]
 Description=Hololive central collector c
-# 런타임 peer는 Wants=로만 끌어온다. Requires=는 명시적 stop/restart를 전파해 primary fence(소비자 유지)와
-# Sentinel HA(로컬 노드 교체)를 깨뜨린다.
-Wants=holo-pgbouncer.service
-After=holo-pgbouncer.service tailscaled.service
+Wants=holo-postgres.service
+After=holo-postgres.service tailscaled.service
 ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent
 ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced
 StartLimitIntervalSec=0
@@ -113,8 +111,8 @@ Environment=LOG_MAX_SIZE_MB=5
 Environment=LOG_MAX_BACKUPS=5
 Environment=LOG_MAX_AGE_DAYS=30
 Environment=LOG_COMPRESS=true
-Environment=HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-pgbouncer
-Environment=HOLOLIVE_CENTRAL_POSTGRES_PORT=6432
+Environment=HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres
+Environment=HOLOLIVE_CENTRAL_POSTGRES_PORT=5432
 Environment=POSTGRES_SSLMODE=verify-full
 Environment=POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
 Environment=POSTGRES_QUERY_EXEC_MODE=cache_statement
@@ -122,7 +120,7 @@ Environment=HOLOLIVE_COLLECTOR_HTTP_TRANSPORTS=h3
 Environment=HOLOLIVE_COLLECTOR_H3_ADDR=:30025
 Environment=HOLOLIVE_COLLECTOR_METRICS_ADDR=:30096
 Environment=COLLECTOR_POSTGRES_POOL_MIN_CONNS=2
-Environment=COLLECTOR_POSTGRES_POOL_MAX_CONNS=7
+Environment=COLLECTOR_POSTGRES_POOL_MAX_CONNS=6
 Environment=COLLECTOR_READINESS_TIMEOUT_SECONDS=2
 Environment=COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS=1
 Environment=COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS=30

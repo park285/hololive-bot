@@ -15,14 +15,7 @@ func (ma *MessageAdapter) tryLiveCommand(command string, args []string, raw stri
 		return nil, false
 	}
 
-	params := make(map[string]any)
-
-	if len(args) > 0 {
-		member := strings.TrimSpace(strings.Join(args, " "))
-		if member != "" {
-			params[paramMember] = member
-		}
-	}
+	params := botcommand.LiveParams{Member: strings.TrimSpace(strings.Join(args, " "))}
 
 	return &ParsedCommand{Type: botcommand.CommandLive, Params: params, RawMessage: raw}, true
 }
@@ -51,8 +44,9 @@ func (ma *MessageAdapter) isUpcomingCommand(cmd string) bool {
 	return slices.Contains(upcomingCommandAliases, cmd)
 }
 
-func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
-	params := make(map[string]any)
+func (ma *MessageAdapter) parseUpcomingArgs(args []string) botcommand.UpcomingParams {
+	var params botcommand.UpcomingParams
+
 	memberTokens := make([]string, 0, len(args))
 	all := false
 
@@ -67,15 +61,19 @@ func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
 			continue
 		}
 
-		if applyUpcomingLimit(params, token) {
+		if applyUpcomingLimit(&params, token) {
 			continue
 		}
 
 		memberTokens = append(memberTokens, token)
 	}
 
-	applyUpcomingAll(params, all)
-	applyUpcomingMember(params, memberTokens)
+	if all {
+		params.All = true
+		params.Limit = 0
+	}
+
+	params.Member = strings.TrimSpace(strings.Join(memberTokens, " "))
 
 	return params
 }
@@ -86,8 +84,8 @@ func isAllUpcomingToken(token string) bool {
 	return slices.Contains(allUpcomingTokens, stringutil.Normalize(token))
 }
 
-func applyUpcomingLimit(params map[string]any, token string) bool {
-	if _, exists := params[paramLimit]; exists {
+func applyUpcomingLimit(params *botcommand.UpcomingParams, token string) bool {
+	if params.Limit != 0 {
 		return false
 	}
 
@@ -96,25 +94,9 @@ func applyUpcomingLimit(params map[string]any, token string) bool {
 		return false
 	}
 
-	params[paramLimit] = n
+	params.Limit = n
 
 	return true
-}
-
-func applyUpcomingAll(params map[string]any, all bool) {
-	if !all {
-		return
-	}
-
-	params["all"] = true
-	delete(params, paramLimit)
-}
-
-func applyUpcomingMember(params map[string]any, memberTokens []string) {
-	member := strings.TrimSpace(strings.Join(memberTokens, " "))
-	if member != "" {
-		params[paramMember] = member
-	}
 }
 
 var scheduleMemberCommandAliases = []string{"멤버", "member"}
@@ -130,7 +112,7 @@ func (ma *MessageAdapter) tryScheduleCommand(command string, args []string, raw 
 
 	params := ma.parseScheduleArgs(args)
 
-	params["_raw_command"] = command
+	params.RawCommand = command
 
 	return &ParsedCommand{
 		Type:       botcommand.CommandSchedule,
@@ -148,11 +130,7 @@ func (ma *MessageAdapter) trySchedulePosterCommand(command string, args []string
 		return nil, false
 	}
 
-	params := make(map[string]any)
-
-	if member := strings.TrimSpace(strings.Join(args, " ")); member != "" {
-		params[paramMember] = member
-	}
+	params := botcommand.SchedulePosterParams{Member: strings.TrimSpace(strings.Join(args, " "))}
 
 	return &ParsedCommand{Type: botcommand.CommandSchedulePoster, Params: params, RawMessage: raw}, true
 }
@@ -161,9 +139,9 @@ func (ma *MessageAdapter) isScheduleCommand(cmd string) bool {
 	return slices.Contains(scheduleCommandAliases, cmd)
 }
 
-func (ma *MessageAdapter) parseScheduleArgs(args []string) map[string]any {
+func (ma *MessageAdapter) parseScheduleArgs(args []string) botcommand.ScheduleParams {
 	if len(args) == 0 {
-		return make(map[string]any)
+		return botcommand.ScheduleParams{}
 	}
 
 	member := args[0]
@@ -175,8 +153,5 @@ func (ma *MessageAdapter) parseScheduleArgs(args []string) map[string]any {
 		}
 	}
 
-	return map[string]any{
-		paramMember: member,
-		paramDays:   days,
-	}
+	return botcommand.ScheduleParams{Member: member, Days: days}
 }

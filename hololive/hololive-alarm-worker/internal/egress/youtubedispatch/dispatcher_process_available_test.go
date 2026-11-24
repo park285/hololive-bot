@@ -39,8 +39,6 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 		DeliveryParallelism: 1,
 	})
 
-	dispatcher.telemetry = nil
-
 	now := time.Now()
 
 	for _, contentID := range []string{"drain-1", "drain-2", "drain-3"} {
@@ -82,8 +80,6 @@ func TestDispatcher_ProcessAvailable_StopsWhenIdle(t *testing.T) {
 		RetryBackoff:        time.Minute,
 		DeliveryParallelism: 1,
 	})
-
-	dispatcher.telemetry = nil
 
 	require.False(t, dispatcher.processAvailable(ctx, 4))
 
@@ -147,8 +143,6 @@ func TestDispatcher_RunResetsWaitAfterProcessedRows(t *testing.T) {
 		RetryBackoff:        time.Minute,
 		DeliveryParallelism: 1,
 	})
-
-	dispatcher.telemetry = nil
 
 	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,

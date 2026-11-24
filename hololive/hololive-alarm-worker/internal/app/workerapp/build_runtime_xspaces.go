@@ -38,7 +38,7 @@ func buildXSpacesRunner(xSpaces workerconfig.XSpacesConfig, infra *sharedmodules
 	resolver := alarmstore.NewSubscriberResolver(infra.Cache, infra.Postgres.GetPool())
 
 	runner, err := xspacesworker.NewRunner(*config, store, xspacesworker.StartStore{Pool: infra.Postgres.GetPool()},
-		xspacesworker.ProcessCollector{}, pub,
+		&xspacesworker.ProcessCollector{}, pub,
 		func(ctx context.Context, channelID string) ([]string, error) {
 			return resolver.ResolveChannelSubscribersByType(ctx, channelID, domain.AlarmTypeLive)
 		}, logger)

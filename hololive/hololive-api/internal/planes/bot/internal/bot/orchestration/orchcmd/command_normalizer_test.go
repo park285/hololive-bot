@@ -1,195 +1,36 @@
 package orchcmd
 
 import (
-	"maps"
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 )
 
-type normalizeCommandKeyTestCase struct {
-	name       string
-	cmdType    botcommand.CommandType
-	params     map[string]any
-	wantKey    string
-	wantAction string
-}
-
-func normalizeCommandKeyTestCases() []normalizeCommandKeyTestCase {
-	return []normalizeCommandKeyTestCase{
-		{
-			name:       "alarm_list → alarm 키 + action=list",
-			cmdType:    botcommand.CommandAlarmList,
-			params:     map[string]any{},
-			wantKey:    CommandKeyAlarm,
-			wantAction: "list",
-		},
-		{
-			name:       "alarm_add → alarm 키 + action=add",
-			cmdType:    botcommand.CommandAlarmAdd,
-			params:     map[string]any{"channel": "pekora"},
-			wantKey:    CommandKeyAlarm,
-			wantAction: "add",
-		},
-		{
-			name:       "alarm_remove → alarm 키 + action=remove",
-			cmdType:    botcommand.CommandAlarmRemove,
-			params:     map[string]any{"channel": "aqua"},
-			wantKey:    CommandKeyAlarm,
-			wantAction: "remove",
-		},
-		{
-			name:       "alarm_clear → alarm 키 + action=clear",
-			cmdType:    botcommand.CommandAlarmClear,
-			params:     map[string]any{},
-			wantKey:    CommandKeyAlarm,
-			wantAction: "clear",
-		},
-		{
-			name:       "alarm_invalid → alarm 키 + action=invalid",
-			cmdType:    botcommand.CommandAlarmInvalid,
-			params:     map[string]any{},
-			wantKey:    CommandKeyAlarm,
-			wantAction: "invalid",
-		},
-		{
-			name:    "live → 변환 없이 live 키 반환",
-			cmdType: botcommand.CommandLive,
-			params:  map[string]any{"foo": "bar"},
-			wantKey: "live",
-		},
-		{
-			name:    "help → 변환 없이 help 키 반환",
-			cmdType: botcommand.CommandHelp,
-			params:  map[string]any{},
-			wantKey: "help",
-		},
-	}
-}
-
 func TestNormalizeCommandKey(t *testing.T) {
 	t.Parallel()
 
-	tests := normalizeCommandKeyTestCases()
-
-	for _, tc := range tests {
+	for _, tc := range []struct {
+		name       string
+		cmdType    botcommand.CommandType
+		params     botcommand.Params
+		wantKey    string
+		wantParams botcommand.Params
+	}{
+		{"alarm_list → alarm 키 + action=list", botcommand.CommandAlarmList, botcommand.AlarmParams{}, CommandKeyAlarm, botcommand.AlarmParams{Action: "list"}},
+		{"alarm_add → 인자 유지 + action=add", botcommand.CommandAlarmAdd, botcommand.AlarmParams{Member: "pekora", Type: "방송"}, CommandKeyAlarm, botcommand.AlarmParams{Action: "add", Member: "pekora", Type: "방송"}},
+		{"alarm_remove → action=remove", botcommand.CommandAlarmRemove, botcommand.AlarmParams{Member: "aqua"}, CommandKeyAlarm, botcommand.AlarmParams{Action: "remove", Member: "aqua"}},
+		{"alarm_clear 인자 없음 → action=clear", botcommand.CommandAlarmClear, nil, CommandKeyAlarm, botcommand.AlarmParams{Action: "clear"}},
+		{"alarm_invalid → action=invalid", botcommand.CommandAlarmInvalid, botcommand.AlarmParams{}, CommandKeyAlarm, botcommand.AlarmParams{Action: "invalid"}},
+		{"live → 변환 없음", botcommand.CommandLive, botcommand.LiveParams{Member: "miko"}, "live", botcommand.LiveParams{Member: "miko"}},
+		{"help → 변환 없음", botcommand.CommandHelp, botcommand.NoParams{}, "help", botcommand.NoParams{}},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assertNormalizeCommandKey(t, &tc)
+
+			gotKey, gotParams := NormalizeCommandKey(tc.cmdType, tc.params)
+			if gotKey != tc.wantKey || gotParams != tc.wantParams {
+				t.Errorf("NormalizeCommandKey(%q) = (%q, %#v), want (%q, %#v)", tc.cmdType, gotKey, gotParams, tc.wantKey, tc.wantParams)
+			}
 		})
-	}
-}
-
-func assertNormalizeCommandKey(t *testing.T, tc *normalizeCommandKeyTestCase) {
-	t.Helper()
-
-	origParams := make(map[string]any, len(tc.params))
-	maps.Copy(origParams, tc.params)
-
-	gotKey, gotParams := NormalizeCommandKey(tc.cmdType, tc.params)
-	if gotKey != tc.wantKey {
-		t.Errorf("NormalizeCommandKey(%q) key = %q, want %q", tc.cmdType, gotKey, tc.wantKey)
-	}
-
-	assertNormalizeCommandAction(t, gotParams, tc.wantAction)
-	assertOriginalParamsUnchanged(t, tc.params, origParams)
-}
-
-func assertNormalizeCommandAction(t *testing.T, gotParams map[string]any, wantAction string) {
-	t.Helper()
-
-	if wantAction == "" {
-		return
-	}
-
-	gotAction, ok := gotParams["action"]
-	if !ok {
-		t.Fatal("gotParams에 action 키가 없음")
-	}
-
-	if gotAction != wantAction {
-		t.Errorf("gotParams[action] = %q, want %q", gotAction, wantAction)
-	}
-}
-
-func assertOriginalParamsUnchanged(t *testing.T, params, origParams map[string]any) {
-	t.Helper()
-
-	for k, origV := range origParams {
-		if params[k] != origV {
-			t.Errorf("원본 params[%q]가 변경됨: got %v, want %v", k, params[k], origV)
-		}
-	}
-}
-
-type cloneParamsWithActionTestCase struct {
-	name       string
-	params     map[string]any
-	action     string
-	wantAction string
-	wantKeys   []string
-}
-
-func TestCloneParamsWithAction(t *testing.T) {
-	t.Parallel()
-
-	tests := []cloneParamsWithActionTestCase{
-		{
-			name:       "nil 입력 → action만 있는 새 맵 반환",
-			params:     nil,
-			action:     "list",
-			wantAction: "list",
-			wantKeys:   []string{"action"},
-		},
-		{
-			name:       "기존 파라미터 → action 추가 후 복제 반환",
-			params:     map[string]any{"channel": "noel", "org": "hololive"},
-			action:     "add",
-			wantAction: "add",
-			wantKeys:   []string{"channel", "org", "action"},
-		},
-		{
-			name:       "빈 맵 → action만 있는 새 맵 반환",
-			params:     map[string]any{},
-			action:     "remove",
-			wantAction: "remove",
-			wantKeys:   []string{"action"},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			assertCloneParamsWithAction(t, &tc)
-		})
-	}
-}
-
-func assertCloneParamsWithAction(t *testing.T, tc *cloneParamsWithActionTestCase) {
-	t.Helper()
-
-	origLen := len(tc.params)
-	got := cloneParamsWithAction(tc.params, tc.action)
-
-	if got["action"] != tc.wantAction {
-		t.Errorf("got[action] = %v, want %q", got["action"], tc.wantAction)
-	}
-
-	for _, key := range tc.wantKeys {
-		if _, ok := got[key]; !ok {
-			t.Errorf("반환된 맵에 키 %q가 없음", key)
-		}
-	}
-
-	if tc.params != nil && len(tc.params) != origLen {
-		t.Errorf("원본 params 길이가 변경됨: got %d, want %d", len(tc.params), origLen)
-	}
-
-	if len(tc.params) > 0 {
-		got["__test_isolation__"] = true
-
-		if _, leaked := tc.params["__test_isolation__"]; leaked {
-			t.Error("cloneParamsWithAction이 원본 맵을 반환함 (복제 아님)")
-		}
 	}
 }

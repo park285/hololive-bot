@@ -229,38 +229,32 @@ case "$target" in
             'HOLOLIVE_COLLECTOR_D_PASSWORD=HOLOLIVE_COLLECTOR_D_PASSWORD!' \
             'HOLOLIVE_REPLICATOR_PASSWORD=HOLOLIVE_REPLICATOR_PASSWORD'
         ;;
-    holo-pgbouncer)
-        if phase="$(pg_major_phase)"; then
-            die "PostgreSQL major upgrade in progress (phase ${phase:-unknown}); holo-pgbouncer stays stopped. Inspect ${pg_major_marker}"
-        fi
-        compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
-        require_values POSTGRES_PORT_BIND_IP
-        require_secret_file "${secrets_dir}/certs/postgres-ca.pem"
-        for tls_file in server.crt server.key backend-client.crt backend-client.key; do
-            require_secret_file "${secrets_dir}/pgbouncer/${tls_file}"
-        done
-        wait_for_tailnet_address POSTGRES_PORT_BIND_IP
-        admin_postgres_bind_assert "$deploy_root" "$POSTGRES_PORT_BIND_IP"
-        admin_network_assert_firewall "${deploy_root}/scripts/systemd/admin-dashboard-ingress.nft" "$installed_firewall"
-        install -d -m 0755 -- "${run_dir}/pgbouncer"
-        postgres_capacity_write_quadlet_config "$deploy_root" "$compose_env" "$quadlet_dir" \
-            "${run_dir}/pgbouncer/pgbouncer.ini"
-        ;;
     valkey-cache)
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         require_values VALKEY_BIND_IP
         wait_for_tailnet_address VALKEY_BIND_IP
+        admin_central_bind_assert "$deploy_root" "$VALKEY_BIND_IP" Valkey || die "VALKEY_BIND_IP must select the central Valkey endpoint"
         ;;
     hololive-db-migrate)
         compose_env_validate_file_format "$compose_env" || die "compose env file is invalid: ${compose_env}"
         case "${2:-}" in
-            pool-auth) write_secret_env hololive-db-migrate 'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' ;;
+            admin-bootstrap)
+                write_secret_env hololive-db-migrate \
+                    'PGPASSWORD=HOLOLIVE_MIGRATOR_PASSWORD!' \
+                    'POSTGRES_ADMIN_PASSWORD=DB_PASSWORD!' \
+                    'HOLOLIVE_DB_PASSWORD=HOLOLIVE_DB_PASSWORD!' \
+                    'HOLOLIVE_ALARM_WORKER_PASSWORD=HOLOLIVE_ALARM_WORKER_PASSWORD!' \
+                    'HOLOLIVE_COLLECTOR_A_PASSWORD=HOLOLIVE_COLLECTOR_A_PASSWORD!' \
+                    'HOLOLIVE_COLLECTOR_B_PASSWORD=HOLOLIVE_COLLECTOR_B_PASSWORD!' \
+                    'HOLOLIVE_COLLECTOR_C_PASSWORD=HOLOLIVE_COLLECTOR_C_PASSWORD!' \
+                    'HOLOLIVE_COLLECTOR_D_PASSWORD=HOLOLIVE_COLLECTOR_D_PASSWORD!'
+                ;;
             schema) write_secret_env hololive-db-migrate 'PGPASSWORD=HOLOLIVE_MIGRATOR_PASSWORD!' ;;
-            *) die "hololive-db-migrate requires pool-auth or schema" ;;
+            *) die "hololive-db-migrate requires admin-bootstrap or schema" ;;
         esac
         ;;
     hololive-alarm-worker)
-        require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS
+        require_values LIVE_LOGS_PATH VALKEY_BIND_IP
         validate_container_env_file "${secrets_dir}/alarm-worker.env"
         if [[ "$render_env" == false ]]; then
             wait_for_tailnet_address HOLOLIVE_METRICS_PORT_BIND_IP
@@ -270,7 +264,7 @@ case "$target" in
             'HOLODEX_API_KEY=HOLODEX_API_KEY'
         ;;
     hololive-api)
-        require_values LIVE_LOGS_PATH VALKEY_SENTINEL_ADDRS \
+        require_values LIVE_LOGS_PATH VALKEY_BIND_IP \
             HOLOLIVE_API_PORT_BIND_IP HOLOLIVE_ADMIN_API_PORT_BIND_IP HOLOLIVE_H3_SERVER_NAME
         validate_container_env_file "${secrets_dir}/bot.env"
         if [[ "$render_env" == false ]]; then

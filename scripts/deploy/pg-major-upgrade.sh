@@ -106,7 +106,7 @@ write_marker() {
 
 start_units() {
   local unit
-  for unit in holo-pgbouncer.service "${writer_units[@]}"; do
+  for unit in "${writer_units[@]}"; do
     if [[ " ${active_units[*]} " == *" $unit "* ]]; then
       systemctl start "$unit"
     fi
@@ -117,7 +117,7 @@ admin_user="$(env_value POSTGRES_ADMIN_USER postgres_admin)"
 central_slot="$(collector_slots_where host central)" && [[ "$central_slot" =~ ^[a-z]$ ]] || die "central collector slot is missing"
 central_collector="$(collector_slot "$central_slot" collector_unit)" || die "central collector unit is missing"
 writer_units=("$central_collector" hololive-alarm-worker.service hololive-api.service)
-stop_units=(hololive-api.service hololive-alarm-worker.service "$central_collector" holo-pgbouncer.service)
+stop_units=(hololive-api.service hololive-alarm-worker.service "$central_collector")
 bootstrap_roles="$admin_user,hololive_runtime,hololive_alarm_worker,$(env_value HOLOLIVE_MIGRATOR_USER hololive_migrator),hololive_scraper"
 bootstrap_roles+=",hololive_collector_a,hololive_collector_b,hololive_collector_c,hololive_collector_d"
 if [[ -n "$(env_value HOLOLIVE_REPLICATOR_PASSWORD '')" ]]; then
@@ -156,6 +156,9 @@ version="$(scalar 'SHOW server_version_num;')"
 size="$(scalar "SELECT pg_database_size('hololive');")"
 connection_limit="$(scalar "SELECT datconnlimit FROM pg_database WHERE datname = 'hololive';")"
 [[ "$size" =~ ^[0-9]+$ && "$connection_limit" =~ ^-?[0-9]+$ ]] || die "cannot read the database size and connection limit"
+remote_collectors="$(scalar "SELECT count(*) FROM pg_stat_activity WHERE backend_type = 'client backend' AND usename LIKE 'hololive\_collector\_%' AND usename <> 'hololive_collector_$central_slot';")"
+[[ "$remote_collectors" == 0 ]] ||
+  die "AP collectors still hold ${remote_collectors:-unknown} sessions; stop them through their slot procedures before the upgrade"
 install -d -m 0700 -- "$state_dir"
 graph_root="$(podman info --format '{{.Store.GraphRoot}}')"
 for path in "$state_dir" "$graph_root"; do
@@ -191,7 +194,7 @@ abort() {
   fi
   systemctl stop holo-postgres.service
   cat >&2 <<EOF
-[pg-major-upgrade] aborted after PostgreSQL 18 stopped. holo-postgres, holo-pgbouncer and the writers stay stopped while $marker exists.
+[pg-major-upgrade] aborted after PostgreSQL 18 stopped. holo-postgres and the writers stay stopped while $marker exists.
 [pg-major-upgrade] The previous volume $source_volume was only read. The dump and fingerprints are in $work_dir.
 [pg-major-upgrade] Return to PostgreSQL 18: set POSTGRES_IMAGE=$source_image in the compose.env master and sync it (stack-platform-ops),
 [pg-major-upgrade] install the previous revision's holo-postgres.container and holo-pg-data.volume into $quadlet_dir and run systemctl daemon-reload,
@@ -203,7 +206,7 @@ EOF
 trap abort EXIT
 
 write_marker dump
-log "stopping writers and the pooler: ${stop_units[*]}"
+log "stopping writers: ${stop_units[*]}"
 systemctl stop "${stop_units[@]}"
 remaining=
 for _ in $(seq 1 30); do

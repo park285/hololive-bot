@@ -18,7 +18,7 @@ new_host() {
     "$T/etc/containers/systemd/hololive-bot/"
   cp "$root/scripts/deploy/quadlet-prestart.sh" "$T/usr/local/libexec/hololive-bot/quadlet-prestart"
   printf 'POSTGRES_IMAGE=sha256:%s\nHOLOLIVE_REPLICATOR_PASSWORD=x\n' "$target_id" >"$T/etc/stack-secrets/hololive-bot/compose.env"
-  for unit in holo-postgres hololive-api hololive-alarm-worker hololive-collector-c holo-pgbouncer; do
+  for unit in holo-postgres hololive-api hololive-alarm-worker hololive-collector-c; do
     touch "$T/state/active/$unit.service"
   done
   touch "$T/volumes/hololive-bot_holo-pg-data"
@@ -86,6 +86,7 @@ case "$1 $2" in
           *datconnlimit\ FROM*) echo -1 ;;
           *bootstrap_roles*) echo "CREATE ROLE iris_db_nightly;" ;;
           *"'rows'"*) printf 'role|postgres_admin\n'; cat "$S/rows" ;;
+          *"usename LIKE"*) cat "$S/remote-collectors" 2>/dev/null || echo 0 ;;
           *pg_stat_activity*backend_type*) echo 0 ;;
           *"count(*) FROM pg_catalog.pg_default_acl"*) echo default-acl >>"$S/calls"; echo 0 ;;
           *) printf 'psql %s\n' "$(head -c 60 <<<"$sql")" >>"$S/calls" ;;
@@ -133,8 +134,11 @@ expect_refusal 'configured PostgreSQL image is not PostgreSQL 19'
 rm "$T/state/target-major-18"
 printf '# drift\n' >>"$T/etc/containers/systemd/hololive-bot/holo-postgres.container"
 expect_refusal 'installed holo-postgres.container differs'
+new_host remote-collectors
+printf '2\n' >"$T/state/remote-collectors"
+expect_refusal 'AP collectors still hold 2 sessions'
 if grep -q 'systemctl stop' "$T/state/calls"; then exit 1; fi
-echo 'preflight refuses unresolved markers, existing targets, wrong majors and stale units before stopping anything'
+echo 'preflight refuses unresolved markers, existing targets, wrong majors, stale units and connected AP collectors before stopping anything'
 
 new_host commit
 run_tool >"$T/out"
@@ -146,8 +150,8 @@ grep -qF 'major upgrade committed' "$T/out"
 (( $(line_of 'final-server') < $(line_of 'CONNECTION LIMIT 0') ))
 (( $(line_of 'CONNECTION LIMIT 0') < $(line_of 'default-acl') ))
 (( $(line_of 'default-acl') < $(line_of 'pg_restore') ))
-(( $(line_of 'pg_restore') < $(line_of 'systemctl start holo-pgbouncer.service') ))
-(( $(line_of 'systemctl start holo-pgbouncer.service') < $(line_of 'systemctl start hololive-api.service') ))
+(( $(line_of 'pg_restore') < $(line_of 'systemctl start hololive-collector-c.service') ))
+(( $(line_of 'systemctl start hololive-collector-c.service') < $(line_of 'systemctl start hololive-api.service') ))
 grep -qF 'CONNECTION LIMIT -1' "$T/state/calls"
 [[ "$(cat "$T/state/volume")" == hololive-bot_holo-pg-data19 ]]
 work="$(find "$T/var/lib/hololive-bot/pg-major" -mindepth 1 -maxdepth 1 -type d)"
@@ -169,7 +173,7 @@ touch "$T/state/fail-dump"
 expect_refusal 'aborted before PostgreSQL 18 stopped'
 [[ ! -e "$(marker)" ]]
 if grep -qF 'systemctl stop holo-postgres.service' "$T/state/calls"; then exit 1; fi
-for unit in holo-pgbouncer hololive-collector-c hololive-alarm-worker hololive-api; do
+for unit in hololive-collector-c hololive-alarm-worker hololive-api; do
   [[ -e "$T/state/active/$unit.service" ]]
 done
 echo 'a failure before PostgreSQL 18 stops clears the marker and restarts the stopped units'
@@ -206,11 +210,7 @@ rm "$fixture/prestart-volumes/hololive-bot_holo-pg-data19/pgdata/PG_VERSION"
 printf 'phase=dump\n' >"$(marker)"
 prestart holo-postgres
 grep -qF 'holo-postgres stays stopped' "$T/out"
-prestart holo-pgbouncer
-grep -qF 'holo-pgbouncer stays stopped' "$T/out"
 printf 'phase=restore\n' >"$(marker)"
 prestart holo-postgres
 passed_guard
-prestart holo-pgbouncer
-grep -qF 'holo-pgbouncer stays stopped' "$T/out"
-echo 'prestart keeps PostgreSQL and the pooler down during an upgrade and refuses an empty cluster beside a previous one'
+echo 'prestart keeps PostgreSQL down during an upgrade and refuses an empty cluster beside a previous one'

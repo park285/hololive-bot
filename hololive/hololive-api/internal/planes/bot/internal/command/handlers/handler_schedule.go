@@ -30,12 +30,9 @@ func (c *ScheduleCommand) Description() string {
 	return "특정 멤버 일정 조회"
 }
 
-func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	rawCommandToken := popRawScheduleCommandToken(params)
-	memberName, ok := scheduleMemberName(params)
-
-	if !ok {
-		if shouldSuppressSchedulePrompt(cmdCtx, rawCommandToken) {
+func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.ScheduleParams) error {
+	if params.Member == "" {
+		if shouldSuppressSchedulePrompt(cmdCtx, params.RawCommand) {
 			return nil
 		}
 
@@ -46,8 +43,8 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *botcommand.Comman
 		return nil
 	}
 
-	days := scheduleDays(params)
-	if err := c.executeMemberSchedule(ctx, cmdCtx.Room, memberName, days); err != nil {
+	days := clampScheduleDays(params.Days)
+	if err := c.executeMemberSchedule(ctx, cmdCtx.Room, params.Member, days); err != nil {
 		return fmt.Errorf("execute member schedule: %w", err)
 	}
 
@@ -102,26 +99,6 @@ func (c *ScheduleCommand) executeMemberSchedule(ctx context.Context, room, membe
 	}
 
 	return nil
-}
-
-func popRawScheduleCommandToken(params map[string]any) string {
-	rawCommandToken := stringParam(params, "_raw_command")
-	delete(params, "_raw_command")
-
-	return rawCommandToken
-}
-
-func scheduleMemberName(params map[string]any) (string, bool) {
-	memberName, ok := params[paramMember].(string)
-	if !ok || memberName == "" {
-		return "", false
-	}
-
-	return memberName, true
-}
-
-func scheduleDays(params map[string]any) int {
-	return clampScheduleDays(intParam(params, paramDays, 7))
 }
 
 func clampScheduleDays(days int) int {

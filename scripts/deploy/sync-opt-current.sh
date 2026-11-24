@@ -14,14 +14,16 @@ die() { printf '[sync-opt-current] ERROR: %s\n' "$*" >&2; exit 1; }
 preserve_runtime=false
 application_only=false
 source_base=
+valkey_only=false
 case "$#:${1:-}" in
   0:) ;;
+  1:--valkey-only) valkey_only=true ;;
   1:--preserve-runtime) preserve_runtime=true ;;
   1:--application-only) application_only=true; preserve_runtime=true ;;
   2:--source-only)
     [[ "$2" =~ ^[0-9a-f]{40}$ ]] || die "source-only requires the full installed commit"
     source_base="$2"; application_only=true; preserve_runtime=true ;;
-  *) die "usage: $0 [--preserve-runtime | --application-only | --source-only <installed-commit>]" ;;
+  *) die "usage: $0 [--valkey-only | --preserve-runtime | --application-only | --source-only <installed-commit>]" ;;
 esac
 
 [[ "$(id -u)" -eq 0 ]] || die "must run as root (sudo)"
@@ -47,6 +49,82 @@ assert_clean "$REPO_ROOT" "repo"
 HEAD_REVISION="$(git -C "$REPO_ROOT" rev-parse --verify 'HEAD^{commit}')"
 HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse --short "$HEAD_REVISION")"
 log "repo=$REPO_ROOT HEAD=$HEAD_SHA -> $OPT_CURRENT"
+env_value() {
+  if compose_env_key_exists_in_file "$COMPOSE_ENV" "$1"; then
+    compose_env_read_value_from_file "$COMPOSE_ENV" "$1"
+  fi
+}
+require_central_valkey_bind() {
+  compose_env_validate_file_format "$COMPOSE_ENV"
+  [[ "$(env_value VALKEY_BIND_IP)" == 100.100.1.8 ]] || die "VALKEY_BIND_IP must select the central Valkey endpoint"
+}
+host_assets=(
+  "scripts/deploy/quadlet-prestart.sh|$LIBEXEC_DIR/quadlet-prestart|755"
+  "scripts/systemd/admin-dashboard-ingress-firewall.service|/etc/systemd/system/admin-dashboard-ingress-firewall.service|644"
+  "scripts/systemd/admin-dashboard-ingress.nft|/etc/nftables.d/admin-dashboard-ingress.nft|644"
+)
+for lib in admin-bind public-bind-mounts postgres-capacity compose-env postgres-endpoint collector-slots; do
+  host_assets+=("scripts/deploy/lib/$lib.sh|$LIBEXEC_DIR/lib/$lib.sh|644")
+done
+host_assets+=("scripts/deploy/lib/collector-slots.tsv|$LIBEXEC_DIR/lib/collector-slots.tsv|644")
+require_valkey_stage_selected() {
+  local stage_tool=/opt/iris-stack/valkey-ha/stage.py
+  { [[ -f $stage_tool && ! -L $stage_tool ]] && bash "$REPO_ROOT/scripts/deploy/verify-exec-tree-ownership.sh" "$stage_tool"; } ||
+    die "Valkey stage tool is missing or writable by a non-root user: $stage_tool"
+  python3 -I "$stage_tool" selected hololive || die "Valkey standalone stage is not admitted"
+}
+
+if [[ $valkey_only == true ]]; then
+  [[ $OPT_ROOT == /opt/hololive-bot/compose ]] || die "Valkey-only publication checks the runtime tree that the prestart reads: /opt/hololive-bot/compose"
+  # shellcheck source=scripts/deploy/lib/compose-env.sh
+  . "$REPO_ROOT/scripts/deploy/lib/compose-env.sh"
+  # shellcheck source=scripts/deploy/lib/postgres-endpoint.sh
+  . "$REPO_ROOT/scripts/deploy/lib/postgres-endpoint.sh"
+  require_central_valkey_bind
+  require_valkey_stage_selected
+  unit=valkey-cache.container
+  target="$QUADLET_DIR/$unit"
+  [[ -f $target && ! -L $target && $(realpath -e "$target") == "$target" && ! -e $target.d && ! -L $target.d ]] ||
+    die "expected an existing Valkey unit without local drop-ins"
+  quadlet_override_origins "$target" || die "Valkey unit has unreviewed Quadlet or systemd overrides"
+  start_checks=("deploy/topology/hosts.conf|$OPT_CURRENT/deploy/topology/hosts.conf|644")
+  for asset in "${host_assets[@]}"; do
+    [[ $asset != *"|$LIBEXEC_DIR/"* ]] || start_checks+=("$asset")
+  done
+  start_paths=()
+  for asset in "${start_checks[@]}"; do
+    IFS='|' read -r path dest mode <<<"$asset"
+    if ! { [[ -f $dest && ! -L $dest && $(stat -c %u:%g:%a -- "$dest") == "0:0:$mode" ]] && cmp -s -- "$REPO_ROOT/$path" "$dest"; }; then
+      die "installed Valkey start checks differ from the checkout; run a full sync first: $dest"
+    fi
+    start_paths+=("$dest")
+  done
+  bash "$REPO_ROOT/scripts/deploy/verify-exec-tree-ownership.sh" "${start_paths[@]}" ||
+    die "installed Valkey start checks are writable by a non-root user"
+  if compose_env_key_exists_in_file "$COMPOSE_ENV" VALKEY_IMAGE; then
+    image=$(compose_env_read_value_from_file "$COMPOSE_ENV" VALKEY_IMAGE)
+    [[ -n $image ]] || die "VALKEY_IMAGE is empty in $COMPOSE_ENV"
+  else
+    image=$(sed -n 's/^Environment=VALKEY_IMAGE=//p' "$REPO_ROOT/deploy/quadlet/hololive-bot/$unit")
+  fi
+  if ! podman image exists "$image"; then
+    die "Valkey image is not present: $image"
+  fi
+  scratch=$(mktemp -d /run/.hololive-valkey-unit.XXXXXX)
+  candidate=
+  trap 'rm -rf -- "$scratch"; [[ -z $candidate ]] || rm -f -- "$candidate"' EXIT
+  mkdir "$scratch/units"
+  cp -a "$QUADLET_DIR/." "$scratch/units/"
+  install -m0644 "$REPO_ROOT/deploy/quadlet/hololive-bot/$unit" "$scratch/units/$unit"
+  QUADLET_UNIT_DIRS="$scratch/units" /usr/libexec/podman/quadlet -dryrun >/dev/null || die "Valkey unit rejected"
+  candidate=$(mktemp "$QUADLET_DIR/.valkey-candidate.XXXXXX")
+  install -m0644 "$scratch/units/$unit" "$candidate"
+  mv -T -- "$candidate" "$target"
+  candidate=
+  systemctl daemon-reload || die "Valkey unit published; daemon-reload outcome unknown"
+  log "Valkey unit published without a service restart"
+  exit 0
+fi
 if [[ -n "$source_base" ]]; then
   [[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=all)" ]] || die "source-only requires a clean checkout"
   if ! { [[ -f "$OPT_CURRENT/.source-revision" && ! -L "$OPT_CURRENT/.source-revision" ]] &&
@@ -80,6 +158,7 @@ backup_current() {
 }
 
 if [[ "$application_only" != true ]]; then
+  require_valkey_stage_selected
   backup_current
 fi
 
@@ -119,8 +198,9 @@ programs = [
     "scripts/deploy/quadlet-redeploy-service.sh", "scripts/deploy/quadlet-rollback-service.sh",
     "scripts/deploy/quadlet-prestart.sh", "scripts/ci/postgres-capacity-policy.tsv",
     *("scripts/deploy/lib/" + name for name in (
-        "worker-profile-pair.py", "systemd-stop-guard.py", "card-migration-guard.py", "admin-bind.sh",
+        "worker-profile-pair.py", "systemd-stop-guard.py", "writer-drain-guard.py", "admin-bind.sh",
         "public-bind-mounts.sh", "postgres-capacity.sh", "compose-env.sh", "postgres-endpoint.sh")),
+    "hololive/hololive-api/cmd/db-migrate/queries/bootstrap_writer_admission.sql",
 ]
 slot_table = ("collector-slots.sh", "collector-slots.tsv")
 files = {root / path for path in programs}
@@ -152,15 +232,6 @@ fi
 
 migrator=hololive-db-migrate.container
 migrator_path="deploy/quadlet/hololive-bot/$migrator"
-host_assets=(
-  "scripts/deploy/quadlet-prestart.sh|$LIBEXEC_DIR/quadlet-prestart|755"
-  "scripts/systemd/admin-dashboard-ingress-firewall.service|/etc/systemd/system/admin-dashboard-ingress-firewall.service|644"
-  "scripts/systemd/admin-dashboard-ingress.nft|/etc/nftables.d/admin-dashboard-ingress.nft|644"
-)
-for lib in admin-bind public-bind-mounts postgres-capacity compose-env postgres-endpoint collector-slots; do
-  host_assets+=("scripts/deploy/lib/$lib.sh|$LIBEXEC_DIR/lib/$lib.sh|644")
-done
-host_assets+=("scripts/deploy/lib/collector-slots.tsv|$LIBEXEC_DIR/lib/collector-slots.tsv|644")
 
 assert_same_file() {
   if ! { [[ -f "$1" && ! -L "$1" && -f "$2" && ! -L "$2" ]] && cmp -s -- "$1" "$2"; }; then
@@ -182,8 +253,6 @@ verify_execution_tree() {
   shift
   local -a paths=("$@" "$OPT_CURRENT/scripts/deploy/verify-exec-tree-ownership.sh"
     "$OPT_CURRENT/scripts/ci/postgres-capacity-policy.tsv"
-    "$OPT_CURRENT/deploy/pgbouncer/pg_hba.conf"
-    "$OPT_CURRENT/deploy/pgbouncer/stats-users.txt"
     "$OPT_CURRENT/deploy/nginx/admin-dashboard-ingress.conf.template"
     "$OPT_CURRENT/deploy/postgres/pg_hba.conf")
   for asset in "${host_assets[@]}"; do
@@ -247,17 +316,10 @@ fi
 . "$STAGING/scripts/deploy/lib/compose-env.sh"
 # shellcheck source=scripts/deploy/lib/collector-slots.sh
 . "$STAGING/scripts/deploy/lib/collector-slots.sh"
-compose_env_validate_file_format "$COMPOSE_ENV"
+require_central_valkey_bind
 central_collector="$(collector_slot "$(collector_slots_where host central)" collector_unit)" ||
   die "central collector slot is missing"
 central_collector="${central_collector%.service}"
-env_value() {
-  if compose_env_key_exists_in_file "$COMPOSE_ENV" "$1"; then
-    compose_env_read_value_from_file "$COMPOSE_ENV" "$1"
-  fi
-}
-[[ "$(env_value HOLOLIVE_VALKEY_HA_ENABLED)" == 1 ]] || die "HOLOLIVE_VALKEY_HA_ENABLED=1 is required in $COMPOSE_ENV"
-[[ -n "$(env_value VALKEY_SENTINEL_ADDRS)" ]] || die "VALKEY_SENTINEL_ADDRS is required in $COMPOSE_ENV"
 OPTIONAL_FEATURES=(
   "x-spaces|HOLOLIVE_X_SPACES_ENABLED|40-x-spaces.conf|hololive-api hololive-alarm-worker"
   "schedule-poster|HOLOLIVE_SCHEDULE_POSTER_ENABLED|41-schedule-poster.conf|hololive-api"
@@ -299,7 +361,7 @@ for feature in "${OPTIONAL_FEATURES[@]}"; do
 done
 if [[ "$application_only" == true ]]; then
   assert_same_tree "$quadlet_check_dir" "$QUADLET_DIR" "--exclude=/$migrator"
-  required_exec=--pool-only=auth
+  required_exec=--configure-login-roles
   if [[ -n "$source_base" ]]; then
     required_exec=--schema-only
     assert_same_file "$STAGING/$migrator_path" "$QUADLET_DIR/$migrator"

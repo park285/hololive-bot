@@ -108,6 +108,7 @@ BUNDLE_MANIFEST.txt
 .codex-input/
 .mcp.json
 .opencode/
+_workspace/
 *.ai.md
 *-ai-notes.md
 *.backup

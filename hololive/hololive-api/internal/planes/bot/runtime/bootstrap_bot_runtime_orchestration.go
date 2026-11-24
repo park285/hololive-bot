@@ -74,7 +74,7 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 		accept: botBot.AcceptsMessage,
 		logger: logger,
 		totals: durable.inboxTotals,
-	}, appbootstrap.BotWebhookRuntimeDependencies{Cache: infra.Cache}, logger)
+	}, infra.Postgres.GetPool(), logger)
 	if err != nil {
 		return nil, fmt.Errorf("build webhook handler: %w", err)
 	}

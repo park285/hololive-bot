@@ -44,10 +44,6 @@ type YouTubeDeliveryWorkerSettings struct {
 	ReviveFreshnessWindowMS     int64 `json:"revive_freshness_window_ms"`
 	SubscriberLookupParallelism int   `json:"subscriber_lookup_parallelism"`
 	AggregateSyncIntervalMS     int64 `json:"aggregate_sync_interval_ms"`
-	TelemetryPollIntervalMS     int64 `json:"telemetry_poll_interval_ms"`
-	TelemetryFlushBatch         int   `json:"telemetry_flush_batch"`
-	TelemetryRetryBackoffMS     int64 `json:"telemetry_retry_backoff_ms"`
-	TelemetryRetentionMS        int64 `json:"telemetry_retention_ms"`
 	HandoffHorizonMS            int64 `json:"handoff_horizon_ms"`
 }
 

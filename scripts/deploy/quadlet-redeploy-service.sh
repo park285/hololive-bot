@@ -492,16 +492,14 @@ if [[ "$mode" == resume ]]; then
   migrator_ref="${candidate_refs[hololive-api]}"
 fi
 infrastructure_generation() {
-  local name state running cid image started
-  for name in holo-postgres holo-pgbouncer; do
-    state="$(podman container inspect --format '{{.State.Running}} {{.Id}} {{.Image}} {{.State.StartedAt.UnixNano}}' "$name")" || return 1
-    read -r running cid image started <<<"$state"
-    [[ "$running" == true && "$cid" =~ ^[0-9a-f]{64}$ && "$image" =~ ^[0-9a-f]{64}$ &&
-       "$started" =~ ^[1-9][0-9]*$ ]] || return 1
-    printf '%s %s %s %s\n' "$name" "$cid" "$image" "$started"
-  done
+  local state running cid image started
+  state="$(podman container inspect --format '{{.State.Running}} {{.Id}} {{.Image}} {{.State.StartedAt.UnixNano}}' holo-postgres)" || return 1
+  read -r running cid image started <<<"$state"
+  [[ "$running" == true && "$cid" =~ ^[0-9a-f]{64}$ && "$image" =~ ^[0-9a-f]{64}$ &&
+     "$started" =~ ^[1-9][0-9]*$ ]] || return 1
+  printf 'holo-postgres %s %s %s\n' "$cid" "$image" "$started"
 }
-infrastructure="$(infrastructure_generation)" || die "cannot establish running PostgreSQL and pooler generations"
+infrastructure="$(infrastructure_generation)" || die "cannot establish the running PostgreSQL generation"
 if [[ "$mode" == resume ]]; then
   for service in "${services[@]}"; do
     cmp -s "${release_paths[$service]}/infrastructure" <(printf '%s\n' "$infrastructure") || die "infrastructure changed since the hold"
@@ -509,7 +507,7 @@ if [[ "$mode" == resume ]]; then
 fi
 assert_infrastructure() {
   local actual
-  actual="$(infrastructure_generation)" && [[ "$actual" == "$infrastructure" ]] || die "accepted database or pooler generation changed"
+  actual="$(infrastructure_generation)" && [[ "$actual" == "$infrastructure" ]] || die "accepted database generation changed"
 }
 for service in "${services[@]}"; do
   candidate_ids[$service]="$(resolve_image "${candidate_refs[$service]}" "$service")"
@@ -519,8 +517,8 @@ postgres_capacity_assert_target "$ROOT_DIR" "$compose_env"
 assert_writer_endpoint() {
   local unit="$quadlet_dir/$1.container" values
   values="$(postgres_quadlet_environment "$unit" "$compose_env" "$unit" POSTGRES_HOST POSTGRES_PORT POSTGRES_SOCKET_PATH POSTGRES_SSLMODE)"
-  [[ "$values" == $'POSTGRES_HOST=holo-pgbouncer\nPOSTGRES_PORT=6432\nPOSTGRES_SOCKET_PATH=\nPOSTGRES_SSLMODE=verify-full' ]] ||
-    die "$1: pooled TCP endpoint and verify-full are required"
+  [[ "$values" == $'POSTGRES_HOST=holo-postgres\nPOSTGRES_PORT=5432\nPOSTGRES_SOCKET_PATH=\nPOSTGRES_SSLMODE=verify-full' ]] ||
+    die "$1: direct TLS endpoint and verify-full are required"
 }
 require_card_ledger() {
   local result receipts head_query contract
@@ -542,14 +540,12 @@ SQL
   )" && [[ "$result" == t ]] || die "migration lineage not confirmed; no single-writer migration or new writer activation"
 }
 
-if [[ "$mode" != quiesce ]]; then
-  postgres_capacity_assert_live "$ROOT_DIR" "$compose_env" "$quadlet_dir"
-  for service in "${services[@]}"; do assert_writer_endpoint "$service"; done
-  if [[ "$mode" == deploy ]]; then
-    require_card_ledger
-    postgres_endpoint_require_same "$(postgres_endpoint_container "$service")" 'holo-pgbouncer|6432' ||
-      die "single-writer endpoint change refused; use the coordinated pre-sync hold"
-  fi
+postgres_capacity_assert_installed "$ROOT_DIR" "$compose_env" "$quadlet_dir"
+for service in "${services[@]}"; do assert_writer_endpoint "$service"; done
+if [[ "$mode" == deploy ]]; then
+  require_card_ledger
+  postgres_endpoint_require_same "$(postgres_endpoint_container "$service")" 'holo-postgres|5432' ||
+    die "single-writer endpoint change refused; use the coordinated pre-sync hold"
 fi
 
 prepare_slot() {
@@ -578,10 +574,10 @@ prepare_slot() {
   [[ "$captured_id" =~ ^[0-9a-f]{64}$ ]] || die "$service has no captured container ID"
   if [[ "$mode" == quiesce ]]; then original_cids[$service]="$captured_id"; fi
   endpoint="$(postgres_endpoint_container "$captured_id")"
-  [[ "$endpoint" == 'holo-pgbouncer|6432' ]] || die "card window requires a running pooled writer"
-  printf '%s\n' "$endpoint" >"$release/previous.endpoint"
+  [[ "$endpoint" == 'holo-postgres|5432' ]] || die "migration window requires a running direct TLS writer"
   postgres_endpoint_require_same "$endpoint" "$(postgres_endpoint_quadlet "$quadlet_dir/$service.container" "$compose_env")" ||
     die "$service installed endpoint differs from the captured running generation"
+  printf '%s\n' "$endpoint" >"$release/previous.endpoint"
   python3 "$pair_tool" rollback "$service" "$release/previous" "$release/rollback.conf"
   (cd "$release" && sha256sum previous/pair.json previous.endpoint rollback.conf >rollback.sha256)
   python3 "$pair_tool" check "$service" "$release/previous"
@@ -672,7 +668,7 @@ run_migration() {
     sync_paths "$migration" "${release_paths[hololive-api]}"
   fi
   if [[ "$mode" == resume ]]; then
-    python3 -I -B "$ROOT_DIR/scripts/deploy/lib/card-migration-guard.py"
+    python3 -I -B "$ROOT_DIR/scripts/deploy/lib/writer-drain-guard.py"
   else
     systemctl start hololive-db-migrate.service
   fi
@@ -700,7 +696,7 @@ assert_infrastructure
 for service in "${services[@]}"; do
   [[ "$mode" != resume ]] || assert_coordinated_hold
   assert_writer_endpoint "$service"
-  postgres_pooler_assert_writer_sql "$service"
+  postgres_writer_assert_sql "$service"
 done
 assert_infrastructure
 assert_no_fence_marker

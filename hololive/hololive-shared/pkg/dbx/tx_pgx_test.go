@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -35,6 +36,20 @@ func TestPgxTxCommitsOnNilError(t *testing.T) {
 
 	require.NoError(t, pool.QueryRow(ctx, "SELECT value FROM dbx_tx_test").Scan(&got))
 	require.Equal(t, "committed", got)
+}
+
+func TestPgxTxOptionsAppliesTransactionMode(t *testing.T) {
+	ctx := t.Context()
+	pool := newTxTestPool(t)
+
+	var readOnly, isolation string
+
+	err := InPgxTxOptions(ctx, pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, "SELECT current_setting('transaction_read_only'), current_setting('transaction_isolation')").Scan(&readOnly, &isolation)
+	})
+	require.NoError(t, err)
+	require.Equal(t, "on", readOnly)
+	require.Equal(t, "repeatable read", isolation)
 }
 
 func TestPgxTxRollsBackOnError(t *testing.T) {

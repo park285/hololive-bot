@@ -42,11 +42,25 @@ test("escaped aggregate challenge exceeding the IPC budget is rejected before ad
 });
 
 
+test("a protocol 1 broker without token validation is never used", async (t) => {
+  const client = await brokerServer(t, (req, res) => {
+    req.resume();
+    res.setHeader("content-type", "application/json");
+    if (req.url === "/health") {
+      res.end(JSON.stringify({ protocol_version: 1, generation: "generation", state: "IDLE", revision: "revision" }));
+    } else {
+      res.end(JSON.stringify({ protocol_version: 1, generation: "generation", video_id: "video", po_token: "not a token!" }));
+    }
+  });
+  await assert.rejects(() => client.freshGeneration(new AbortController().signal), { code: "broker_protocol" });
+  await assert.rejects(() => client.mint("generation", "video", new AbortController().signal), { code: "broker_protocol" });
+});
+
 test("malformed preparation acknowledgment is not accepted", async (t) => {
   const client = await brokerServer(t, (req, res) => {
     req.resume();
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ protocol_version: 1, generation: "generation", prepared: false }));
+    res.end(JSON.stringify({ protocol_version: 2, generation: "generation", prepared: false }));
   });
   await assert.rejects(() => client.prepare("generation", "agent", new AbortController().signal), { code: "broker_protocol" });
 });
@@ -57,11 +71,11 @@ test("prepared health phase is recognized and retired before a new generation", 
     req.resume();
     res.setHeader("content-type", "application/json");
     if (req.url === "/health") {
-      res.end(JSON.stringify({ protocol_version: 1, generation: retired ? "new-generation" : "old-generation",
+      res.end(JSON.stringify({ protocol_version: 2, generation: retired ? "new-generation" : "old-generation",
         state: retired ? "IDLE" : "AWAITING_CHALLENGE", revision: "revision" }));
     } else {
       retired = true;
-      res.end(JSON.stringify({ protocol_version: 1, generation: "old-generation", closed: true }));
+      res.end(JSON.stringify({ protocol_version: 2, generation: "old-generation", closed: true }));
     }
   });
   assert.equal(await client.freshGeneration(new AbortController().signal), "new-generation");
@@ -75,7 +89,7 @@ test("generation acquisition waits for trusted SDK startup beyond three seconds"
     req.resume();
     timer = setTimeout(() => {
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ protocol_version: 1, generation: "loaded-generation", state: "IDLE", revision: "revision" }));
+      res.end(JSON.stringify({ protocol_version: 2, generation: "loaded-generation", state: "IDLE", revision: "revision" }));
     }, 4_000);
   });
   assert.equal(await client.freshGeneration(new AbortController().signal), "loaded-generation");
@@ -110,7 +124,7 @@ for (const [name, mutation] of [
       req.resume();
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({
-        protocol_version: 1, generation: "expected-generation", video_id: "expected-video",
+        protocol_version: 2, generation: "expected-generation", video_id: "expected-video",
         po_token: "valid-proof", ...mutation,
       }));
     });
@@ -126,7 +140,7 @@ test("oversized untrusted output is rejected before token consumption", async (t
     req.resume();
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({
-      protocol_version: 1, generation: "generation", video_id: "video", po_token: "x".repeat(70_000),
+      protocol_version: 2, generation: "generation", video_id: "video", po_token: "x".repeat(70_000),
     }));
   });
   await assert.rejects(() => client.mint("generation", "video", new AbortController().signal), { code: "broker_protocol" });
@@ -148,7 +162,7 @@ test("closing the owned transport terminates an unfinished mint", async (t) => {
 /** @param {import("node:http").ServerResponse} res */
 function healthResponse(res) {
   res.setHeader("content-type", "application/json");
-  res.end(JSON.stringify({ protocol_version: 1, generation: "generation", state: "IDLE", revision: "revision" }));
+  res.end(JSON.stringify({ protocol_version: 2, generation: "generation", state: "IDLE", revision: "revision" }));
 }
 
 const clientCloseBoundMs = 2_000;

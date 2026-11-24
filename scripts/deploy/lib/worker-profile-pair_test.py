@@ -538,7 +538,7 @@ class ResolvedPairTest(unittest.TestCase):
             "PATH": os.environ["PATH"],
             "HOLOLIVE_QUADLET_TEST_ROOT": str(self.root),
             "LIVE_LOGS_PATH": str(self.root / "logs"),
-            "VALKEY_SENTINEL_ADDRS": "sentinel.invalid:26379",
+            "VALKEY_BIND_IP": "127.0.0.1",
             "HOLOLIVE_API_PORT_BIND_IP": "127.0.0.1",
             "HOLOLIVE_ADMIN_API_PORT_BIND_IP": "127.0.0.1",
             "HOLOLIVE_H3_SERVER_NAME": "api.example.test",
@@ -618,7 +618,7 @@ class ResolvedPairTest(unittest.TestCase):
                            "--image-volume=ignore"):
                 self.assertIn(option, args)
             network = args[args.index("--network") + 1]
-            if args[-1] == "--check-pooled-database":
+            if args[-1] == "--check-database-endpoint":
                 self.assertEqual(network, self.module.COLLECTOR_NETWORKS[self.pair["service"]][1])
                 self.assertIn("--entrypoint=./bin/hololive-collector", args)
             else:
@@ -654,11 +654,11 @@ class ResolvedPairTest(unittest.TestCase):
         self.assertEqual(kwargs["stderr"], subprocess.DEVNULL)
         return self.real_run(args, **kwargs)
 
-    def check(self, *, pooled=False):
+    def check(self, *, database_check=False):
         (self.root / "compose.env").write_text("SYNTHETIC_FIXTURE=1\n")
         with mock.patch.dict(os.environ, self.host, clear=True), \
                 mock.patch.object(self.module.subprocess, "run", side_effect=self.lifecycle):
-            self.module.check_resolved_pair(self.directory, self.pair, pooled=pooled)
+            self.module.check_resolved_pair(self.directory, self.pair, database_check=database_check)
 
     def test_pooled_probe_uses_only_its_candidate_network_and_slot_environment(self):
         for service, volume, slot in ((SERVICE, "hololive-bot_youtube-po-c-socket", "c"),
@@ -670,17 +670,17 @@ class ResolvedPairTest(unittest.TestCase):
                     fixture.case(service)
                     (fixture.units / fixture.module.QUADLET_UNITS[service]).write_bytes(fixture.record.read_bytes())
                     fixture.existing_volume(volume)
-                    fixture.check(pooled=True)
+                    fixture.check(database_check=True)
                     self.assertEqual(len(fixture.consumed), 1)
                     args, env, _ = fixture.consumed[0]
-                    self.assertEqual(args[-2:], [IMAGE, "--check-pooled-database"])
+                    self.assertEqual(args[-2:], [IMAGE, "--check-database-endpoint"])
                     self.assertEqual((env["POSTGRES_HOST"], env["POSTGRES_PORT"]),
-                                     ("holo-pgbouncer", "6432") if slot == "c" else ("100.100.1.8", "6433"))
+                                     ("holo-postgres", "5432") if slot == "c" else ("100.100.1.8", "5433"))
                     self.assertEqual(env["POSTGRES_USER"], "hololive_collector_" + slot)
                     self.assertEqual(env["POSTGRES_SSLMODE"], "verify-full")
                     fixture.check_status = 19
                     with self.assertRaises(subprocess.CalledProcessError) as failure:
-                        fixture.check(pooled=True)
+                        fixture.check(database_check=True)
                     self.assertEqual(failure.exception.returncode, 19)
                     self.assertEqual(len(fixture.consumed), 2)
                     fixture.assert_private_inputs()
@@ -690,21 +690,21 @@ class ResolvedPairTest(unittest.TestCase):
     def test_pooled_probe_refuses_previous_or_unreviewed_network_before_podman(self):
         self.case(B_SERVICE)
         with self.assertRaisesRegex(ValueError, "installed candidate unit"):
-            self.check(pooled=True)
+            self.check(database_check=True)
         (self.units / self.module.QUADLET_UNITS[B_SERVICE]).write_bytes(self.record.read_bytes())
         self.pair["container_id"] = "c" * 64
         with self.assertRaisesRegex(ValueError, "collector candidate"):
-            self.check(pooled=True)
+            self.check(database_check=True)
         del self.pair["container_id"]
         (self.units / self.module.COLLECTOR_NETWORKS[B_SERVICE][0]).write_text("[Network]\nNetworkName=host\n")
         with self.assertRaisesRegex(ValueError, "installed collector probe network"):
-            self.check(pooled=True)
+            self.check(database_check=True)
         self.assertEqual(self.calls, [])
 
     def test_api_pair_cannot_enable_network_for_profile_checks(self):
         self.case("hololive-api")
         with self.assertRaisesRegex(ValueError, "collector candidate"):
-            self.check(pooled=True)
+            self.check(database_check=True)
         self.assertEqual(self.calls, [])
 
     def assert_private_inputs(self):

@@ -6,12 +6,8 @@ const socketPath = "/run/hololive-youtube-po/worker.sock";
 const responseLimit = 64 * 1024;
 const requestLimit = 1024 * 1024;
 const idleSocketTimeoutMs = 1_000;
-const brokerStates = new Set(["IDLE", "STARTING", "AWAITING_CHALLENGE", "AWAITING_INTEGRITY", "READY"]);
-const brokerErrors = new Set([
-  "invalid_request", "generation_mismatch", "invalid_state", "expired", "busy", "worker_failed", "worker_timeout",
-]);
-const poTokenPattern = /^[A-Za-z0-9_-]+={0,2}$/;
 const generationPattern = /^[A-Za-z0-9_-]+$/;
+const protocolVersion = 2;
 
 export class ProofError extends Error {
   /** @param {string} code */
@@ -37,7 +33,7 @@ export class ProofBrokerClient {
       try {
         const health = await this.exchange("GET", "/health", undefined, readySignal);
         fields(health, ["protocol_version", "generation", "state", "revision"]);
-        if (!generation(health.generation) || typeof health.state !== "string" || !brokerStates.has(health.state) || typeof health.revision !== "string") {
+        if (!generation(health.generation) || typeof health.state !== "string" || typeof health.revision !== "string") {
           throw new ProofError("broker_protocol");
         }
         if (health.state === "IDLE" && health.generation !== retiredGeneration) {
@@ -68,7 +64,7 @@ export class ProofBrokerClient {
    */
   async prepare(id, userAgent, signal) {
     const result = await this.exchange("POST", "/v1/session", {
-      protocol_version: 1, generation: id, user_agent: userAgent,
+      protocol_version: protocolVersion, generation: id, user_agent: userAgent,
     }, signal);
     fields(result, ["protocol_version", "generation", "prepared"]);
     if (result.generation !== id || result.prepared !== true) throw new ProofError("broker_protocol");
@@ -79,9 +75,9 @@ export class ProofBrokerClient {
    * @param {AbortSignal} signal
    */
   async challenge(input, signal) {
-    const result = await this.exchange("POST", "/v1/challenge", { protocol_version: 1, ...input }, signal);
+    const result = await this.exchange("POST", "/v1/challenge", { protocol_version: protocolVersion, ...input }, signal);
     fields(result, ["protocol_version", "generation", "snapshot"]);
-    if (result.generation !== input.generation || !boundedString(result.snapshot, 60_000)) {
+    if (result.generation !== input.generation || !boundedString(result.snapshot, responseLimit)) {
       throw new ProofError("broker_protocol");
     }
     return result.snapshot;
@@ -95,7 +91,7 @@ export class ProofBrokerClient {
    */
   async activate(id, integrityToken, validForMs, signal) {
     const result = await this.exchange("POST", "/v1/activate", {
-      protocol_version: 1, generation: id, integrity_token: integrityToken, valid_for_ms: validForMs,
+      protocol_version: protocolVersion, generation: id, integrity_token: integrityToken, valid_for_ms: validForMs,
     }, signal);
     fields(result, ["protocol_version", "generation", "ready"]);
     if (result.generation !== id || result.ready !== true) throw new ProofError("broker_protocol");
@@ -108,11 +104,10 @@ export class ProofBrokerClient {
    */
   async mint(id, videoId, signal) {
     const result = await this.exchange("POST", "/v1/mint", {
-      protocol_version: 1, generation: id, video_id: videoId,
+      protocol_version: protocolVersion, generation: id, video_id: videoId,
     }, signal);
     fields(result, ["protocol_version", "generation", "video_id", "po_token"]);
-    if (result.generation !== id || result.video_id !== videoId || !boundedString(result.po_token, 8_192) ||
-        !poTokenPattern.test(result.po_token)) {
+    if (result.generation !== id || result.video_id !== videoId || !boundedString(result.po_token, responseLimit)) {
       throw new ProofError("broker_protocol");
     }
     return result.po_token;
@@ -123,7 +118,7 @@ export class ProofBrokerClient {
    * @param {AbortSignal} signal
    */
   async retire(id, signal) {
-    const result = await this.exchange("DELETE", "/v1/session", { protocol_version: 1, generation: id }, signal);
+    const result = await this.exchange("DELETE", "/v1/session", { protocol_version: protocolVersion, generation: id }, signal);
     fields(result, ["protocol_version", "generation", "closed"]);
     if (result.generation !== id || result.closed !== true) throw new ProofError("broker_protocol");
   }
@@ -169,10 +164,10 @@ export class ProofBrokerClient {
               throw new ProofError("broker_protocol");
             }
             const result = /** @type {unknown} */ (JSON.parse(Buffer.concat(chunks, size).toString("utf8")));
-            if (!record(result) || result.protocol_version !== 1) throw new ProofError("broker_protocol");
+            if (!record(result) || result.protocol_version !== protocolVersion) throw new ProofError("broker_protocol");
             if (res.statusCode !== 200) {
               fields(result, ["protocol_version", "error"]);
-              if (!record(result.error) || Object.keys(result.error).length !== 1 || typeof result.error.code !== "string" || !brokerErrors.has(result.error.code)) {
+              if (!record(result.error) || Object.keys(result.error).length !== 1 || typeof result.error.code !== "string") {
                 throw new ProofError("broker_protocol");
               }
               throw new ProofError(`broker_${result.error.code}`);

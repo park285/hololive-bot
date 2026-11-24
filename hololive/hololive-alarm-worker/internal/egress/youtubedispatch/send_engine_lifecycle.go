@@ -70,13 +70,12 @@ func (d *SendEngine) applyPreparedLifecycleFailure(
 	outboxes []domain.YouTubeNotificationOutbox,
 	kind ytlifecycle.FailureKind,
 	reason ytlifecycle.Reason,
-	mode store.DeliveryMode,
 	result *deliveryDispatchResult,
 ) bool {
 	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), deliveryStateTimeout)
 	defer cancel()
 
-	applied, err := d.transition.ApplyPreparedFailure(ctx, rows, outboxMap(outboxes), kind, reason, 0, mode)
+	applied, err := d.transition.ApplyPreparedFailure(ctx, rows, outboxMap(outboxes), kind, reason, 0)
 	observeLifecycleApply("prepared_failure", applied, err, len(rows))
 
 	if err != nil || applied.Outcome != store.ApplyApplied {
@@ -96,13 +95,12 @@ func (d *SendEngine) applyStartedLifecycleFailure(
 	kind ytlifecycle.FailureKind,
 	reason ytlifecycle.Reason,
 	retryAfter time.Duration,
-	mode store.DeliveryMode,
 	result *deliveryDispatchResult,
 ) bool {
 	ctx, cancel := deliveryStateContext(ctx)
 	defer cancel()
 
-	applied, err := d.transition.ApplyStartedFailure(ctx, operation, kind, reason, retryAfter, mode)
+	applied, err := d.transition.ApplyStartedFailure(ctx, operation, kind, reason, retryAfter)
 	observeLifecycleApply("provider_failure", applied, err, operation.OwnerCount())
 
 	if err != nil || applied.Outcome != store.ApplyApplied {
@@ -119,7 +117,6 @@ func (d *SendEngine) applyStartedLifecycleFailure(
 func (d *SendEngine) completeLifecycleSent(
 	ctx context.Context,
 	attempt *deliveryAttempt,
-	mode store.DeliveryMode,
 	result *deliveryDispatchResult,
 ) bool {
 	ctx, cancel := deliveryStateContext(ctx)
@@ -133,7 +130,7 @@ func (d *SendEngine) completeLifecycleSent(
 		admission.RequestGeneration = frozen.Generation
 	}
 
-	applied, err := d.transition.CompleteSent(ctx, operation, mode, admission)
+	applied, err := d.transition.CompleteSent(ctx, operation, admission)
 	observeLifecycleApply("complete_sent", applied, err, operation.OwnerCount())
 
 	if err != nil || applied.Outcome != store.ApplyApplied {
@@ -152,7 +149,6 @@ func (d *SendEngine) selectDeliverableMembers(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
-	mode store.DeliveryMode,
 	result *deliveryDispatchResult,
 ) []claimedDelivery {
 	members := make([]claimedDelivery, 0, min(len(rows), len(outboxes)))
@@ -178,7 +174,7 @@ func (d *SendEngine) selectDeliverableMembers(
 	}
 
 	if len(unresolved) > 0 {
-		d.applyPreSendFailure(ctx, unresolved, mode, result)
+		d.applyPreSendFailure(ctx, unresolved, result)
 	}
 
 	return members
@@ -187,7 +183,6 @@ func (d *SendEngine) selectDeliverableMembers(
 func (d *SendEngine) applyPreSendFailure(
 	ctx context.Context,
 	members []claimedDelivery,
-	mode store.DeliveryMode,
 	result *deliveryDispatchResult,
 ) {
 	attempt := newDeliveryAttempt(members)
@@ -197,7 +192,6 @@ func (d *SendEngine) applyPreSendFailure(
 		attempt.outboxes,
 		ytlifecycle.FailureRetryable,
 		lifecycleReasonPreSendClaim,
-		mode,
 		result,
 	) {
 		return

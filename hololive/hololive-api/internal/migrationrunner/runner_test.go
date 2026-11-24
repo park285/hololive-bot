@@ -191,6 +191,51 @@ func TestCurrentSchemaRejectsTerminalPayloadRetention(t *testing.T) {
 	assertLegacyTerminalWriterRejected(t, pool, "legacy-dead", "dead")
 }
 
+func TestHeadContractRejectsDeferrableWebhookNonceKey(t *testing.T) {
+	for name, alter := range map[string]string{
+		"primary key": `ALTER TABLE public.bot_webhook_nonces
+			DROP CONSTRAINT bot_webhook_nonces_pkey,
+			ADD CONSTRAINT bot_webhook_nonces_pkey PRIMARY KEY (digest) DEFERRABLE INITIALLY IMMEDIATE`,
+		"additional unique key": `ALTER TABLE public.bot_webhook_nonces
+			ADD CONSTRAINT bot_webhook_nonces_digest_deferred UNIQUE (digest) DEFERRABLE INITIALLY IMMEDIATE`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			pool := dbtest.NewBlankPool(t)
+			_, err := Run(t.Context(), pool, migrations.FS, Config{})
+			require.NoError(t, err)
+
+			_, err = Run(t.Context(), pool, migrations.FS, Config{VerifyOnly: true})
+			require.NoError(t, err)
+
+			_, err = pool.Exec(t.Context(), alter)
+			require.NoError(t, err)
+
+			_, err = Run(t.Context(), pool, migrations.FS, Config{VerifyOnly: true})
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestHeadContractAcceptsDeferrableKeyThatCannotArbitrateNonces(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	_, err := Run(t.Context(), pool, migrations.FS, Config{})
+	require.NoError(t, err)
+
+	_, err = pool.Exec(t.Context(), `ALTER TABLE public.bot_webhook_nonces
+		ADD CONSTRAINT bot_webhook_nonces_digest_expiry UNIQUE (digest, expires_at) DEFERRABLE INITIALLY IMMEDIATE`)
+	require.NoError(t, err)
+
+	_, err = Run(t.Context(), pool, migrations.FS, Config{VerifyOnly: true})
+	require.NoError(t, err)
+
+	var first, second bool
+
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT public.reserve_bot_webhook_nonce($1, $2)", make([]byte, 32), int64(600_000_000)).Scan(&first))
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT public.reserve_bot_webhook_nonce($1, $2)", make([]byte, 32), int64(600_000_000)).Scan(&second))
+	require.True(t, first)
+	require.False(t, second)
+}
+
 func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 

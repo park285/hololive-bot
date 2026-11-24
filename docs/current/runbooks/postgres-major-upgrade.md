@@ -47,9 +47,9 @@ dump/restore로 새 볼륨 `hololive-bot_holo-pg-data19`에 옮기며, 기존 `h
 
 ## 동작
 
-1. 표식을 `phase=dump`로 쓰고 `hololive-api`, `hololive-alarm-worker`, 중앙 collector, `holo-pgbouncer`를 멈춥니다.
-   앱 세션은 모두 풀러를 거치므로 이후에는 관리자, exporter, nightly 세션만 남아야 하며 아니면 멈춥니다.
-   다른 host의 collector a·b·d는 계속 실행되며 풀러가 돌아올 때까지 접속에 실패하고 재시도합니다.
+1. 다른 host의 collector a·b·d는 각 slot 절차로 먼저 정지합니다. 직접 접속한 AP collector 세션이 남아 있으면 preflight가 아무것도 멈추기 전에 거부합니다.
+   표식을 `phase=dump`로 쓰고 `hololive-api`, `hololive-alarm-worker`, 중앙 collector를 멈춥니다.
+   이후에는 관리자, exporter, nightly 세션만 남아야 하며 아니면 멈춥니다.
 2. `/var/lib/hololive-bot/pg-major/<UTC>`(0700)에 `pg_dump -Fc`, 역할 SQL, 원본 지문을 만들고 18을 멈춥니다.
 3. 표식을 `phase=restore`로 바꾸고 19를 새 볼륨에서 기동합니다(init-db가 bootstrap 역할과 확장을 만듭니다).
    unit의 healthy 검사는 init 중 임시 서버에도 통과하므로, 컨테이너의 PID 1이 `postgres`가 되고 접속을 받을 때까지
@@ -60,13 +60,13 @@ dump/restore로 새 볼륨 `hololive-bot_holo-pg-data19`에 옮기며, 기존 `h
 5. 지문(역할, 멤버십, 설정, DB·스키마·관계·열·함수 권한, 기본 권한, 제약, 인덱스, 트리거, 타입, 시퀀스 값, 테이블별 행
    해시)이 원본과 같아야 합니다. CHECK와 인덱스 정의는 19가 중첩 AND의 괄호를 다르게 출력하므로 괄호와 공백을 뺀
    값으로 비교합니다.
-6. `ANALYZE` 뒤 원래 연결 한도를 복원하고 표식을 지운 다음, 멈췄던 unit을 풀러, collector, worker, API 순서로 기동합니다.
+6. `ANALYZE` 뒤 원래 연결 한도를 복원하고 표식을 지운 다음, 멈췄던 unit을 collector, worker, API 순서로 기동합니다. AP collector는 각 slot 절차로 다시 엽니다.
 
 쓰기 중단 시간은 1단계부터 6단계까지이며 dump와 복원 시간이 대부분입니다.
 
 ## 보호 장치
 
-- 표식이 있으면 prestart가 `holo-pgbouncer`의 기동을 거부하고, `holo-postgres`는 `phase=restore`일 때만 기동합니다.
+- 표식이 있으면 prestart가 `holo-postgres`를 `phase=restore`일 때만 기동합니다.
 - 표식이 없을 때도 대상 볼륨에 클러스터가 없고 이전 `hololive-bot_holo-pg-data*` 볼륨이 있으면 prestart가
   `holo-postgres`의 기동을 거부합니다. 전체 설치 뒤 재시작이 빈 19 클러스터를 initdb하는 것을 막습니다.
 

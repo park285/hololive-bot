@@ -136,7 +136,7 @@ func runFrozenProviderAttempt(t *testing.T, engine *SendEngine, transition *stor
 		require.ErrorIs(t, sendErr, errRequestGenerationsExhausted)
 
 		kind, reason, after := lifecycleProviderFailure(sendErr)
-		result, applyErr := transition.ApplyStartedFailure(ctx, operation, kind, reason, after, store.DeliveryModePerRoom)
+		result, applyErr := transition.ApplyStartedFailure(ctx, operation, kind, reason, after)
 		require.NoError(t, applyErr)
 		require.Equal(t, store.ApplyApplied, result.Outcome)
 	}

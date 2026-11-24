@@ -16,7 +16,6 @@ type MessageAdapter struct {
 }
 
 const (
-	paramAction = "action"
 	paramMember = "member"
 	paramType   = "type"
 	paramDays   = "days"
@@ -81,7 +80,7 @@ func NewMessageAdapter(prefix string) *MessageAdapter {
 
 type ParsedCommand struct {
 	Type       botcommand.CommandType
-	Params     map[string]any
+	Params     botcommand.Params
 	RawMessage string
 }
 
@@ -142,7 +141,6 @@ func (ma *MessageAdapter) parseKnownCommand(command string, args []string, text 
 func (ma *MessageAdapter) createUnknownCommand(text string) *ParsedCommand {
 	return &ParsedCommand{
 		Type:       botcommand.CommandUnknown,
-		Params:     make(map[string]any),
 		RawMessage: text,
 	}
 }

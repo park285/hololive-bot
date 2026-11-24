@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -42,22 +41,6 @@ func (r *identityRepository) FindByIdentity(ctx context.Context, kind domain.Out
 	return &records[0], nil
 }
 
-const (
-	trackingFinalActualPublishedExpr = `COALESCE(youtube_content_alarm_tracking.actual_published_at, EXCLUDED.actual_published_at)`
-	trackingFinalAlarmSentExpr       = `CASE
-		        WHEN youtube_content_alarm_tracking.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
-		        WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_content_alarm_tracking.alarm_sent_at
-		        WHEN EXCLUDED.alarm_sent_at < youtube_content_alarm_tracking.alarm_sent_at THEN EXCLUDED.alarm_sent_at
-		        ELSE youtube_content_alarm_tracking.alarm_sent_at
-		    END`
-)
-
-var (
-	trackingLatencyMillisExpr   = buildLatencyMillisExpr(trackingFinalActualPublishedExpr, trackingFinalAlarmSentExpr)
-	trackingLatencyExceededExpr = buildLatencyExceededExpr(trackingLatencyMillisExpr)
-	trackingDeliveryStatusExpr  = buildDeliveryStatusExpr(trackingFinalAlarmSentExpr)
-)
-
 func (r *identityRepository) UpsertBatch(ctx context.Context, records []*domain.YouTubeContentAlarmTracking) error {
 	if len(records) == 0 {
 		return nil
@@ -73,9 +56,7 @@ func (r *identityRepository) UpsertBatch(ctx context.Context, records []*domain.
 	}
 
 	now := timestamp.Normalize(time.Now())
-	query, args := buildTrackingUpsertQuery(normalized, now, trackingLatencyMillisExpr, trackingLatencyExceededExpr, trackingDeliveryStatusExpr)
-
-	if _, err := dbx.ExecSQL(ctx, r.db, "upsert tracking batch: exec query", query, args...); err != nil {
+	if _, err := dbx.ExecSQL(ctx, r.db, "upsert tracking batch: exec query", upsertTrackingBatchSQL, trackingUpsertArgs(normalized, now)...); err != nil {
 		return fmt.Errorf("exec SQL: %w", err)
 	}
 
@@ -89,59 +70,34 @@ func normalizeTrackingBatchRecords(records []*domain.YouTubeContentAlarmTracking
 		}, mergeNormalizedTrackingRecord)
 }
 
-func buildTrackingUpsertQuery(
-	normalized []*domain.YouTubeContentAlarmTracking,
-	now time.Time,
-	latencyMillisExpr string,
-	latencyExceededExpr string,
-	deliveryStatusExpr string,
-) (string, []any) {
-	const columnsPerRow = 12
-
-	args := make([]any, 0, len(normalized)*columnsPerRow)
-
-	var sb strings.Builder
-
-	sb.WriteString(buildTrackingUpsertQuerySQL)
+func trackingUpsertArgs(normalized []*domain.YouTubeContentAlarmTracking, now time.Time) []any {
+	size := len(normalized)
+	kinds := make([]string, size)
+	contentIDs := make([]string, size)
+	canonicalContentIDs := make([]string, size)
+	channelIDs := make([]string, size)
+	actualPublishedAts := make([]*time.Time, size)
+	detectedAts := make([]time.Time, size)
+	alarmSentAts := make([]*time.Time, size)
+	latencyMillis := make([]*int64, size)
+	latencyExceeded := make([]*bool, size)
+	deliveryStatuses := make([]string, size)
 
 	for i, record := range normalized {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-
-		dbx.WriteRowPlaceholders(&sb, i, columnsPerRow)
-
-		args = appendTrackingUpsertValues(args, record, now)
+		kinds[i] = string(record.Kind)
+		contentIDs[i] = record.ContentID
+		canonicalContentIDs[i] = record.CanonicalContentID
+		channelIDs[i] = record.ChannelID
+		actualPublishedAts[i] = record.ActualPublishedAt
+		detectedAts[i] = record.DetectedAt
+		alarmSentAts[i] = record.AlarmSentAt
+		latencyMillis[i] = record.AlarmLatencyMillis
+		latencyExceeded[i] = record.AlarmLatencyExceeded
+		deliveryStatuses[i] = string(record.DeliveryStatus)
 	}
 
-	sb.WriteString(buildTrackingUpsertQuery2SQL)
-	sb.WriteString(latencyMillisExpr)
-	sb.WriteString(`,
-		    alarm_latency_exceeded = `)
-	sb.WriteString(latencyExceededExpr)
-	sb.WriteString(`,
-		    delivery_status = `)
-	sb.WriteString(deliveryStatusExpr)
-	sb.WriteString(`,
-		    updated_at = EXCLUDED.updated_at
-	`)
-
-	return sb.String(), args
-}
-
-func appendTrackingUpsertValues(args []any, record *domain.YouTubeContentAlarmTracking, now time.Time) []any {
-	return append(args,
-		record.Kind,
-		record.ContentID,
-		record.CanonicalContentID,
-		record.ChannelID,
-		record.ActualPublishedAt,
-		record.DetectedAt,
-		record.AlarmSentAt,
-		record.AlarmLatencyMillis,
-		record.AlarmLatencyExceeded,
-		record.DeliveryStatus,
-		now,
-		now,
-	)
+	return []any{
+		kinds, contentIDs, canonicalContentIDs, channelIDs, actualPublishedAts, detectedAts, alarmSentAts,
+		latencyMillis, latencyExceeded, deliveryStatuses, now, alarmLatencyExceededThresholdMillis,
+	}
 }

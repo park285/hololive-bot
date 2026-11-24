@@ -3,8 +3,6 @@
 # prestart가 HOLOLIVE_BOT_PORT_BIND_IP로 /run/hololive-bot/admin-dashboard-ingress.conf를 렌더링한다.
 [Unit]
 Description=Hololive central shortlink ingress
-# 런타임 peer는 Wants=로만 끌어온다. Requires=는 명시적 stop/restart를 전파해 primary fence(소비자 유지)와
-# Sentinel HA(로컬 노드 교체)를 깨뜨린다. 방화벽은 보안 전제라 Requires=로 둔다.
 Wants=hololive-api.service
 Requires=admin-dashboard-ingress-firewall.service
 After=hololive-api.service admin-dashboard-ingress-firewall.service tailscaled.service

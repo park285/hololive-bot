@@ -23,13 +23,13 @@ func TestEventGradeArguments(t *testing.T) {
 		cmd := adapter.ParseMessage(&webhook.Message{Msg: "!이벤트등급 " + tt.args})
 		require.NotNil(t, cmd)
 		require.Equal(t, botcommand.CommandEventGrade, cmd.Type)
-		require.Equal(t, map[string]any{"score": tt.score, "region": tt.region}, cmd.Params)
+		require.Equal(t, botcommand.Params(botcommand.EventGradeParams{Score: tt.score, Region: tt.region}), cmd.Params)
 	}
 
 	for _, args := range []string{"", "0", "-3", "+3", "1,00", "10,0,000", "1234,567", "9,223,372,036,854,775,808", "us 500", "1 jp extra", "1 moon", "a1", "1.5"} {
 		cmd := adapter.ParseMessage(&webhook.Message{Msg: "!이벤트등급 " + args})
 		require.NotNil(t, cmd)
 		require.Equal(t, botcommand.CommandEventGrade, cmd.Type)
-		require.Empty(t, cmd.Params)
+		require.Equal(t, botcommand.Params(botcommand.EventGradeParams{}), cmd.Params)
 	}
 }

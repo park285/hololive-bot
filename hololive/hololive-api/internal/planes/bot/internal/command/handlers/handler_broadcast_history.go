@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -47,7 +48,7 @@ func (c *BroadcastHistoryCommand) Description() string {
 	return "종료된 방송 이력 조회"
 }
 
-func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
+func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.BroadcastHistoryParams) error {
 	query, filter, err := c.buildQuery(ctx, cmdCtx, params)
 	if errors.Is(err, errBroadcastHistoryHandled) {
 		return nil
@@ -83,7 +84,7 @@ func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *botcomman
 	return nil
 }
 
-func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) (*handlercore.BroadcastHistoryQuery, *formatter.BroadcastHistoryFilter, error) {
+func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.BroadcastHistoryParams) (*handlercore.BroadcastHistoryQuery, *formatter.BroadcastHistoryFilter, error) {
 	query, filter := newBroadcastHistoryQuery(params)
 	if err := c.applyBroadcastHistoryType(ctx, cmdCtx, params, &query, &filter); err != nil {
 		return nil, nil, fmt.Errorf("apply broadcast history type: %w", err)
@@ -96,17 +97,13 @@ func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *botcom
 	return &query, &filter, nil
 }
 
-func newBroadcastHistoryQuery(params map[string]any) (query handlercore.BroadcastHistoryQuery, filter formatter.BroadcastHistoryFilter) {
-	days := normalizeBroadcastHistoryDays(intParam(params, "days", defaultBroadcastHistoryDays))
-	if boolParam(params, "all") {
-		days = MaxBroadcastHistoryDays
-	}
-
-	limit := normalizeBroadcastHistoryLimit(intParam(params, "limit", defaultBroadcastHistoryLimit))
+func newBroadcastHistoryQuery(params botcommand.BroadcastHistoryParams) (query handlercore.BroadcastHistoryQuery, filter formatter.BroadcastHistoryFilter) {
+	days := normalizeBroadcastHistoryDays(cmp.Or(params.Days, defaultBroadcastHistoryDays))
+	limit := normalizeBroadcastHistoryLimit(cmp.Or(params.Limit, defaultBroadcastHistoryLimit))
 
 	query = handlercore.BroadcastHistoryQuery{
 		Limit:   limit,
-		TopicID: stringParam(params, "topic"),
+		TopicID: params.Topic,
 		Since:   time.Now().AddDate(0, 0, -days),
 	}
 
@@ -117,8 +114,8 @@ func newBroadcastHistoryQuery(params map[string]any) (query handlercore.Broadcas
 	}
 }
 
-func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) error {
-	rawType := stringParam(params, "type")
+func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.BroadcastHistoryParams, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) error {
+	rawType := params.Type
 	if rawType == "" {
 		return nil
 	}
@@ -138,8 +135,8 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context,
 	return nil
 }
 
-func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) error {
-	memberName := stringParam(params, paramMember)
+func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.BroadcastHistoryParams, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) error {
+	memberName := params.Member
 	if memberName == "" {
 		return nil
 	}
@@ -183,8 +180,8 @@ func (c *BroadcastThumbnailCommand) Description() string {
 	return "종료된 방송 썸네일 다운로드"
 }
 
-func (c *BroadcastThumbnailCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	videoID := stringParam(params, "video_id")
+func (c *BroadcastThumbnailCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.BroadcastThumbnailParams) error {
+	videoID := params.VideoID
 	if videoID == "" {
 		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrBroadcastThumbnailUsage); err != nil {
 			return fmt.Errorf("send message: %w", err)

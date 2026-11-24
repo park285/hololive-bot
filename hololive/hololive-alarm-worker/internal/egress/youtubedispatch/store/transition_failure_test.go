@@ -3,7 +3,9 @@ package store
 import (
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
@@ -39,7 +41,7 @@ func TestApplyPreparedFailureIsNotSplitByConcurrentFollowerClaim(t *testing.T) {
 	}
 
 	result, err := transition.ApplyPreparedFailure(
-		ctx, prepared, outboxes, lifecycle.FailurePermanent, "message_missing", 0, DeliveryModePerRoom,
+		ctx, prepared, outboxes, lifecycle.FailurePermanent, "message_missing", 0,
 	)
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, result.Outcome)
@@ -76,14 +78,68 @@ func TestApplyPreparedFailureConfirmsLostCommitResponse(t *testing.T) {
 	}
 
 	result, err := transition.ApplyPreparedFailure(
-		ctx, prepared, outboxes, lifecycle.FailureRetryable, "message_missing", 0, DeliveryModePerRoom,
+		ctx, prepared, outboxes, lifecycle.FailureRetryable, "message_missing", 0,
 	)
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, result.Outcome)
 	require.Equal(t, CommitConfirmedPost, result.CommitAdjudication)
 	require.Equal(t, []lifecycle.RuleID{lifecycle.RuleRetryScheduled}, result.Rules)
 
-	telemetry := loadTransitionTelemetryRows(t, pool)
-	require.Len(t, telemetry, 1)
-	require.Equal(t, ownerID, telemetry[0].DeliveryID)
+	var attemptCount int
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT attempt_count FROM youtube_notification_delivery WHERE id = $1`, ownerID).Scan(&attemptCount))
+	require.Equal(t, 1, attemptCount)
+}
+
+func seedTransitionShortLogicalGroup(t *testing.T, pool *pgxpool.Pool, videoID, roomID string) (int64, int64) {
+	t.Helper()
+
+	createdAt := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
+	payload := transitionShortPayload(videoID)
+
+	var ids [2]int64
+
+	for index, contentID := range []string{videoID, " " + videoID + " "} {
+		var outboxID int64
+
+		require.NoError(t, pool.QueryRow(t.Context(), `
+			INSERT INTO youtube_notification_outbox (
+				kind, channel_id, content_id, payload, status, attempt_count, next_attempt_at, created_at
+			) VALUES ($1, $2, $3, $4::jsonb, $5, 0, $6, $7)
+			RETURNING id
+		`, domain.OutboxKindNewShort, "channel-telemetry", contentID, payload, domain.OutboxStatusPending,
+			createdAt, createdAt.Add(time.Duration(index)*time.Second)).Scan(&outboxID))
+
+		require.NoError(t, pool.QueryRow(t.Context(), `
+			INSERT INTO youtube_notification_delivery (
+				outbox_id, room_id, status, attempt_count, next_attempt_at, created_at
+			) VALUES ($1, $2, $3, 0, $4, $5)
+			RETURNING id
+		`, outboxID, roomID, domain.OutboxStatusPending, createdAt, createdAt.Add(time.Duration(index)*time.Second)).Scan(&ids[index]))
+	}
+
+	return ids[0], ids[1]
+}
+
+func transitionShortPayload(videoID string) string {
+	return `{"canonical_post_id":"short:` + videoID + `","video_id":"` + videoID + `","title":"telemetry"}`
+}
+
+func claimTransitionTestActiveRows(
+	t *testing.T,
+	transition *TransitionStore,
+	pool *pgxpool.Pool,
+) ([]domain.YouTubeNotificationDelivery, map[int64]domain.YouTubeNotificationOutbox) {
+	t.Helper()
+
+	claimed, err := transition.ClaimPending(t.Context(), 10)
+	require.NoError(t, err)
+
+	outboxes := loadTransitionTestOutboxes(t, pool, claimed)
+	prepared, err := transition.PrepareClaimed(t.Context(), claimed, outboxes)
+	require.NoError(t, err)
+	require.Empty(t, prepared.Blocked)
+	require.Len(t, prepared.ActiveRows, 1)
+
+	return prepared.ActiveRows, outboxes
 }

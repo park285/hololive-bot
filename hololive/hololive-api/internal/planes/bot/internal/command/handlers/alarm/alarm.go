@@ -1,6 +1,7 @@
 package alarm
 
 import (
+	"cmp"
 	"context"
 	stdErrors "errors"
 	"fmt"
@@ -25,7 +26,7 @@ type alarmTarget struct {
 	Name      string
 }
 
-type alarmActionHandler func(context.Context, *botcommand.CommandContext, map[string]any) error
+type alarmActionHandler func(context.Context, *botcommand.CommandContext, botcommand.AlarmParams) error
 
 func NewAlarmCommand(deps *handlercore.Dependencies) *AlarmCommand {
 	return &AlarmCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
@@ -39,7 +40,7 @@ func (c *AlarmCommand) Description() string {
 	return "방송 알람 관리"
 }
 
-func (c *AlarmCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
+func (c *AlarmCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.AlarmParams) error {
 	if err := c.executeAction(ctx, cmdCtx, params, alarmAction(params)); err != nil {
 		return fmt.Errorf("execute action: %w", err)
 	}
@@ -47,16 +48,11 @@ func (c *AlarmCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandCo
 	return nil
 }
 
-func alarmAction(params map[string]any) string {
-	action, hasAction := params["action"].(string)
-	if !hasAction {
-		return "list"
-	}
-
-	return action
+func alarmAction(params botcommand.AlarmParams) string {
+	return cmp.Or(params.Action, "list")
 }
 
-func (c *AlarmCommand) executeAction(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any, action string) error {
+func (c *AlarmCommand) executeAction(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.AlarmParams, action string) error {
 	handler, ok := c.alarmActionHandlers()[action]
 	if !ok {
 		if err := c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatHelp(ctx)); err != nil {
@@ -85,7 +81,7 @@ func (c *AlarmCommand) alarmActionHandlers() map[string]alarmActionHandler {
 	}
 }
 
-func (c *AlarmCommand) handleListAction(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
+func (c *AlarmCommand) handleListAction(ctx context.Context, cmdCtx *botcommand.CommandContext, _ botcommand.AlarmParams) error {
 	c.Deps().Logger.Debug("Alarm list requested")
 
 	if err := c.handleList(ctx, cmdCtx); err != nil {
@@ -95,7 +91,7 @@ func (c *AlarmCommand) handleListAction(ctx context.Context, cmdCtx *botcommand.
 	return nil
 }
 
-func (c *AlarmCommand) handleClearAction(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
+func (c *AlarmCommand) handleClearAction(ctx context.Context, cmdCtx *botcommand.CommandContext, _ botcommand.AlarmParams) error {
 	if err := c.handleClear(ctx, cmdCtx); err != nil {
 		return fmt.Errorf("handle clear: %w", err)
 	}
@@ -103,7 +99,7 @@ func (c *AlarmCommand) handleClearAction(ctx context.Context, cmdCtx *botcommand
 	return nil
 }
 
-func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *botcommand.CommandContext, _ map[string]any) error {
+func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *botcommand.CommandContext, _ botcommand.AlarmParams) error {
 	c.Deps().Logger.Info("Invalid alarm command received",
 		sharedprivacylog.RoomIDAttr(cmdCtx.Room),
 	)
@@ -134,7 +130,7 @@ type alarmMutation struct {
 	apply                 func(ctx context.Context, cmdCtx *botcommand.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error
 }
 
-func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
+func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.AlarmParams) error {
 	return c.handleAlarmMutation(ctx, cmdCtx, params, alarmMutation{
 		needMemberNameMessage: messaging.ErrAlarmNeedMemberNameAdd,
 		requestedLog:          "Alarm add requested",
@@ -143,7 +139,7 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *botcommand.Command
 	})
 }
 
-func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
+func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.AlarmParams) error {
 	return c.handleAlarmMutation(ctx, cmdCtx, params, alarmMutation{
 		needMemberNameMessage: messaging.ErrAlarmNeedMemberNameRemove,
 		requestedLog:          "Alarm remove requested",
@@ -152,7 +148,7 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *botcommand.Comm
 	})
 }
 
-func (c *AlarmCommand) handleAlarmMutation(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any, mutation alarmMutation) error {
+func (c *AlarmCommand) handleAlarmMutation(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.AlarmParams, mutation alarmMutation) error {
 	memberName, err := c.requiredAlarmMemberName(ctx, cmdCtx.Room, params, mutation.needMemberNameMessage)
 	if err != nil {
 		return fmt.Errorf("require alarm member name: %w", err)
@@ -190,10 +186,9 @@ func (c *AlarmCommand) handleAlarmMutation(ctx context.Context, cmdCtx *botcomma
 	return nil
 }
 
-func (c *AlarmCommand) requiredAlarmMemberName(ctx context.Context, room string, params map[string]any, message string) (string, error) {
-	memberName, hasMember := params["member"].(string)
-	if hasMember && memberName != "" {
-		return memberName, nil
+func (c *AlarmCommand) requiredAlarmMemberName(ctx context.Context, room string, params botcommand.AlarmParams, message string) (string, error) {
+	if params.Member != "" {
+		return params.Member, nil
 	}
 
 	if err := c.Deps().SendError(ctx, room, message); err != nil {
@@ -349,13 +344,8 @@ func (c *AlarmCommand) handleClear(ctx context.Context, cmdCtx *botcommand.Comma
 	return nil
 }
 
-func (c *AlarmCommand) parseAlarmTypes(params map[string]any) domain.AlarmTypes {
-	typeStr, hasType := params["type"].(string)
-	if !hasType || typeStr == "" {
-		return domain.DefaultAlarmTypes
-	}
-
-	if alarmTypes, ok := alarmTypesByName[typeStr]; ok {
+func (c *AlarmCommand) parseAlarmTypes(params botcommand.AlarmParams) domain.AlarmTypes {
+	if alarmTypes, ok := alarmTypesByName[params.Type]; ok {
 		return alarmTypes
 	}
 

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -59,7 +58,7 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailures(t *testing.T) {
 		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
 
-	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 0, store.DeliveryModePerRoom)}
+	wantStarted := []string{startedFailureRecord(ytlifecycle.FailureRetryable, lifecycleReasonRateLimited, 0)}
 	if got := transitionSpy(t, dispatcher).recordedStartedFailures(); !slices.Equal(got, wantStarted) {
 		t.Fatalf("started failures = %v, want %v", got, wantStarted)
 	}

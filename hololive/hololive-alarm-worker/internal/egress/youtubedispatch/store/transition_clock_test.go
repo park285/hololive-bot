@@ -55,7 +55,7 @@ func TestRetryDueCountsFromDatabaseClockAfterLockWait(t *testing.T) {
 
 	go func() {
 		_, err := transition.ApplyStartedFailure(
-			t.Context(), operation, lifecycle.FailureRetryable, lifecycle.Reason("provider_transport"), retryAfter, DeliveryModePerRoom,
+			t.Context(), operation, lifecycle.FailureRetryable, lifecycle.Reason("provider_transport"), retryAfter,
 		)
 		done <- err
 	}()

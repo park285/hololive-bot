@@ -92,9 +92,9 @@ RichText 활성화는 코드·DB 배포와 별도입니다. 기본 템플릿은 
 
 ## 동기 집계 정합 확인
 
-`scripts/maintenance/check-runtime-projections.sh`는 `youtube_collection_runtime_bundles`와
-`youtube_live_runtime_state`를 원본에서 재계산한 값과 비교합니다. dbtest와 같은 SQL 자산을 사용하며,
-bundle의 observation-to-job 매핑도 운영 view와 독립적으로 비교합니다.
+`scripts/maintenance/check-runtime-projections.sh`는 `youtube_live_runtime_state`를 원본에서 재계산한 값과
+비교합니다. dbtest와 같은 SQL 자산을 사용합니다. 수집 대상 bundle 지표는 별도 동기 테이블 없이
+`youtube_collection_targets`에서 조회 시점에 집계하므로 정합 확인 대상이 아닙니다.
 
 승인된 대상 DB의 libpq 접속 설정(`PGSERVICE` 또는 명시적 host·database·user와 기존 인증)을
 준비한 환경에서 아래 명령을 실행합니다. 대상 선택·인증·원격 실행은 `stack-platform-ops`를 따르며,
@@ -221,12 +221,12 @@ sudo podman exec holo-postgres psql -U postgres_admin -d hololive -c \
 
 ### Valkey latency / slowlog
 
-중앙 `valkey-cache`는 Valkey HA hololive 그룹 노드라 unix socket 없이 TLS `16379`만 열고, 운영 명령은 `operator` ACL 사용자로 인증합니다.
-비밀번호는 argv·호스트 process list에 남지 않도록 호스트의 원본 파일(`/etc/stack-secrets/valkey/hololive/operator-password`)을 stdin으로 넘깁니다.
+중앙 `valkey-cache`는 unix socket 없이 TLS `16379`만 엽니다. 아래 `operator` 명령은 기존 HA/`standalone-persistent` 단계 전용입니다. 최종 캐시는 이 계정을 배포하지 않으며 관측은 `health`의 `PING`·`INFO`로 제한합니다.
+비밀번호는 argv·호스트 process list에 남지 않도록 승인된 호스트 파일을 stdin으로 넘깁니다.
 컨테이너 안의 마운트(`/run/valkey/operator-password`)는 root 0600이어서 컨테이너 사용자 `valkey`도, capability가 없는 컨테이너 root도 읽지 못합니다.
 
 앱 ACL 사용자 `hololive-api`와 `hololive-worker`는 각자 쓰는 key 접두어에만 접근합니다. 허용 접두어는 메타 저장소 `tools/ops/prepare-valkey-ha.py`의 `KEYS`에 있습니다.
-새 접두어를 쓰는 코드는 배포 전에 그 `KEYS`, stack-secrets 세 노드(hololive-seoul, kapu, iris-seoul)의 `valkey/hololive/users.acl`, 노드 런타임(`ACL SETUSER`)에 접두어를 넣어야 합니다. 빠지면 그 명령이 `NOPERM`으로 실패하고 `vk info stats`의 `acl_access_denied_key`가 늘어납니다.
+접두어 변경은 해당 단계에서 실제 앱 요청과 거부 경로를 검증한 별도의 ACL 변경입니다. 다른 그룹이나 전체 키 권한을 부여하지 않습니다. `NOPERM` 또는 `acl_access_denied_key` 증가 때 ACL을 임의 확장하지 않습니다.
 
 ```bash
 vk() { sudo cat /etc/stack-secrets/valkey/hololive/operator-password | sudo podman exec -i valkey-cache sh -c 'IFS= read -r p; VALKEYCLI_AUTH="$p" exec valkey-cli --no-auth-warning --tls --cacert /run/valkey-certs/ca.pem --user operator -h 127.0.0.1 -p 16379 "$@"' vk "$@"; }

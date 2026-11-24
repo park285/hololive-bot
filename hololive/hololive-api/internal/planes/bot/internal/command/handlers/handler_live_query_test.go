@@ -39,10 +39,10 @@ func TestLiveCommand_YouTubeQueryFailureIsNotEmpty(t *testing.T) {
 				return nil
 			}
 
-			params := map[string]any{}
+			var params botcommand.LiveParams
 
 			if member {
-				params[paramMember] = testMemberAqua
+				params.Member = testMemberAqua
 			}
 
 			err := NewLiveCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, params)
@@ -80,7 +80,7 @@ func TestLiveCommand_LogsBlockingAndNonblockingDiagnostics(t *testing.T) {
 					{ChannelID: "ch-y", Reason: reason, Diagnostics: livequery.Diagnostics{RetainedOrphanEnds: 2, EndedPendingEnds: 4, EndedHeadMismatches: 1}},
 				},
 			}}
-			if err := NewLiveCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, nil); err != nil {
+			if err := NewLiveCommand(deps).Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.LiveParams{}); err != nil {
 				t.Fatal(err)
 			}
 

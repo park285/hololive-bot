@@ -24,6 +24,10 @@ type Tx interface {
 	Rollback(ctx context.Context) error
 }
 
+type TxBeginner interface {
+	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
+}
+
 func InPgxTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx Tx) error) error {
 	if pool == nil {
 		return errors.New("pgx pool is nil")
@@ -33,7 +37,13 @@ func InPgxTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx Tx) error) erro
 		return nil
 	}
 
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	return InPgxTxOptions(ctx, pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+		return fn(tx)
+	})
+}
+
+func InPgxTxOptions(ctx context.Context, db TxBeginner, opts pgx.TxOptions, fn func(tx pgx.Tx) error) error {
+	tx, err := db.BeginTx(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("begin pgx transaction: %w", err)
 	}

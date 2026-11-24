@@ -52,8 +52,6 @@ func TestDispatcherAggregateSyncQuarantinesStaleSendingDelivery(t *testing.T) {
 		CleanupEnabled: false,
 	})
 
-	dispatcher.telemetry = nil
-
 	dispatcher.aggregateSyncOnce(ctx)
 
 	var gotDelivery deliveryTestDeliveryModel

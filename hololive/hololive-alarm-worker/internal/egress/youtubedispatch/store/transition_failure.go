@@ -18,19 +18,14 @@ func (s *TransitionStore) ApplyStartedFailure(
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
 	retryAfter time.Duration,
-	mode DeliveryMode,
 ) (ApplyResult, error) {
 	if !operation.Valid() {
 		return newApplyResult(ApplyConflict, nil), errors.New("apply started failure: invalid operation")
 	}
 
-	if err := mode.validateCallerMode(); err != nil {
-		return newApplyResult(ApplyConflict, nil), fmt.Errorf("apply started failure: %w", err)
-	}
-
 	load := func(context.Context, dbx.Querier) (StartedOperation, error) { return operation, nil }
 
-	result, err := s.applyFailure(ctx, "apply started failure", load, kind, reason, retryAfter, mode)
+	result, err := s.applyFailure(ctx, "apply started failure", load, kind, reason, retryAfter)
 	if err != nil {
 		return result, fmt.Errorf("apply started failure: %w", err)
 	}
@@ -45,21 +40,16 @@ func (s *TransitionStore) ApplyPreparedFailure(
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
 	retryAfter time.Duration,
-	mode DeliveryMode,
 ) (ApplyResult, error) {
 	if len(rows) == 0 {
 		return newApplyResult(ApplyConflict, nil), errors.New("apply prepared failure: rows are empty")
-	}
-
-	if err := mode.validateCallerMode(); err != nil {
-		return newApplyResult(ApplyConflict, nil), fmt.Errorf("apply prepared failure: %w", err)
 	}
 
 	load := func(ctx context.Context, tx dbx.Querier) (StartedOperation, error) {
 		return s.loadPreparedFailureOperation(ctx, tx, rows, outboxByID)
 	}
 
-	result, err := s.applyFailure(ctx, "apply prepared failure", load, kind, reason, retryAfter, mode)
+	result, err := s.applyFailure(ctx, "apply prepared failure", load, kind, reason, retryAfter)
 	if err != nil {
 		return result, fmt.Errorf("apply prepared failure: %w", err)
 	}
@@ -134,7 +124,6 @@ func (s *TransitionStore) applyFailure(
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
 	retryAfter time.Duration,
-	mode DeliveryMode,
 ) (ApplyResult, error) {
 	var priorAdjudication CommitAdjudication
 
@@ -162,9 +151,12 @@ func (s *TransitionStore) applyFailure(
 
 			var rowsErr error
 
-			touched, rowsErr = applyFailureRows(ctx, tx, operationName, operation, transitions, reason, mode)
+			touched, _, rowsErr = applyRowTransitions(ctx, tx, operationName, transitions)
+			if rowsErr != nil {
+				return fmt.Errorf("%s: apply rows: %w", operationName, rowsErr)
+			}
 
-			return rowsErr
+			return nil
 		})
 		if applyErr == nil {
 			result := newApplyResultWithRules(ApplyApplied, touched, rules)
@@ -198,28 +190,6 @@ func (s *TransitionStore) applyFailure(
 	}
 
 	return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("%s: retry loop exhausted", operationName)
-}
-
-func applyFailureRows(
-	ctx context.Context,
-	tx dbx.Querier,
-	operationName string,
-	operation StartedOperation,
-	transitions []rowTransition,
-	reason lifecycle.Reason,
-	mode DeliveryMode,
-) ([]int64, error) {
-	touched, failedAt, err := applyRowTransitions(ctx, tx, operationName, transitions)
-	if err != nil {
-		return nil, fmt.Errorf("%s: apply rows: %w", operationName, err)
-	}
-
-	attempts := ownerAttempts(operation.groups, attemptResultFailure, reason)
-	if err := recordAttemptTelemetry(ctx, tx, mode, attempts, failedAt); err != nil {
-		return nil, fmt.Errorf("%s: record telemetry: %w", operationName, err)
-	}
-
-	return touched, nil
 }
 
 func (s *TransitionStore) prepareFailureTransitions(

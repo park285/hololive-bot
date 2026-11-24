@@ -92,9 +92,7 @@ func TestScheduleCommand_Execute_GoldenPath(t *testing.T) {
 
 	cmd := NewScheduleCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: "미코",
-	})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.ScheduleParams{Member: "미코"})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -124,7 +122,7 @@ func TestScheduleCommand_Execute_NoMemberName(t *testing.T) {
 
 	cmd := NewScheduleCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.ScheduleParams{})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -154,9 +152,7 @@ func TestScheduleCommand_Execute_NoMemberName_SuppressedByMemberToken(t *testing
 
 	cmd := NewScheduleCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		"_raw_command": "멤버",
-	})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.ScheduleParams{RawCommand: "멤버"})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -195,9 +191,7 @@ func TestScheduleCommand_Execute_QueryError(t *testing.T) {
 
 	cmd := NewScheduleCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: "미코",
-	})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.ScheduleParams{Member: "미코"})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -228,9 +222,7 @@ func TestScheduleCommand_Execute_MemberNotFound(t *testing.T) {
 	}
 
 	cmd := NewScheduleCommand(deps)
-	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: "존재하지않는멤버",
-	}); err != nil {
+	if err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.ScheduleParams{Member: "존재하지않는멤버"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -268,10 +260,7 @@ func TestScheduleCommand_Execute_WithDays(t *testing.T) {
 
 	cmd := NewScheduleCommand(deps)
 
-	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, map[string]any{
-		paramMember: "미코",
-		"days":      14,
-	})
+	err := cmd.Execute(t.Context(), &botcommand.CommandContext{Room: testRoomID}, botcommand.ScheduleParams{Member: "미코", Days: 14})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -306,33 +295,6 @@ func TestClampScheduleDays(t *testing.T) {
 			got := clampScheduleDays(tc.days)
 			if got != tc.want {
 				t.Fatalf("clampScheduleDays(%d) = %d, want %d", tc.days, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestScheduleMemberName(t *testing.T) {
-	tests := []struct {
-		name     string
-		params   map[string]any
-		wantName string
-		wantOK   bool
-	}{
-		{name: "present", params: map[string]any{paramMember: "미코"}, wantName: "미코", wantOK: true},
-		{name: "empty string", params: map[string]any{paramMember: ""}, wantName: "", wantOK: false},
-		{name: "missing", params: map[string]any{}, wantName: "", wantOK: false},
-		{name: "wrong type", params: map[string]any{paramMember: 123}, wantName: "", wantOK: false},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			name, ok := scheduleMemberName(tc.params)
-			if ok != tc.wantOK {
-				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
-			}
-
-			if name != tc.wantName {
-				t.Fatalf("name = %q, want %q", name, tc.wantName)
 			}
 		})
 	}

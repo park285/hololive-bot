@@ -227,6 +227,27 @@ func TestClassifyPostBlamesTheConnection(t *testing.T) {
 	_, _, err = testDecisionJudge(plain).classifyPost(t.Context(), "本文")
 	require.ErrorIs(t, err, errChangeOutcomeUnknown, "연결 뒤 시간 초과는 그 글 때문일 수도 있다")
 	require.NotErrorIs(t, err, errChangeServiceFailed)
+
+	dropped := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, readErr := io.Copy(io.Discard, r.Body); readErr != nil {
+			return
+		}
+
+		conn, _, hijackErr := http.NewResponseController(w).Hijack()
+		if hijackErr != nil {
+			t.Errorf("hijack decision connection: %v", hijackErr)
+
+			return
+		}
+
+		if closeErr := conn.Close(); closeErr != nil {
+			t.Errorf("close hijacked decision connection: %v", closeErr)
+		}
+	}))
+
+	_, _, err = testDecisionJudge(dropped.Client()).classifyPost(t.Context(), "本文")
+	require.ErrorIs(t, err, errChangeOutcomeUnknown, "본문을 보낸 뒤 응답을 잃으면 결과를 알 수 없다")
+	require.NotErrorIs(t, err, errChangeServiceFailed)
 }
 
 func TestPostAnswerDecisionCombinesScoreAndKind(t *testing.T) {

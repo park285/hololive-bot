@@ -11,7 +11,6 @@ require (
 	github.com/kapu/hololive-collector v0.0.0
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go/adapters/valkeydedup v1.0.0
 	github.com/park285/iris-client-go/v5 v5.2.1
 	github.com/park285/shared-go/core v1.0.0
 	github.com/park285/shared-go/postgres v1.0.3

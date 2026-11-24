@@ -1,3 +1,1 @@
-SELECT guard_key
-FROM youtube_collection_projection_guard
-FOR UPDATE
+SELECT true FROM (SELECT public.lock_youtube_collection_runtime_bundles()) AS locked

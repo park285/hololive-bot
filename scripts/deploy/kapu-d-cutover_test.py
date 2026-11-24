@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import contextlib
 import importlib.util
-import io
 import json
 import os
 from pathlib import Path
@@ -53,6 +52,68 @@ class ReceiptStore(unittest.TestCase):
             self.assertTrue(link.is_symlink())
 
 
+class Commands(unittest.TestCase):
+    def test_clean_commands_refuse_diagnostics_even_on_success(self):
+        self.assertEqual(d.run('sh', '-c', 'echo listed', clean=True), 'listed')
+        with self.assertRaises(d.Refused):
+            d.run('sh', '-c', 'echo listed; echo partial >&2', clean=True)
+        self.assertEqual(d.run('sh', '-c', 'echo listed; echo noise >&2'), 'listed')
+
+
+class GeneratedUnit(unittest.TestCase):
+    def setUp(self):
+        self.stack = contextlib.ExitStack()
+        self.addCleanup(self.stack.close)
+        root = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
+        self.units, self.extra, self.gen = root / 'units', root / 'extra', root / 'generator'
+        for path in self.units, self.extra, self.gen:
+            path.mkdir()
+        for source in d.INPUT.iterdir():
+            if source.suffix in ('.container', '.network', '.volume'):
+                (self.units / source.name).write_bytes(source.read_bytes())
+        drops = self.units / (d.unit(d.C) + '.d')
+        drops.mkdir()
+        (drops / '50-mcs-level.conf').write_text('[Container]\nSecurityLabelLevel=s0:c908,c909\n')
+        (drops / '90-resolved-dns.conf').write_text('[Container]\nDNS=\nDNS=127.0.0.53\n')
+        for k, v in [('UNIT', self.units), ('GEN', self.gen), ('trusted', lambda *args: None), ('raw', Path.read_bytes),
+                     ('policy', lambda n: {f.name: f.read_bytes() for f in sorted((self.units / (d.unit(n) + '.d')).glob('*.conf'))})]:
+            self.stack.enter_context(patch.object(d, k, v))
+
+    def install(self, *dirs):
+        with tempfile.TemporaryDirectory() as out:
+            d.run(str(d.QUADLET), '-no-kmsg-log', out, env={'QUADLET_UNIT_DIRS': ':'.join(map(str, [self.units, *dirs]))})
+            for n in d.NAMES:
+                (self.gen / (n + '.service')).write_bytes((Path(out) / (n + '.service')).read_bytes())
+
+    def test_generated_accepts_every_generator_run_of_the_reviewed_sources(self):
+        for _ in range(6):
+            self.install()
+            for n in d.NAMES:
+                d.generated(n)
+
+    def test_generated_finds_referenced_units_wherever_quadlet_does(self):
+        (self.units / 'infra').mkdir()
+        for ref in (d.NETWORK_UNIT, d.I + '.volume'):
+            (self.units / ref).rename(self.units / 'infra' / ref)
+        self.install()
+        for n in d.NAMES:
+            d.generated(n)
+
+    def test_generated_refuses_settings_a_quadlet_dropin_outside_the_reviewed_set_adds(self):
+        for n in d.NAMES:
+            for section, line in [('[Unit]', 'Wants=probe.service'), ('[Unit]', 'Requires=probe.service'),
+                                  ('[Service]', 'ExecStartPre=/bin/true')]:
+                with self.subTest(unit=n, line=line):
+                    folder = self.extra / (d.unit(n) + '.d')
+                    folder.mkdir(exist_ok=True)
+                    (folder / '10-x.conf').write_text(section + '\n' + line + '\n')
+                    self.install(self.extra)
+                    self.assertIn(line, (self.gen / (n + '.service')).read_text())
+                    with self.assertRaisesRegex(d.Refused, '생성된 Quadlet과 설치본 불일치'):
+                        d.generated(n)
+                    (folder / '10-x.conf').unlink()
+
+
 class Cutover(unittest.TestCase):
     def test_profile_and_sql_isolate_runtime_inputs(self):
         image = 'sha256:' + 'a' * 64
@@ -65,17 +126,18 @@ class Cutover(unittest.TestCase):
         self.assertEqual([arg for arg in profile if arg.startswith(('--volume=', '--mount='))],
                          ['--volume=' + str(d.CA) + ':' + d.CERT + ':ro',
                           '--volume=' + str(d.D/'profile.json') + ':' + d.PROFILE_ENV['STACK_WORKER_PROFILE_FILE'] + ':ro'])
-        self.assertEqual(sql[-2:], (image, '--check-pooled-database'))
+        self.assertEqual(sql[-2:], (image, '--check-database-endpoint'))
         self.assertEqual([arg for arg in sql if arg.startswith(('--volume=', '--mount='))],
                          ['--volume=' + str(d.CA) + ':' + d.CERT + ':ro'])
         for arg in ['--user=1000:1000', '--group-add=1002', '--userns=auto:size=65536,gidmapping=1002:1002:1',
                     '--security-opt=label=level:s0:c908,c909', '--read-only', '--network=' + d.NETWORK,
-                    '--ip=10.89.15.14', '--env=POSTGRES_USER=hololive_collector_d', '--env=POSTGRES_PORT=6433',
+                    '--ip=10.89.15.14', '--env=POSTGRES_USER=hololive_collector_d', '--env=POSTGRES_PORT=5433',
                     '--env=COLLECTOR_INSTANCE_ID=' + d.SERVICE, '--env-file=' + str(d.ENVFILE)]:
             self.assertIn(arg, sql)
         self.assertFalse(any('PASSWORD' in arg or '.key' in arg for arg in sql))
 
     def setUp(self):
+        self.addCleanup(os.chdir, os.getcwd())
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
@@ -112,7 +174,7 @@ class Cutover(unittest.TestCase):
             self.state['old'][n] = {'cid':str(i+6)*64,'inv':'b'*32,'image':ident['id'][7:]}
             self.executions[n] = {'cid':str(i+8)*64,'inv':'e'*32,'image':self.ids[n][7:],
                                   'started':'120','main':'123','pid':'124','cgroup':'/system.slice/'+n+'.service'}
-            data = f'[Container]\nContainerName={n}\nEnvironment=POSTGRES_PORT=6433\n'.encode()
+            data = f'[Container]\nContainerName={n}\nEnvironment=POSTGRES_PORT=5433\n'.encode()
             (self.input / d.unit(n)).write_bytes(data)
             (self.units / d.unit(n)).write_bytes(b'old')
             self.digests[n] = d.sha(data)
@@ -122,18 +184,31 @@ class Cutover(unittest.TestCase):
             d.record(self.h / (n + '.stopped'), b'b'*32)
             d.metadata(self.h / (n + '.stopped.json'), {**self.props[n],'cid':self.state['old'][n]['cid'],
                        'invocation':'b'*32,'since':'@1234.000056','manager_stop':True,'container_exit':'0'})
-        d.record(self.h/'quiesced', d.QUIESCED['5433'])
+        self.state['candidate'] = self.target()
         d.metadata(self.h/'previous.json',self.state)
+        d.record(self.h/'quiesced', d.stop_receipt(json.loads((self.h/'previous.json').read_bytes())))
+        self.vendor = self.root / 'vendor'
+        self.vendor.mkdir()
+        self.early = self.root / 'early'
+        self.early.mkdir()
+        self.patch('GEN', self.root / 'generator')
+        d.GEN.mkdir()
+        self.patch('unit_paths', lambda: [self.system, self.early, d.GEN, self.vendor])
         self.patch('trusted', lambda *args:None)
         self.patch('raw', Path.read_bytes)
         self.patch('retained', lambda *args,**kwargs:None)
         self.patch('origin', lambda *args,**kwargs:None)
+        self.patch('generated', lambda *args:None)
         self.patch('absent', lambda *args:None)
         self.patch('image', lambda name,tag:self.tags[tag])
         self.patch('prop', lambda n,k:self.props[n][k])
         self.patch('generation', self.generation)
         self.calls = []
+        for n in d.NAMES:
+            (d.GEN / (n + '.service')).write_text('[Unit]\nDescription=x\n[Service]\nType=notify\nExecStart=/bin/true\n')
+        self.mounts = {}
         self.patch('run', self.command)
+        self.real_run = d.subprocess.run
         self.stack.enter_context(patch.object(d.subprocess,'run',self.start_client))
 
     def patch(self, name, value):
@@ -148,6 +223,8 @@ class Cutover(unittest.TestCase):
             self.props[n]['LoadState'] = 'masked' if os.path.lexists(d.mask(n)) else 'loaded'
 
     def start_client(self, argv, *, stdout, **kwargs):
+        if argv[0] == 'systemd-analyze':
+            return self.real_run(argv, stdout=stdout, **kwargs)
         self.assertEqual(argv[:3],['systemctl','start','--show-transaction'])
         n = argv[-1].removesuffix('.service')
         self.assertNotIn(n,self.guards)
@@ -162,6 +239,8 @@ class Cutover(unittest.TestCase):
         return d.subprocess.CompletedProcess(argv,0)
 
     def command(self, *args, **kwargs):
+        if args[:5] == ('systemctl','show','--property=ActiveState','--value','--') and args[5].endswith('.mount'):
+            return self.mounts.get(args[5], 'inactive')
         if args[:3] == ('systemctl','show','--all'):
             props = self.props[args[-1].removesuffix('.service')]
             return '\n'.join(k + '=' + props[k] for k in args[3].removeprefix('--property=').split(','))
@@ -238,8 +317,8 @@ class Cutover(unittest.TestCase):
         (self.release / '.source-revision').write_text(target['revision'] + '\n')
         (self.release / 'd-card-candidate.json').write_text(json.dumps(target))
 
-    def cli(self, action, target, *, pooled=True, anchor_uid=0):
-        args = ['kapu-d-cutover.py',action,*(['--already-pooled'] if pooled else []),str(self.h),
+    def cli(self, action, target, *, anchor_uid=0):
+        args = ['kapu-d-cutover.py',action,str(self.h),
                 target['revision'],*(target[k][n] for k in ('images','units') for n in d.NAMES)]
         anchors = {d.mask_anchor(self.h,n) for n in d.NAMES}
         lstat = Path.lstat
@@ -257,13 +336,11 @@ class Cutover(unittest.TestCase):
               patch.object(d.socket,'gethostname',return_value='kapu'), patch.object(d.signal,'signal')):
             d.main()
 
-    def resume(self, source_port='5433'):
-        d.resume(self.h,self.target(),source_port)
+    def resume(self):
+        d.resume(self.h,self.target())
 
-    def running_pair(self, installed_port='5433', runtime_port=None):
+    def running_pair(self, runtime_port=None):
         self.h = self.root / 'd-cutover-running'
-        self.patch('GEN',self.root / 'generator')
-        d.GEN.mkdir()
         self.patch('origin',self.origin)
         self.patch('retained',self.retained)
         self.patch('prereqs',lambda:None)
@@ -271,9 +348,9 @@ class Cutover(unittest.TestCase):
         self.patch('policy',lambda n: {'50-mcs-level.conf':b'[Container]\nSecurityLabelLevel=s0:c908,c909\n'} if n == d.C else {})
         self.patch('profile',lambda:b'profile')
         self.patch('healthy',lambda n,g,**kwargs:self.assertEqual(g,self.generation(n)))
-        def collector(g,port,level):
-            expected = (runtime_port or installed_port) if g['cid'] == self.state['old'][d.C]['cid'] else '6433'
-            d.need(port == expected,'collector 실행 환경 불일치')
+        def collector(g,level):
+            running = runtime_port if g['cid'] == self.state['old'][d.C]['cid'] else None
+            d.need(running in (None, d.CANDIDATE_PORT),'collector 실행 환경 불일치')
             return b'profile'
         self.patch('collector',collector)
         self.patch('issuer',lambda *args:None)
@@ -284,7 +361,8 @@ class Cutover(unittest.TestCase):
                 base = self.units / d.unit(n)
                 f = d.GEN / (n + '.service')
                 text = base.read_text() + '\n' + '\n'.join(v.decode() for v in d.policy(n).values())
-                f.write_text('SourcePath=' + str(base) + '\n' + text.replace('[Container]', '[X-Container]'))
+                f.write_text('[Unit]\nSourcePath=' + str(base) + '\n' + text.replace('[Container]', '[X-Container]') +
+                             '\n[Service]\nType=notify\nExecStart=/bin/true\n')
                 self.props[n].update(FragmentPath=str(d.mask(n) if self.props[n]['LoadState'] == 'masked' else f),
                                      NeedDaemonReload='no', Type='notify', DropInPaths=(
                                          str(self.system / (n+'.service.d/90-hololive-stop-guard.conf')) if n in self.guards else ''))
@@ -293,7 +371,7 @@ class Cutover(unittest.TestCase):
             candidate = (self.unit_source / d.unit(n)).read_bytes()
             (self.input / d.unit(n)).write_bytes(candidate)
             self.digests[n] = d.sha(candidate)
-            (self.units / d.unit(n)).write_bytes(candidate.replace(b'POSTGRES_PORT=6433', b'POSTGRES_PORT=' + installed_port.encode()))
+            (self.units / d.unit(n)).write_bytes(candidate)
             old_image = self.state['images'][n]
             self.tags[old_image['id']] = old_image
             d.mask(n).unlink()
@@ -302,12 +380,135 @@ class Cutover(unittest.TestCase):
         self.reload()
         return self.h
 
+    def test_quiesce_refuses_dependency_links_a_guard_reload_brings_in(self):
+        h = self.running_pair()
+        reload = self.reload
+        def reload_with_link():
+            reload()
+            folder = self.system / (d.C + '.service.requires')
+            if self.guards and not folder.exists():
+                folder.mkdir()
+                (folder / 'probe.service').symlink_to('../probe.service')
+        self.reload = reload_with_link
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            d.quiesce(h, self.target())
+        self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','stop')])
+
+    def test_dependency_masks_are_only_exact_dev_null_links(self):
+        target = self.target()
+        self.seal(target)
+        folder = self.system / (d.C + '.service.wants')
+        folder.mkdir()
+        (folder / 'probe.service').symlink_to('/dev/null/')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+
+    def test_higher_priority_masks_and_hidden_entries_hide_lower_dependencies(self):
+        target = self.target()
+        self.seal(target)
+        upper = self.system / (d.C + '.service.wants')
+        lower = self.vendor / (d.C + '.service.wants')
+        upper.mkdir()
+        lower.mkdir()
+        (upper / 'probe.service').symlink_to('/dev/null')
+        (lower / 'probe.service').symlink_to('../probe.service')
+        drops = self.system / (d.C + '.service.d')
+        drops.mkdir(exist_ok=True)
+        (drops / '.pending.conf').write_bytes(b'[Service]\nRestart=no\n')
+        self.cli('check', target)
+        (drops / '20-x.conf').symlink_to('/dev/null')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+        (drops / '20-x.conf').unlink()
+        (upper / 'probe.service').unlink()
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_dropin_precedence_follows_unit_name_then_prefix_then_type_level(self):
+        target = self.target()
+        self.seal(target)
+        cases = [
+            ((self.system, 'service'), (self.vendor, d.C + '.service'), True),
+            ((self.system, 'service'), (self.vendor, 'hololive-.service'), True),
+            ((self.vendor, d.C + '.service'), (self.system, 'service'), False),
+            ((self.vendor, 'hololive-.service'), (self.system, 'service'), False),
+            ((self.system, d.C + '.service'), (self.system, 'hololive-.service'), False),
+        ]
+        for (mroot, mstem), (lroot, lstem), refused in cases:
+            for suffix, entry in (('.wants', 'probe.service'), ('.d', '50-x.conf')):
+                masked = mroot / (mstem + suffix) / entry
+                live = lroot / (lstem + suffix) / entry
+                masked.parent.mkdir(exist_ok=True)
+                live.parent.mkdir(exist_ok=True)
+                masked.symlink_to('/dev/null')
+                refused = refused or suffix == '.d'
+                own = mroot / (d.I + '.service' + suffix) / entry
+                if not refused:
+                    own.parent.mkdir(exist_ok=True)
+                    own.symlink_to('/dev/null')
+                if suffix == '.wants':
+                    live.symlink_to('../probe.service')
+                else:
+                    live.write_bytes(b'[Service]\nRestart=no\n')
+                if refused:
+                    with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                        self.cli('check', target)
+                else:
+                    self.cli('check', target)
+                masked.unlink()
+                live.unlink()
+                if not refused:
+                    own.unlink()
+
+    def test_dependency_dirs_ignore_entries_systemd_ignores(self):
+        target = self.target()
+        self.seal(target)
+        folder = self.system / (d.C + '.service.wants')
+        folder.mkdir()
+        (folder / 'README').write_bytes(b'note\n')
+        (folder / 'NOTES').symlink_to('../probe.service')
+        (folder / 'masked.service').symlink_to('/dev/null')
+        (folder / 'zero.service').symlink_to('/dev/zero')
+        (self.root / 'empty.service').write_bytes(b'')
+        (folder / 'empty.service').symlink_to(self.root / 'empty.service')
+        self.cli('check', target)
+        (folder / 'probe.service').symlink_to('../probe.service')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+
+    def test_resume_refuses_a_dropin_on_the_open_issuer_before_collector_start(self):
+        target = self.target()
+        self.seal(target)
+        reload = self.reload
+        def reload_with_issuer_dropin():
+            reload()
+            folder = self.system / (d.I + '.service.d')
+            if not os.path.lexists(d.mask(d.C)) and not folder.exists():
+                folder.mkdir()
+                (folder / '10-late.conf').write_bytes(b'[Service]\nRestart=no\n')
+        self.reload = reload_with_issuer_dropin
+        self.resume_inputs()
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.resume()
+        self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','start') and c[-1] == d.C + '.service'])
+
+    def test_quiesce_refuses_dependency_links_before_any_stop(self):
+        h = self.running_pair()
+        folder = self.system / (d.C + '.service.requires')
+        folder.mkdir()
+        (folder / 'probe.service').symlink_to('../probe.service')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            d.quiesce(h, self.target())
+        self.assertFalse(os.path.lexists(h))
+        self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','stop')])
+
     def test_original_jobs_finish_before_any_seal(self):
         h = self.running_pair()
         self.outcomes[d.I] = {'ActiveState':'failed','Result':'exit-code','ExecMainStatus':'143'}
         self.outcomes[d.C] = {'InvocationID':'','ExecMainCode':'0'}
-        d.quiesce(h,'5433')
-        self.assertEqual((h/'quiesced').read_bytes(),d.QUIESCED['5433'])
+        d.quiesce(h,self.target())
+        self.assertEqual((h/'quiesced').read_bytes(),d.stop_receipt(json.loads((h/'previous.json').read_bytes())))
         self.assertEqual([x[-1] for x in self.calls if x[:2] == ('systemctl','stop')],
                          [d.I+'.service',d.C+'.service'])
         for n in d.NAMES:
@@ -328,7 +529,7 @@ class Cutover(unittest.TestCase):
             return result
         self.patch('run',swap)
         with self.assertRaisesRegex(ValueError,'세대 변경'):
-            d.quiesce(h,'5433')
+            d.quiesce(h,self.target())
         self.assertEqual(self.guards,set(d.NAMES))
         self.assertNotIn(('systemctl','stop',d.C+'.service'),self.calls)
         self.assertFalse((h/'quiesced').exists())
@@ -337,7 +538,7 @@ class Cutover(unittest.TestCase):
         h = self.running_pair()
         self.outcomes[d.C] = {'ActiveState':'failed','Result':'exit-code','ExecMainStatus':'143'}
         with self.assertRaisesRegex(ValueError,'정상 종료 미확인'):
-            d.quiesce(h,'5433')
+            d.quiesce(h,self.target())
         result = json.loads((h/(d.C+'.stopped.json')).read_bytes())
         self.assertTrue(result['manager_stop'])
         self.assertEqual((result['Result'],result['ExecMainStatus']), ('exit-code','143'))
@@ -350,7 +551,7 @@ class Cutover(unittest.TestCase):
         self.exits[d.C] = '143'
         self.outcomes[d.C] = {'InvocationID':'','ExecMainCode':'0','ExecMainStatus':'0','Result':'success'}
         with self.assertRaisesRegex(ValueError,'정상 종료 미확인'):
-            d.quiesce(h,'5433')
+            d.quiesce(h,self.target())
         self.assertFalse((h/'quiesced').exists())
         self.assertEqual(json.loads((h/(d.C+'.stopped.json')).read_bytes())['container_exit'],'143')
         self.assertIn(d.C,self.guards)
@@ -359,71 +560,356 @@ class Cutover(unittest.TestCase):
         h = self.running_pair()
         self.guards.add(d.I)
         with self.assertRaisesRegex(ValueError,'이전 가드'):
-            d.quiesce(h,'5433')
+            d.quiesce(h,self.target())
         self.assertFalse(any(c[:2] == ('systemctl','stop') for c in self.calls))
         self.assertEqual(self.guards,set(d.NAMES))
         self.assertFalse((h/'quiesced').exists())
 
-    def exercise_release(self, source_port):
+    def test_already_direct_release_keeps_installed_endpoint(self):
         candidates = dict(self.executions)
-        h = self.running_pair(source_port)
-        target = self.target() if source_port == '6433' else None
-        if target is None:
-            d.quiesce(h,source_port)
-        else:
-            self.seal(target)
-            self.cli('quiesce',target)
+        h = self.running_pair()
+        target = self.target()
+        self.seal(target)
+        self.cli('quiesce',target)
         previous = json.loads((h/'previous.json').read_bytes())
-        self.assertEqual(previous['previous_endpoint']['port'],int(source_port))
+        self.assertEqual(previous['previous_endpoint']['port'],5433)
         self.assertEqual(previous['old'],self.executions)
         self.assertEqual(previous.get('candidate'),target)
         collector_unit = self.units / d.unit(d.C)
         inode = d.number(collector_unit)
         self.executions = candidates
-        if target is None:
-            self.resume(source_port)
-        else:
-            self.cli('resume',target)
-        self.assertEqual(d.number(collector_unit) == inode,source_port == '6433')
+        self.cli('resume',target)
+        self.assertEqual(d.number(collector_unit),inode)
         self.assertEqual(collector_unit.read_bytes(),(d.INPUT / d.unit(d.C)).read_bytes())
         accepted = json.loads((h/'accepted.json').read_bytes())
-        self.assertEqual((accepted['generations'],accepted['port']),(candidates,6433))
+        self.assertEqual((accepted['generations'],accepted['port']),(candidates,5433))
         self.assertEqual([x[-1] for x in self.calls if x[:2] == ('systemctl','start')],
                          [d.I+'.service',d.C+'.service'])
 
-    def test_direct_release_switches_installed_endpoint(self):
-        self.exercise_release('5433')
-
-    def test_already_pooled_release_keeps_installed_endpoint(self):
-        self.exercise_release('6433')
-
-    def test_pooled_installation_is_not_an_implicit_direct_cutover(self):
-        h = self.running_pair('6433')
-        with self.assertRaisesRegex(d.Refused,'계약 불일치'):
-            d.quiesce(h,'5433')
-        self.assertFalse(h.exists())
-        self.assertFalse(self.calls)
-
-    def test_already_pooled_refuses_direct_running_collector(self):
-        h = self.running_pair('6433',runtime_port='5433')
+    def test_already_direct_refuses_pooled_running_collector(self):
+        h = self.running_pair(runtime_port='6433')
         with self.assertRaisesRegex(d.Refused,'실행 환경 불일치'):
-            d.quiesce(h,'6433',self.target())
+            d.quiesce(h,self.target())
         self.assertFalse(h.exists())
         self.assertFalse(self.calls)
 
-    def test_pooled_resume_refuses_changed_previous_endpoint(self):
-        h = self.running_pair('6433')
-        d.quiesce(h,'6433',self.target())
+    def test_check_runs_resume_gates_without_changing_the_hold(self):
+        target = self.target()
+        self.seal(target)
+        before = sorted((p.name, p.read_bytes() if p.is_file() else None) for p in self.h.iterdir())
+        masks = {n: os.readlink(d.mask(n)) for n in d.NAMES}
+        units = {n: (self.units / d.unit(n)).read_bytes() for n in d.NAMES}
+        self.cli('check', target)
+        self.assertEqual(sorted((p.name, p.read_bytes() if p.is_file() else None) for p in self.h.iterdir()), before)
+        self.assertEqual({n: os.readlink(d.mask(n)) for n in d.NAMES}, masks)
+        self.assertEqual({n: (self.units / d.unit(n)).read_bytes() for n in d.NAMES}, units)
+        self.assertEqual(self.calls, [])
+
+    def test_check_and_resume_refuse_an_interrupted_resume_attempt(self):
+        target = self.target()
+        self.seal(target)
+        d.metadata(self.h / 'resume-attempt.json', {**target, 'profile': self.state['profile']})
+        attempt = (self.h / 'resume-attempt.json').read_bytes()
+        with self.assertRaisesRegex(d.Refused, '재개 시도'):
+            self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, '재개 시도'):
+            self.resume()
+        self.assertEqual((self.h / 'resume-attempt.json').read_bytes(), attempt)
+        self.assertEqual(self.calls, [])
+
+    def test_check_and_resume_refuse_a_systemd_dropin_added_after_the_stop(self):
+        target = self.target()
+        self.seal(target)
+        for folder in (self.system / (d.C + '.service.d'), self.vendor / 'hololive-.service.d', self.vendor / 'service.d'):
+            folder.mkdir()
+            (folder / '10-late.conf').write_bytes(b'[Service]\nEnvironment=LATE=1\n')
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.resume()
+            (folder / '10-late.conf').unlink()
+        self.assertEqual(self.calls, [])
+        self.cli('check', target)
+
+    def test_check_and_resume_refuse_aliases_but_not_aliases_of_other_units(self):
+        target = self.target()
+        self.seal(target)
+        for alias in (self.system / 'collector-alias.service', self.system / 'chained.service'):
+            alias.symlink_to(d.GEN / (d.C + '.service') if alias.name == 'collector-alias.service' else 'collector-alias.service')
+            with self.assertRaisesRegex(d.Refused, 'systemd unit 별칭'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd unit 별칭'):
+                self.resume()
+        (self.system / 'chained.service').unlink()
+        (self.system / 'collector-alias.service').unlink()
+        (self.vendor / 'other.service').write_bytes(b'[Service]\nExecStart=/bin/true\n')
+        (self.vendor / 'unrelated.service').symlink_to('other.service')
+        for folder in (self.vendor / 'unrelated.service.d', self.vendor / 'other.service.d'):
+            folder.mkdir()
+            (folder / '10-own.conf').write_bytes(b'[Service]\nEnvironment=OWN=1\n')
+        self.cli('check', target)
+        for folder in (self.vendor / (d.C.rpartition('-')[0] + '-.service.d'),):
+            folder.mkdir()
+            (folder / '10-late.conf').write_bytes(b'[Service]\nEnvironment=LATE=1\n')
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.resume()
+            (folder / '10-late.conf').unlink()
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_and_resume_refuse_dependency_links_added_after_the_stop(self):
+        target = self.target()
+        self.seal(target)
+        for folder in (self.system / (d.C + '.service.requires'), self.vendor / 'hololive-.service.wants',
+                       self.vendor / 'service.upholds'):
+            folder.mkdir()
+            (folder / 'probe.service').symlink_to('../probe.service')
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.resume()
+            (folder / 'probe.service').unlink()
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+        self.cli('check', target)
+
+    def test_check_and_resume_verify_generated_fragments_before_the_attempt_record(self):
+        target = self.target()
+        self.seal(target)
+        checked = []
+        def generated(name):
+            checked.append(name)
+            d.need(False, '생성된 unit 원천 불일치')
+        self.patch('generated', generated)
+        with self.assertRaisesRegex(d.Refused, '생성된 unit 원천'):
+            self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, '생성된 unit 원천'):
+            self.resume()
+        self.assertEqual(checked, [d.NAMES[0]] * 2)
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_and_resume_refuse_dependency_links_the_owned_masks_hide(self):
+        target = self.target()
+        self.seal(target)
+        wants = self.system / (d.I + '.service.wants')
+        wants.mkdir()
+        for entry, link in [(d.C, '../' + d.C + '.service'), ('probe', '../' + d.C + '.service'), (d.C, str(d.mask(d.C))),
+                            ('probe', '../' + d.mask_anchor(self.h, d.I).name)]:
+            with self.subTest(entry=entry, link=link):
+                (wants / (entry + '.service')).symlink_to(link)
+                with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                    self.cli('check', target)
+                with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                    self.resume()
+                self.assertEqual(self.calls, [])
+                self.assertFalse((self.h / 'resume-attempt.json').exists())
+                (wants / (entry + '.service')).unlink()
+        self.cli('check', target)
+
+    def test_check_resolves_process_relative_links_from_the_root_like_systemd(self):
+        target = self.target()
+        self.seal(target)
+        op = self.root / 'op'
+        decoy = op / d.mask(d.C).relative_to('/')
+        decoy.parent.mkdir(parents=True)
+        decoy.symlink_to('/dev/null')
+        upholds = self.system / (d.I + '.service.upholds')
+        upholds.mkdir()
+        (upholds / 'evil.service').symlink_to('/proc/self/cwd' + str(d.mask(d.C)))
+        os.chdir(op)
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+
+    def test_check_accepts_dependency_links_masked_by_another_holds_anchor(self):
+        target = self.target()
+        self.seal(target)
+        old = self.system / ('.' + d.I + '.pair-old.mask')
+        old.symlink_to('/dev/null')
+        wants = self.system / (d.C + '.service.wants')
+        wants.mkdir()
+        (wants / 'probe.service').symlink_to(old)
+        self.cli('check', target)
+
+    def test_check_accepts_dependency_links_masked_by_a_link_resume_keeps(self):
+        target = self.target()
+        self.seal(target)
+        keep = self.system / '.keep-mask'
+        os.link(d.mask(d.C), keep, follow_symlinks=False)
+        wants = self.system / (d.I + '.service.wants')
+        wants.mkdir()
+        (wants / 'probe.service').symlink_to('../.keep-mask')
+        self.cli('check', target)
+        (wants / 'probe.service').unlink()
+        (wants / 'probe.service').symlink_to('../' + d.C + '.service')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+
+    def test_check_accepts_a_sealed_hold_whose_manager_still_lists_the_removed_guard(self):
+        target = self.target()
+        self.seal(target)
+        self.patch('origin', self.origin)
+        for n in d.NAMES:
+            self.props[n]['DropInPaths'] = str(self.system / (n + '.service.d/90-hololive-stop-guard.conf'))
+        self.cli('check', target)
+        self.assertEqual(self.calls, [])
+
+    def test_resume_refuses_dependency_links_the_resume_reload_creates(self):
+        target = self.target()
+        self.seal(target)
+        reload = self.reload
+        def reload_with_generated_link():
+            reload()
+            if not os.path.lexists(d.mask(d.I)):
+                folder = self.system / (d.I + '.service.wants')
+                folder.mkdir(exist_ok=True)
+                if not os.path.lexists(folder / 'probe.service'):
+                    (folder / 'probe.service').symlink_to('../probe.service')
+        self.reload = reload_with_generated_link
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.resume()
+        self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','start')])
+
+    def requires_mounts(self):
+        for n in d.NAMES:
+            (d.GEN / (n + '.service')).write_text('[Unit]\nDescription=x\nRequiresMountsFor=/run/containers /var/lib/hololive-collectors/d\n'
+                                                  '[Service]\nType=notify\nExecStart=/bin/true\n')
+
+    def test_check_and_resume_refuse_a_mount_unit_requires_mounts_for_would_start(self):
+        target = self.target()
+        self.seal(target)
+        self.requires_mounts()
+        self.cli('check', target)
+        for name, where in (('run-containers.mount', '/run/containers'),
+                            ('var-lib-hololive\\x2dcollectors.mount', '/var/lib/hololive-collectors')):
+            (self.system / name).write_text('[Mount]\nWhat=tmpfs\nWhere=' + where + '\nType=tmpfs\n')
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.resume()
+            self.mounts[name] = 'active'
+        self.cli('check', target)
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_resume_refuses_a_mount_unit_the_resume_reload_brings_in(self):
+        target = self.target()
+        self.seal(target)
+        self.requires_mounts()
+        reload = self.reload
+        def reload_with_mount_unit():
+            reload()
+            if not os.path.lexists(d.mask(d.I)):
+                (self.system / 'run-containers.mount').write_text('[Mount]\nWhat=tmpfs\nWhere=/run/containers\nType=tmpfs\n')
+        self.reload = reload_with_mount_unit
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.resume()
+        self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','start')])
+
+    def test_check_and_resume_refuse_unit_files_hidden_behind_the_mask(self):
+        target = self.target()
+        self.seal(target)
+        for name in d.NAMES:
+            entry = self.early / (name + '.service')
+            entry.symlink_to('x.service')
+            with self.assertRaisesRegex(d.Refused, 'systemd unit 파일'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd unit 파일'):
+                self.resume()
+            entry.unlink()
+            (self.vendor / (name + '.service')).write_bytes(b'[Service]\nExecStart=/bin/true\n')
+        self.cli('check', target)
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_ignores_a_self_alias_but_not_the_unit_behind_it(self):
+        target = self.target()
+        self.seal(target)
+        later = self.root / 'later'
+        later.mkdir()
+        self.patch('unit_paths', lambda: [self.system, self.early, later, d.GEN, self.vendor])
+        for name in d.NAMES:
+            (self.early / (name + '.service')).symlink_to(d.GEN / (name + '.service'))
+        (later / (d.I + '.service')).symlink_to('../generator/' + d.I + '.service')
+        self.cli('check', target)
+        (later / (d.C + '.service')).write_bytes(b'[Service]\nExecStart=/bin/true\n')
+        with self.assertRaisesRegex(d.Refused, 'systemd unit 파일'):
+            self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, 'systemd unit 파일'):
+            self.resume()
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_and_resume_refuse_a_unit_systemd_cannot_load(self):
+        target = self.target()
+        self.seal(target)
+        (d.GEN / (d.C + '.service')).write_bytes(b'')
+        with self.assertRaisesRegex(d.Refused, 'systemd unit 판정'):
+            self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, 'systemd unit 판정'):
+            self.resume()
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_and_resume_refuse_an_alias_whose_masked_dependency_systemd_picks_at_random(self):
+        target = self.target()
+        self.seal(target)
+        for alias in ('alpha', 'beta'):
+            (self.system / (alias + '.service')).symlink_to(d.GEN / (d.C + '.service'))
+            (self.system / (alias + '.service.wants')).mkdir()
+        (self.system / 'alpha.service.wants' / 'probe.service').symlink_to('/dev/null')
+        (self.system / 'beta.service.wants' / 'probe.service').symlink_to('../probe.service')
+        for _ in range(16):
+            with self.assertRaisesRegex(d.Refused, 'systemd unit 별칭'):
+                self.cli('check', target)
+        with self.assertRaisesRegex(d.Refused, 'systemd unit 별칭'):
+            self.resume()
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_check_follows_systemd_for_relative_dirs_and_invalid_names(self):
+        target = self.target()
+        self.seal(target)
+        (self.system / 'links').mkdir()
+        (self.system / 'links' / 'probe.service').symlink_to('/dev/null')
+        (self.system / (d.C + '.service.wants')).symlink_to('links')
+        (self.vendor / (d.C + '.service.wants')).mkdir()
+        (self.vendor / (d.C + '.service.wants') / 'probe.service').symlink_to('../probe.service')
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.cli('check', target)
+        (self.vendor / (d.C + '.service.wants') / 'probe.service').unlink()
+        (self.vendor / (d.C + '.service.wants') / 'bad name.service').symlink_to('../probe.service')
+        (self.early / (d.C + '.service')).mkdir()
+        self.cli('check', target)
+        self.assertEqual(self.calls, [])
+
+    def test_check_refuses_what_resume_refuses(self):
+        target = self.target()
+        self.seal(target)
+        def rebooted(h, s):
+            d.need(False, '다른 hold/boot')
+        with patch.object(d, 'retained', rebooted), self.assertRaises(d.Refused):
+            self.cli('check', target)
+        (self.h / 'quiesced').write_bytes(b'stale\n')
+        with self.assertRaises(d.Refused):
+            self.cli('check', target)
+        self.assertEqual(self.calls, [])
+
+    def test_direct_resume_refuses_changed_previous_endpoint(self):
+        h = self.running_pair()
+        d.quiesce(h,self.target())
         state = json.loads((h/'previous.json').read_bytes())
-        state['previous_endpoint']['port'] = 5433
+        state['previous_endpoint']['port'] = 6433
         (h/'previous.json').write_text(json.dumps(state))
         with self.assertRaisesRegex(d.Refused,'quiesce 영수증'):
-            self.resume('6433')
+            self.resume()
         self.assertFalse((h/'resume-attempt.json').exists())
         self.assertTrue(all(d.mask(n).is_symlink() for n in d.NAMES))
 
-    def test_pooled_quiesce_requires_a_new_verified_pair_before_either_stop(self):
-        h = self.running_pair('6433')
+    def test_direct_quiesce_requires_a_new_verified_pair_before_either_stop(self):
+        h = self.running_pair()
         target = self.target()
         old_ids = {n:i['id'] for n,i in self.state['images'].items()}
         old_revision = self.state['images'][d.C]['rev']
@@ -437,12 +923,12 @@ class Cutover(unittest.TestCase):
         )
         for invalid,reason in cases:
             with self.subTest(reason=reason), self.assertRaisesRegex(d.Refused,reason):
-                d.quiesce(h,'6433',invalid)
+                d.quiesce(h,invalid)
             self.assertFalse(h.exists())
             self.assertFalse(self.calls)
 
     def test_card_cli_rejects_earlier_complete_release_and_same_revision_rebuild(self):
-        h = self.running_pair('6433')
+        h = self.running_pair()
         card = self.target()
         self.seal(card)
         prior_ids = {d.C:'sha256:'+'5'*64,d.I:'sha256:'+'6'*64}
@@ -459,15 +945,8 @@ class Cutover(unittest.TestCase):
             self.assertFalse(h.exists())
             self.assertFalse(self.calls)
 
-        for action in ('quiesce','resume'):
-            with self.subTest(action=action), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as exc:
-                self.cli(action,card,pooled=False)
-            self.assertEqual(exc.exception.code,2)
-            self.assertFalse(h.exists())
-            self.assertFalse(self.calls)
-
     def test_card_cli_requires_both_protected_files_before_quiesce(self):
-        h = self.running_pair('6433')
+        h = self.running_pair()
         target = self.target()
         for name in ('.source-revision','d-card-candidate.json'):
             self.seal(target)
@@ -479,7 +958,7 @@ class Cutover(unittest.TestCase):
             self.assertFalse(self.calls)
 
     def test_card_cli_rechecks_protected_inputs_before_resume(self):
-        h = self.running_pair('6433')
+        h = self.running_pair()
         target = self.target()
         self.seal(target)
         self.cli('quiesce',target)
@@ -499,7 +978,7 @@ class Cutover(unittest.TestCase):
 
     def test_card_cli_refuses_foreign_mask_anchor_before_resume(self):
         candidates = dict(self.executions)
-        h = self.running_pair('6433')
+        h = self.running_pair()
         target = self.target()
         self.seal(target)
         self.cli('quiesce',target)
@@ -512,10 +991,10 @@ class Cutover(unittest.TestCase):
         for n in d.NAMES:
             self.assertEqual(d.number(d.mask(n)),d.number(d.mask_anchor(h,n)))
 
-    def test_pooled_resume_only_opens_the_candidate_from_this_hold(self):
-        h = self.running_pair('6433')
+    def test_direct_resume_only_opens_the_candidate_from_this_hold(self):
+        h = self.running_pair()
         target = self.target()
-        d.quiesce(h,'6433',target)
+        d.quiesce(h,target)
         alternate = 'sha256:' + 'c'*64
         self.tags[alternate] = {'id':alternate,'rev':self.rev}
         old = self.state['images']
@@ -528,7 +1007,7 @@ class Cutover(unittest.TestCase):
         self.calls.clear()
         for replacement in candidates:
             with self.subTest(candidate=replacement), self.assertRaisesRegex(d.Refused,'승인한 후보와 불일치'):
-                d.resume(h,replacement,'6433')
+                d.resume(h,replacement)
             self.assertFalse(self.calls)
             self.assertFalse((h/'resume-attempt.json').exists())
             for n in d.NAMES:
@@ -540,7 +1019,7 @@ class Cutover(unittest.TestCase):
         for f in ('previous.json','quiesced'):
             (foreign/f).write_bytes((h/f).read_bytes())
         with self.assertRaisesRegex(d.Refused,'다른 hold/boot'):
-            d.resume(foreign,target,'6433')
+            d.resume(foreign,target)
         self.assertFalse(self.calls)
         self.assertFalse((foreign/'resume-attempt.json').exists())
 
@@ -549,7 +1028,7 @@ class Cutover(unittest.TestCase):
         state['candidate'] = replacement
         (h/'previous.json').write_text(json.dumps(state))
         with self.assertRaisesRegex(d.Refused,'quiesce 영수증'):
-            d.resume(h,replacement,'6433')
+            d.resume(h,replacement)
         self.assertFalse(self.calls)
         self.assertFalse((h/'resume-attempt.json').exists())
 
@@ -708,12 +1187,11 @@ class Cutover(unittest.TestCase):
         self.rejected_but_stopped()
 
     def test_static_receipt_cannot_open_candidates(self):
-        for marker,requested in ((b'kapu-d-v1\n','5433'),(b'kapu-d-guarded-stop-v1\n','5433'),
-                                 (d.QUIESCED['6433'],'5433'),(d.QUIESCED['5433'],'6433')):
-            with self.subTest(marker=marker,requested=requested):
+        for marker in (b'kapu-d-v1\n',b'kapu-d-guarded-stop-v1\n',b'kapu-d-guarded-stop-v4 pooled-to-direct\n',d.QUIESCED):
+            with self.subTest(marker=marker):
                 (self.h/'quiesced').write_bytes(marker)
                 with self.assertRaisesRegex(ValueError,'quiesce 영수증'):
-                    self.resume(requested)
+                    self.resume()
                 self.assertFalse(self.calls)
                 self.assertFalse((self.h/'resume-attempt.json').exists())
 
@@ -784,7 +1262,7 @@ class Cutover(unittest.TestCase):
         self.assertEqual(self.props[d.I]['MainPID'],'0')
         self.assertFalse((self.h/'accepted.json').exists())
 
-    def test_candidate_stop_cannot_reuse_direct_issuer_143(self):
+    def test_candidate_stop_cannot_reuse_original_issuer_143(self):
         self.patch('gate',lambda *args:None)
         self.patch('acceptance',lambda *args: self.fail_candidate())
         self.outcomes[d.I] = {'ActiveState':'failed','InvocationID':self.state['old'][d.I]['inv'],

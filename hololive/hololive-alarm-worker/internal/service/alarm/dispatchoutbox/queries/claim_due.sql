@@ -35,7 +35,7 @@ WITH clock AS MATERIALIZED (
 	FROM ranked_units
 	WHERE cumulative_deliveries <= $1::INT OR ordinal = 1
 ), picked AS (
-	SELECT d.id
+	SELECT d.id, d.xmin AS row_version
 	FROM alarm_dispatch_deliveries d
 	WHERE d.send_unit_id IN (SELECT id FROM next_units)
 	  AND d.status IN ('pending', 'retry')
@@ -48,6 +48,8 @@ WITH clock AS MATERIALIZED (
 		updated_at = clock.now
 	FROM picked CROSS JOIN clock
 	WHERE d.id = picked.id
+	  AND d.status IN ('pending', 'retry')
+	  AND (d.xmin = picked.row_version OR d.next_attempt_at <= clock.now)
 	RETURNING d.id, d.event_id, d.room_id, d.dedupe_key, d.claim_keys, d.delivery_context,
 		d.dispatch_group_key, d.send_unit_id, d.status, d.attempt_count, d.next_attempt_at,
 		d.locked_by, d.locked_at, d.lock_expires_at, d.sending_started_at, d.sent_at,

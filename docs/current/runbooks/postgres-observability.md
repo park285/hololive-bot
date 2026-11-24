@@ -21,8 +21,10 @@ base image의 contrib인 `auto_explain`(preload), `pg_buffercache` 1.7, `amcheck
 기존 volume에 initdb를 재실행하지 않는다. `postgres-replication.md`의 single-primary
 경계와 현재 `DEPLOYMENT_BASELINE.md`를 유지한다.
 
-현재 네 확장과 auto_explain preload는 서울 primary에서 활성화되어 있습니다. 로컬 main으로의 소스 통합은
-재배포·재활성화가 아닙니다. 운영 점검은 아래 읽기 전용 관측 절차를 사용합니다.
+`pg_stat_kcache`와 `pg_wait_sampling`은 상시 preload하지 않습니다. 진단 구간에만 아래 활성화 절차로 켜고,
+수집을 마치면 복구 절차로 확장을 제거한 뒤 preload를 상시 값 `pg_stat_statements,auto_explain`으로 되돌립니다.
+서울 primary는 아직 네 확장과 두 preload가 켜진 상태이며, 상시 값으로 되돌리는 재시작은 별도 승인이 필요합니다.
+로컬 main으로의 소스 통합은 재배포·재활성화가 아닙니다. 운영 점검은 아래 읽기 전용 관측 절차를 사용합니다.
 Osaka의 적용 기록은 당시 증거로 보존하되, 해당 VM과 100GB 부트 볼륨은 모두 삭제했습니다.
 과거 복구 이미지·파일이 서울에 같은 경로로 존재한다고 가정하지 않습니다.
 
@@ -51,7 +53,7 @@ podman image inspect --format 'sha256:{{.Id}} arch={{.Architecture}} revision={{
   localhost/hololive-postgres:observability-candidate
 ```
 
-root/UID 999 시작, preload 누락 거부, CPU 계측, sleep/행 잠금 표본, 권한, 재시작,
+UID 999 시작과 gosu 부재, preload 누락 거부, CPU 계측, sleep/행 잠금 표본, 권한, 재시작,
 SQL 비활성화 뒤 기본 preload 복귀를 검증한다. ARM64 에뮬레이션의 `linux_hz` 자동 감지값을
 운영 설정으로 복사하지 않는다. 최종 이미지에는 compiler·테스트 데이터가 들어가지 않는다.
 저장소의 최종 이미지 스캔을 후보 태그만 담은 별도 manifest로 실행한다.
@@ -69,8 +71,16 @@ SQL 비활성화 뒤 기본 preload 복귀를 검증한다. ARM64 에뮬레이�
    `/etc/stack-secrets/hololive-bot/compose.env`와 마스터의 일치 및 manifest owner/mode를
    검증한다. 수동 명령과 systemd 재시작 모두 같은 값을 읽도록 한다.
 
+   진단 구간 값:
+
    ```dotenv
    HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES=pg_stat_statements,pg_stat_kcache,pg_wait_sampling,auto_explain
+   ```
+
+   상시 값:
+
+   ```dotenv
+   HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES=pg_stat_statements,auto_explain
    ```
 
    `holo-postgres.container`의 `Exec=`는 kcache `track=top`, planning off, wait `profile_pid=off`,

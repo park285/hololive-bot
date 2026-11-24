@@ -27,11 +27,18 @@ path_is_root_safe() {
     report "other-writable (${perms}): ${f}"
     return 1
   fi
-  if (( (g & 2) != 0 )) && [[ "${gid}" -ne 0 ]]; then
-    report "group-writable by non-root group (gid=${gid}, ${perms}): ${f}"
+  if (( (g & 2) != 0 )); then
+    report "group-writable (gid=${gid}, ${perms}): ${f}"
     return 1
   fi
   return 0
+}
+
+paths_with_acl() {
+  python3 -I -S -c 'import os, sys
+for path in sys.argv[1:]:
+    if any(name.startswith("system.posix_acl_") for name in os.listxattr(path, follow_symlinks=False)):
+        print(path)' "$@"
 }
 
 path_chain() {
@@ -47,15 +54,26 @@ path_chain() {
 }
 
 path_chain_is_root_safe() {
-  local target="$1" path violations=0
+  local target="$1" path acl violations=0
+  local -a checked=()
   while IFS= read -r path; do
     if [[ -L "${path}" ]]; then
       report "symlink in root exec path: ${path}"
       violations=$((violations + 1))
       continue
     fi
+    checked+=("${path}")
     path_is_root_safe "${path}" || violations=$((violations + 1))
   done < <(path_chain "${target}")
+  if ! acl="$(paths_with_acl "${checked[@]}")"; then
+    report "cannot read POSIX ACLs: ${target}"
+    violations=$((violations + 1))
+  fi
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    report "POSIX ACL in root exec path: ${path}"
+    violations=$((violations + 1))
+  done <<<"${acl}"
 
   (( violations == 0 ))
 }

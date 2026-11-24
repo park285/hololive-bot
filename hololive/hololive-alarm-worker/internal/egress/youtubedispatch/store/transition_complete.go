@@ -16,15 +16,10 @@ import (
 func (s *TransitionStore) CompleteSent(
 	ctx context.Context,
 	operation StartedOperation,
-	mode DeliveryMode,
 	admission HandoffAdmission,
 ) (ApplyResult, error) {
 	if !operation.Valid() {
 		return newApplyResult(ApplyConflict, nil), errors.New("complete sent: invalid operation")
-	}
-
-	if err := mode.validateCallerMode(); err != nil {
-		return newApplyResult(ApplyConflict, nil), fmt.Errorf("complete sent: %w", err)
 	}
 
 	if err := admission.validate(); err != nil {
@@ -39,7 +34,7 @@ func (s *TransitionStore) CompleteSent(
 	var priorAdjudication CommitAdjudication
 
 	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
-		touched, applyErr := s.completeSentOnce(ctx, operation, transitions, mode, admission)
+		touched, applyErr := s.completeSentOnce(ctx, operation, transitions, admission)
 		if applyErr == nil {
 			result := newApplyResult(ApplyApplied, touched)
 
@@ -149,7 +144,6 @@ func (s *TransitionStore) completeSentOnce(
 	ctx context.Context,
 	operation StartedOperation,
 	transitions []rowTransition,
-	mode DeliveryMode,
 	admission HandoffAdmission,
 ) ([]int64, error) {
 	var touched []int64
@@ -169,7 +163,7 @@ func (s *TransitionStore) completeSentOnce(
 			return fmt.Errorf("complete sent: apply rows: %w", err)
 		}
 
-		if err := recordSentTrackingAndTelemetry(ctx, tx, operation, sentAt, mode); err != nil {
+		if err := recordSentTracking(ctx, tx, operation, sentAt); err != nil {
 			return err
 		}
 
@@ -198,12 +192,11 @@ func (s *TransitionStore) completeSentOnce(
 	return touched, nil
 }
 
-func recordSentTrackingAndTelemetry(
+func recordSentTracking(
 	ctx context.Context,
 	tx dbx.Querier,
 	operation StartedOperation,
 	sentAt time.Time,
-	mode DeliveryMode,
 ) error {
 	marks, err := LoadAlarmSentMarksForDeliveryIDs(ctx, tx, startedOwnerIDs(operation), sentAt)
 	if err != nil {
@@ -212,14 +205,6 @@ func recordSentTrackingAndTelemetry(
 
 	if err := markSentDeliveryTracking(ctx, tx, marks); err != nil {
 		return fmt.Errorf("complete sent: persist tracking: %w", err)
-	}
-
-	if err := recordAttemptTelemetry(ctx, tx, mode, ownerAttempts(operation.groups, attemptResultSuccess, ""), sentAt); err != nil {
-		return fmt.Errorf("complete sent: record telemetry: %w", err)
-	}
-
-	if err := persistSentTrackingLatencyClassifications(ctx, tx, marks); err != nil {
-		return fmt.Errorf("complete sent: persist tracking classifications: %w", err)
 	}
 
 	return nil

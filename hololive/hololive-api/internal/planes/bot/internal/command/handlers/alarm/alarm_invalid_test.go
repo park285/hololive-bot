@@ -43,10 +43,9 @@ func newInvalidAlarmCommand(t *testing.T) (command *AlarmCommand, sent *[]record
 func TestHandleInvalidAlwaysAnswersWithTheUsageError(t *testing.T) {
 	t.Parallel()
 
-	cases := map[string]map[string]any{
-		"nil params":     nil,
+	cases := map[string]botcommand.AlarmParams{
 		"empty params":   {},
-		"ignored params": {"sub_command": "오타-" + alarmPrivacySentinel, "member": "미코-" + alarmPrivacySentinel},
+		"ignored params": {Member: "미코-" + alarmPrivacySentinel, Type: "오타-" + alarmPrivacySentinel},
 	}
 
 	for name, params := range cases {
@@ -83,7 +82,7 @@ func TestHandleInvalidLogKeepsRoomIDWithoutUserInput(t *testing.T) {
 		Room:     "123456789",
 		UserName: "닉네임-" + alarmPrivacySentinel,
 	}
-	params := map[string]any{"sub_command": "오타-" + alarmPrivacySentinel}
+	params := botcommand.AlarmParams{Member: "오타-" + alarmPrivacySentinel}
 
 	if err := command.handleInvalid(t.Context(), cmdCtx, params); err != nil {
 		t.Fatalf("handleInvalid() error = %v", err)

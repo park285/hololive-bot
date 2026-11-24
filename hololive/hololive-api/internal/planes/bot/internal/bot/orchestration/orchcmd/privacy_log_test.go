@@ -260,6 +260,6 @@ type failingRouterCommand struct {
 
 func (c *failingRouterCommand) Name() string        { return c.name }
 func (c *failingRouterCommand) Description() string { return c.name }
-func (c *failingRouterCommand) Execute(context.Context, *botcommand.CommandContext, map[string]any) error {
+func (c *failingRouterCommand) Dispatch(context.Context, *botcommand.CommandContext, botcommand.Params) error {
 	return c.err
 }

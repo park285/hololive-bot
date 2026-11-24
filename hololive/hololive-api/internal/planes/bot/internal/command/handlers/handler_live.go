@@ -30,10 +30,9 @@ func (c *LiveCommand) Description() string {
 	return "현재 방송 중인 스트림 목록"
 }
 
-func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params map[string]any) error {
-	memberName, hasMember := params[paramMember].(string)
-	if hasMember && memberName != "" {
-		if err := c.executeMemberLive(ctx, cmdCtx, memberName); err != nil {
+func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *botcommand.CommandContext, params botcommand.LiveParams) error {
+	if params.Member != "" {
+		if err := c.executeMemberLive(ctx, cmdCtx, params.Member); err != nil {
 			return fmt.Errorf("execute member live: %w", err)
 		}
 

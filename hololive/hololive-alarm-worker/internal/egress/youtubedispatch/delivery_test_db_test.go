@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/telemetry"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -30,15 +29,6 @@ func newDeliveryPool(tb testing.TB) *pgxpool.Pool {
 	tb.Helper()
 
 	return dbtest.NewPool(tb)
-}
-
-func newDeliveryTelemetryRepository(tb testing.TB, pool *pgxpool.Pool) *telemetry.Repository {
-	tb.Helper()
-
-	repository, err := telemetry.NewRepository(pool)
-	require.NoError(tb, err)
-
-	return repository
 }
 
 func TestDeliveryPoolKeepsOutboxForeignKey(t *testing.T) {
@@ -205,7 +195,6 @@ func insertDeliveryTestRowsContext(ctx context.Context, pool *pgxpool.Pool, valu
 		insertDeliveryTestDeliveryRowsContext,
 		insertDeliveryTestTrackingRowsContext,
 		insertDeliveryTestAlarmStateRowsContext,
-		insertDeliveryTestTelemetryRowsContext,
 		insertDeliveryTestAlarmRowsContext,
 	} {
 		affected, matched, err := dispatch(ctx, pool, value)
@@ -355,32 +344,6 @@ func insertDeliveryTestAlarmStateRowsContext(ctx context.Context, pool *pgxpool.
 
 	if err != nil {
 		return affected, true, fmt.Errorf("insert alarm state rows: %w", err)
-	}
-
-	return affected, true, nil
-}
-
-func insertDeliveryTestTelemetryRowsContext(ctx context.Context, pool *pgxpool.Pool, value any) (int64, bool, error) {
-	var (
-		affected int64
-		err      error
-	)
-
-	switch rows := value.(type) {
-	case *telemetry.YouTubeNotificationDeliveryTelemetry:
-		affected, err = insertDomainTelemetry(ctx, pool, rows)
-	case telemetry.YouTubeNotificationDeliveryTelemetry:
-		affected, err = insertDomainTelemetry(ctx, pool, &rows)
-	case []telemetry.YouTubeNotificationDeliveryTelemetry:
-		affected, err = insertDeliveryTestValueSlice(ctx, pool, rows, insertDomainTelemetry)
-	case *[]telemetry.YouTubeNotificationDeliveryTelemetry:
-		affected, err = insertDeliveryTestValueSlice(ctx, pool, *rows, insertDomainTelemetry)
-	default:
-		return 0, false, nil
-	}
-
-	if err != nil {
-		return affected, true, fmt.Errorf("insert telemetry rows: %w", err)
 	}
 
 	return affected, true, nil
@@ -651,38 +614,6 @@ func insertDomainAlarmState(ctx context.Context, pool *pgxpool.Pool, row *domain
 	return tag.RowsAffected(), err
 }
 
-func insertDomainTelemetry(ctx context.Context, pool *pgxpool.Pool, row *telemetry.YouTubeNotificationDeliveryTelemetry) (int64, error) {
-	if row == nil {
-		return 0, nil
-	}
-
-	now := time.Now().UTC()
-
-	row.EventAt = normalizeRequiredTime(row.EventAt, now)
-	row.NextAttemptAt = normalizeRequiredTime(row.NextAttemptAt, now)
-	row.CreatedAt = normalizeRequiredTime(row.CreatedAt, now)
-	row.ActualPublishedAt = normalizeTimePtr(row.ActualPublishedAt)
-	row.AlarmSentAt = normalizeTimePtr(row.AlarmSentAt)
-	row.DetectedAt = normalizeTimePtr(row.DetectedAt)
-	row.AttemptStartedAt = normalizeTimePtr(row.AttemptStartedAt)
-	row.AttemptFinishedAt = normalizeTimePtr(row.AttemptFinishedAt)
-	row.LockedAt = normalizeTimePtr(row.LockedAt)
-	row.LoggedAt = normalizeTimePtr(row.LoggedAt)
-
-	if row.ID == 0 {
-		err := pool.QueryRow(ctx, `INSERT INTO youtube_notification_delivery_telemetry (delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at, dedupe_key, delivery_path, delivery_mode, send_result, failure_reason, attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, error) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25) RETURNING id`, row.DeliveryID, row.AttemptOrdinal, row.OutboxID, row.ChannelID, row.ContentID, row.PostID, row.RoomID, row.AlarmType, row.ActualPublishedAt, row.AlarmSentAt, row.AlarmLatencyMillis, row.DetectedAt, row.DedupeKey, row.DeliveryPath, row.DeliveryMode, row.SendResult, row.FailureReason, row.AttemptStartedAt, row.AttemptFinishedAt, row.EventAt, row.NextAttemptAt, row.CreatedAt, row.LockedAt, row.LoggedAt, row.Error).Scan(&row.ID)
-		if err != nil {
-			return 0, fmt.Errorf("scan: %w", err)
-		}
-
-		return 1, nil
-	}
-
-	tag, err := pool.Exec(ctx, `INSERT INTO youtube_notification_delivery_telemetry (id, delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at, dedupe_key, delivery_path, delivery_mode, send_result, failure_reason, attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, error) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`, row.ID, row.DeliveryID, row.AttemptOrdinal, row.OutboxID, row.ChannelID, row.ContentID, row.PostID, row.RoomID, row.AlarmType, row.ActualPublishedAt, row.AlarmSentAt, row.AlarmLatencyMillis, row.DetectedAt, row.DedupeKey, row.DeliveryPath, row.DeliveryMode, row.SendResult, row.FailureReason, row.AttemptStartedAt, row.AttemptFinishedAt, row.EventAt, row.NextAttemptAt, row.CreatedAt, row.LockedAt, row.LoggedAt, row.Error)
-
-	return tag.RowsAffected(), err
-}
-
 func insertDeliveryTestAlarm(ctx context.Context, pool *pgxpool.Pool, alarm *domain.Alarm) (int64, error) {
 	if alarm == nil {
 		return 0, nil
@@ -717,8 +648,6 @@ func deliveryTestTableForDest(dest any) string {
 		return testTableContentAlarmTracking
 	case *domain.YouTubeCommunityShortsAlarmState, *[]domain.YouTubeCommunityShortsAlarmState:
 		return "youtube_community_shorts_alarm_states"
-	case *telemetry.YouTubeNotificationDeliveryTelemetry, *[]telemetry.YouTubeNotificationDeliveryTelemetry:
-		return testTableDeliveryTelemetry
 	default:
 		return deliveryTestTableName(dest)
 	}
@@ -734,8 +663,6 @@ func deliveryTestTableForModel(model any) string {
 		return testTableContentAlarmTracking
 	case *domain.YouTubeCommunityShortsAlarmState, domain.YouTubeCommunityShortsAlarmState:
 		return "youtube_community_shorts_alarm_states"
-	case *telemetry.YouTubeNotificationDeliveryTelemetry, telemetry.YouTubeNotificationDeliveryTelemetry:
-		return testTableDeliveryTelemetry
 	case *domain.Alarm, domain.Alarm:
 		return "alarms"
 	default:
@@ -762,8 +689,6 @@ func deliveryTestSelectColumns(table string) string {
 		return "kind, content_id, COALESCE(canonical_content_id, '') AS canonical_content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, alarm_latency_millis, alarm_latency_exceeded, COALESCE(delivery_status, '') AS delivery_status, COALESCE(latency_classification_status, '') AS latency_classification_status, COALESCE(delay_source, '') AS delay_source, COALESCE(internal_delay_cause, '') AS internal_delay_cause, created_at, updated_at"
 	case "youtube_community_shorts_alarm_states":
 		return "kind, post_id, content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, delivery_status, created_at, updated_at"
-	case testTableDeliveryTelemetry:
-		return "id, delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, COALESCE(post_id, '') AS post_id, room_id, alarm_type, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at, COALESCE(dedupe_key, '') AS dedupe_key, COALESCE(delivery_path, '') AS delivery_path, COALESCE(delivery_mode, '') AS delivery_mode, COALESCE(send_result, '') AS send_result, COALESCE(failure_reason, '') AS failure_reason, attempt_started_at, attempt_finished_at, event_at, next_attempt_at, created_at, locked_at, logged_at, COALESCE(error, '') AS error"
 	default:
 		return "*"
 	}

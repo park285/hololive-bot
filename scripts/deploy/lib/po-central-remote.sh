@@ -640,7 +640,7 @@ prepare_candidate_pair() {
         "$unit_dir/$collector_container.container" || return
     fi
     [[ "$slot" != c ]] || env_file="${compose_env:-/etc/stack-secrets/hololive-bot/compose.env}"
-    if [[ "$slot" == c ]]; then expected='holo-pgbouncer|6432'; else expected='100.100.1.8|6433'; fi
+    if [[ "$slot" == c ]]; then expected='holo-postgres|5432'; else expected='100.100.1.8|5433'; fi
     postgres_endpoint_require_same "$(postgres_endpoint_quadlet "$unit_dir/$collector_container.container" "$env_file")" "$expected"
     previous_revision="$(cat "$backup/collector.revision")"
     verify_collector "$collector_rollback" "$backup/collector-prechange-manifest.json" "$previous_revision" "$backup/collector-prechange.image-id"
@@ -663,7 +663,7 @@ prepare_candidate_pair() {
 
 validate_candidate_pair() {
   prepare_candidate_pair
-  python3 "$pair_tool" check-pooled "$service" "$profile_release/candidate"
+  python3 "$pair_tool" check-database "$service" "$profile_release/candidate"
 }
 
 image_id() {
@@ -753,6 +753,12 @@ restore_collector_base_unit() {
   fi
   echo "[ROLLBACK] restored the collector base unit the previous image ran with; reinstall the intended revision's unit before the next deployment" >&2
 }
+collector_origin_endpoint() {
+  local installed="$unit_dir/$collector_container.container" recorded="$profile_release/previous/unit.container" env_file=-
+  [[ "$slot" != c ]] || env_file="${compose_env:-/etc/stack-secrets/hololive-bot/compose.env}"
+  [[ -f "$recorded" ]] || return 1
+  postgres_endpoint_quadlet "$recorded" "$env_file" "$installed"
+}
 collector_rollback_endpoint_validate() {
   local installed="$unit_dir/$collector_container.container" recorded="$profile_release/previous/unit.container"
   local env_file=- current_endpoint previous_endpoint
@@ -819,9 +825,7 @@ require_card_candidate() {
       "$(<"$backup/collector-prechange.image-id")" "$(<"$backup/po-prechange.image-id")" || return 1
   fi
   if [[ "$mode" == resume ]]; then
-    local expected='holo-pgbouncer|6432'
-    [[ "$slot" != b ]] || expected='100.100.1.8|6433'
-    postgres_endpoint_require_same "$(<"$backup/collector.endpoint")" "$expected" || return 1
+    postgres_endpoint_require_same "$(<"$backup/collector.endpoint")" "$(collector_origin_endpoint)" || return 1
   fi
 }
 
@@ -932,11 +936,11 @@ collector_database_endpoint() {
   [[ "${route[POSTGRES_DB]-}" == hololive && -z "${route[POSTGRES_SOCKET_PATH]-}" ]] || return 1
   postgres_endpoint_validate "${route[POSTGRES_HOST]-}" "${route[POSTGRES_PORT]-}"
 }
-require_collector_pooler_endpoint() {
-  local expected='holo-pgbouncer|6432' actual
-  [[ "$slot" != b ]] || expected='100.100.1.8|6433'
+require_collector_database_endpoint() {
+  local expected='holo-postgres|5432' actual
+  [[ "$slot" != b ]] || expected='100.100.1.8|5433'
   actual="$(collector_database_endpoint "$collector_container")" || return 1
-  [[ "$actual" == "$expected" ]] || { echo 'activated collector must use the reviewed pooler endpoint' >&2; return 1; }
+  [[ "$actual" == "$expected" ]] || { echo 'activated collector must use the reviewed direct TLS endpoint' >&2; return 1; }
 }
 require_collector_lease_migration() {
   local position="$1" observed endpoint proof
@@ -944,7 +948,7 @@ require_collector_lease_migration() {
   . "$staging/scripts/deploy/lib/migration-receipts.sh"
   if [[ "$position" == applied ]]; then
     endpoint="$(collector_database_endpoint "$collector_container")" || return 1
-    if [[ "$endpoint" != 'holo-pgbouncer|6432' && "$endpoint" != 'holo-postgres|5432' ]]; then
+    if [[ "$endpoint" != 'holo-postgres|5432' ]]; then
       echo 'collector migration proof requires the local primary route' >&2
       return 1
     fi
@@ -997,7 +1001,7 @@ if [[ "$mode" == check ]]; then
   [[ "$(image_label "$collector" version)" == "$version" ]]
   verify_issuer_runtime "$revision" "$(<"$staging/image-id")"
   verify_collector_runtime "$revision" "$(<"$staging/collector-image-id")"
-  require_collector_pooler_endpoint
+  require_collector_database_endpoint
   python3 "$pair_tool" verify-live "$service" "$profile_release/candidate" "$collector_container"
   since="$(cat "$backup/change-started-at")"
   [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
@@ -1019,7 +1023,7 @@ cutover_units_settled || {
   exit 1
 }
 if [[ "$slot" == c && "$mode" != quiesce ]]; then
-  postgres_capacity_assert_live "$staging" "$compose_env" "$unit_dir"
+  postgres_capacity_assert_installed "$staging" "$compose_env" "$unit_dir"
 fi
 if [[ "$mode" != resume ]]; then
 require_unmasked_units
@@ -1081,6 +1085,9 @@ if [[ "$card_transition" == false ]]; then
     done
     [[ ! -e "$profile_release" && ! -L "$profile_release" ]]
     cmp -- "$staging/$slot_unit_dir/$collector_container.container" "$unit_dir/$collector_container.container"
+    [[ "$(collector_database_endpoint "$collector_container")" == '100.100.1.8|5433' ]] || {
+      echo 'running b collector still uses a pre-direct endpoint; finish its retirement with the 1-9 step tree' >&2; exit 1;
+    }
   fi
 fi
 if [[ "$staged_pair" == true ]]; then (( EPOCHSECONDS < expires )); fi
@@ -1116,11 +1123,6 @@ captured_collector="$(python3 -c 'import json,sys; print(json.load(open(sys.argv
 [[ "$captured_collector" =~ ^[0-9a-f]{64}$ ]]
 if [[ "$staged_pair" == true ]]; then [[ "$captured_collector" == "${captured_generation%% *}" ]]; fi
 collector_database_endpoint "$captured_collector" > "$backup/collector.endpoint"
-if [[ "$mode" == quiesce ]]; then
-  expected='holo-pgbouncer|6432'
-  [[ "$slot" != b ]] || expected='100.100.1.8|6433'
-  postgres_endpoint_require_same "$(<"$backup/collector.endpoint")" "$expected"
-fi
 if [[ "$seal" != - ]]; then
   printf '%s\n' "$seal" > "$backup/transport.sha256"
 fi
@@ -1262,7 +1264,7 @@ fi
 if [[ "$mode" == resume ]]; then require_launched_unit "$issuer_unit"; release_unit "$collector_unit"; fi
 start_slot_unit "$collector_unit"
 verify_collector_runtime "$revision" "$(<"$staging/collector-image-id")"
-require_collector_pooler_endpoint
+require_collector_database_endpoint
 python3 "$pair_tool" verify-live "$service" "$profile_release/candidate" "$collector_container"
 since_epoch="$(date -u -d "$started_at" +%s)"
 for container in "$issuer_container" "$collector_container"; do

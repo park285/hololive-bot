@@ -7,7 +7,6 @@ ALTER ROLE hololive_collector_b CONNECTION LIMIT 7;
 ALTER ROLE hololive_collector_c CONNECTION LIMIT 7;
 ALTER ROLE hololive_collector_d CONNECTION LIMIT 7;
 ALTER ROLE hololive_migrator CONNECTION LIMIT 1;
-ALTER ROLE hololive_pgbouncer_auth CONNECTION LIMIT 1;
 ALTER ROLE postgres_exporter CONNECTION LIMIT 2;
 ALTER ROLE iris_db_nightly CONNECTION LIMIT 2;
 COMMIT;

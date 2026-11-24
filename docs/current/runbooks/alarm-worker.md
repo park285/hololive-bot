@@ -375,10 +375,15 @@ sudo podman exec hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007
   설정을 유지한 채 이전 image만 재기동하는 rollback은 지원하지 않습니다.
 - paired rollback이 준비되지 않았거나 send-unit schema 호환성이 확인되지 않으면 이전
   image로 전환하지 않고 current revision을 fix-forward합니다.
-- delivery telemetry 단일 경로 이전
-  image로 되돌리려면 운영 profile에 `youtube_delivery.telemetry_backfill_batch`를 다시 넣고
-  같은 유지보수 단계에서 image를 전환합니다. exact-key 디코더라 키가 없으면 이전 image가
-  기동하지 않습니다(`rollback.md`).
+- 발송 시도 telemetry를 없앤 image보다 이전 image는 worker profile에
+  `youtube_delivery.telemetry_poll_interval_ms`·`telemetry_flush_batch`·`telemetry_retry_backoff_ms`·
+  `telemetry_retention_ms`가 있어야 기동하고, delivery telemetry 단일 경로 이전 image는
+  `youtube_delivery.telemetry_backfill_batch`도 요구합니다. exact-key 디코더라 새 image는 이 키들이 든 profile을
+  거부하므로 stack-secrets 원본에 다시 넣지 않습니다. 배포 helper가 보존한 이전 image·profile·unit pair를
+  `quadlet-rollback-service.sh --check`로 검사하고 별도 승인 뒤 `--apply`로 되돌립니다(`rollback.md`).
+  되돌린 image는 제거 기간에 생긴 시도의 telemetry 행을 시도 당시에 기록하지 않습니다. backfill이 있는 image
+  (delivery telemetry 단일 경로 이전)는 보존 기간 안의 delivery 현재 상태로 `delivery_mode = recovered` 행을 만들 수 있는데,
+  이 행은 남은 상태에서 다시 만든 기록이지 시도 당시의 증거가 아닙니다.
 - Preserve and inspect `alarm:dispatch:*` queues before replaying or deleting queue data.
 
 ## Related contracts

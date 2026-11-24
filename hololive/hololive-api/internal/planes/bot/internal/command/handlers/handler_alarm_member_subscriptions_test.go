@@ -73,7 +73,7 @@ func TestAlarmCommand_UNITBMemberSubscriptionsRemainRoomScoped(t *testing.T) {
 	cmdCtx := &botcommand.CommandContext{Room: testRoomID}
 
 	for _, name := range []string{"미라", "네온"} {
-		require.NoError(t, command.Execute(t.Context(), cmdCtx, map[string]any{"action": testActionAdd, "member": name}))
+		require.NoError(t, command.Execute(t.Context(), cmdCtx, botcommand.AlarmParams{Action: testActionAdd, Member: name}))
 	}
 
 	require.Len(t, recorder.added, 2)
@@ -90,7 +90,7 @@ func TestAlarmCommand_UNITBMemberSubscriptionsRemainRoomScoped(t *testing.T) {
 	}
 
 	for _, name := range []string{"미라", "유닛 B"} {
-		require.NoError(t, command.Execute(t.Context(), cmdCtx, map[string]any{"action": "remove", "member": name}))
+		require.NoError(t, command.Execute(t.Context(), cmdCtx, botcommand.AlarmParams{Action: "remove", Member: name}))
 	}
 
 	require.Len(t, recorder.removed, 2)
@@ -110,7 +110,7 @@ func TestAlarmCommand_UNITBMemberSubscriptionsRemainRoomScoped(t *testing.T) {
 		{ChannelID: commandUnitBChannel, HostID: "yoinagi-neon", MemberName: "네온[유닛b]", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
 	}
 
-	require.NoError(t, command.Execute(t.Context(), cmdCtx, map[string]any{"action": "list"}))
+	require.NoError(t, command.Execute(t.Context(), cmdCtx, botcommand.AlarmParams{Action: "list"}))
 	require.Contains(t, sent[len(sent)-1], "미라[유닛b]")
 	require.Contains(t, sent[len(sent)-1], "네온[유닛b]")
 }

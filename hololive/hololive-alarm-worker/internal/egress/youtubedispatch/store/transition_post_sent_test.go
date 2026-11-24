@@ -61,7 +61,7 @@ func seedTransitionPostSentRows(t *testing.T, pool *pgxpool.Pool, videoID, postI
 			kind, channel_id, content_id, payload, status, attempt_count, next_attempt_at, created_at
 		) VALUES ($1, $2, $3, $4::jsonb, $5, 0, $6, $6)
 		RETURNING id
-	`, domain.OutboxKindNewShort, "channel-post-sent", videoID, transitionShortTelemetryPayload(videoID),
+	`, domain.OutboxKindNewShort, "channel-post-sent", videoID, transitionShortPayload(videoID),
 		domain.OutboxStatusPending, createdAt).Scan(&outboxID))
 
 	_, err := pool.Exec(t.Context(), `
@@ -97,7 +97,7 @@ func completeTransitionPostSentRoom(
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, begin.Outcome)
 
-	completed, err := transition.CompleteSent(t.Context(), operation, DeliveryModePerRoom, admission)
+	completed, err := transition.CompleteSent(t.Context(), operation, admission)
 	require.NoError(t, err)
 	require.Equal(t, ApplyApplied, completed.Outcome)
 

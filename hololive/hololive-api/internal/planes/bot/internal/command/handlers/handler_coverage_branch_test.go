@@ -21,54 +21,6 @@ func (s *stubCoverageStreamProvider) GetChannelSchedule(_ context.Context, _ str
 	return nil, nil
 }
 
-func TestIntParam(t *testing.T) {
-	tests := []struct {
-		name         string
-		params       map[string]any
-		key          string
-		defaultValue int
-		want         int
-	}{
-		{
-			name:         "missing key uses default",
-			params:       map[string]any{},
-			key:          testParamLimit,
-			defaultValue: 24,
-			want:         24,
-		},
-		{
-			name:         "nil map uses default",
-			params:       nil,
-			key:          testParamLimit,
-			defaultValue: 12,
-			want:         12,
-		},
-		{
-			name:         "int value",
-			params:       map[string]any{testParamLimit: 48},
-			key:          testParamLimit,
-			defaultValue: 24,
-			want:         48,
-		},
-		{
-			name:         "unsupported type uses default",
-			params:       map[string]any{testParamLimit: "36"},
-			key:          testParamLimit,
-			defaultValue: 24,
-			want:         24,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := intParam(tc.params, tc.key, tc.defaultValue)
-			if got != tc.want {
-				t.Fatalf("expected %d, got %d", tc.want, got)
-			}
-		})
-	}
-}
-
 func TestNormalizeUpcomingDisplayLimit(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -95,27 +47,27 @@ func TestNormalizeUpcomingDisplayLimit(t *testing.T) {
 func TestParseUpcomingOptions(t *testing.T) {
 	tests := []struct {
 		name             string
-		params           map[string]any
+		params           botcommand.UpcomingParams
 		wantDisplayLimit int
 	}{
 		{
 			name:             "defaults",
-			params:           map[string]any{},
+			params:           botcommand.UpcomingParams{},
 			wantDisplayLimit: 0,
 		},
 		{
 			name:             "caps limit",
-			params:           map[string]any{testParamLimit: 120},
+			params:           botcommand.UpcomingParams{Limit: 120},
 			wantDisplayLimit: 100,
 		},
 		{
 			name:             "show all overrides limit",
-			params:           map[string]any{testParamLimit: 2, "all": true},
+			params:           botcommand.UpcomingParams{Limit: 2, All: true},
 			wantDisplayLimit: 0,
 		},
 		{
 			name:             "normalizes low limit",
-			params:           map[string]any{testParamLimit: -1},
+			params:           botcommand.UpcomingParams{Limit: -1},
 			wantDisplayLimit: 0,
 		},
 	}
