@@ -295,8 +295,8 @@ if [[ "$mode" == deploy || "$mode" == quiesce ]]; then
     issuer_dir="$local_stage/issuer"
   fi
   ssh "$ssh_target" "sudo -n mkdir -m 0700 -- '$staging'"
-  rsync -a --rsync-path='sudo -n rsync' \
-    --files-from=<(printf '%s\n' "$payload_files") "$root/" "$ssh_target:$staging/"
+  printf '%s\n' "$payload_files" | rsync -a --rsync-path='sudo -n rsync' \
+    --files-from=- "$root/" "$ssh_target:$staging/"
   rsync -a --rsync-path='sudo -n rsync' \
     "$issuer_dir/image.tar" "$issuer_dir/image.tar.sha256" \
     "$issuer_dir/image-id" "$issuer_dir/rootfs-manifest.json" "$local_stage/collector-image.tar" \

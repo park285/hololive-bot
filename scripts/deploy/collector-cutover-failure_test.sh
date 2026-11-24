@@ -827,6 +827,72 @@ for slot in ('c', 'b'):
         result = run(slot_preamble(slot) + 'set -- ' + shlex.join(args) + '\n' + central[:central.index('install -d -m 0755 /run/lock')], root, 'paths')
         require((result.returncode == 0) == accepted, f'{slot}: W2 resume requires its card backup and staging', result)
 
+with tempfile.TemporaryDirectory(prefix='c-verified-transfer-') as raw:
+    state = Path(raw)
+    tool, pair, remote, bin_dir = state / 'tool', state / 'pair', state / 'remote', state / 'bin'
+    payload = (root / 'scripts/deploy/po-central-files.txt').read_text().splitlines()
+    migration_names = [line.split()[1] for line in
+                       (root / 'hololive/hololive-api/scripts/migrations/manifest.txt').read_text().splitlines() if line.strip()]
+    payload += [f'hololive/hololive-api/scripts/migrations/{prefix}{name}' for name in migration_names[1:] for prefix in ('', 'contracts/')]
+    for name in payload + ['scripts/deploy/po-central-cutover.sh', 'scripts/deploy/lib/source-revision.sh',
+                           'scripts/deploy/lib/po-central-remote.sh', 'scripts/deploy/po-central-files.txt', 'hololive/hololive-api/VERSION']:
+        (tool / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(root / name, tool / name)
+    for directory in (pair, remote, bin_dir):
+        directory.mkdir()
+    def sums(directory, names):
+        return ''.join(f'{hashlib.sha256((directory / n).read_bytes()).hexdigest()}  {n}\n' for n in names)
+    for prefix, meta in (('', 'rootfs-manifest.json'), ('collector-', 'collector-manifest.json')):
+        (pair / (prefix + 'image.tar')).write_bytes((prefix + 'image').encode())
+        (pair / (prefix + 'image.tar.sha256')).write_text(sums(pair, [prefix + 'image.tar']))
+        (pair / (prefix + 'image-id')).write_text(new_id + '\n')
+        (pair / meta).write_text(json.dumps({'source_revision': new_revision, 'architecture': 'arm64', 'go': {'goarch': 'arm64'}}))
+    (pair / 'source-files.sha256').write_text(sums(tool, payload))
+    (pair / 'transport-files.sha256').write_text(sums(pair, ('source-files.sha256', 'rootfs-manifest.json', 'collector-manifest.json',
+                                                            'image-id', 'collector-image-id', 'image.tar.sha256', 'collector-image.tar.sha256')))
+    seal = hashlib.sha256((pair / 'transport-files.sha256').read_bytes()).hexdigest()
+    (bin_dir / 'ssh').write_text('#!/bin/bash\nshift\ncommand="$*"\nexec bash -c "${command//"$REMOTE_ROOT"/"$FAKE_REMOTE"}"\n')
+    (bin_dir / 'ssh').chmod(0o755)
+    entry = r'''
+set -eu
+state="$1"
+hostname() { printf 'kapu\n'; }
+git() {
+  [[ "$1" == -C && "$2" == */tool ]] || return 2
+  case "$3" in
+    status) ;;
+    rev-parse) printf '%040d\n' 0 | tr 0 b ;;
+    *) return 2 ;;
+  esac
+}
+sudo() { [[ "$1" != -n ]] || shift; "$@"; }
+ssh() {
+  local command="${*:2}"
+  command="${command//"$REMOTE_ROOT"/"$FAKE_REMOTE"}"
+  case "$command" in
+    'sudo -n mkdir '*) eval "${command#sudo -n }" ;;
+    'sudo -n chown '*) ;;
+    'sudo -n bash -s -- c quiesce-verified '*) cat > "$state/remote-body" ;;
+    *) return 2 ;;
+  esac
+}
+export -f hostname git sudo ssh
+export state REMOTE_ROOT=/opt/hololive-bot/compose FAKE_REMOTE="$state/remote" PATH="$state/bin:$PATH" PO_C_SSH_TARGET=hololive-seoul APPROVE_PO_C_DEPLOY=true
+bash "$state/tool/scripts/deploy/po-central-cutover.sh" c quiesce-verified "$state/pair" "$3"
+'''
+    result = subprocess.run(['bash', '-s', '--', str(state), 'transfer', seal], input=entry, capture_output=True, text=True, timeout=60)
+    staged = list(remote.glob('po-staging-*'))
+    require(result.returncode == 0 and len(staged) == 1 and (state / 'remote-body').is_file(),
+            'c: verified pair transfer reaches the remote quiesce with the installed rsync', result)
+    pair_files = ['image.tar', 'image.tar.sha256', 'image-id', 'rootfs-manifest.json', 'collector-image.tar', 'collector-image.tar.sha256',
+                  'collector-image-id', 'collector-manifest.json', 'source-files.sha256', 'transport-files.sha256']
+    copied = sorted(str(p.relative_to(staged[0])) for p in staged[0].rglob('*') if p.is_file())
+    require(copied == sorted(payload + pair_files) and
+            all((staged[0] / n).read_bytes() == (tool / n).read_bytes() for n in payload) and
+            all((staged[0] / n).read_bytes() == (pair / n).read_bytes() for n in pair_files),
+            'c: staging holds exactly the payload and the sealed pair', result)
+    print('[PASS] c verified pair transfer')
+
 with tempfile.TemporaryDirectory(prefix='b-staged-cli-') as raw:
     state = Path(raw)
     tool = state / 'coordinator'
