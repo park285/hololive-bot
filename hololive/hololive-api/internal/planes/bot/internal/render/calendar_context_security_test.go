@@ -51,25 +51,25 @@ func TestCalendarCardRendererCancelledRenderDoesNotFetchOrPoisonCache(t *testing
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	data, err := renderer.RenderCalendarImageContext(ctx, 6, 2026, entries)
+	pages, err := renderer.RenderCalendarImagesWithTheme(ctx, 6, 2026, CalendarThemePrismDaylight, entries)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled render error = %v, want context.Canceled", err)
 	}
 
-	if data != nil {
-		t.Fatalf("canceled render returned %d bytes", len(data))
+	if pages != nil {
+		t.Fatalf("canceled render returned %d pages", len(pages))
 	}
 
 	if got := recorder.requests.Load(); got != 0 {
 		t.Fatalf("canceled render fetched %d photos, want 0", got)
 	}
 
-	data, err = renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
+	pages, err = renderer.RenderCalendarImagesWithTheme(t.Context(), 6, 2026, CalendarThemePrismDaylight, entries)
 	if err != nil {
 		t.Fatalf("subsequent render error = %v", err)
 	}
 
-	assertValidPNG(t, data)
+	assertValidPNG(t, pages[0])
 
 	if got := recorder.requests.Load(); got != 1 {
 		t.Fatalf("subsequent render fetched %d photos, want 1; canceled result may have poisoned cache", got)
@@ -215,28 +215,28 @@ func TestCalendarCardRendererGlobalPhotoFetchTruncationDoesNotPopulateCaches(t *
 
 	renderer := NewCalendarCardRenderer(WithCalendarImageCache(newTestCalendarImageCache(t)))
 
-	first, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
+	first, err := renderer.RenderCalendarImagesWithTheme(t.Context(), 6, 2026, CalendarThemePrismDaylight, entries)
 	if err != nil {
-		t.Fatalf("first RenderCalendarImageContext() error = %v", err)
+		t.Fatalf("first RenderCalendarImagesWithTheme() error = %v", err)
 	}
 
-	assertValidPNG(t, first)
+	assertValidPNG(t, first[0])
 
-	cacheKey := newCalendarCacheKey(6, 2026, entries)
-	if _, ok := renderer.cachedImage(cacheKey); ok {
+	cacheKey := newCalendarCacheKey(6, 2026, CalendarThemePrismDaylight, entries)
+	if _, ok := renderer.cachedAlbum(cacheKey); ok {
 		t.Fatal("globally truncated render was stored in memory cache")
 	}
 
-	if _, ok := renderer.sharedCachedImage(t.Context(), cacheKey); ok {
+	if _, _, ok := renderer.sharedCachedAlbum(t.Context(), cacheKey); ok {
 		t.Fatal("globally truncated render was stored in shared cache")
 	}
 
-	second, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
+	second, err := renderer.RenderCalendarImagesWithTheme(t.Context(), 6, 2026, CalendarThemePrismDaylight, entries)
 	if err != nil {
-		t.Fatalf("second RenderCalendarImageContext() error = %v", err)
+		t.Fatalf("second RenderCalendarImagesWithTheme() error = %v", err)
 	}
 
-	assertValidPNG(t, second)
+	assertValidPNG(t, second[0])
 
 	if got, want := requests.Load(), int32(calendarPhotoMaxFetches*2); got != want {
 		t.Fatalf("photo requests = %d, want %d; same-key render did not refetch", got, want)
@@ -298,6 +298,7 @@ func TestCalendarCardRendererOrdinaryPhotoFetchFailureStillPopulatesMemoryCache(
 
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests++
+
 		return calendarPhotoTestResponse(req, "text/plain", []byte("not an image")), nil
 	})))
 
@@ -311,28 +312,28 @@ func TestCalendarCardRendererOrdinaryPhotoFetchFailureStillPopulatesMemoryCache(
 	}}
 	renderer := NewCalendarCardRenderer(WithCalendarImageCache(newTestCalendarImageCache(t)))
 
-	first, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
+	first, err := renderer.RenderCalendarImagesWithTheme(t.Context(), 6, 2026, CalendarThemePrismDaylight, entries)
 	if err != nil {
-		t.Fatalf("first RenderCalendarImageContext() error = %v", err)
+		t.Fatalf("first RenderCalendarImagesWithTheme() error = %v", err)
 	}
 
-	assertValidPNG(t, first)
+	assertValidPNG(t, first[0])
 
-	cacheKey := newCalendarCacheKey(6, 2026, entries)
-	if _, ok := renderer.cachedImage(cacheKey); !ok {
+	cacheKey := newCalendarCacheKey(6, 2026, CalendarThemePrismDaylight, entries)
+	if _, ok := renderer.cachedAlbum(cacheKey); !ok {
 		t.Fatal("ordinary photo fetch failure was not stored in memory cache")
 	}
 
-	if _, ok := renderer.sharedCachedImage(t.Context(), cacheKey); ok {
+	if _, _, ok := renderer.sharedCachedAlbum(t.Context(), cacheKey); ok {
 		t.Fatal("ordinary photo fetch failure was stored in shared cache")
 	}
 
-	second, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
+	second, err := renderer.RenderCalendarImagesWithTheme(t.Context(), 6, 2026, CalendarThemePrismDaylight, entries)
 	if err != nil {
-		t.Fatalf("second RenderCalendarImageContext() error = %v", err)
+		t.Fatalf("second RenderCalendarImagesWithTheme() error = %v", err)
 	}
 
-	assertValidPNG(t, second)
+	assertValidPNG(t, second[0])
 
 	if got, want := requests, 1; got != want {
 		t.Fatalf("photo requests = %d, want %d; ordinary failure should reuse memory cache", got, want)

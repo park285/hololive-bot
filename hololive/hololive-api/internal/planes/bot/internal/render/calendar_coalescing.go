@@ -1,7 +1,6 @@
 package render
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -16,18 +15,18 @@ import (
 
 type calendarRenderCall struct {
 	done    chan struct{}
-	data    []byte
+	pages   [][]byte
 	err     error
 	cancel  context.CancelFunc
 	waiters int
 }
 
-func (r *CalendarCardRenderer) renderCoalesced(ctx context.Context, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) ([]byte, error) {
+func (r *CalendarCardRenderer) renderCoalesced(ctx context.Context, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) ([][]byte, error) {
 	call := r.acquireCalendarRenderCall(ctx, cacheKey, month, year, entries)
 
 	out, err := r.awaitCalendarRenderCall(ctx, cacheKey, call)
 	if err != nil {
-		return out, fmt.Errorf("await calendar render call: %w", err)
+		return nil, fmt.Errorf("await calendar render call: %w", err)
 	}
 
 	return out, nil
@@ -47,12 +46,12 @@ func (r *CalendarCardRenderer) acquireCalendarRenderCall(ctx context.Context, ca
 	return call
 }
 
-func (r *CalendarCardRenderer) awaitCalendarRenderCall(ctx context.Context, cacheKey calendarCacheKey, call *calendarRenderCall) ([]byte, error) {
+func (r *CalendarCardRenderer) awaitCalendarRenderCall(ctx context.Context, cacheKey calendarCacheKey, call *calendarRenderCall) ([][]byte, error) {
 	select {
 	case <-call.done:
-		out, err := completedCalendarRenderData(call)
+		out, err := completedCalendarRenderPages(call)
 		if err != nil {
-			return out, fmt.Errorf("completed calendar render data: %w", err)
+			return nil, fmt.Errorf("completed calendar render pages: %w", err)
 		}
 
 		return out, nil
@@ -63,17 +62,16 @@ func (r *CalendarCardRenderer) awaitCalendarRenderCall(ctx context.Context, cach
 	}
 }
 
-func completedCalendarRenderData(call *calendarRenderCall) ([]byte, error) {
+func completedCalendarRenderPages(call *calendarRenderCall) ([][]byte, error) {
 	if call.err != nil {
 		return nil, call.err
 	}
 
-	data := bytes.Clone(call.data)
-	if data == nil {
-		return nil, errors.New("await calendar render: missing image data")
+	if len(call.pages) == 0 {
+		return nil, errors.New("await calendar render: missing image pages")
 	}
 
-	return data, nil
+	return cloneSchedulePages(call.pages), nil
 }
 
 func (r *CalendarCardRenderer) startCalendarRenderCall(ctx context.Context, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) *calendarRenderCall {
@@ -97,13 +95,13 @@ func (r *CalendarCardRenderer) startCalendarRenderCall(ctx context.Context, cach
 
 func (r *CalendarCardRenderer) runCalendarRenderCall(ctx context.Context, call *calendarRenderCall, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) {
 	var (
-		data []byte
-		err  error
+		pages [][]byte
+		err   error
 	)
 
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			err = fmt.Errorf("render calendar image: panic type: %T", recovered)
+			err = fmt.Errorf("render calendar album: panic type: %T", recovered)
 			slog.Default().Error("Calendar render panicked", slog.Group("panic", slog.String("type", fmt.Sprintf("%T", recovered))), slog.String("stack", string(debug.Stack())))
 		}
 
@@ -114,13 +112,13 @@ func (r *CalendarCardRenderer) runCalendarRenderCall(ctx context.Context, call *
 			delete(r.inflight, cacheKey)
 		}
 
-		call.data = bytes.Clone(data)
+		call.pages = cloneSchedulePages(pages)
 		call.err = err
 		close(call.done)
 		r.renderMu.Unlock()
 	}()
 
-	data, err = r.renderCalendarImageOnce(ctx, cacheKey, month, year, entries)
+	pages, err = r.renderCalendarAlbumOnce(ctx, cacheKey, month, year, entries)
 }
 
 func (r *CalendarCardRenderer) cancelCalendarRenderWaiter(cacheKey calendarCacheKey, call *calendarRenderCall) {

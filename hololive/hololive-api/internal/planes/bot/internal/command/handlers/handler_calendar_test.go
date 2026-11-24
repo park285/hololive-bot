@@ -58,12 +58,12 @@ func (s *calendarRepoStub) FindMembersWithCelebrationsInMonth(_ context.Context,
 }
 
 type calendarImageRendererStub struct {
-	data []byte
-	err  error
+	pages [][]byte
+	err   error
 }
 
-func (s *calendarImageRendererStub) RenderCalendarImageContext(_ context.Context, _, _ int, _ []domain.CalendarEntry) ([]byte, error) {
-	return s.data, s.err
+func (s *calendarImageRendererStub) RenderCalendarImagesContext(_ context.Context, _, _ int, _ []domain.CalendarEntry) ([][]byte, error) {
+	return s.pages, s.err
 }
 
 func TestCalendarCommand_Name(t *testing.T) {
@@ -84,7 +84,7 @@ func TestCalendarCommand_CheckDependencies_RequiresImageRenderer(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error { return nil },
-		SendImage:   func(context.Context, string, []byte) error { return nil },
+		SendImages:  func(context.Context, string, [][]byte) error { return nil },
 		SendError:   func(context.Context, string, string) error { return nil },
 		Logger:      slog.Default(),
 	}
@@ -95,14 +95,15 @@ func TestCalendarCommand_CheckDependencies_RequiresImageRenderer(t *testing.T) {
 	}
 }
 
-func TestCalendarCommand_Execute_ImageSuccess(t *testing.T) {
-	var sentImage []byte
+func TestCalendarCommand_Execute_AlbumSuccess(t *testing.T) {
+	var sentAlbum [][]byte
 
 	deps := &handlercore.Dependencies{
 		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
-		SendImage: func(_ context.Context, _ string, data []byte) error {
-			sentImage = data
+		SendImages: func(_ context.Context, _ string, pages [][]byte) error {
+			sentAlbum = pages
+
 			return nil
 		},
 		SendError: func(_ context.Context, _, _ string) error { return nil },
@@ -112,9 +113,10 @@ func TestCalendarCommand_Execute_ImageSuccess(t *testing.T) {
 	repo := &calendarRepoStub{
 		entries: []domain.CalendarEntry{
 			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: testMemberPekora}, Day: 15},
+			{Kind: domain.CelebrationKindAnniversary, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 20, Ordinal: 5},
 		},
 	}
-	renderer := &calendarImageRendererStub{data: []byte("png-data")}
+	renderer := &calendarImageRendererStub{pages: [][]byte{[]byte("bday-png"), []byte("anniv-png")}}
 
 	cmd := NewCalendarCommand(deps, repo, renderer)
 	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
@@ -124,8 +126,8 @@ func TestCalendarCommand_Execute_ImageSuccess(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	if sentImage == nil {
-		t.Error("expected image to be sent")
+	if len(sentAlbum) != 2 {
+		t.Fatalf("len(sentAlbum) = %d, want 2", len(sentAlbum))
 	}
 }
 
@@ -133,12 +135,12 @@ func TestCalendarCommand_Execute_NextMonthAcrossYear(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
-		SendImage:   func(context.Context, string, []byte) error { return nil },
+		SendImages:  func(context.Context, string, [][]byte) error { return nil },
 		SendError:   func(_ context.Context, _, _ string) error { return nil },
 		Logger:      slog.Default(),
 	}
 	repo := &calendarRepoStub{}
-	cmd := NewCalendarCommand(deps, repo, &calendarImageRendererStub{data: []byte("png-data")})
+	cmd := NewCalendarCommand(deps, repo, &calendarImageRendererStub{pages: [][]byte{[]byte("png-data")}})
 
 	cmd.now = func() time.Time {
 		return time.Date(2026, time.December, 15, 12, 0, 0, 0, time.FixedZone("KST", 9*60*60))
@@ -162,12 +164,12 @@ func TestCalendarCommand_Execute_PreviousMonthAcrossYear(t *testing.T) {
 	deps := &handlercore.Dependencies{
 		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
-		SendImage:   func(context.Context, string, []byte) error { return nil },
+		SendImages:  func(context.Context, string, [][]byte) error { return nil },
 		SendError:   func(_ context.Context, _, _ string) error { return nil },
 		Logger:      slog.Default(),
 	}
 	repo := &calendarRepoStub{}
-	cmd := NewCalendarCommand(deps, repo, &calendarImageRendererStub{data: []byte("png-data")})
+	cmd := NewCalendarCommand(deps, repo, &calendarImageRendererStub{pages: [][]byte{[]byte("png-data")}})
 
 	cmd.now = func() time.Time {
 		return time.Date(2026, time.January, 15, 12, 0, 0, 0, time.FixedZone("KST", 9*60*60))
@@ -318,10 +320,11 @@ func TestCalendarCommand_Execute_ImageFailureFallsBackToText(t *testing.T) {
 		Formatter: formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, msg string) error {
 			sentMessage = msg
+
 			return nil
 		},
-		SendImage: func(_ context.Context, _ string, _ []byte) error {
-			t.Error("SendImage should not be called on render failure")
+		SendImages: func(_ context.Context, _ string, _ [][]byte) error {
+			t.Error("SendImages should not be called on render failure")
 
 			return nil
 		},
@@ -361,9 +364,10 @@ func TestCalendarCommand_Execute_ImageSendFailureFallsBackToText(t *testing.T) {
 		Formatter: formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, msg string) error {
 			sentMessage = msg
+
 			return nil
 		},
-		SendImage: func(_ context.Context, _ string, _ []byte) error {
+		SendImages: func(_ context.Context, _ string, _ [][]byte) error {
 			return errors.New("iris image upload failed")
 		},
 		SendError: func(_ context.Context, _, _ string) error { return nil },
@@ -375,7 +379,7 @@ func TestCalendarCommand_Execute_ImageSendFailureFallsBackToText(t *testing.T) {
 			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 5},
 		},
 	}
-	renderer := &calendarImageRendererStub{data: []byte("png-data")}
+	renderer := &calendarImageRendererStub{pages: [][]byte{[]byte("png-data")}}
 
 	cmd := NewCalendarCommand(deps, repo, renderer)
 	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
@@ -402,14 +406,14 @@ func TestCalendarCommand_Execute_ImageOutcomeUnknownSuppressesTextFallback(t *te
 			deps := &handlercore.Dependencies{
 				Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 				SendMessage: func(context.Context, string, string) error { sentMessages++; return nil },
-				SendImage: func(context.Context, string, []byte) error {
-					return fmt.Errorf("send image: %w", imageErr)
+				SendImages: func(context.Context, string, [][]byte) error {
+					return fmt.Errorf("send images: %w", imageErr)
 				},
 				SendError: func(context.Context, string, string) error { return nil },
 				Logger:    slog.New(slog.DiscardHandler),
 			}
 			repo := &calendarRepoStub{entries: []domain.CalendarEntry{{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 5}}}
-			command := NewCalendarCommand(deps, repo, &calendarImageRendererStub{data: []byte("png-data")})
+			command := NewCalendarCommand(deps, repo, &calendarImageRendererStub{pages: [][]byte{[]byte("png-data")}})
 			before := imageTextFallbackCount("calendar", imageTextFallbackReasonOutcomeUnknown)
 			err := command.Execute(t.Context(), &botcommand.CommandContext{Room: testCalendarRoom}, map[string]any{testParamMonth: 3})
 
@@ -436,15 +440,16 @@ func TestCalendarCommand_Execute_RepoError(t *testing.T) {
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 		SendError: func(_ context.Context, _, msg string) error {
 			sentError = msg
+
 			return nil
 		},
-		SendImage: func(context.Context, string, []byte) error { return nil },
-		Logger:    slog.Default(),
+		SendImages: func(context.Context, string, [][]byte) error { return nil },
+		Logger:     slog.Default(),
 	}
 
 	repo := &calendarRepoStub{err: errors.New("db connection lost")}
 
-	cmd := NewCalendarCommand(deps, repo, &calendarImageRendererStub{data: []byte("png-data")})
+	cmd := NewCalendarCommand(deps, repo, &calendarImageRendererStub{pages: [][]byte{[]byte("png-data")}})
 	cmdCtx := &botcommand.CommandContext{Room: testCalendarRoom}
 
 	err := cmd.Execute(t.Context(), cmdCtx, nil)
@@ -462,7 +467,7 @@ func TestCalendarCommand_CheckDependencies_NilRepo(t *testing.T) {
 		Formatter:   formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 		SendError:   func(_ context.Context, _, _ string) error { return nil },
-		SendImage:   func(context.Context, string, []byte) error { return nil },
+		SendImages:  func(context.Context, string, [][]byte) error { return nil },
 		Logger:      slog.Default(),
 	}
 
