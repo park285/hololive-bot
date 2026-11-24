@@ -459,6 +459,21 @@ class Cutover(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertFalse((self.h / 'resume-attempt.json').exists())
 
+    def test_check_and_resume_refuse_unit_files_hidden_behind_the_mask(self):
+        target = self.target()
+        self.seal(target)
+        for name in d.NAMES:
+            entry = self.vendor / (name + '.service')
+            entry.symlink_to('x.service')
+            with self.assertRaisesRegex(d.Refused, 'systemd unit 파일'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd unit 파일'):
+                self.resume()
+            entry.unlink()
+        self.cli('check', target)
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
     def test_check_and_resume_refuse_an_unreadable_systemd_name_map(self):
         target = self.target()
         self.seal(target)

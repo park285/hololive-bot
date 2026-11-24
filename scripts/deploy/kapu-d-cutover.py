@@ -789,6 +789,12 @@ def unit_names(name):
     return {n.removesuffix('.service') for n in names}
 
 
+def foreign_units(name):
+    own = {mask(name), GEN / (name + '.service')}
+    return sorted(str(root / (name + '.service')) for root in unit_paths()
+                  if os.path.lexists(root / (name + '.service')) and root / (name + '.service') not in own)
+
+
 def service_dropins(name):
     names = unit_names(name)
     roots = [root for root in unit_paths() if root.is_dir()]
@@ -812,6 +818,7 @@ def resumable(h, target):
     for n in NAMES:
         require_previous_stop(h,n,s['old'][n])
         held_one(h,s,n)
+        need(not foreign_units(n), '정지 뒤 추가된 systemd unit 파일: ' + n)
         need(not service_dropins(n), '정지 뒤 추가된 systemd drop-in: ' + n)
         candidates[n] = raw(INPUT / unit(n))
         verify_candidate_input(n,candidates[n],target)
