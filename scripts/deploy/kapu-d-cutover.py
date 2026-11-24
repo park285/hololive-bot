@@ -802,14 +802,18 @@ def service_dropins(name):
         fragment = Path(tmp) / 'unit' / (name + '.service')
         fragment.parent.mkdir()
         fragment.write_bytes(raw(GEN / (name + '.service')))
-        drops, pulls = systemd_view(fragment, unit_paths())
-        _, own = systemd_view(fragment, [Path(tmp) / 'none'])
-    return drops + sorted(pulls - own)
+        drops, pulls, mounts = systemd_view(fragment, unit_paths())
+        _, own, _ = systemd_view(fragment, [Path(tmp) / 'none'])
+    return drops + sorted(pulls - own) + sorted(dep for dep in mounts if not mounted(dep.partition(': ')[2]))
+
+
+def mounted(name):
+    return name.endswith('.mount') and run('systemctl', 'show', '--property=ActiveState', '--value', '--', name) == 'active'
 
 
 def systemd_view(fragment, paths):
     proc = subprocess.run(['systemd-analyze', 'verify', '--man=no', '--generators=no', str(fragment)],
-                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60, cwd='/',
+                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=60, cwd='/',
                           env={**COMMAND_ENV, 'SYSTEMD_UNIT_PATH': ':'.join(map(str, paths)),
                                'SYSTEMD_LOG_LEVEL': 'debug', 'SYSTEMD_LOG_TARGET': 'console', 'LC_ALL': 'C'})
     head = '-> Unit ' + fragment.name + ':\n'
@@ -818,8 +822,9 @@ def systemd_view(fragment, paths):
     lines = [line.strip() for line in text.split(head)[1].split('\n-> ')[0].splitlines()]
     need('Unit Load State: loaded' in lines, 'systemd unit 판정 불가: ' + fragment.name)
     drops = sorted(line.removeprefix('DropIn Path: ') for line in lines if line.startswith('DropIn Path: '))
-    return drops, {line.split(' (')[0] for line in lines
-                   if line.split(':')[0] in PULLS and 'origin-file' in line.partition(' (')[2].rstrip(')').split()}
+    pulls = [(dep, origin.rstrip(')').split()) for dep, _, origin in (line.partition(' (') for line in lines)
+             if dep.split(':')[0] in PULLS]
+    return drops, {dep for dep, origins in pulls if 'origin-file' in origins}, {dep for dep, origins in pulls if 'origin-path' in origins}
 
 
 def resumable(h, target):

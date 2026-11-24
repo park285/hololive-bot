@@ -151,6 +151,7 @@ class Cutover(unittest.TestCase):
         self.calls = []
         for n in d.NAMES:
             (d.GEN / (n + '.service')).write_text('[Unit]\nDescription=x\n[Service]\nType=notify\nExecStart=/bin/true\n')
+        self.mounts = {}
         self.patch('run', self.command)
         self.real_run = d.subprocess.run
         self.stack.enter_context(patch.object(d.subprocess,'run',self.start_client))
@@ -183,6 +184,8 @@ class Cutover(unittest.TestCase):
         return d.subprocess.CompletedProcess(argv,0)
 
     def command(self, *args, **kwargs):
+        if args[:5] == ('systemctl','show','--property=ActiveState','--value','--') and args[5].endswith('.mount'):
+            return self.mounts.get(args[5], 'inactive')
         if args[:3] == ('systemctl','show','--all'):
             props = self.props[args[-1].removesuffix('.service')]
             return '\n'.join(k + '=' + props[k] for k in args[3].removeprefix('--property=').split(','))
@@ -651,6 +654,42 @@ class Cutover(unittest.TestCase):
                 if not os.path.lexists(folder / 'probe.service'):
                     (folder / 'probe.service').symlink_to('../probe.service')
         self.reload = reload_with_generated_link
+        with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+            self.resume()
+        self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','start')])
+
+    def requires_mounts(self):
+        for n in d.NAMES:
+            (d.GEN / (n + '.service')).write_text('[Unit]\nDescription=x\nRequiresMountsFor=/run/containers /var/lib/hololive-collectors/d\n'
+                                                  '[Service]\nType=notify\nExecStart=/bin/true\n')
+
+    def test_check_and_resume_refuse_a_mount_unit_requires_mounts_for_would_start(self):
+        target = self.target()
+        self.seal(target)
+        self.requires_mounts()
+        self.cli('check', target)
+        for name, where in (('run-containers.mount', '/run/containers'),
+                            ('var-lib-hololive\\x2dcollectors.mount', '/var/lib/hololive-collectors')):
+            (self.system / name).write_text('[Mount]\nWhat=tmpfs\nWhere=' + where + '\nType=tmpfs\n')
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.cli('check', target)
+            with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
+                self.resume()
+            self.mounts[name] = 'active'
+        self.cli('check', target)
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.h / 'resume-attempt.json').exists())
+
+    def test_resume_refuses_a_mount_unit_the_resume_reload_brings_in(self):
+        target = self.target()
+        self.seal(target)
+        self.requires_mounts()
+        reload = self.reload
+        def reload_with_mount_unit():
+            reload()
+            if not os.path.lexists(d.mask(d.I)):
+                (self.system / 'run-containers.mount').write_text('[Mount]\nWhat=tmpfs\nWhere=/run/containers\nType=tmpfs\n')
+        self.reload = reload_with_mount_unit
         with self.assertRaisesRegex(d.Refused, 'systemd drop-in'):
             self.resume()
         self.assertFalse([c for c in self.calls if c[:2] == ('systemctl','start')])
