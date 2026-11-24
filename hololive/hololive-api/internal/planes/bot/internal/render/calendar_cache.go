@@ -12,11 +12,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-const calendarImageCacheLimit = 24
+const calendarImageCacheLimit = 32
 
 type calendarCacheKey struct {
 	month       int
 	year        int
+	theme       string
 	entriesHash string
 }
 
@@ -51,10 +52,6 @@ func (c *imageCache[K]) getImmutable(key K) ([]byte, bool) {
 	return data, true
 }
 
-func (c *imageCache[K]) put(key K, data []byte) {
-	c.putImmutable(key, bytes.Clone(data))
-}
-
 func (c *imageCache[K]) putImmutable(key K, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -79,23 +76,34 @@ func (c *imageCache[K]) touch(key K) {
 	}
 }
 
-func (r *CalendarCardRenderer) cachedImage(key calendarCacheKey) ([]byte, bool) {
-	if r == nil {
+func (r *CalendarCardRenderer) cachedAlbum(key calendarCacheKey) ([][]byte, bool) {
+	if r == nil || r.cache == nil {
 		return nil, false
 	}
 
-	return r.cache.get(key)
-}
-
-func (r *CalendarCardRenderer) storeCachedImage(key calendarCacheKey, data []byte) {
-	if r == nil {
-		return
+	body, ok := r.cache.getImmutable(key)
+	if !ok {
+		return nil, false
 	}
 
-	r.cache.put(key, data)
+	pages, valid := decodeSchedulePages(body)
+	if !valid {
+		return nil, false
+	}
+
+	return cloneSchedulePages(pages), true
 }
 
-func newCalendarCacheKey(month, year int, entries []domain.CalendarEntry) calendarCacheKey {
+func newCalendarCacheKey(month, year int, theme string, entries []domain.CalendarEntry) calendarCacheKey {
+	return calendarCacheKey{
+		month:       month,
+		year:        year,
+		theme:       normalizeCalendarTheme(theme),
+		entriesHash: hashCalendarEntries(month, year, entries),
+	}
+}
+
+func hashCalendarEntries(month, year int, entries []domain.CalendarEntry) string {
 	hash := sha256.New()
 	writeCacheInt(hash, year)
 	writeCacheInt(hash, month)
@@ -108,11 +116,7 @@ func newCalendarCacheKey(month, year int, entries []domain.CalendarEntry) calend
 		writeMemberCacheHash(hash, entry.Member)
 	}
 
-	return calendarCacheKey{
-		month:       month,
-		year:        year,
-		entriesHash: hex.EncodeToString(hash.Sum(nil)),
-	}
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 func writeMemberCacheHash(w io.Writer, member *domain.Member) {
@@ -128,6 +132,11 @@ func writeMemberCacheHash(w io.Writer, member *domain.Member) {
 	writeCacheString(w, member.NameKo)
 	writeCacheString(w, member.ShortKoreanName)
 	writeCacheString(w, member.Photo)
+	writeCacheInt(w, len(member.Units))
+
+	for _, unit := range member.Units {
+		writeCacheString(w, unit)
+	}
 }
 
 func writeCacheInt(w io.Writer, value int) {

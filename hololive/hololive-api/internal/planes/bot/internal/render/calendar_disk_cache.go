@@ -1,32 +1,54 @@
 package render
 
 import (
+	"bytes"
+	"cmp"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"time"
 )
 
 const (
-	calendarImageCacheVersion = "v5"
+	calendarImageCacheVersion = "v6"
 	calendarImageCacheTTL     = 7 * 24 * time.Hour
 )
 
-func (r *CalendarCardRenderer) sharedCachedImage(ctx context.Context, key calendarCacheKey) ([]byte, bool) {
+func (r *CalendarCardRenderer) sharedCachedAlbum(ctx context.Context, key calendarCacheKey) ([][]byte, []byte, bool) {
 	if r == nil {
-		return nil, false
+		return nil, nil, false
 	}
 
-	return r.sharedCache.get(ctx, calendarImageCacheKey(key), key.entriesHash)
+	hash := sha256.Sum256([]byte(key.entriesHash))
+	record, ok := r.sharedCache.read(ctx, calendarAlbumCacheKey(key))
+
+	if !ok || len(record) <= len(hash) || !bytes.Equal(record[:len(hash)], hash[:]) {
+		return nil, nil, false
+	}
+
+	body := record[len(hash):]
+	pages, valid := decodeSchedulePages(body)
+
+	if !valid {
+		return nil, nil, false
+	}
+
+	return cloneSchedulePages(pages), body, true
 }
 
-func (r *CalendarCardRenderer) storeSharedCachedImage(ctx context.Context, key calendarCacheKey, data []byte) {
+func (r *CalendarCardRenderer) storeSharedCachedAlbum(ctx context.Context, key calendarCacheKey, pages [][]byte) {
 	if r == nil {
 		return
 	}
 
-	r.sharedCache.put(ctx, calendarImageCacheKey(key), key.entriesHash, data)
+	hash := sha256.Sum256([]byte(key.entriesHash))
+	if record := encodeSchedulePages(hash, pages); record != nil {
+		r.sharedCache.write(ctx, calendarAlbumCacheKey(key), record)
+	}
 }
 
-func calendarImageCacheKey(key calendarCacheKey) string {
-	return fmt.Sprintf("bot:calendar:image:%s:%04d-%02d", calendarImageCacheVersion, key.year, key.month)
+func calendarAlbumCacheKey(key calendarCacheKey) string {
+	theme := cmp.Or(key.theme, CalendarThemePrismDaylight)
+
+	return fmt.Sprintf("bot:calendar:album:%s:%04d-%02d:%s", calendarImageCacheVersion, key.year, key.month, theme)
 }
