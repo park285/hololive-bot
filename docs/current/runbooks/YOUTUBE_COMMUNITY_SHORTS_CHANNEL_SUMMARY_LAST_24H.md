@@ -7,11 +7,12 @@
 - 대상은 `COMMUNITY_POST`, `NEW_SHORT` 두 종류만 포함합니다.
 - 최근 24시간 판단 기준은 `youtube_content_alarm_tracking.actual_published_at`이고, 실제 게시 시각이 비어 있으면 `detected_at`로 대체합니다.
 - 집계 단위는 room 이벤트가 아니라 게시물(post)입니다. 같은 게시물에서 room별 재시도나 fan-out이 여러 번 있어도 채널 집계에서는 같은 post를 1건으로 계산합니다.
-- `alarm_sent_post_count` 는 해당 post가 발송 파이프라인에 진입했거나(`outbox_count > 0`) canonical 성공 시각이 남은 경우를 뜻합니다.
+- `alarm_sent_post_count` 는 해당 post가 발송 파이프라인에 진입했거나(`outbox_count > 0`) tracking `alarm_sent_at`(최초 발송 완료 시각)이 남은 경우를 뜻합니다.
 - `success_post_count` 는 SENT delivery 또는 원장 SENT room이 있는 post 수입니다. tracking `alarm_sent_at`은 최초 Iris 접수 시각이라 handoff 실패 뒤에도 남으므로 성공 근거로 쓰지 않습니다. handoff 확인을 기다리는 SENT도 포함하므로 확정 여부는 [Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `in_progress`로 봅니다.
 - `failure_post_count` 는 `FAILED`·`QUARANTINED` delivery나 실패한 시도가 있었던(`attempt_count > 0`) delivery가 하나라도 있는 post 수입니다. 이후 성공해도 실패 흔적은 채널 집계에 남습니다. 시도마다 남던 telemetry 행은 더 쓰지 않으므로, revive로 `attempt_count`가 0으로 돌아간 뒤 성공한 delivery의 이전 실패는 세지 못합니다.
 - delivery 행은 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 지워집니다.
-- `detected_unsent_post_count` 는 감지됐지만 SENT delivery도 원장 SENT room도 없는 post 수입니다. 구독 room이 없어 delivery 없이 끝난 post(`no_target_post_count`)는 뺍니다.
+- `detected_unsent_post_count` 는 감지됐지만 SENT delivery도 원장 SENT room도 없고 격리된 room도 없는 post 수입니다.
+- `unknown_outcome_post_count` 는 성공 근거 없이 delivery 또는 원장이 QUARANTINED인 post 수입니다. provider가 받았는지 모르는 결과 불명이라 미발송에서 뺍니다. 구독 room이 없어 delivery 없이 끝난 post(`no_target_post_count`)는 뺍니다.
 - 게시물과 outbox는 outbox `content_id`를 worker와 같은 규칙으로 정규화한 `post_id`와 tracking `canonical_content_id`로 잇습니다. 공백이 다른 `content_id` 같은 별칭 outbox도 같은 post로 묶입니다.
 
 ## Execute
@@ -37,12 +38,13 @@ WITH outbox_post AS (
     SELECT
         o.*,
         CASE o.kind
-            WHEN 'NEW_SHORT' THEN 'short:' || btrim(regexp_replace(raw.id, '^short:', ''), E' \t\r\n')
-            ELSE 'community:' || btrim(COALESCE(substring(community.id FROM '(?:^|/)post/([^"?#&/]+)'), community.id), E' \t\r\n')
+            WHEN 'NEW_SHORT' THEN 'short:' || regexp_replace(regexp_replace(raw.id, '^short:', ''), space.re, '', 'g')
+            ELSE 'community:' || regexp_replace(COALESCE(substring(community.id FROM '(?:^|/)post/([^"?#&/]+)'), community.id), space.re, '', 'g')
         END AS post_id
     FROM youtube_notification_outbox AS o
-    CROSS JOIN LATERAL (SELECT btrim(o.content_id, E' \t\r\n') AS id) AS raw
-    CROSS JOIN LATERAL (SELECT replace(btrim(regexp_replace(raw.id, '^community:', ''), E' \t\r\n'), '\/', '/') AS id) AS community
+    CROSS JOIN (SELECT '^[ \t\n\v\f\r\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[ \t\n\v\f\r\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$' AS re) AS space
+    CROSS JOIN LATERAL (SELECT regexp_replace(o.content_id, space.re, '', 'g') AS id) AS raw
+    CROSS JOIN LATERAL (SELECT replace(regexp_replace(regexp_replace(raw.id, '^community:', ''), space.re, '', 'g'), '\/', '/') AS id) AS community
     WHERE o.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 ),
 per_post AS (
@@ -58,6 +60,9 @@ per_post AS (
         COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'SENT') AS sent_outbox_count,
         COUNT(d.id) AS delivery_count,
         COUNT(d.id) FILTER (WHERE d.status = 'SENT') AS success_send_count,
+        COUNT(d.id) FILTER (WHERE d.status = 'QUARANTINED') AS quarantined_delivery_count,
+        (SELECT COUNT(*) FROM youtube_notification_delivery_ledger AS l
+          WHERE l.kind = track.kind AND l.logical_id = track.canonical_content_id AND l.status = 'QUARANTINED') AS ledger_quarantined_room_count,
         COUNT(d.id) FILTER (WHERE d.status IN ('FAILED', 'QUARANTINED') OR d.attempt_count > 0) AS failed_attempt_count
     FROM youtube_content_alarm_tracking AS track
     LEFT JOIN outbox_post AS o
@@ -96,7 +101,12 @@ SELECT
         ELSE 0
     END), 0) AS no_target_post_count,
     COALESCE(SUM(CASE
-        WHEN success_send_count = 0 AND ledger_sent_room_count = 0 AND NOT (outbox_count > 0 AND sent_outbox_count = outbox_count AND delivery_count = 0) THEN 1
+        WHEN success_send_count = 0 AND ledger_sent_room_count = 0 AND (quarantined_delivery_count > 0 OR ledger_quarantined_room_count > 0) THEN 1
+        ELSE 0
+    END), 0) AS unknown_outcome_post_count,
+    COALESCE(SUM(CASE
+        WHEN success_send_count = 0 AND ledger_sent_room_count = 0 AND quarantined_delivery_count = 0 AND ledger_quarantined_room_count = 0
+             AND NOT (outbox_count > 0 AND sent_outbox_count = outbox_count AND delivery_count = 0) THEN 1
         ELSE 0
     END), 0) AS detected_unsent_post_count,
     COALESCE(SUM(CASE WHEN outbox_kind = 'COMMUNITY_POST' THEN 1 ELSE 0 END), 0) AS community_detected_post_count,
@@ -114,6 +124,7 @@ SQL
 - `detected_post_count > alarm_sent_post_count`: 감지된 post 중 발송 파이프라인에 아직 진입하지 못한 건이 있다는 뜻입니다.
 - `success_post_count < detected_post_count`: 아직 성공하지 못한 post가 남아 있습니다. `detected_unsent_post_count` 와 같이 봅니다.
 - `failure_post_count > 0`: 해당 채널에서 실패 또는 재시도 흔적이 남은 post가 있다는 뜻입니다. 성공 후 회복된 건도 포함될 수 있습니다.
+- `unknown_outcome_post_count > 0`: 결과 불명으로 격리된 post가 있습니다. 재발송하지 않으므로 room에 도착했는지 직접 확인합니다.
 - `no_target_post_count`: 구독 room이 없어 delivery 없이 outbox가 SENT로 끝난 post 수입니다. 발송 대상이 없었으므로 `detected_unsent_post_count`에서 뺍니다.
 - `detected_unsent_post_count > 0`: 감지 후 아직 성공한 room이 없는 post가 있습니다. 늦더라도 반드시 1회 발송돼야 하는 추적 대상입니다.
 - `community_detected_post_count`, `shorts_detected_post_count`: 어떤 타입에서 채널 부하가 생겼는지 빠르게 나눠 볼 때 사용합니다.

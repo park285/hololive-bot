@@ -342,7 +342,11 @@ func TestProcessPendingDeliveries_FinalResultSurvivesTrackingLookupFailure(t *te
 	require.NotContains(t, entry, FieldActualPublishedAt)
 	require.NotContains(t, entry, FieldAlarmSentAt)
 	require.NotContains(t, entry, FieldAlarmLatencyMillis)
-	require.NotEmpty(t, findAllLogEntriesByMessage(t, logBuffer, CommunityShortsFinalResultTrackingUnavailableMessage))
+	require.NotContains(t, entry, FieldAlarmLatencyExceeded)
+
+	warnings := findAllLogEntriesByMessage(t, logBuffer, CommunityShortsFinalResultTrackingUnavailableMessage)
+	require.Len(t, warnings, 1)
+	require.Equal(t, []any{float64(item.ID)}, warnings[0]["outbox_ids"])
 }
 
 func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult(t *testing.T) {

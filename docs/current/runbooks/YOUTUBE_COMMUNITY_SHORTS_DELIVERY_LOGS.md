@@ -31,7 +31,7 @@ alarm-worker는 발송 시도마다 DB 행을 쓰지 않습니다. 전이 트랜
 - 아래 SQL은 outbox의 `content_id`를 worker와 같은 규칙(앞뒤 공백 제거, `short:`·`community:` 접두사, 커뮤니티 URL의 `post/` 뒤 ID)으로 정규화한 `post_id`로 tracking의 `canonical_content_id`와 잇습니다. 다른 runbook의 SQL도 같은 `outbox_post` CTE를 씁니다.
 - 게시물 단위 결과의 1차 근거는 `message="YouTube community/shorts delivery audit"`, `telemetry_source = outbox_final_result` 줄입니다. 이 줄은 Iris 접수 시점의 판정이므로, 합격 판정 전에 아래 Fallback SQL로 delivery의 현재 상태와 handoff 확인 상태를 함께 확인합니다.
 - 시도별 실패·재시도 흐름은 `delivery attempt started`와 `delivery result` 줄을 room과 시각으로 대조해 읽습니다. 게시물 단위로 정확히 잇는 근거는 아니므로 위 감사 기록 계약의 한계를 함께 봅니다.
-- 2분 SLA는 최종 결과 줄의 `alarm_latency_exceeded`와 `alarm_latency_millis`로 판정합니다. 외부 수집과 내부 전달 구간 분리는 [Latency Cause Report](YOUTUBE_COMMUNITY_SHORTS_LATENCY_CAUSE_REPORT.md)를 따릅니다.
+- 2분 SLA는 최종 결과 줄의 `alarm_latency_exceeded`와 `alarm_latency_millis`로 판정합니다. 재발급 뒤 다시 남은 줄도 처음 접수 시각을 유지하므로(outbox `sent_at`은 재발급에도 유지되고 tracking `alarm_sent_at`은 더 이른 값으로만 바뀝니다) 재발송까지 걸린 지연은 이 값에 반영되지 않습니다. 이 경우 같은 `outbox_id`의 마지막 줄 `sent_at`과 room별 delivery `sent_at`을 비교합니다. 외부 수집과 내부 전달 구간 분리는 [Latency Cause Report](YOUTUBE_COMMUNITY_SHORTS_LATENCY_CAUSE_REPORT.md)를 따릅니다.
 
 ## 최종 결과 줄 필드
 
@@ -51,7 +51,7 @@ alarm-worker는 발송 시도마다 DB 행을 쓰지 않습니다. 전이 트랜
 | `sent_at` | outbox가 SENT면 그 발송 시각, 아니면 최종 결과를 기록한 시각입니다. | `RFC3339 timestamp string` | `2026-04-10T00:02:05Z` |
 | `target_room_count`, `successful_room_count`, `failed_room_count` | 게시물의 대상·성공·실패 room 수입니다. | `integer` | `3` |
 | `actual_published_at` | tracking의 실제 게시 시각입니다. 없으면 빠집니다. | `RFC3339 timestamp string` | `2026-04-10T00:01:10Z` |
-| `alarm_sent_at` | tracking의 최초 Iris 접수 시각입니다. handoff 확인이 실패로 정산돼도 지워지지 않습니다. tracking 행이 없으면 outbox `sent_at`입니다. | `RFC3339 timestamp string` | `2026-04-10T00:02:05Z` |
+| `alarm_sent_at` | tracking의 최초 발송 완료 시각입니다. Iris 접수 시각이거나, 구독 room이 없어 delivery 없이 끝난 outbox의 `sent_at`입니다. handoff 확인이 실패로 정산돼도 지워지지 않습니다. tracking 행이 없으면 outbox `sent_at`입니다. tracking 조회가 실패하면 `actual_published_at`·`alarm_sent_at`·`alarm_latency_millis`·`alarm_latency_exceeded`가 모두 빠지고 `YouTube community/shorts final result tracking unavailable` Warn 줄이 `outbox_ids`와 함께 남습니다. | `RFC3339 timestamp string` | `2026-04-10T00:02:05Z` |
 | `alarm_latency_millis` | `alarm_sent_at - actual_published_at`입니다. 둘 중 하나라도 없으면 빠집니다. | `integer(int64)` | `55000` |
 | `alarm_latency_exceeded` | 실제 게시 시각 기준 2분(120000ms) 초과 여부입니다. 내부 원인이어도 늦게나마 1회 발송돼야 하며 이 값은 기록용입니다. | `bool` | `false` |
 | `failure_reason` | 실패한 room들의 사유를 모은 값입니다. 성공이면 빠집니다. | `string` | `provider_rate_limited` |
@@ -76,12 +76,13 @@ WITH outbox_post AS (
     SELECT
         o.*,
         CASE o.kind
-            WHEN 'NEW_SHORT' THEN 'short:' || btrim(regexp_replace(raw.id, '^short:', ''), E' \t\r\n')
-            ELSE 'community:' || btrim(COALESCE(substring(community.id FROM '(?:^|/)post/([^"?#&/]+)'), community.id), E' \t\r\n')
+            WHEN 'NEW_SHORT' THEN 'short:' || regexp_replace(regexp_replace(raw.id, '^short:', ''), space.re, '', 'g')
+            ELSE 'community:' || regexp_replace(COALESCE(substring(community.id FROM '(?:^|/)post/([^"?#&/]+)'), community.id), space.re, '', 'g')
         END AS post_id
     FROM youtube_notification_outbox AS o
-    CROSS JOIN LATERAL (SELECT btrim(o.content_id, E' \t\r\n') AS id) AS raw
-    CROSS JOIN LATERAL (SELECT replace(btrim(regexp_replace(raw.id, '^community:', ''), E' \t\r\n'), '\/', '/') AS id) AS community
+    CROSS JOIN (SELECT '^[ \t\n\v\f\r\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[ \t\n\v\f\r\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$' AS re) AS space
+    CROSS JOIN LATERAL (SELECT regexp_replace(o.content_id, space.re, '', 'g') AS id) AS raw
+    CROSS JOIN LATERAL (SELECT replace(regexp_replace(regexp_replace(raw.id, '^community:', ''), space.re, '', 'g'), '\/', '/') AS id) AS community
     WHERE o.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 )
 SELECT
@@ -90,12 +91,15 @@ SELECT
     o.content_id,
     o.id AS outbox_id,
     o.status AS outbox_status,
+    o.sent_at AS outbox_sent_at,
     d.id AS delivery_id,
     d.room_id,
     d.status AS delivery_status,
     d.attempt_count,
     d.sent_at,
     d.error,
+    request.member_ids[1] AS handoff_first_delivery_id,
+    request.generation AS handoff_generation,
     request.handoff_request_id,
     request.handoff_next_check_at,
     request.handoff_checked_at,
@@ -119,10 +123,10 @@ SQL
 
 ## Readout
 
-- `delivery_status = SENT`: Iris가 해당 room 요청을 접수했습니다. `sent_at`이 접수 시각입니다. `handoff_next_check_at`이 있으면 handoff 확인을 기다리는 중입니다. `handoff_checked_at`은 확인 절차가 닫힌 시각일 뿐 성공 판정이 아닙니다. 확인이 실패로 정산되면 delivery가 SENT에서 벗어나지만, frozen member가 바뀌어 정산하지 못하고 닫힌 경우(`youtube delivery handoff check closed; frozen members changed since admission` Error 로그)에는 SENT와 `handoff_checked_at`이 함께 남습니다. 그래서 SENT를 확정하려면 같은 `handoff_request_id`의 reconciler 로그에 이 닫힘 로그나 `youtube delivery handoff failed`·`handoff outcome unknown` 로그가 없는지 함께 확인합니다.
+- `delivery_status = SENT`: Iris가 해당 room 요청을 접수했습니다. `sent_at`이 접수 시각입니다. `handoff_next_check_at`이 있으면 handoff 확인을 기다리는 중입니다. `handoff_checked_at`은 확인 절차가 닫힌 시각일 뿐 성공 판정이 아닙니다. 확인이 실패로 정산되면 delivery가 SENT에서 벗어나지만, frozen member가 바뀌어 정산하지 못하고 닫힌 경우(`youtube delivery handoff check closed; frozen members changed since admission` Error 로그)에는 SENT와 `handoff_checked_at`이 함께 남습니다. reconciler 로그에는 Iris 요청 ID가 없고 `delivery_ids.first_id`·`generation`만 있으므로, SENT를 확정하려면 `handoff_first_delivery_id`·`handoff_generation`과 같은 값의 로그에 이 닫힘 로그나 `youtube delivery handoff failed`·`handoff outcome unknown` 로그가 없는지 확인합니다. 그 기간의 로그를 볼 수 없으면 결과를 미확정으로 둡니다.
 - `delivery_status = PENDING`: 아직 보내지 않았거나 재시도를 기다립니다. `error`에 마지막 실패 사유가 남습니다.
 - `delivery_status = SENDING`: 발송 중입니다. 오래 남으면 stale sweep이 `QUARANTINED`로 격리합니다.
-- `delivery_status = FAILED`: 영구 실패 또는 재시도 한도 소진입니다. `youtube_delivery.revive_enabled`가 켜져 있으면 revive가 최근 FAILED 중 outbox `sent_at`이 비어 있고 `error`가 `delivery freshness expired`·`client request id generations exhausted`가 아닌 행만 다시 PENDING으로 돌립니다. Iris가 접수한 뒤 handoff 실패로 FAILED가 된 행은 outbox `sent_at`이 남아 되살아나지 않습니다. `error`로 사유를 확인합니다.
+- `delivery_status = FAILED`: 영구 실패 또는 재시도 한도 소진입니다. `youtube_delivery.revive_enabled`가 켜져 있으면 revive가 최근 FAILED 중 부모 outbox의 `sent_at`(`outbox_sent_at`)이 비어 있고 `error`가 `delivery freshness expired`·`client request id generations exhausted`가 아닌 행만 다시 PENDING으로 돌립니다. 부모 outbox가 SENT에 도달해 `outbox_sent_at`이 채워진 뒤 handoff 실패로 FAILED가 된 room은 되살아나지 않지만, 다른 room이 아직 진행 중이라 `outbox_sent_at`이 비어 있을 때 handoff 실패로 FAILED가 된 room은 되살아날 수 있습니다. `error`로 사유를 확인합니다.
 - `delivery_status = QUARANTINED`: 결과 불명으로 격리됐습니다. 재발송하지 않으므로 전송 증거로 검토합니다.
 - `attempt_count > 0`: 실패한 시도가 그만큼 있었습니다. 성공은 이 값을 올리지 않고 revive가 0으로 되돌리므로 실패 횟수의 하한입니다.
-- 행이 없으면 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나 지워졌을 수 있습니다. 이때는 `youtube_notification_delivery_ledger`의 SENT·QUARANTINED room으로 확인합니다. tracking의 `alarm_sent_at`은 최초 접수 시각이라 handoff 실패 뒤에도 남으므로 성공 근거로 쓰지 않습니다.
+- 행이 없으면 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나 지워졌을 수 있습니다. 이때는 `youtube_notification_delivery_ledger`의 SENT·QUARANTINED room으로 확인합니다. tracking의 `alarm_sent_at`은 최초 발송 완료 시각이라 handoff 실패 뒤에도 남으므로 성공 근거로 쓰지 않습니다.

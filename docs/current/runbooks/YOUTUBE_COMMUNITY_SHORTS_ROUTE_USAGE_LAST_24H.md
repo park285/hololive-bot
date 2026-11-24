@@ -27,12 +27,13 @@ WITH outbox_post AS (
     SELECT
         o.*,
         CASE o.kind
-            WHEN 'NEW_SHORT' THEN 'short:' || btrim(regexp_replace(raw.id, '^short:', ''), E' \t\r\n')
-            ELSE 'community:' || btrim(COALESCE(substring(community.id FROM '(?:^|/)post/([^"?#&/]+)'), community.id), E' \t\r\n')
+            WHEN 'NEW_SHORT' THEN 'short:' || regexp_replace(regexp_replace(raw.id, '^short:', ''), space.re, '', 'g')
+            ELSE 'community:' || regexp_replace(COALESCE(substring(community.id FROM '(?:^|/)post/([^"?#&/]+)'), community.id), space.re, '', 'g')
         END AS post_id
     FROM youtube_notification_outbox AS o
-    CROSS JOIN LATERAL (SELECT btrim(o.content_id, E' \t\r\n') AS id) AS raw
-    CROSS JOIN LATERAL (SELECT replace(btrim(regexp_replace(raw.id, '^community:', ''), E' \t\r\n'), '\/', '/') AS id) AS community
+    CROSS JOIN (SELECT '^[ \t\n\v\f\r\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[ \t\n\v\f\r\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$' AS re) AS space
+    CROSS JOIN LATERAL (SELECT regexp_replace(o.content_id, space.re, '', 'g') AS id) AS raw
+    CROSS JOIN LATERAL (SELECT replace(regexp_replace(regexp_replace(raw.id, '^community:', ''), space.re, '', 'g'), '\/', '/') AS id) AS community
     WHERE o.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 )
 SELECT
@@ -73,6 +74,6 @@ SQL
 
 - `success_send_count > 0`: outbox delivery 발송이 성공했습니다. 같은 `outbox_id`의 최종 결과 로그에서 `delivery_path = youtube_outbox_dispatcher`를 확인합니다.
 - `pending_outbox_count > 0`이고 `delivery_count = 0`: outbox가 room별 delivery로 아직 fan-out되지 않았습니다. 미발송 후보입니다.
-- `sent_outbox_count = outbox_count`이고 `delivery_count = 0`: 구독 room이 없어 outbox가 delivery 없이 SENT로 끝난 게시물입니다. 미발송이 아닙니다.
+- `outbox_count > 0`, `sent_outbox_count = outbox_count`, `delivery_count = 0`: 구독 room이 없어 outbox가 delivery 없이 SENT로 끝난 게시물입니다. 미발송이 아닙니다.
 - `failed_outbox_count > 0`이고 `delivery_count = 0`: 구독 조회 등 fan-out이 재시도 한도까지 실패해 room별 delivery 없이 끝났습니다. 발송 누락이므로 outbox의 `error`를 확인합니다.
-- `outbox_count = 0`: alarm-worker 경로에 진입하지 않았습니다. 끝난 outbox가 `youtube_delivery.cleanup_after_ms`를 넘겨 지워진 경우도 여기에 해당하므로 tracking의 `alarm_sent_at`과 함께 봅니다.
+- `outbox_count = 0`: alarm-worker 경로에 진입하지 않았습니다. 끝난 outbox가 `youtube_delivery.cleanup_after_ms`를 넘겨 지워진 경우도 여기에 해당하므로 원장(`youtube_notification_delivery_ledger`)의 SENT·QUARANTINED room과 함께 봅니다([Send Counts](YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md)의 `sent_outbox_cleaned`).

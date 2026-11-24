@@ -154,7 +154,7 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResults(ctx context.Cont
 
 	trackingErr := al.delivery.AttachTerminalCommunityShortsTracking(ctx, results)
 	if trackingErr != nil {
-		al.logger.Warn(CommunityShortsFinalResultTrackingUnavailableMessage, slog.Any("error", trackingErr))
+		al.logger.Warn(CommunityShortsFinalResultTrackingUnavailableMessage, slog.Any("outbox_ids", outboxIDs), slog.Any("error", trackingErr))
 	}
 
 	finalizedAt := time.Now().UTC()

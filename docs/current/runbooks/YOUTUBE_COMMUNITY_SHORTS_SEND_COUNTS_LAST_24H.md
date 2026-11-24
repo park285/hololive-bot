@@ -9,7 +9,7 @@
 - `0회 발송` 게시물도 결과에 남아야 하므로 추적 테이블(`youtube_content_alarm_tracking`)을 기준 집합으로 사용합니다.
 - 발송 횟수는 room별 delivery(`youtube_notification_delivery`)의 현재 상태로 셉니다. 시도마다 남던 telemetry 행은 더 쓰지 않으므로, 실패 흔적은 `FAILED`·`QUARANTINED` 상태와 `attempt_count > 0`으로만 남습니다. `attempt_count`는 실패한 시도에서만 올라가고 성공은 올리지 않으며, revive가 0으로 되돌립니다.
 - 게시물은 outbox `content_id`를 worker와 같은 규칙으로 정규화한 `post_id`(tracking의 `canonical_content_id`와 같은 값)로 outbox와 잇습니다. 공백이 다른 `content_id` 같은 별칭 outbox가 한 게시물에 여럿일 수 있고, 같은 room의 별칭 delivery는 실제 발송 없이 fulfilled로 SENT가 되므로 `success_send_count`는 실제 발송 횟수보다 클 수 있습니다. 게시물·room당 성공은 원장 `youtube_notification_delivery_ledger`의 기본 키 `(kind, logical_id, room_id)`로 한 번만 기록되므로 room 단위 판단은 `success_room_count`와 `ledger_sent_room_count`로 합니다. 중복 발송 위험은 provider가 받았는지 모르는 시도에 남으며, 이런 delivery는 `QUARANTINED`로 격리되고 재발송하지 않습니다.
-- delivery 행은 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 지워집니다. 지워진 뒤에는 원장(`youtube_notification_delivery_ledger`, `logical_id`는 tracking의 `canonical_content_id`와 같은 값)의 SENT·QUARANTINED room 수와 tracking의 `alarm_sent_at`으로 판정합니다.
+- delivery 행은 outbox가 끝나고 `youtube_delivery.cleanup_after_ms`가 지나면 지워집니다. 지워진 뒤에는 원장(`youtube_notification_delivery_ledger`, `logical_id`는 tracking의 `canonical_content_id`와 같은 값)의 SENT·QUARANTINED room 수로 판정합니다. tracking의 `alarm_sent_at`은 최초 발송 완료 시각이라 handoff 실패 뒤에도 남으므로 그것만 남은 게시물은 결과를 알 수 없습니다.
 
 ## Execute
 
@@ -31,12 +31,13 @@ WITH outbox_post AS (
     SELECT
         o.*,
         CASE o.kind
-            WHEN 'NEW_SHORT' THEN 'short:' || btrim(regexp_replace(raw.id, '^short:', ''), E' \t\r\n')
-            ELSE 'community:' || btrim(COALESCE(substring(community.id FROM '(?:^|/)post/([^"?#&/]+)'), community.id), E' \t\r\n')
+            WHEN 'NEW_SHORT' THEN 'short:' || regexp_replace(regexp_replace(raw.id, '^short:', ''), space.re, '', 'g')
+            ELSE 'community:' || regexp_replace(COALESCE(substring(community.id FROM '(?:^|/)post/([^"?#&/]+)'), community.id), space.re, '', 'g')
         END AS post_id
     FROM youtube_notification_outbox AS o
-    CROSS JOIN LATERAL (SELECT btrim(o.content_id, E' \t\r\n') AS id) AS raw
-    CROSS JOIN LATERAL (SELECT replace(btrim(regexp_replace(raw.id, '^community:', ''), E' \t\r\n'), '\/', '/') AS id) AS community
+    CROSS JOIN (SELECT '^[ \t\n\v\f\r\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[ \t\n\v\f\r\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$' AS re) AS space
+    CROSS JOIN LATERAL (SELECT regexp_replace(o.content_id, space.re, '', 'g') AS id) AS raw
+    CROSS JOIN LATERAL (SELECT replace(regexp_replace(regexp_replace(raw.id, '^community:', ''), space.re, '', 'g'), '\/', '/') AS id) AS community
     WHERE o.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
 ),
 per_post AS (
@@ -96,7 +97,7 @@ SELECT
     CASE
         WHEN quarantined_delivery_count > 0 OR ledger_quarantined_room_count > 0 THEN 'quarantined'
         WHEN outbox_count = 0 AND ledger_sent_room_count > 0 THEN 'sent_outbox_cleaned'
-        WHEN outbox_count = 0 AND alarm_sent_at IS NOT NULL THEN 'accepted_outbox_cleaned'
+        WHEN outbox_count = 0 AND alarm_sent_at IS NOT NULL THEN 'tracking_only_outbox_cleaned'
         WHEN outbox_count = 0 THEN 'outbox_missing'
         WHEN pending_outbox_count > 0 OR in_progress_delivery_count > 0 OR handoff_pending_delivery_count > 0 THEN 'in_progress'
         WHEN target_room_count = 0 AND sent_outbox_count = outbox_count THEN 'no_target_rooms'
@@ -135,14 +136,14 @@ SQL
 
 ## Readout
 
-- `status = ok`: 진행 중·실패·격리 room 없이 대상 room이 모두 SENT입니다.
+- `status = ok`: 진행 중·실패·격리 room 없이 대상 room이 모두 SENT이고 handoff 확인을 기다리는 room도 없습니다. frozen member가 바뀌어 정산하지 못하고 닫힌 확인도 SENT로 남으므로, 확정하려면 [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 handoff 로그 대조를 따릅니다.
 - `quarantined_posts = 0`: 집계 창에 결과 불명으로 격리된 delivery나 원장 항목이 없으므로 중복 발송 후보도 없습니다.
 - `status = quarantined`: provider가 받았는지 모르는 시도가 격리됐습니다. 재발송하지 않으므로 room에 도착했는지 전송 증거로 검토합니다. 받았다면 1회, 받지 못했다면 누락입니다.
 - `status = no_target_rooms`: 구독 room이 없어 outbox가 delivery 없이 SENT로 끝났습니다. 발송할 대상이 없었던 정상 상태입니다.
 - `status = no_success`: 진행 중인 room 없이 SENT delivery가 하나도 없습니다. room이 모두 실패했거나, fan-out이 실패해 delivery 없이 outbox가 FAILED로 끝났습니다. 후자는 outbox `error`로 확인합니다.
 - `status = outbox_missing`: 게시물 추적 레코드는 있으나 outbox row도, 원장 SENT도, `alarm_sent_at`도 없습니다. 전송 파이프라인 진입 전 누락 후보입니다.
 - `status = sent_outbox_cleaned`: 끝난 outbox가 보존 기간을 넘겨 지워졌고 원장 SENT가 남아 있습니다.
-- `status = accepted_outbox_cleaned`: outbox와 원장 SENT 없이 `alarm_sent_at`만 남았습니다. Iris가 처음 접수한 것만 확인되고, 그 뒤 handoff 실패로 재시도가 소진돼 원장 SENT가 지워졌을 수 있으므로 최종 결과는 알 수 없습니다.
+- `status = tracking_only_outbox_cleaned`: outbox와 원장 SENT 없이 tracking `alarm_sent_at`만 남았습니다. 구독 room 없이 끝난 outbox의 `sent_at`이 복사됐거나, Iris가 접수한 뒤 handoff 실패로 재시도가 소진돼 원장 SENT가 지워졌을 수 있으므로 최종 결과는 알 수 없습니다.
 - `status = in_progress`: outbox fan-out을 기다리거나, `PENDING`·`SENDING` room이 남았거나, SENT room의 handoff 확인(`handoff_pending_delivery_count`)이 끝나지 않았습니다. 확인 결과에 따라 재발급·실패·격리로 바뀔 수 있습니다.
 - `status = failed_attempts`: 성공은 있었지만 `FAILED` delivery나 실패한 시도가 있었던 delivery도 있습니다. 시도별 사유는 [Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)의 로그로 확인합니다.
 - `publish_to_detect_ms`, `detect_to_sent_ms`: 외부 수집 구간과 내부 전달 구간입니다. `delay_seconds > 120`이면 2분 초과이며, 구간 판정은 [Latency Cause Report](YOUTUBE_COMMUNITY_SHORTS_LATENCY_CAUSE_REPORT.md)를 따릅니다.
