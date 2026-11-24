@@ -1062,7 +1062,7 @@ if [[ "$card_transition" == false ]]; then
     origin_snapshot="$(cat -- "$card_active" && printf 'collector %s %s\nissuer %s %s\n' \
       "$collector_invocation" "$captured_generation" "$issuer_invocation" "$captured_issuer")"
     observed_origin="$(printf '%s\n' "$origin_snapshot" | sha256sum)"
-    [[ "${observed_origin%% *}" == "$origin_digest" ]] || { echo 'approved W2 publisher generation changed' >&2; exit 1; }
+    [[ "${observed_origin%% *}" == "$origin_digest" ]] || { echo 'approved origin publisher generation changed' >&2; exit 1; }
     verify_collector_runtime "$w2_revision" "$w2_collector"
     verify_issuer_runtime "$w2_revision" "$w2_issuer"
     for tag in "$collector_rollback" "$issuer_rollback"; do
@@ -1086,7 +1086,7 @@ if [[ "$card_transition" == false ]]; then
     [[ ! -e "$profile_release" && ! -L "$profile_release" ]]
     cmp -- "$staging/$slot_unit_dir/$collector_container.container" "$unit_dir/$collector_container.container"
     [[ "$(collector_database_endpoint "$collector_container")" == '100.100.1.8|5433' ]] || {
-      echo 'running b collector still uses a pre-direct endpoint; finish its retirement with the 1-9 step tree' >&2; exit 1;
+      echo 'running b collector does not use the direct endpoint 100.100.1.8:5433' >&2; exit 1;
     }
   fi
 fi
