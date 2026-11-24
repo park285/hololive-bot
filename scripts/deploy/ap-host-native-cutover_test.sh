@@ -557,6 +557,7 @@ systemctl() {
       [[ "$3" == "$po_socket" ]]
       rm "down-$po_socket"; printf '%032d\n' 101 >"live-$po_socket" ;;
     disable) touch "disabled-$2" ;;
+    reset-failed) rm "failed-$2" ;;
     start)
       printf '%s\n' "$2" >> starts
       rm "down-$2"
@@ -581,7 +582,7 @@ native_window_prop() {
     ExecMainStartTimestampMonotonic) python3 -I -B -c 'import sys,time; print(time.monotonic_ns()//1000-100000000*int(sys.argv[1]))' "$([[ -f broker-not-ready ]] && echo 1 || echo 0)" ;;
     ExecMainCode) echo 1 ;;
     ExecMainStatus) echo 0 ;;
-    ActiveState) if [[ -e "down-$1" ]]; then echo inactive; else echo active; fi ;;
+    ActiveState) if [[ -e "failed-$1" ]]; then echo failed; elif [[ -e "down-$1" ]]; then echo inactive; else echo active; fi ;;
     SubState) if [[ "$1" == "$po_socket" ]]; then echo listening; else echo running; fi ;;
     RootDirectory) printf '%s/po-sandbox/rootfs\n' "$release_dir" ;;
     RootDirectoryStartOnly) if [[ $(readlink "$window/policy") != held ]]; then echo yes; else echo no; fi ;;
@@ -596,7 +597,7 @@ native_window_prop() {
     LoadState) echo loaded ;;
     NeedDaemonReload) echo no ;;
     UnitFileState) if [[ -f "disabled-$1" ]]; then echo disabled; else echo enabled; fi ;;
-    Result) echo success ;;
+    Result) if [[ -e "failed-$1" ]]; then echo trigger-limit-hit; else echo success; fi ;;
     *) return 93 ;;
   esac
 }
@@ -662,6 +663,12 @@ journalctl() {
     [[ "$fault" != no_drain ]] || return 0
     local invocation="${!#}"
     printf '{"_SYSTEMD_INVOCATION_ID":"%s"}\n' "${invocation#_SYSTEMD_INVOCATION_ID=}"
+  elif [[ "$*" == *MESSAGE_ID=d9b373ed55a64feb8242e02dbe79a49c* ]]; then
+    [[ " $* " == *" UNIT=$po_socket "* && -f "tripped-$po_socket" ]] || return 0
+    local selected
+    for selected in "$@"; do
+      if [[ "$selected" == INVOCATION_ID=* ]]; then printf '{"INVOCATION_ID":"%s","UNIT_RESULT":"trigger-limit-hit"}\n' "${selected#*=}"; fi
+    done
   elif [[ "$*" == *JOB_RESULT=done* && "$*" == *MESSAGE_ID=9d1aaa27d60140bd96365438aad20286* && "$fault" != started_only ]]; then
     if [[ -n "$fault" && " $* " == *" UNIT=${fault#missing-receipt-} "* ]]; then return 0; fi
     local selected
@@ -842,6 +849,14 @@ native_window_probe_units() {
 }
 touch exit-after-probe
 '''
+collector_briefly_not_ready = '''
+eval "fixture_$(declare -f collector_readiness_fetch)"
+collector_readiness_fetch() {
+  if [[ -f collector-busy ]]; then rm collector-busy; printf '{"instance_id":"collector-a","status":"not_ready","state":"DEGRADED","dependency":"youtubejs"}\\n'; return 1; fi
+  fixture_collector_readiness_fetch
+}
+touch collector-busy
+'''
 for name, action, mutation, expected in (
     ('accepted', 'accepted', '', 'accepted'),
     ('failed', 'observation-failed', '', 'stopped'),
@@ -860,6 +875,7 @@ for name, action, mutation, expected in (
     ('expired-issuer-lease', 'accepted', 'rmdir "$(native_window_permit rotation)"', 'unknown'),
     ('expired-during-final-health', 'accepted', 'touch expire-during-health', 'unknown'),
     ('socket-open-issuer-not-ready', 'accepted', 'touch broker-not-ready', 'unknown'),
+    ('collector-briefly-not-ready', 'accepted', collector_briefly_not_ready, 'accepted'),
     ('owned-cold-issuer-warms', 'accepted', 'retire_issuer rotate; touch broker-warming', 'accepted'),
     ('issuer-changed', 'accepted', 'printf "%032d\\n" 9 > "live-$po_service"', 'unknown'),
     ('socket-changed', 'observation-failed', 'printf "%032d\\n" 9 > "live-$po_socket"', 'unknown'),
@@ -939,11 +955,40 @@ set -e
 case, result = window_case('settle-rerun-after-partial', [release_window, str(old_port), 'normal'], failed_stage + stopped_after_unknown + check_fails_once + settled_reentry)
 assert result.returncode == 0, result.stderr
 assert (case/'current/accepted-window').is_file() and len(list((case/'releases/old/native-window').glob('settled-*/outcome'))) == 1
+accept_unknown = candidate_stage + '''
+touch expire-during-health
+set +e
+(set -e; window_action=accepted; native_window_close_observation)
+set -e
+rm expire-during-health
+[[ "$(cat "$native_recovery_dir/step")" == accept && -d "$native_recovery_dir/accepting" && -f "$native_recovery_dir/outcome" ]]
+''' + installed_candidate + '''
+systemctl --job-mode=fail stop "$po_socket" "$unit"
+retire_issuer stop
+'''
+case, result = window_case('settle-accept-unknown-reentry', [release_window, str(old_port), 'normal'], accept_unknown + settled_reentry)
+assert result.returncode == 0, result.stderr
+hold = case/'releases/old/native-window'
+archives = list(hold.glob('settled-*'))
+assert len(archives) == 1 and (archives[0]/'outcome').read_text() == 'outcome_unknown\n', archives
+assert {p.name for p in archives[0].iterdir()} >= {'outcome', 'accepting', 'await-observation', 'observed.tmp', 'closing', 'issuer-lease'}
+assert (case/'current/accepted-window').is_file() and (hold/'accepted-guard').is_dir() and not (case/'recovery').exists()
+tripped_socket = accept_unknown.replace('systemctl --job-mode=fail stop "$po_socket" "$unit"\n', 'systemctl --job-mode=fail stop "$unit"\ntouch "down-$po_socket" "failed-$po_socket" "tripped-$po_socket"\n')
+assert tripped_socket != accept_unknown
+case, result = window_case('settle-accept-tripped-socket', [release_window, str(old_port), 'normal'], tripped_socket + settled_reentry)
+assert result.returncode == 0, result.stderr
+assert (case/'current/accepted-window').is_file() and not (case/'failed-issuer.socket').exists()
+case, result = window_case('settle-accept-rerun-after-partial', [release_window, str(old_port), 'normal'], accept_unknown + check_fails_once + settled_reentry)
+assert result.returncode == 0, result.stderr
+assert (case/'current/accepted-window').is_file() and len(list((case/'releases/old/native-window').glob('settled-*/accepting'))) == 1
 for name, scenario in (
+    ('settle-refuses-committed-accept', accept_unknown + 'touch "$native_recovery_dir/accepted-window"\n'),
+    ('settle-refuses-unrecorded-socket-failure', tripped_socket + 'rm "tripped-$po_socket"\n'),
+    ('settle-refuses-accept-without-closing', failed_stage + stopped_after_unknown + 'printf "accept\\n" >"$native_recovery_dir/step"\n'),
     ('settle-refuses-contract-installed', failed_stage + stopped_after_unknown.replace(installed_candidate, real_inputs)),
     ('settle-refuses-running-collector', failed_stage + installed_candidate + 'systemctl --job-mode=fail stop "$po_socket"\nretire_issuer stop\nrmdir "$(native_window_permit rotation)"\n'),
     ('settle-refuses-live-lease', failed_stage + installed_candidate + 'systemctl --job-mode=fail stop "$po_socket" "$unit"\nretire_issuer stop\n'),
-    ('settle-refuses-other-step', failed_stage + stopped_after_unknown + 'printf "accept\\n" >"$native_recovery_dir/step"\n'),
+    ('settle-refuses-other-step', failed_stage + stopped_after_unknown + 'printf "issuer\\n" >"$native_recovery_dir/step"\n'),
     ('settle-refuses-without-outcome', candidate_stage.replace('native_window_await_observation\n', 'touch "$window/blocked"\n') + stopped_after_unknown),
     ('settle-refuses-awaited-observation', candidate_stage + 'native_window_uncertain || true\n' + stopped_after_unknown),
     ('settle-refuses-missing-stop-receipt', failed_stage + stopped_after_unknown + '''
