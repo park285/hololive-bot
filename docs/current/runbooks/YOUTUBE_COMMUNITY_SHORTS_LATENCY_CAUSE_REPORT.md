@@ -99,7 +99,7 @@ ORDER BY observed_at DESC;
 
 ## Readout
 
-- `internal_over_target_posts > 0`: 감지 이후 내부 전달만으로 2분을 넘긴 게시물이 있습니다. 해당 게시물의 delivery 상태(`attempt_count`, `error`)로 재시도 흔적을 확인합니다. 대기 시간은 attempt started 줄의 `attempt_started_at`과 tracking의 `detected_at`을 비교합니다.
+- `internal_over_target_posts > 0`: 감지 이후 내부 전달만으로 2분을 넘긴 게시물이 있습니다. 해당 게시물의 delivery 상태(`attempt_count`, `error`)로 재시도 흔적을 확인합니다. attempt started 줄의 `attempt_started_at`과 tracking의 `detected_at`의 차이는 첫 발송 시도까지 걸린 시간입니다. 발송 준비에서 실패한 claim은 이 줄을 남기지 않으므로 이 차이에는 그 뒤의 재시도 대기가 섞일 수 있고, 최초 대기 시간만 따로 복원할 수는 없습니다([Delivery Logs](YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md)).
 - `internal_dominant_posts`: 외부와 내부가 함께 늦었고 내부가 더 길었던 건입니다. 내부 원인 후보로 봅니다.
 - `external_dominant_posts`: 외부 수집 지연이 우세한 건입니다. 실패 집계에서 제외하는 참고 정보입니다.
 - `insufficient_evidence_posts`: 실제 게시 시각이나 발송 시각이 없어 구간을 나누지 못한 건입니다.
