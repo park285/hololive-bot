@@ -11,13 +11,13 @@ type contextCalendarRendererStub struct {
 	seenContexts []context.Context
 }
 
-func (s *contextCalendarRendererStub) RenderCalendarImageContext(ctx context.Context, _, _ int, _ []domain.CalendarEntry) ([]byte, error) {
+func (s *contextCalendarRendererStub) RenderCalendarImagesContext(ctx context.Context, _, _ int, _ []domain.CalendarEntry) ([][]byte, error) {
 	s.seenContexts = append(s.seenContexts, ctx)
 
-	return []byte("png"), nil
+	return [][]byte{[]byte("png")}, nil
 }
 
-func TestCalendarCommandRenderCalendarImageUsesContextCapability(t *testing.T) {
+func TestCalendarCommandRenderCalendarImagesUsesContextCapability(t *testing.T) {
 	t.Parallel()
 
 	type contextKey struct{}
@@ -26,13 +26,13 @@ func TestCalendarCommandRenderCalendarImageUsesContextCapability(t *testing.T) {
 	stub := &contextCalendarRendererStub{}
 	command := &CalendarCommand{imageRenderer: stub}
 
-	data, err := command.renderCalendarImage(ctx, 6, 2026, nil)
+	pages, err := command.renderCalendarImages(ctx, 6, 2026, nil)
 	if err != nil {
-		t.Fatalf("renderCalendarImage() error = %v", err)
+		t.Fatalf("renderCalendarImages() error = %v", err)
 	}
 
-	if string(data) != "png" {
-		t.Fatalf("renderCalendarImage() data = %q", data)
+	if len(pages) != 1 || string(pages[0]) != "png" {
+		t.Fatalf("renderCalendarImages() pages = %q", pages)
 	}
 
 	if len(stub.seenContexts) != 1 {

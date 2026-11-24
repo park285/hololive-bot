@@ -58,7 +58,7 @@ type CelebrationCalendarFinder interface {
 }
 
 type CalendarImageRenderer interface {
-	RenderCalendarImageContext(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error)
+	RenderCalendarImagesContext(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([][]byte, error)
 }
 
 type HelpImageProvider interface {

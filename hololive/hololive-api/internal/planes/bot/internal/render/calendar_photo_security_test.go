@@ -96,7 +96,7 @@ func TestFetchMemberPhotoBlocksUnsafeURLsBeforeRoundTrip(t *testing.T) {
 	}
 }
 
-func TestCalendarCardRendererRenderCalendarImageDoesNotShareCacheBlockedPhotoFallback(t *testing.T) {
+func TestCalendarCardRendererRenderCalendarImagesDoesNotShareCacheBlockedPhotoFallback(t *testing.T) {
 	store, mini := newTestCalendarImageCacheWithMini(t)
 	blockedPhotoURL := "https://127.0.0.1/avatar=s88-c"
 	entries := []domain.CalendarEntry{
@@ -121,28 +121,28 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotShareCacheBlockedPhotoFal
 
 	r := NewCalendarCardRenderer(WithCalendarImageCache(store))
 
-	data, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
+	pages, err := r.RenderCalendarImagesWithTheme(t.Context(), 6, 2026, CalendarThemePrismDaylight, entries)
 	if err != nil {
-		t.Fatalf("RenderCalendarImageContext() error = %v", err)
+		t.Fatalf("RenderCalendarImagesWithTheme() error = %v", err)
 	}
 
-	assertValidPNG(t, data)
+	assertValidPNG(t, pages[0])
 
 	if got := recorder.requests.Load(); got != 0 {
 		t.Fatalf("blocked photo URL was fetched %d times, want 0", got)
 	}
 
-	fallbackData, err := NewCalendarCardRenderer().RenderCalendarImageContext(t.Context(), 6, 2026, fallbackEntries)
+	fallbackPages, err := NewCalendarCardRenderer().RenderCalendarImagesWithTheme(t.Context(), 6, 2026, CalendarThemePrismDaylight, fallbackEntries)
 	if err != nil {
-		t.Fatalf("fallback RenderCalendarImageContext() error = %v", err)
+		t.Fatalf("fallback RenderCalendarImagesWithTheme() error = %v", err)
 	}
 
-	if !bytes.Equal(data, fallbackData) {
+	if !bytes.Equal(pages[0], fallbackPages[0]) {
 		t.Fatal("blocked photo render should match default-avatar fallback")
 	}
 
-	cacheKey := newCalendarCacheKey(6, 2026, entries)
-	if _, ok := r.sharedCachedImage(t.Context(), cacheKey); ok {
+	cacheKey := newCalendarCacheKey(6, 2026, CalendarThemePrismDaylight, entries)
+	if _, _, ok := r.sharedCachedAlbum(t.Context(), cacheKey); ok {
 		t.Fatal("blocked photo fallback was stored in shared cache")
 	}
 
@@ -150,7 +150,7 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotShareCacheBlockedPhotoFal
 		t.Fatalf("shared cache keys = %v, want none", keys)
 	}
 
-	if _, ok := NewCalendarCardRenderer(WithCalendarImageCache(store)).sharedCachedImage(t.Context(), cacheKey); ok {
+	if _, _, ok := NewCalendarCardRenderer(WithCalendarImageCache(store)).sharedCachedAlbum(t.Context(), cacheKey); ok {
 		t.Fatal("blocked photo fallback was served from shared cache")
 	}
 }

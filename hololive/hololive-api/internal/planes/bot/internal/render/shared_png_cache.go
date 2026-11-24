@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/sharedcache"
@@ -19,30 +18,6 @@ type sharedRenderCache struct {
 	store sharedcache.Store
 	ttl   time.Duration
 	event string
-}
-
-type sharedPNGCache sharedRenderCache
-
-func (c sharedPNGCache) get(ctx context.Context, key, hash string) ([]byte, bool) {
-	data, ok := sharedRenderCache(c).read(ctx, key)
-	if !ok || len(data) > len(hash)+sharedPNGCacheMaxBytes {
-		return nil, false
-	}
-
-	image, found := bytes.CutPrefix(data, []byte(hash))
-	if !found || !isPNGData(image) {
-		return nil, false
-	}
-
-	return image, true
-}
-
-func (c sharedPNGCache) put(ctx context.Context, key, hash string, data []byte) {
-	if c.store == nil || !isPNGData(data) || len(data) > sharedPNGCacheMaxBytes {
-		return
-	}
-
-	sharedRenderCache(c).write(ctx, key, slices.Concat([]byte(hash), data))
 }
 
 func (c sharedRenderCache) read(ctx context.Context, key string) ([]byte, bool) {

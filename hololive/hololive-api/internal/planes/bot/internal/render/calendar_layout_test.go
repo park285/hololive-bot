@@ -1,95 +1,166 @@
 package render
 
 import (
+	"bytes"
+	"image/png"
+	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
-	"golang.org/x/image/font"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/assets/fonts"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/cardkit"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func clampToWidthTestFace(t *testing.T) font.Face {
-	t.Helper()
+func TestCalFontSetClamp(t *testing.T) {
+	t.Parallel()
 
-	fontMu.Lock()
-	t.Cleanup(fontMu.Unlock)
-
-	face, err := fonts.CaptionFaceSized(22 * scaleFactor)
+	fs, err := loadCalendarFontSet()
 	if err != nil {
-		t.Fatalf("CaptionFaceSized() error = %v", err)
+		t.Fatalf("loadCalendarFontSet() error = %v", err)
 	}
 
-	return face
+	style := calText{Size: 18, Face: calFaceXBold}
+
+	if got := fs.clamp(style, testShortKoreanName, fs.width(style, testShortKoreanName)+1); got != testShortKoreanName {
+		t.Errorf("clamp(fits) = %q, want %q", got, testShortKoreanName)
+	}
+
+	for _, s := range []string{
+		"우사다 페코라 우사다 페코라 우사다 페코라",
+		"시라카미 후부키 白上フブキ 호쇼 마린 宝鐘マリン",
+	} {
+		limit := fs.width(style, s) / 2
+		got := fs.clamp(style, s, limit)
+
+		if got == "" || !strings.HasSuffix(got, "…") || fs.width(style, got) > limit {
+			t.Errorf("clamp(%q) = %q, want non-empty ellipsis within %v", s, got, limit)
+		}
+	}
+
+	spaceCase := "우사다 페코라페코라"
+	spaceLimit := fs.width(style, "우사다 ") + fs.width(style, "…")/2
+
+	if got := fs.clamp(style, spaceCase, spaceLimit); strings.Contains(got, " …") {
+		t.Errorf("clamp(trailing space) = %q, want trimmed before ellipsis", got)
+	}
+
+	if got := fs.clamp(style, testShortKoreanName, 0); got != "" {
+		t.Errorf("clamp(0) = %q, want empty", got)
+	}
+
+	if got := fs.clamp(style, testShortKoreanName, 1); got != "" {
+		t.Errorf("clamp(1) = %q, want empty", got)
+	}
 }
 
-func TestClampToWidth(t *testing.T) {
-	face := clampToWidthTestFace(t)
-
-	t.Run("fits unchanged", func(t *testing.T) {
-		s := testShortKoreanName
-		limit := cardkit.MeasureText(face, s) + 1
-
-		if got := cardkit.ClampToWidth(face, s, limit); got != s {
-			t.Errorf("cardkit.ClampToWidth() = %q, want unchanged %q", got, s)
-		}
-	})
-
-	t.Run("overflow clamps with ellipsis", func(t *testing.T) {
-		s := "우사다 페코라 우사다 페코라 우사다 페코라"
-		limit := cardkit.MeasureText(face, s) / 2
-		got := cardkit.ClampToWidth(face, s, limit)
-
-		if !strings.HasSuffix(got, "…") {
-			t.Fatalf("cardkit.ClampToWidth() = %q, want ellipsis suffix", got)
-		}
-
-		if w := cardkit.MeasureText(face, got); w > limit {
-			t.Errorf("clamped width = %d, want <= %d", w, limit)
-		}
-
-		if !strings.HasPrefix(s, strings.TrimSuffix(got, "…")) {
-			t.Errorf("clamped %q is not a prefix of source %q", got, s)
-		}
-	})
-
-	t.Run("mixed KR JP overflow", func(t *testing.T) {
-		s := "시라카미 후부키 白上フブキ 호쇼 마린 宝鐘マリン"
-		limit := cardkit.MeasureText(face, s) / 3
-		got := cardkit.ClampToWidth(face, s, limit)
-
-		if got == "" || !strings.HasSuffix(got, "…") {
-			t.Fatalf("cardkit.ClampToWidth() = %q, want non-empty with ellipsis", got)
-		}
-
-		if w := cardkit.MeasureText(face, got); w > limit {
-			t.Errorf("clamped width = %d, want <= %d", w, limit)
-		}
-	})
+func sampleSplitCalendarEntries(baseURL string) []domain.CalendarEntry {
+	return []domain.CalendarEntry{
+		{
+			Kind:   domain.CelebrationKindBirthday,
+			Day:    7,
+			Member: &domain.Member{ShortKoreanName: "제타", NameKo: "베스티아 제타", Units: []string{"holoh3ro"}, Photo: baseURL + "/zeta=s88-c"},
+		},
+		{
+			Kind:    domain.CelebrationKindAnniversary,
+			Day:     9,
+			Ordinal: 2,
+			Member:  &domain.Member{ShortKoreanName: "리오나", NameKo: "이사키 리오나", Units: []string{"FLOW GLOW"}, Photo: baseURL + "/riona=s88-c"},
+		},
+		{
+			Kind:    domain.CelebrationKindAnniversary,
+			Day:     9,
+			Ordinal: 2,
+			Member:  &domain.Member{ShortKoreanName: "니코", NameKo: "코가네이 니코", Units: []string{"FLOW GLOW"}, Photo: baseURL + "/niko=s88-c"},
+		},
+	}
 }
 
-func TestClampToWidthBoundaries(t *testing.T) {
-	face := clampToWidthTestFace(t)
+func assertCalendarAlbumBounds(t *testing.T, album [][]byte) {
+	t.Helper()
 
-	t.Run("trailing space trimmed before ellipsis", func(t *testing.T) {
-		s := "우사다 페코라페코라"
-		limit := cardkit.MeasureText(face, "우사다 ") + cardkit.MeasureText(face, "…")/2
-
-		if got := cardkit.ClampToWidth(face, s, limit); strings.Contains(got, " …") {
-			t.Errorf("cardkit.ClampToWidth() = %q, want no space before ellipsis", got)
+	for _, page := range album {
+		img, err := png.Decode(bytes.NewReader(page))
+		if err != nil {
+			t.Fatalf("png.Decode() error = %v", err)
 		}
-	})
 
-	t.Run("non-positive limit", func(t *testing.T) {
-		if got := cardkit.ClampToWidth(face, testShortKoreanName, 0); got != "" {
-			t.Errorf("cardkit.ClampToWidth(0) = %q, want empty", got)
+		if img.Bounds().Dx() != calendarOutputWidth || img.Bounds().Dy() > calendarOutputHeight {
+			t.Errorf("bounds = %v, want %dx(<=%d)", img.Bounds(), calendarOutputWidth, calendarOutputHeight)
 		}
-	})
+	}
+}
 
-	t.Run("limit below single rune", func(t *testing.T) {
-		if got := cardkit.ClampToWidth(face, testShortKoreanName, 1); got != "" {
-			t.Errorf("cardkit.ClampToWidth(1) = %q, want empty", got)
+func TestCalendarCardRenderer_SplitsBirthdayAndAnniversaryAndRotatesThemes(t *testing.T) {
+	var requests atomic.Int32
+
+	server := newPNGServer(t, &requests)
+	defer server.Close()
+
+	store := newTestCalendarImageCache(t)
+	renderer := NewCalendarCardRenderer(WithCalendarImageCache(store))
+
+	renderer.variants.intN = func(int) int { return 0 }
+
+	entries := sampleSplitCalendarEntries(server.URL)
+
+	firstAlbum, err := renderer.RenderCalendarImagesContext(t.Context(), 11, 2026, entries)
+	if err != nil || len(firstAlbum) != 2 {
+		t.Fatalf("first RenderCalendarImagesContext() len=%d, err=%v; want 2 pages", len(firstAlbum), err)
+	}
+
+	secondAlbum, err := renderer.RenderCalendarImagesContext(t.Context(), 11, 2026, entries)
+	if err != nil || len(secondAlbum) != 2 {
+		t.Fatalf("second RenderCalendarImagesContext() len=%d, err=%v; want 2 pages", len(secondAlbum), err)
+	}
+
+	if bytes.Equal(firstAlbum[0], secondAlbum[0]) || bytes.Equal(firstAlbum[1], secondAlbum[1]) {
+		t.Fatal("consecutive calls returned identical theme pages, want rotating 3-A <-> 3-B")
+	}
+
+	thirdAlbum, err := renderer.RenderCalendarImagesContext(t.Context(), 11, 2026, entries)
+	if err != nil || !slices.EqualFunc(firstAlbum, thirdAlbum, bytes.Equal) {
+		t.Fatalf("third RenderCalendarImagesContext() did not cycle back to cached first theme: err=%v", err)
+	}
+
+	assertCalendarAlbumBounds(t, firstAlbum)
+	assertCalendarAlbumBounds(t, secondAlbum)
+
+	if got, want := requests.Load(), int32(6); got != want {
+		t.Fatalf("photo requests = %d, want %d", got, want)
+	}
+
+	freshRenderer := NewCalendarCardRenderer(WithCalendarImageCache(store))
+
+	freshRenderer.variants.intN = func(int) int { return 0 }
+
+	fromShared, err := freshRenderer.RenderCalendarImagesContext(t.Context(), 11, 2026, entries)
+	if err != nil || !slices.EqualFunc(firstAlbum, fromShared, bytes.Equal) {
+		t.Fatalf("shared Valkey album cache mismatch: err=%v", err)
+	}
+
+	if got, want := requests.Load(), int32(6); got != want {
+		t.Fatalf("photo requests after shared cache hit = %d, want %d", got, want)
+	}
+}
+
+func TestCalendarCardRenderer_SixWeekBusyMonthFitsHeightBudget(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewCalendarCardRenderer()
+	entries := []domain.CalendarEntry{
+		{Kind: domain.CelebrationKindAnniversary, Day: 1, Ordinal: 4, Member: &domain.Member{ShortKoreanName: "멤버A", Units: []string{"유닛1"}}},
+		{Kind: domain.CelebrationKindAnniversary, Day: 1, Ordinal: 4, Member: &domain.Member{ShortKoreanName: "멤버B", Units: []string{"유닛1"}}},
+		{Kind: domain.CelebrationKindAnniversary, Day: 15, Ordinal: 3, Member: &domain.Member{ShortKoreanName: "멤버C", Units: []string{"유닛2"}}},
+		{Kind: domain.CelebrationKindAnniversary, Day: 15, Ordinal: 3, Member: &domain.Member{ShortKoreanName: "멤버D", Units: []string{"유닛2"}}},
+		{Kind: domain.CelebrationKindAnniversary, Day: 31, Ordinal: 5, Member: &domain.Member{ShortKoreanName: "멤버E", Units: []string{"유닛3"}}},
+	}
+
+	for _, themeID := range calendarThemePool {
+		pages, err := renderer.RenderCalendarImagesWithTheme(t.Context(), 5, 2026, themeID, entries)
+		if err != nil || len(pages) != 1 {
+			t.Fatalf("RenderCalendarImagesWithTheme(%q) len=%d, err=%v; want 1 page", themeID, len(pages), err)
 		}
-	})
+
+		assertCalendarAlbumBounds(t, pages)
+	}
 }

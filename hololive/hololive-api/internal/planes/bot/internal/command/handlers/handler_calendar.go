@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -14,6 +15,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/timeutil"
 )
+
+const calendarCardContentType = "image/png"
 
 type CalendarCommand struct {
 	handlercore.BaseCommand
@@ -56,7 +59,7 @@ func (c *CalendarCommand) Execute(ctx context.Context, cmdCtx *botcommand.Comman
 		return nil
 	}
 
-	imageSent, imageErr := c.trySendCalendarImage(ctx, cmdCtx.Room, month, year, entries)
+	imageSent, imageErr := c.trySendCalendarImages(ctx, cmdCtx.Room, month, year, entries)
 	if imageErr != nil {
 		return fmt.Errorf("send calendar image: %w", imageErr)
 	}
@@ -102,9 +105,9 @@ func (c *CalendarCommand) nowKST() time.Time {
 	return timeutil.NowKST()
 }
 
-func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string, month, year int, entries []domain.CalendarEntry) (bool, error) {
-	data, err := c.renderCalendarImage(ctx, month, year, entries)
-	if err != nil || len(data) == 0 {
+func (c *CalendarCommand) trySendCalendarImages(ctx context.Context, room string, month, year int, entries []domain.CalendarEntry) (bool, error) {
+	pages, err := c.renderCalendarImages(ctx, month, year, entries)
+	if err != nil || len(pages) == 0 || slices.ContainsFunc(pages, func(p []byte) bool { return len(p) == 0 }) {
 		observeImageTextFallback(c.Name(), imageTextFallbackReasonRenderFailed)
 		c.Deps().Logger.Warn("calendar image render failed, falling back to text",
 			slog.Any("error", err),
@@ -113,7 +116,13 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 		return false, nil
 	}
 
-	if err := c.Deps().SendImage(ctx, room, data); err != nil {
+	sendCtx := ctx
+
+	if len(pages) == 1 {
+		sendCtx = transport.WithImageContentType(ctx, calendarCardContentType)
+	}
+
+	if err := c.Deps().SendImages(sendCtx, room, pages); err != nil {
 		if transport.IsReplyOutcomeUnknown(err) {
 			observeImageTextFallback(c.Name(), imageTextFallbackReasonOutcomeUnknown)
 			c.Deps().Logger.Warn("calendar image outcome unknown, suppressing text fallback",
@@ -134,10 +143,10 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 	return true, nil
 }
 
-func (c *CalendarCommand) renderCalendarImage(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error) {
-	out, err := c.imageRenderer.RenderCalendarImageContext(ctx, month, year, entries)
+func (c *CalendarCommand) renderCalendarImages(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([][]byte, error) {
+	out, err := c.imageRenderer.RenderCalendarImagesContext(ctx, month, year, entries)
 	if err != nil {
-		return out, fmt.Errorf("render calendar image context: %w", err)
+		return out, fmt.Errorf("render calendar images context: %w", err)
 	}
 
 	return out, nil
@@ -156,7 +165,7 @@ func (c *CalendarCommand) CheckDependencies() error {
 		return errors.New("calendar command: member repository not configured")
 	}
 
-	if c.imageRenderer == nil || c.Deps().SendImage == nil {
+	if c.imageRenderer == nil || c.Deps().SendImages == nil {
 		return errors.New("calendar command: image renderer not configured")
 	}
 
