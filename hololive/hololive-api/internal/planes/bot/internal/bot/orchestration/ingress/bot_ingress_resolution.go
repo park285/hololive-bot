@@ -3,7 +3,7 @@ package ingress
 import (
 	"strings"
 
-	"github.com/park285/iris-client-go/v5/webhook"
+	"github.com/park285/iris-client-go/v6/webhook"
 )
 
 func roomChatFromMessage(message *webhook.Message) (roomType, roomLinkID string) {

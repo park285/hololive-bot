@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffloop"
@@ -85,6 +85,12 @@ func (c *handoffTestConsumer) QuarantineAfterHandoff(_ context.Context, claim *d
 	return nil
 }
 
+func (c *handoffTestConsumer) PauseRoomAfterHandoff(_ context.Context, claim *dispatchoutbox.HandoffClaim, code, _ string) error {
+	c.record(handoffCall{op: "room_pause", unitID: claim.UnitID, code: code})
+
+	return nil
+}
+
 type handoffTestStatusClient struct {
 	mu       sync.Mutex
 	queried  []string
@@ -130,6 +136,11 @@ func TestHandoffReconcilerRoutesObservationToLedgerAction(t *testing.T) {
 		{name: "failed with budget", status: handoffStatus("failed"), attempt: 1, want: handoffCall{op: "reissue", retryAfter: 10 * time.Second, code: contractsalarm.HandoffCodeFailed}},
 		{name: "failed without attempt budget", status: handoffStatus("failed"), attempt: alarmDispatchMaxAttempts - 1, want: handoffCall{op: handoffOpDLQ, code: contractsalarm.HandoffCodeFailed}},
 		{name: "failed at last generation", status: handoffStatus("failed"), generation: iris.ReplyReissueMaxGenerations, want: handoffCall{op: handoffOpDLQ, code: contractsalarm.HandoffCodeFailed}},
+		{name: "room not joined with budget", status: func(requestID string) (*iris.ReplyStatusSnapshot, error) {
+			reason := iris.ReplyFailureReasonRoomNotJoined
+
+			return &iris.ReplyStatusSnapshot{RequestID: requestID, State: "failed", Reason: &reason}, nil
+		}, attempt: 1, want: handoffCall{op: "room_pause", code: contractsalarm.HandoffCodeRoomNotJoined}},
 		{name: "queued before horizon", status: handoffStatus("queued"), elapsed: 30 * time.Second, want: handoffCall{op: "reschedule", step: time.Minute, horizon: testHandoffHorizon}},
 		{name: "query error before horizon", status: func(string) (*iris.ReplyStatusSnapshot, error) {
 			return nil, &iris.HTTPError{StatusCode: http.StatusServiceUnavailable}

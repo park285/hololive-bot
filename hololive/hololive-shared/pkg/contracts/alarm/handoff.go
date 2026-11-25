@@ -5,4 +5,5 @@ const (
 	HandoffCodeOutcomeUnknown = "handoff_outcome_unknown"
 	HandoffCodeStatusMissing  = "handoff_status_missing"
 	HandoffCodeUnconfirmed    = "handoff_unconfirmed"
+	HandoffCodeRoomNotJoined  = "handoff_room_not_joined"
 )

@@ -144,7 +144,7 @@ release pair, not as extra keys or aliases in the new profile.
 ### Build and CLI prerequisites
 
 - 다섯 소비자는 각 `go.mod`가 고정한 shared-go 판본과 공식 checksum을 씁니다.
-  api·alarm-worker·shared는 `github.com/park285/iris-client-go/v5`를 직접,
+  api·alarm-worker·shared는 `github.com/park285/iris-client-go/v6`를 직접,
   collector는 간접 의존성으로 고정합니다. 루트 SDK pin은 `v5.2.1`입니다.
   운영 빌드에는 각 모듈의 정식 tag와 공식 Go checksum이 필요합니다. 로컬 `go.work`의 형제 소스로 대체하지 않습니다.
   SDK v5는 H3 `GET /auth/epoch`를 지원하는 Iris와 같은 배포 창에서 교체하며

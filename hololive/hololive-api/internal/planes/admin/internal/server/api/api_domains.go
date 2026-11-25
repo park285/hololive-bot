@@ -30,6 +30,7 @@ type AlarmHandler struct {
 type RoomHandler struct {
 	acl      *acl.Service
 	iris     IrisRoomLister
+	pauses   DeliveryPauseStore
 	activity *activity.Logger
 	logger   *slog.Logger
 }
@@ -59,6 +60,7 @@ type Deps struct {
 	Applier     adminsettings.SettingsApplier
 
 	Iris                    IrisRoomLister
+	DeliveryPauses          DeliveryPauseStore
 	DispatchOps             DispatchOperations
 	XSpaceSessions          *xspaces.Store
 	SchedulePosters         *scheduleposter.Store
@@ -83,7 +85,7 @@ func NewDomainHandlers(deps Deps) (*DomainHandlers, error) {
 	return &DomainHandlers{
 		Member:         newMemberHandler(deps),
 		Alarm:          &AlarmHandler{alarm: deps.Alarm, dispatchOps: deps.DispatchOps, activity: deps.Activity, logger: deps.Logger},
-		Room:           &RoomHandler{acl: deps.ACL, iris: deps.Iris, activity: deps.Activity, logger: deps.Logger},
+		Room:           &RoomHandler{acl: deps.ACL, iris: deps.Iris, pauses: deps.DeliveryPauses, activity: deps.Activity, logger: deps.Logger},
 		Stream:         &StreamHandler{holodex: deps.Holodex, logger: deps.Logger},
 		Stats:          &StatsHandler{repository: deps.Repository, alarm: deps.Alarm, acl: deps.ACL, logger: deps.Logger},
 		Settings:       newSettingsHandler(deps),

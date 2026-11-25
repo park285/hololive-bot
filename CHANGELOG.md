@@ -14,6 +14,10 @@
 - **신호 처리 중 복원 실패 보고:** 배포 도구가 신호 trap 안에서 복원할 때, 인수 없는 `return`이 bash 규칙에 따라 trap 이전의 성공 상태를 돌려줘 guard 해제 실패 같은 오류를 성공으로 처리할 수 있었습니다. 중앙·b·native 배포 라이브러리의 해당 `return`이 실제 실패 상태를 돌려주도록 고쳤습니다.
 - **AP a 정지 창 퇴역:** W3 수용이 끝나 `osaka --quiesce`·`--resume`·`--settle`·`--install-initial`을 지웠습니다. native 도구는 `--dry-run`·`--apply`·`--prepare-profile`만 받습니다. 분리 정지 창, collector 이름 전환, webhook nonce 저장소 전환 절차 문서도 지웠습니다.
 
+## r1.2.8 - 2026-11-25
+
+- **봇 계정이 없는 방의 발송 일시정지:** Iris `/reply-status`가 `failed`와 `reason: room_not_joined`를 돌려주면(미참가·나가기·강퇴·계정 변경) alarm dispatch는 멤버를 `cancelled`(`handoff_room_not_joined`)로, youtube delivery는 `FAILED`로 닫고 재발급·DLQ로 보내지 않습니다. 같은 정산에서 방을 새 표 `kakao_room_delivery_pauses`(migration 007)에 넣어 구독은 두고 발송만 멈춥니다. 멈춘 방의 새 alarm delivery는 `cancelled`/`room_paused`로 기록하고, YouTube fan-out은 그 방을 건너뜁니다. 봇 명령 응답도 `dead`(`handoff_room_not_joined`)로 끝납니다. hololive-api가 그 방의 메시지를 관측하면 자동으로 재개하고, 관리자는 `GET`/`DELETE /api/holo/rooms/delivery-pauses`로 목록을 보고 재개합니다. 지표 `alarm_handoff_room_not_joined_total{ledger}`, `alarm_dispatch_pg_paused_room_total`, `hololive_youtube_outbox_enqueue_paused_rooms_total`을 더했습니다. iris-client-go를 v6.0.0으로 올렸습니다. 운영 전환은 migration 007을 코드보다 먼저 적용해야 합니다.
+
 ## r1.2.7 - 2026-11-25
 
 - **collector helper 연결 오류 응답:** youtube.js helper가 연결을 받은 뒤 2초(`headersTimeout`) 안에 요청 헤더를 다 읽지 못하면 Node 기본 처리로 본문 없는 `408`을 보냈습니다. collector는 이를 helper 프로토콜 불일치로 보고 런타임을 멈췄습니다(2026-11-25 배포 직후 부하가 높던 osaka1에서 두 번). 이제 helper는 연결 단계 오류도 프로토콜 JSON으로 답합니다. 시간 초과는 `collection_timeout`(TIMEOUT), 잘못된 HTTP는 `invalid_request`(PROTOCOL)이고, collector는 시간 초과를 다시 시도할 수 있는 실패로 처리합니다.
@@ -23,8 +27,3 @@
 
 - **PostgreSQL 코드 규칙:** 다섯 모듈의 운영 SQL을 모두 `shared-go/postgres` v1.0.4의 `pgxdb.Statement`로 읽고 `pgxdb.Exec`·`Query`·`QueryRow`·`Queue`로 실행합니다. `sqlassets.MustStatementReader`가 `pgxdb.Statement`를 돌려주고 `sqlassets.WithFragment` 대신 `sqlassets.Fragment` 자리표시자와 `With`로 조각을 끼우며, `dbx.Tx`는 `pgxdb.Querier`를 품으며 `dbx.Statement.SQL`은 `pgxdb.Statement`입니다. Go 코드에서 조립하던 SQL은 `queries/*.sql`의 자리표시자와 `With`·`WithToken`으로 옮겼습니다. 433개 문장을 변경 전후로 비교해 양 끝 공백 말고는 같음을 확인했습니다. 스택 ast-grep 규칙 `go-postgres-conventions.yml` 대신 golangci-lint forbidigo가 pgx·pgxpool의 SQL 직접 실행, `BeginFunc`, 트랜잭션 직접 `Rollback`, `pgxpool.New`를 거부합니다. migration 실행·역할 bootstrap DDL, 행 수만큼 `VALUES`를 만드는 일괄 쓰기, 관리자 목록 필터만 `nolint`로 둡니다.
 - **형식 검증 동기화:** `AlarmDispatchClaim` 모델에 `claim_due.sql`의 행 버전·due 재검사를 넣었습니다. 오래된 스냅샷으로 선점하는 작업자가 그 사이 회수되어 미래로 다시 예약된 retry 행을 가져가지 않는다는 `StaleClaimLeavesFutureRetry`를 검사하며, 재검사를 지운 복사본은 이 속성을 위반합니다. `CollectionJobLease`와 함께 동기화 커밋을 `5a3bb90c9`로 옮겼습니다.
-
-## r1.2.5 - 2026-11-25
-
-- **AP a native 창 정리:** PgBouncer 퇴역 전환이 끝나 W1·W2 창을 지웠습니다. native 도구는 W3에서 수용된 원점만 받습니다. 퇴역 전환 절차 문서와 그 링크도 지웠습니다.
-- **인프라 image를 공식 image로 전환:** PostgreSQL·Valkey·nginx 자체 image와 빌드 recipe를 지우고 고정 digest의 공식 image(`postgres:19.0-alpine`, `valkey:9.1.3-alpine3.24`, `nginx:1.31.9-alpine-slim`)를 그대로 씁니다. 공식 image에 없는 `pg_stat_kcache`·`pg_wait_sampling` 설정을 unit에서 뺐고, Valkey health check는 `valkey-runtime` 대신 `valkey-cli`를 직접 실행합니다. 세 image는 주간 최종 image 스캔에서 빠집니다. 공식 image에는 아직 수정 전 Alpine 패키지(PostgreSQL의 libxml2 CVE-2026-86144 등)와 gosu의 Go 1.24.6 표준 라이브러리 보고가 남아 있습니다. 운영 전환은 [확장 제거 절차](docs/current/runbooks/postgres-observability.md#공식-image-전환-전-확장-제거)를 먼저 따릅니다.

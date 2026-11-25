@@ -54,6 +54,7 @@ var (
 	handoffReissueSQL    = withHandoffFence("handoff_reissue.sql")
 	handoffDLQSQL        = withHandoffFence("handoff_dlq.sql")
 	handoffQuarantineSQL = withHandoffFence("handoff_quarantine.sql")
+	handoffRoomPauseSQL  = withHandoffFence("handoff_room_not_joined.sql")
 )
 
 func withHandoffFence(name string) pgxdb.Statement {

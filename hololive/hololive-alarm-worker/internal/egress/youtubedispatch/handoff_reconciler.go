@@ -24,12 +24,14 @@ type handoffClaimer interface {
 	ClaimHandoffDue(ctx context.Context, limit int, softClaim time.Duration) ([]store.HandoffClaim, error)
 }
 
+//nolint:interfacebloat // one settlement method per handoff decision action
 type handoffSettler interface {
 	CompleteHandoff(ctx context.Context, claim *store.HandoffClaim) (store.ApplyResult, error)
 	RescheduleHandoff(ctx context.Context, claim *store.HandoffClaim, step, horizon time.Duration) (store.ApplyResult, error)
 	ReissueAfterHandoff(ctx context.Context, claim *store.HandoffClaim, code, detail string) (store.ApplyResult, error)
 	ExhaustAfterHandoff(ctx context.Context, claim *store.HandoffClaim, code, detail string) (store.ApplyResult, error)
 	QuarantineAfterHandoff(ctx context.Context, claim *store.HandoffClaim, code, detail string) (store.ApplyResult, error)
+	PauseRoomAfterHandoff(ctx context.Context, claim *store.HandoffClaim, code, detail string) (store.ApplyResult, error)
 }
 
 type handoffReconcilerConfig struct {
@@ -159,6 +161,12 @@ func (l handoffLedger) Quarantine(ctx context.Context, claim *store.HandoffClaim
 	return settledHandoff(handoffcheck.ActionQuarantine, claim, result, err)
 }
 
+func (l handoffLedger) RoomNotJoined(ctx context.Context, claim *store.HandoffClaim, code, detail string) error {
+	result, err := l.PauseRoomAfterHandoff(ctx, claim, code, detail)
+
+	return settledHandoff(handoffcheck.ActionRoomNotJoined, claim, result, err)
+}
+
 func settledHandoff(action handoffcheck.Action, claim *store.HandoffClaim, result store.ApplyResult, err error) error {
 	units := len(claim.MemberIDs)
 
@@ -179,7 +187,7 @@ func settledHandoff(action handoffcheck.Action, claim *store.HandoffClaim, resul
 
 func observeHandoffLedger(action handoffcheck.Action, result store.ApplyResult, units int) {
 	switch action {
-	case handoffcheck.ActionReissue, handoffcheck.ActionExhausted:
+	case handoffcheck.ActionReissue, handoffcheck.ActionExhausted, handoffcheck.ActionRoomNotJoined:
 		observeLedgerOperation("handoff_delete_sent", result, units)
 	case handoffcheck.ActionQuarantine:
 		observeLedgerOperation("handoff_delete_sent", result, units)

@@ -10,6 +10,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 type RoomLister interface {
@@ -19,6 +20,7 @@ type RoomLister interface {
 type roomStore interface {
 	upsert(context.Context, Facts) error
 	get(context.Context, string) (Facts, bool, error)
+	resume(context.Context, string) (bool, error)
 }
 
 type Catalog struct {
@@ -46,12 +48,31 @@ func New(pool *pgxpool.Pool, lister RoomLister, logger *slog.Logger) *Catalog {
 
 func (c *Catalog) Observe(ctx context.Context, roomID, roomType, roomLinkID string) {
 	facts := normalizeFacts(roomID, roomType, roomLinkID)
-	if facts.RoomID == "" || (facts.RoomType == "" && facts.RoomLinkID == "") {
+	if facts.RoomID == "" {
+		return
+	}
+
+	c.resumeDelivery(ctx, facts.RoomID)
+
+	if facts.RoomType == "" && facts.RoomLinkID == "" {
 		return
 	}
 
 	c.remember(facts)
 	c.warn(ctx, "observe kakao room failed", c.store.upsert(ctx, facts))
+}
+
+func (c *Catalog) resumeDelivery(ctx context.Context, roomID string) {
+	resumed, err := c.store.resume(ctx, roomID)
+	if err != nil {
+		c.warn(ctx, "resume kakao room delivery failed", err)
+
+		return
+	}
+
+	if resumed && c.logger != nil {
+		c.logger.LogAttrs(ctx, slog.LevelInfo, "kakao room delivery resumed after an observed message", privacylog.RoomIDAttr(roomID))
+	}
 }
 
 func (c *Catalog) OpenChat(ctx context.Context, roomID string) bool {

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,6 +82,22 @@ func TestDecideReplyHandoff(t *testing.T) {
 			got := decideReplyHandoff(tc.claim, tc.snapshot, tc.err, horizon, maxAttempts)
 			assert.Equal(t, replyHandoffDecision{status: tc.wantState, lastError: tc.wantCode}, got)
 		})
+	}
+}
+
+func TestDecideReplyHandoffRoomNotJoinedIsDead(t *testing.T) {
+	t.Parallel()
+
+	reason := iris.ReplyFailureReasonRoomNotJoined
+	snapshot := &iris.ReplyStatusSnapshot{RequestID: testHandoffRequestID, State: "failed", Reason: &reason}
+
+	for _, claim := range []durability.ReplyHandoffClaim{
+		{IrisRequestID: testHandoffRequestID, Attempts: 1, Elapsed: time.Second},
+		{IrisRequestID: testHandoffRequestID, Attempts: 5, OperatorReplayGrants: 1, Elapsed: time.Second},
+	} {
+		got := decideReplyHandoff(claim, snapshot, nil, 105*time.Second, 5)
+		assert.Equal(t, durability.ReplyOutboxDead, got.status)
+		assert.Equal(t, contractsalarm.HandoffCodeRoomNotJoined, got.lastError)
 	}
 }
 

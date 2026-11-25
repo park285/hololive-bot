@@ -113,11 +113,20 @@ attempt; the horizon must cover that queue drain. Production uses 300000 (about 
 |---|---|
 | `handoff_completed` | close the check (`handoff_checked_at`); members stay `sent` |
 | pending state, or a query error other than 404 | next check 15s, then 60s, then every 5 min, never after admission + horizon |
+| `failed` with `reason: room_not_joined` | members `cancelled` (attempt + 1, `handoff_room_not_joined`) and the send unit's room inserted into `kakao_room_delivery_pauses`, in one statement, whatever budget remains; dedup claim keys stay held |
 | `failed`, generation < 2 and retry budget left | members `retry` (attempt + 1, `sent_at` cleared, `handoff_failed`); unit advances to the next SDK request ID (`:r1`/`:r2`) with cleared handoff columns, in one statement |
 | `failed`, otherwise | members `dlq` (attempt + 1, `handoff_failed`); dedup claim keys released after commit under a separate 5s budget, not the settlement budget |
 | `outcome_unknown`, unrecognized state, empty or mismatched response | members `quarantined` (`handoff_outcome_unknown`) |
 | 404 | members `quarantined` (`handoff_status_missing`) |
 | still pending at the horizon | members `quarantined` (`handoff_unconfirmed`) |
+
+`room_not_joined` means the Iris bridge found no active room for the current KakaoTalk account (never joined, left,
+kicked, or the account changed). A row in `kakao_room_delivery_pauses` pauses delivery to that room while its
+subscriptions stay: the alarm dispatch publisher inserts new deliveries for a paused room as `cancelled`
+(`room_paused`) and reports them accepted, and YouTube fan-out leaves the room out before materializing deliveries.
+hololive-api deletes the row when it observes any message from the room, or when an operator calls
+`DELETE /api/holo/rooms/delivery-pauses/{roomId}` (`GET /api/holo/rooms/delivery-pauses` lists them). Cancelled
+deliveries are not resent after a resume.
 
 A replaced token or request ID applies nothing. If the token and request IDs still match but a member is no longer
 `sent` (including a unit whose members were all deleted), members are left unchanged, the check is closed for good,
@@ -439,7 +448,7 @@ Dispatch publish has no response body; delivery outcome is represented by delive
 - handoff 확인: handoff를 확인하지 못한 `sent` 단위는 `alarm-dispatch-handoff-reconciler`가 [Iris handoff reconciliation](#iris-handoff-reconciliation) 규칙으로 확인합니다. sender는 handoff를 기다리지 않습니다.
 - stale `sending` 격리: `quarantine_threshold_ms`는 `lease_ms` 이상이어야 합니다. 프로필 검증이 더 작은 값을 기동 시 거부하고, dispatch consumer도 생략·0·음수를 포함해 lease보다 작은 기준을 lease에서 계산한 값으로 바꾸지 않고 생성 오류로 거부합니다.
 - Retry: a failed delivery returns to `retry` with `next_attempt_at` set from the transition's single database clock plus `retry_after_ms` (members of one send unit share it); the claimed envelope carries retry metadata (`attempt`, `last_error`, optional `last_error_code`) from the delivery row.
-- `last_error_code` is one of `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, the recovery codes `lease_expired`, `stale_sending`, and `lease_released`, or the handoff reconciliation codes `handoff_failed`, `handoff_outcome_unknown`, `handoff_status_missing`, and `handoff_unconfirmed`. The handoff codes are `HandoffCode*` in `hololive/hololive-shared/pkg/contracts/alarm`, shared by the alarm dispatch and YouTube ledgers and the hololive-api bot reply outbox (`last_error`); each ledger keeps its own decision table and budget. Existing consumers may ignore this optional field.
+- `last_error_code` is one of `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, the recovery codes `lease_expired`, `stale_sending`, and `lease_released`, the handoff reconciliation codes `handoff_failed`, `handoff_room_not_joined`, `handoff_outcome_unknown`, `handoff_status_missing`, and `handoff_unconfirmed`, or `room_paused` for a delivery inserted `cancelled` because its room was paused. The handoff codes are `HandoffCode*` in `hololive/hololive-shared/pkg/contracts/alarm`, shared by the alarm dispatch and YouTube ledgers and the hololive-api bot reply outbox (`last_error`); each ledger keeps its own decision table and budget. Existing consumers may ignore this optional field.
 - DLQ and quarantine are delivery states (`dlq`, `quarantined`) in `alarm_dispatch_deliveries`; the event payload stays in `alarm_dispatch_events`. Replay uses the audited requeue in [admin dispatch operations](../runbooks/admin-dispatch-operations.md).
 
 ## Compatibility policy

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/stretchr/testify/require"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"

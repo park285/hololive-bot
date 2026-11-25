@@ -72,14 +72,14 @@ func publishReceiptOutcome(receipt PublishReceipt, collision bool, inserted map[
 	switch {
 	case collision:
 		return PublishRejectedCollision
-	case receipt.Status == StatusSent:
-		return PublishDuplicateSent
-	case receipt.Status == StatusDLQ || receipt.Status == StatusQuarantined || receipt.Status == StatusCancelled:
-		return PublishRejectedTerminal
 	case inserted[receipt.DedupeKey]:
 		delete(inserted, receipt.DedupeKey)
 
 		return PublishInserted
+	case receipt.Status == StatusSent:
+		return PublishDuplicateSent
+	case receipt.Status == StatusDLQ || receipt.Status == StatusQuarantined || receipt.Status == StatusCancelled:
+		return PublishRejectedTerminal
 	default:
 		return PublishDuplicateActive
 	}

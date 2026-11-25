@@ -132,35 +132,35 @@ func truncateHash(h string) string {
 	return h[:8] + "..."
 }
 
-func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInsert) ([]string, error) {
+func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInsert) ([]string, int, error) {
 	if len(deliveries) == 0 {
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	rows, err := buildDeliveryBatchRows(deliveries)
 	if err != nil {
-		return nil, fmt.Errorf("build delivery batch rows: %w", err)
+		return nil, 0, fmt.Errorf("build delivery batch rows: %w", err)
 	}
 
 	raw, err := jsonv2.Marshal(rows)
 	if err != nil {
-		return nil, fmt.Errorf("insert dispatch deliveries: marshal batch: %w", err)
+		return nil, 0, fmt.Errorf("insert dispatch deliveries: marshal batch: %w", err)
 	}
 
 	if unitErr := ensureSendUnits(ctx, tx, raw); unitErr != nil {
-		return nil, fmt.Errorf("ensure send units: %w", unitErr)
+		return nil, 0, fmt.Errorf("ensure send units: %w", unitErr)
 	}
 
-	selected, inserted, err := insertDeliveryBatch(ctx, tx, raw)
+	selected, inserted, paused, err := insertDeliveryBatch(ctx, tx, raw)
 	if err != nil {
-		return nil, fmt.Errorf("insert delivery batch: %w", err)
+		return nil, 0, fmt.Errorf("insert delivery batch: %w", err)
 	}
 
 	if selected != len(deliveries) {
-		return nil, fmt.Errorf("insert dispatch deliveries: selected %d of %d rows", selected, len(deliveries))
+		return nil, 0, fmt.Errorf("insert dispatch deliveries: selected %d of %d rows", selected, len(deliveries))
 	}
 
-	return inserted, nil
+	return inserted, paused, nil
 }
 
 func ensureSendUnits(ctx context.Context, tx pgx.Tx, raw []byte) error {
@@ -194,13 +194,13 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 	return rows, nil
 }
 
-func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected int, inserted []string, err error) {
-	err = pgxdb.QueryRow(ctx, tx, insertDeliveryBatchSQL, jsonbRecordsetParam(raw)).Scan(&selected, &inserted)
+func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected int, inserted []string, paused int, err error) {
+	err = pgxdb.QueryRow(ctx, tx, insertDeliveryBatchSQL, jsonbRecordsetParam(raw)).Scan(&selected, &inserted, &paused)
 	if err != nil {
-		return 0, nil, fmt.Errorf("insert dispatch deliveries: %w", err)
+		return 0, nil, 0, fmt.Errorf("insert dispatch deliveries: %w", err)
 	}
 
-	return selected, inserted, nil
+	return selected, inserted, paused, nil
 }
 
 func prepareInsertBatchRows(envelopes []AlarmQueueEnvelope, result *PublishBatchResult) ([]eventInsert, []deliveryInsert, []eventCollision, error) {
@@ -290,12 +290,13 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 		return PublishBatchResult{RequestedDeliveries: len(envelopes)}, fmt.Errorf("prepare batch deliveries for insert: %w", err)
 	}
 
-	insertedDeliveries, err := insertDeliveries(ctx, tx, deliveries)
+	insertedDeliveries, pausedDeliveries, err := insertDeliveries(ctx, tx, deliveries)
 	if err != nil {
 		return PublishBatchResult{RequestedDeliveries: len(envelopes)}, fmt.Errorf("insert deliveries: %w", err)
 	}
 
 	result.InsertedDeliveries = len(insertedDeliveries)
+	result.PausedRoomDeliveries = pausedDeliveries
 
 	receipts, receiptErr := loadPublishReceipts(ctx, tx, envelopes, insertedDeliveries)
 	if receiptErr != nil {
@@ -317,6 +318,7 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 
 	result.Receipts = receipts
 	countPublishReceiptDuplicates(result)
+	observePGPausedRoom(result.PausedRoomDeliveries)
 
 	return processedPublishBatchResult(result), nil
 }

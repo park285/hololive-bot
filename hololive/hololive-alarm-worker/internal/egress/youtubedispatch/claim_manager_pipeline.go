@@ -55,6 +55,7 @@ type outboxEnqueueStats struct {
 	subscriberLookupFailures int
 	enqueueFailures          int
 	totalTargetRooms         int
+	pausedRooms              int
 }
 
 func (s *outboxEnqueueStats) add(next outboxEnqueueStats) {
@@ -63,6 +64,7 @@ func (s *outboxEnqueueStats) add(next outboxEnqueueStats) {
 	s.subscriberLookupFailures += next.subscriberLookupFailures
 	s.enqueueFailures += next.enqueueFailures
 	s.totalTargetRooms += next.totalTargetRooms
+	s.pausedRooms += next.pausedRooms
 }
 
 func deliveryRoomIDs(rooms map[string]bool) []string {
@@ -75,14 +77,15 @@ func deliveryRoomIDs(rooms map[string]bool) []string {
 }
 
 func (d *ClaimManager) recordOutboxEnqueueStats(claimed int, stats outboxEnqueueStats) {
-	if claimed > 0 || stats.enqueuedOutboxes > 0 || stats.noSubscriberOutboxes > 0 || stats.subscriberLookupFailures > 0 || stats.enqueueFailures > 0 || stats.totalTargetRooms > 0 {
+	if claimed > 0 || stats.enqueuedOutboxes > 0 || stats.noSubscriberOutboxes > 0 || stats.subscriberLookupFailures > 0 || stats.enqueueFailures > 0 || stats.totalTargetRooms > 0 || stats.pausedRooms > 0 {
 		d.logger.Info("Outbox per-room enqueue completed",
 			slog.Int("outbox_claimed", claimed),
 			slog.Int("outbox_enqueued", stats.enqueuedOutboxes),
 			slog.Int("outbox_no_subscribers", stats.noSubscriberOutboxes),
 			slog.Int("subscriber_lookup_failures", stats.subscriberLookupFailures),
 			slog.Int("enqueue_failures", stats.enqueueFailures),
-			slog.Int("target_rooms", stats.totalTargetRooms))
+			slog.Int("target_rooms", stats.totalTargetRooms),
+			slog.Int("paused_rooms_skipped", stats.pausedRooms))
 	}
 
 	observeOutboxEnqueueOutboxes("claimed", claimed)
@@ -91,6 +94,7 @@ func (d *ClaimManager) recordOutboxEnqueueStats(claimed int, stats outboxEnqueue
 	observeOutboxEnqueueOutboxes("subscriber_lookup_failures", stats.subscriberLookupFailures)
 	observeOutboxEnqueueOutboxes("enqueue_failures", stats.enqueueFailures)
 	observeOutboxEnqueueTargetRooms(stats.totalTargetRooms)
+	observeOutboxEnqueuePausedRooms(stats.pausedRooms)
 }
 
 func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {

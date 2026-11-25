@@ -39,7 +39,7 @@
 * 실시간 알림 발송: `alarm-worker -> PostgreSQL dispatch outbox (Valkey wakeup) -> alarm-worker egress -> Iris Core -> 카카오톡`
 * 유튜브 신작 감지: `collector -> source_observations -> hololive-api YouTube plane -> alarm-worker`
 
-Iris 연결은 `iris-client-go/v5`(판본은 각 module `go.mod`)를 사용하며 기동 epoch 인증을 지원하는 Iris가 필수입니다.
+Iris 연결은 `iris-client-go/v6`(판본은 각 module `go.mod`)를 사용하며 기동 epoch 인증을 지원하는 Iris가 필수입니다.
 SDK는 보호 호출 전 같은 H3/TLS 대상의 공개 `GET /auth/epoch`를 조회·검증·캐시하고
 bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 대체하지 않습니다.
 `401`과 검증된 `AUTH_EPOCH_MISMATCH`가 함께 온 경우만 원래 deadline·본문·`ClientRequestID`를 유지해

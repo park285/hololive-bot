@@ -32,6 +32,7 @@ var alarmWorkerTableACL = map[string]string{
 	"public.event_grade_observations":                "r",
 	"public.event_grade_regions":                     "r",
 	"public.event_grade_requests":                    insertReadWriteACL,
+	"public.kakao_room_delivery_pauses":              "ar",
 	"public.kakao_rooms":                             insertReadWriteACL,
 	"public.members":                                 "r",
 	"public.message_strings":                         "r",
