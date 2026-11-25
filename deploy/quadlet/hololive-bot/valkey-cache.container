@@ -41,7 +41,7 @@ StopTimeout=60
 Exec=valkey-server /run/valkey/${VALKEY_STAGE}.conf
 
 [Service]
-Environment=VALKEY_IMAGE=localhost/iris-stack-valkey:9.1.3-zlib1.4-r1
+Environment=VALKEY_IMAGE=localhost/iris-stack-valkey:9.1.3-zlib1.4-r2
 EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
 EnvironmentFile=/var/lib/iris-valkey-standalone/hololive.env
 ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart valkey-cache
