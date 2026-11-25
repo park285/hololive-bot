@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
@@ -31,7 +32,7 @@ func (r *Repository) LatestCheckpointCursor(
 
 	var cursor []byte
 
-	err := r.pool.QueryRow(ctx, latestCheckpointCursorSQL, string(provider), string(kind), subjectKey).Scan(&cursor)
+	err := pgxdb.QueryRow(ctx, r.pool, latestCheckpointCursorSQL, string(provider), string(kind), subjectKey).Scan(&cursor)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

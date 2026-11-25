@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -158,7 +159,7 @@ func loadTimeFinalizationState(ctx context.Context, tx dbx.Tx, videoID string) (
 		enqueuedAt          *time.Time
 	)
 
-	if err := tx.QueryRow(ctx, repositoryLiveTimeFinalizationStateSQL, videoID).Scan(
+	if err := pgxdb.QueryRow(ctx, tx, repositoryLiveTimeFinalizationStateSQL, videoID).Scan(
 		&state.TimesSource, &queue, &outcome, &attempts, &deferrals, &retryBase, &next, &observationID, &enqueuedAt,
 	); err != nil {
 		return timeFinalizationState{}, fmt.Errorf("load live time finalization: %w", err)
@@ -341,7 +342,7 @@ func persistTimeFinalization(ctx context.Context, tx dbx.Tx, write *timeFinaliza
 		sessionUpdated bool
 	)
 
-	err := tx.QueryRow(ctx, repositoryLiveTimeFinalizationWriteSQL,
+	err := pgxdb.QueryRow(ctx, tx, repositoryLiveTimeFinalizationWriteSQL,
 		write.VideoID, write.Queue, write.Outcome, nullableText(write.Reason), write.Attempts, write.Deferrals,
 		write.RetryBaseAt, write.NextAttemptAt, write.LastAttemptAt, write.ObservationID,
 		write.ObservedStartedAt, write.ObservedEndedAt, write.StartedAt, write.EndedAt,

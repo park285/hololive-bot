@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -208,7 +209,7 @@ func TestPostponementUsesCurrentScheduleForRegistrationCollectionAndDecision(t *
 	c.EventEndsAt = c.RevealsAt.Add(time.Hour)
 	require.NoError(t, r.StoreCatalog(ctx, "jp", now.Add(-2*time.Second), []Chapter{c}))
 
-	decision, err := r.pool.Exec(ctx, decideSQL, []string{"jp"})
+	decision, err := pgxdb.Exec(ctx, r.pool, decideSQL, []string{"jp"})
 	require.NoError(t, err)
 	require.Zero(t, decision.RowsAffected())
 	require.Equal(t, map[string]time.Time{c.ChapterID: c.EventEndsAt}, collectionTargets(t, r))
@@ -223,12 +224,12 @@ func TestPostponementUsesCurrentScheduleForRegistrationCollectionAndDecision(t *
 	require.NoError(t, r.StoreCatalog(ctx, "jp", now, []Chapter{c}))
 	require.Equal(t, map[string]time.Time{c.ChapterID: c.RevealsAt}, collectionTargets(t, r))
 
-	decision, err = r.pool.Exec(ctx, decideSQL, []string{"jp"})
+	decision, err = pgxdb.Exec(ctx, r.pool, decideSQL, []string{"jp"})
 	require.NoError(t, err)
 	require.Zero(t, decision.RowsAffected())
 	require.NoError(t, r.StoreBorder(ctx, borderAt(c, "jp", now, true)))
 
-	decision, err = r.pool.Exec(ctx, decideSQL, []string{"jp"})
+	decision, err = pgxdb.Exec(ctx, r.pool, decideSQL, []string{"jp"})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), decision.RowsAffected())
 }
@@ -321,11 +322,11 @@ func TestExpiryPreservesTimelyFinalSnapshot(t *testing.T) {
 	_, err := r.pool.Exec(ctx, seedRequestSQL, "1", "2", 90, "jp", c.EventID, c.ChapterID)
 	require.NoError(t, err)
 
-	expired, err := r.pool.Exec(ctx, expireSQL, "jp")
+	expired, err := pgxdb.Exec(ctx, r.pool, expireSQL, "jp")
 	require.NoError(t, err)
 	require.Zero(t, expired.RowsAffected())
 
-	decided, err := r.pool.Exec(ctx, decideSQL, []string{"jp"})
+	decided, err := pgxdb.Exec(ctx, r.pool, decideSQL, []string{"jp"})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), decided.RowsAffected())
 }

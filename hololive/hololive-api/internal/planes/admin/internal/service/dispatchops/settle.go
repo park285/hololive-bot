@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
@@ -49,7 +50,7 @@ func (r *Repository) Settle(ctx context.Context, id string, request SettleReques
 		return result, err
 	}
 
-	rows, err := tx.Query(ctx, settleSQL, mutation.ids, request.OperatorID, request.Reason, request.Action,
+	rows, err := pgxdb.Query(ctx, tx, settleSQL, mutation.ids, request.OperatorID, request.Reason, request.Action,
 		mutation.status, mutation.cancel, mutation.quarantineIDs)
 	if err != nil {
 		return result, fmt.Errorf("update dispatch settlement group: %w", conflictError(err))

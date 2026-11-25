@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -37,7 +38,7 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 		dbNow   time.Time
 	)
 
-	err := tx.QueryRow(ctx, finalizeNextDueLiveEndTxSQL).Scan(&videoID, &dbNow)
+	err := pgxdb.QueryRow(ctx, tx, finalizeNextDueLiveEndTxSQL).Scan(&videoID, &dbNow)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil

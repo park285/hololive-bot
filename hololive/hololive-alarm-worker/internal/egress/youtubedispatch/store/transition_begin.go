@@ -7,6 +7,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -71,7 +73,7 @@ func (s *TransitionStore) beginSendingOnce(
 		touched     []int64
 	)
 
-	err := s.executeTx(ctx, "begin sending", func(tx dbx.Querier) error {
+	err := s.executeTx(ctx, "begin sending", func(tx pgxdb.Querier) error {
 		var txErr error
 
 		started, transitions, touched, txErr = s.beginSendingTx(ctx, tx, rows, outboxByID)
@@ -90,7 +92,7 @@ func (s *TransitionStore) beginSendingOnce(
 
 func (s *TransitionStore) beginSendingTx(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 ) (StartedOperation, []rowTransition, []int64, error) {
@@ -294,7 +296,7 @@ func (s *TransitionStore) classifyRowEnvelope(
 
 func deliverysqlSelectTransitionRows(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	ids []int64,
 	dest *[]transitionRow,
 ) error {

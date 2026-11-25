@@ -72,7 +72,7 @@ func TestShortsClaimWorkIsBoundedByActiveQueueNotRetainedHistory(t *testing.T) {
 
 			var raw []byte
 
-			err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+claimObservationsSQL,
+			err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+claimObservationsSQL.SQL(),
 				[]string{"shorts_list"}, 1, "test-plan", strings.Repeat("a", 64), int64(60000), MaxAttempts).Scan(&raw)
 			require.NoError(t, err)
 

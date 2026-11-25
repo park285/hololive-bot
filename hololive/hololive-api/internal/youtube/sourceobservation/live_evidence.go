@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -20,7 +21,7 @@ func loadLivePendingEnds(ctx context.Context, tx dbx.Tx, state *live.State, vide
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, repositoryLivePendingEndsSQL, videoIDs)
+	rows, err := pgxdb.Query(ctx, tx, repositoryLivePendingEndsSQL, videoIDs)
 	if err != nil {
 		return fmt.Errorf("query pending ends: %w", err)
 	}
@@ -164,9 +165,9 @@ func loadLiveAbsenceSlots(ctx context.Context, tx dbx.Tx, state *live.State, cha
 	)
 
 	if len(channelIDs) == 0 {
-		rows, err = tx.Query(ctx, repositoryLiveAbsenceCurrentSlotSQL, scheduledFor, currentChannels)
+		rows, err = pgxdb.Query(ctx, tx, repositoryLiveAbsenceCurrentSlotSQL, scheduledFor, currentChannels)
 	} else {
-		rows, err = tx.Query(ctx, repositoryLiveAbsenceSlotsSQL, channelIDs, after, scheduledFor, currentChannels)
+		rows, err = pgxdb.Query(ctx, tx, repositoryLiveAbsenceSlotsSQL, channelIDs, after, scheduledFor, currentChannels)
 	}
 
 	if err != nil {
@@ -215,7 +216,7 @@ func persistLiveEvidence(ctx context.Context, tx dbx.Tx, decision *live.Decision
 		return fmt.Errorf("persist pending ends: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, repositoryLivePendingEndsDeleteSQL, sessionIDs, pendingIDs); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, repositoryLivePendingEndsDeleteSQL, sessionIDs, pendingIDs); err != nil {
 		return fmt.Errorf("delete settled pending ends: %w", err)
 	}
 
@@ -230,7 +231,7 @@ func persistLiveEvidence(ctx context.Context, tx dbx.Tx, decision *live.Decision
 		return fmt.Errorf("encode absence coverage: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, repositoryLiveAbsenceSlotInsertSQL,
+	if _, err := pgxdb.Exec(ctx, tx, repositoryLiveAbsenceSlotInsertSQL,
 		slot.ObservationID, slot.ScheduledFor, slot.EvidenceSHA256, slot.EffectiveAt,
 		slot.ReceivedAt, slot.ScopeSHA256, string(coverage)); err != nil {
 		return fmt.Errorf("persist absence slot: %w", err)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
@@ -123,7 +124,7 @@ func execLiveHead(t *testing.T, pool *pgxpool.Pool, state *live.SessionState) in
 
 	statement := liveHeadStatement(state)
 
-	tag, err := pool.Exec(t.Context(), statement.SQL, statement.Args...)
+	tag, err := pgxdb.Exec(t.Context(), pool, statement.SQL, statement.Args...)
 	require.NoError(t, err)
 
 	return tag.RowsAffected()

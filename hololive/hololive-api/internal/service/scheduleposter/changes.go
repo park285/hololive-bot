@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -34,7 +35,7 @@ func (s *Store) InsertPosts(ctx context.Context, posterID int64, posts []Post) (
 
 	var stored int64
 
-	if err := s.pool.QueryRow(ctx, insertPostsSQL, posterID, ids, postedAt, bodies).Scan(&stored); err != nil {
+	if err := pgxdb.QueryRow(ctx, s.pool, insertPostsSQL, posterID, ids, postedAt, bodies).Scan(&stored); err != nil {
 		return 0, fmt.Errorf("insert schedule poster posts: %w", err)
 	}
 
@@ -65,7 +66,7 @@ func validatePosts(posts []Post) error {
 }
 
 func (s *Store) PendingPosts(ctx context.Context, schedule PublishedSchedule, limit int) ([]Post, error) {
-	rows, err := s.pool.Query(ctx, pendingPostsSQL, schedule.PosterID, schedule.ExtractedAt, min(max(limit, 1), maxListLimit))
+	rows, err := pgxdb.Query(ctx, s.pool, pendingPostsSQL, schedule.PosterID, schedule.ExtractedAt, min(max(limit, 1), maxListLimit))
 	if err != nil {
 		return nil, fmt.Errorf("list pending schedule poster posts: %w", err)
 	}
@@ -109,7 +110,7 @@ func (s *Store) RecordDecision(ctx context.Context, channelID string, postID int
 		info, kind = new(decision.ScheduleInfo), new(decision.Kind)
 	}
 
-	tag, err := s.pool.Exec(ctx, recordDecisionSQL, postID, channelID, decision.Status, decision.Reason, info, kind)
+	tag, err := pgxdb.Exec(ctx, s.pool, recordDecisionSQL, postID, channelID, decision.Status, decision.Reason, info, kind)
 	if err != nil {
 		return false, fmt.Errorf("record schedule poster decision: %w", err)
 	}
@@ -135,7 +136,7 @@ func (s *Store) RecordMatch(ctx context.Context, schedule PublishedSchedule, pos
 	recorded := false
 
 	err = dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		tag, markErr := tx.Exec(ctx, recordMatchSQL, post.ID, schedule.PosterID, schedule.ExtractedAt, result.Status, result.Reason,
+		tag, markErr := pgxdb.Exec(ctx, tx, recordMatchSQL, post.ID, schedule.PosterID, schedule.ExtractedAt, result.Status, result.Reason,
 			post.Status, readPosterID, readRowsAt)
 		if markErr != nil {
 			return fmt.Errorf("mark post matched: %w", markErr)
@@ -145,18 +146,18 @@ func (s *Store) RecordMatch(ctx context.Context, schedule PublishedSchedule, pos
 			return nil
 		}
 
-		if _, deleteErr := tx.Exec(ctx, deleteChangesSQL, post.ID, schedule.PosterID); deleteErr != nil {
+		if _, deleteErr := pgxdb.Exec(ctx, tx, deleteChangesSQL, post.ID, schedule.PosterID); deleteErr != nil {
 			return fmt.Errorf("delete changes: %w", deleteErr)
 		}
 
 		if payload != "" {
-			if _, insertErr := tx.Exec(ctx, insertChangesSQL, post.ID, schedule.PosterID, payload); insertErr != nil {
+			if _, insertErr := pgxdb.Exec(ctx, tx, insertChangesSQL, post.ID, schedule.PosterID, payload); insertErr != nil {
 				return fmt.Errorf("insert changes: %w", insertErr)
 			}
 		}
 
 		if slices.ContainsFunc(result.Changes, func(change Change) bool { return change.Kind.Applied() }) {
-			if _, requeueErr := tx.Exec(ctx, requeueLaterPostsSQL, post.ID, schedule.PosterID, schedule.ExtractedAt); requeueErr != nil {
+			if _, requeueErr := pgxdb.Exec(ctx, tx, requeueLaterPostsSQL, post.ID, schedule.PosterID, schedule.ExtractedAt); requeueErr != nil {
 				return fmt.Errorf("requeue later posts: %w", requeueErr)
 			}
 		}
@@ -238,7 +239,7 @@ func encodeChanges(postID int64, result MatchResult) (string, error) {
 }
 
 func (s *Store) PurgePosts(ctx context.Context, before time.Time, limit int) (int64, error) {
-	tag, err := s.pool.Exec(ctx, purgePostsSQL, before, limit)
+	tag, err := pgxdb.Exec(ctx, s.pool, purgePostsSQL, before, limit)
 	if err != nil {
 		return 0, fmt.Errorf("purge schedule poster posts: %w", err)
 	}
@@ -252,7 +253,7 @@ func (s *Store) RevokePost(ctx context.Context, posterID, postID int64) error {
 			return err
 		}
 
-		if _, err := tx.Exec(ctx, deleteChangesSQL, postID, posterID); err != nil {
+		if _, err := pgxdb.Exec(ctx, tx, deleteChangesSQL, postID, posterID); err != nil {
 			return fmt.Errorf("delete changes: %w", err)
 		}
 
@@ -276,14 +277,14 @@ func (s *Store) RestorePost(ctx context.Context, posterID, postID int64) error {
 	return nil
 }
 
-func setPostState(ctx context.Context, tx pgx.Tx, query string, posterID, postID int64) error {
+func setPostState(ctx context.Context, tx pgx.Tx, query pgxdb.Statement, posterID, postID int64) error {
 	var (
 		review  *ReviewStatus
 		status  *string
 		changed bool
 	)
 
-	if err := tx.QueryRow(ctx, query, posterID, postID).Scan(&review, &status, &changed); err != nil {
+	if err := pgxdb.QueryRow(ctx, tx, query, posterID, postID).Scan(&review, &status, &changed); err != nil {
 		return fmt.Errorf("set post state: %w", err)
 	}
 
@@ -322,7 +323,7 @@ func (s *Store) PosterPosts(ctx context.Context, posterID int64) ([]PosterPost, 
 	var posts []PosterPost
 
 	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, getSQL, posterID)
+		rows, err := pgxdb.Query(ctx, tx, getSQL, posterID)
 		if err != nil {
 			return fmt.Errorf("load poster: %w", err)
 		}
@@ -347,7 +348,7 @@ func (s *Store) PosterPosts(ctx context.Context, posterID int64) ([]PosterPost, 
 }
 
 func loadPosterPosts(ctx context.Context, tx pgx.Tx, posterID int64) ([]PosterPost, error) {
-	rows, err := tx.Query(ctx, posterPostsSQL, posterID, maxActionablePosterPosts, maxOtherPosterPosts)
+	rows, err := pgxdb.Query(ctx, tx, posterPostsSQL, posterID, maxActionablePosterPosts, maxOtherPosterPosts)
 	if err != nil {
 		return nil, fmt.Errorf("load posts: %w", err)
 	}
@@ -380,7 +381,7 @@ func loadPosterPostChanges(ctx context.Context, tx pgx.Tx, posterID int64, posts
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, posterPostChangesSQL, posterID, ids)
+	rows, err := pgxdb.Query(ctx, tx, posterPostChangesSQL, posterID, ids)
 	if err != nil {
 		return fmt.Errorf("load post changes: %w", err)
 	}
@@ -413,7 +414,7 @@ func loadPosterPostChanges(ctx context.Context, tx pgx.Tx, posterID int64, posts
 }
 
 func publishedChanges(ctx context.Context, tx pgx.Tx, schedule *PublishedSchedule) ([]Change, error) {
-	rows, err := tx.Query(ctx, publishedChangesSQL, schedule.PosterID, schedule.ExtractedAt)
+	rows, err := pgxdb.Query(ctx, tx, publishedChangesSQL, schedule.PosterID, schedule.ExtractedAt)
 	if err != nil {
 		return nil, fmt.Errorf("load changes: %w", err)
 	}

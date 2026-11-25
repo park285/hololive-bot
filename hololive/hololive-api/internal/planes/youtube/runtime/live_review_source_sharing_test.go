@@ -189,7 +189,7 @@ func assertLiveReviewQuerySemanticEquivalence(t *testing.T, tx pgx.Tx, channels 
 		unresolved_unreviewed,legacy_not_due,metadata_never_checked,metadata_check_age,oldest_review_age`
 
 	assertLiveReviewRowsEqual(t, tx, `WITH `+liveReviewSourceOracleSQL+`,
-		actual AS (`+strings.TrimSuffix(strings.TrimSpace(collectionTargetObservabilitySQL), ";")+`),
+		actual AS (`+strings.TrimSuffix(strings.TrimSpace(collectionTargetObservabilitySQL.SQL()), ";")+`),
 		expected AS (
 		    SELECT count(*) FILTER (WHERE head_status='LIVE') AS live,
 		           count(*) FILTER (WHERE head_status='UPCOMING') AS upcoming,
@@ -230,7 +230,7 @@ func assertLiveReviewQuerySemanticEquivalence(t *testing.T, tx pgx.Tx, channels 
 		availability_at,availability_seen_at,unresolvable_since`
 
 	assertLiveReviewRowsEqual(t, tx, `WITH `+liveReviewSourceOracleSQL+`,
-		actual AS (`+strings.TrimSuffix(strings.TrimSpace(liveCheckVideosSQL), ";")+`),
+		actual AS (`+strings.TrimSuffix(strings.TrimSpace(liveCheckVideosSQL.SQL()), ";")+`),
 		expected AS (
 		    SELECT video_id,channel_id,status='UPCOMING' AS is_upcoming,statement_timestamp() AS as_of,
 		           CASE WHEN status='LIVE' THEN last_live_positive_at ELSE last_upcoming_positive_at END AS positive_at,

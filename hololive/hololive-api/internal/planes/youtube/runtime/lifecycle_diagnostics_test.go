@@ -69,7 +69,7 @@ func observeLifecycleMetrics(t *testing.T, pool *pgxpool.Pool) *collectionTarget
 
 	ctx := t.Context()
 
-	rows, queryErr := pool.Query(ctx, collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
+	rows, queryErr := pgxdb.Query(ctx, pool, collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
 	if queryErr != nil {
 		t.Fatal(queryErr)
 	}

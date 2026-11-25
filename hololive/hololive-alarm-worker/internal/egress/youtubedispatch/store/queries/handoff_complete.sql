@@ -1,4 +1,5 @@
-/* fragment:handoff_request_fence */, updated AS (
+/* fragment:handoff_request_fence */
+, updated AS (
     UPDATE youtube_notification_send_request r
     SET handoff_next_check_at = NULL,
         handoff_checked_at = clock.now

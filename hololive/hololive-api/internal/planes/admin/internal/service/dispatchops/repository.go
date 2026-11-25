@@ -32,7 +32,7 @@ func (r *Repository) Summary(ctx context.Context) (Summary, error) {
 		return result, availabilityErr
 	}
 
-	rows, err := r.pool.Query(ctx, summarySQL)
+	rows, err := pgxdb.Query(ctx, r.pool, summarySQL)
 	if err != nil {
 		return result, fmt.Errorf("query dispatch summary: %w", err)
 	}
@@ -67,7 +67,7 @@ func (r *Repository) Failures(ctx context.Context) (FailureBreakdown, error) {
 		return result, err
 	}
 
-	rows, err := r.pool.Query(ctx, failuresSQL, FailureBreakdownLimit)
+	rows, err := pgxdb.Query(ctx, r.pool, failuresSQL, FailureBreakdownLimit)
 	if err != nil {
 		return result, fmt.Errorf("query dispatch failures: %w", err)
 	}
@@ -117,7 +117,7 @@ func (r *Repository) List(ctx context.Context, filter Filter) (Page, error) {
 		return result, availabilityErr
 	}
 
-	rows, err := r.pool.Query(ctx, query, args...)
+	rows, err := r.pool.Query(ctx, query, args...) //nolint:forbidigo // 필터에 따라 조건절과 자리표시자를 조립하는 관리자 목록 조회다.
 	if err != nil {
 		return result, fmt.Errorf("query dispatch deliveries: %w", err)
 	}
@@ -155,7 +155,7 @@ func (r *Repository) Detail(ctx context.Context, id string) (Detail, error) {
 	}
 	defer rollback(ctx, tx)
 
-	item, err := scanDelivery(tx.QueryRow(ctx, detailSQL, numericID))
+	item, err := scanDelivery(pgxdb.QueryRow(ctx, tx, detailSQL, numericID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, ErrNotFound
 	}
@@ -210,7 +210,7 @@ func (r *Repository) Actions(ctx context.Context, id, beforeID string) (ActionPa
 		return result, availabilityErr
 	}
 
-	rows, err := r.pool.Query(ctx, actionsSQL, numericID, before, PageSize+1)
+	rows, err := pgxdb.Query(ctx, r.pool, actionsSQL, numericID, before, PageSize+1)
 	if err != nil {
 		return result, fmt.Errorf("query dispatch actions: %w", err)
 	}
@@ -289,7 +289,7 @@ func loadGroup(ctx context.Context, tx pgx.Tx, id int64, lock bool) ([]Delivery,
 		query = groupLockedSQL
 	}
 
-	rows, err := tx.Query(ctx, query, id, MaxReplaySize+1)
+	rows, err := pgxdb.Query(ctx, tx, query, id, MaxReplaySize+1)
 	if err != nil {
 		return nil, fmt.Errorf("query dispatch replay group: %w", err)
 	}

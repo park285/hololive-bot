@@ -18,6 +18,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 var cookiePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{16,512}$`)
@@ -181,7 +182,7 @@ func (s *Store) Status(ctx context.Context) (Status, error) {
 		return status, nil
 	}
 
-	err := s.pool.QueryRow(ctx, statusSQL).Scan(&status.Revision, &status.State,
+	err := pgxdb.QueryRow(ctx, s.pool, statusSQL).Scan(&status.Revision, &status.State,
 		&status.CandidateState, &status.LastError, &status.CandidateError, &status.LastCheckedAt, &status.LastSuccessAt, &status.NextCheckAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return status, nil
@@ -209,7 +210,7 @@ func (s *Store) Submit(ctx context.Context, c Cookies, expected string) (bool, e
 		return false, err
 	}
 
-	result, err := s.pool.Exec(ctx, submitSQL, sealed, revision)
+	result, err := pgxdb.Exec(ctx, s.pool, submitSQL, sealed, revision)
 	if err != nil {
 		return false, fmt.Errorf("submit X session candidate: %w", err)
 	}
@@ -223,7 +224,7 @@ func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 		active, candidate []byte
 	)
 
-	err := s.pool.QueryRow(ctx, snapshotSQL).Scan(&snapshot.Revision, &snapshot.ActiveRevision, &active, &candidate, &snapshot.NextCheckAt, &snapshot.State, &snapshot.LastError)
+	err := pgxdb.QueryRow(ctx, s.pool, snapshotSQL).Scan(&snapshot.Revision, &snapshot.ActiveRevision, &active, &candidate, &snapshot.NextCheckAt, &snapshot.State, &snapshot.LastError)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return snapshot, nil
@@ -261,7 +262,7 @@ func (s *Store) ResolveCandidate(ctx context.Context, revision int64, rejection 
 		query = rejectSQL
 	}
 
-	result, err := s.pool.Exec(ctx, query, revision, rejection)
+	result, err := pgxdb.Exec(ctx, s.pool, query, revision, rejection)
 	if err != nil {
 		return false, fmt.Errorf("resolve X session candidate: %w", err)
 	}
@@ -288,7 +289,7 @@ func (s *Store) Observe(ctx context.Context, activeRevision int64, code string, 
 		return false, errors.New("invalid X observation error code")
 	}
 
-	result, err := s.pool.Exec(ctx, observeSQL, activeRevision, state, code, next, code == "")
+	result, err := pgxdb.Exec(ctx, s.pool, observeSQL, activeRevision, state, code, next, code == "")
 	if err != nil {
 		return false, fmt.Errorf("record X session observation: %w", err)
 	}
@@ -310,7 +311,7 @@ func (s *Store) CandidateFailure(ctx context.Context, revision int64, code strin
 		return errors.New("invalid candidate failure code")
 	}
 
-	_, err := s.pool.Exec(ctx, candidateFailureSQL, revision, code, next)
+	_, err := pgxdb.Exec(ctx, s.pool, candidateFailureSQL, revision, code, next)
 	if err != nil {
 		return fmt.Errorf("record X candidate failure: %w", err)
 	}

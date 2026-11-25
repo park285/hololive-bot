@@ -23,7 +23,7 @@ var replyOutboxManualReplayArtifactSQL = strings.NewReplacer(
 	":'outbox_id'", "$1",
 	":'operator_actor'", "$2",
 	":'operator_reason'", "$3",
-).Replace(mustSQL("reply_outbox_replay_manual_review.sql"))
+).Replace(mustSQL("reply_outbox_replay_manual_review.sql").SQL())
 
 func replayManualReviewArtifact(ctx context.Context, repo *ReplyOutboxRepository, id int64, actor, reason string) (string, error) {
 	var outcome string

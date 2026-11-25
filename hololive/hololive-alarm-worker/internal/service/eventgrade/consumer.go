@@ -2,7 +2,6 @@ package eventgrade
 
 import (
 	"context"
-	_ "embed"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
@@ -16,15 +15,6 @@ import (
 	observationcontract "github.com/kapu/hololive-shared/pkg/contracts/eventgrade"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
-
-//go:embed queries/lock_offset.sql
-var lockOffsetSQL string
-
-//go:embed queries/next_observations.sql
-var nextObservationsSQL string
-
-//go:embed queries/advance_offset.sql
-var advanceOffsetSQL string
 
 var errRejected = errors.New("event grade observation rejected")
 
@@ -79,7 +69,7 @@ func (r *Repository) consumeBatch(ctx context.Context, tx pgx.Tx, region contrac
 		published int64
 	)
 
-	if err := tx.QueryRow(ctx, lockOffsetSQL, region).Scan(&applied, &published); err != nil {
+	if err := pgxdb.QueryRow(ctx, tx, lockOffsetSQL, region).Scan(&applied, &published); err != nil {
 		return out, fmt.Errorf("lock event grade consumer offset: %w", err)
 	}
 
@@ -115,7 +105,7 @@ func (r *Repository) consumeBatch(ctx context.Context, tx pgx.Tx, region contrac
 		return out, out.stopErr
 	}
 
-	tag, err := tx.Exec(ctx, advanceOffsetSQL, region, applied, last)
+	tag, err := pgxdb.Exec(ctx, tx, advanceOffsetSQL, region, applied, last)
 	if err != nil {
 		return out, fmt.Errorf("advance event grade consumer offset: %w", err)
 	}
@@ -128,7 +118,7 @@ func (r *Repository) consumeBatch(ctx context.Context, tx pgx.Tx, region contrac
 }
 
 func readObservations(ctx context.Context, tx pgx.Tx, region contract.GradeRegion, applied int64, limit int) ([]observation, error) {
-	rows, err := tx.Query(ctx, nextObservationsSQL, region, applied, limit)
+	rows, err := pgxdb.Query(ctx, tx, nextObservationsSQL, region, applied, limit)
 	if err != nil {
 		return nil, fmt.Errorf("read event grade observations after %d: %w", applied, err)
 	}

@@ -5,37 +5,30 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type alarmStateRepository struct {
-	db trackingDB
+	db pgxdb.Querier
 }
 
 type deliveryStateRepository struct {
-	db    trackingDB
+	db    pgxdb.Querier
 	owner *PgxRepository
 }
 
 type identityRepository struct {
-	db trackingDB
+	db pgxdb.Querier
 }
 
 type sourcePostRepository struct {
-	db trackingDB
-}
-
-type trackingDB interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	db pgxdb.Querier
 }
 
 type PgxRepository struct {
-	db trackingDB
+	db pgxdb.Querier
 
 	alarm    *alarmStateRepository
 	delivery *deliveryStateRepository
@@ -49,7 +42,7 @@ type AlarmSentMark struct {
 	AlarmSentAt time.Time
 }
 
-func NewRepository(db trackingDB) *PgxRepository {
+func NewRepository(db pgxdb.Querier) *PgxRepository {
 	repo := &PgxRepository{
 		db: db,
 		alarm: &alarmStateRepository{

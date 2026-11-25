@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
@@ -28,7 +30,7 @@ type persistedOutboxSentStateInput struct {
 	ContentID string
 }
 
-func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx dbx.Querier, trackingRows []*domain.YouTubeContentAlarmTracking) error {
+func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx pgxdb.Querier, trackingRows []*domain.YouTubeContentAlarmTracking) error {
 	if len(trackingRows) == 0 || tx == nil {
 		return nil
 	}
@@ -91,7 +93,7 @@ func collectTrackingIdentityInputs(trackingRows []*domain.YouTubeContentAlarmTra
 
 func loadPersistedOutboxSentState(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	inputs []persistedOutboxSentStateInput,
 ) ([]persistedOutboxSentStateRow, error) {
 	kinds := make([]string, len(inputs))
@@ -139,7 +141,7 @@ func buildPersistedSentStateMaps(
 
 func mergePersistedDeliverySentState(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	outboxIDs []int64,
 	identityByOutboxID map[int64]string,
 	sentAtByIdentity map[string]time.Time,

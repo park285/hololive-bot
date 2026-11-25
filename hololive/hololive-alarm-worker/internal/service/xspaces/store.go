@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -19,11 +20,11 @@ func (s StartStore) Remember(ctx context.Context, payload domain.XSpaceDispatchP
 		return payload, fmt.Errorf("encode X space start: %w", err)
 	}
 
-	if _, err := s.Pool.Exec(ctx, insertStartSQL, payload.SpaceID, raw); err != nil {
+	if _, err := pgxdb.Exec(ctx, s.Pool, insertStartSQL, payload.SpaceID, raw); err != nil {
 		return payload, fmt.Errorf("store X space start: %w", err)
 	}
 
-	if err := s.Pool.QueryRow(ctx, loadStartSQL, payload.SpaceID).Scan(&raw); err != nil {
+	if err := pgxdb.QueryRow(ctx, s.Pool, loadStartSQL, payload.SpaceID).Scan(&raw); err != nil {
 		return payload, fmt.Errorf("read X space start: %w", err)
 	}
 
@@ -45,7 +46,7 @@ func (s StartStore) Remember(ctx context.Context, payload domain.XSpaceDispatchP
 }
 
 func (s StartStore) Prune(ctx context.Context) error {
-	_, err := s.Pool.Exec(ctx, pruneStartsSQL)
+	_, err := pgxdb.Exec(ctx, s.Pool, pruneStartsSQL)
 	if err != nil {
 		return fmt.Errorf("prune X space starts: %w", err)
 	}

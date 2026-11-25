@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -39,8 +39,7 @@ func (s *TransitionStore) ClaimOutboxesForFanout(ctx context.Context, batchSize 
 		return nil, errors.New("claim outboxes for fanout: batch size must be positive")
 	}
 
-	rows, err := s.db.Query(
-		ctx,
+	rows, err := pgxdb.Query(ctx, s.db,
 		fanoutClaimSQL,
 		domain.OutboxStatusPending,
 		s.config.LockTimeout.Milliseconds(),
@@ -177,8 +176,7 @@ func (s *TransitionStore) ReviveFailedFanoutOutboxes(
 		return newApplyResult(ApplyConflict, nil), 0, errors.New("revive failed fanout outboxes: invalid bounds")
 	}
 
-	rows, err := s.db.Query(
-		ctx,
+	rows, err := pgxdb.Query(ctx, s.db,
 		fanoutReviveFailedSQL,
 		domain.OutboxStatusFailed,
 		freshnessWindow.Milliseconds(),
@@ -224,7 +222,7 @@ func (s *TransitionStore) ApplyFanoutFailure(
 	var priorAdjudication CommitAdjudication
 
 	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
-		applyErr := s.executeTx(ctx, "apply fanout failure", func(tx dbx.Querier) error {
+		applyErr := s.executeTx(ctx, "apply fanout failure", func(tx pgxdb.Querier) error {
 			return applyFanoutFailureTx(ctx, tx, outbox, next)
 		})
 		if applyErr == nil {
@@ -269,12 +267,11 @@ type fanoutFailureState struct {
 
 func applyFanoutFailureTx(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	outbox domain.YouTubeNotificationOutbox,
 	next fanoutFailureState,
 ) error {
-	rows, err := tx.Query(
-		ctx,
+	rows, err := pgxdb.Query(ctx, tx,
 		fanoutFailSQL,
 		next.status,
 		next.attempt,
@@ -341,7 +338,7 @@ func (s *TransitionStore) materializeFanoutOnce(
 ) (FanoutResult, error) {
 	result := FanoutResult{DeliveryCount: len(targets), NoTargets: len(targets) == 0}
 
-	err := s.executeTx(ctx, materializeFanoutOperation, func(tx dbx.Querier) error {
+	err := s.executeTx(ctx, materializeFanoutOperation, func(tx pgxdb.Querier) error {
 		if err := validateFanoutClaim(ctx, tx, outbox); err != nil {
 			return fmt.Errorf("materialize fanout: validate claim: %w", err)
 		}
@@ -365,7 +362,7 @@ func (s *TransitionStore) materializeFanoutOnce(
 	return result, nil
 }
 
-func validateFanoutClaim(ctx context.Context, tx dbx.Querier, outbox domain.YouTubeNotificationOutbox) error {
+func validateFanoutClaim(ctx context.Context, tx pgxdb.Querier, outbox domain.YouTubeNotificationOutbox) error {
 	state, children, found, err := loadFanoutState(ctx, tx, outbox.ID)
 	if err != nil {
 		return fmt.Errorf("materialize fanout: load claimed state: %w", err)
@@ -388,11 +385,10 @@ func validateFanoutClaim(ctx context.Context, tx dbx.Querier, outbox domain.YouT
 
 func completeNoTargetFanout(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	outbox domain.YouTubeNotificationOutbox,
 ) error {
-	tag, err := tx.Exec(
-		ctx,
+	tag, err := pgxdb.Exec(ctx, tx,
 		fanoutCompleteNoTargetsSQL,
 		domain.OutboxStatusSent,
 		outbox.ID,
@@ -412,12 +408,11 @@ func completeNoTargetFanout(
 
 func materializeFanoutTargets(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	outbox domain.YouTubeNotificationOutbox,
 	targets []string,
 ) error {
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		fanoutInsertChildrenSQL,
 		outbox.ID,
 		domain.OutboxStatusPending,
@@ -446,9 +441,8 @@ func materializeFanoutTargets(
 	return nil
 }
 
-func releaseFanoutOutbox(ctx context.Context, tx dbx.Querier, outbox domain.YouTubeNotificationOutbox) error {
-	tag, err := tx.Exec(
-		ctx,
+func releaseFanoutOutbox(ctx context.Context, tx pgxdb.Querier, outbox domain.YouTubeNotificationOutbox) error {
+	tag, err := pgxdb.Exec(ctx, tx,
 		fanoutReleaseOutboxSQL,
 		outbox.ID,
 		domain.OutboxStatusPending,
@@ -467,12 +461,12 @@ func releaseFanoutOutbox(ctx context.Context, tx dbx.Querier, outbox domain.YouT
 
 func loadFanoutState(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	outboxID int64,
 ) (fanoutOutboxState, []string, bool, error) {
 	var state fanoutOutboxState
 
-	err := db.QueryRow(ctx, fanoutLoadOutboxSQL, outboxID).Scan(
+	err := pgxdb.QueryRow(ctx, db, fanoutLoadOutboxSQL, outboxID).Scan(
 		&state.status,
 		&state.attemptCount,
 		&state.nextAttemptAt,
@@ -490,7 +484,7 @@ func loadFanoutState(
 		return fanoutOutboxState{}, nil, false, fmt.Errorf("load fanout outbox state: %w", err)
 	}
 
-	rows, err := db.Query(ctx, fanoutLoadChildrenSQL, outboxID)
+	rows, err := pgxdb.Query(ctx, db, fanoutLoadChildrenSQL, outboxID)
 	if err != nil {
 		return fanoutOutboxState{}, nil, false, fmt.Errorf("load fanout children: %w", err)
 	}

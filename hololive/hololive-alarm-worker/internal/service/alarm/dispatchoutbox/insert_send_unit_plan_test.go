@@ -107,7 +107,7 @@ func explainInsertDeliveryBatch(ctx context.Context, t *testing.T, pool *pgxpool
 	_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = "+mode)
 	require.NoError(t, err)
 
-	_, err = tx.Exec(ctx, "PREPARE insert_delivery_plan AS "+insertDeliveryBatchSQL)
+	_, err = tx.Exec(ctx, "PREPARE insert_delivery_plan AS "+insertDeliveryBatchSQL.SQL())
 	require.NoError(t, err)
 
 	defer func() {

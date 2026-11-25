@@ -74,8 +74,7 @@ func (s *TransitionStore) ClaimPending(ctx context.Context, batchSize int) ([]do
 		return nil, errors.New("claim pending: batch size must be positive")
 	}
 
-	rows, err := s.db.Query(
-		ctx,
+	rows, err := pgxdb.Query(ctx, s.db,
 		transitionClaimPendingSQL,
 		lifecycle.StatusPending,
 		s.config.LockTimeout.Milliseconds(),
@@ -134,7 +133,7 @@ type resolvedLogicalGroups struct {
 
 func (s *TransitionStore) resolveClaimedGroups(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	operation string,
 	claimed []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
@@ -158,7 +157,7 @@ func (s *TransitionStore) resolveClaimedGroups(
 
 func (s *TransitionStore) resolveLogicalGroups(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	requested []requestedLogicalGroup,
 	currentIDs map[int64]struct{},
 	checkLocked func(rows []transitionRow) error,
@@ -379,7 +378,7 @@ func logicalIdentityCandidates(key ytcontentid.LogicalKey, outbox domain.YouTube
 
 func (s *TransitionStore) loadLogicalGroupRows(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	requested []requestedLogicalGroup,
 ) ([]transitionRow, error) {
 	if len(requested) == 0 {
@@ -389,7 +388,7 @@ func (s *TransitionStore) loadLogicalGroupRows(
 	return queryLogicalGroupRows(ctx, db, s.logicalGroupArgs(requested))
 }
 
-func queryLogicalGroupRows(ctx context.Context, db dbx.Querier, args []any) ([]transitionRow, error) {
+func queryLogicalGroupRows(ctx context.Context, db pgxdb.Querier, args []any) ([]transitionRow, error) {
 	var rows []transitionRow
 
 	if err := dbx.SelectSQL(ctx, db, &rows, "load transition logical group rows", transitionGroupRowsSQL, args...); err != nil {
@@ -429,7 +428,7 @@ func (s *TransitionStore) logicalGroupWindowComplete(requestedCount, observedCou
 
 func loadTransitionLedger(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	keys []ytcontentid.LogicalKey,
 ) (map[ytcontentid.LogicalKey]DeliveryLedgerRecord, []preparation.LedgerEvidence, error) {
 	ledgerByKey := make(map[ytcontentid.LogicalKey]DeliveryLedgerRecord, len(keys))
@@ -507,7 +506,7 @@ type transitionVectors struct {
 
 func applyRowTransitions(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	operation string,
 	transitions []rowTransition,
 ) ([]int64, time.Time, error) {
@@ -516,7 +515,7 @@ func applyRowTransitions(
 
 func applySendingTransitions(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	operation string,
 	transitions []rowTransition,
 	lease time.Duration,
@@ -526,7 +525,7 @@ func applySendingTransitions(
 
 func applyFencedRowTransitions(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	operation string,
 	transitions []rowTransition,
 	claimLeaseMS *int64,
@@ -540,8 +539,7 @@ func applyFencedRowTransitions(
 		return nil, time.Time{}, fmt.Errorf("%s: build transition vectors: %w", operation, err)
 	}
 
-	rows, err := db.Query(
-		ctx,
+	rows, err := pgxdb.Query(ctx, db,
 		transitionApplyRowsSQL,
 		vectors.ids,
 		vectors.expectedStatuses,
@@ -673,7 +671,7 @@ func checkedTransitionAttempt(operation string, row transitionRow) (int32, error
 func (s *TransitionStore) executeTx(
 	ctx context.Context,
 	operation string,
-	fn func(tx dbx.Querier) error,
+	fn func(tx pgxdb.Querier) error,
 ) error {
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {

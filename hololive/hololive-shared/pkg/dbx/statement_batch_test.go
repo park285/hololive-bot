@@ -3,39 +3,33 @@ package dbx
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-const (
-	testStatementFirstSQL  = "first"
-	testStatementSecondSQL = "second"
-	testZeroRowsSQLPrefix  = "zero-rows"
-)
-
 type statementRecordingTx struct {
 	Tx
 
-	executed []string
-	failAt   int
-	failErr  error
+	executed     []string
+	executedArgs [][]any
+	failAt       int
+	failErr      error
 }
 
-func (t *statementRecordingTx) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+func (t *statementRecordingTx) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	index := len(t.executed)
 
 	t.executed = append(t.executed, sql)
+	t.executedArgs = append(t.executedArgs, args)
 
 	if index == t.failAt {
 		return pgconn.CommandTag{}, t.failErr
 	}
 
-	if strings.HasPrefix(sql, testZeroRowsSQLPrefix) {
+	if sql == testZeroRowsSQL.SQL() {
 		return pgconn.NewCommandTag("UPDATE 0"), nil
 	}
 
@@ -102,7 +96,7 @@ func TestExecStatementsEmptyAndNil(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := ExecStatements(t.Context(), nil, []Statement{{SQL: "SELECT 1"}}); err == nil {
+	if err := ExecStatements(t.Context(), nil, []Statement{{SQL: testSelectOneSQL}}); err == nil {
 		t.Fatal("non-empty execution without a transaction must fail")
 	}
 }
@@ -110,18 +104,18 @@ func TestExecStatementsEmptyAndNil(t *testing.T) {
 func TestExecStatementsChunkingPreservesOrder(t *testing.T) {
 	tx := &statementRecordingBatchTx{statementRecordingTx: &statementRecordingTx{failAt: -1}}
 	statements := make([]Statement, 260)
-	want := make([]string, len(statements))
+	want := make([]any, len(statements))
 
 	for i := range statements {
-		want[i] = fmt.Sprintf("statement-%d", i)
-		statements[i] = Statement{SQL: want[i], Operation: "test"}
+		want[i] = i
+		statements[i] = Statement{SQL: testStatementNumberedSQL, Args: []any{i}, Operation: "test"}
 	}
 
 	if err := ExecStatements(t.Context(), tx, statements); err != nil {
 		t.Fatal(err)
 	}
 
-	if !slices.Equal(tx.executed, want) || !slices.Equal(tx.sizes, []int{128, 128, 4}) {
+	if !slices.Equal(firstArgs(tx.executedArgs), want) || !slices.Equal(tx.sizes, []int{128, 128, 4}) {
 		t.Fatalf("batch order/sizes changed: sizes=%v executed=%d", tx.sizes, len(tx.executed))
 	}
 
@@ -144,6 +138,11 @@ func TestExecStatementsFailureClosesResultsAndJoinsErrors(t *testing.T) {
 		closeErr:             closeFailure,
 	}
 	statements := make([]Statement, 260)
+
+	for i := range statements {
+		statements[i] = Statement{SQL: testStatementNumberedSQL}
+	}
+
 	err := ExecStatements(t.Context(), tx, statements)
 
 	if !errors.Is(err, executeFailure) || !errors.Is(err, closeFailure) {
@@ -158,13 +157,13 @@ func TestExecStatementsFailureClosesResultsAndJoinsErrors(t *testing.T) {
 func TestExecStatementsSequentialFallback(t *testing.T) {
 	failure := errors.New("fallback failure")
 	tx := &statementRecordingTx{failAt: 1, failErr: failure}
-	statements := []Statement{{SQL: testStatementFirstSQL}, {SQL: testStatementSecondSQL}, {SQL: "third"}}
+	statements := []Statement{{SQL: testStatementFirstSQL}, {SQL: testStatementSecondSQL}, {SQL: testStatementThirdSQL}}
 
 	if err := ExecStatements(t.Context(), tx, statements); !errors.Is(err, failure) {
 		t.Fatalf("fallback error=%v", err)
 	}
 
-	if !slices.Equal(tx.executed, []string{testStatementFirstSQL, testStatementSecondSQL}) {
+	if !slices.Equal(tx.executed, []string{testStatementFirstSQL.SQL(), testStatementSecondSQL.SQL()}) {
 		t.Fatalf("fallback executed=%v", tx.executed)
 	}
 }
@@ -172,11 +171,11 @@ func TestExecStatementsSequentialFallback(t *testing.T) {
 func TestExecStatementsRequireRowReportsUnappliedStatement(t *testing.T) {
 	statements := make([]Statement, 140)
 	for i := range statements {
-		statements[i] = Statement{SQL: fmt.Sprintf("statement-%d", i), Operation: "required", RequireRow: true}
+		statements[i] = Statement{SQL: testStatementNumberedSQL, Args: []any{i}, Operation: "required", RequireRow: true}
 	}
 
-	statements[3] = Statement{SQL: testZeroRowsSQLPrefix + "-optional", Operation: "optional"}
-	statements[130].SQL = testZeroRowsSQLPrefix + "-required"
+	statements[3] = Statement{SQL: testZeroRowsSQL, Operation: "optional"}
+	statements[130].SQL = testZeroRowsSQL
 
 	for _, batched := range []bool{true, false} {
 		recorder := &statementRecordingTx{failAt: -1}
@@ -257,4 +256,13 @@ func TestExecStatementsRejectsNilBatchResults(t *testing.T) {
 	if err := ExecStatements(t.Context(), &nilStatementBatchTx{}, []Statement{{SQL: testStatementFirstSQL}}); err == nil {
 		t.Fatal("nil batch results must fail closed")
 	}
+}
+
+func firstArgs(all [][]any) []any {
+	out := make([]any, len(all))
+	for i, args := range all {
+		out[i] = args[0]
+	}
+
+	return out
 }

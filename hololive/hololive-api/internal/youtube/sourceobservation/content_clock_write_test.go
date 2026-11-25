@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/content"
 	publishkit "github.com/kapu/hololive-collector/testkit/sourceobservation"
@@ -149,7 +150,7 @@ func TestContentClockUpsertGuardSkipsIdenticalValues(t *testing.T) {
 	execClock := func(label string) int64 {
 		statement := contentClockStatement(&clock, coverage)
 
-		tag, execErr := pool.Exec(ctx, statement.SQL, statement.Args...)
+		tag, execErr := pgxdb.Exec(ctx, pool, statement.SQL, statement.Args...)
 		if execErr != nil {
 			t.Fatalf("%s: %v", label, execErr)
 		}

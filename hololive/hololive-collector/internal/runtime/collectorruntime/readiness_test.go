@@ -101,16 +101,16 @@ func TestRDY003PendingCountUsesCapSentinel(t *testing.T) {
 	}
 
 	sql := pendingObservationCountSQL
-	if !strings.Contains(sql, "LIMIT $1 + 1") {
+	if !strings.Contains(sql.SQL(), "LIMIT $1 + 1") {
 		t.Fatal("pending count must use cap+1 sentinel")
 	}
 
 	handoffSQL := observationHandoffStatusSQL
-	if !strings.Contains(handoffSQL, "unnest($1::bigint[]) WITH ORDINALITY") {
+	if !strings.Contains(handoffSQL.SQL(), "unnest($1::bigint[]) WITH ORDINALITY") {
 		t.Fatal("handoff status query must keep requested ID order")
 	}
 
-	if strings.Contains(sql, "COUNT(observation_id)") {
+	if strings.Contains(sql.SQL(), "COUNT(observation_id)") {
 		t.Fatal("unbounded pending COUNT path must be removed")
 	}
 

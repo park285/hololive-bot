@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -32,7 +34,7 @@ type handoffGroup struct {
 
 func (s *TransitionStore) lockHandoffUnits(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	action string,
 	claim *HandoffClaim,
 ) ([]handoffUnit, []sendfence.Observation, error) {
@@ -66,7 +68,7 @@ func (s *TransitionStore) lockHandoffUnits(
 	return units, observed, nil
 }
 
-func loadHandoffMembers(ctx context.Context, tx dbx.Querier, memberIDs []int64) (handoffMembers, error) {
+func loadHandoffMembers(ctx context.Context, tx pgxdb.Querier, memberIDs []int64) (handoffMembers, error) {
 	var rows []transitionRow
 
 	if err := dbx.SelectSQL(ctx, tx, &rows, "load handoff members", handoffMembersSQL, memberIDs); err != nil {
@@ -102,7 +104,7 @@ func loadHandoffMembers(ctx context.Context, tx dbx.Querier, memberIDs []int64) 
 	return members, nil
 }
 
-func (s *TransitionStore) lockHandoffGroup(ctx context.Context, tx dbx.Querier, requested []requestedLogicalGroup) (handoffGroup, error) {
+func (s *TransitionStore) lockHandoffGroup(ctx context.Context, tx pgxdb.Querier, requested []requestedLogicalGroup) (handoffGroup, error) {
 	if len(requested) == 0 {
 		return handoffGroup{}, nil
 	}
@@ -125,7 +127,7 @@ func (s *TransitionStore) lockHandoffGroup(ctx context.Context, tx dbx.Querier, 
 	}, nil
 }
 
-func lockHandoffParents(ctx context.Context, tx dbx.Querier, groupArgs []any) ([]int64, error) {
+func lockHandoffParents(ctx context.Context, tx pgxdb.Querier, groupArgs []any) ([]int64, error) {
 	var parentIDs []int64
 
 	if err := dbx.SelectSQL(ctx, tx, &parentIDs, "load handoff group parents", handoffGroupParentsSQL, groupArgs...); err != nil {
@@ -255,7 +257,7 @@ func handoffObservationsMatch(claim *HandoffClaim, observed []sendfence.Observat
 	})
 }
 
-func observeHandoffLedger(ctx context.Context, tx dbx.Querier, units []handoffUnit, observed []sendfence.Observation) error {
+func observeHandoffLedger(ctx context.Context, tx pgxdb.Querier, units []handoffUnit, observed []sendfence.Observation) error {
 	keys := make([]ytcontentid.LogicalKey, 0, len(units))
 	for i := range units {
 		keys = append(keys, units[i].key)

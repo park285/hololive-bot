@@ -3,6 +3,7 @@ FROM schedule_posters p
 JOIN schedule_poster_posts d ON d.channel_id = p.channel_id
 WHERE p.id = $1 AND p.review_status = 'confirmed' AND p.rows_extracted_at = $2
   AND /* fragment:post_window */
+
   AND (d.status = 'unjudged'
        OR p.rows_status <> 'pending'
           AND (d.status = 'relevant'

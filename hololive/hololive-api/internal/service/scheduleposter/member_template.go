@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -18,10 +19,10 @@ func (s *Store) MemberCardTemplate(ctx context.Context, memberID int) (cardtempl
 	return readMemberCardTemplate(ctx, s.pool, memberID)
 }
 
-func readMemberCardTemplate(ctx context.Context, db rowQuerier, memberID int) (cardtemplate.ID, error) {
+func readMemberCardTemplate(ctx context.Context, db pgxdb.Querier, memberID int) (cardtemplate.ID, error) {
 	var value cardtemplate.ID
 
-	err := db.QueryRow(ctx, getMemberTemplateSQL, memberID, cardtemplate.Classic).Scan(&value)
+	err := pgxdb.QueryRow(ctx, db, getMemberTemplateSQL, memberID, cardtemplate.Classic).Scan(&value)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", domain.ErrMemberNotFound
 	}
@@ -39,7 +40,7 @@ func (s *Store) SetMemberCardTemplate(ctx context.Context, memberID int, expecte
 	}
 
 	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
-		locked, err := tx.Exec(ctx, lockTemplateMemberSQL, memberID)
+		locked, err := pgxdb.Exec(ctx, tx, lockTemplateMemberSQL, memberID)
 		if err != nil {
 			return fmt.Errorf("lock template member: %w", err)
 		}
@@ -61,7 +62,7 @@ func (s *Store) SetMemberCardTemplate(ctx context.Context, memberID int, expecte
 			return nil
 		}
 
-		if _, err := tx.Exec(ctx, saveMemberTemplateSQL, memberID, selected); err != nil {
+		if _, err := pgxdb.Exec(ctx, tx, saveMemberTemplateSQL, memberID, selected); err != nil {
 			return fmt.Errorf("write member schedule card template: %w", err)
 		}
 

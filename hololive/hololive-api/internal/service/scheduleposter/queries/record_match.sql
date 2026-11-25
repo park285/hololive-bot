@@ -7,4 +7,5 @@ WHERE d.post_id = $1 AND d.status IN ('relevant', 'matched', 'match_failed') AND
       SELECT 1 FROM schedule_posters p
       WHERE p.id = $2 AND p.channel_id = d.channel_id AND p.review_status = 'confirmed' AND p.rows_extracted_at = $3
         AND /* fragment:post_window */
+
   )

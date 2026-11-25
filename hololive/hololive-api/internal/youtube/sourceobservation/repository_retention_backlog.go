@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 func (r *Repository) measureRetentionBacklogs(ctx context.Context, cfg RetentionConfig, now time.Time, result *RetentionResult) error {
@@ -17,7 +19,7 @@ func (r *Repository) measureRetentionBacklogs(ctx context.Context, cfg Retention
 		known  bool
 	)
 
-	if err := r.pool.QueryRow(ctx, repositoryRetentionBacklogEvidenceSQL, kinds, cutoffs, MaxRetentionBatchSize).Scan(&oldest, &known); err != nil {
+	if err := pgxdb.QueryRow(ctx, r.pool, repositoryRetentionBacklogEvidenceSQL, kinds, cutoffs, MaxRetentionBatchSize).Scan(&oldest, &known); err != nil {
 		result.FailedTable = "source_observations"
 		return fmt.Errorf("read retention backlog: source_observations: %w", err)
 	}

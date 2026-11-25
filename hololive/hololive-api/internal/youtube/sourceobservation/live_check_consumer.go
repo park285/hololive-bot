@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -317,7 +318,7 @@ func (c *Consumer) unresolvableVideoFact(
 
 	var negativeAt time.Time
 
-	err := tx.QueryRow(ctx, repositoryChannelLiveNegativeSQL,
+	err := pgxdb.QueryRow(ctx, tx, repositoryChannelLiveNegativeSQL,
 		session.ChannelID, *session.Clock.LastLivePositiveAt, claimed.EffectiveAt).Scan(&negativeAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fact, nil
@@ -389,10 +390,10 @@ func videoLiveEvidence(observation *Observation, fact *live.SessionFact) live.Ev
 	}
 }
 
-func upsertLatestLiveCheck(ctx context.Context, tx dbx.Tx, query string, args ...any) (bool, error) {
+func upsertLatestLiveCheck(ctx context.Context, tx dbx.Tx, query pgxdb.Statement, args ...any) (bool, error) {
 	var key string
 
-	err := tx.QueryRow(ctx, query, args...).Scan(&key)
+	err := pgxdb.QueryRow(ctx, tx, query, args...).Scan(&key)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

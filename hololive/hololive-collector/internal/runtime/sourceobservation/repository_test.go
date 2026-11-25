@@ -327,19 +327,19 @@ func TestPublishBatchRollsBackEvidenceAndCheckpointWhenQueueInsertFails(t *testi
 
 func TestPublishSetCollisionWriteKeepsInsertOnlyPrivilege(t *testing.T) {
 	query := publishObservationSetSQL
-	start := strings.Index(query, "collision_write AS (")
-	end := strings.Index(query, "), observation_write AS (")
+	start := strings.Index(query.SQL(), "collision_write AS (")
+	end := strings.Index(query.SQL(), "), observation_write AS (")
 
 	if start < 0 || end <= start {
 		t.Fatal("publish set collision write CTE is missing")
 	}
 
-	collisionWrite := query[start:end]
+	collisionWrite := query.SQL()[start:end]
 	if !strings.Contains(collisionWrite, "RETURNING 1 AS inserted") || strings.Contains(collisionWrite, "RETURNING id") {
 		t.Fatal("collision write must not require SELECT privilege for RETURNING")
 	}
 
-	if !strings.Contains(query, "count(inserted) FROM collision_write") {
+	if !strings.Contains(query.SQL(), "count(inserted) FROM collision_write") {
 		t.Fatal("collision write execution barrier must count the constant result")
 	}
 }

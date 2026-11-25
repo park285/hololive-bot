@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -24,7 +26,7 @@ func (r *deliveryStateRepository) MarkAlarmSentBatch(ctx context.Context, marks 
 		return fmt.Errorf("mark alarm sent batch: %w", err)
 	}
 
-	if err := inPgxTx(ctx, r.db, func(tx trackingDB) error {
+	if err := inPgxTx(ctx, r.db, func(tx pgxdb.Querier) error {
 		txRepo := NewRepository(tx)
 		return txRepo.delivery.applyAlarmSentMarks(ctx, normalized)
 	}); err != nil {
@@ -52,7 +54,7 @@ func (r *deliveryStateRepository) applyAlarmSentMarks(ctx context.Context, marks
 		missingStateInserted int64
 	)
 
-	if err := r.db.QueryRow(ctx, applyAlarmSentMarksSQL, inputs.kinds, inputs.canonicalContentIDs, inputs.alarmSentAts, updatedAt, alarmLatencyExceededThresholdMillis).Scan(
+	if err := pgxdb.QueryRow(ctx, r.db, applyAlarmSentMarksSQL, inputs.kinds, inputs.canonicalContentIDs, inputs.alarmSentAts, updatedAt, alarmLatencyExceededThresholdMillis).Scan(
 		&trackingUpdated,
 		&existingStateUpdated,
 		&missingStateInserted,

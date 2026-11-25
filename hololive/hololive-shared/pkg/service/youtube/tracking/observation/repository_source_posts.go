@@ -28,8 +28,8 @@ func (r *sourcePostRepository) UpsertSourcePostsBatch(ctx context.Context, recor
 	}
 
 	query, args := buildSourcePostsBatchUpsert(normalized, yttimestamp.Normalize(time.Now()))
-	if _, err := dbx.ExecSQL(ctx, r.db, "upsert source posts batch: exec query", query, args...); err != nil {
-		return fmt.Errorf("exec SQL: %w", err)
+	if _, err := r.db.Exec(ctx, query, args...); err != nil { //nolint:forbidigo // 행 수에 맞춰 VALUES 자리표시자를 만드는 일괄 쓰기다.
+		return fmt.Errorf("exec SQL: upsert source posts batch: exec query: %w", err)
 	}
 
 	return nil

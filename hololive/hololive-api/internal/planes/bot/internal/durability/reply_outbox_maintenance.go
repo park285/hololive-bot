@@ -7,6 +7,8 @@ import (
 	"math"
 	"slices"
 	"time"
+
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type ReplyOutboxManualReviewStats struct {
@@ -24,7 +26,7 @@ func (r *ReplyOutboxRepository) ManualReviewStats(ctx context.Context) (ReplyOut
 		oldestSeconds float64
 	)
 
-	err := r.pool.QueryRow(ctx, replyOutboxManualReviewStatsSQL).Scan(&stats.Backlog, &oldestSeconds)
+	err := pgxdb.QueryRow(ctx, r.pool, replyOutboxManualReviewStatsSQL).Scan(&stats.Backlog, &oldestSeconds)
 	if err != nil {
 		return ReplyOutboxManualReviewStats{}, fmt.Errorf("observe reply outbox manual review backlog: %w", err)
 	}

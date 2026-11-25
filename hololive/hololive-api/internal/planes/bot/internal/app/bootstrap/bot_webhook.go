@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v5/webhook"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 )
@@ -56,7 +57,7 @@ func (s postgresNonceStore) IsDuplicate(ctx context.Context, key string, ttl tim
 
 	var reserved bool
 
-	err := s.pool.QueryRow(ctx, reserveBotWebhookNonceSQL, digest[:], ttl.Microseconds()).Scan(&reserved)
+	err := pgxdb.QueryRow(ctx, s.pool, reserveBotWebhookNonceSQL, digest[:], ttl.Microseconds()).Scan(&reserved)
 	if err != nil {
 		return false, fmt.Errorf("reserve webhook nonce: %w", err)
 	}

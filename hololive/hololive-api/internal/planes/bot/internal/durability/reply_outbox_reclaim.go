@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -52,7 +53,7 @@ func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize in
 }
 
 func lockedReplyReclaimCandidates(ctx context.Context, tx pgx.Tx, batchSize int32, horizonMS int64) ([]replyReclaimCandidate, error) {
-	rows, err := tx.Query(ctx, replyOutboxReclaimCandidatesSQL, batchSize, horizonMS)
+	rows, err := pgxdb.Query(ctx, tx, replyOutboxReclaimCandidatesSQL, batchSize, horizonMS)
 	if err != nil {
 		return nil, fmt.Errorf("lock reply reclaim candidates: %w", err)
 	}
@@ -105,7 +106,7 @@ func applyReplyReclaim(ctx context.Context, tx pgx.Tx, candidates []replyReclaim
 
 	mutation := newReplyReclaimMutation(candidates, maxAttempts)
 
-	tag, err := tx.Exec(ctx, replyOutboxReclaimExpiredSQL, mutation.ids, mutation.targets,
+	tag, err := pgxdb.Exec(ctx, tx, replyOutboxReclaimExpiredSQL, mutation.ids, mutation.targets,
 		mutation.errors, mutation.retry, horizonMS)
 	if err != nil {
 		return ReplyOutboxReclaim{}, fmt.Errorf("apply reply reclaim: %w", err)

@@ -87,7 +87,7 @@ func explainPublishSet(b *testing.B, pool *pgxpool.Pool, encoded []byte) (execut
 
 	var raw []byte
 
-	require.NoError(b, tx.QueryRow(ctx, "EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) "+publishObservationSetSQL, string(encoded)).Scan(&raw))
+	require.NoError(b, tx.QueryRow(ctx, "EXPLAIN (ANALYZE, TIMING OFF, FORMAT JSON) "+publishObservationSetSQL.SQL(), string(encoded)).Scan(&raw))
 
 	var plans []struct {
 		Plan          publishSetPlanNode `json:"Plan"`

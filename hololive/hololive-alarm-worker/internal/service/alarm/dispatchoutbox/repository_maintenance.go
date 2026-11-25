@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 func (r *PgxRepository) RecoverExpiredLeased(ctx context.Context, limit int) (int, error) {
@@ -12,7 +14,7 @@ func (r *PgxRepository) RecoverExpiredLeased(ctx context.Context, limit int) (in
 		return 0, errors.New("recover expired leased dispatch deliveries: limit must be positive")
 	}
 
-	tag, err := r.pool.Exec(ctx, recoverExpiredLeasedSQL, limit, maxDeliveriesPerSendUnit)
+	tag, err := pgxdb.Exec(ctx, r.pool, recoverExpiredLeasedSQL, limit, maxDeliveriesPerSendUnit)
 	if err != nil {
 		return 0, fmt.Errorf("recover expired leased dispatch deliveries: %w", err)
 	}
@@ -26,7 +28,7 @@ func (r *PgxRepository) QuarantineStaleSending(ctx context.Context, olderThan ti
 		return 0, fmt.Errorf("quarantine stale sending dispatch deliveries: older than: %w", err)
 	}
 
-	tag, err := r.pool.Exec(ctx, quarantineStaleSendingSQL, limit, olderThanMS)
+	tag, err := pgxdb.Exec(ctx, r.pool, quarantineStaleSendingSQL, limit, olderThanMS)
 	if err != nil {
 		return 0, fmt.Errorf("quarantine stale sending dispatch deliveries: %w", err)
 	}

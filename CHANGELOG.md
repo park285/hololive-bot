@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **PostgreSQL 코드 규칙:** 다섯 모듈의 운영 SQL을 모두 `shared-go/postgres` v1.0.4의 `pgxdb.Statement`로 읽고 `pgxdb.Exec`·`Query`·`QueryRow`·`Queue`로 실행합니다. `sqlassets.MustStatementReader`가 `pgxdb.Statement`를 돌려주고 `sqlassets.WithFragment` 대신 `sqlassets.Fragment` 자리표시자와 `With`로 조각을 끼우며, `dbx.Tx`는 `pgxdb.Querier`를 품으며 `dbx.Statement.SQL`은 `pgxdb.Statement`입니다. Go 코드에서 조립하던 SQL은 `queries/*.sql`의 자리표시자와 `With`·`WithToken`으로 옮겼습니다. 433개 문장을 변경 전후로 비교해 양 끝 공백 말고는 같음을 확인했습니다. 스택 ast-grep 규칙 `go-postgres-conventions.yml` 대신 golangci-lint forbidigo가 pgx·pgxpool의 SQL 직접 실행, `BeginFunc`, 트랜잭션 직접 `Rollback`, `pgxpool.New`를 거부합니다. migration 실행·역할 bootstrap DDL, 행 수만큼 `VALUES`를 만드는 일괄 쓰기, 관리자 목록 필터만 `nolint`로 둡니다.
+
 ## r1.2.5 - 2026-11-25
 
 - **AP a native 창 정리:** PgBouncer 퇴역 전환이 끝나 W1·W2 창을 지웠습니다. native 도구는 W3에서 수용된 원점만 받습니다. 퇴역 전환 절차 문서와 그 링크도 지웠습니다.

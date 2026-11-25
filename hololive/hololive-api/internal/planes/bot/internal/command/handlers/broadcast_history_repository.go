@@ -9,13 +9,14 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
 type pgBroadcastHistoryRepository struct {
-	pool broadcastHistoryDB
+	pool pgxdb.Querier
 }
 
 const (
@@ -39,11 +40,6 @@ type broadcastHistoryCollector struct {
 	cursorVideoID string
 	pages         int
 	scannedRows   int
-}
-
-type broadcastHistoryDB interface {
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 func NewPgBroadcastHistoryRepository(pool *pgxpool.Pool) handlercore.BroadcastHistoryRepository {
@@ -207,7 +203,7 @@ func (r *pgBroadcastHistoryRepository) listEndedBroadcastPage(
 ) ([]handlercore.BroadcastHistoryEntry, error) {
 	topicFilter := broadcastHistorySQLTopicFilter(query.TopicID)
 
-	rows, err := r.pool.Query(ctx, broadcastHistoryPageSQL(query.ChannelID),
+	rows, err := pgxdb.Query(ctx, r.pool, broadcastHistoryPageSQL(query.ChannelID),
 		query.ChannelID,
 		since,
 		cursorAt,
@@ -258,7 +254,7 @@ func (r *pgBroadcastHistoryRepository) GetEndedBroadcast(ctx context.Context, qu
 		return nil, handlercore.ErrBroadcastNotFound
 	}
 
-	row := r.pool.QueryRow(ctx, getEndedBroadcastSQL, query.VideoID)
+	row := pgxdb.QueryRow(ctx, r.pool, getEndedBroadcastSQL, query.VideoID)
 
 	entry, err := scanBroadcastHistoryRow(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -272,7 +268,7 @@ func (r *pgBroadcastHistoryRepository) GetEndedBroadcast(ctx context.Context, qu
 	return &entry, nil
 }
 
-func broadcastHistoryPageSQL(channelID string) string {
+func broadcastHistoryPageSQL(channelID string) pgxdb.Statement {
 	if channelID == "" {
 		return broadcastHistoryAllChannelsPageSQL
 	}

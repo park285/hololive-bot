@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -56,7 +57,7 @@ func (r *Renderer) getTemplate(ctx context.Context, key domain.TemplateKey, chan
 func (r *Renderer) resolveTemplate(ctx context.Context, key domain.TemplateKey, channelID string, format domain.TemplateFormat) (cacheKey, error) {
 	ck := cacheKey{templateKey: key}
 
-	err := r.pool.QueryRow(ctx, rendererResolveSQL, key, channelID, format).Scan(&ck.id, &ck.version, &ck.channelID)
+	err := pgxdb.QueryRow(ctx, r.pool, rendererResolveSQL, key, channelID, format).Scan(&ck.id, &ck.version, &ck.channelID)
 	if err != nil {
 		return cacheKey{}, templateQueryError(key, err)
 	}
@@ -135,7 +136,7 @@ func (r *Renderer) cachedTemplate(ck cacheKey) *template.Template {
 func (r *Renderer) loadTemplate(ctx context.Context, ck cacheKey) (*template.Template, error) {
 	var body string
 
-	err := r.pool.QueryRow(ctx, rendererLoadSQL, ck.id, ck.templateKey, ck.channelID).Scan(&body, &ck.version)
+	err := pgxdb.QueryRow(ctx, r.pool, rendererLoadSQL, ck.id, ck.templateKey, ck.channelID).Scan(&body, &ck.version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("%w: %s", errTemplateSourceChanged, ck.templateKey)
 	}

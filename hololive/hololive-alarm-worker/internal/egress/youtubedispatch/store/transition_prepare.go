@@ -7,10 +7,11 @@ import (
 	"slices"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -31,7 +32,7 @@ func (s *TransitionStore) PrepareClaimed(
 
 	var prepared preparedClaims
 
-	err := s.executeTx(ctx, "prepare claimed", func(tx dbx.Querier) error {
+	err := s.executeTx(ctx, "prepare claimed", func(tx pgxdb.Querier) error {
 		var prepareErr error
 
 		prepared, prepareErr = s.prepareClaimedTx(ctx, tx, claimed, outboxByID)
@@ -63,7 +64,7 @@ type preparedClaims struct {
 
 func (s *TransitionStore) prepareClaimedTx(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	claimed []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 ) (preparedClaims, error) {
@@ -415,7 +416,7 @@ func (s *TransitionStore) DeferFollower(ctx context.Context, command DeferComman
 
 	var touched []int64
 
-	if err := s.executeTx(ctx, "defer follower", func(tx dbx.Querier) error {
+	if err := s.executeTx(ctx, "defer follower", func(tx pgxdb.Querier) error {
 		var applyErr error
 
 		touched, _, applyErr = applyRowTransitions(ctx, tx, "defer follower", []rowTransition{transition})

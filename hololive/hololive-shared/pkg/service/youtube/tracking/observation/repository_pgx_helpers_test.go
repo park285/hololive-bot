@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,16 +30,16 @@ func (tx *recordingTrackingTx) Rollback(context.Context) error {
 }
 
 type queryOnlyTrackingDB struct {
-	trackingDB
+	pgxdb.Querier
 }
 
 func TestInPgxTxJoinsCallerTransaction(t *testing.T) {
 	tx := &recordingTrackingTx{}
 	fnErr := errors.New("apply marks failed")
 
-	var received trackingDB
+	var received pgxdb.Querier
 
-	err := inPgxTx(t.Context(), tx, func(db trackingDB) error {
+	err := inPgxTx(t.Context(), tx, func(db pgxdb.Querier) error {
 		received = db
 
 		return fnErr
@@ -53,7 +54,7 @@ func TestInPgxTxJoinsCallerTransaction(t *testing.T) {
 func TestInPgxTxRejectsUnsupportedDB(t *testing.T) {
 	called := false
 
-	err := inPgxTx(t.Context(), queryOnlyTrackingDB{}, func(trackingDB) error {
+	err := inPgxTx(t.Context(), queryOnlyTrackingDB{}, func(pgxdb.Querier) error {
 		called = true
 
 		return nil

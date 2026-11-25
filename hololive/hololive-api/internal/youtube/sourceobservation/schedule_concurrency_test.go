@@ -56,7 +56,7 @@ func TestScheduleReportsConflictWithConcurrentLiveInsertion(t *testing.T) {
 			}
 			statement, _ := liveSessionWrite(nil, &session)
 
-			_, err = liveTx.Exec(ctx, statement.SQL, statement.Args...)
+			_, err = pgxdb.Exec(ctx, liveTx, statement.SQL, statement.Args...)
 			require.NoError(t, err)
 
 			pid := scheduleTx.Conn().PgConn().PID()

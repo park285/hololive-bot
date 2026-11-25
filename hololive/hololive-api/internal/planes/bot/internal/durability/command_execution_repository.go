@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 const (
@@ -50,7 +51,7 @@ func (r *CommandExecutionRepository) Claim(ctx context.Context, messageID, comma
 		return false, fmt.Errorf("require bounded command kind: %w", err)
 	}
 
-	tag, err := r.pool.Exec(ctx, commandExecutionClaimSQL, id, kind, token)
+	tag, err := pgxdb.Exec(ctx, r.pool, commandExecutionClaimSQL, id, kind, token)
 	if err != nil {
 		return false, safeMessageRepositoryError("claim command execution", id, err)
 	}
@@ -77,7 +78,7 @@ func (r *CommandExecutionRepository) Complete(ctx context.Context, messageID, cl
 		return false, fmt.Errorf("%w", statusErr)
 	}
 
-	tag, err := r.pool.Exec(ctx, commandExecutionCompleteSQL, id, token, status)
+	tag, err := pgxdb.Exec(ctx, r.pool, commandExecutionCompleteSQL, id, token, status)
 	if err != nil {
 		return false, safeMessageRepositoryError("complete command execution", id, err)
 	}
@@ -108,7 +109,7 @@ func (r *CommandExecutionRepository) Heartbeat(ctx context.Context, messageID, c
 		return false, err
 	}
 
-	tag, err := r.pool.Exec(ctx, commandExecutionHeartbeatSQL, id, token)
+	tag, err := pgxdb.Exec(ctx, r.pool, commandExecutionHeartbeatSQL, id, token)
 	if err != nil {
 		return false, safeMessageRepositoryError("heartbeat command execution", id, err)
 	}
@@ -128,7 +129,7 @@ func (r *CommandExecutionRepository) State(ctx context.Context, messageID string
 
 	var state CommandExecutionState
 
-	err = r.pool.QueryRow(ctx, commandExecutionStateSQL, id).Scan(&state.Status, &state.ClaimedAt)
+	err = pgxdb.QueryRow(ctx, r.pool, commandExecutionStateSQL, id).Scan(&state.Status, &state.ClaimedAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil //nolint:nilnil // 행 없음(no row)을 알리는 계약값이다. runtime 폴링 루프가 nil 결과로 유휴를 판정하므로 sentinel 오류로 바꾸려면 이 패키지 밖 호출자를 함께 고쳐야 한다.
@@ -155,7 +156,7 @@ func (r *CommandExecutionRepository) ExpireStaleClaims(ctx context.Context, olde
 		return 0, errors.Join(ErrInvalidArgument, errors.New("batch size must be positive"))
 	}
 
-	tag, err := r.pool.Exec(ctx, commandExecutionExpireStaleSQL, ageMS, batchSize)
+	tag, err := pgxdb.Exec(ctx, r.pool, commandExecutionExpireStaleSQL, ageMS, batchSize)
 	if err != nil {
 		return 0, fmt.Errorf("expire stale command execution claims: %w", err)
 	}

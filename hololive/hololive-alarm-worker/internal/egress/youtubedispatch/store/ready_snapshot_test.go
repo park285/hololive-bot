@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 
@@ -60,7 +61,7 @@ func TestReadySnapshotAndClaimShareThresholds(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.want, values.Depth)
 
-			rows, err := pool.Query(ctx, transitionClaimPendingSQL, "PENDING", readyTestLease.Milliseconds(),
+			rows, err := pgxdb.Query(ctx, pool, transitionClaimPendingSQL, "PENDING", readyTestLease.Milliseconds(),
 				readyTestFreshness.Milliseconds(), 10, "youtube-dispatcher:test")
 			require.NoError(t, err)
 

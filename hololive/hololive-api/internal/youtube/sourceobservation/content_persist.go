@@ -7,6 +7,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/content"
 	"github.com/kapu/hololive-shared/pkg/contracts/youtubeoutbox"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -172,8 +174,7 @@ func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation *Observat
 		return fmt.Errorf("marshal coverage: %w", err)
 	}
 
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		persistContentAbsenceSQL,
 		observation.SubjectKey,
 		observation.ObservationKind,
@@ -192,8 +193,7 @@ func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation *Observat
 }
 
 func persistContentHead(ctx context.Context, tx dbx.Tx, observation *Observation, earliestComplete, earliestBaseline *time.Time) error {
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		persistContentHeadSQL,
 		observation.SubjectKey,
 		observation.ObservationKind,

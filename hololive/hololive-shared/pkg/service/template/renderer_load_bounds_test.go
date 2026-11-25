@@ -16,6 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -280,7 +281,7 @@ func TestRendererDifferentResolvedVersionsShareActualParse(t *testing.T) {
 	key := domain.TemplateKeyCmdHelp
 	old := cacheKey{templateKey: key}
 
-	if err := pool.QueryRow(t.Context(), rendererResolveSQL, key, "", domain.TemplateFormatPlain).Scan(&old.id, &old.version, &old.channelID); err != nil {
+	if err := pgxdb.QueryRow(t.Context(), pool, rendererResolveSQL, key, "", domain.TemplateFormatPlain).Scan(&old.id, &old.version, &old.channelID); err != nil {
 		t.Fatal(err)
 	}
 

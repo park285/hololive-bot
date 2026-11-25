@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type Image struct {
@@ -19,7 +20,7 @@ func (s *Store) Image(ctx context.Context, id int64) (Image, bool, error) {
 		data []byte
 	)
 
-	err := s.pool.QueryRow(ctx, imageSQL, id).Scan(&mime, &data)
+	err := pgxdb.QueryRow(ctx, s.pool, imageSQL, id).Scan(&mime, &data)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Image{}, false, ErrNotFound
 	}
@@ -36,7 +37,7 @@ func (s *Store) Image(ctx context.Context, id int64) (Image, bool, error) {
 }
 
 func (s *Store) SaveImage(ctx context.Context, id int64, image Image) error {
-	if _, err := s.pool.Exec(ctx, saveImageSQL, id, image.Data, image.MIME); err != nil {
+	if _, err := pgxdb.Exec(ctx, s.pool, saveImageSQL, id, image.Data, image.MIME); err != nil {
 		return fmt.Errorf("save schedule poster image: %w", err)
 	}
 

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/config/runtimepolicy"
@@ -118,7 +117,7 @@ func ensureLoginRoles(
 
 	defer func() { err = closeConn(ctx, conn, "admin", err) }()
 
-	if _, err := conn.Exec(ctx, mustSQL("bootstrap_writer_admission.sql")); err != nil {
+	if _, err := pgxdb.Exec(ctx, conn, mustStatement("bootstrap_writer_admission.sql")); err != nil {
 		return fmt.Errorf("bootstrap: configure writer admission: %w", err)
 	}
 
@@ -135,14 +134,14 @@ func ensureLoginRoles(
 	}
 
 	grant := fmt.Sprintf(mustSQL("grant_connect.sql.tpl"), databaseIdent, pgx.Identifier{scraperGroup}.Sanitize())
-	if _, err := conn.Exec(ctx, grant); err != nil {
+	if _, err := conn.Exec(ctx, grant); err != nil { //nolint:forbidigo // 역할 DDL은 바인드 인자를 받지 않아 pgx.Identifier로 정제한 이름과 SCRAM 검증자를 끼운다.
 		return fmt.Errorf("bootstrap: grant connect: %w", err)
 	}
 
 	return nil
 }
 
-func ensureLoginRole(ctx context.Context, conn roleConnection, scraperGroup, databaseIdent string, credential loginCredential) error {
+func ensureLoginRole(ctx context.Context, conn pgxdb.Querier, scraperGroup, databaseIdent string, credential loginCredential) error {
 	if err := upsertLoginRole(ctx, conn, credential.user, credential.password); err != nil {
 		return err
 	}
@@ -154,38 +153,38 @@ func ensureLoginRole(ctx context.Context, conn roleConnection, scraperGroup, dat
 		membership = fmt.Sprintf(mustSQL("grant_scraper_membership.sql.tpl"), pgx.Identifier{scraperGroup}.Sanitize(), roleIdent)
 	}
 
-	if _, err := conn.Exec(ctx, membership); err != nil {
+	if _, err := conn.Exec(ctx, membership); err != nil { //nolint:forbidigo // 역할 DDL은 바인드 인자를 받지 않아 pgx.Identifier로 정제한 이름과 SCRAM 검증자를 끼운다.
 		return fmt.Errorf("bootstrap: grant database access: %w", err)
 	}
 
 	limit := fmt.Sprintf(mustSQL("alter_role_connection_limit.sql.tpl"), roleIdent, credential.connectionLimit)
-	if _, err := conn.Exec(ctx, limit); err != nil {
+	if _, err := conn.Exec(ctx, limit); err != nil { //nolint:forbidigo // 역할 DDL은 바인드 인자를 받지 않아 pgx.Identifier로 정제한 이름과 SCRAM 검증자를 끼운다.
 		return fmt.Errorf("bootstrap: limit role connections: %w", err)
 	}
 
 	return nil
 }
 
-func upsertScraperGroupRole(ctx context.Context, conn roleConnection, scraperGroup string) error {
+func upsertScraperGroupRole(ctx context.Context, conn pgxdb.Querier, scraperGroup string) error {
 	var exists bool
 
-	if err := conn.QueryRow(ctx, mustSQL("check_role.sql"), scraperGroup).Scan(&exists); err != nil {
+	if err := pgxdb.QueryRow(ctx, conn, mustStatement("check_role.sql"), scraperGroup).Scan(&exists); err != nil {
 		return fmt.Errorf("bootstrap: check scraper group role: %w", err)
 	}
 
 	roleIdent := pgx.Identifier{scraperGroup}.Sanitize()
 
 	if !exists {
-		if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("create_scraper_group_role.sql.tpl"), roleIdent)); err != nil {
+		if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("create_scraper_group_role.sql.tpl"), roleIdent)); err != nil { //nolint:forbidigo // 역할 DDL은 바인드 인자를 받지 않아 pgx.Identifier로 정제한 이름과 SCRAM 검증자를 끼운다.
 			return fmt.Errorf("bootstrap: create scraper group role: %w", err)
 		}
 	}
 
-	if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("alter_scraper_group_role.sql.tpl"), roleIdent)); err != nil {
+	if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("alter_scraper_group_role.sql.tpl"), roleIdent)); err != nil { //nolint:forbidigo // 역할 DDL은 바인드 인자를 받지 않아 pgx.Identifier로 정제한 이름과 SCRAM 검증자를 끼운다.
 		return fmt.Errorf("bootstrap: alter scraper group role: %w", err)
 	}
 
-	if _, err := conn.Exec(ctx, mustSQL("terminate_role_sessions.sql"), scraperGroup); err != nil {
+	if _, err := pgxdb.Exec(ctx, conn, mustStatement("terminate_role_sessions.sql"), scraperGroup); err != nil {
 		return fmt.Errorf("bootstrap: terminate scraper group sessions: %w", err)
 	}
 
@@ -210,15 +209,10 @@ func protectCredentialSession(config *pgx.ConnConfig) {
 	config.RuntimeParams["track_activities"] = "off"
 }
 
-type roleConnection interface {
-	QueryRow(context.Context, string, ...any) pgx.Row
-	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
-}
-
-func upsertLoginRole(ctx context.Context, conn roleConnection, user, password string) error {
+func upsertLoginRole(ctx context.Context, conn pgxdb.Querier, user, password string) error {
 	var exists bool
 
-	if err := conn.QueryRow(ctx, mustSQL("check_role.sql"), user).Scan(&exists); err != nil {
+	if err := pgxdb.QueryRow(ctx, conn, mustStatement("check_role.sql"), user).Scan(&exists); err != nil {
 		return fmt.Errorf("bootstrap: check login role: %w", err)
 	}
 
@@ -230,7 +224,7 @@ func upsertLoginRole(ctx context.Context, conn roleConnection, user, password st
 	if exists {
 		var current string
 
-		if err := conn.QueryRow(ctx, mustSQL("read_role_password.sql"), user).Scan(&current); err != nil {
+		if err := pgxdb.QueryRow(ctx, conn, mustStatement("read_role_password.sql"), user).Scan(&current); err != nil {
 			return fmt.Errorf("bootstrap: read login password: %w", err)
 		}
 
@@ -248,7 +242,7 @@ func upsertLoginRole(ctx context.Context, conn roleConnection, user, password st
 	passwordLiteral := quoteSQLLiteral(verifier)
 
 	if !exists {
-		if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("create_login_role.sql.tpl"), roleIdent, passwordLiteral)); err != nil {
+		if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("create_login_role.sql.tpl"), roleIdent, passwordLiteral)); err != nil { //nolint:forbidigo // 역할 DDL은 바인드 인자를 받지 않아 pgx.Identifier로 정제한 이름과 SCRAM 검증자를 끼운다.
 			return fmt.Errorf("bootstrap: create login role: %w", err)
 		}
 	}
@@ -257,7 +251,7 @@ func upsertLoginRole(ctx context.Context, conn roleConnection, user, password st
 		mustSQL("alter_login_role.sql.tpl"),
 		roleIdent, passwordLiteral,
 	)
-	if _, err := conn.Exec(ctx, alter); err != nil {
+	if _, err := conn.Exec(ctx, alter); err != nil { //nolint:forbidigo // 역할 DDL은 바인드 인자를 받지 않아 pgx.Identifier로 정제한 이름과 SCRAM 검증자를 끼운다.
 		return fmt.Errorf("bootstrap: alter login role: %w", err)
 	}
 
@@ -278,7 +272,7 @@ func grantScraperSchemaUsage(ctx context.Context, connString, scraperGroup strin
 	defer func() { err = closeConn(ctx, conn, "database", err) }()
 
 	stmt := fmt.Sprintf(mustSQL("grant_schema_usage.sql.tpl"), pgx.Identifier{scraperGroup}.Sanitize())
-	if _, err := conn.Exec(ctx, stmt); err != nil {
+	if _, err := conn.Exec(ctx, stmt); err != nil { //nolint:forbidigo // 역할 DDL은 바인드 인자를 받지 않아 pgx.Identifier로 정제한 이름과 SCRAM 검증자를 끼운다.
 		return fmt.Errorf("bootstrap: grant schema usage: %w", err)
 	}
 

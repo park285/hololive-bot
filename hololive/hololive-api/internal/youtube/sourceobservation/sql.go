@@ -2,7 +2,8 @@ package sourceobservation
 
 import (
 	"embed"
-	"strings"
+
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
@@ -10,13 +11,13 @@ import (
 //go:embed queries/*
 var sqlAssets embed.FS
 
-var mustSQL = func() func(string) string {
-	read := sqlassets.MustReader(sqlAssets, "queries")
+var mustSQL = func() func(string) pgxdb.Statement {
+	read := sqlassets.MustStatementReader(sqlAssets, "queries")
 	relation := read("repository_ready_relation.sql")
-	claim := strings.ReplaceAll(read("claim_observations.sql"), "{{ready_relation}}", strings.ReplaceAll(relation, "{{max_attempts}}", "$6"))
-	snapshot := strings.ReplaceAll(read("repository_ready_snapshot.sql"), "{{ready_relation}}", strings.ReplaceAll(relation, "{{max_attempts}}", "$2"))
+	claim := read("claim_observations.sql").With("{{ready_relation}}", relation.WithToken("{{max_attempts}}", "$6"))
+	snapshot := read("repository_ready_snapshot.sql").With("{{ready_relation}}", relation.WithToken("{{max_attempts}}", "$2"))
 
-	return func(name string) string {
+	return func(name string) pgxdb.Statement {
 		switch name {
 		case "claim_observations.sql":
 			return claim

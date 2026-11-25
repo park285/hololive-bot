@@ -626,7 +626,7 @@ func insertLiveEndCandidate(t *testing.T, pool *pgxpool.Pool, observationID int6
 	t.Helper()
 
 	now := time.Now().UTC()
-	if _, err := pool.Exec(t.Context(), repositoryLivePendingEndUpsertSQL,
+	if _, err := pgxdb.Exec(t.Context(), pool, repositoryLivePendingEndUpsertSQL,
 		"video-end-candidate", testChannelID, "SCOPED_ABSENCE", observationID,
 		now, now, now, nil, true, true); err != nil {
 		t.Fatalf("insert live end evidence: %v", err)

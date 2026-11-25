@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -186,7 +188,7 @@ func upsertConfirmedPremiereSession(ctx context.Context, tx dbx.Tx, session *liv
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, repositoryLivePremiereClassificationUpsertSQL, appendLiveSessionArgs(make([]any, 0, liveSessionColumnCount), session, session.Title)...); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, repositoryLivePremiereClassificationUpsertSQL, appendLiveSessionArgs(make([]any, 0, liveSessionColumnCount), session, session.Title)...); err != nil {
 		return fmt.Errorf("upsert live session: %w", err)
 	}
 

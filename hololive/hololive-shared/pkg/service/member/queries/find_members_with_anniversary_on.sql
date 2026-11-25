@@ -1,5 +1,5 @@
 
-		SELECT %s
+		SELECT {{memberColumns}}
 		FROM members
 		WHERE EXTRACT(MONTH FROM debut_date) = $1
 		  AND EXTRACT(DAY FROM debut_date) = $2

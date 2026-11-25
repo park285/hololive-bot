@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -275,7 +276,7 @@ func TestRepositoryMarkAlarmSentBatchUpdatesAlarmState(t *testing.T) {
 
 func requireDuplicateDeliveryFinalized(
 	t *testing.T,
-	db trackingDB,
+	db pgxdb.Querier,
 	repository *PgxRepository,
 	firstAlarmSentAt time.Time,
 ) {

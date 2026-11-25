@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-collector/internal/runtime/collection"
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -69,7 +70,7 @@ func TestOrdinaryDeferSQLInvalidTupleDoesNotUpdateActiveLease(t *testing.T) {
 
 	var jobKey string
 
-	err := pool.QueryRow(ctx, deferSQL,
+	err := pgxdb.QueryRow(ctx, pool, deferSQL,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 		time.Now().UTC().Add(time.Second), "not_a_code", "TRANSIENT", "detail",
 		testRetryBounds.Minimum.Milliseconds(), testRetryBounds.Maximum.Milliseconds(), false,

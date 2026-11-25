@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/profile"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -13,7 +14,7 @@ import (
 
 func loadProfileState(ctx context.Context, tx dbx.Tx, channelID string) (profile.State, error) {
 	state := profile.State{ChannelID: channelID, Head: profile.Head{ChannelID: channelID}}
-	err := tx.QueryRow(ctx, loadProfileStateSQL, channelID).Scan(
+	err := pgxdb.QueryRow(ctx, tx, loadProfileStateSQL, channelID).Scan(
 		&state.Head.ChannelID,
 		&state.Head.Handle.Set, &state.Head.Handle.Value, &state.Head.Handle.EffectiveAt,
 		&state.Head.Description.Set, &state.Head.Description.Value, &state.Head.Description.EffectiveAt,
@@ -53,8 +54,7 @@ func persistProfileEvidence(ctx context.Context, tx dbx.Tx, observation *Observa
 		return nil
 	}
 
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		persistProfileEvidenceSQL,
 		decision.Sample.ChannelID,
 		decision.Sample.ScheduledFor,
@@ -83,8 +83,7 @@ func persistProfileHead(ctx context.Context, tx dbx.Tx, decision *profile.Decisi
 		return nil
 	}
 
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		persistProfileHeadSQL,
 		decision.Head.ChannelID,
 		decision.Head.Handle.Set, decision.Head.Handle.Value, decision.Head.Handle.EffectiveAt,

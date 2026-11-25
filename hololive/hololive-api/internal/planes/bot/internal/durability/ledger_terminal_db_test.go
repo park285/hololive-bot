@@ -35,7 +35,7 @@ func TestInboxClaimDoesNotScanBlockedFollowers(t *testing.T) {
 
 	var planJSON []byte
 
-	err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+inboxClaimSQL, "plan-token", int64(durabilityTestLease/time.Millisecond)).Scan(&planJSON)
+	err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+inboxClaimSQL.SQL(), "plan-token", int64(durabilityTestLease/time.Millisecond)).Scan(&planJSON)
 	require.NoError(t, err)
 
 	var plan []map[string]any
@@ -170,7 +170,7 @@ func TestInboxConcurrentFirstAdmitsPreserveOneOldestHead(t *testing.T) {
 
 	defer func() { require.NoError(t, rollbackInboxTx(ctx, blocker)) }()
 
-	_, err = blocker.Exec(ctx, inboxOrderingKeyLockSQL, "room:barrier-first")
+	_, err = pgxdb.Exec(ctx, blocker, inboxOrderingKeyLockSQL, "room:barrier-first")
 	require.NoError(t, err)
 
 	start := make(chan struct{})
@@ -215,7 +215,7 @@ func TestInboxAdmitRacingTerminalTransitionPreservesSuccessorHead(t *testing.T) 
 
 	defer func() { require.NoError(t, rollbackInboxTx(ctx, blocker)) }()
 
-	_, err = blocker.Exec(ctx, inboxOrderingKeyLockSQL, "room:barrier-terminal")
+	_, err = pgxdb.Exec(ctx, blocker, inboxOrderingKeyLockSQL, "room:barrier-terminal")
 	require.NoError(t, err)
 
 	errs := make(chan error, 2)

@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 type groupRowsQueryPlan struct {
@@ -32,7 +32,7 @@ func TestTransitionLogicalGroupRowsPreparedPlanBoundsRequestScans(t *testing.T) 
 	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
 		for _, count := range []int{1, 50, 100} {
 			t.Run(fmt.Sprintf("%s/tuples-%d", mode, count), func(t *testing.T) {
-				assertGroupQueryPreparedPlan(t, pool, transitionGroupRowsSQL, mode, count, assertGroupRowsResult)
+				assertGroupQueryPreparedPlan(t, pool, transitionGroupRowsSQL.SQL(), mode, count, assertGroupRowsResult)
 			})
 		}
 	}
@@ -45,7 +45,7 @@ func TestHandoffGroupParentsPreparedPlanBoundsRequestScans(t *testing.T) {
 	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
 		for _, count := range []int{1, 50, 100} {
 			t.Run(fmt.Sprintf("%s/tuples-%d", mode, count), func(t *testing.T) {
-				assertGroupQueryPreparedPlan(t, pool, handoffGroupParentsSQL, mode, count, assertGroupParentsResult)
+				assertGroupQueryPreparedPlan(t, pool, handoffGroupParentsSQL.SQL(), mode, count, assertGroupParentsResult)
 			})
 		}
 	}
@@ -56,7 +56,7 @@ func assertGroupRowsResult(t *testing.T, tx pgx.Tx, execute string, wanted []int
 
 	var rows []transitionRow
 
-	require.NoError(t, dbx.SelectSQL(t.Context(), tx, &rows, "prepared group SQL result", execute))
+	require.NoError(t, pgxscan.Select(t.Context(), tx, &rows, execute))
 	require.Equal(t, wanted, groupQueryRowIDs(rows))
 }
 
@@ -65,9 +65,9 @@ func assertGroupParentsResult(t *testing.T, tx pgx.Tx, execute string, wanted []
 
 	var want, parents []int64
 
-	require.NoError(t, dbx.SelectSQL(t.Context(), tx, &want, "expected group parents",
+	require.NoError(t, pgxscan.Select(t.Context(), tx, &want,
 		`SELECT DISTINCT outbox_id FROM youtube_notification_delivery WHERE id = ANY($1::BIGINT[]) ORDER BY outbox_id`, wanted))
-	require.NoError(t, dbx.SelectSQL(t.Context(), tx, &parents, "prepared group parents result", execute))
+	require.NoError(t, pgxscan.Select(t.Context(), tx, &parents, execute))
 	require.Equal(t, want, parents)
 }
 

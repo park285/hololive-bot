@@ -1,7 +1,8 @@
 WITH clock AS MATERIALIZED (
     SELECT clock_timestamp() AS now_at
 ), bundle AS MATERIALIZED (
-%s
+{{bundle}}
+
 ),
 admission AS MATERIALIZED (
     SELECT member_count::integer AS member_count

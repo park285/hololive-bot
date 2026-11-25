@@ -1,4 +1,5 @@
-/* fragment:handoff_request_fence */, members AS MATERIALIZED (
+/* fragment:handoff_request_fence */
+, members AS MATERIALIZED (
     SELECT count(d.id) = cardinality($6::BIGINT[]) AS members_match,
            min(d.sent_at) AS admitted_at
     FROM unnest($8::BIGINT[], $9::BIGINT[]) AS claimed(id, row_version)

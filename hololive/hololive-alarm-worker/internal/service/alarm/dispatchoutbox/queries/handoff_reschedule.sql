@@ -1,4 +1,5 @@
-/* fragment:handoff_fence */, unit_updated AS (
+/* fragment:handoff_fence */
+, unit_updated AS (
     UPDATE alarm_dispatch_send_units u
     SET handoff_next_check_at = CASE
             WHEN passed.value THEN LEAST(

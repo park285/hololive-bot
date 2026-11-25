@@ -86,8 +86,7 @@ func claimObservations(
 		kinds[i] = string(options.Kinds[i])
 	}
 
-	rows, err := tx.Query(
-		ctx,
+	rows, err := pgxdb.Query(ctx, tx,
 		claimObservationsSQL,
 		kinds,
 		options.Limit,
@@ -194,7 +193,7 @@ func (s *claimTerminalSet) deadLetter(ctx context.Context, tx dbx.Tx) error {
 		return nil
 	}
 
-	tag, err := tx.Exec(ctx, repositoryClaimDeadLetterSQL, s.ids, s.codes)
+	tag, err := pgxdb.Exec(ctx, tx, repositoryClaimDeadLetterSQL, s.ids, s.codes)
 	if err != nil {
 		return fmt.Errorf("claim source observations: dead letter terminal rows: %w", err)
 	}
@@ -221,7 +220,7 @@ func (r *Repository) ReadySnapshot(ctx context.Context, kinds []contract.Observa
 		ageSeconds float64
 	)
 
-	if err := r.pool.QueryRow(ctx, repositoryReadySnapshotSQL, kindNames, maxAttempts).Scan(&values.Depth, &ageSeconds); err != nil {
+	if err := pgxdb.QueryRow(ctx, r.pool, repositoryReadySnapshotSQL, kindNames, maxAttempts).Scan(&values.Depth, &ageSeconds); err != nil {
 		return workercontract.QueueValues{}, fmt.Errorf("snapshot source observation ready queue: %w", err)
 	}
 

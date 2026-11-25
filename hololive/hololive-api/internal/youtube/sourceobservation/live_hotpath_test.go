@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
@@ -200,7 +201,7 @@ func assertLiveHeadWrites(t *testing.T, pool *pgxpool.Pool, session *live.Sessio
 
 	statement := liveHeadStatement(session)
 
-	tag, err := pool.Exec(t.Context(), statement.SQL, statement.Args...)
+	tag, err := pgxdb.Exec(t.Context(), pool, statement.SQL, statement.Args...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +300,7 @@ func TestLivePendingUpsertSkipsIdenticalEvidence(t *testing.T) {
 			args[7] = now
 		}
 
-		tag, err := pool.Exec(ctx, repositoryLivePendingEndUpsertSQL, args...)
+		tag, err := pgxdb.Exec(ctx, pool, repositoryLivePendingEndUpsertSQL, args...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -322,9 +323,9 @@ func TestLiveStatementBatchFailureRollsBack(t *testing.T) {
 
 	err := dbx.InPgxTx(ctx, pool, func(tx dbx.Tx) error {
 		return dbx.ExecStatements(ctx, tx, []dbx.Statement{
-			{SQL: "INSERT INTO hotpath_batch_regression VALUES ($1)", Args: []any{1}},
-			{SQL: "INSERT INTO hotpath_batch_regression VALUES ($1)", Args: []any{1}},
-			{SQL: "INSERT INTO hotpath_batch_regression VALUES ($1)", Args: []any{2}},
+			{SQL: hotpathBatchRegressionSQL, Args: []any{1}},
+			{SQL: hotpathBatchRegressionSQL, Args: []any{1}},
+			{SQL: hotpathBatchRegressionSQL, Args: []any{2}},
 		})
 	})
 

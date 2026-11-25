@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"embed"
-	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
@@ -10,7 +9,7 @@ import (
 //go:embed queries/*
 var sqlAssets embed.FS
 
-var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+var mustSQL = sqlassets.MustStatementReader(sqlAssets, "queries")
 
 var (
 	broadcastHistoryListPageTemplateSQL = mustSQL("broadcast_history_list_page_template.sql")
@@ -18,10 +17,6 @@ var (
 )
 
 var (
-	broadcastHistoryAllChannelsPageSQL = broadcastHistoryListPageSQL(`$1::text = ''`)
-	broadcastHistoryChannelPageSQL     = broadcastHistoryListPageSQL(`s.channel_id = $1`)
+	broadcastHistoryAllChannelsPageSQL = broadcastHistoryListPageTemplateSQL.WithToken("{{channelPredicate}}", `$1::text = ''`)
+	broadcastHistoryChannelPageSQL     = broadcastHistoryListPageTemplateSQL.WithToken("{{channelPredicate}}", `s.channel_id = $1`)
 )
-
-func broadcastHistoryListPageSQL(channelPredicate string) string {
-	return strings.ReplaceAll(broadcastHistoryListPageTemplateSQL, "{{channelPredicate}}", channelPredicate)
-}

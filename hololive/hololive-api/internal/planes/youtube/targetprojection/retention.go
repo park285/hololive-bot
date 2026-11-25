@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 const projectionRetentionTimeout = 8 * time.Second
@@ -27,7 +29,7 @@ func (r *Refresher) Retain(ctx context.Context, now time.Time, age time.Duration
 
 	cutoff := now.UTC().Add(-age)
 
-	leaseTag, err := r.pool.Exec(ctx, deleteRetiredJobLeasesSQL, cutoff, batchSize)
+	leaseTag, err := pgxdb.Exec(ctx, r.pool, deleteRetiredJobLeasesSQL, cutoff, batchSize)
 	if err != nil {
 		return RetentionResult{}, fmt.Errorf("retain youtube target projections: delete retired job leases: %w", err)
 	}
@@ -36,7 +38,7 @@ func (r *Refresher) Retain(ctx context.Context, now time.Time, age time.Duration
 
 	result.LeasesDeleted = leaseTag.RowsAffected()
 
-	err = r.pool.QueryRow(ctx, deleteRetiredGenerationsSQL, cutoff, batchSize).
+	err = pgxdb.QueryRow(ctx, r.pool, deleteRetiredGenerationsSQL, cutoff, batchSize).
 		Scan(&result.ReasonsDeleted, &result.TargetsDeleted, &result.GenerationsDeleted)
 	if err != nil {
 		return RetentionResult{LeasesDeleted: result.LeasesDeleted}, fmt.Errorf("retain youtube target projections: delete retired generation rows: %w", err)

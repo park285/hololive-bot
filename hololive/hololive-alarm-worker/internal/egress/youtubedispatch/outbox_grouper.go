@@ -4,8 +4,9 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -16,7 +17,7 @@ type OutboxGrouper struct {
 	config            Config
 }
 
-func newOutboxGrouper(db dbx.Querier, cacheClient alarmstore.SubscriberCache, logger *slog.Logger, config *Config) *OutboxGrouper {
+func newOutboxGrouper(db pgxdb.Querier, cacheClient alarmstore.SubscriberCache, logger *slog.Logger, config *Config) *OutboxGrouper {
 	if logger == nil {
 		logger = slog.Default()
 	}

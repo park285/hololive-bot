@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"net"
 	"os"
@@ -109,12 +108,6 @@ func databaseCheckConfig() (*pgx.ConnConfig, error) {
 	return cfg, nil
 }
 
-//go:embed queries/read_only_session_limits.sql
-var readOnlySessionLimitsSQL string
-
-//go:embed queries/verify_database_session.sql
-var verifyDatabaseSessionSQL string
-
 func verifyDatabaseSession(ctx context.Context, conn *pgx.Conn, role string) (err error) {
 	tx, err := conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -127,13 +120,13 @@ func verifyDatabaseSession(ctx context.Context, conn *pgx.Conn, role string) (er
 		}
 	}()
 
-	if _, execErr := tx.Exec(ctx, readOnlySessionLimitsSQL); execErr != nil {
+	if _, execErr := pgxdb.Exec(ctx, tx, readOnlySessionLimitsSQL); execErr != nil {
 		return errors.New("read-only transaction limits failed")
 	}
 
 	var verified bool
 
-	if scanErr := tx.QueryRow(ctx, verifyDatabaseSessionSQL, role).Scan(&verified); scanErr != nil || !verified {
+	if scanErr := pgxdb.QueryRow(ctx, tx, verifyDatabaseSessionSQL, role).Scan(&verified); scanErr != nil || !verified {
 		return errors.New("database backend identity check failed")
 	}
 

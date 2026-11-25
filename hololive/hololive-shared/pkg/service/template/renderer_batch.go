@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"text/template"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -152,7 +154,7 @@ func (r *Renderer) resolveTemplates(ctx context.Context, selectors []templateSel
 		keys[i], channels[i], formats[i] = string(selector.key), selector.channelID, string(selector.format)
 	}
 
-	rows, err := r.pool.Query(ctx, rendererResolveBatchSQL, keys, channels, formats)
+	rows, err := pgxdb.Query(ctx, r.pool, rendererResolveBatchSQL, keys, channels, formats)
 	if err != nil {
 		return nil, fmt.Errorf("query templates: %w", err)
 	}

@@ -7,10 +7,11 @@ import (
 	"strings"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
-func ExecSQL(ctx context.Context, db Querier, action, query string, args ...any) (int64, error) {
-	tag, err := db.Exec(ctx, query, args...)
+func ExecSQL(ctx context.Context, db pgxdb.Querier, action string, query pgxdb.Statement, args ...any) (int64, error) {
+	tag, err := pgxdb.Exec(ctx, db, query, args...)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", action, err)
 	}
@@ -18,16 +19,26 @@ func ExecSQL(ctx context.Context, db Querier, action, query string, args ...any)
 	return tag.RowsAffected(), nil
 }
 
-func SelectSQL(ctx context.Context, db Querier, dest any, action, query string, args ...any) error {
-	if err := pgxscan.Select(ctx, db, dest, query, args...); err != nil {
+func SelectSQL(ctx context.Context, db pgxdb.Querier, dest any, action string, query pgxdb.Statement, args ...any) error {
+	rows, err := pgxdb.Query(ctx, db, query, args...)
+	if err != nil {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+
+	if err := pgxscan.ScanAll(dest, rows); err != nil {
 		return fmt.Errorf("%s: %w", action, err)
 	}
 
 	return nil
 }
 
-func GetSQL(ctx context.Context, db Querier, dest any, action, query string, args ...any) (bool, error) {
-	err := pgxscan.Get(ctx, db, dest, query, args...)
+func GetSQL(ctx context.Context, db pgxdb.Querier, dest any, action string, query pgxdb.Statement, args ...any) (bool, error) {
+	rows, err := pgxdb.Query(ctx, db, query, args...)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", action, err)
+	}
+
+	err = pgxscan.ScanOne(dest, rows)
 	if err == nil {
 		return true, nil
 	}

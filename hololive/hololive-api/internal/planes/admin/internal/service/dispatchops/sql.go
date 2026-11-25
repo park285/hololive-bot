@@ -10,25 +10,29 @@ import (
 //go:embed queries/*.sql
 var sqlAssets embed.FS
 
-var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+var (
+	mustSQL       = sqlassets.MustReader(sqlAssets, "queries")
+	mustStatement = sqlassets.MustStatementReader(sqlAssets, "queries")
+)
 
 var (
 	errorCodeExpression = strings.TrimSpace(mustSQL("error_code_expression.sql"))
-	actionsSQL          = mustSQL("actions.sql")
-	detailSQL           = withListProjection(mustSQL("detail.sql"))
-	failuresSQL         = withErrorCodeExpression(mustSQL("failures.sql"))
-	groupLockedSQL      = withListProjection(mustSQL("group_locked.sql"))
-	groupSQL            = withListProjection(mustSQL("group.sql"))
 	listSQL             = withErrorCodeExpression(mustSQL("list.sql"))
-	requeueSQL          = mustSQL("requeue.sql")
-	settleSQL           = mustSQL("settle.sql")
-	summarySQL          = mustSQL("summary.sql")
+)
+
+var (
+	errorCodeStatement = mustStatement("error_code_expression.sql")
+	listStatement      = mustStatement("list.sql").With("{{errorCodeExpression}}", errorCodeStatement)
+	actionsSQL         = mustStatement("actions.sql")
+	detailSQL          = mustStatement("detail.sql").With("{{listProjection}}", listStatement)
+	failuresSQL        = mustStatement("failures.sql").With("{{errorCodeExpression}}", errorCodeStatement)
+	groupLockedSQL     = mustStatement("group_locked.sql").With("{{listProjection}}", listStatement)
+	groupSQL           = mustStatement("group.sql").With("{{listProjection}}", listStatement)
+	requeueSQL         = mustStatement("requeue.sql")
+	settleSQL          = mustStatement("settle.sql")
+	summarySQL         = mustStatement("summary.sql")
 )
 
 func withErrorCodeExpression(query string) string {
 	return strings.ReplaceAll(query, "{{errorCodeExpression}}", errorCodeExpression)
-}
-
-func withListProjection(query string) string {
-	return strings.ReplaceAll(query, "{{listProjection}}", listSQL)
 }

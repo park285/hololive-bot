@@ -7,6 +7,7 @@ import (
 	"maps"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type insertedEventRow struct {
@@ -33,7 +34,7 @@ func loadExistingEventRows(ctx context.Context, tx pgx.Tx, events []eventInsert)
 		keys = append(keys, events[i].EventKey)
 	}
 
-	rows, err := tx.Query(ctx, loadExistingEventRowsSQL, keys)
+	rows, err := pgxdb.Query(ctx, tx, loadExistingEventRowsSQL, keys)
 	if err != nil {
 		return nil, fmt.Errorf("preflight dispatch events: %w", err)
 	}

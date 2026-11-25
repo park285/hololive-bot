@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-collector/internal/runtime/collection"
@@ -95,8 +96,8 @@ func lockGuardAndVerifyMembership(
 	membershipQuery, membershipArgs := LeaseMembershipQuery(proof, scope)
 	batch := &pgx.Batch{}
 
-	batch.Queue(lockProjectionGuardShareSQL)
-	batch.Queue(membershipQuery, membershipArgs...)
+	pgxdb.Queue(batch, lockProjectionGuardShareSQL)
+	pgxdb.Queue(batch, membershipQuery, membershipArgs...)
 
 	results := sender.SendBatch(ctx, batch)
 	if results == nil {
@@ -197,7 +198,7 @@ func sameJobContract(left, right collection.JobContract) bool {
 }
 
 func (q *snapshotQuery) loadExact(ctx context.Context, tx dbx.Tx, subject string) (collection.TargetSnapshot, error) {
-	rows, err := tx.Query(ctx, loadExactSQL, q.current, q.kindValues, subject)
+	rows, err := pgxdb.Query(ctx, tx, loadExactSQL, q.current, q.kindValues, subject)
 	if err != nil {
 		return collection.TargetSnapshot{}, fmt.Errorf("load exact target snapshot: query targets: %w", err)
 	}
@@ -283,7 +284,7 @@ func scanExactTargetRow(rows pgx.Rows) (contract.ObservationKind, bool, error) {
 }
 
 func (q *snapshotQuery) loadProjection(ctx context.Context, tx dbx.Tx) (collection.TargetSnapshot, error) {
-	rows, err := tx.Query(ctx, loadProjectionSQL, q.current, q.kindValues, q.maxRosterRows)
+	rows, err := pgxdb.Query(ctx, tx, loadProjectionSQL, q.current, q.kindValues, q.maxRosterRows)
 	if err != nil {
 		return collection.TargetSnapshot{}, fmt.Errorf("load projection target snapshot: query targets: %w", err)
 	}

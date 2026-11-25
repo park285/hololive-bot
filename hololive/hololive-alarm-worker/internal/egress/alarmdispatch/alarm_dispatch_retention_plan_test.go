@@ -28,7 +28,7 @@ func TestAlarmDispatchRetentionDeleteReadsOnlyExpiredRowsPerStatus(t *testing.T)
 	for status, query := range alarmDispatchRetentionDeleteSQL {
 		for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
 			t.Run(string(status)+"/"+mode, func(t *testing.T) {
-				plan, deleted := explainAlarmDispatchRetentionDelete(ctx, t, pool, query, mode,
+				plan, deleted := explainAlarmDispatchRetentionDelete(ctx, t, pool, query.SQL(), mode,
 					fmt.Sprintf("%d, %d", retentionPlanRetentionDays, retentionPlanLimit))
 				require.Equal(t, retentionPlanLimit, deleted, "retention delete must remove one full batch")
 

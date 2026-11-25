@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 const attemptsExhaustedCode = "attempts_exhausted"
@@ -51,7 +51,7 @@ func (r *Repository) Retry(ctx context.Context, input RetryInput) (contract.Stat
 
 	var observationID int64
 
-	err := r.pool.QueryRow(ctx, query, args...).Scan(&observationID)
+	err := pgxdb.QueryRow(ctx, r.pool, query, args...).Scan(&observationID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrClaimLost
@@ -96,7 +96,7 @@ func (r *Repository) DeadLetter(ctx context.Context, input DeadLetterInput) erro
 	return nil
 }
 
-func persistDeadLetter(ctx context.Context, db dbx.Querier, input DeadLetterInput) error {
+func persistDeadLetter(ctx context.Context, db pgxdb.Querier, input DeadLetterInput) error {
 	if input.ObservationID <= 0 || !lowercaseHexToken(input.LeaseToken) {
 		return errors.New("validate source observation dead letter: invalid observation id or lease token")
 	}
@@ -107,8 +107,7 @@ func persistDeadLetter(ctx context.Context, db dbx.Querier, input DeadLetterInpu
 
 	var observationID int64
 
-	err := db.QueryRow(
-		ctx,
+	err := pgxdb.QueryRow(ctx, db,
 		persistDeadLetterSQL,
 		input.ObservationID,
 		input.LeaseToken,

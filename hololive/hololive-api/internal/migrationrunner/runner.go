@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -66,7 +67,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, source fs.FS, cfg Config) (Res
 	defer conn.Release()
 
 	exec := func(ctx context.Context, query string, args ...any) error {
-		_, execErr := conn.Exec(ctx, query, args...)
+		_, execErr := conn.Exec(ctx, query, args...) //nolint:forbidigo // shared-go dbmigrate가 넘기는 SQL을 실행하는 콜백이다.
 		return execErr
 	}
 	sessionCfg := dbmigrate.SessionConfig{
@@ -109,13 +110,13 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, files []migrationsourc
 	}
 
 	err := dbx.InPgxTxOptions(ctx, conn, opts, func(tx pgx.Tx) error {
-		if _, pathErr := tx.Exec(ctx, mustSQL("migration_search_path.sql")); pathErr != nil {
+		if _, pathErr := pgxdb.Exec(ctx, tx, mustSQL("migration_search_path.sql")); pathErr != nil {
 			return fmt.Errorf("select migration namespace: %w", pathErr)
 		}
 
 		var migrations, checksums bool
 
-		if err := tx.QueryRow(ctx, mustSQL("migration_ledgers_present.sql")).Scan(&migrations, &checksums); err != nil {
+		if err := pgxdb.QueryRow(ctx, tx, mustSQL("migration_ledgers_present.sql")).Scan(&migrations, &checksums); err != nil {
 			return fmt.Errorf("inspect migration ledgers: %w", err)
 		}
 
@@ -176,13 +177,13 @@ func advance(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg C
 }
 
 func openMigrationWindow(ctx context.Context, tx pgx.Tx) (bool, error) {
-	if _, err := tx.Exec(ctx, mustSQL("migration_window_marker.sql")); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, mustSQL("migration_window_marker.sql")); err != nil {
 		return false, fmt.Errorf("publish migration window marker: %w", err)
 	}
 
 	var drained bool
 
-	if err := tx.QueryRow(ctx, mustSQL("writer_drain_state.sql")).Scan(&drained); err != nil {
+	if err := pgxdb.QueryRow(ctx, tx, mustSQL("writer_drain_state.sql")).Scan(&drained); err != nil {
 		return false, fmt.Errorf("inspect writer drain: %w", err)
 	}
 
@@ -196,7 +197,7 @@ func bootstrap(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg
 
 	var empty bool
 
-	if err := tx.QueryRow(ctx, mustSQL("empty_database.sql")).Scan(&empty); err != nil {
+	if err := pgxdb.QueryRow(ctx, tx, mustSQL("empty_database.sql")).Scan(&empty); err != nil {
 		return Result{}, fmt.Errorf("inspect empty database: %w", err)
 	}
 
@@ -213,7 +214,7 @@ func bootstrap(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg
 	if cfg.InitializeOnly {
 		var ready bool
 
-		if err := tx.QueryRow(ctx, mustSQL("initialization_roles.sql")).Scan(&ready); err != nil {
+		if err := pgxdb.QueryRow(ctx, tx, mustSQL("initialization_roles.sql")).Scan(&ready); err != nil {
 			return Result{}, fmt.Errorf("inspect application initialization prerequisites: %w", err)
 		}
 
@@ -232,7 +233,7 @@ func bootstrap(ctx context.Context, tx pgx.Tx, files []migrationsource.File, cfg
 func verifyHead(ctx context.Context, tx pgx.Tx, files []migrationsource.File, migrationWindow bool) (int, int, error) {
 	var epoch, applied, pending int
 
-	if err := tx.QueryRow(ctx, mustSQL("lineage_head.sql"), migrationsource.Receipts(files)).Scan(&epoch, &applied, &pending); err != nil {
+	if err := pgxdb.QueryRow(ctx, tx, mustSQL("lineage_head.sql"), migrationsource.Receipts(files)).Scan(&epoch, &applied, &pending); err != nil {
 		return 0, 0, fmt.Errorf("inspect migration head and card schema (partial cutovers must stay held): %w", err)
 	}
 
@@ -247,7 +248,7 @@ func verifyHead(ctx context.Context, tx pgx.Tx, files []migrationsource.File, mi
 	if migrationWindow {
 		var private bool
 
-		if err := tx.QueryRow(ctx, mustSQL("migration_window_state.sql")).Scan(&private); err != nil {
+		if err := pgxdb.QueryRow(ctx, tx, mustSQL("migration_window_state.sql")).Scan(&private); err != nil {
 			return 0, 0, fmt.Errorf("inspect protected migration endpoint: %w", err)
 		}
 
@@ -261,7 +262,7 @@ func verifyHead(ctx context.Context, tx pgx.Tx, files []migrationsource.File, mi
 
 func initialize(ctx context.Context, tx pgx.Tx, files []migrationsource.File) error {
 	exec := func(ctx context.Context, query string, args ...any) error {
-		_, execErr := tx.Exec(ctx, query, args...)
+		_, execErr := tx.Exec(ctx, query, args...) //nolint:forbidigo // shared-go dbmigrate가 넘기는 SQL을 실행하는 콜백이다.
 		return execErr
 	}
 	ledger := dbmigrate.Ledger{Table: "public.schema_migrations"}
@@ -270,7 +271,7 @@ func initialize(ctx context.Context, tx pgx.Tx, files []migrationsource.File) er
 		return fmt.Errorf("create migration ledger: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("ensure_migration_checksums.sql")); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, mustSQL("ensure_migration_checksums.sql")); err != nil {
 		return fmt.Errorf("create checksum ledger: %w", err)
 	}
 
@@ -282,7 +283,7 @@ func applyFiles(ctx context.Context, tx pgx.Tx, files []migrationsource.File) er
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("lock_migration_ledgers.sql")); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, mustSQL("lock_migration_ledgers.sql")); err != nil {
 		return fmt.Errorf("protect migration ledgers: %w", err)
 	}
 
@@ -312,7 +313,7 @@ func applyFiles(ctx context.Context, tx pgx.Tx, files []migrationsource.File) er
 func receiptState(ctx context.Context, tx pgx.Tx, except, checksum string) ([]byte, error) {
 	var digest []byte
 
-	if err := tx.QueryRow(ctx, mustSQL("ledger_snapshot.sql"), except, checksum).Scan(&digest); err != nil {
+	if err := pgxdb.QueryRow(ctx, tx, mustSQL("ledger_snapshot.sql"), except, checksum).Scan(&digest); err != nil {
 		return nil, fmt.Errorf("inspect ledger definitions and preserved receipts: %w", err)
 	}
 
@@ -324,11 +325,11 @@ func applyFile(ctx context.Context, tx pgx.Tx, file migrationsource.File) error 
 		return fmt.Errorf("execute pending migration: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("record_migration_checksum.sql"), file.Name, file.Checksum); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, mustSQL("record_migration_checksum.sql"), file.Name, file.Checksum); err != nil {
 		return fmt.Errorf("record checksum for %s: %w", file.Name, err)
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("record_migration_application.sql"), file.Name); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, mustSQL("record_migration_application.sql"), file.Name); err != nil {
 		return fmt.Errorf("record application of %s: %w", file.Name, err)
 	}
 
@@ -352,7 +353,7 @@ var _ dbmigrate.UnlockFailureEvicter = pgxAdvisoryLockSession{}
 func (s pgxAdvisoryLockSession) TryAdvisoryLock(ctx context.Context, key int64) (bool, error) {
 	var acquired bool
 
-	if err := s.conn.QueryRow(ctx, mustSQL("try_advisory_lock.sql"), key).Scan(&acquired); err != nil {
+	if err := pgxdb.QueryRow(ctx, s.conn, mustSQL("try_advisory_lock.sql"), key).Scan(&acquired); err != nil {
 		return false, fmt.Errorf("scan try advisory lock: %w", err)
 	}
 
@@ -362,7 +363,7 @@ func (s pgxAdvisoryLockSession) TryAdvisoryLock(ctx context.Context, key int64) 
 func (s pgxAdvisoryLockSession) AdvisoryUnlock(ctx context.Context, key int64) (bool, error) {
 	var released bool
 
-	if err := s.conn.QueryRow(ctx, mustSQL("advisory_unlock.sql"), key).Scan(&released); err != nil {
+	if err := pgxdb.QueryRow(ctx, s.conn, mustSQL("advisory_unlock.sql"), key).Scan(&released); err != nil {
 		return false, fmt.Errorf("scan advisory unlock: %w", err)
 	}
 

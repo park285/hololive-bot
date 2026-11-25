@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
@@ -51,7 +52,7 @@ func (rosterReader) LiveCheckVideos(
 		return nil, nil
 	}
 
-	rows, err := tx.Query(ctx, liveCheckVideosSQL,
+	rows, err := pgxdb.Query(ctx, tx, liveCheckVideosSQL,
 		query.OperationalChannelIDs,
 		targetprojection.MaxInputLiveCheckVideoCount+1)
 	if err != nil {
@@ -101,7 +102,7 @@ func (r rosterReader) TimeFinalizationVideos(ctx context.Context, tx dbx.Tx) ([]
 		maxBacklogFinalizations = 2000
 	)
 
-	rows, err := tx.Query(ctx, timeFinalizationVideosSQL, r.timeFinalizationBacklogBatchSize,
+	rows, err := pgxdb.Query(ctx, tx, timeFinalizationVideosSQL, r.timeFinalizationBacklogBatchSize,
 		maxNewFinalizations, maxBacklogFinalizations,
 		sourceobservation.TimeFinalizationNewWindow, sourceobservation.TimeFinalizationFirstAttemptDelay)
 	if err != nil {
@@ -174,12 +175,12 @@ func freshnessDeadline(asOf time.Time, effective, observed pgtype.Timestamptz, b
 	return earliest.Add(budget)
 }
 
-func loadChannelIDs(ctx context.Context, tx dbx.Tx, query, label string) ([]string, error) {
+func loadChannelIDs(ctx context.Context, tx dbx.Tx, query pgxdb.Statement, label string) ([]string, error) {
 	if tx == nil {
 		return nil, fmt.Errorf("%w: transaction is not configured", targetprojection.ErrInputRead)
 	}
 
-	rows, err := tx.Query(ctx, query, targetprojection.MaxInputChannelCount+1)
+	rows, err := pgxdb.Query(ctx, tx, query, targetprojection.MaxInputChannelCount+1)
 	if err != nil {
 		return nil, fmt.Errorf("%w: load %s channels: %w", targetprojection.ErrInputRead, label, err)
 	}

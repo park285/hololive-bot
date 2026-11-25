@@ -137,11 +137,11 @@ func TestProjectionLockUsesRestrictedRoleFunction(t *testing.T) {
 	t.Parallel()
 
 	query := lockProjectionGuardShareSQL
-	if !strings.Contains(query, "lock_current_youtube_collection_projection()") {
+	if !strings.Contains(query.SQL(), "lock_current_youtube_collection_projection()") {
 		t.Fatal("projection lock query must use the restricted-role lock function")
 	}
 
-	if strings.Contains(strings.ToUpper(query), "FOR SHARE") {
+	if strings.Contains(strings.ToUpper(query.SQL()), "FOR SHARE") {
 		t.Fatal("projection lock query must not lock the table directly")
 	}
 }
@@ -348,8 +348,7 @@ func holdActiveLeaseRow(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseP
 		failureAt                                *time.Time
 	)
 
-	err = tx.QueryRow(
-		ctx,
+	err = pgxdb.QueryRow(ctx, tx,
 		lockActiveLeaseSQL,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 	).Scan(&failureCode, &failureClass, &failureDetail, &failureAt)
@@ -1465,7 +1464,7 @@ func (l *JobLease) Complete(ctx context.Context) error {
 
 	var jobKey string
 
-	err := l.repository.pool.QueryRow(ctx, completeCurrentLeaseSQL, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+	err := pgxdb.QueryRow(ctx, l.repository.pool, completeCurrentLeaseSQL, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 		l.proof.ProjectionGeneration, l.proof.ScheduledFor).Scan(&jobKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return collection.ErrFenceLost

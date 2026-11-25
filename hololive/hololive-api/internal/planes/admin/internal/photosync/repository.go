@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type repository struct {
@@ -15,7 +16,7 @@ type repository struct {
 func (r repository) membersNeedingSync(ctx context.Context, staleThreshold time.Duration) ([]string, error) {
 	staleTime := time.Now().Add(-staleThreshold)
 
-	rows, err := r.pool.Query(ctx, membersNeedingSyncSQL, staleTime)
+	rows, err := pgxdb.Query(ctx, r.pool, membersNeedingSyncSQL, staleTime)
 	if err != nil {
 		return nil, fmt.Errorf("get members needing photo sync: %w", err)
 	}
@@ -41,7 +42,7 @@ func (r repository) membersNeedingSync(ctx context.Context, staleThreshold time.
 }
 
 func (r repository) updatePhoto(ctx context.Context, channelID, photoURL string) error {
-	if _, err := r.pool.Exec(ctx, updatePhotoSQL, channelID, photoURL, time.Now()); err != nil {
+	if _, err := pgxdb.Exec(ctx, r.pool, updatePhotoSQL, channelID, photoURL, time.Now()); err != nil {
 		return fmt.Errorf("update photo: %w", err)
 	}
 

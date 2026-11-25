@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func selectSourcePostsForTest(t *testing.T, db trackingDB) []domain.YouTubeCommunityShortsSourcePost {
+func selectSourcePostsForTest(t *testing.T, db pgxdb.Querier) []domain.YouTubeCommunityShortsSourcePost {
 	t.Helper()
 
 	var rows []domain.YouTubeCommunityShortsSourcePost
@@ -128,7 +129,7 @@ type convergedTrackingRow struct {
 
 func requireConvergedTrackingRow(
 	t *testing.T,
-	db trackingDB,
+	db pgxdb.Querier,
 	repository *PgxRepository,
 	tc trackingIdentityCase,
 	want convergedTrackingRow,
@@ -350,7 +351,7 @@ func concurrentUpsertTracking(t *testing.T, repository *PgxRepository, records [
 	}
 }
 
-func requireSingleCanonicalTrackingRow(t *testing.T, db trackingDB, kind domain.OutboxKind, canonicalID string) {
+func requireSingleCanonicalTrackingRow(t *testing.T, db pgxdb.Querier, kind domain.OutboxKind, canonicalID string) {
 	t.Helper()
 
 	rows := selectTrackingRowsForTest(t, db)

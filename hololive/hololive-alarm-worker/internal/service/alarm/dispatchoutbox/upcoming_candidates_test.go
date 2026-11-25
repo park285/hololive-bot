@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -87,7 +88,7 @@ func TestUpcomingCandidatesCommitResponseLossAndConstraintFailure(t *testing.T) 
 	require.Equal(t, 1, count)
 }
 
-type unexpectedStageDB struct{}
+type unexpectedStageDB struct{ pgxdb.Querier }
 
 func (unexpectedStageDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, errors.New("unexpected exec")

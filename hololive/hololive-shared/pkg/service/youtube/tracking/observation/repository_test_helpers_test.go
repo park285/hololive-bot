@@ -5,6 +5,7 @@ import (
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -42,7 +43,7 @@ func newTrackingTestDBWithMaxOpenConns(t *testing.T, maxOpenConns int) *pgxpool.
 	return pool
 }
 
-func selectTrackingRowsForTest(t *testing.T, db trackingDB) []domain.YouTubeContentAlarmTracking {
+func selectTrackingRowsForTest(t *testing.T, db pgxdb.Querier) []domain.YouTubeContentAlarmTracking {
 	t.Helper()
 
 	var rows []domain.YouTubeContentAlarmTracking

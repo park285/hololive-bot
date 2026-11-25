@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -35,8 +36,7 @@ func (r *Repository) EnsureClaimBudget(
 
 	var expiresAt time.Time
 
-	err := r.pool.QueryRow(
-		ctx,
+	err := pgxdb.QueryRow(ctx, r.pool,
 		ensureClaimBudgetSQL,
 		claim.ObservationID,
 		claim.LeaseToken,
@@ -235,8 +235,7 @@ func writeFinalizeApplications(ctx context.Context, tx dbx.Tx, observation *Obse
 		kinds[i], keys[i], decisions[i] = application.EntityKind, application.EntityKey, application.Decision
 	}
 
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		writeFinalizeApplicationsSQL,
 		observation.ID, kinds, keys, decisions,
 	); err != nil {
@@ -265,8 +264,7 @@ func validateFinalizeApplication(index int, application Application) error {
 func completeFinalizeObservation(ctx context.Context, tx dbx.Tx, claim Claim, observation *Observation) error {
 	var observationID int64
 
-	err := tx.QueryRow(
-		ctx,
+	err := pgxdb.QueryRow(ctx, tx,
 		completeFinalizeObservationSQL,
 		observation.ID,
 		observation.LeaseToken,
@@ -280,8 +278,7 @@ func completeFinalizeObservation(ctx context.Context, tx dbx.Tx, claim Claim, ob
 		return fmt.Errorf("finalize source observation: complete queue item: %w", err)
 	}
 
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		completeFinalizeObservation2SQL,
 		claim.ConsumerName,
 		observation.ObservationKind,
@@ -295,8 +292,7 @@ func completeFinalizeObservation(ctx context.Context, tx dbx.Tx, claim Claim, ob
 }
 
 func lockClaim(ctx context.Context, tx dbx.Tx, claim Claim) (Observation, error) {
-	row := tx.QueryRow(
-		ctx,
+	row := pgxdb.QueryRow(ctx, tx,
 		lockClaimSQL,
 		claim.ObservationID,
 		claim.LeaseToken,

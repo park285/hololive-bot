@@ -72,7 +72,7 @@ func benchmarkRepositoryRead(b *testing.B, repo *Repository, pool *pgxpool.Pool,
 
 	var raw []byte
 
-	require.NoError(b, pool.QueryRow(b.Context(), "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) "+snapshotSQL, request.Scope == All, request.ChannelID, request.Limit+1, maxChannels+1).Scan(&raw))
+	require.NoError(b, pool.QueryRow(b.Context(), "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) "+snapshotSQL.SQL(), request.Scope == All, request.ChannelID, request.Limit+1, maxChannels+1).Scan(&raw))
 
 	var plans []struct {
 		ExecutionTime float64 `json:"Execution Time"`

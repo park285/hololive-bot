@@ -2,7 +2,6 @@ package joblease
 
 import (
 	"embed"
-	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
@@ -10,13 +9,13 @@ import (
 //go:embed queries/*
 var sqlAssets embed.FS
 
-var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+var mustSQL = sqlassets.MustStatementReader(sqlAssets, "queries")
 
 var (
 	subjectCandidatesForProjectionSQL   = mustSQL("subject_candidates_for_projection.sql")
 	globalCandidatesForProjectionSQL    = mustSQL("global_candidates_for_projection.sql")
-	repositoryLeaseAcquireSQL           = fmt.Sprintf(mustSQL("repository_lease_acquire.sql.tpl"), mustSQL("repository_target_bundle_kinds.sql"))
-	repositoryLeaseAcquireExactSQL      = fmt.Sprintf(mustSQL("repository_lease_acquire.sql.tpl"), mustSQL("repository_target_bundle_exact.sql"))
+	repositoryLeaseAcquireSQL           = mustSQL("repository_lease_acquire.sql.tpl").With("{{bundle}}", mustSQL("repository_target_bundle_kinds.sql"))
+	repositoryLeaseAcquireExactSQL      = mustSQL("repository_lease_acquire.sql.tpl").With("{{bundle}}", mustSQL("repository_target_bundle_exact.sql"))
 	repositoryLeaseInitializeSQL        = mustSQL("repository_lease_initialize.sql")
 	completeCurrentLeaseSQL             = mustSQL("complete_current_lease.sql")
 	completeCurrentLeaseWithErrorSQL    = mustSQL("complete_current_lease_with_error.sql")

@@ -10,6 +10,7 @@ FROM (
     FROM schedule_posters p
     JOIN schedule_poster_posts d ON d.channel_id = p.channel_id
     WHERE p.id = $1 AND /* fragment:post_window */
+
 ) listed
 WHERE n <= CASE WHEN actionable THEN $2::bigint ELSE $3::bigint END
 ORDER BY posted_at DESC, post_id DESC

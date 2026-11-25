@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type eventCollision struct {
@@ -39,7 +40,7 @@ func recordEventCollisions(ctx context.Context, tx pgx.Tx, collisions []eventCol
 		return fmt.Errorf("record dispatch event collisions: marshal batch: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, recordEventCollisionsSQL, jsonbRecordsetParam(raw)); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, recordEventCollisionsSQL, jsonbRecordsetParam(raw)); err != nil {
 		return fmt.Errorf("record dispatch event collisions: %w", err)
 	}
 

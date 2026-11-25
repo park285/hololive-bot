@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -110,7 +111,7 @@ func TestRetentionBacklogDoesNotClaimEmptyBeyondProtectedScanLimit(t *testing.T)
 			known  bool
 		)
 
-		require.NoError(t, pool.QueryRow(ctx, repositoryRetentionBacklogEvidenceSQL,
+		require.NoError(t, pgxdb.QueryRow(ctx, pool, repositoryRetentionBacklogEvidenceSQL,
 			[]string{string(contract.KindCommunityPage)}, []time.Time{time.Now().Add(-24 * time.Hour)}, tc.limit).Scan(&oldest, &known))
 		require.Equal(t, tc.known, known)
 

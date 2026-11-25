@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -19,7 +21,7 @@ func (r *PgxRepository) ClaimDue(ctx context.Context, workerID string, limit int
 		return nil, fmt.Errorf("claim due dispatch deliveries: lease: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, claimDueSQL, limit, workerID, leaseMS, maxDeliveriesPerSendUnit)
+	rows, err := pgxdb.Query(ctx, r.pool, claimDueSQL, limit, workerID, leaseMS, maxDeliveriesPerSendUnit)
 	if err != nil {
 		return nil, fmt.Errorf("claim due dispatch deliveries: %w", err)
 	}
@@ -49,7 +51,7 @@ func (r *PgxRepository) LoadEventsByID(ctx context.Context, eventIDs []int64) (m
 		return events, nil
 	}
 
-	rows, err := r.pool.Query(ctx, loadEventsByIDSQL, eventIDs)
+	rows, err := pgxdb.Query(ctx, r.pool, loadEventsByIDSQL, eventIDs)
 	if err != nil {
 		return nil, fmt.Errorf("load dispatch events: %w", err)
 	}

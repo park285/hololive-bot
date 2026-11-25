@@ -165,7 +165,7 @@ func explainHistoryPage(t *testing.T, pool *pgxpool.Pool, mode, channelID string
 
 	for _, statement := range []string{
 		"SET plan_cache_mode = " + mode,
-		"PREPARE history_page_plan(text, timestamptz, timestamptz, text, text, integer) AS " + broadcastHistoryPageSQL(channelID),
+		"PREPARE history_page_plan(text, timestamptz, timestamptz, text, text, integer) AS " + broadcastHistoryPageSQL(channelID).SQL(),
 	} {
 		_, err = conn.Exec(ctx, statement)
 		require.NoError(t, err)

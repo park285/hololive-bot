@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -18,7 +19,7 @@ func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType, alia
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
 	}
 
-	tag, err := r.pool.Exec(ctx, addAliasSQL, memberID, aliasType, alias)
+	tag, err := pgxdb.Exec(ctx, r.pool, addAliasSQL, memberID, aliasType, alias)
 	if err != nil {
 		return fmt.Errorf("add alias: %w", err)
 	}
@@ -35,7 +36,7 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType, a
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
 	}
 
-	tag, err := r.pool.Exec(ctx, removeAliasSQL, memberID, aliasType, alias)
+	tag, err := pgxdb.Exec(ctx, r.pool, removeAliasSQL, memberID, aliasType, alias)
 	if err != nil {
 		return fmt.Errorf("remove alias: %w", err)
 	}
@@ -48,7 +49,7 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType, a
 }
 
 func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduated bool) error {
-	tag, err := r.pool.Exec(ctx, setGraduationSQL, memberID, isGraduated, graduationStatus(isGraduated))
+	tag, err := pgxdb.Exec(ctx, r.pool, setGraduationSQL, memberID, isGraduated, graduationStatus(isGraduated))
 	if err != nil {
 		return fmt.Errorf("update graduation status: %w", err)
 	}
@@ -61,7 +62,7 @@ func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduate
 }
 
 func (r *Repository) UpdateChannelID(ctx context.Context, memberID int, channelID string) error {
-	tag, err := r.pool.Exec(ctx, updateChannelIDSQL, memberID, channelID)
+	tag, err := pgxdb.Exec(ctx, r.pool, updateChannelIDSQL, memberID, channelID)
 	if err != nil {
 		return fmt.Errorf("update channel ID: %w", err)
 	}
@@ -74,7 +75,7 @@ func (r *Repository) UpdateChannelID(ctx context.Context, memberID int, channelI
 }
 
 func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name string) error {
-	tag, err := r.pool.Exec(ctx, updateMemberNameSQL, memberID, name)
+	tag, err := pgxdb.Exec(ctx, r.pool, updateMemberNameSQL, memberID, name)
 	if err != nil {
 		return fmt.Errorf("update member name: %w", err)
 	}
@@ -105,7 +106,7 @@ func (r *Repository) CreateMemberOrMatch(ctx context.Context, member *domain.Mem
 		member.ShortKoreanName, member.ChzzkChannelID, member.TwitchUserID,
 	}
 
-	err = r.pool.QueryRow(ctx, createMemberSQL, args...).Scan(&member.ID)
+	err = pgxdb.QueryRow(ctx, r.pool, createMemberSQL, args...).Scan(&member.ID)
 	if err == nil {
 		return false, nil
 	}
@@ -115,7 +116,7 @@ func (r *Repository) CreateMemberOrMatch(ctx context.Context, member *domain.Mem
 		return false, fmt.Errorf("create member: %w", err)
 	}
 
-	err = r.pool.QueryRow(ctx, matchCreatedMemberSQL, args...).Scan(&member.ID)
+	err = pgxdb.QueryRow(ctx, r.pool, matchCreatedMemberSQL, args...).Scan(&member.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, ErrCreateConflict
 	}

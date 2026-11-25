@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/kapu/hololive-api/internal/youtube/sourceobservation"
@@ -40,7 +41,7 @@ func newTimeFinalizationMetrics(reg prometheus.Registerer) *timeFinalizationMetr
 }
 
 func (r *Runtime) loadTimeFinalizationSamples(ctx context.Context) ([]timeFinalizationSample, error) {
-	rows, err := r.pool.Query(ctx, timeFinalizationObservabilitySQL, sourceobservation.TimeFinalizationNewWindow)
+	rows, err := pgxdb.Query(ctx, r.pool, timeFinalizationObservabilitySQL, sourceobservation.TimeFinalizationNewWindow)
 	if err != nil {
 		return nil, fmt.Errorf("query time finalization snapshot: %w", err)
 	}

@@ -1,4 +1,5 @@
 WITH /* fragment:transition_group_candidates */
+
 SELECT DISTINCT grouped.outbox_id
 FROM (
     SELECT delivery.outbox_id

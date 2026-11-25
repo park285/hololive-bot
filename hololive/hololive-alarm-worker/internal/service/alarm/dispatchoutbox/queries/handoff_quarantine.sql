@@ -1,4 +1,5 @@
-/* fragment:handoff_fence */, updated AS (
+/* fragment:handoff_fence */
+, updated AS (
     UPDATE alarm_dispatch_deliveries d
     SET status = 'quarantined',
         quarantined_at = clock.now,

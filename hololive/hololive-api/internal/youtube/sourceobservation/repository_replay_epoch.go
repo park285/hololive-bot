@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -43,8 +44,7 @@ func activateReplayEpochTx(
 	tx dbx.Tx,
 	input ReplayEpochInput,
 ) (ReplayEpochActivation, error) {
-	epoch, err := scanReplayEpoch(tx.QueryRow(
-		ctx,
+	epoch, err := scanReplayEpoch(pgxdb.QueryRow(ctx, tx,
 		activateReplayEpochTxSQL,
 		input.ActivatedBy,
 		input.Reason,
@@ -57,8 +57,7 @@ func activateReplayEpochTx(
 		return ReplayEpochActivation{}, fmt.Errorf("activate source observation replay epoch: %w", err)
 	}
 
-	epoch, err = scanReplayEpoch(tx.QueryRow(
-		ctx,
+	epoch, err = scanReplayEpoch(pgxdb.QueryRow(ctx, tx,
 		activateReplayEpochTx2SQL,
 	))
 	if err != nil {

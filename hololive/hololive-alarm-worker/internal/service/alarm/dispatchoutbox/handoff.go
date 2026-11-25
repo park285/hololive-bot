@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 )
@@ -69,7 +70,7 @@ func (r *PgxRepository) ClaimHandoffDue(ctx context.Context, limit int, softClai
 		return nil, fmt.Errorf("claim handoff checks: soft claim: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, handoffClaimDueSQL, limit, softClaimMS)
+	rows, err := pgxdb.Query(ctx, r.pool, handoffClaimDueSQL, limit, softClaimMS)
 	if err != nil {
 		return nil, fmt.Errorf("claim handoff checks: %w", err)
 	}
@@ -149,14 +150,14 @@ func (r *PgxRepository) QuarantineAfterHandoff(ctx context.Context, claim *Hando
 	return r.applyHandoff(ctx, fenceActionHandoffQuarantine, handoffQuarantineSQL, claim, sanitizeStoredError(detail), code)
 }
 
-func (r *PgxRepository) applyHandoff(ctx context.Context, action, query string, claim *HandoffClaim, extra ...any) error {
+func (r *PgxRepository) applyHandoff(ctx context.Context, action string, query pgxdb.Statement, claim *HandoffClaim, extra ...any) error {
 	if claim == nil || len(claim.DeliveryIDs) == 0 {
 		return fmt.Errorf("%s: claim has no pinned deliveries", action)
 	}
 
 	args := append([]any{claim.UnitID, claim.CheckToken, claim.ClientRequestID, claim.IrisRequestID, claim.claimXID}, extra...)
 
-	rows, err := r.pool.Query(ctx, query, args...)
+	rows, err := pgxdb.Query(ctx, r.pool, query, args...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", action, err)
 	}

@@ -12,7 +12,7 @@ import (
 func TestOrdinaryDeferSQLHasClosedValuesWhitelist(t *testing.T) {
 	t.Parallel()
 
-	got := extractDurableFailureTuples(deferSQL)
+	got := extractDurableFailureTuples(deferSQL.SQL())
 	want := contract.DeferFailureTuples()
 
 	if !failureTupleSetsEqual(got, want) {
@@ -23,7 +23,7 @@ func TestOrdinaryDeferSQLHasClosedValuesWhitelist(t *testing.T) {
 func TestCompleteWithErrorSQLHasClosedValuesWhitelist(t *testing.T) {
 	t.Parallel()
 
-	got := extractDurableFailureTuples(completeCurrentLeaseWithErrorSQL)
+	got := extractDurableFailureTuples(completeCurrentLeaseWithErrorSQL.SQL())
 	want := contract.CompleteErrorFailureTuples()
 
 	if !failureTupleSetsEqual(got, want) {

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
@@ -16,7 +16,7 @@ import (
 var sqlAssets embed.FS
 
 var (
-	mustSQL           = sqlassets.MustReader(sqlAssets, "queries")
+	mustSQL           = sqlassets.MustStatementReader(sqlAssets, "queries")
 	candidatesPageSQL = mustSQL("candidates_page.sql")
 	saveDecisionSQL   = mustSQL("save_decision.sql")
 )
@@ -44,17 +44,12 @@ type decision struct {
 	Model      string
 }
 
-type pool interface {
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
 type pgStore struct {
-	pool pool
+	pool pgxdb.Querier
 }
 
 func (s pgStore) candidates(ctx context.Context, since, endedBefore time.Time, cursorAt *time.Time, cursorVideoID string, limit int) ([]candidate, error) {
-	rows, err := s.pool.Query(ctx, candidatesPageSQL, since, cursorAt, cursorVideoID, limit, endedBefore)
+	rows, err := pgxdb.Query(ctx, s.pool, candidatesPageSQL, since, cursorAt, cursorVideoID, limit, endedBefore)
 	if err != nil {
 		return nil, fmt.Errorf("query broadcast type decision candidates: %w", err)
 	}
@@ -74,7 +69,7 @@ func (s pgStore) candidates(ctx context.Context, since, endedBefore time.Time, c
 }
 
 func (s pgStore) save(ctx context.Context, d decision) error {
-	if _, err := s.pool.Exec(ctx, saveDecisionSQL, d.VideoID, d.Title, d.Outcome, d.Type, d.Confidence, d.Model); err != nil {
+	if _, err := pgxdb.Exec(ctx, s.pool, saveDecisionSQL, d.VideoID, d.Title, d.Outcome, d.Type, d.Confidence, d.Model); err != nil {
 		return fmt.Errorf("save broadcast type decision %s: %w", d.VideoID, err)
 	}
 

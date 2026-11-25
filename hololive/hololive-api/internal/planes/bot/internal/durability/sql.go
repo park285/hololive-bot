@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
@@ -17,27 +18,29 @@ import (
 //go:embed queries/*
 var sqlAssets embed.FS
 
-var mustSQL = func() func(string) string {
-	read := sqlassets.MustReader(sqlAssets, "queries")
+var mustSQL = func() func(string) pgxdb.Statement {
+	read := sqlassets.MustStatementReader(sqlAssets, "queries")
 	inboxRelation := read("inbox_ready_relation.sql")
 	replyRelation := read("reply_ready_relation.sql")
 	safety := read("reply_safety_expired.sql")
-	inboxClaim := strings.ReplaceAll(read("inbox_claim.sql"), "{{inbox_ready_relation}}", inboxRelation)
-	inboxSnapshot := strings.ReplaceAll(read("inbox_ready_snapshot.sql"), "{{inbox_ready_relation}}", inboxRelation)
-	inboxHeadAdvance := strings.NewReplacer("{{inbox_head_advance}}", read("inbox_head_advance.sql"))
-	replyClaim := strings.NewReplacer("{{reply_ready_relation}}", replyRelation, "{{safety_expired}}",
-		strings.NewReplacer("{{max_attempts}}", "$3", "{{replay_horizon}}", "$4").Replace(safety)).Replace(read("reply_outbox_claim.sql"))
-	replySnapshot := strings.NewReplacer("{{reply_ready_relation}}", replyRelation, "{{safety_expired}}",
-		strings.NewReplacer("{{max_attempts}}", "$1", "{{replay_horizon}}", "$2").Replace(safety)).Replace(read("reply_outbox_ready_snapshot.sql"))
+	inboxClaim := read("inbox_claim.sql").With("{{inbox_ready_relation}}", inboxRelation)
+	inboxSnapshot := read("inbox_ready_snapshot.sql").With("{{inbox_ready_relation}}", inboxRelation)
+	inboxHeadAdvance := read("inbox_head_advance.sql")
+	replyClaim := read("reply_outbox_claim.sql").
+		With("{{reply_ready_relation}}", replyRelation).
+		With("{{safety_expired}}", safety.WithToken("{{max_attempts}}", "$3").WithToken("{{replay_horizon}}", "$4"))
+	replySnapshot := read("reply_outbox_ready_snapshot.sql").
+		With("{{reply_ready_relation}}", replyRelation).
+		With("{{safety_expired}}", safety.WithToken("{{max_attempts}}", "$1").WithToken("{{replay_horizon}}", "$2"))
 
-	return func(name string) string {
+	return func(name string) pgxdb.Statement {
 		switch name {
 		case "inbox_claim.sql":
 			return inboxClaim
 		case "inbox_ready_snapshot.sql":
 			return inboxSnapshot
 		case "inbox_abandon.sql", "inbox_complete.sql", "inbox_reclaim_expired.sql", "inbox_release.sql":
-			return inboxHeadAdvance.Replace(read(name))
+			return read(name).With("{{inbox_head_advance}}", inboxHeadAdvance)
 		case "reply_outbox_claim.sql":
 			return replyClaim
 		case "reply_outbox_ready_snapshot.sql":

@@ -25,7 +25,7 @@ func TestLiveStatementBatchFailureRollsBackEarlierChunks(t *testing.T) {
 
 	for i := range statements {
 		statements[i] = dbx.Statement{
-			SQL:       "INSERT INTO hotpath_chunk_rollback VALUES ($1)",
+			SQL:       hotpathChunkRollbackSQL,
 			Args:      []any{i},
 			Operation: "insert rollback fixture",
 		}
@@ -91,14 +91,14 @@ func TestLiveStatementBatchesPreserveDeferredForeignKeyBoundary(t *testing.T) {
 
 	for i := range children {
 		statements = append(statements, dbx.Statement{
-			SQL:       "INSERT INTO hotpath_batch_child VALUES ($1, $2)",
+			SQL:       hotpathBatchChildSQL,
 			Args:      []any{i, 1},
 			Operation: "insert deferred child fixture",
 		})
 	}
 
 	statements = append(statements, dbx.Statement{
-		SQL:       "INSERT INTO hotpath_batch_parent VALUES ($1)",
+		SQL:       hotpathBatchParentSQL,
 		Args:      []any{1},
 		Operation: "insert deferred parent fixture",
 	})

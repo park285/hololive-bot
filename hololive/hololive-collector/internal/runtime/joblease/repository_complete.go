@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-collector/internal/runtime/collection"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -50,7 +51,7 @@ func (l *JobLease) completeCurrentTx(ctx context.Context, tx dbx.Tx) error {
 func CompleteLease(ctx context.Context, tx dbx.Tx, proof *contract.LeaseProof) error {
 	var jobKey string
 
-	err := tx.QueryRow(ctx, completeCurrentLeaseSQL, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
+	err := pgxdb.QueryRow(ctx, tx, completeCurrentLeaseSQL, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
 		proof.ProjectionGeneration, proof.ScheduledFor).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -71,7 +72,7 @@ func CompleteLeaseWithError(ctx context.Context, tx dbx.Tx, proof *contract.Leas
 
 	var jobKey string
 
-	err := tx.QueryRow(ctx, completeCurrentLeaseWithErrorSQL, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
+	err := pgxdb.QueryRow(ctx, tx, completeCurrentLeaseWithErrorSQL, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
 		proof.ProjectionGeneration, proof.ScheduledFor,
 		string(diagnostic.Code()), string(diagnostic.Class()), diagnostic.Detail(),
 	).Scan(&jobKey)
@@ -93,8 +94,7 @@ func lockActiveLease(ctx context.Context, tx dbx.Tx, proof *contract.LeaseProof)
 		failureAt                                *time.Time
 	)
 
-	err := tx.QueryRow(
-		ctx,
+	err := pgxdb.QueryRow(ctx, tx,
 		lockActiveLeaseSQL,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 	).Scan(&failureCode, &failureClass, &failureDetail, &failureAt)

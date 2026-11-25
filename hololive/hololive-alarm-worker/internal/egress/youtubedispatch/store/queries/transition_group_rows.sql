@@ -1,4 +1,5 @@
 WITH /* fragment:transition_group_candidates */
+
 SELECT delivery.id,
        delivery.outbox_id,
        delivery.room_id,

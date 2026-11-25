@@ -3,7 +3,6 @@ package eventgrade
 import (
 	"context"
 	"crypto/rand"
-	_ "embed"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
@@ -12,24 +11,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	observation "github.com/kapu/hololive-shared/pkg/contracts/eventgrade"
 )
-
-//go:embed queries/claim_catalog.sql
-var claimCatalogSQL string
-
-//go:embed queries/claim_cutoffs.sql
-var claimCutoffsSQL string
-
-//go:embed queries/publish.sql
-var publishSQL string
-
-//go:embed queries/release.sql
-var releaseSQL string
-
-//go:embed queries/session_user.sql
-var sessionUserSQL string
 
 const (
 	CollectorRole   = "hololive_collector_c"
@@ -72,7 +57,7 @@ type cutoffLease struct {
 func VerifySession(ctx context.Context, pool *pgxpool.Pool) error {
 	var role string
 
-	if err := pool.QueryRow(ctx, sessionUserSQL).Scan(&role); err != nil {
+	if err := pgxdb.QueryRow(ctx, pool, sessionUserSQL).Scan(&role); err != nil {
 		return fmt.Errorf("read event grade database identity: %w", err)
 	}
 
@@ -123,7 +108,7 @@ func (r *Runner) Cycle(ctx context.Context) {
 func (r *Runner) collectCatalog(ctx context.Context, region string) error {
 	var claim lease
 
-	err := r.pool.QueryRow(ctx, claimCatalogSQL, region, r.owner, leaseTTL.Milliseconds()).Scan(&claim.jobKey, &claim.epoch, &claim.claimedAt)
+	err := pgxdb.QueryRow(ctx, r.pool, claimCatalogSQL, region, r.owner, leaseTTL.Milliseconds()).Scan(&claim.jobKey, &claim.epoch, &claim.claimedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -160,7 +145,7 @@ func (r *Runner) collectCatalog(ctx context.Context, region string) error {
 }
 
 func (r *Runner) collectCutoffs(ctx context.Context, region string) error {
-	rows, err := r.pool.Query(ctx, claimCutoffsSQL, region, r.owner, leaseTTL.Milliseconds(), cutoffsPerCycle)
+	rows, err := pgxdb.Query(ctx, r.pool, claimCutoffsSQL, region, r.owner, leaseTTL.Milliseconds(), cutoffsPerCycle)
 	if err != nil {
 		return fmt.Errorf("claim cutoffs: %w", err)
 	}
@@ -214,7 +199,7 @@ func (r *Runner) publish(ctx context.Context, claim lease, started, observed tim
 
 	var seq int64
 
-	if err := r.pool.QueryRow(ctx, publishSQL, claim.jobKey, r.owner, claim.epoch, started, observed, string(payload)).Scan(&seq); err != nil {
+	if err := pgxdb.QueryRow(ctx, r.pool, publishSQL, claim.jobKey, r.owner, claim.epoch, started, observed, string(payload)).Scan(&seq); err != nil {
 		return errors.Join(fmt.Errorf("publish %s: %w", claim.jobKey, err), r.release(ctx, claim))
 	}
 
@@ -227,7 +212,7 @@ func (r *Runner) release(ctx context.Context, claim lease) error {
 
 	var released bool
 
-	if err := r.pool.QueryRow(releaseCtx, releaseSQL, claim.jobKey, r.owner, claim.epoch).Scan(&released); err != nil {
+	if err := pgxdb.QueryRow(releaseCtx, r.pool, releaseSQL, claim.jobKey, r.owner, claim.epoch).Scan(&released); err != nil {
 		return fmt.Errorf("release %s: %w", claim.jobKey, err)
 	}
 
