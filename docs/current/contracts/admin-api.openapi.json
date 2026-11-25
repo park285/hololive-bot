@@ -192,6 +192,70 @@
         }
       }
     },
+    "/api/holo/rooms/delivery-pauses": {
+      "get": {
+        "operationId": "holoGetRoomDeliveryPauses",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomDeliveryPausesResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holo/rooms/delivery-pauses/{roomId}": {
+      "delete": {
+        "operationId": "holoResumeRoomDelivery",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "roomId",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RoomChatId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomDeliveryResumeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Producer error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProducerError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/holo/schedule-posters": {
       "get": {
         "operationId": "holoListSchedulePosters",
@@ -2074,6 +2138,71 @@
             "description": "가장 늦게 관리자 검토로 넘긴 후보 ID입니다. 확정·거절해도 뒤로 가지 않으며 넘긴 후보가 없으면 빈 문자열입니다."
           }
         }
+      },
+      "RoomChatId": {
+        "type": "string",
+        "pattern": "^-?[0-9]{1,19}$"
+      },
+      "RoomDeliveryPause": {
+        "type": "object",
+        "required": [
+          "roomId",
+          "reason",
+          "pausedAt"
+        ],
+        "properties": {
+          "roomId": {
+            "$ref": "#/components/schemas/RoomChatId"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "room_not_joined"
+            ]
+          },
+          "pausedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoomDeliveryPausesResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "pauses"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "pauses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoomDeliveryPause"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoomDeliveryResumeResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "resumed"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "resumed": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

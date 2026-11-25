@@ -367,7 +367,10 @@ func (s *adminOpenAPI) checkObject(schema *jsonSchema, value map[string]any, at 
 
 func TestRoomOperationsMatchAdminOpenAPI(t *testing.T) {
 	spec := loadAdminOpenAPI(t)
-	serve, _, _ := newAdminTestRouter(t, &recordingIrisRooms{})
+	serve, _, pool := newAdminTestRouter(t, &recordingIrisRooms{})
+
+	_, err := pool.Exec(t.Context(), "INSERT INTO kakao_room_delivery_pauses (room_id, reason, paused_at) VALUES ('-3013', 'room_not_joined', now())")
+	require.NoError(t, err)
 
 	steps := []struct {
 		method, path, body string
@@ -402,6 +405,28 @@ func TestRoomOperationsMatchAdminOpenAPI(t *testing.T) {
 		}
 
 		spec.assertResponse(t, step.method, step.path, rec)
+	}
+
+	const pausesPath, pauseRoute = "/api/holo/rooms/delivery-pauses", "/api/holo/rooms/delivery-pauses/{roomId}"
+
+	pauseSteps := []struct {
+		method, path, route, want string
+		status                    int
+	}{
+		{http.MethodGet, pausesPath, pausesPath, `"roomId":"-3013"`, http.StatusOK},
+		{http.MethodDelete, pausesPath + "/-3013", pauseRoute, `"resumed":true`, http.StatusOK},
+		{http.MethodDelete, pausesPath + "/-3013", pauseRoute, `"resumed":false`, http.StatusOK},
+		{http.MethodGet, pausesPath, pausesPath, `"pauses":[]`, http.StatusOK},
+		{http.MethodDelete, pausesPath + "/room", pauseRoute, `"error"`, http.StatusBadRequest},
+	}
+
+	for _, step := range pauseSteps {
+		rec := serve(step.method, step.path, "")
+		if rec.Code != step.status || !strings.Contains(rec.Body.String(), step.want) {
+			t.Fatalf("%s %s = %d %s, want %d containing %s", step.method, step.path, rec.Code, rec.Body.String(), step.status, step.want)
+		}
+
+		spec.assertResponse(t, step.method, step.route, rec)
 	}
 }
 
