@@ -9,7 +9,7 @@ import (
 //go:embed queries/*.sql
 var sqlAssets embed.FS
 
-var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+var mustSQL = sqlassets.MustStatementReader(sqlAssets, "queries")
 
 var (
 	insertStartSQL = mustSQL("insert_start.sql")

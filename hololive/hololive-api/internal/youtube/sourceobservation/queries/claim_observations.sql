@@ -1,4 +1,5 @@
-WITH {{ready_relation}}, replay_expired_candidates AS MATERIALIZED (
+WITH {{ready_relation}}
+, replay_expired_candidates AS MATERIALIZED (
     SELECT queue.observation_id, queue.attempt_count
     FROM source_observation_queue AS queue
     JOIN source_observations AS observation

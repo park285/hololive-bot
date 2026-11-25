@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -45,7 +46,7 @@ func (r *Repository) FindByAlias(ctx context.Context, alias string) (*domain.Mem
 func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 	query := getAllChannelIDsSQL
 
-	rows, err := r.pool.Query(ctx, query)
+	rows, err := pgxdb.Query(ctx, r.pool, query)
 	if err != nil {
 		return nil, fmt.Errorf("query channel ids: %w", err)
 	}
@@ -66,7 +67,7 @@ func collectChannelIDs(rows pgx.Rows) ([]string, error) {
 func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	query := getAllMembersSQL
 
-	rows, err := r.pool.Query(ctx, query)
+	rows, err := pgxdb.Query(ctx, r.pool, query)
 	if err != nil {
 		return nil, fmt.Errorf("query all members: %w", err)
 	}
@@ -83,7 +84,7 @@ func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error
 func (r *Repository) CountMembers(ctx context.Context) (int, error) {
 	var count int
 
-	if err := r.pool.QueryRow(ctx, countMembersSQL).Scan(&count); err != nil {
+	if err := pgxdb.QueryRow(ctx, r.pool, countMembersSQL).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count members: %w", err)
 	}
 

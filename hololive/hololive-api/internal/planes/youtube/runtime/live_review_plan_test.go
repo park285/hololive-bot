@@ -58,10 +58,10 @@ func prepareLiveReviewPlans(t *testing.T, tx pgx.Tx, mode string) {
 	_, err := tx.Exec(t.Context(), "SET LOCAL plan_cache_mode = "+mode)
 	require.NoError(t, err)
 
-	_, err = tx.Exec(t.Context(), "PREPARE review_observability(bigint) AS "+collectionTargetObservabilitySQL)
+	_, err = tx.Exec(t.Context(), "PREPARE review_observability(bigint) AS "+collectionTargetObservabilitySQL.SQL())
 	require.NoError(t, err)
 
-	_, err = tx.Exec(t.Context(), "PREPARE review_live_check(text[],bigint) AS "+liveCheckVideosSQL)
+	_, err = tx.Exec(t.Context(), "PREPARE review_live_check(text[],bigint) AS "+liveCheckVideosSQL.SQL())
 	require.NoError(t, err)
 }
 

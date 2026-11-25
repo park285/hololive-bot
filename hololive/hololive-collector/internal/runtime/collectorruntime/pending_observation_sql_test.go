@@ -63,7 +63,7 @@ func TestPendingObservationCountPlanUsesBothPartialIndexes(t *testing.T) {
 		t.Fatal(execErr)
 	}
 
-	rows, err := tx.Query(ctx, "EXPLAIN (COSTS OFF) "+pendingObservationCountSQL, pendingQueueCap)
+	rows, err := tx.Query(ctx, "EXPLAIN (COSTS OFF) "+pendingObservationCountSQL.SQL(), pendingQueueCap)
 	if err != nil {
 		t.Fatal(err)
 	}

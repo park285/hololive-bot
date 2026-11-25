@@ -2,23 +2,17 @@ package eventgrade
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
-
-//go:embed queries/region_fence.sql
-var regionFenceSQL string
-
-//go:embed queries/region_state.sql
-var regionStateSQL string
 
 type dispatchPublisher interface {
 	PublishDispatchBatch(context.Context, []dispatchoutbox.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error)
@@ -49,7 +43,7 @@ func (r *Repository) decideRegion(ctx context.Context, region string) (bool, err
 	decided := false
 
 	err := dbx.InPgxTxOptions(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, regionFenceSQL, region); err != nil {
+		if _, err := pgxdb.Exec(ctx, tx, regionFenceSQL, region); err != nil {
 			return fmt.Errorf("wait for event grade publications: %w", err)
 		}
 
@@ -58,7 +52,7 @@ func (r *Repository) decideRegion(ctx context.Context, region string) (bool, err
 			inFlight           bool
 		)
 
-		if err := tx.QueryRow(ctx, regionStateSQL, region).Scan(&published, &applied, &inFlight); err != nil {
+		if err := pgxdb.QueryRow(ctx, tx, regionStateSQL, region).Scan(&published, &applied, &inFlight); err != nil {
 			return fmt.Errorf("read event grade region state: %w", err)
 		}
 
@@ -66,11 +60,11 @@ func (r *Repository) decideRegion(ctx context.Context, region string) (bool, err
 			return nil
 		}
 
-		if _, err := tx.Exec(ctx, expireSQL, region); err != nil {
+		if _, err := pgxdb.Exec(ctx, tx, expireSQL, region); err != nil {
 			return fmt.Errorf("expire event grade decisions: %w", err)
 		}
 
-		if _, err := tx.Exec(ctx, decideSQL, []string{region}); err != nil {
+		if _, err := pgxdb.Exec(ctx, tx, decideSQL, []string{region}); err != nil {
 			return fmt.Errorf("freeze event grade decisions: %w", err)
 		}
 
@@ -86,7 +80,7 @@ func (r *Repository) decideRegion(ctx context.Context, region string) (bool, err
 }
 
 func (r *Repository) publishDecisions(ctx context.Context, publisher dispatchPublisher) error {
-	rows, err := r.pool.Query(ctx, pendingSQL, 100)
+	rows, err := pgxdb.Query(ctx, r.pool, pendingSQL, 100)
 	if err != nil {
 		return fmt.Errorf("load event grade decisions: %w", err)
 	}
@@ -168,7 +162,7 @@ func (r *Repository) settleReceipts(ctx context.Context, items []pending, receip
 		}
 
 		p := &items[i].payload
-		if _, err := r.pool.Exec(ctx, settleDispatchSQL, p.RequestID, p.Outcome, rejection); err != nil {
+		if _, err := pgxdb.Exec(ctx, r.pool, settleDispatchSQL, p.RequestID, p.Outcome, rejection); err != nil {
 			failures = append(failures, fmt.Errorf("settle event grade receipt ordinal %d: %w", i, err))
 		}
 	}

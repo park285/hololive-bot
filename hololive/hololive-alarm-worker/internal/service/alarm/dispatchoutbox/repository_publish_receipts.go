@@ -7,12 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
-
-type publishReceiptQueryer interface {
-	Query(context.Context, string, ...any) (pgx.Rows, error)
-}
 
 type publishReceiptInput struct {
 	Ordinal     int    `json:"ordinal"`
@@ -21,7 +17,7 @@ type publishReceiptInput struct {
 	DedupeKey   string `json:"dedupe_key"`
 }
 
-func loadPublishReceipts(ctx context.Context, db publishReceiptQueryer, envelopes []AlarmQueueEnvelope, insertedKeys []string) ([]PublishReceipt, error) {
+func loadPublishReceipts(ctx context.Context, db pgxdb.Querier, envelopes []AlarmQueueEnvelope, insertedKeys []string) ([]PublishReceipt, error) {
 	inputs := make([]publishReceiptInput, 0, len(envelopes))
 	for i := range envelopes {
 		event, delivery, err := buildLedgerRows(&envelopes[i])
@@ -37,7 +33,7 @@ func loadPublishReceipts(ctx context.Context, db publishReceiptQueryer, envelope
 		return nil, fmt.Errorf("marshal receipt identities: %w", err)
 	}
 
-	rows, err := db.Query(ctx, repositoryPublishReceiptsSQL, jsonbRecordsetParam(raw))
+	rows, err := pgxdb.Query(ctx, db, repositoryPublishReceiptsSQL, jsonbRecordsetParam(raw))
 	if err != nil {
 		return nil, fmt.Errorf("query receipt identities: %w", err)
 	}

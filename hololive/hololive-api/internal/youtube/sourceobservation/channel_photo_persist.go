@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/photo"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -13,7 +15,7 @@ import (
 func loadPhotoState(ctx context.Context, tx dbx.Tx, channelID string) (photo.State, error) {
 	state := photo.State{ChannelID: channelID, Head: photo.Head{ChannelID: channelID, Kinds: map[string]photo.Canonical{}}}
 
-	rows, err := tx.Query(ctx, loadPhotoStateSQL, channelID)
+	rows, err := pgxdb.Query(ctx, tx, loadPhotoStateSQL, channelID)
 	if err != nil {
 		return photo.State{}, fmt.Errorf("load channel photo heads: %w", err)
 	}
@@ -78,8 +80,7 @@ func persistPhotoVariants(ctx context.Context, tx dbx.Tx, observation *Observati
 }
 
 func persistPhotoVariant(ctx context.Context, tx dbx.Tx, observation *Observation, decision *photo.Decision, variant *photo.Variant) error {
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		persistPhotoVariantSQL,
 		decision.Sample.ChannelID,
 		variant.Kind,
@@ -120,8 +121,7 @@ func persistPhotoHead(ctx context.Context, tx dbx.Tx, channelID, kind string, ca
 		return errors.New("upsert channel photo head: canonical state is nil")
 	}
 
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		persistPhotoHeadSQL,
 		channelID,
 		kind,
@@ -151,8 +151,7 @@ func persistPhotoProduct(ctx context.Context, tx dbx.Tx, decision *photo.Decisio
 	}
 
 	avatar, banner := photoProductThumbnails(decision.WriteProduct)
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		persistPhotoProductSQL,
 		decision.Sample.ChannelID,
 		nullableThumbnails(avatar),

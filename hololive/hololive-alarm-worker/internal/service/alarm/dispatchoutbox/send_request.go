@@ -136,7 +136,7 @@ func fillPinnedRequest(request, candidate *SendRequest, ids []int64) error {
 func lockSendRequest(ctx context.Context, tx pgx.Tx, unitID int64) (*SendRequest, error) {
 	var request SendRequest
 
-	err := tx.QueryRow(ctx, sendRequestLockSQL, unitID).Scan(&request.Body, &request.Route, &request.BodyHash, &request.DeliveryIDs, &request.BaseClientRequestID, &request.ClientRequestID, &request.Generation, &request.RoomID)
+	err := pgxdb.QueryRow(ctx, tx, sendRequestLockSQL, unitID).Scan(&request.Body, &request.Route, &request.BodyHash, &request.DeliveryIDs, &request.BaseClientRequestID, &request.ClientRequestID, &request.Generation, &request.RoomID)
 	if err != nil {
 		return nil, fmt.Errorf("lock send request: %w", err)
 	}
@@ -145,7 +145,7 @@ func lockSendRequest(ctx context.Context, tx pgx.Tx, unitID int64) (*SendRequest
 }
 
 func pinSendRequest(ctx context.Context, tx pgx.Tx, unitID int64, request *SendRequest, claims []DeliveryClaim) error {
-	rows, err := tx.Query(ctx, sendRequestPinSQL, unitID, request.Body, request.Route, request.BodyHash, request.DeliveryIDs, request.BaseClientRequestID)
+	rows, err := pgxdb.Query(ctx, tx, sendRequestPinSQL, unitID, request.Body, request.Route, request.BodyHash, request.DeliveryIDs, request.BaseClientRequestID)
 	if err != nil {
 		return fmt.Errorf("pin send request: %w", err)
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-collector/internal/runtime/collection"
@@ -105,7 +106,7 @@ func (r *Repository) acquireTx(
 }
 
 func lockProjectionGuard(ctx context.Context, tx dbx.Tx) (int64, bool, error) {
-	return scanProjectionGuard(tx.QueryRow(ctx, lockProjectionGuardShareSQL))
+	return scanProjectionGuard(pgxdb.QueryRow(ctx, tx, lockProjectionGuardShareSQL))
 }
 
 func scanProjectionGuard(row pgx.Row) (int64, bool, error) {
@@ -202,7 +203,7 @@ func acquireLeaseProof(
 		scheduled                                                pgtype.Timestamptz
 	)
 
-	err := tx.QueryRow(ctx, query,
+	err := pgxdb.QueryRow(ctx, tx, query,
 		generation, kindValues, scope.Kinds, spec.SubjectKey,
 		spec.JobKey, owner, spec.PollInterval.Milliseconds(), leaseTTL.Milliseconds(),
 		scope.ExactSubject, spec.Provider, spec.Class, spec.CollectionJobKind,
@@ -228,7 +229,7 @@ func acquireLeaseProof(
 	identity := acquiredJobIdentity{provider: provider.String, class: class.String, subjectKey: subject.String}
 
 	if created {
-		if err := tx.QueryRow(ctx, repositoryLeaseInitializeSQL,
+		if err := pgxdb.QueryRow(ctx, tx, repositoryLeaseInitializeSQL,
 			proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, leaseTTL.Milliseconds(),
 		).Scan(&proof.ScheduledFor); err != nil {
 			return contract.LeaseProof{}, acquiredJobIdentity{}, fmt.Errorf("acquire collection job lease: initialize created lease: %w", err)
@@ -297,7 +298,7 @@ func (l *JobLease) renewTx(ctx context.Context, tx dbx.Tx) error {
 
 	var jobKey string
 
-	err := tx.QueryRow(ctx, renewTxSQL, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+	err := pgxdb.QueryRow(ctx, tx, renewTxSQL, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 		l.proof.ProjectionGeneration, l.proof.ScheduledFor, l.repository.config.LeaseTTL.Milliseconds()).Scan(&jobKey)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -313,7 +314,7 @@ func (l *JobLease) renewTx(ctx context.Context, tx dbx.Tx) error {
 
 func (l *JobLease) Defer(ctx context.Context, input collection.DeferCollectionInput) error {
 	var (
-		q     dbx.Querier
+		q     pgxdb.Querier
 		proof *contract.LeaseProof
 	)
 
@@ -324,7 +325,7 @@ func (l *JobLease) Defer(ctx context.Context, input collection.DeferCollectionIn
 	return DeferLease(ctx, q, proof, input)
 }
 
-func DeferLease(ctx context.Context, q dbx.Querier, proof *contract.LeaseProof, input collection.DeferCollectionInput) error {
+func DeferLease(ctx context.Context, q pgxdb.Querier, proof *contract.LeaseProof, input collection.DeferCollectionInput) error {
 	if err := input.Validate(); err != nil {
 		return fmt.Errorf("defer collection job lease: %w: %w", ErrInvalidJob, err)
 	}
@@ -345,7 +346,7 @@ func DeferLease(ctx context.Context, q dbx.Querier, proof *contract.LeaseProof, 
 
 	var jobKey string
 
-	err := q.QueryRow(ctx, deferSQL, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
+	err := pgxdb.QueryRow(ctx, q, deferSQL, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch,
 		proof.ProjectionGeneration, proof.ScheduledFor, input.Schedule().At(), code, string(diagnostic.Class()), detail,
 		bounds.Minimum.Milliseconds(), bounds.Maximum.Milliseconds(), input.Schedule().IsNotBefore()).Scan(&jobKey)
 
@@ -375,14 +376,14 @@ func (l *JobLease) Release(ctx context.Context, reason ReleaseReason) error {
 	)
 
 	if reason == ReleaseSuperseded {
-		err = l.repository.pool.QueryRow(ctx, repositoryLeaseReleaseSupersededSQL,
+		err = pgxdb.QueryRow(ctx, l.repository.pool, repositoryLeaseReleaseSupersededSQL,
 			l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch, l.proof.ProjectionGeneration, l.proof.ScheduledFor,
 			string(reason.ErrorCode()),
 		).Scan(&jobKey)
 	} else {
 		delay := deterministicJitter(&l.proof, l.repository.config.MinReleaseJitter, l.repository.config.MaxReleaseJitter)
 
-		err = l.repository.pool.QueryRow(ctx, releaseSQL,
+		err = pgxdb.QueryRow(ctx, l.repository.pool, releaseSQL,
 			l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch, l.proof.ProjectionGeneration, l.proof.ScheduledFor,
 			delay.Milliseconds(), string(reason.ErrorCode()),
 		).Scan(&jobKey)

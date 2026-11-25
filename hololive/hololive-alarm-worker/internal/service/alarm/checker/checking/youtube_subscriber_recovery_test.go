@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
@@ -19,7 +20,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
@@ -57,7 +57,7 @@ func (failingSubscriberRow) Scan(...any) error {
 	return errSubscriberDBUnavailable
 }
 
-func newSubscriberRecoveryChecker(t *testing.T, subscriptionDB dbx.Querier) (*YouTubeChecker, cache.Client) {
+func newSubscriberRecoveryChecker(t *testing.T, subscriptionDB pgxdb.Querier) (*YouTubeChecker, cache.Client) {
 	t.Helper()
 
 	startScheduled := time.Now().UTC().Truncate(time.Second).Add(5*time.Minute + 10*time.Second)

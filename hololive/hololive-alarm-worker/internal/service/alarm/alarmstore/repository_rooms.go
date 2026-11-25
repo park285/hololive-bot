@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func (r *Repository) CountAlarmEntries(ctx context.Context) (int, error) {
 	var count int
 
-	if err := r.pool.QueryRow(ctx, countAlarmEntriesSQL).Scan(&count); err != nil {
+	if err := pgxdb.QueryRow(ctx, r.pool, countAlarmEntriesSQL).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count alarm entries: %w", err)
 	}
 
@@ -18,7 +20,7 @@ func (r *Repository) CountAlarmEntries(ctx context.Context) (int, error) {
 }
 
 func (r *Repository) GetAllDistinctRoomIDs(ctx context.Context) ([]string, error) {
-	rows, err := r.pool.Query(ctx, getAllDistinctRoomIDsSQL)
+	rows, err := pgxdb.Query(ctx, r.pool, getAllDistinctRoomIDsSQL)
 	if err != nil {
 		return nil, fmt.Errorf("get all distinct room ids: %w", err)
 	}
@@ -44,7 +46,7 @@ func (r *Repository) GetAllDistinctRoomIDs(ctx context.Context) ([]string, error
 }
 
 func (r *Repository) ListAlarmEntries(ctx context.Context) ([]*domain.AlarmEntry, error) {
-	rows, err := r.pool.Query(ctx, listAlarmEntriesSQL)
+	rows, err := pgxdb.Query(ctx, r.pool, listAlarmEntriesSQL)
 	if err != nil {
 		return nil, fmt.Errorf("list alarm entries: %w", err)
 	}
@@ -70,7 +72,7 @@ func (r *Repository) ListAlarmEntries(ctx context.Context) ([]*domain.AlarmEntry
 }
 
 func (r *Repository) SetRoomDisplayName(ctx context.Context, roomID, displayName string) error {
-	if _, err := r.pool.Exec(ctx, setRoomDisplayNameSQL, roomID, displayName); err != nil {
+	if _, err := pgxdb.Exec(ctx, r.pool, setRoomDisplayNameSQL, roomID, displayName); err != nil {
 		return fmt.Errorf("upsert room display name: %w", err)
 	}
 
@@ -78,7 +80,7 @@ func (r *Repository) SetRoomDisplayName(ctx context.Context, roomID, displayName
 }
 
 func (r *Repository) DeleteRoomDisplayName(ctx context.Context, roomID string) error {
-	if _, err := r.pool.Exec(ctx, deleteRoomDisplayNameSQL, roomID); err != nil {
+	if _, err := pgxdb.Exec(ctx, r.pool, deleteRoomDisplayNameSQL, roomID); err != nil {
 		return fmt.Errorf("delete room display name: %w", err)
 	}
 

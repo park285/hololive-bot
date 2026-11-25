@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
@@ -34,7 +36,7 @@ func BoundedErrorDetail(value string) string {
 }
 
 func lockLiveRuntimeState(ctx context.Context, tx dbx.Tx) error {
-	if _, err := tx.Exec(ctx, repositoryLiveRuntimeLockSQL); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, repositoryLiveRuntimeLockSQL); err != nil {
 		return fmt.Errorf("lock youtube live runtime state: %w", err)
 	}
 
@@ -46,7 +48,7 @@ func refreshLiveRuntimeState(ctx context.Context, tx dbx.Tx, videoIDs []string) 
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, repositoryLiveRuntimeRefreshSQL, videoIDs); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, repositoryLiveRuntimeRefreshSQL, videoIDs); err != nil {
 		return fmt.Errorf("refresh youtube live runtime state: %w", err)
 	}
 

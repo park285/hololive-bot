@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -70,7 +72,7 @@ func (s *TransitionStore) QuarantineStaleLogicalGroups(ctx context.Context, limi
 
 func confirmQuarantinePostState(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	writes []LedgerWrite,
 	applyErr error,
 	result QuarantineResult,
@@ -94,7 +96,7 @@ func (s *TransitionStore) quarantineStaleOnce(
 		writes      []LedgerWrite
 	)
 
-	err := s.executeTx(ctx, "quarantine logical groups", func(tx dbx.Querier) error {
+	err := s.executeTx(ctx, "quarantine logical groups", func(tx pgxdb.Querier) error {
 		var txErr error
 
 		result, transitions, writes, txErr = s.quarantineStaleTx(ctx, tx, limit)
@@ -113,7 +115,7 @@ func (s *TransitionStore) quarantineStaleOnce(
 
 func (s *TransitionStore) quarantineStaleTx(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	limit int,
 ) (QuarantineResult, []rowTransition, []LedgerWrite, error) {
 	candidates, checkedAt, err := loadStaleSendingCandidates(ctx, tx, s.config.LockTimeout, limit)
@@ -290,7 +292,7 @@ func quarantineFulfilledResolution(
 
 func loadStaleSendingCandidates(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	lease time.Duration,
 	limit int,
 ) ([]transitionRow, time.Time, error) {
@@ -316,7 +318,7 @@ func loadStaleSendingCandidates(
 
 func (s *TransitionStore) resolveStaleSendingGroups(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	candidates []transitionRow,
 ) (resolvedLogicalGroups, error) {
 	requested, err := staleRequestedLogicalGroups(candidates)
@@ -378,7 +380,7 @@ func countQuarantineTransitions(transitions []rowTransition) int {
 	return count
 }
 
-func validateQuarantineLedger(ctx context.Context, db dbx.Querier, writes []LedgerWrite) error {
+func validateQuarantineLedger(ctx context.Context, db pgxdb.Querier, writes []LedgerWrite) error {
 	keys := make([]ytcontentid.LogicalKey, 0, len(writes))
 	for i := range writes {
 		keys = append(keys, writes[i].Key)

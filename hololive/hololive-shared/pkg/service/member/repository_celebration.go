@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -12,7 +13,7 @@ import (
 func (r *Repository) FindMembersWithCelebrationsInMonth(ctx context.Context, month, referenceYear int) ([]domain.CalendarEntry, error) {
 	query := findMembersWithCelebrationsInMonthSQL
 
-	rows, err := r.pool.Query(ctx, query, month, referenceYear)
+	rows, err := pgxdb.Query(ctx, r.pool, query, month, referenceYear)
 	if err != nil {
 		return nil, fmt.Errorf("find members with celebrations in month %d: %w", month, err)
 	}
@@ -86,7 +87,7 @@ const celebrationMemberColumns = `id, slug, channel_id, english_name, japanese_n
 func (r *Repository) FindMembersWithBirthdayOn(ctx context.Context, month, day int) ([]*domain.Member, error) {
 	query := findMembersWithBirthdayOnSQL
 
-	rows, err := r.pool.Query(ctx, query, month, day)
+	rows, err := pgxdb.Query(ctx, r.pool, query, month, day)
 	if err != nil {
 		return nil, fmt.Errorf("find members with birthday: %w", err)
 	}
@@ -103,7 +104,7 @@ func (r *Repository) FindMembersWithBirthdayOn(ctx context.Context, month, day i
 func (r *Repository) FindMembersWithAnniversaryOn(ctx context.Context, month, day, referenceYear int) ([]*domain.Member, error) {
 	query := findMembersWithAnniversaryOnSQL
 
-	rows, err := r.pool.Query(ctx, query, month, day, referenceYear)
+	rows, err := pgxdb.Query(ctx, r.pool, query, month, day, referenceYear)
 	if err != nil {
 		return nil, fmt.Errorf("find members with anniversary: %w", err)
 	}

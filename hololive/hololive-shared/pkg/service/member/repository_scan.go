@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -104,8 +105,8 @@ func nullableText(value *string) string {
 	return *value
 }
 
-func (r *Repository) querySingleMember(ctx context.Context, query string, args ...any) (*domain.Member, error) {
-	row, err := scanMemberRow(r.pool.QueryRow(ctx, query, args...))
+func (r *Repository) querySingleMember(ctx context.Context, query pgxdb.Statement, args ...any) (*domain.Member, error) {
+	row, err := scanMemberRow(pgxdb.QueryRow(ctx, r.pool, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrMemberNotFound
 	}

@@ -2,7 +2,6 @@ package eventgrade
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"fmt"
 	"regexp"
@@ -11,55 +10,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
-
-//go:embed queries/register.sql
-var registerSQL string
-
-//go:embed queries/catalog.sql
-var catalogSQL string
-
-//go:embed queries/chapter.sql
-var chapterSQL string
-
-//go:embed queries/block_binding.sql
-var blockBindingSQL string
-
-//go:embed queries/block_reassigned.sql
-var blockReassignedSQL string
-
-//go:embed queries/block_missing.sql
-var blockMissingSQL string
-
-//go:embed queries/border.sql
-var borderSQL string
-
-//go:embed queries/lock_chapter.sql
-var lockChapterSQL string
-
-//go:embed queries/snapshot_state.sql
-var snapshotStateSQL string
-
-//go:embed queries/delete_provisional.sql
-var deleteProvisionalSQL string
-
-//go:embed queries/invalidate_final.sql
-var invalidateFinalSQL string
-
-//go:embed queries/decide.sql
-var decideSQL string
-
-//go:embed queries/expire.sql
-var expireSQL string
-
-//go:embed queries/pending.sql
-var pendingSQL string
-
-//go:embed queries/settle_dispatch.sql
-var settleDispatchSQL string
 
 type Repository struct{ pool *pgxpool.Pool }
 
@@ -87,7 +42,7 @@ func (r *Repository) RegisterEventGrade(ctx context.Context, req contract.EventG
 	}
 
 	response := contract.EventGradeResponse{Region: req.Region, Status: "registered"}
-	err := r.pool.QueryRow(ctx, registerSQL, req.Region, req.RoomID, req.UserID, req.Score).Scan(&response.EventType, &response.EndsAt, &response.RevealsAt)
+	err := pgxdb.QueryRow(ctx, r.pool, registerSQL, req.Region, req.RoomID, req.UserID, req.Score).Scan(&response.EventType, &response.EndsAt, &response.RevealsAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return contract.EventGradeResponse{Region: req.Region, Status: "unavailable"}, nil
@@ -198,7 +153,7 @@ func validateCatalogChapters(chapters []Chapter, bindings map[string]string) err
 }
 
 func (r *Repository) storeCatalogSnapshotTx(ctx context.Context, tx pgx.Tx, region contract.GradeRegion, observed time.Time, chapters []Chapter, bindings []ChapterBinding, conflicts []string, quarantineMissing bool) error {
-	tag, err := tx.Exec(ctx, catalogSQL, region, observed)
+	tag, err := pgxdb.Exec(ctx, tx, catalogSQL, region, observed)
 	if err != nil {
 		return fmt.Errorf("update catalog observation: %w", err)
 	}
@@ -213,7 +168,7 @@ func (r *Repository) storeCatalogSnapshotTx(ctx context.Context, tx pgx.Tx, regi
 			chapterIDs[i] = bindings[i].ChapterID
 		}
 
-		if _, execErr := tx.Exec(ctx, blockMissingSQL, region, chapterIDs); execErr != nil {
+		if _, execErr := pgxdb.Exec(ctx, tx, blockMissingSQL, region, chapterIDs); execErr != nil {
 			return fmt.Errorf("block bindings missing after interrupted collection: %w", execErr)
 		}
 	}
@@ -224,7 +179,7 @@ func (r *Repository) storeCatalogSnapshotTx(ctx context.Context, tx pgx.Tx, regi
 	}
 
 	if len(conflicts) > 0 {
-		if _, err := tx.Exec(ctx, blockBindingSQL, region, conflicts); err != nil {
+		if _, err := pgxdb.Exec(ctx, tx, blockBindingSQL, region, conflicts); err != nil {
 			return fmt.Errorf("block conflicting chapter bindings: %w", err)
 		}
 	}
@@ -238,7 +193,7 @@ func (r *Repository) storeCatalogSnapshotTx(ctx context.Context, tx pgx.Tx, regi
 
 		var rescheduled bool
 
-		if err := tx.QueryRow(ctx, chapterSQL, region, c.EventID, c.ChapterID, c.EventType, c.StartsAt, c.EndsAt, c.EventEndsAt, c.RevealsAt, observed).Scan(&rescheduled); err != nil {
+		if err := pgxdb.QueryRow(ctx, tx, chapterSQL, region, c.EventID, c.ChapterID, c.EventType, c.StartsAt, c.EndsAt, c.EventEndsAt, c.RevealsAt, observed).Scan(&rescheduled); err != nil {
 			return fmt.Errorf("store chapter: %w", err)
 		}
 
@@ -248,7 +203,7 @@ func (r *Repository) storeCatalogSnapshotTx(ctx context.Context, tx pgx.Tx, regi
 				finalAfter = c.RevealsAt
 			}
 
-			if _, err := tx.Exec(ctx, invalidateFinalSQL, region, c.EventID, c.ChapterID, finalAfter); err != nil {
+			if _, err := pgxdb.Exec(ctx, tx, invalidateFinalSQL, region, c.EventID, c.ChapterID, finalAfter); err != nil {
 				return fmt.Errorf("invalidate rescheduled final border: %w", err)
 			}
 		}
@@ -266,7 +221,7 @@ func (r *Repository) blockReassignedBindings(ctx context.Context, tx pgx.Tx, reg
 		chapterIDs[i] = bindings[i].ChapterID
 	}
 
-	rows, err := tx.Query(ctx, blockReassignedSQL, region, eventIDs, chapterIDs)
+	rows, err := pgxdb.Query(ctx, tx, blockReassignedSQL, region, eventIDs, chapterIDs)
 	if err != nil {
 		return nil, fmt.Errorf("block reassigned chapter bindings: %w", err)
 	}
@@ -364,7 +319,7 @@ func (r *Repository) StoreBorder(ctx context.Context, b Border) error {
 }
 
 func (r *Repository) storeBorderTx(ctx context.Context, tx pgx.Tx, b *Border, ranks []int32, scores []int64) error {
-	tag, err := tx.Exec(ctx, lockChapterSQL, b.Region, b.EventID, b.ChapterID, b.StartedAt, b.ObservedAt, *b.Final)
+	tag, err := pgxdb.Exec(ctx, tx, lockChapterSQL, b.Region, b.EventID, b.ChapterID, b.StartedAt, b.ObservedAt, *b.Final)
 	if err != nil {
 		return fmt.Errorf("lock border chapter: %w", err)
 	}
@@ -375,7 +330,7 @@ func (r *Repository) storeBorderTx(ctx context.Context, tx pgx.Tx, b *Border, ra
 
 	var exists, accepted bool
 
-	if err := tx.QueryRow(ctx, snapshotStateSQL, b.Region, b.EventID, b.ChapterID, *b.Final, b.ObservedAt, ranks, scores).Scan(&exists, &accepted); err != nil {
+	if err := pgxdb.QueryRow(ctx, tx, snapshotStateSQL, b.Region, b.EventID, b.ChapterID, *b.Final, b.ObservedAt, ranks, scores).Scan(&exists, &accepted); err != nil {
 		return fmt.Errorf("read stored border snapshot: %w", err)
 	}
 
@@ -388,12 +343,12 @@ func (r *Repository) storeBorderTx(ctx context.Context, tx pgx.Tx, b *Border, ra
 			return nil
 		}
 
-		if _, err := tx.Exec(ctx, deleteProvisionalSQL, b.Region, b.EventID, b.ChapterID); err != nil {
+		if _, err := pgxdb.Exec(ctx, tx, deleteProvisionalSQL, b.Region, b.EventID, b.ChapterID); err != nil {
 			return fmt.Errorf("remove previous provisional border: %w", err)
 		}
 	}
 
-	if _, err := tx.Exec(ctx, borderSQL, b.Region, b.EventID, b.ChapterID, b.StartedAt, b.ObservedAt, *b.Final, ranks, scores); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, borderSQL, b.Region, b.EventID, b.ChapterID, b.StartedAt, b.ObservedAt, *b.Final, ranks, scores); err != nil {
 		return fmt.Errorf("insert border snapshot: %w", err)
 	}
 

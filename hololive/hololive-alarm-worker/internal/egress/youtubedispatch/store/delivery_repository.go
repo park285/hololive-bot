@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -45,24 +46,24 @@ func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, 
 	return nil
 }
 
-func lockOutboxAggregateParents(ctx context.Context, tx dbx.Querier, outboxIDs []int64) error {
+func lockOutboxAggregateParents(ctx context.Context, tx pgxdb.Querier, outboxIDs []int64) error {
 	if len(outboxIDs) == 0 {
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, deliveryRepositoryAggregateLockSQL, outboxIDs); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, deliveryRepositoryAggregateLockSQL, outboxIDs); err != nil {
 		return fmt.Errorf("lock outbox aggregate parents: %w", err)
 	}
 
 	return nil
 }
 
-func syncOutboxAggregates(ctx context.Context, tx dbx.Querier, outboxIDs []int64) error {
+func syncOutboxAggregates(ctx context.Context, tx pgxdb.Querier, outboxIDs []int64) error {
 	if len(outboxIDs) == 0 {
 		return nil
 	}
 
-	if _, err := tx.Exec(ctx, deliveryRepositoryAggregateSyncSQL,
+	if _, err := pgxdb.Exec(ctx, tx, deliveryRepositoryAggregateSyncSQL,
 		outboxIDs,
 		domain.OutboxStatusPending,
 		DeliveryStatusSending,

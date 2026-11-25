@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -30,7 +32,7 @@ func (s *TransitionStore) ExpirePending(ctx context.Context, afterID int64, limi
 
 	result := ExpiryResult{ApplyResult: newApplyResult(ApplyApplied, nil)}
 
-	err := s.executeTx(ctx, "expire pending", func(tx dbx.Querier) error {
+	err := s.executeTx(ctx, "expire pending", func(tx pgxdb.Querier) error {
 		return s.expirePendingInTx(ctx, tx, afterID, limit, &result)
 	})
 	if err != nil {
@@ -43,7 +45,7 @@ func (s *TransitionStore) ExpirePending(ctx context.Context, afterID int64, limi
 	return result, nil
 }
 
-func (s *TransitionStore) expirePendingInTx(ctx context.Context, tx dbx.Querier, afterID int64, limit int, result *ExpiryResult) error {
+func (s *TransitionStore) expirePendingInTx(ctx context.Context, tx pgxdb.Querier, afterID int64, limit int, result *ExpiryResult) error {
 	var checked []checkedTransitionRow
 
 	if err := dbx.SelectSQL(

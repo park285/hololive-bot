@@ -2,7 +2,6 @@ package member
 
 import (
 	"embed"
-	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
@@ -10,7 +9,7 @@ import (
 //go:embed queries/*
 var sqlAssets embed.FS
 
-var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+var mustSQL = sqlassets.MustStatementReader(sqlAssets, "queries")
 
 var (
 	addAliasSQL           = mustSQL("add_alias.sql")
@@ -29,7 +28,7 @@ var (
 )
 
 var (
-	findMembersWithAnniversaryOnSQL       = fmt.Sprintf(mustSQL("find_members_with_anniversary_on.sql"), celebrationMemberColumns)
-	findMembersWithBirthdayOnSQL          = fmt.Sprintf(mustSQL("find_members_with_birthday_on.sql"), celebrationMemberColumns)
-	findMembersWithCelebrationsInMonthSQL = fmt.Sprintf(mustSQL("find_members_with_celebrations_in_month.sql"), celebrationMemberColumns, celebrationMemberColumns)
+	findMembersWithAnniversaryOnSQL       = mustSQL("find_members_with_anniversary_on.sql").WithToken("{{memberColumns}}", celebrationMemberColumns)
+	findMembersWithBirthdayOnSQL          = mustSQL("find_members_with_birthday_on.sql").WithToken("{{memberColumns}}", celebrationMemberColumns)
+	findMembersWithCelebrationsInMonthSQL = mustSQL("find_members_with_celebrations_in_month.sql").WithToken("{{memberColumns}}", celebrationMemberColumns)
 )

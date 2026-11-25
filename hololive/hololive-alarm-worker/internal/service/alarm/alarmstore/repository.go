@@ -7,15 +7,15 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 type Repository struct {
-	pool   dbx.Querier
+	pool   pgxdb.Querier
 	logger *slog.Logger
 }
 
@@ -26,7 +26,7 @@ func NewRepository(postgres database.Client, logger *slog.Logger) *Repository {
 	}
 }
 
-func newRepositoryWithQuerier(querier dbx.Querier) *Repository {
+func newRepositoryWithQuerier(querier pgxdb.Querier) *Repository {
 	return &Repository{pool: querier}
 }
 
@@ -48,7 +48,7 @@ func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 		return fmt.Errorf("encode alarm types: %w", err)
 	}
 
-	_, err = r.pool.Exec(ctx, query,
+	_, err = pgxdb.Exec(ctx, r.pool, query,
 		alarm.RoomID, alarm.UserID, alarm.ChannelID,
 		roomName, alarm.UserName,
 		typesValue, alarm.HostID,
@@ -75,7 +75,7 @@ func (r *Repository) RemoveHost(ctx context.Context, roomID, channelID, hostID s
 func (r *Repository) removeSubscription(ctx context.Context, roomID, channelID, hostID string) error {
 	query := removeSubscriptionSQL
 
-	_, err := r.pool.Exec(ctx, query, roomID, channelID, hostID)
+	_, err := pgxdb.Exec(ctx, r.pool, query, roomID, channelID, hostID)
 	if err != nil {
 		return fmt.Errorf("remove alarm: %w", err)
 	}
@@ -86,7 +86,7 @@ func (r *Repository) removeSubscription(ctx context.Context, roomID, channelID, 
 func (r *Repository) ClearByRoom(ctx context.Context, roomID string) (int64, error) {
 	query := clearByRoomSQL
 
-	cmdTag, err := r.pool.Exec(ctx, query, roomID)
+	cmdTag, err := pgxdb.Exec(ctx, r.pool, query, roomID)
 	if err != nil {
 		return 0, fmt.Errorf("clear alarms: %w", err)
 	}
@@ -97,7 +97,7 @@ func (r *Repository) ClearByRoom(ctx context.Context, roomID string) (int64, err
 func (r *Repository) FindByRoom(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
 	query := findByRoomSQL
 
-	rows, err := r.pool.Query(ctx, query, roomID)
+	rows, err := pgxdb.Query(ctx, r.pool, query, roomID)
 	if err != nil {
 		return nil, fmt.Errorf("find alarms by room: %w", err)
 	}
@@ -114,7 +114,7 @@ func (r *Repository) FindByRoom(ctx context.Context, roomID string) ([]*domain.A
 func (r *Repository) HasChannelSubscriptions(ctx context.Context, channelID string) (bool, error) {
 	var exists bool
 
-	if err := r.pool.QueryRow(ctx, repositoryChannelSubscriptionsExistSQL, channelID).Scan(&exists); err != nil {
+	if err := pgxdb.QueryRow(ctx, r.pool, repositoryChannelSubscriptionsExistSQL, channelID).Scan(&exists); err != nil {
 		return false, fmt.Errorf("check channel subscriptions: %w", err)
 	}
 
@@ -124,7 +124,7 @@ func (r *Repository) HasChannelSubscriptions(ctx context.Context, channelID stri
 func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
 	query := findByChannelAndTypeSQL
 
-	rows, err := r.pool.Query(ctx, query, channelID, string(alarmType))
+	rows, err := pgxdb.Query(ctx, r.pool, query, channelID, string(alarmType))
 	if err != nil {
 		return nil, fmt.Errorf("find alarms by channel and type: %w", err)
 	}
@@ -143,7 +143,7 @@ func (r *Repository) GetMemberName(ctx context.Context, channelID string) (strin
 
 	var memberName string
 
-	err := r.pool.QueryRow(ctx, query, channelID).Scan(&memberName)
+	err := pgxdb.QueryRow(ctx, r.pool, query, channelID).Scan(&memberName)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
@@ -159,7 +159,7 @@ func (r *Repository) GetMemberName(ctx context.Context, channelID string) (strin
 func (r *Repository) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
 	query := loadAllSQL
 
-	rows, err := r.pool.Query(ctx, query)
+	rows, err := pgxdb.Query(ctx, r.pool, query)
 	if err != nil {
 		return nil, fmt.Errorf("load all alarms: %w", err)
 	}

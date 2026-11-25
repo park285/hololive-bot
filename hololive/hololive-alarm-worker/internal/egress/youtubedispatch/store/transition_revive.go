@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -78,7 +80,7 @@ func (s *TransitionStore) reviveFailedOnce(
 		transitions []rowTransition
 	)
 
-	err := s.executeTx(ctx, "revive failed logical groups", func(tx dbx.Querier) error {
+	err := s.executeTx(ctx, "revive failed logical groups", func(tx pgxdb.Querier) error {
 		var txErr error
 
 		result, transitions, txErr = s.reviveFailedTx(ctx, tx, policy, limit)
@@ -97,7 +99,7 @@ func (s *TransitionStore) reviveFailedOnce(
 
 func (s *TransitionStore) reviveFailedTx(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	policy lifecycle.RevivePolicy,
 	limit int,
 ) (ReviveResult, []rowTransition, error) {
@@ -350,7 +352,7 @@ func transitionRowKeySet(rows []transitionRow) (map[ytcontentid.LogicalKey]struc
 
 func loadReviveCandidates(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	lease time.Duration,
 	freshness time.Duration,
 	limit int,

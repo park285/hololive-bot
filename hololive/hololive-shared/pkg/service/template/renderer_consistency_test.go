@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -412,7 +413,7 @@ func TestRendererBodyReadCachesActualVersion(t *testing.T) {
 	r := NewRenderer(pool, slog.New(slog.DiscardHandler))
 	ck := cacheKey{templateKey: domain.TemplateKeyCmdHelp}
 
-	if err := pool.QueryRow(t.Context(), rendererResolveSQL, ck.templateKey, "", domain.TemplateFormatPlain).Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
+	if err := pgxdb.QueryRow(t.Context(), pool, rendererResolveSQL, ck.templateKey, "", domain.TemplateFormatPlain).Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -474,7 +475,7 @@ func TestRendererBodyReadRejectsChangedSource(t *testing.T) {
 	r := NewRenderer(pool, slog.New(slog.DiscardHandler))
 	ck := cacheKey{templateKey: domain.TemplateKeyCmdHelp}
 
-	if err := pool.QueryRow(t.Context(), rendererResolveSQL, ck.templateKey, "", domain.TemplateFormatPlain).Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
+	if err := pgxdb.QueryRow(t.Context(), pool, rendererResolveSQL, ck.templateKey, "", domain.TemplateFormatPlain).Scan(&ck.id, &ck.version, &ck.channelID); err != nil {
 		t.Fatal(err)
 	}
 

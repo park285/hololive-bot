@@ -90,7 +90,7 @@ func explainDurablePrune(ctx context.Context, t *testing.T, pool *pgxpool.Pool, 
 	_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = "+mode)
 	require.NoError(t, err)
 
-	_, err = tx.Exec(ctx, "PREPARE durable_prune_plan(bigint, bigint, integer) AS "+durablePruneTerminalSQL)
+	_, err = tx.Exec(ctx, "PREPARE durable_prune_plan(bigint, bigint, integer) AS "+durablePruneTerminalSQL.SQL())
 	require.NoError(t, err)
 
 	explain := fmt.Sprintf("EXPLAIN (ANALYZE, FORMAT JSON) EXECUTE durable_prune_plan(%d, %d, %d)",

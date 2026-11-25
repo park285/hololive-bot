@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/schedule"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -39,7 +41,7 @@ func loadScheduleSessions(
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, repositoryScheduleSessionsSQL, videoIDs)
+	rows, err := pgxdb.Query(ctx, tx, repositoryScheduleSessionsSQL, videoIDs)
 	if err != nil {
 		return fmt.Errorf("load schedule sessions: %w", err)
 	}
@@ -83,7 +85,7 @@ func loadScheduleHeads(ctx context.Context, tx dbx.Tx, state *schedule.State, vi
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, repositoryScheduleHeadsSQL, videoIDs)
+	rows, err := pgxdb.Query(ctx, tx, repositoryScheduleHeadsSQL, videoIDs)
 	if err != nil {
 		return fmt.Errorf("load schedule head statuses: %w", err)
 	}

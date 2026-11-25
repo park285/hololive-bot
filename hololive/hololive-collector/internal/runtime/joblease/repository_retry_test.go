@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-collector/internal/runtime/collection"
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -202,7 +203,7 @@ func TestDeferSQLRejectsNonCooldownNotBefore(t *testing.T) {
 
 	var jobKey string
 
-	err := pool.QueryRow(t.Context(), deferSQL,
+	err := pgxdb.QueryRow(t.Context(), pool, deferSQL,
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 		time.Now().UTC().Add(10*time.Minute), string(contract.ErrorCollectionFailed), string(contract.ClassTransient), "failure",
 		testRetryBounds.Minimum.Milliseconds(), testRetryBounds.Maximum.Milliseconds(), true,

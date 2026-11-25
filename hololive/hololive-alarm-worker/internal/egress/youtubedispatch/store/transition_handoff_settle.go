@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 type handoffFailure struct {
@@ -50,7 +51,7 @@ func (s *TransitionStore) settleHandoffFailure(ctx context.Context, claim *Hando
 	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
 		var settlement handoffSettlement
 
-		err := s.executeTx(ctx, failure.action, func(tx dbx.Querier) error {
+		err := s.executeTx(ctx, failure.action, func(tx pgxdb.Querier) error {
 			var txErr error
 
 			settlement, txErr = s.settleHandoffFailureTx(ctx, tx, claim, failure, errorText)
@@ -101,7 +102,7 @@ func (s *TransitionStore) settleHandoffFailure(ctx context.Context, claim *Hando
 
 func (s *TransitionStore) settleHandoffFailureTx(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	claim *HandoffClaim,
 	failure handoffFailure,
 	errorText string,
@@ -138,7 +139,7 @@ func (s *TransitionStore) settleHandoffFailureTx(
 
 func applyHandoffFailure(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	claim *HandoffClaim,
 	units []handoffUnit,
 	failure handoffFailure,
@@ -208,7 +209,7 @@ func handoffFailureTransitions(units []handoffUnit, failure handoffFailure, erro
 	return transitions
 }
 
-func deleteHandoffSentLedger(ctx context.Context, tx dbx.Querier, units []handoffUnit) error {
+func deleteHandoffSentLedger(ctx context.Context, tx pgxdb.Querier, units []handoffUnit) error {
 	kinds := make([]string, 0, len(units))
 	logicalIDs := make([]string, 0, len(units))
 	roomIDs := make([]string, 0, len(units))
@@ -221,7 +222,7 @@ func deleteHandoffSentLedger(ctx context.Context, tx dbx.Querier, units []handof
 		sources = append(sources, units[i].owner.ID)
 	}
 
-	tag, err := tx.Exec(ctx, handoffLedgerDeleteSentSQL, kinds, logicalIDs, roomIDs, sources)
+	tag, err := pgxdb.Exec(ctx, tx, handoffLedgerDeleteSentSQL, kinds, logicalIDs, roomIDs, sources)
 	if err != nil {
 		return fmt.Errorf("delete sent ledger: %w", err)
 	}
@@ -233,7 +234,7 @@ func deleteHandoffSentLedger(ctx context.Context, tx dbx.Querier, units []handof
 	return nil
 }
 
-func recordHandoffQuarantinedLedger(ctx context.Context, tx dbx.Querier, units []handoffUnit, transitionedAt time.Time) error {
+func recordHandoffQuarantinedLedger(ctx context.Context, tx pgxdb.Querier, units []handoffUnit, transitionedAt time.Time) error {
 	writes := make([]LedgerWrite, 0, len(units))
 	for i := range units {
 		writes = append(writes, LedgerWrite{Key: units[i].key, ObservedAt: transitionedAt, SourceDeliveryID: units[i].owner.ID})
@@ -246,8 +247,8 @@ func recordHandoffQuarantinedLedger(ctx context.Context, tx dbx.Querier, units [
 	return nil
 }
 
-func reissueHandoffRequest(ctx context.Context, tx dbx.Querier, claim *HandoffClaim) error {
-	tag, err := tx.Exec(ctx, handoffRequestReissueSQL, claim.RequestBaseID, claim.Generation)
+func reissueHandoffRequest(ctx context.Context, tx pgxdb.Querier, claim *HandoffClaim) error {
+	tag, err := pgxdb.Exec(ctx, tx, handoffRequestReissueSQL, claim.RequestBaseID, claim.Generation)
 	if err != nil {
 		return fmt.Errorf("reissue frozen request: %w", err)
 	}
@@ -259,8 +260,8 @@ func reissueHandoffRequest(ctx context.Context, tx dbx.Querier, claim *HandoffCl
 	return nil
 }
 
-func closeHandoffRequest(ctx context.Context, tx dbx.Querier, baseID string) error {
-	tag, err := tx.Exec(ctx, handoffRequestCloseSQL, baseID)
+func closeHandoffRequest(ctx context.Context, tx pgxdb.Querier, baseID string) error {
+	tag, err := pgxdb.Exec(ctx, tx, handoffRequestCloseSQL, baseID)
 	if err != nil {
 		return fmt.Errorf("close handoff check: %w", err)
 	}

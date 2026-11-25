@@ -1,6 +1,7 @@
 WITH candidate AS MATERIALIZED (
     SELECT due.id
     {{inbox_ready_relation}}
+
     ORDER BY due.available_at ASC, due.id ASC
     LIMIT 1
     FOR UPDATE SKIP LOCKED

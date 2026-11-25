@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -274,7 +276,7 @@ func (r *Repository) deleteQueueBatch(ctx context.Context, cfg RetentionConfig, 
 
 func (r *Repository) deleteAgedBatch(
 	ctx context.Context,
-	query string,
+	query pgxdb.Statement,
 	age time.Duration,
 	now time.Time,
 	limit int,
@@ -347,7 +349,7 @@ func (r *Repository) deleteEvidenceWindow(ctx context.Context, kinds []string, c
 	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (evidenceWindow, error) {
 		var window evidenceWindow
 
-		if err := tx.QueryRow(ctx, repositoryRetentionDeleteEvidenceWindowSQL, kinds, cutoffs, limit).
+		if err := pgxdb.QueryRow(ctx, tx, repositoryRetentionDeleteEvidenceWindowSQL, kinds, cutoffs, limit).
 			Scan(&window.deleted, &window.passed, &window.traversalCompleted); err != nil {
 			return evidenceWindow{}, fmt.Errorf("delete source observation evidence: %w", err)
 		}
@@ -368,8 +370,7 @@ func (r *Repository) deleteUnreferencedPayloadBatch(ctx context.Context, cfg Ret
 
 	var removed int64
 
-	if err := r.pool.QueryRow(
-		ctx,
+	if err := pgxdb.QueryRow(ctx, r.pool,
 		repositoryRetentionDeletePayloadsSQL,
 		now.Add(-time.Hour),
 		cfg.BatchSize,
@@ -387,15 +388,15 @@ func (r *Repository) deleteUnreferencedProvenanceBatch(ctx context.Context, cfg 
 
 	var removed int64
 
-	if err := r.pool.QueryRow(ctx, repositoryRetentionDeleteProvenancesSQL, cfg.BatchSize).Scan(&removed); err != nil {
+	if err := pgxdb.QueryRow(ctx, r.pool, repositoryRetentionDeleteProvenancesSQL, cfg.BatchSize).Scan(&removed); err != nil {
 		return 0, fmt.Errorf("collect unreferenced source observation provenances: %w", err)
 	}
 
 	return removed, nil
 }
 
-func (r *Repository) execDelete(ctx context.Context, query string, args ...any) (int64, error) {
-	tag, err := r.pool.Exec(ctx, query, args...)
+func (r *Repository) execDelete(ctx context.Context, query pgxdb.Statement, args ...any) (int64, error) {
+	tag, err := pgxdb.Exec(ctx, r.pool, query, args...)
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)
 	}

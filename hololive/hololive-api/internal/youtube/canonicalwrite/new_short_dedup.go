@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -14,7 +16,7 @@ type knownShortVideoIDRow struct {
 
 func dropAlreadyKnownShortArtifacts(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	notifications []*domain.YouTubeNotificationOutbox,
 	trackingRows []*domain.YouTubeContentAlarmTracking,
 ) ([]*domain.YouTubeNotificationOutbox, []*domain.YouTubeContentAlarmTracking, error) {

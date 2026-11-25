@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
@@ -23,7 +24,7 @@ type fakeHistoryPageCall struct {
 }
 
 type fakeHistoryDB struct {
-	broadcastHistoryDB
+	pgxdb.Querier
 
 	rows  []handlercore.BroadcastHistoryEntry
 	fail  func(ctx context.Context, call int) error

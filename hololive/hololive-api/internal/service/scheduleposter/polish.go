@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -75,7 +76,7 @@ func (s *Store) PolishSlot(ctx context.Context, posterID int64, seen time.Time, 
 			extractedAt        *time.Time
 		)
 
-		err := tx.QueryRow(ctx, lockPosterSQL, posterID).Scan(&schedule.PosterID, &channelID, &schedule.Confirmed, &weekStart, &weekEnd,
+		err := pgxdb.QueryRow(ctx, tx, lockPosterSQL, posterID).Scan(&schedule.PosterID, &channelID, &schedule.Confirmed, &weekStart, &weekEnd,
 			&extractedAt, &schedule.PostedAt, &schedule.RowsPending, &schedule.RowsDayShift)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
@@ -127,7 +128,7 @@ func polish(ctx context.Context, tx pgx.Tx, posterID int64, slot *Slot, korean K
 		fields = append(fields, change.RecordedAt, posterID)
 	}
 
-	tag, err := tx.Exec(ctx, query, append(target, fields...)...)
+	tag, err := pgxdb.Exec(ctx, tx, query, append(target, fields...)...)
 	if err != nil {
 		return fmt.Errorf("write korean fields: %w", err)
 	}
@@ -151,7 +152,7 @@ func (s *Store) TranslationMemo(ctx context.Context) (Memo, error) {
 		updatedAt *time.Time
 	)
 
-	if err := s.pool.QueryRow(ctx, memoSQL).Scan(&memo.Body, &memo.Revision, &updatedAt); err != nil {
+	if err := pgxdb.QueryRow(ctx, s.pool, memoSQL).Scan(&memo.Body, &memo.Revision, &updatedAt); err != nil {
 		return Memo{}, fmt.Errorf("load schedule poster translation memo: %w", err)
 	}
 
@@ -169,7 +170,7 @@ func (s *Store) SaveTranslationMemo(ctx context.Context, expectedRevision int64,
 
 	var revision int64
 
-	err := s.pool.QueryRow(ctx, saveMemoSQL, expectedRevision, body).Scan(&revision)
+	err := pgxdb.QueryRow(ctx, s.pool, saveMemoSQL, expectedRevision, body).Scan(&revision)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, ErrRevisionConflict
 	}

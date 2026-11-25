@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -30,8 +31,7 @@ func lockCommunitySubject(
 	kind contract.ObservationKind,
 	subjectKey string,
 ) error {
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		lockCommunitySubjectSQL,
 		provider,
 		kind,
@@ -45,15 +45,14 @@ func lockCommunitySubject(
 
 func loadCommunitySubjectHead(
 	ctx context.Context,
-	q dbx.Querier,
+	q pgxdb.Querier,
 	provider contract.Provider,
 	kind contract.ObservationKind,
 	subjectKey string,
 ) (communitySubjectHead, error) {
 	var head communitySubjectHead
 
-	err := q.QueryRow(
-		ctx,
+	err := pgxdb.QueryRow(ctx, q,
 		loadCommunitySubjectHeadSQL,
 		provider,
 		kind,
@@ -76,8 +75,7 @@ func saveCommunitySubjectHead(
 	tx dbx.Tx,
 	observation *Observation,
 ) error {
-	if _, err := tx.Exec(
-		ctx,
+	if _, err := pgxdb.Exec(ctx, tx,
 		saveCommunitySubjectHeadSQL,
 		observation.Provider,
 		observation.ObservationKind,
@@ -94,7 +92,7 @@ func saveCommunitySubjectHead(
 
 func loadCommunityWatermark(
 	ctx context.Context,
-	q dbx.Querier,
+	q pgxdb.Querier,
 	channelID string,
 ) (domain.YouTubeContentWatermark, error) {
 	watermark, err := loadTypedWatermark(ctx, q, channelID, domain.WatermarkTypeCommunityPost)
@@ -107,7 +105,7 @@ func loadCommunityWatermark(
 
 func loadCommunityWindowReady(
 	ctx context.Context,
-	q dbx.Querier,
+	q pgxdb.Querier,
 	observationID int64,
 	channelID string,
 ) (bool, error) {
@@ -117,8 +115,7 @@ func loadCommunityWindowReady(
 
 	var ready bool
 
-	if err := q.QueryRow(
-		ctx,
+	if err := pgxdb.QueryRow(ctx, q,
 		loadCommunityWindowReadySQL,
 		observationID,
 		communityWindowEntityKind,
@@ -133,7 +130,7 @@ func loadCommunityWindowReady(
 
 func loadKnownCommunityPostIDs(
 	ctx context.Context,
-	q dbx.Querier,
+	q pgxdb.Querier,
 	channelID string,
 	postIDs []string,
 ) (map[string]struct{}, error) {
@@ -142,8 +139,7 @@ func loadKnownCommunityPostIDs(
 		return known, nil
 	}
 
-	rows, err := q.Query(
-		ctx,
+	rows, err := pgxdb.Query(ctx, q,
 		loadKnownCommunityPostIDsSQL,
 		channelID,
 		postIDs,
@@ -172,7 +168,7 @@ func loadKnownCommunityPostIDs(
 
 func loadTypedWatermark(
 	ctx context.Context,
-	q dbx.Querier,
+	q pgxdb.Querier,
 	channelID string,
 	watermarkType domain.WatermarkType,
 ) (domain.YouTubeContentWatermark, error) {
@@ -181,8 +177,7 @@ func loadTypedWatermark(
 		lastContentID *string
 	)
 
-	err := q.QueryRow(
-		ctx,
+	err := pgxdb.QueryRow(ctx, q,
 		loadTypedWatermarkSQL,
 		channelID,
 		watermarkType,

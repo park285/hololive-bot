@@ -7,11 +7,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-func inPgxTx(ctx context.Context, db trackingDB, fn func(tx trackingDB) error) error {
+func inPgxTx(ctx context.Context, db pgxdb.Querier, fn func(tx pgxdb.Querier) error) error {
 	switch typed := db.(type) {
 	case pgx.Tx:
 		return fn(typed)

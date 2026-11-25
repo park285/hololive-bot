@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -29,14 +28,9 @@ type UpcomingCandidateStore interface {
 	Finish(context.Context, map[string][]string, time.Time) error
 }
 
-type UpcomingCandidates struct{ db upcomingCandidateDB }
+type UpcomingCandidates struct{ db pgxdb.Querier }
 
-type upcomingCandidateDB interface {
-	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
-	Query(context.Context, string, ...any) (pgx.Rows, error)
-}
-
-func NewUpcomingCandidates(db upcomingCandidateDB) *UpcomingCandidates {
+func NewUpcomingCandidates(db pgxdb.Querier) *UpcomingCandidates {
 	return &UpcomingCandidates{db: db}
 }
 
@@ -86,13 +80,13 @@ func (s *UpcomingCandidates) Stage(ctx context.Context, channelID string, now ti
 	return stageUpcomingInputs(ctx, s.db, channelID, now, inputs)
 }
 
-func stageUpcomingInputs(ctx context.Context, db upcomingCandidateDB, channelID string, now time.Time, inputs []upcomingCandidateInput) error {
+func stageUpcomingInputs(ctx context.Context, db pgxdb.Querier, channelID string, now time.Time, inputs []upcomingCandidateInput) error {
 	raw, err := jsonv2.Marshal(inputs)
 	if err != nil {
 		return fmt.Errorf("stage upcoming candidates: encode: %w", err)
 	}
 
-	if _, err := db.Exec(ctx, upcomingCandidatesStageSQL, string(raw), channelID, now); err != nil {
+	if _, err := pgxdb.Exec(ctx, db, upcomingCandidatesStageSQL, string(raw), channelID, now); err != nil {
 		return fmt.Errorf("stage upcoming candidates: insert candidates: %w", err)
 	}
 
@@ -137,7 +131,7 @@ func (s *UpcomingCandidates) Finish(ctx context.Context, keysByOutcome map[strin
 			continue
 		}
 
-		if _, err := s.db.Exec(ctx, upcomingCandidatesApplySQL, keys, outcome, &now, now); err != nil {
+		if _, err := pgxdb.Exec(ctx, s.db, upcomingCandidatesApplySQL, keys, outcome, &now, now); err != nil {
 			return fmt.Errorf("finish upcoming candidates: outcome %s: %w", outcome, err)
 		}
 	}
@@ -150,7 +144,7 @@ func (s *UpcomingCandidates) Cleanup(ctx context.Context, retentionDays, limit i
 		return 0, errors.New("cleanup upcoming candidates: retention and limit must be positive")
 	}
 
-	tag, err := s.db.Exec(ctx, upcomingCandidatesCleanupSQL, retentionDays, limit)
+	tag, err := pgxdb.Exec(ctx, s.db, upcomingCandidatesCleanupSQL, retentionDays, limit)
 	if err != nil {
 		return 0, fmt.Errorf("cleanup upcoming candidates: %w", err)
 	}

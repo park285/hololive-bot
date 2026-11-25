@@ -103,7 +103,7 @@ func TestLoadExistingEventRows_ReturnsRowsInEventKeyOrder(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = pgxdb.Rollback(ctx, tx) }()
 
-	rows, err := tx.Query(ctx, loadExistingEventRowsSQL, eventKeysOf(events))
+	rows, err := pgxdb.Query(ctx, tx, loadExistingEventRowsSQL, eventKeysOf(events))
 	require.NoError(t, err)
 	defer rows.Close()
 

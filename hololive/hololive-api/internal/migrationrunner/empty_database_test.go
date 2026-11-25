@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -64,6 +65,6 @@ func TestEmptyDatabaseProbeAcceptsWriterAdmissionForUnprivilegedMigrator(t *test
 
 	var empty bool
 
-	require.NoError(t, conn.QueryRow(t.Context(), mustSQL("empty_database.sql")).Scan(&empty))
+	require.NoError(t, pgxdb.QueryRow(t.Context(), conn, mustSQL("empty_database.sql")).Scan(&empty))
 	require.True(t, empty, "a blank database with only the writer admission gate must count as empty")
 }

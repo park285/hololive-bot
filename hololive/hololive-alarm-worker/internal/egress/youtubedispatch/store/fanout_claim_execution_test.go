@@ -39,7 +39,7 @@ func TestFanoutSQLPreparedModesPreservePendingGuard(t *testing.T) {
 			require.NoError(t, err)
 
 			id := seedTransitionFanoutOutbox(t, pool, "video-sql-plan")
-			tx := preparePlanModeSQLTest(t, pool, mode, "fanout_sql_v2", fanoutClaimSQL)
+			tx := preparePlanModeSQLTest(t, pool, mode, "fanout_sql_v2", fanoutClaimSQL.SQL())
 
 			for _, rejected := range []any{domain.OutboxStatusFailed, domain.OutboxStatusSent, nil, "PENDING' OR 1=1 --"} {
 				rows := runFanoutSQLTest(t, tx, rejected)

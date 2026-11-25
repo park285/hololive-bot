@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type ReplyOutboxInsertOutcome int
@@ -45,7 +46,7 @@ const (
 )
 
 type replyOutboxSettlementPolicy struct {
-	sql   string
+	sql   pgxdb.Statement
 	retry bool
 }
 
@@ -118,7 +119,7 @@ func (r *ReplyOutboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSn
 		oldestAgeSeconds float64
 	)
 
-	if err := r.pool.QueryRow(ctx, replyOutboxReadySnapshotSQL, r.maxAttempts, replayHorizonMS).
+	if err := pgxdb.QueryRow(ctx, r.pool, replyOutboxReadySnapshotSQL, r.maxAttempts, replayHorizonMS).
 		Scan(&snapshot.Depth, &oldestAgeSeconds); err != nil {
 		return ReadyQueueSnapshot{}, fmt.Errorf("snapshot reply outbox ready queue: %w", err)
 	}
@@ -145,7 +146,7 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 	digest := sha256.Sum256(normalized.Payload)
 	payloadHash := hex.EncodeToString(digest[:])
 
-	tag, err := r.pool.Exec(ctx, replyOutboxInsertSQL,
+	tag, err := pgxdb.Exec(ctx, r.pool, replyOutboxInsertSQL,
 		normalized.MessageID,
 		normalized.Phase,
 		normalized.Ordinal,
@@ -173,7 +174,7 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, entry *ReplyOutboxEntry, payloadHash string) (ReplyOutboxInsertOutcome, error) {
 	var recordedHash, recordedClientRequestID string
 
-	err := r.pool.QueryRow(ctx, replyOutboxConflictSQL, entry.MessageID, entry.Phase, entry.Ordinal).
+	err := pgxdb.QueryRow(ctx, r.pool, replyOutboxConflictSQL, entry.MessageID, entry.Phase, entry.Ordinal).
 		Scan(&recordedHash, &recordedClientRequestID)
 	if err != nil {
 		return ReplyOutboxAlreadyRecorded,
@@ -209,7 +210,7 @@ func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, le
 		return nil, err
 	}
 
-	row := r.pool.QueryRow(ctx, replyOutboxClaimSQL, token, leaseMS, r.maxAttempts, replayHorizonMS)
+	row := pgxdb.QueryRow(ctx, r.pool, replyOutboxClaimSQL, token, leaseMS, r.maxAttempts, replayHorizonMS)
 
 	err = row.Scan(&claim.ID, &claim.MessageID, &claim.Phase, &claim.Ordinal,
 		&claim.RoomID, &claim.Payload, &claim.ClientRequestID, &claim.Attempts)
@@ -251,7 +252,7 @@ func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutb
 		args = append(args, retryMS)
 	}
 
-	tag, err := r.pool.Exec(ctx, policy.sql, args...)
+	tag, err := pgxdb.Exec(ctx, r.pool, policy.sql, args...)
 	if err != nil {
 		return false, fmt.Errorf("settle reply outbox row %d: %w", settlement.ID, err)
 	}

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
@@ -19,7 +21,7 @@ func seenTime(value, fallback time.Time) time.Time {
 	return value
 }
 
-func batchUpsertVideos(ctx context.Context, tx dbx.Querier, videos []*domain.YouTubeVideo) error {
+func batchUpsertVideos(ctx context.Context, tx pgxdb.Querier, videos []*domain.YouTubeVideo) error {
 	if len(videos) == 0 {
 		return nil
 	}
@@ -36,7 +38,7 @@ func batchUpsertVideos(ctx context.Context, tx dbx.Querier, videos []*domain.You
 	return nil
 }
 
-func upsertVideosChunk(ctx context.Context, tx dbx.Querier, videos []*domain.YouTubeVideo) error {
+func upsertVideosChunk(ctx context.Context, tx pgxdb.Querier, videos []*domain.YouTubeVideo) error {
 	now := time.Now()
 
 	const columnsPerRow = 12
@@ -75,14 +77,14 @@ func upsertVideosChunk(ctx context.Context, tx dbx.Querier, videos []*domain.You
 
 	sb.WriteString(upsertVideosChunk2SQL)
 
-	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec video upsert chunk (%d rows)", len(videos)), sb.String(), args...); err != nil {
+	if _, err := tx.Exec(ctx, sb.String(), args...); err != nil { //nolint:forbidigo // 행 수에 맞춰 VALUES 자리표시자를 만드는 일괄 쓰기다.
 		return fmt.Errorf("exec video upsert chunk (%d rows): %w", len(videos), err)
 	}
 
 	return nil
 }
 
-func batchUpsertCommunityPosts(ctx context.Context, tx dbx.Querier, posts []*domain.YouTubeCommunityPost) error {
+func batchUpsertCommunityPosts(ctx context.Context, tx pgxdb.Querier, posts []*domain.YouTubeCommunityPost) error {
 	if len(posts) == 0 {
 		return nil
 	}
@@ -99,7 +101,7 @@ func batchUpsertCommunityPosts(ctx context.Context, tx dbx.Querier, posts []*dom
 	return nil
 }
 
-func upsertCommunityPostsChunk(ctx context.Context, tx dbx.Querier, posts []*domain.YouTubeCommunityPost) error {
+func upsertCommunityPostsChunk(ctx context.Context, tx pgxdb.Querier, posts []*domain.YouTubeCommunityPost) error {
 	now := time.Now()
 
 	const columnsPerRow = 13
@@ -139,14 +141,14 @@ func upsertCommunityPostsChunk(ctx context.Context, tx dbx.Querier, posts []*dom
 
 	sb.WriteString(upsertCommunityPostsChunk2SQL)
 
-	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec community post upsert chunk (%d rows)", len(posts)), sb.String(), args...); err != nil {
+	if _, err := tx.Exec(ctx, sb.String(), args...); err != nil { //nolint:forbidigo // 행 수에 맞춰 VALUES 자리표시자를 만드는 일괄 쓰기다.
 		return fmt.Errorf("exec community post upsert chunk (%d rows): %w", len(posts), err)
 	}
 
 	return nil
 }
 
-func batchInsertNotifications(ctx context.Context, tx dbx.Querier, notifications []*domain.YouTubeNotificationOutbox) error {
+func batchInsertNotifications(ctx context.Context, tx pgxdb.Querier, notifications []*domain.YouTubeNotificationOutbox) error {
 	if len(notifications) == 0 {
 		return nil
 	}
@@ -163,7 +165,7 @@ func batchInsertNotifications(ctx context.Context, tx dbx.Querier, notifications
 	return nil
 }
 
-func insertNotificationsChunk(ctx context.Context, tx dbx.Querier, notifications []*domain.YouTubeNotificationOutbox) error {
+func insertNotificationsChunk(ctx context.Context, tx pgxdb.Querier, notifications []*domain.YouTubeNotificationOutbox) error {
 	if err := validateNotificationDedupeKeys(notifications); err != nil {
 		return fmt.Errorf("validate notification dedupe keys: %w", err)
 	}
@@ -210,7 +212,7 @@ func notificationChunksByKind(notifications []*domain.YouTubeNotificationOutbox)
 	return chunks
 }
 
-func insertNotificationsSameKindChunk(ctx context.Context, tx dbx.Querier, notifications []*domain.YouTubeNotificationOutbox, now time.Time) error {
+func insertNotificationsSameKindChunk(ctx context.Context, tx pgxdb.Querier, notifications []*domain.YouTubeNotificationOutbox, now time.Time) error {
 	if len(notifications) == 0 {
 		return nil
 	}
@@ -227,7 +229,7 @@ func insertNotificationsSameKindChunk(ctx context.Context, tx dbx.Querier, notif
 
 	sb.WriteString(insertNotificationsSameKindChunk2SQL)
 
-	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec notification insert chunk (%d rows)", len(notifications)), sb.String(), args...); err != nil {
+	if _, err := tx.Exec(ctx, sb.String(), args...); err != nil { //nolint:forbidigo // 행 수에 맞춰 VALUES 자리표시자를 만드는 일괄 쓰기다.
 		return fmt.Errorf("exec notification insert chunk (%d rows): %w", len(notifications), err)
 	}
 
@@ -291,7 +293,7 @@ func appendNotificationInsertArgs(
 	)
 }
 
-func upsertWatermark(ctx context.Context, tx dbx.Querier, watermark *domain.YouTubeContentWatermark) error {
+func upsertWatermark(ctx context.Context, tx pgxdb.Querier, watermark *domain.YouTubeContentWatermark) error {
 	if watermark == nil {
 		return nil
 	}

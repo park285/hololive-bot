@@ -12,14 +12,8 @@ import (
 	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
-type Querier interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type Tx interface {
-	Querier
+	pgxdb.Querier
 	Commit(ctx context.Context) error
 	Rollback(ctx context.Context) error
 }
@@ -105,7 +99,7 @@ func InPgxTxWithResult[T any](ctx context.Context, pool *pgxpool.Pool, fn func(t
 const maxHotpathBatchStatements = 128
 
 type Statement struct {
-	SQL        string
+	SQL        pgxdb.Statement
 	Args       []any
 	Operation  string
 	RequireRow bool
@@ -156,7 +150,7 @@ func ExecStatements(ctx context.Context, tx Tx, statements []Statement) error {
 
 		statement := &statements[i]
 
-		tag, err := tx.Exec(ctx, statement.SQL, statement.Args...)
+		tag, err := pgxdb.Exec(ctx, tx, statement.SQL, statement.Args...)
 		if err != nil {
 			return fmt.Errorf("execute statement %d (%s): %w", i, statement.Operation, err)
 		}
@@ -188,7 +182,7 @@ func execStatementBatch(ctx context.Context, sender statementBatchSender, statem
 	batch := &pgx.Batch{}
 
 	for i := range statements {
-		batch.Queue(statements[i].SQL, statements[i].Args...)
+		pgxdb.Queue(batch, statements[i].SQL, statements[i].Args...)
 	}
 
 	results := sender.SendBatch(ctx, batch)

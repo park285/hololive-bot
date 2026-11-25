@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 )
@@ -35,10 +36,6 @@ const (
 	fenceActionQuarantine           = "quarantine"
 )
 
-type fencedQuerier interface {
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-}
-
 type PoolSource interface {
 	GetPool() *pgxpool.Pool
 }
@@ -55,7 +52,7 @@ func NewPgxRepository(postgres PoolSource, logger *slog.Logger) (*PgxRepository,
 	return &PgxRepository{pool: postgres.GetPool(), now: time.Now, logger: logger}, nil
 }
 
-func (r *PgxRepository) applyFenced(ctx context.Context, querier fencedQuerier, action, query string, want []int64, args ...any) error {
+func (r *PgxRepository) applyFenced(ctx context.Context, querier pgxdb.Querier, action string, query pgxdb.Statement, want []int64, args ...any) error {
 	observed, err := queryFenceObservations(ctx, querier, action, query, args...)
 	if err != nil {
 		return err
@@ -64,8 +61,8 @@ func (r *PgxRepository) applyFenced(ctx context.Context, querier fencedQuerier, 
 	return r.checkFenced(action, want, observed)
 }
 
-func queryFenceObservations(ctx context.Context, querier fencedQuerier, action, query string, args ...any) ([]sendfence.Observation, error) {
-	rows, err := querier.Query(ctx, query, args...)
+func queryFenceObservations(ctx context.Context, querier pgxdb.Querier, action string, query pgxdb.Statement, args ...any) ([]sendfence.Observation, error) {
+	rows, err := pgxdb.Query(ctx, querier, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", action, err)
 	}

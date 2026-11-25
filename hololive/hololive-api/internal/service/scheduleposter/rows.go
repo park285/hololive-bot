@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/service/scheduleposter/cardtemplate"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -123,7 +124,7 @@ func laterOf(a, b time.Time) time.Time {
 }
 
 func (s *Store) PendingRows(ctx context.Context, today time.Time, limit int) ([]PendingRows, error) {
-	rows, err := s.pool.Query(ctx, pendingRowsSQL, today, min(max(limit, 1), maxListLimit))
+	rows, err := pgxdb.Query(ctx, s.pool, pendingRowsSQL, today, min(max(limit, 1), maxListLimit))
 	if err != nil {
 		return nil, fmt.Errorf("list pending schedule poster rows: %w", err)
 	}
@@ -141,7 +142,7 @@ func (s *Store) PendingRows(ctx context.Context, today time.Time, limit int) ([]
 }
 
 func (s *Store) WeekTerms(ctx context.Context, item PendingRows) ([]Term, error) {
-	rows, err := s.pool.Query(ctx, weekTermsSQL, item.ID, item.WeekStart, item.WeekEnd)
+	rows, err := pgxdb.Query(ctx, s.pool, weekTermsSQL, item.ID, item.WeekStart, item.WeekEnd)
 	if err != nil {
 		return nil, fmt.Errorf("list schedule poster week terms: %w", err)
 	}
@@ -171,7 +172,7 @@ func (s *Store) RecordRows(ctx context.Context, item PendingRows, rows []Row, da
 	recorded := false
 
 	err = dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		tag, markErr := tx.Exec(ctx, recordRowsSQL, item.ID, item.RowsRevision, dayShift)
+		tag, markErr := pgxdb.Exec(ctx, tx, recordRowsSQL, item.ID, item.RowsRevision, dayShift)
 		if markErr != nil {
 			return fmt.Errorf("mark rows extracted: %w", markErr)
 		}
@@ -184,7 +185,7 @@ func (s *Store) RecordRows(ctx context.Context, item PendingRows, rows []Row, da
 			return deleteErr
 		}
 
-		if _, insertErr := tx.Exec(ctx, insertRowsSQL, item.ID, payload); insertErr != nil {
+		if _, insertErr := pgxdb.Exec(ctx, tx, insertRowsSQL, item.ID, payload); insertErr != nil {
 			return fmt.Errorf("insert rows: %w", insertErr)
 		}
 
@@ -305,7 +306,7 @@ func encodeRows(rows []Row) (string, error) {
 }
 
 func (s *Store) RecordRowsFailure(ctx context.Context, item PendingRows, reason string) (bool, error) {
-	tag, err := s.pool.Exec(ctx, recordRowsFailureSQL, item.ID, item.RowsRevision, reason)
+	tag, err := pgxdb.Exec(ctx, s.pool, recordRowsFailureSQL, item.ID, item.RowsRevision, reason)
 	if err != nil {
 		return false, fmt.Errorf("record schedule poster rows failure: %w", err)
 	}
@@ -326,7 +327,7 @@ func (s *Store) PublishedMemberRows(ctx context.Context, memberID int, channelID
 	)
 
 	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		rows, queryErr := tx.Query(ctx, publishedRowsSQL, channelID, day, memberID, cardtemplate.Classic)
+		rows, queryErr := pgxdb.Query(ctx, tx, publishedRowsSQL, channelID, day, memberID, cardtemplate.Classic)
 		if queryErr != nil {
 			return fmt.Errorf("load rows: %w", queryErr)
 		}
@@ -394,7 +395,7 @@ func (s *Store) PosterRows(ctx context.Context, id int64, day time.Time) (Poster
 			extractedAt        *time.Time
 		)
 
-		err := tx.QueryRow(ctx, posterScheduleSQL, id).Scan(&schedule.PosterID, &channelID, &schedule.Confirmed, &weekStart, &weekEnd,
+		err := pgxdb.QueryRow(ctx, tx, posterScheduleSQL, id).Scan(&schedule.PosterID, &channelID, &schedule.Confirmed, &weekStart, &weekEnd,
 			&extractedAt, &schedule.PostedAt, &schedule.RowsPending, &schedule.RowsDayShift)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
@@ -412,7 +413,7 @@ func (s *Store) PosterRows(ctx context.Context, id int64, day time.Time) (Poster
 			schedule.WeekStart, schedule.WeekEnd = *weekStart, *weekEnd
 		}
 
-		if err = tx.QueryRow(ctx, publishedPosterSQL, channelID, day).Scan(&schedule.TodayPosterID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		if err = pgxdb.QueryRow(ctx, tx, publishedPosterSQL, channelID, day).Scan(&schedule.TodayPosterID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("load published poster: %w", err)
 		}
 
@@ -432,7 +433,7 @@ func (s *Store) PosterRows(ctx context.Context, id int64, day time.Time) (Poster
 }
 
 func loadPosterRows(ctx context.Context, tx pgx.Tx, schedule *PublishedSchedule) error {
-	rows, err := tx.Query(ctx, posterRowsSQL, schedule.PosterID)
+	rows, err := pgxdb.Query(ctx, tx, posterRowsSQL, schedule.PosterID)
 	if err != nil {
 		return fmt.Errorf("load rows: %w", err)
 	}

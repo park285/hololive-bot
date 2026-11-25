@@ -4,6 +4,7 @@ WITH target AS (
     JOIN schedule_poster_posts d ON d.channel_id = p.channel_id
     WHERE p.id = $1 AND d.post_id = $2
       AND /* fragment:post_window */
+
     FOR UPDATE OF d
 ), restored AS (
     UPDATE schedule_poster_posts d

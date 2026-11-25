@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"golang.org/x/sync/singleflight"
 
 	alarmkeys "github.com/kapu/hololive-alarm-worker/internal/service/alarm/keys"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
@@ -21,11 +21,11 @@ type SubscriberCache interface {
 
 type SubscriberResolver struct {
 	cache SubscriberCache
-	db    dbx.Querier
+	db    pgxdb.Querier
 	loads singleflight.Group
 }
 
-func NewSubscriberResolver(cacheClient SubscriberCache, db dbx.Querier) *SubscriberResolver {
+func NewSubscriberResolver(cacheClient SubscriberCache, db pgxdb.Querier) *SubscriberResolver {
 	return &SubscriberResolver{cache: cacheClient, db: db}
 }
 
@@ -151,7 +151,7 @@ func (r *SubscriberResolver) ResolveUncachedChannelSubscribersByType(
 
 func loadChannelSubscriberAlarmsByChannels(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	channelIDs []string,
 	alarmType domain.AlarmType,
 ) (map[string][]*domain.Alarm, error) {

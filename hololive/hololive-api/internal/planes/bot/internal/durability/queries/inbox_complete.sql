@@ -11,4 +11,5 @@ WHERE message_id = $1
 RETURNING message_id, ordering_key, status
 ),
 {{inbox_head_advance}}
+
 SELECT EXISTS (SELECT 1 FROM settled)

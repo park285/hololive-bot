@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 func (s *TransitionStore) FreezeFallbackRequests(ctx context.Context, operation StartedOperation, requests []FrozenRequest) ([]FrozenRequest, error) {
@@ -16,7 +16,7 @@ func (s *TransitionStore) FreezeFallbackRequests(ctx context.Context, operation 
 
 	frozen := make([]FrozenRequest, 0, len(requests))
 
-	err := s.executeTx(ctx, "freeze fallback requests", func(tx dbx.Querier) error {
+	err := s.executeTx(ctx, "freeze fallback requests", func(tx pgxdb.Querier) error {
 		groups := sortedStartedGroups(operation.groups)
 		byID := make(map[int64]FrozenRequest, len(requests))
 
@@ -47,7 +47,7 @@ func (s *TransitionStore) FreezeFallbackRequests(ctx context.Context, operation 
 	return frozen, nil
 }
 
-func freezeFallbackRequest(ctx context.Context, tx dbx.Querier, group startedLogicalGroup, groups []startedLogicalGroup, byID map[int64]FrozenRequest) (FrozenRequest, error) {
+func freezeFallbackRequest(ctx context.Context, tx pgxdb.Querier, group startedLogicalGroup, groups []startedLogicalGroup, byID map[int64]FrozenRequest) (FrozenRequest, error) {
 	request, ok := byID[group.ownerAfter.ID]
 	if !ok || request.RoomID != group.ownerAfter.RoomID {
 		return FrozenRequest{}, errors.New("freeze fallback requests: owner mismatch")
@@ -55,7 +55,7 @@ func freezeFallbackRequest(ctx context.Context, tx dbx.Querier, group startedLog
 
 	var bound string
 
-	if err := tx.QueryRow(ctx, sendRequestFallbackFenceSQL, group.ownerAfter.ID, group.ownerAfter.RowVersion, group.ownerAfter.LockedBy).Scan(&bound); err != nil {
+	if err := pgxdb.QueryRow(ctx, tx, sendRequestFallbackFenceSQL, group.ownerAfter.ID, group.ownerAfter.RowVersion, group.ownerAfter.LockedBy).Scan(&bound); err != nil {
 		return FrozenRequest{}, fmt.Errorf("freeze fallback requests: owner fence: %w", err)
 	}
 
@@ -83,7 +83,7 @@ func freezeFallbackRequest(ctx context.Context, tx dbx.Querier, group startedLog
 		return FrozenRequest{}, err
 	}
 
-	if _, bindErr := tx.Exec(ctx, sendRequestFallbackBindSQL, group.ownerAfter.ID, request.BaseID); bindErr != nil {
+	if _, bindErr := pgxdb.Exec(ctx, tx, sendRequestFallbackBindSQL, group.ownerAfter.ID, request.BaseID); bindErr != nil {
 		return FrozenRequest{}, fmt.Errorf("freeze fallback requests: bind: %w", bindErr)
 	}
 

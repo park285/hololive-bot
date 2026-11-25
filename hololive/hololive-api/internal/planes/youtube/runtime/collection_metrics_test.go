@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
@@ -25,7 +26,7 @@ func TestCollectionTargetSnapshotIncludesUnqueuedAndExcludesInactive(t *testing.
 
 	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
-	rows, err := pool.Query(t.Context(), collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
+	rows, err := pgxdb.Query(t.Context(), pool, collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +104,7 @@ func TestCollectionTargetSnapshotDefersSleepingTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows, err := pool.Query(ctx, collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
+	rows, err := pgxdb.Query(ctx, pool, collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +188,7 @@ func TestCollectionTargetSnapshotRejectsInvalidProjection(t *testing.T) {
 				}
 			}
 
-			rows, err := pool.Query(t.Context(), collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
+			rows, err := pgxdb.Query(t.Context(), pool, collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -229,7 +230,7 @@ func TestCollectionLiveStateWorkExcludesRetainedEndedHistory(t *testing.T) {
 
 	var raw []byte
 
-	if err := pool.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds()).Scan(&raw); err != nil {
+	if err := pool.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+collectionTargetObservabilitySQL.SQL(), defaultLiveFreshnessBudget().Milliseconds()).Scan(&raw); err != nil {
 		t.Fatal(err)
 	}
 

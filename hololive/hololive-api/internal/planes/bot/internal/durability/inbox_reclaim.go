@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type InboxReclaim struct {
@@ -72,7 +73,7 @@ func reclaimExpiredInboxTx(ctx context.Context, tx pgx.Tx, maxAttempts, batchSiz
 
 	var reclaim InboxReclaim
 
-	err = tx.QueryRow(ctx, inboxReclaimExpiredSQL, mutation.ids, mutation.attempts, mutation.statuses, mutation.terminal).
+	err = pgxdb.QueryRow(ctx, tx, inboxReclaimExpiredSQL, mutation.ids, mutation.attempts, mutation.statuses, mutation.terminal).
 		Scan(&reclaim.Requeued, &reclaim.Abandoned)
 	if err != nil {
 		return InboxReclaim{}, fmt.Errorf("reclaim expired webhook inbox leases: %w", err)
@@ -91,7 +92,7 @@ type inboxReclaimCandidate struct {
 }
 
 func lockedExpiredInboxCandidates(ctx context.Context, tx pgx.Tx, batchSize int32, keys []string) ([]inboxReclaimCandidate, error) {
-	rows, err := tx.Query(ctx, inboxReclaimCandidatesSQL, batchSize, keys)
+	rows, err := pgxdb.Query(ctx, tx, inboxReclaimCandidatesSQL, batchSize, keys)
 	if err != nil {
 		return nil, fmt.Errorf("lock expired inbox candidates: %w", err)
 	}
@@ -104,7 +105,7 @@ func lockedExpiredInboxCandidates(ctx context.Context, tx pgx.Tx, batchSize int3
 	return candidates, nil
 }
 
-func (r *InboxRepository) settle(ctx context.Context, query, messageID, claimToken string) (applied bool, err error) {
+func (r *InboxRepository) settle(ctx context.Context, query pgxdb.Statement, messageID, claimToken string) (applied bool, err error) {
 	if poolErr := ensurePool(r.pool); poolErr != nil {
 		return false, poolErr
 	}
@@ -133,8 +134,8 @@ func (r *InboxRepository) settle(ctx context.Context, query, messageID, claimTok
 	return applied, nil
 }
 
-func settleInboxTx(ctx context.Context, tx pgx.Tx, query, id, token string) (applied bool, err error) {
-	err = tx.QueryRow(ctx, query, id, token).Scan(&applied)
+func settleInboxTx(ctx context.Context, tx pgx.Tx, query pgxdb.Statement, id, token string) (applied bool, err error) {
+	err = pgxdb.QueryRow(ctx, tx, query, id, token).Scan(&applied)
 	if err != nil {
 		return false, safeMessageRepositoryError("settle webhook inbox row", id, err)
 	}

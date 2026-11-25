@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
@@ -13,8 +15,7 @@ func persistReconcileConflict(
 	observation *Observation,
 	entityKind, entityKey, fieldName, existingSHA, attemptedSHA string,
 ) error {
-	_, err := tx.Exec(
-		ctx,
+	_, err := pgxdb.Exec(ctx, tx,
 		persistReconcileConflictSQL,
 		observation.ID,
 		observation.Provider,

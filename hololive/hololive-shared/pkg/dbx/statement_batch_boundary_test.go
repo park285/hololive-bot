@@ -50,7 +50,7 @@ func TestExecStatementsCancellationBetweenBatchesStopsDispatch(t *testing.T) {
 	statements := make([]Statement, maxHotpathBatchStatements+1)
 
 	for i := range statements {
-		statements[i] = Statement{SQL: "SELECT 1", Operation: "cancellation boundary"}
+		statements[i] = Statement{SQL: testSelectOneSQL, Operation: "cancellation boundary"}
 	}
 
 	if err := ExecStatements(ctx, tx, statements); !errors.Is(err, context.Canceled) {
@@ -97,7 +97,7 @@ func TestExecStatementsCancellationBetweenSequentialStatementsStopsDispatch(t *t
 		t.Fatalf("cancellation between statements was lost: %v", err)
 	}
 
-	if len(tx.executed) != 1 || tx.executed[0] != testStatementFirstSQL {
+	if len(tx.executed) != 1 || tx.executed[0] != testStatementFirstSQL.SQL() {
 		t.Fatalf("sequential execution continued after cancellation: %v", tx.executed)
 	}
 }

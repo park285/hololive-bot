@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-collector/internal/runtime/collection"
 	"github.com/kapu/hololive-collector/internal/runtime/joblease"
@@ -62,8 +63,8 @@ func publishVerificationBatch(
 	membershipQuery, membershipArgs := joblease.LeaseMembershipQuery(proof, scope)
 	batch := &pgx.Batch{}
 
-	batch.Queue(publishVerificationBatchSQL)
-	batch.Queue(
+	pgxdb.Queue(batch, publishVerificationBatchSQL)
+	pgxdb.Queue(batch,
 		publishVerificationBatch2SQL,
 		proof.JobKey,
 		proof.OwnerInstance,
@@ -71,9 +72,9 @@ func publishVerificationBatch(
 		proof.ProjectionGeneration,
 		proof.ScheduledFor,
 	)
-	batch.Queue(membershipQuery, membershipArgs...)
-	batch.Queue(publishVerificationBatch3SQL, proof.ProjectionGeneration, subjects, kinds)
-	batch.Queue(publishVerificationBatch4SQL, string(contracts))
+	pgxdb.Queue(batch, membershipQuery, membershipArgs...)
+	pgxdb.Queue(batch, publishVerificationBatch3SQL, proof.ProjectionGeneration, subjects, kinds)
+	pgxdb.Queue(batch, publishVerificationBatch4SQL, string(contracts))
 
 	return batch
 }

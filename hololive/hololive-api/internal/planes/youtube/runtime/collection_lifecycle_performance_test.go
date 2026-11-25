@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
@@ -42,7 +43,7 @@ func TestCollectionLifecycleSnapshotWithinRuntimeBudget(t *testing.T) {
 			defer cancel()
 
 			started := time.Now()
-			rows, err := pool.Query(ctx, collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
+			rows, err := pgxdb.Query(ctx, pool, collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
 			require.NoError(t, err)
 
 			defer rows.Close()
@@ -94,7 +95,7 @@ func TestLiveCheckVideosExcludeOnlyMatchedReviews(t *testing.T) {
 	require.NoError(t, err)
 	dbtest.RefreshAllLiveRuntimeState(t, pool)
 
-	rows, err := pool.Query(ctx, liveCheckVideosSQL, []string{"review-channel"}, 10)
+	rows, err := pgxdb.Query(ctx, pool, liveCheckVideosSQL, []string{"review-channel"}, 10)
 	require.NoError(t, err)
 
 	defer rows.Close()

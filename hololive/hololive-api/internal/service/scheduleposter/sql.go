@@ -3,13 +3,15 @@ package scheduleposter
 import (
 	"embed"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
 
 //go:embed queries/*
 var sqlAssets embed.FS
 
-var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+var mustSQL = sqlassets.MustStatementReader(sqlAssets, "queries")
 
 var (
 	getMemberTemplateSQL         = mustSQL("get_member_template.sql")
@@ -71,6 +73,6 @@ var (
 	lockPosterSQL      = mustSQL("lock_poster_schedule.sql")
 )
 
-func withFragment(name, marker, fragment string) string {
-	return sqlassets.WithFragment(mustSQL(name), marker, fragment)
+func withFragment(name, marker string, fragment pgxdb.Statement) pgxdb.Statement {
+	return mustSQL(name).With(sqlassets.Fragment(marker), fragment)
 }

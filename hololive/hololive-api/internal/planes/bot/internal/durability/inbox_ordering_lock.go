@@ -15,7 +15,7 @@ func (r *InboxRepository) beginLockedMessageTx(ctx context.Context, messageID st
 		return nil, fmt.Errorf("begin webhook transition: %w", err)
 	}
 
-	if err := tx.QueryRow(ctx, inboxMessageOrderingLockSQL, messageID).Scan(nil); err != nil {
+	if err := pgxdb.QueryRow(ctx, tx, inboxMessageOrderingLockSQL, messageID).Scan(nil); err != nil {
 		return nil, errors.Join(fmt.Errorf("lock webhook message ordering key: %w", err), rollbackInboxTx(ctx, tx))
 	}
 
@@ -32,7 +32,7 @@ func rollbackInboxTx(ctx context.Context, tx pgx.Tx) error {
 }
 
 func lockInboxOrderingKey(ctx context.Context, tx pgx.Tx, orderingKey string) error {
-	if _, err := tx.Exec(ctx, inboxOrderingKeyLockSQL, orderingKey); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, inboxOrderingKeyLockSQL, orderingKey); err != nil {
 		return fmt.Errorf("lock webhook ordering key: %w", err)
 	}
 
@@ -48,7 +48,7 @@ func lockInboxOrderingKeys(ctx context.Context, tx pgx.Tx, orderingKeys []string
 		return errors.Join(ErrInvalidArgument, errors.New("transaction must not be nil"))
 	}
 
-	if _, err := tx.Exec(ctx, inboxOrderingKeysLockSQL, orderingKeys); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, inboxOrderingKeysLockSQL, orderingKeys); err != nil {
 		return fmt.Errorf("lock webhook ordering keys: %w", err)
 	}
 
@@ -56,7 +56,7 @@ func lockInboxOrderingKeys(ctx context.Context, tx pgx.Tx, orderingKeys []string
 }
 
 func expiredInboxOrderingKeys(ctx context.Context, tx pgx.Tx, batchSize int32) ([]string, error) {
-	rows, err := tx.Query(ctx, inboxReclaimExpiredKeysSQL, batchSize)
+	rows, err := pgxdb.Query(ctx, tx, inboxReclaimExpiredKeysSQL, batchSize)
 	if err != nil {
 		return nil, fmt.Errorf("select expired webhook ordering keys: %w", err)
 	}

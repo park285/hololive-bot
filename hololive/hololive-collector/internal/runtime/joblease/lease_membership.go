@@ -6,27 +6,27 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-collector/internal/runtime/collection"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-func verifyLeaseMembership(ctx context.Context, q dbx.Querier, proof *contract.LeaseProof, scope collection.MembershipScope) error {
+func verifyLeaseMembership(ctx context.Context, q pgxdb.Querier, proof *contract.LeaseProof, scope collection.MembershipScope) error {
 	if q == nil || proof == nil || len(scope.Kinds) == 0 {
 		return errors.New("verify collection lease membership: request is invalid")
 	}
 
 	query, args := LeaseMembershipQuery(proof, scope)
 
-	if err := ScanLeaseMembership(q.QueryRow(ctx, query, args...)); err != nil {
+	if err := ScanLeaseMembership(pgxdb.QueryRow(ctx, q, query, args...)); err != nil {
 		return fmt.Errorf("scan lease membership: %w", err)
 	}
 
 	return nil
 }
 
-func LeaseMembershipQuery(proof *contract.LeaseProof, scope collection.MembershipScope) (string, []any) {
+func LeaseMembershipQuery(proof *contract.LeaseProof, scope collection.MembershipScope) (pgxdb.Statement, []any) {
 	return leaseMembershipQuerySQL, []any{
 		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
 		scope.Kinds, scope.ExactSubject,

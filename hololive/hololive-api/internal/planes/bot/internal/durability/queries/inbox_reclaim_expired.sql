@@ -25,6 +25,7 @@ WITH candidate AS (
     RETURNING inbox.message_id, inbox.ordering_key, inbox.status
 ),
 {{inbox_head_advance}}
+
 SELECT
     count(status) FILTER (WHERE status = 'retry')::bigint AS requeued,
     count(status) FILTER (WHERE status = 'dead')::bigint AS abandoned

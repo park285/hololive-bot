@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type DurableLedgerMaintenance struct {
@@ -52,7 +53,7 @@ func (r *DurableLedgerRepository) Maintain(
 
 	var result DurableLedgerMaintenance
 
-	err = r.pool.QueryRow(ctx, durablePruneTerminalSQL, terminalMS, manualReviewMS, batchSize).
+	err = pgxdb.QueryRow(ctx, r.pool, durablePruneTerminalSQL, terminalMS, manualReviewMS, batchSize).
 		Scan(&result.DeletedInbox, &result.DeletedCommand, &result.DeletedOutbox)
 	if err != nil {
 		return DurableLedgerMaintenance{}, fmt.Errorf("prune durable terminal ledgers: %w", err)

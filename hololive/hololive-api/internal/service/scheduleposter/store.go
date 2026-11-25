@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -124,10 +125,6 @@ type Store struct {
 	pool *pgxpool.Pool
 }
 
-type rowQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 func NewStore(pool *pgxpool.Pool) (*Store, error) {
 	if pool == nil {
 		return nil, errors.New("schedule poster store requires database pool")
@@ -168,7 +165,7 @@ func (s *Store) InsertCandidates(ctx context.Context, candidates []Candidate, au
 		excerpts[i] = candidate.TextExcerpt
 	}
 
-	tag, err := s.pool.Exec(ctx, insertCandidatesSQL, ids, channels, users, posts, images, postedAt, excerpts, autoReview)
+	tag, err := pgxdb.Exec(ctx, s.pool, insertCandidatesSQL, ids, channels, users, posts, images, postedAt, excerpts, autoReview)
 	if err != nil {
 		return 0, fmt.Errorf("insert schedule poster candidates: %w", err)
 	}
@@ -181,7 +178,7 @@ func (s *Store) InsertCommunityCandidates(ctx context.Context, channelIDs []stri
 		return 0, nil
 	}
 
-	tag, err := s.pool.Exec(ctx, insertCommunityCandidatesSQL, channelIDs, since, textPattern, autoReview)
+	tag, err := pgxdb.Exec(ctx, s.pool, insertCommunityCandidatesSQL, channelIDs, since, textPattern, autoReview)
 	if err != nil {
 		return 0, fmt.Errorf("insert schedule poster community candidates: %w", err)
 	}
@@ -215,7 +212,7 @@ func (s *Store) InsertThumbnailCandidates(ctx context.Context, candidates []Thum
 		postedAt[i] = candidate.PostedAt
 	}
 
-	tag, err := s.pool.Exec(ctx, insertThumbnailCandidatesSQL, channels, videos, data, mimes, postedAt, autoReview)
+	tag, err := pgxdb.Exec(ctx, s.pool, insertThumbnailCandidatesSQL, channels, videos, data, mimes, postedAt, autoReview)
 	if err != nil {
 		return 0, fmt.Errorf("insert schedule poster thumbnail candidates: %w", err)
 	}
@@ -224,7 +221,7 @@ func (s *Store) InsertThumbnailCandidates(ctx context.Context, candidates []Thum
 }
 
 func (s *Store) UnreviewedCandidates(ctx context.Context, limit int) ([]ReviewCandidate, error) {
-	rows, err := s.pool.Query(ctx, unreviewedCandidatesSQL, min(max(limit, 1), maxListLimit))
+	rows, err := pgxdb.Query(ctx, s.pool, unreviewedCandidatesSQL, min(max(limit, 1), maxListLimit))
 	if err != nil {
 		return nil, fmt.Errorf("list unreviewed schedule poster candidates: %w", err)
 	}
@@ -242,7 +239,7 @@ func (s *Store) UnreviewedCandidates(ctx context.Context, limit int) ([]ReviewCa
 }
 
 func (s *Store) RequestReview(ctx context.Context, id int64, reason ReviewRequestReason) (bool, error) {
-	tag, err := s.pool.Exec(ctx, requestReviewSQL, id, reason)
+	tag, err := pgxdb.Exec(ctx, s.pool, requestReviewSQL, id, reason)
 	if err != nil {
 		return false, fmt.Errorf("request schedule poster review: %w", err)
 	}
@@ -251,7 +248,7 @@ func (s *Store) RequestReview(ctx context.Context, id int64, reason ReviewReques
 }
 
 func (s *Store) HandOverUnreviewed(ctx context.Context, createdBefore time.Time, reason ReviewRequestReason) (int64, error) {
-	tag, err := s.pool.Exec(ctx, handOverUnreviewedSQL, createdBefore, reason)
+	tag, err := pgxdb.Exec(ctx, s.pool, handOverUnreviewedSQL, createdBefore, reason)
 	if err != nil {
 		return 0, fmt.Errorf("hand over unreviewed schedule posters: %w", err)
 	}
@@ -276,7 +273,7 @@ func (s *Store) AutoConfirm(ctx context.Context, id, expectedRevision int64, wee
 
 		var same, overlapping bool
 
-		if err := tx.QueryRow(ctx, weekCoverageSQL, id, weekStart, weekEnd).Scan(&same, &overlapping); err != nil {
+		if err := pgxdb.QueryRow(ctx, tx, weekCoverageSQL, id, weekStart, weekEnd).Scan(&same, &overlapping); err != nil {
 			return fmt.Errorf("load confirmed schedule poster weeks: %w", err)
 		}
 
@@ -302,7 +299,7 @@ func (s *Store) AutoConfirm(ctx context.Context, id, expectedRevision int64, wee
 }
 
 func (s *Store) ExpirePending(ctx context.Context, before time.Time) (int64, error) {
-	tag, err := s.pool.Exec(ctx, expirePendingSQL, before)
+	tag, err := pgxdb.Exec(ctx, s.pool, expirePendingSQL, before)
 	if err != nil {
 		return 0, fmt.Errorf("expire schedule poster candidates: %w", err)
 	}
@@ -311,7 +308,7 @@ func (s *Store) ExpirePending(ctx context.Context, before time.Time) (int64, err
 }
 
 func (s *Store) Purge(ctx context.Context, before time.Time, limit int) (int64, error) {
-	tag, err := s.pool.Exec(ctx, purgeSQL, before, limit)
+	tag, err := pgxdb.Exec(ctx, s.pool, purgeSQL, before, limit)
 	if err != nil {
 		return 0, fmt.Errorf("purge schedule posters: %w", err)
 	}
@@ -325,7 +322,7 @@ func (s *Store) Summary(ctx context.Context) (Summary, error) {
 		latest  *int64
 	)
 
-	if err := s.pool.QueryRow(ctx, summarySQL).Scan(&summary.PendingCount, &latest); err != nil {
+	if err := pgxdb.QueryRow(ctx, s.pool, summarySQL).Scan(&summary.PendingCount, &latest); err != nil {
 		return Summary{}, fmt.Errorf("load schedule poster summary: %w", err)
 	}
 
@@ -341,7 +338,7 @@ func (s *Store) List(ctx context.Context, status ReviewStatus, limit int) ([]Pos
 		return nil, fmt.Errorf("list schedule posters: invalid review status %q", status)
 	}
 
-	rows, err := s.pool.Query(ctx, listSQL, string(status), min(max(limit, 1), maxListLimit))
+	rows, err := pgxdb.Query(ctx, s.pool, listSQL, string(status), min(max(limit, 1), maxListLimit))
 	if err != nil {
 		return nil, fmt.Errorf("list schedule posters: %w", err)
 	}
@@ -355,7 +352,7 @@ func (s *Store) List(ctx context.Context, status ReviewStatus, limit int) ([]Pos
 }
 
 func (s *Store) Get(ctx context.Context, id int64) (Poster, error) {
-	rows, err := s.pool.Query(ctx, getSQL, id)
+	rows, err := pgxdb.Query(ctx, s.pool, getSQL, id)
 	if err != nil {
 		return Poster{}, fmt.Errorf("get schedule poster: %w", err)
 	}
@@ -456,7 +453,7 @@ func (s *Store) AutoReject(ctx context.Context, id, expectedRevision int64) (int
 func lockUnreviewed(ctx context.Context, tx pgx.Tx, id int64) error {
 	var unreviewed bool
 
-	err := tx.QueryRow(ctx, lockUnreviewedCandidateSQL, id).Scan(&unreviewed)
+	err := pgxdb.QueryRow(ctx, tx, lockUnreviewedCandidateSQL, id).Scan(&unreviewed)
 
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -471,7 +468,7 @@ func lockUnreviewed(ctx context.Context, tx pgx.Tx, id int64) error {
 }
 
 func lockChannelConfirm(ctx context.Context, tx pgx.Tx, id int64) error {
-	if _, err := tx.Exec(ctx, lockChannelConfirmSQL, id); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, lockChannelConfirmSQL, id); err != nil {
 		return fmt.Errorf("lock schedule poster channel: %w", err)
 	}
 
@@ -479,7 +476,7 @@ func lockChannelConfirm(ctx context.Context, tx pgx.Tx, id int64) error {
 }
 
 func changeWeek(
-	ctx context.Context, tx pgx.Tx, query string, id, expectedRevision int64, weekStart, weekEnd time.Time, args ...any,
+	ctx context.Context, tx pgx.Tx, query pgxdb.Statement, id, expectedRevision int64, weekStart, weekEnd time.Time, args ...any,
 ) (int64, error) {
 	var (
 		current    *int64
@@ -488,7 +485,7 @@ func changeWeek(
 		updated    *int64
 	)
 
-	if err := tx.QueryRow(ctx, query, append([]any{id, expectedRevision, weekStart, weekEnd}, args...)...).
+	if err := pgxdb.QueryRow(ctx, tx, query, append([]any{id, expectedRevision, weekStart, weekEnd}, args...)...).
 		Scan(&current, &changeable, &nearPost, &updated); err != nil {
 		return 0, fmt.Errorf("update schedule poster: %w", err)
 	}
@@ -532,7 +529,7 @@ func reject(ctx context.Context, tx pgx.Tx, id, expectedRevision int64, reviewer
 }
 
 func deleteRows(ctx context.Context, tx pgx.Tx, id int64) error {
-	if _, err := tx.Exec(ctx, deleteRowsSQL, id); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, deleteRowsSQL, id); err != nil {
 		return fmt.Errorf("delete schedule poster rows: %w", err)
 	}
 
@@ -543,14 +540,14 @@ func (s *Store) RequestRows(ctx context.Context, id, expectedRevision int64) (in
 	return s.mutate(ctx, "request schedule poster rows", requestRowsSQL, id, expectedRevision)
 }
 
-func (s *Store) mutate(ctx context.Context, action, query string, id, expectedRevision int64) (int64, error) {
+func (s *Store) mutate(ctx context.Context, action string, query pgxdb.Statement, id, expectedRevision int64) (int64, error) {
 	return mutate(ctx, s.pool, action, query, id, expectedRevision)
 }
 
-func mutate(ctx context.Context, db rowQuerier, action, query string, id, expectedRevision int64, args ...any) (int64, error) {
+func mutate(ctx context.Context, db pgxdb.Querier, action string, query pgxdb.Statement, id, expectedRevision int64, args ...any) (int64, error) {
 	var current, updated *int64
 
-	if err := db.QueryRow(ctx, query, append([]any{id, expectedRevision}, args...)...).Scan(&current, &updated); err != nil {
+	if err := pgxdb.QueryRow(ctx, db, query, append([]any{id, expectedRevision}, args...)...).Scan(&current, &updated); err != nil {
 		return 0, fmt.Errorf("%s: %w", action, err)
 	}
 

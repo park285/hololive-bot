@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-collector/internal/runtime/collection"
@@ -40,7 +41,7 @@ func (p *postgresContractGenerationReader) LoadContractGenerations(
 		values[i] = string(kinds[i])
 	}
 
-	rows, err := p.pool.Query(ctx, loadContractGenerationsSQL, string(provider), values)
+	rows, err := pgxdb.Query(ctx, p.pool, loadContractGenerationsSQL, string(provider), values)
 	if err != nil {
 		return nil, collecterr.Wrap(contract.ErrorCollectionFailed, contract.ClassTransient, fmt.Errorf("load observation contract generations: %w", err))
 	}

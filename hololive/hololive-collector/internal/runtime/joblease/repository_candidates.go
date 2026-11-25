@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-collector/internal/runtime/collection"
@@ -35,7 +36,7 @@ func (r *Repository) CurrentProjectionGeneration(ctx context.Context) (int64, er
 
 	var generation int64
 
-	err := r.pool.QueryRow(ctx, currentProjectionGenerationSQL).Scan(&generation)
+	err := pgxdb.QueryRow(ctx, r.pool, currentProjectionGenerationSQL).Scan(&generation)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, collection.ErrProjectionStale
@@ -119,8 +120,7 @@ func (r *Repository) subjectCandidatesForProjection(
 	excluded []string,
 	limit int,
 ) (CandidatePage, error) {
-	rows, err := r.pool.Query(
-		ctx,
+	rows, err := pgxdb.Query(ctx, r.pool,
 		subjectCandidatesForProjectionSQL,
 		generation,
 		kindValues,
@@ -159,8 +159,7 @@ func (r *Repository) globalCandidatesForProjection(
 		return CandidatePage{}, candidateContractError(collecterr.Wrap(contract.ErrorInternalInvariant, contract.ClassInternal, err))
 	}
 
-	rows, err := r.pool.Query(
-		ctx,
+	rows, err := pgxdb.Query(ctx, r.pool,
 		globalCandidatesForProjectionSQL,
 		generation,
 		kindValues,

@@ -9,17 +9,20 @@ import (
 //go:embed queries/*
 var sqlAssets embed.FS
 
-var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+var (
+	mustSQL       = sqlassets.MustReader(sqlAssets, "queries")
+	mustStatement = sqlassets.MustStatementReader(sqlAssets, "queries")
+)
 
 var (
-	dropAlreadyKnownShortArtifactsSQL    = mustSQL("drop_already_known_short_artifacts.sql")
+	dropAlreadyKnownShortArtifactsSQL    = mustStatement("drop_already_known_short_artifacts.sql")
 	insertNotificationsSameKindChunk2SQL = mustSQL("insert_notifications_same_kind_chunk_2.sql")
 	insertNotificationsSameKindChunkSQL  = mustSQL("insert_notifications_same_kind_chunk.sql")
-	loadPersistedOutboxSentStateSQL      = mustSQL("load_persisted_outbox_sent_state.sql")
-	mergePersistedDeliverySentStateSQL   = mustSQL("merge_persisted_delivery_sent_state.sql")
+	loadPersistedOutboxSentStateSQL      = mustStatement("load_persisted_outbox_sent_state.sql")
+	mergePersistedDeliverySentStateSQL   = mustStatement("merge_persisted_delivery_sent_state.sql")
 	upsertCommunityPostsChunk2SQL        = mustSQL("upsert_community_posts_chunk_2.sql")
 	upsertCommunityPostsChunkSQL         = mustSQL("upsert_community_posts_chunk.sql")
 	upsertVideosChunk2SQL                = mustSQL("upsert_videos_chunk_2.sql")
 	upsertVideosChunkSQL                 = mustSQL("upsert_videos_chunk.sql")
-	upsertWatermarkSQL                   = mustSQL("upsert_watermark.sql")
+	upsertWatermarkSQL                   = mustStatement("upsert_watermark.sql")
 )

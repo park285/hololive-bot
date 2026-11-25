@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 const (
@@ -17,11 +17,7 @@ const (
 	maxChannels = 10_000
 )
 
-type snapshotDB interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
-type Repository struct{ db snapshotDB }
+type Repository struct{ db pgxdb.Querier }
 
 func New(pool *pgxpool.Pool) *Repository {
 	return &Repository{db: pool}
@@ -41,7 +37,7 @@ func (r *Repository) Query(ctx context.Context, request Request) (Result, error)
 		snapshots       []channelSnapshot
 	)
 
-	if err := r.db.QueryRow(queryCtx, snapshotSQL, request.Scope == All, request.ChannelID, request.Limit+1, maxChannels+1).Scan(&result.AsOf, &channels, &items); err != nil {
+	if err := pgxdb.QueryRow(queryCtx, r.db, snapshotSQL, request.Scope == All, request.ChannelID, request.Limit+1, maxChannels+1).Scan(&result.AsOf, &channels, &items); err != nil {
 		return Result{}, fmt.Errorf("read live query snapshot: %w", err)
 	}
 

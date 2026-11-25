@@ -6,9 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/retry"
 
 	workerconfig "github.com/kapu/hololive-alarm-worker/internal/config"
@@ -66,14 +65,8 @@ type alarmDispatchMaintenanceRunner struct {
 	logger           *slog.Logger
 }
 
-type alarmDispatchMaintenanceQuerier interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type alarmDispatchMaintenancePgxStore struct {
-	db       alarmDispatchMaintenanceQuerier
+	db       pgxdb.Querier
 	beginner *pgxpool.Pool
 }
 
@@ -234,7 +227,7 @@ func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
 func acquireAlarmDispatchLock(ctx context.Context, tx dbx.Tx, key int64) (bool, error) {
 	var locked bool
 
-	if err := tx.QueryRow(ctx, acquireAlarmDispatchLockSQL, key).Scan(&locked); err != nil {
+	if err := pgxdb.QueryRow(ctx, tx, acquireAlarmDispatchLockSQL, key).Scan(&locked); err != nil {
 		return false, fmt.Errorf("scan: %w", err)
 	}
 
@@ -246,7 +239,7 @@ func (s alarmDispatchMaintenancePgxStore) BacklogSnapshot(ctx context.Context) (
 
 	var pendingRows, retryRows, leasedRows, sendingRows int64
 
-	if err := s.db.QueryRow(ctx, backlogSnapshotSQL).
+	if err := pgxdb.QueryRow(ctx, s.db, backlogSnapshotSQL).
 		Scan(
 			&snapshot.OldestPendingAgeSeconds,
 			&snapshot.OldestRetryAgeSeconds,
@@ -283,7 +276,7 @@ func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 		return 0, fmt.Errorf("unsupported alarm dispatch retention status: %s", status)
 	}
 
-	tag, err := s.db.Exec(ctx, query, retentionDays, limit)
+	tag, err := pgxdb.Exec(ctx, s.db, query, retentionDays, limit)
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)
 	}
@@ -297,7 +290,7 @@ func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context
 		return alarmDispatchOrphanEventCounts{}, fmt.Errorf("cleanup upcoming candidates: %w", err)
 	}
 
-	tag, err := s.db.Exec(ctx, deleteOrphanEventsSQL, retentionDays, limit)
+	tag, err := pgxdb.Exec(ctx, s.db, deleteOrphanEventsSQL, retentionDays, limit)
 	if err != nil {
 		return alarmDispatchOrphanEventCounts{}, fmt.Errorf("exec: %w", err)
 	}
@@ -306,7 +299,7 @@ func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context
 }
 
 func (s alarmDispatchMaintenancePgxStore) DeleteOrphanSendUnits(ctx context.Context, limit int) (int64, error) {
-	tag, err := s.db.Exec(ctx, deleteOrphanSendUnitsSQL, limit)
+	tag, err := pgxdb.Exec(ctx, s.db, deleteOrphanSendUnitsSQL, limit)
 	if err != nil {
 		return 0, fmt.Errorf("exec: %w", err)
 	}

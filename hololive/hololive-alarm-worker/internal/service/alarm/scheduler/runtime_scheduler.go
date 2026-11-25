@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/alarmstore"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
 	checknotifier "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier"
@@ -15,7 +17,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/queue"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
@@ -122,7 +123,7 @@ func newRuntimeSchedulerYouTubeChecker(
 	postgres database.Client,
 	logger *slog.Logger,
 ) (*checking.YouTubeChecker, error) {
-	var subscriptionDB dbx.Querier
+	var subscriptionDB pgxdb.Querier
 
 	if postgres != nil {
 		subscriptionDB = postgres.GetPool()

@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
@@ -20,7 +22,7 @@ func TestProjectionTargetSnapshotSQLBoundsOnlyNonNullRows(t *testing.T) {
 	})
 	requested := []string{string(contract.KindLiveSnapshot), string(contract.KindSchedule)}
 
-	rows, err := pool.Query(ctx, loadProjectionSQL, generation, requested, 1)
+	rows, err := pgxdb.Query(ctx, pool, loadProjectionSQL, generation, requested, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

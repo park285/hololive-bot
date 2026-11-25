@@ -11,9 +11,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -57,7 +57,7 @@ func scanFrozenRequest(row pgx.CollectableRow) (FrozenRequest, error) {
 }
 
 func (s *TransitionStore) LoadFrozenRequests(ctx context.Context, deliveryIDs []int64) ([]FrozenRequest, error) {
-	rows, err := s.db.Query(ctx, sendRequestLoadSQL, deliveryIDs)
+	rows, err := pgxdb.Query(ctx, s.db, sendRequestLoadSQL, deliveryIDs)
 	if err != nil {
 		return nil, fmt.Errorf("load frozen youtube requests: query: %w", err)
 	}
@@ -74,7 +74,7 @@ func (s *TransitionStore) LoadFrozenRequests(ctx context.Context, deliveryIDs []
 func (s *TransitionStore) FreezeRequest(ctx context.Context, deliveries []domain.YouTubeNotificationDelivery, request FrozenRequest) (FrozenRequest, error) {
 	var frozen FrozenRequest
 
-	err := s.executeTx(ctx, "freeze request", func(tx dbx.Querier) error {
+	err := s.executeTx(ctx, "freeze request", func(tx pgxdb.Querier) error {
 		var err error
 
 		frozen, err = freezeRequestInTx(ctx, tx, deliveries, request)
@@ -88,7 +88,7 @@ func (s *TransitionStore) FreezeRequest(ctx context.Context, deliveries []domain
 	return frozen, nil
 }
 
-func freezeRequestInTx(ctx context.Context, tx dbx.Querier, deliveries []domain.YouTubeNotificationDelivery, request FrozenRequest) (FrozenRequest, error) {
+func freezeRequestInTx(ctx context.Context, tx pgxdb.Querier, deliveries []domain.YouTubeNotificationDelivery, request FrozenRequest) (FrozenRequest, error) {
 	ids := make([]int64, 0, len(deliveries))
 	for i := range deliveries {
 		ids = append(ids, deliveries[i].ID)
@@ -127,8 +127,8 @@ func freezeRequestInTx(ctx context.Context, tx dbx.Querier, deliveries []domain.
 	return frozen, nil
 }
 
-func loadRequestDeliveryStates(ctx context.Context, tx dbx.Querier, ids []int64) ([]requestDeliveryState, error) {
-	rows, err := tx.Query(ctx, sendRequestLockSQL, ids)
+func loadRequestDeliveryStates(ctx context.Context, tx pgxdb.Querier, ids []int64) ([]requestDeliveryState, error) {
+	rows, err := pgxdb.Query(ctx, tx, sendRequestLockSQL, ids)
 	if err != nil {
 		return nil, fmt.Errorf("freeze request: lock deliveries: %w", err)
 	}
@@ -141,7 +141,7 @@ func loadRequestDeliveryStates(ctx context.Context, tx dbx.Querier, ids []int64)
 	return states, nil
 }
 
-func loadBoundFrozenRequest(ctx context.Context, tx dbx.Querier, bound string, ids []int64) (FrozenRequest, error) {
+func loadBoundFrozenRequest(ctx context.Context, tx pgxdb.Querier, bound string, ids []int64) (FrozenRequest, error) {
 	frozen, err := loadFrozenRequest(ctx, tx, bound)
 	if err != nil {
 		return FrozenRequest{}, err
@@ -154,8 +154,8 @@ func loadBoundFrozenRequest(ctx context.Context, tx dbx.Querier, bound string, i
 	return frozen, nil
 }
 
-func bindFrozenRequest(ctx context.Context, tx dbx.Querier, ids []int64, baseID string) error {
-	tag, err := tx.Exec(ctx, sendRequestBindSQL, ids, baseID)
+func bindFrozenRequest(ctx context.Context, tx pgxdb.Querier, ids []int64, baseID string) error {
+	tag, err := pgxdb.Exec(ctx, tx, sendRequestBindSQL, ids, baseID)
 	if err != nil {
 		return fmt.Errorf("freeze request: bind: %w", err)
 	}
@@ -201,8 +201,8 @@ func validateRequestDeliveryStates(expected []domain.YouTubeNotificationDelivery
 	return bound, nil
 }
 
-func loadFrozenRequest(ctx context.Context, db dbx.Querier, id string) (FrozenRequest, error) {
-	rows, err := db.Query(ctx, sendRequestGetSQL, id)
+func loadFrozenRequest(ctx context.Context, db pgxdb.Querier, id string) (FrozenRequest, error) {
+	rows, err := pgxdb.Query(ctx, db, sendRequestGetSQL, id)
 	if err != nil {
 		return FrozenRequest{}, fmt.Errorf("get frozen request: %w", err)
 	}
@@ -231,7 +231,7 @@ func (s *TransitionStore) AdvanceRequestGeneration(ctx context.Context, operatio
 		}
 	}
 
-	err = s.executeTx(ctx, "advance request generation", func(tx dbx.Querier) error {
+	err = s.executeTx(ctx, "advance request generation", func(tx pgxdb.Querier) error {
 		return advanceRequestGenerationInTx(ctx, tx, operation, request, transitions)
 	})
 	if err != nil {
@@ -243,12 +243,12 @@ func (s *TransitionStore) AdvanceRequestGeneration(ctx context.Context, operatio
 	return request, nil
 }
 
-func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation StartedOperation, request FrozenRequest, transitions []rowTransition) error {
+func advanceRequestGenerationInTx(ctx context.Context, tx pgxdb.Querier, operation StartedOperation, request FrozenRequest, transitions []rowTransition) error {
 	if err := verifyStartedRequestOwners(ctx, tx, operation, request.BaseID); err != nil {
 		return err
 	}
 
-	tag, err := tx.Exec(ctx, sendRequestAdvanceSQL, request.BaseID, request.Generation)
+	tag, err := pgxdb.Exec(ctx, tx, sendRequestAdvanceSQL, request.BaseID, request.Generation)
 	if err != nil {
 		return fmt.Errorf("advance request generation: update: %w", err)
 	}
@@ -264,14 +264,14 @@ func advanceRequestGenerationInTx(ctx context.Context, tx dbx.Querier, operation
 	return nil
 }
 
-func verifyStartedRequestOwners(ctx context.Context, tx dbx.Querier, operation StartedOperation, baseID string) error {
+func verifyStartedRequestOwners(ctx context.Context, tx pgxdb.Querier, operation StartedOperation, baseID string) error {
 	groups := sortedStartedGroups(operation.groups)
 	for i := range groups {
 		group := &groups[i]
 
 		var valid bool
 
-		if err := tx.QueryRow(ctx, sendRequestFenceSQL, group.ownerAfter.ID, group.ownerAfter.RowVersion, baseID, group.ownerAfter.LockedBy).Scan(&valid); err != nil {
+		if err := pgxdb.QueryRow(ctx, tx, sendRequestFenceSQL, group.ownerAfter.ID, group.ownerAfter.RowVersion, baseID, group.ownerAfter.LockedBy).Scan(&valid); err != nil {
 			return fmt.Errorf("advance request generation: owner fence: %w", err)
 		}
 
@@ -288,7 +288,7 @@ func (s *TransitionStore) CleanupOrphanRequests(ctx context.Context, cutoff time
 		return 0, errors.New("cleanup orphan requests: invalid limit")
 	}
 
-	tag, err := s.db.Exec(ctx, sendRequestCleanupSQL, cutoff, limit)
+	tag, err := pgxdb.Exec(ctx, s.db, sendRequestCleanupSQL, cutoff, limit)
 	if err != nil {
 		return 0, fmt.Errorf("cleanup orphan requests: %w", err)
 	}
@@ -296,12 +296,12 @@ func (s *TransitionStore) CleanupOrphanRequests(ctx context.Context, cutoff time
 	return tag.RowsAffected(), nil
 }
 
-func insertFrozenRequest(ctx context.Context, tx dbx.Querier, request FrozenRequest) (FrozenRequest, error) {
+func insertFrozenRequest(ctx context.Context, tx pgxdb.Querier, request FrozenRequest) (FrozenRequest, error) {
 	sum := sha256.Sum256([]byte(request.Message))
 
 	request.MessageHash = hex.EncodeToString(sum[:])
 
-	if _, err := tx.Exec(ctx, sendRequestInsertSQL, request.BaseID, request.RoomID, request.Message, request.MessageHash, request.DedupeKeys, request.MemberIDs, request.Route); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, sendRequestInsertSQL, request.BaseID, request.RoomID, request.Message, request.MessageHash, request.DedupeKeys, request.MemberIDs, request.Route); err != nil {
 		return FrozenRequest{}, fmt.Errorf("insert frozen request: %w", err)
 	}
 

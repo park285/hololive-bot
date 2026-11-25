@@ -8,6 +8,7 @@ import (
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type aclSettingStore interface {
@@ -38,7 +39,12 @@ func newPgxACLStore(pool *pgxpool.Pool) *pgxACLStore {
 func (s *pgxACLStore) GetSetting(ctx context.Context, key string) (value string, ok bool, err error) {
 	var stored *string
 
-	scanErr := pgxscan.Get(ctx, s.pool, &stored, getSettingSQL, key)
+	rows, queryErr := pgxdb.Query(ctx, s.pool, getSettingSQL, key)
+	if queryErr != nil {
+		return "", false, fmt.Errorf("get acl setting %q: %w", key, queryErr)
+	}
+
+	scanErr := pgxscan.ScanOne(&stored, rows)
 	if scanErr != nil {
 		if stdErrors.Is(scanErr, pgx.ErrNoRows) {
 			return "", false, nil
@@ -55,7 +61,7 @@ func (s *pgxACLStore) GetSetting(ctx context.Context, key string) (value string,
 }
 
 func (s *pgxACLStore) CreateSetting(ctx context.Context, key, value string) error {
-	if _, err := s.pool.Exec(ctx, createSettingSQL, key, value); err != nil {
+	if _, err := pgxdb.Exec(ctx, s.pool, createSettingSQL, key, value); err != nil {
 		return fmt.Errorf("create acl setting %q: %w", key, err)
 	}
 
@@ -63,7 +69,7 @@ func (s *pgxACLStore) CreateSetting(ctx context.Context, key, value string) erro
 }
 
 func (s *pgxACLStore) UpsertSetting(ctx context.Context, key, value string) error {
-	if _, err := s.pool.Exec(ctx,
+	if _, err := pgxdb.Exec(ctx, s.pool,
 		upsertSettingSQL,
 		key, value,
 	); err != nil {
@@ -76,7 +82,12 @@ func (s *pgxACLStore) UpsertSetting(ctx context.Context, key, value string) erro
 func (s *pgxACLStore) ListRooms(ctx context.Context) ([]Room, error) {
 	var rooms []Room
 
-	if err := pgxscan.Select(ctx, s.pool, &rooms, listRoomsSQL); err != nil {
+	rows, err := pgxdb.Query(ctx, s.pool, listRoomsSQL)
+	if err != nil {
+		return nil, fmt.Errorf("list acl rooms: %w", err)
+	}
+
+	if err := pgxscan.ScanAll(&rooms, rows); err != nil {
 		return nil, fmt.Errorf("list acl rooms: %w", err)
 	}
 
@@ -84,7 +95,7 @@ func (s *pgxACLStore) ListRooms(ctx context.Context) ([]Room, error) {
 }
 
 func (s *pgxACLStore) CreateRoom(ctx context.Context, roomID, listType string) (bool, error) {
-	tag, err := s.pool.Exec(ctx,
+	tag, err := pgxdb.Exec(ctx, s.pool,
 		createRoomSQL,
 		roomID, listType,
 	)
@@ -96,7 +107,7 @@ func (s *pgxACLStore) CreateRoom(ctx context.Context, roomID, listType string) (
 }
 
 func (s *pgxACLStore) DeleteRoom(ctx context.Context, roomID, listType string) (bool, error) {
-	tag, err := s.pool.Exec(ctx,
+	tag, err := pgxdb.Exec(ctx, s.pool,
 		deleteRoomSQL,
 		roomID, listType,
 	)

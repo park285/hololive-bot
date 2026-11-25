@@ -134,8 +134,8 @@ func TestRefreshProjectionUsesCanonicalByteOrderAcrossDatabaseCollations(t *test
 
 func TestProjectionVerificationQueriesUseCanonicalByteOrder(t *testing.T) {
 	for _, tc := range []struct{ name, query string }{
-		{name: "load_targets.sql", query: loadTargetsSQL},
-		{name: "load_reasons.sql", query: loadReasonsSQL},
+		{name: "load_targets.sql", query: loadTargetsSQL.SQL()},
+		{name: "load_reasons.sql", query: loadReasonsSQL.SQL()},
 	} {
 		if !strings.Contains(tc.query, `subject_key COLLATE "C"`) ||
 			!strings.Contains(tc.query, `observation_kind COLLATE "C"`) {
@@ -144,8 +144,8 @@ func TestProjectionVerificationQueriesUseCanonicalByteOrder(t *testing.T) {
 	}
 
 	reasonsQuery := loadReasonsSQL
-	if !strings.Contains(reasonsQuery, `reason_kind COLLATE "C"`) ||
-		!strings.Contains(reasonsQuery, `reason_key COLLATE "C"`) {
+	if !strings.Contains(reasonsQuery.SQL(), `reason_kind COLLATE "C"`) ||
+		!strings.Contains(reasonsQuery.SQL(), `reason_key COLLATE "C"`) {
 		t.Fatal("load_reasons.sql must canonically order reason identity")
 	}
 }

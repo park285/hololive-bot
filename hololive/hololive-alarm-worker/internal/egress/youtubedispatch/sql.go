@@ -9,6 +9,6 @@ import (
 //go:embed queries/*
 var sqlAssets embed.FS
 
-var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+var mustSQL = sqlassets.MustStatementReader(sqlAssets, "queries")
 
 var loadOutboxItemsByIDsSQL = mustSQL("load_outbox_items_by_ids.sql")

@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
@@ -19,19 +20,15 @@ import (
 //go:embed queries/*.sql
 var sqlAssets embed.FS
 
-var officialCollaboTalentNamesSQL = sqlassets.MustReader(sqlAssets, "queries")("official_collabo_talent_names.sql")
+var officialCollaboTalentNamesSQL = sqlassets.MustStatementReader(sqlAssets, "queries")("official_collabo_talent_names.sql")
 
 type Video struct {
 	ID            string
 	HostChannelID string
 }
 
-type rowsQuerier interface {
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-}
-
 type Reader struct {
-	db      rowsQuerier
+	db      pgxdb.Querier
 	members domain.MemberDataProvider
 }
 
@@ -81,7 +78,7 @@ func (r *Reader) DisplayNames(ctx context.Context, videos []Video) (map[string][
 }
 
 func (r *Reader) officialNames(ctx context.Context, videoIDs []string) (map[string][]string, error) {
-	rows, err := r.db.Query(ctx, officialCollaboTalentNamesSQL, videoIDs)
+	rows, err := pgxdb.Query(ctx, r.db, officialCollaboTalentNamesSQL, videoIDs)
 	if err != nil {
 		return nil, fmt.Errorf("query official collab members: %w", err)
 	}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubeoutbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -19,7 +21,7 @@ type deliveryAlarmSentTarget struct {
 
 var alarmSentMarkOutboxKinds = deliverysql.Texts([]domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort})
 
-func LoadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time) ([]observation.AlarmSentMark, error) {
+func LoadAlarmSentMarksForDeliveryIDs(ctx context.Context, db pgxdb.Querier, ids []int64, sentAt time.Time) ([]observation.AlarmSentMark, error) {
 	uniqueIDs := deliverysql.UniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil, nil
@@ -75,7 +77,7 @@ func UniqueStrings(values []string) []string {
 
 func markSentDeliveryTracking(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	trackingMarks []observation.AlarmSentMark,
 ) error {
 	if err := observation.NewRepository(tx).MarkAlarmSentBatch(ctx, trackingMarks); err != nil {

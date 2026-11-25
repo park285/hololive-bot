@@ -1,4 +1,5 @@
-/* fragment:handoff_fence */, updated AS (
+/* fragment:handoff_fence */
+, updated AS (
     UPDATE alarm_dispatch_deliveries d
     SET status = 'dlq',
         attempt_count = d.attempt_count + 1,

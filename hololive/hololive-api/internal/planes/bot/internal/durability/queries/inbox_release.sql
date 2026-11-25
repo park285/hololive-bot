@@ -16,4 +16,5 @@ WHERE message_id = $1
 RETURNING message_id, ordering_key, status
 ),
 {{inbox_head_advance}}
+
 SELECT status FROM settled

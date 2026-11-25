@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
@@ -37,7 +38,7 @@ type LedgerWrite struct {
 
 func RecordDeliveryLedgerWrites(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	status LedgerStatus,
 	writes []LedgerWrite,
 ) error {
@@ -76,7 +77,7 @@ func RecordDeliveryLedgerWrites(
 		query = deliveryLedgerRecordQuarantinedSQL
 	}
 
-	if _, err := tx.Exec(ctx, query, kinds, logicalIDs, roomIDs, observedAts, sourceDeliveryIDs); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, query, kinds, logicalIDs, roomIDs, observedAts, sourceDeliveryIDs); err != nil {
 		return fmt.Errorf("upsert delivery ledger: %w", err)
 	}
 

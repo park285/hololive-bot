@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -23,7 +24,7 @@ func (s *TransitionStore) ApplyStartedFailure(
 		return newApplyResult(ApplyConflict, nil), errors.New("apply started failure: invalid operation")
 	}
 
-	load := func(context.Context, dbx.Querier) (StartedOperation, error) { return operation, nil }
+	load := func(context.Context, pgxdb.Querier) (StartedOperation, error) { return operation, nil }
 
 	result, err := s.applyFailure(ctx, "apply started failure", load, kind, reason, retryAfter)
 	if err != nil {
@@ -45,7 +46,7 @@ func (s *TransitionStore) ApplyPreparedFailure(
 		return newApplyResult(ApplyConflict, nil), errors.New("apply prepared failure: rows are empty")
 	}
 
-	load := func(ctx context.Context, tx dbx.Querier) (StartedOperation, error) {
+	load := func(ctx context.Context, tx pgxdb.Querier) (StartedOperation, error) {
 		return s.loadPreparedFailureOperation(ctx, tx, rows, outboxByID)
 	}
 
@@ -59,7 +60,7 @@ func (s *TransitionStore) ApplyPreparedFailure(
 
 func (s *TransitionStore) loadPreparedFailureOperation(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 ) (StartedOperation, error) {
@@ -120,7 +121,7 @@ func preparedFailureGroup(
 func (s *TransitionStore) applyFailure(
 	ctx context.Context,
 	operationName string,
-	load func(ctx context.Context, tx dbx.Querier) (StartedOperation, error),
+	load func(ctx context.Context, tx pgxdb.Querier) (StartedOperation, error),
 	kind lifecycle.FailureKind,
 	reason lifecycle.Reason,
 	retryAfter time.Duration,
@@ -136,7 +137,7 @@ func (s *TransitionStore) applyFailure(
 			prepareErr     error
 		)
 
-		applyErr := s.executeTx(ctx, operationName, func(tx dbx.Querier) error {
+		applyErr := s.executeTx(ctx, operationName, func(tx pgxdb.Querier) error {
 			operation, loadErr := load(ctx, tx)
 			if loadErr != nil {
 				return fmt.Errorf("%s: load groups: %w", operationName, loadErr)

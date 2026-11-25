@@ -49,7 +49,7 @@ func TestLiveAbsenceCurrentSlotLookupIsBoundedBySlotNotChannelHistory(t *testing
 
 			var raw []byte
 
-			err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+repositoryLiveAbsenceCurrentSlotSQL,
+			err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+repositoryLiveAbsenceCurrentSlotSQL.SQL(),
 				current, []string{testChannelID}).Scan(&raw)
 			require.NoError(t, err)
 

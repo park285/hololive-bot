@@ -5,6 +5,7 @@ WITH clock AS MATERIALIZED (
 	FROM alarm_dispatch_deliveries d
 	WHERE $1::INT > 0
 	  AND /* fragment:ready_predicate */
+
 	ORDER BY d.next_attempt_at ASC, d.id ASC
 	LIMIT $1::INT * $4::INT
 ), unit_candidates AS (

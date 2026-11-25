@@ -32,7 +32,7 @@ func TestLiveSessionRepeatedObservationIsHeapOnlyUpdate(t *testing.T) {
 	}
 
 	insert, _ := liveSessionWrite(nil, session)
-	_, err := pool.Exec(ctx, insert.SQL, insert.Args...)
+	_, err := pgxdb.Exec(ctx, pool, insert.SQL, insert.Args...)
 	require.NoError(t, err)
 
 	tx, err := pool.Begin(ctx)
@@ -56,7 +56,7 @@ func TestLiveSessionRepeatedObservationIsHeapOnlyUpdate(t *testing.T) {
 		statement, write := liveSessionWrite(map[string]live.SessionState{stored.VideoID: stored}, &next)
 		require.True(t, write)
 
-		tag, execErr := tx.Exec(ctx, statement.SQL, statement.Args...)
+		tag, execErr := pgxdb.Exec(ctx, tx, statement.SQL, statement.Args...)
 		require.NoError(t, execErr)
 		require.EqualValues(t, 1, tag.RowsAffected(), "refresh %d must update the session", i)
 

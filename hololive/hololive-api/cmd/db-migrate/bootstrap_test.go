@@ -182,6 +182,8 @@ func TestScraperGroupRoleIsNoLogin(t *testing.T) {
 }
 
 type roleRecorder struct {
+	pgxdb.Querier
+
 	exists   bool
 	commands []string
 	fail     error

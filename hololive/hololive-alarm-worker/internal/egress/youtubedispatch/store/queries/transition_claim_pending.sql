@@ -11,6 +11,7 @@ WITH clock AS MATERIALIZED (
     JOIN youtube_notification_outbox outbox ON outbox.id = delivery.outbox_id
     LEFT JOIN youtube_notification_send_request request ON request.base_id = delivery.send_request_id
     WHERE /* fragment:ready_predicate */
+
       AND (request.base_id IS NULL OR
            delivery.id = (SELECT min(id) FROM unnest(request.member_ids) AS ids(id)))
     ORDER BY delivery.next_attempt_at, delivery.created_at, delivery.id

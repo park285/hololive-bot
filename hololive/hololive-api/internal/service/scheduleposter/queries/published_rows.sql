@@ -3,6 +3,7 @@ WITH poster AS (
     FROM schedule_posters
     WHERE id = (
 /* fragment:published_poster */
+
     )
 )
 SELECT poster.id, poster.week_start, poster.week_end, poster.rows_extracted_at, poster.posted_at, poster.rows_status = 'pending',

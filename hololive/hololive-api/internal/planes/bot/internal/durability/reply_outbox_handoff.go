@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 var replyHandoffSettlementPolicies = map[string]replyOutboxSettlementPolicy{
@@ -54,7 +55,7 @@ func (r *ReplyOutboxRepository) SettleAccepted(ctx context.Context, id int64, cl
 		return false, fmt.Errorf("first handoff check delay: %w", err)
 	}
 
-	tag, err := r.pool.Exec(ctx, replyOutboxSettleAcceptedSQL, id, token, requestID, firstCheckMS)
+	tag, err := pgxdb.Exec(ctx, r.pool, replyOutboxSettleAcceptedSQL, id, token, requestID, firstCheckMS)
 	if err != nil {
 		return false, fmt.Errorf("settle reply outbox row %d accepted: %w", id, err)
 	}
@@ -81,7 +82,7 @@ func (r *ReplyOutboxRepository) ClaimHandoffDue(ctx context.Context, batchSize i
 		return nil, err
 	}
 
-	rows, err := r.pool.Query(ctx, replyOutboxHandoffClaimSQL, batchSize, softClaimMS, replayHorizonMS)
+	rows, err := pgxdb.Query(ctx, r.pool, replyOutboxHandoffClaimSQL, batchSize, softClaimMS, replayHorizonMS)
 	if err != nil {
 		return nil, fmt.Errorf("claim reply handoff checks: %w", err)
 	}
@@ -131,7 +132,7 @@ func (r *ReplyOutboxRepository) SettleHandoff(ctx context.Context, settlement Re
 		args = append(args, retryMS)
 	}
 
-	tag, err := r.pool.Exec(ctx, policy.sql, args...)
+	tag, err := pgxdb.Exec(ctx, r.pool, policy.sql, args...)
 	if err != nil {
 		return false, fmt.Errorf("settle reply handoff row %d: %w", claim.ID, err)
 	}
@@ -156,7 +157,7 @@ func (r *ReplyOutboxRepository) RescheduleHandoff(ctx context.Context, claim Rep
 
 	var delayMS int64
 
-	err = r.pool.QueryRow(ctx, replyOutboxHandoffRescheduleSQL,
+	err = pgxdb.QueryRow(ctx, r.pool, replyOutboxHandoffRescheduleSQL,
 		claim.ID, claim.CheckToken, claim.IrisRequestID, claim.claimXID, stepMS, horizonMS).Scan(&delayMS)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, false, nil

@@ -3,7 +3,7 @@ package migrationsource
 import (
 	"context"
 	"crypto/sha256"
-	_ "embed"
+	"embed"
 	"encoding/hex"
 	"fmt"
 	"io/fs"
@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
 	"github.com/kapu/hololive-shared/pkg/sqlsplit"
@@ -20,11 +21,13 @@ const Baseline = "001_schema_epoch4_baseline.sql"
 
 var suffixName = regexp.MustCompile(`^\d{3}_epoch4_[a-z0-9_]+\.sql$`)
 
-//go:embed queries/settle_constraints.sql
-var settleConstraints string
+//go:embed queries/settle_constraints.sql queries/prepare_migration_session.sql
+var sqlAssets embed.FS
 
-//go:embed queries/prepare_migration_session.sql
-var prepareMigrationSessionSQL string
+var (
+	settleConstraints          = pgxdb.MustStatement(sqlAssets, "queries/settle_constraints.sql")
+	prepareMigrationSessionSQL = pgxdb.MustStatement(sqlAssets, "queries/prepare_migration_session.sql")
+)
 
 //go:embed queries/physical_contract.sql.tpl
 var physicalContractTemplateSQL string
@@ -101,7 +104,7 @@ func (f File) Apply(ctx context.Context, tx pgx.Tx) error {
 	}
 
 	for _, stmt := range segments[0].Statements {
-		if _, err := tx.Exec(ctx, stmt); err != nil {
+		if _, err := tx.Exec(ctx, stmt); err != nil { //nolint:forbidigo // migration 파일에 담긴 문장을 실행한다.
 			return fmt.Errorf("apply %s: %w", f.Name, err)
 		}
 	}
@@ -110,7 +113,7 @@ func (f File) Apply(ctx context.Context, tx pgx.Tx) error {
 }
 
 func prepareMigrationSession(ctx context.Context, tx pgx.Tx) error {
-	if _, err := tx.Exec(ctx, prepareMigrationSessionSQL); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, prepareMigrationSessionSQL); err != nil {
 		return fmt.Errorf("prepare migration namespace and function validation: %w", err)
 	}
 
@@ -122,7 +125,7 @@ func SettleConstraints(ctx context.Context, tx pgx.Tx) error {
 		return err
 	}
 
-	if _, err := tx.Exec(ctx, settleConstraints); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, settleConstraints); err != nil {
 		return fmt.Errorf("settle named constraints and restore initial timing: %w", err)
 	}
 
@@ -138,7 +141,7 @@ func (f File) Verify(ctx context.Context, tx pgx.Tx) error {
 
 	predicate := strings.TrimSuffix(strings.TrimSpace(f.Contract), ";")
 
-	if err := tx.QueryRow(ctx, strings.ReplaceAll(physicalContractTemplateSQL, "{{predicate}}", predicate), pgx.QueryExecModeExec).Scan(&ready); err != nil {
+	if err := tx.QueryRow(ctx, strings.ReplaceAll(physicalContractTemplateSQL, "{{predicate}}", predicate), pgx.QueryExecModeExec).Scan(&ready); err != nil { //nolint:forbidigo // migration 파일이 선언한 물리 계약 술어를 검사한다.
 		return fmt.Errorf("inspect physical contract for %s: %w", f.Name, err)
 	}
 

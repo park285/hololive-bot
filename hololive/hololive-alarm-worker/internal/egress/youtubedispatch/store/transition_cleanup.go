@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -61,7 +62,7 @@ func (s *TransitionStore) CleanupTerminalOutboxes(
 
 	var result CleanupResult
 
-	err = s.executeTx(ctx, "cleanup terminal outboxes", func(tx dbx.Querier) error {
+	err = s.executeTx(ctx, "cleanup terminal outboxes", func(tx pgxdb.Querier) error {
 		var cleanupErr error
 
 		result, cleanupErr = s.cleanupTerminalTx(ctx, tx, bounds.cutoff, bounds.afterTerminalAt, after.OutboxID, limit)
@@ -110,7 +111,7 @@ func canonicalCleanupBounds(
 
 func (s *TransitionStore) cleanupTerminalTx(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	cutoff time.Time,
 	afterTerminalAt *time.Time,
 	afterOutboxID int64,
@@ -172,12 +173,11 @@ func cleanupCandidateIDs(candidates []cleanupCandidate) []int64 {
 
 func deleteCleanupOutboxes(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	eligible []int64,
 	cutoff time.Time,
 ) (int, error) {
-	rows, err := tx.Query(
-		ctx,
+	rows, err := pgxdb.Query(ctx, tx,
 		transitionCleanupDeleteSQL,
 		eligible,
 		[]string{string(domain.OutboxStatusSent), string(domain.OutboxStatusFailed)},
@@ -216,8 +216,7 @@ func (s *TransitionStore) CleanupExpiredFanoutOutboxes(
 		return 0, errors.New("cleanup expired fanout outboxes: limit must be positive")
 	}
 
-	rows, err := s.db.Query(
-		ctx,
+	rows, err := pgxdb.Query(ctx, s.db,
 		fanoutCleanupExpiredSQL,
 		domain.OutboxStatusPending,
 		pendingAge.Milliseconds(),
@@ -239,7 +238,7 @@ func (s *TransitionStore) CleanupExpiredFanoutOutboxes(
 
 func loadCleanupCandidates(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	cutoff time.Time,
 	afterTerminalAt *time.Time,
 	afterOutboxID int64,
@@ -271,7 +270,7 @@ type cleanupObservedRow struct {
 	Locked bool
 }
 
-func loadCleanupChildren(ctx context.Context, db dbx.Querier, outboxIDs []int64) ([]cleanupObservedRow, error) {
+func loadCleanupChildren(ctx context.Context, db pgxdb.Querier, outboxIDs []int64) ([]cleanupObservedRow, error) {
 	var rows []cleanupObservedRow
 
 	if err := dbx.SelectSQL(
@@ -290,7 +289,7 @@ func loadCleanupChildren(ctx context.Context, db dbx.Querier, outboxIDs []int64)
 
 func (s *TransitionStore) cleanupEligibleOutboxes(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	candidates []cleanupCandidate,
 	children []cleanupObservedRow,
 ) ([]int64, map[CleanupGuardReason]int, error) {
@@ -473,7 +472,7 @@ func newCleanupGroupArgs(requested []requestedLogicalGroup) cleanupGroupArgs {
 
 func (s *TransitionStore) loadCleanupSiblings(
 	ctx context.Context,
-	db dbx.Querier,
+	db pgxdb.Querier,
 	requested []requestedLogicalGroup,
 ) ([]transitionRow, map[ytcontentid.LogicalKey]struct{}, error) {
 	args := newCleanupGroupArgs(requested)

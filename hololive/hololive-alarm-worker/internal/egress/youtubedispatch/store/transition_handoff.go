@@ -11,11 +11,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 const (
@@ -48,8 +48,8 @@ func (a HandoffAdmission) validate() error {
 	return nil
 }
 
-func lockAdmissionRequest(ctx context.Context, tx dbx.Querier, operation StartedOperation, admission HandoffAdmission) error {
-	rows, err := tx.Query(ctx, handoffAdmitLockSQL,
+func lockAdmissionRequest(ctx context.Context, tx pgxdb.Querier, operation StartedOperation, admission HandoffAdmission) error {
+	rows, err := pgxdb.Query(ctx, tx, handoffAdmitLockSQL,
 		admission.RequestBaseID, admission.RequestGeneration, startedOwnerIDs(operation))
 	if err != nil {
 		return fmt.Errorf("lock admitted request: %w", err)
@@ -69,10 +69,10 @@ func lockAdmissionRequest(ctx context.Context, tx dbx.Querier, operation Started
 	return nil
 }
 
-func recordAdmission(ctx context.Context, tx dbx.Querier, admission HandoffAdmission, sentAt time.Time) error {
+func recordAdmission(ctx context.Context, tx pgxdb.Querier, admission HandoffAdmission, sentAt time.Time) error {
 	firstCheck := min(handoffcheck.FirstCheckDelay, admission.Horizon)
 
-	tag, err := tx.Exec(ctx, handoffAdmitSQL,
+	tag, err := pgxdb.Exec(ctx, tx, handoffAdmitSQL,
 		admission.RequestBaseID, admission.IrisRequestID, sentAt, firstCheck.Milliseconds())
 	if err != nil {
 		return fmt.Errorf("record handoff admission: %w", err)
@@ -85,7 +85,7 @@ func recordAdmission(ctx context.Context, tx dbx.Querier, admission HandoffAdmis
 	return nil
 }
 
-func validateAdmissionPostState(ctx context.Context, db dbx.Querier, admission HandoffAdmission) error {
+func validateAdmissionPostState(ctx context.Context, db pgxdb.Querier, admission HandoffAdmission) error {
 	state, found, err := loadHandoffRequestState(ctx, db, admission.RequestBaseID)
 	if err != nil {
 		return fmt.Errorf("read-back handoff admission: %w", err)
@@ -106,10 +106,10 @@ type handoffRequestState struct {
 	claimXID      uint32
 }
 
-func loadHandoffRequestState(ctx context.Context, db dbx.Querier, baseID string) (handoffRequestState, bool, error) {
+func loadHandoffRequestState(ctx context.Context, db pgxdb.Querier, baseID string) (handoffRequestState, bool, error) {
 	var state handoffRequestState
 
-	err := db.QueryRow(ctx, handoffRequestStateSQL, baseID).
+	err := pgxdb.QueryRow(ctx, db, handoffRequestStateSQL, baseID).
 		Scan(&state.IrisRequestID, &state.Generation, &state.NextCheckAt, &state.CheckedAt, &state.claimXID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return handoffRequestState{}, false, nil
@@ -195,7 +195,7 @@ func (s *TransitionStore) ClaimHandoffDue(ctx context.Context, limit int, softCl
 		return nil, fmt.Errorf("claim youtube handoff checks: soft claim %s must be at least 1ms", softClaim)
 	}
 
-	rows, err := s.db.Query(ctx, handoffClaimDueSQL, limit, softClaim.Milliseconds())
+	rows, err := pgxdb.Query(ctx, s.db, handoffClaimDueSQL, limit, softClaim.Milliseconds())
 	if err != nil {
 		return nil, fmt.Errorf("claim youtube handoff checks: %w", err)
 	}
@@ -291,8 +291,8 @@ type handoffFence struct {
 	applied        bool
 }
 
-func queryHandoffFence(ctx context.Context, db dbx.Querier, query string, args ...any) (handoffFence, error) {
-	rows, err := db.Query(ctx, query, args...)
+func queryHandoffFence(ctx context.Context, db pgxdb.Querier, query pgxdb.Statement, args ...any) (handoffFence, error) {
+	rows, err := pgxdb.Query(ctx, db, query, args...)
 	if err != nil {
 		return handoffFence{}, fmt.Errorf("query handoff fence: %w", err)
 	}
@@ -340,7 +340,7 @@ func (f handoffFence) claimMiss(action string, claim *HandoffClaim) error {
 	return nil
 }
 
-func (s *TransitionStore) applyHandoffRequest(ctx context.Context, action, query string, claim *HandoffClaim, extra ...any) (ApplyResult, error) {
+func (s *TransitionStore) applyHandoffRequest(ctx context.Context, action string, query pgxdb.Statement, claim *HandoffClaim, extra ...any) (ApplyResult, error) {
 	if err := claim.validate(); err != nil {
 		return newApplyResult(ApplyConflict, nil), fmt.Errorf("%s: %w", action, err)
 	}

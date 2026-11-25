@@ -30,7 +30,7 @@ type projectionCacheTracer struct {
 }
 
 func (tr *projectionCacheTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
-	if data.SQL == loadReasonsSQL {
+	if data.SQL == loadReasonsSQL.SQL() {
 		tr.loads.Add(1)
 	}
 

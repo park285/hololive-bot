@@ -1,10 +1,13 @@
 package sqlassets
 
 import (
+	"embed"
 	"fmt"
 	"io/fs"
 	"strings"
 	"sync"
+
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 func MustReader(assets fs.FS, directory string) func(string) string {
@@ -40,13 +43,19 @@ func MustReader(assets fs.FS, directory string) func(string) string {
 	}
 }
 
-func WithFragment(query, name, fragment string) string {
-	directive := "/* fragment:" + name + " */"
-	if count := strings.Count(query, directive); count != 1 {
-		panic(fmt.Errorf("embedded SQL fragment %q appears %d times, want exactly 1", directive, count))
+func MustStatementReader(assets embed.FS, directory string) func(string) pgxdb.Statement {
+	directory = strings.TrimSuffix(directory, "/")
+	if !fs.ValidPath(directory) || directory == "." {
+		panic(fmt.Errorf("invalid embedded SQL directory %q", directory))
 	}
 
-	return strings.Replace(query, directive, fragment, 1)
+	return func(name string) pgxdb.Statement {
+		return pgxdb.MustStatement(assets, directory+"/"+name)
+	}
+}
+
+func Fragment(name string) string {
+	return "/* fragment:" + name + " */"
 }
 
 func cachedSQL(value any) string {

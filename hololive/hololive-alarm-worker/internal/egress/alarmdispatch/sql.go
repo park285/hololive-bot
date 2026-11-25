@@ -3,6 +3,8 @@ package alarmdispatch
 import (
 	"embed"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
@@ -10,7 +12,7 @@ import (
 //go:embed queries/*
 var sqlAssets embed.FS
 
-var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+var mustSQL = sqlassets.MustStatementReader(sqlAssets, "queries")
 
 var (
 	acquireAlarmDispatchLockSQL = mustSQL("acquire_alarm_dispatch_lock.sql")
@@ -19,7 +21,7 @@ var (
 	deleteOrphanSendUnitsSQL    = mustSQL("delete_orphan_send_units.sql")
 )
 
-var alarmDispatchRetentionDeleteSQL = map[dispatchoutbox.Status]string{
+var alarmDispatchRetentionDeleteSQL = map[dispatchoutbox.Status]pgxdb.Statement{
 	dispatchoutbox.StatusSent:        mustSQL("alarm_dispatch_retention_delete_sent.sql"),
 	dispatchoutbox.StatusDLQ:         mustSQL("alarm_dispatch_retention_delete_dlq.sql"),
 	dispatchoutbox.StatusQuarantined: mustSQL("alarm_dispatch_retention_delete_quarantined.sql"),

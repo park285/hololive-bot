@@ -645,7 +645,7 @@ func advanceLease(
 	return next
 }
 
-func expireObservationClaim(t *testing.T, db dbx.Querier, observationID int64) {
+func expireObservationClaim(t *testing.T, db pgxdb.Querier, observationID int64) {
 	t.Helper()
 
 	if _, err := db.Exec(t.Context(), `

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -38,9 +39,7 @@ func ReadySnapshot(ctx context.Context, pool *pgxpool.Pool, lockTimeout, freshne
 		ageSeconds float64
 	)
 
-	if err := pool.QueryRow(
-		ctx, deliveryReadySnapshotSQL, "PENDING", lockTimeout.Milliseconds(), freshness.Milliseconds(), batchSize,
-	).Scan(&depth, &ageSeconds); err != nil {
+	if err := pgxdb.QueryRow(ctx, pool, deliveryReadySnapshotSQL, "PENDING", lockTimeout.Milliseconds(), freshness.Milliseconds(), batchSize).Scan(&depth, &ageSeconds); err != nil {
 		return workercontract.QueueValues{}, fmt.Errorf("sample ready youtube deliveries: %w", err)
 	}
 
@@ -50,7 +49,7 @@ func ReadySnapshot(ctx context.Context, pool *pgxpool.Pool, lockTimeout, freshne
 func expiredPendingCount(ctx context.Context, pool *pgxpool.Pool, freshness time.Duration, batchSize int) (int64, error) {
 	var expired int64
 
-	if err := pool.QueryRow(ctx, deliveryExpiredSnapshotSQL, freshness.Milliseconds(), batchSize).Scan(&expired); err != nil {
+	if err := pgxdb.QueryRow(ctx, pool, deliveryExpiredSnapshotSQL, freshness.Milliseconds(), batchSize).Scan(&expired); err != nil {
 		return 0, fmt.Errorf("sample expired youtube deliveries: %w", err)
 	}
 

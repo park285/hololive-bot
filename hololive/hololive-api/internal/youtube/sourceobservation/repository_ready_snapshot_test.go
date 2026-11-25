@@ -49,7 +49,7 @@ func TestReadySnapshotUsesSchedulingAndExpiredLeaseThresholds(t *testing.T) {
 				age   float64
 			)
 
-			err = tx.QueryRow(t.Context(), repositoryReadySnapshotSQL, []string{"community_page"}, MaxAttempts).Scan(&depth, &age)
+			err = pgxdb.QueryRow(t.Context(), tx, repositoryReadySnapshotSQL, []string{"community_page"}, MaxAttempts).Scan(&depth, &age)
 			require.NoError(t, err)
 			require.Equal(t, int64(1), depth)
 			require.Zero(t, age, "age is the scheduling/lease threshold, not observation receipt")

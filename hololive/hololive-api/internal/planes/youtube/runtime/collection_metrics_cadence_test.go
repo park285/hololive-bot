@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
@@ -63,7 +64,7 @@ func assertCollectionCadenceMetrics(t *testing.T, pool *pgxpool.Pool, fixtureTim
 		t.Fatal(err)
 	}
 
-	rows, err := pool.Query(t.Context(), collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
+	rows, err := pgxdb.Query(t.Context(), pool, collectionTargetObservabilitySQL, defaultLiveFreshnessBudget().Milliseconds())
 	if err != nil {
 		t.Fatal(err)
 	}

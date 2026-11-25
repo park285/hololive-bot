@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -34,7 +36,7 @@ func (r *Repository) loadChannelSubscriberAlarmsByChannels(
 	queryCtx, cancel := context.WithTimeout(ctx, channelSubscriberLoadTimeout)
 	defer cancel()
 
-	rows, err := r.pool.Query(queryCtx, loadChannelSubscriberAlarmsByChannelsSQL, channelIDs, string(alarmType))
+	rows, err := pgxdb.Query(queryCtx, r.pool, loadChannelSubscriberAlarmsByChannelsSQL, channelIDs, string(alarmType))
 	if err != nil {
 		return nil, fmt.Errorf("load channel subscriber alarms by channels: %w", err)
 	}

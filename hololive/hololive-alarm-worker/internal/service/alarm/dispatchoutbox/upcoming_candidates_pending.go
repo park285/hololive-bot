@@ -109,7 +109,7 @@ type pendingCandidatePayload struct {
 }
 
 func evaluateUpcomingCandidates(ctx context.Context, tx pgx.Tx, now time.Time) ([]pendingCandidatePayload, error) {
-	rows, err := tx.Query(ctx, upcomingCandidatesPendingSQL, UpcomingCandidateLimit)
+	rows, err := pgxdb.Query(ctx, tx, upcomingCandidatesPendingSQL, UpcomingCandidateLimit)
 	if err != nil {
 		return nil, fmt.Errorf("load upcoming candidate facts: %w", err)
 	}

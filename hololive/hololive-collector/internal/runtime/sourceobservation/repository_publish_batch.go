@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -150,7 +151,7 @@ func publishObservationSet(
 	encoded []byte,
 	want int,
 ) (PublishBatchResult, bool, error) {
-	rows, err := tx.Query(ctx, publishObservationSetSQL, string(encoded))
+	rows, err := pgxdb.Query(ctx, tx, publishObservationSetSQL, string(encoded))
 	if err != nil {
 		return PublishBatchResult{}, false, fmt.Errorf("publish source observation batch: execute set: %w", err)
 	}

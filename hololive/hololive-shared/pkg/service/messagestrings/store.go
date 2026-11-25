@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 const (
@@ -23,12 +23,8 @@ const (
 	NamespaceTimeFmt   = "timefmt"
 )
 
-type queryRunner interface {
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-}
-
 type Store struct {
-	pool   queryRunner
+	pool   pgxdb.Querier
 	logger *slog.Logger
 	mu     sync.RWMutex
 	cache  map[string]map[string]string
@@ -147,7 +143,7 @@ func (s *Store) GetMap(namespace string) map[string]string {
 }
 
 func (s *Store) load(ctx context.Context) error {
-	rows, err := s.pool.Query(ctx, loadSQL)
+	rows, err := pgxdb.Query(ctx, s.pool, loadSQL)
 	if err != nil {
 		return fmt.Errorf("query message_strings: %w", err)
 	}

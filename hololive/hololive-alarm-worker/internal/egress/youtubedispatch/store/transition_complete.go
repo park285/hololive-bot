@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
@@ -148,7 +149,7 @@ func (s *TransitionStore) completeSentOnce(
 ) ([]int64, error) {
 	var touched []int64
 
-	err := s.executeTx(ctx, "complete sent", func(tx dbx.Querier) error {
+	err := s.executeTx(ctx, "complete sent", func(tx pgxdb.Querier) error {
 		var (
 			sentAt time.Time
 			err    error
@@ -194,7 +195,7 @@ func (s *TransitionStore) completeSentOnce(
 
 func recordSentTracking(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx pgxdb.Querier,
 	operation StartedOperation,
 	sentAt time.Time,
 ) error {
@@ -210,7 +211,7 @@ func recordSentTracking(
 	return nil
 }
 
-func validateSentTracking(ctx context.Context, db dbx.Querier, operation StartedOperation) error {
+func validateSentTracking(ctx context.Context, db pgxdb.Querier, operation StartedOperation) error {
 	repository := observation.NewRepository(db)
 	seen := make(map[string]struct{})
 

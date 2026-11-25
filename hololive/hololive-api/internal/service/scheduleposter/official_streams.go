@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type OfficialStream struct {
@@ -21,7 +22,7 @@ func (s *Store) OfficialStreams(ctx context.Context, videoIDs []string) (map[str
 		return map[string]OfficialStream{}, nil
 	}
 
-	rows, err := s.pool.Query(ctx, officialStreamsSQL, videoIDs)
+	rows, err := pgxdb.Query(ctx, s.pool, officialStreamsSQL, videoIDs)
 	if err != nil {
 		return nil, fmt.Errorf("load official streams: %w", err)
 	}

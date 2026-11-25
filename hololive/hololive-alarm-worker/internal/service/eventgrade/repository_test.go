@@ -16,7 +16,7 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
-//go:embed queries/test_seed_request.sql
+//go:embed testdata/test_seed_request.sql
 var seedRequestSQL string
 
 //go:embed testdata/read_requests.sql

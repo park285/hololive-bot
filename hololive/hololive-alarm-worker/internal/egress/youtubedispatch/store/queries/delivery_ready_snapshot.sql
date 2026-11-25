@@ -13,3 +13,4 @@ FROM youtube_notification_delivery delivery
 JOIN youtube_notification_outbox outbox ON outbox.id = delivery.outbox_id
 LEFT JOIN youtube_notification_send_request request ON request.base_id = delivery.send_request_id
 WHERE /* fragment:ready_predicate */
+

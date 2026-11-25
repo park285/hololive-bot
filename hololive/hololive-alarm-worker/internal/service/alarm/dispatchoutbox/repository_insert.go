@@ -97,7 +97,7 @@ func buildEventBatchRows(events []eventInsert) []eventBatchRow {
 }
 
 func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (map[string]int64, int, error) {
-	rows, err := tx.Query(ctx, insertEventBatchSQL, jsonbRecordsetParam(raw))
+	rows, err := pgxdb.Query(ctx, tx, insertEventBatchSQL, jsonbRecordsetParam(raw))
 	if err != nil {
 		return nil, 0, fmt.Errorf("insert dispatch events: %w", err)
 	}
@@ -164,7 +164,7 @@ func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInser
 }
 
 func ensureSendUnits(ctx context.Context, tx pgx.Tx, raw []byte) error {
-	if _, err := tx.Exec(ctx, ensureSendUnitsSQL, jsonbRecordsetParam(raw)); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, ensureSendUnitsSQL, jsonbRecordsetParam(raw)); err != nil {
 		return fmt.Errorf("insert dispatch send units: %w", err)
 	}
 
@@ -195,7 +195,7 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 }
 
 func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected int, inserted []string, err error) {
-	err = tx.QueryRow(ctx, insertDeliveryBatchSQL, jsonbRecordsetParam(raw)).Scan(&selected, &inserted)
+	err = pgxdb.QueryRow(ctx, tx, insertDeliveryBatchSQL, jsonbRecordsetParam(raw)).Scan(&selected, &inserted)
 	if err != nil {
 		return 0, nil, fmt.Errorf("insert dispatch deliveries: %w", err)
 	}

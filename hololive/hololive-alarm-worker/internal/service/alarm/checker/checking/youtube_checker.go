@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/alarmtiming/targetpolicy"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicscope"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
@@ -52,7 +52,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 	dedupService *dedup.Service,
 	evaluationWindowCap time.Duration,
 	persistedLiveSource YouTubeLiveSessionSource,
-	subscriptionDB dbx.Querier,
+	subscriptionDB pgxdb.Querier,
 	logger *slog.Logger,
 ) (*YouTubeChecker, error) {
 	if cacheClient == nil {

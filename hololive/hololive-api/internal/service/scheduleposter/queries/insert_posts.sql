@@ -4,6 +4,7 @@ WITH stored AS (
     FROM schedule_posters p
     CROSS JOIN unnest($2::bigint[], $3::timestamptz[], $4::text[]) AS d(post_id, posted_at, body)
     WHERE p.id = $1 AND p.review_status = 'confirmed' AND /* fragment:post_window */
+
     ON CONFLICT (post_id, channel_id) DO UPDATE
     SET body = EXCLUDED.body, status = 'unjudged', reason = '', schedule_info = NULL, kind = NULL,
         matched_poster_id = NULL, matched_rows_at = NULL

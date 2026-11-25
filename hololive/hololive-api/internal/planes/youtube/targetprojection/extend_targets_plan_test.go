@@ -41,7 +41,7 @@ func TestExtendTargetsCurrentRangeBufferBound(t *testing.T) {
 			_, err = tx.Exec(t.Context(), "SET LOCAL plan_cache_mode = "+mode)
 			require.NoError(t, err)
 
-			_, err = tx.Exec(t.Context(), "PREPARE extend_target_plan(bigint,text[],text[],timestamptz[]) AS "+extendTargetsSQL)
+			_, err = tx.Exec(t.Context(), "PREPARE extend_target_plan(bigint,text[],text[],timestamptz[]) AS "+extendTargetsSQL.SQL())
 			require.NoError(t, err)
 
 			defer func() {

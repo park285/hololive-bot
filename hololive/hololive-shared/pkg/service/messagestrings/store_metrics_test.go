@@ -10,10 +10,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 type failingQuerier struct {
+	pgxdb.Querier
+
 	err   error
 	calls int
 }
@@ -61,6 +64,8 @@ func (r *valueRows) Scan(dest ...any) error {
 }
 
 type valueQuerier struct {
+	pgxdb.Querier
+
 	rows [][3]string
 }
 

@@ -3,13 +3,15 @@ package store
 import (
 	"embed"
 
+	"github.com/park285/shared-go/postgres/pgxdb"
+
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
 
 //go:embed queries/*
 var sqlAssets embed.FS
 
-var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+var mustSQL = sqlassets.MustStatementReader(sqlAssets, "queries")
 
 var (
 	loadTerminalCommunityShortsOutboxResultsSQL  = mustSQL("load_terminal_community_shorts_outbox_results.sql")
@@ -62,8 +64,8 @@ var (
 )
 
 var (
-	transitionClaimPendingSQL = sqlassets.WithFragment(mustSQL("transition_claim_pending.sql"), "ready_predicate", mustSQL("delivery_ready_predicate.sql"))
-	deliveryReadySnapshotSQL  = sqlassets.WithFragment(mustSQL("delivery_ready_snapshot.sql"), "ready_predicate", mustSQL("delivery_ready_predicate.sql"))
+	transitionClaimPendingSQL = mustSQL("transition_claim_pending.sql").With(sqlassets.Fragment("ready_predicate"), mustSQL("delivery_ready_predicate.sql"))
+	deliveryReadySnapshotSQL  = mustSQL("delivery_ready_snapshot.sql").With(sqlassets.Fragment("ready_predicate"), mustSQL("delivery_ready_predicate.sql"))
 )
 
 var (
@@ -73,8 +75,8 @@ var (
 	handoffRequestLockSQL  = withHandoffRequestFence("handoff_request_lock.sql")
 )
 
-func withHandoffRequestFence(name string) string {
-	return sqlassets.WithFragment(mustSQL(name), "handoff_request_fence", handoffRequestFenceSQL)
+func withHandoffRequestFence(name string) pgxdb.Statement {
+	return mustSQL(name).With(sqlassets.Fragment("handoff_request_fence"), handoffRequestFenceSQL)
 }
 
 var (
@@ -83,6 +85,6 @@ var (
 	handoffGroupParentsSQL       = withGroupCandidates("handoff_group_parents.sql")
 )
 
-func withGroupCandidates(name string) string {
-	return sqlassets.WithFragment(mustSQL(name), "transition_group_candidates", transitionGroupCandidatesSQL)
+func withGroupCandidates(name string) pgxdb.Statement {
+	return mustSQL(name).With(sqlassets.Fragment("transition_group_candidates"), transitionGroupCandidatesSQL)
 }

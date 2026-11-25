@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
@@ -79,7 +80,7 @@ func (r *InboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSnapshot
 		oldestAgeSeconds float64
 	)
 
-	if err := r.pool.QueryRow(ctx, inboxReadySnapshotSQL).Scan(&snapshot.Depth, &oldestAgeSeconds); err != nil {
+	if err := pgxdb.QueryRow(ctx, r.pool, inboxReadySnapshotSQL).Scan(&snapshot.Depth, &oldestAgeSeconds); err != nil {
 		return ReadyQueueSnapshot{}, fmt.Errorf("snapshot webhook inbox ready queue: %w", err)
 	}
 
@@ -120,7 +121,7 @@ func admitInboxTx(ctx context.Context, tx pgx.Tx, normalized InboxMessage) (work
 
 	var admitted bool
 
-	err := tx.QueryRow(ctx, inboxAdmitSQL, normalized.MessageID, normalized.RoomID, normalized.OrderingKey, jsonbParam(normalized.Payload)).Scan(&admitted)
+	err := pgxdb.QueryRow(ctx, tx, inboxAdmitSQL, normalized.MessageID, normalized.RoomID, normalized.OrderingKey, jsonbParam(normalized.Payload)).Scan(&admitted)
 	if err != nil {
 		return workercontract.AdmissionFailed, safeMessageRepositoryError("admit webhook inbox row", normalized.MessageID, err)
 	}
@@ -176,7 +177,7 @@ func (r *InboxRepository) Claim(ctx context.Context, claimToken string, lease ti
 
 	var claim InboxClaim
 
-	row := r.pool.QueryRow(ctx, inboxClaimSQL, token, leaseMS)
+	row := pgxdb.QueryRow(ctx, r.pool, inboxClaimSQL, token, leaseMS)
 
 	err = row.Scan(&claim.MessageID, &claim.RoomID, &claim.OrderingKey, &claim.Payload, &claim.Attempts, &claim.LeaseUntil)
 
@@ -247,7 +248,7 @@ func (r *InboxRepository) Release(
 	return InboxReleaseRetried, nil
 }
 
-func (r *InboxRepository) releaseLocked(ctx context.Context, query, id, token string, retryMS int64, attempts int32, lastError string) (status string, err error) {
+func (r *InboxRepository) releaseLocked(ctx context.Context, query pgxdb.Statement, id, token string, retryMS int64, attempts int32, lastError string) (status string, err error) {
 	tx, err := r.beginLockedMessageTx(ctx, id)
 	if err != nil {
 		return "", safeMessageRepositoryError("begin webhook release", id, err)
@@ -255,7 +256,7 @@ func (r *InboxRepository) releaseLocked(ctx context.Context, query, id, token st
 
 	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
 
-	err = tx.QueryRow(ctx, query, id, token, retryMS,
+	err = pgxdb.QueryRow(ctx, tx, query, id, token, retryMS,
 		normalizeInboxFailureReason(lastError), attempts).Scan(&status)
 	if err != nil {
 		return "", safeMessageRepositoryError("release webhook inbox row", id, err)
@@ -328,7 +329,7 @@ func (r *InboxRepository) Abandon(ctx context.Context, messageID, claimToken, re
 }
 
 func abandonInboxTx(ctx context.Context, tx pgx.Tx, id, token, terminalReason string) (applied bool, err error) {
-	err = tx.QueryRow(ctx, inboxAbandonSQL, id, token,
+	err = pgxdb.QueryRow(ctx, tx, inboxAbandonSQL, id, token,
 		clampColumnText(terminalReason, terminalReasonByteLimit)).Scan(&applied)
 	if err != nil {
 		return false, safeMessageRepositoryError("abandon webhook inbox row", id, err)
@@ -358,7 +359,7 @@ func (r *InboxRepository) Heartbeat(ctx context.Context, messageID, claimToken s
 
 	var leaseUntil time.Time
 
-	err = r.pool.QueryRow(ctx, inboxHeartbeatSQL, id, token, leaseMS).Scan(&leaseUntil)
+	err = pgxdb.QueryRow(ctx, r.pool, inboxHeartbeatSQL, id, token, leaseMS).Scan(&leaseUntil)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return time.Time{}, false, nil

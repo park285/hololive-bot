@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -14,7 +15,7 @@ import (
 )
 
 func lockLiveSubject(ctx context.Context, tx dbx.Tx, subjectKey string) error {
-	if _, err := tx.Exec(ctx, lockLiveSubjectSQL, subjectKey); err != nil {
+	if _, err := pgxdb.Exec(ctx, tx, lockLiveSubjectSQL, subjectKey); err != nil {
 		return fmt.Errorf("lock live subject: %w", err)
 	}
 
@@ -74,7 +75,7 @@ func loadLiveSessions(ctx context.Context, tx dbx.Tx, state *live.State, channel
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, loadLiveSessionsSQL, channelIDs, videoIDs)
+	rows, err := pgxdb.Query(ctx, tx, loadLiveSessionsSQL, channelIDs, videoIDs)
 	if err != nil {
 		return fmt.Errorf("load live sessions: %w", err)
 	}
@@ -136,7 +137,7 @@ func loadLiveHeads(ctx context.Context, tx dbx.Tx, state *live.State, videoIDs, 
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, loadLiveHeadsSQL, videoIDs, omitIgnoredFor)
+	rows, err := pgxdb.Query(ctx, tx, loadLiveHeadsSQL, videoIDs, omitIgnoredFor)
 	if err != nil {
 		return fmt.Errorf("load live heads: %w", err)
 	}
@@ -160,7 +161,7 @@ func loadLiveIgnoredAbsences(ctx context.Context, tx dbx.Tx, state *live.State, 
 		return nil
 	}
 
-	rows, err := tx.Query(ctx, repositoryLiveIgnoredAbsencesSQL, videoIDs)
+	rows, err := pgxdb.Query(ctx, tx, repositoryLiveIgnoredAbsencesSQL, videoIDs)
 	if err != nil {
 		return fmt.Errorf("query ignored absences: %w", err)
 	}

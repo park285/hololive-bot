@@ -61,9 +61,9 @@ func (c *candidateTraffic) TraceQueryStart(ctx context.Context, _ *pgx.Conn, dat
 	c.statements.Add(1)
 
 	switch data.SQL {
-	case currentProjectionGenerationSQL:
+	case currentProjectionGenerationSQL.SQL():
 		c.headers.Add(1)
-	case subjectCandidatesForProjectionSQL, globalCandidatesForProjectionSQL:
+	case subjectCandidatesForProjectionSQL.SQL(), globalCandidatesForProjectionSQL.SQL():
 		c.candidates.Add(1)
 	case candidateBaselineSQL:
 		c.oracle.Add(1)
@@ -293,7 +293,7 @@ func (f *candidateTrafficFleet) readPage(ctx context.Context, ap int) (Candidate
 
 	var generation int64
 
-	if err := f.pools[ap].QueryRow(ctx, currentProjectionGenerationSQL).Scan(&generation); err != nil {
+	if err := pgxdb.QueryRow(ctx, f.pools[ap], currentProjectionGenerationSQL).Scan(&generation); err != nil {
 		return CandidatePage{}, err
 	}
 
@@ -415,7 +415,7 @@ func (f *candidateTrafficFleet) explain(t *testing.T, state string) {
 func (f *candidateTrafficFleet) explainMode(t *testing.T, state, mode string) {
 	t.Helper()
 
-	query := subjectCandidatesForProjectionSQL
+	query := subjectCandidatesForProjectionSQL.SQL()
 
 	if f.legacy {
 		query = candidateBaselineSQL

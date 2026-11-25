@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 func (r *Repository) Requeue(ctx context.Context, id string, request RequeueRequest) (RequeueResult, error) {
@@ -52,7 +53,7 @@ func (r *Repository) Requeue(ctx context.Context, id string, request RequeueRequ
 		ids = append(ids, parsed)
 	}
 
-	rows, err := tx.Query(ctx, requeueSQL, ids, request.OperatorID, request.Reason)
+	rows, err := pgxdb.Query(ctx, tx, requeueSQL, ids, request.OperatorID, request.Reason)
 	if err != nil {
 		return result, fmt.Errorf("update dispatch replay group: %w", conflictError(err))
 	}

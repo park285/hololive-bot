@@ -5,6 +5,8 @@ import (
 	jsonv2 "encoding/json/v2"
 	"fmt"
 	"time"
+
+	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 func leaseMilliseconds(d time.Duration) (int64, error) {
@@ -42,7 +44,7 @@ func (r *PgxRepository) ReleaseLeased(ctx context.Context, claims []DeliveryClai
 	return r.applyClaims(ctx, fenceActionReleaseLeased, releaseLeasedSQL, claims, workerID)
 }
 
-func (r *PgxRepository) applyClaims(ctx context.Context, action, query string, claims []DeliveryClaim, workerID string) error {
+func (r *PgxRepository) applyClaims(ctx context.Context, action string, query pgxdb.Statement, claims []DeliveryClaim, workerID string) error {
 	if len(claims) == 0 {
 		return nil
 	}
@@ -73,7 +75,7 @@ func (r *PgxRepository) RequeuePreSend(ctx context.Context, updates []FailureUpd
 	return r.routeFailureUpdates(ctx, updates, workerID, requeuePreSendSQL, fenceActionRequeuePreSend)
 }
 
-func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, query, action string) error {
+func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID string, query pgxdb.Statement, action string) error {
 	if len(updates) == 0 {
 		return nil
 	}
@@ -140,7 +142,7 @@ func (r *PgxRepository) Quarantine(ctx context.Context, updates []TerminalUpdate
 	return r.terminalUpdates(ctx, fenceActionQuarantine, repositoryTerminalQuarantineSQL, updates, workerID)
 }
 
-func (r *PgxRepository) terminalUpdates(ctx context.Context, action, query string, updates []TerminalUpdate, workerID string) error {
+func (r *PgxRepository) terminalUpdates(ctx context.Context, action string, query pgxdb.Statement, updates []TerminalUpdate, workerID string) error {
 	if len(updates) == 0 {
 		return nil
 	}
