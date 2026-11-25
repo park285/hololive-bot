@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **인프라 이미지 보안 수정:** 주간 `final-images` 검사가 검출한 Alpine 패키지 취약점을 고쳤습니다. nginx와 Valkey 이미지는 OpenSSL 3.5.9-r1(CVE-2026-107496, CVE-2026-95691, CVE-2026-95692 외 LOW 2건), PostgreSQL 이미지는 libxml2 2.13.9-r3(CVE-2026-86144)을 하한으로 둡니다. 이미지 태그는 `iris-stack-nginx:1.31.9-zlib1.4-r1`, `iris-stack-valkey:9.1.3-zlib1.4-r2`로 올렸습니다.
+
 ## r1.2.4 - 2026-11-25
 
 - **AP a 수용 readiness:** W3 수용 단계는 issuer가 준비된 뒤 collector `/ready`가 한 번 503을 돌려주면 바로 결과 불명으로 끝났습니다(2026-11-24 osaka1 정산 재개, youtube.js helper 응답 지연). 이제 기존 90초 한도 안에서 다시 확인하고, 한도가 지나면 지금처럼 결과 불명으로 끝납니다.
