@@ -8,15 +8,15 @@ DB와 공개 YouTube 제목을 합쳐 문자 TF-IDF + LogisticRegression을 실�
 
 - `hololive/hololive-shared/pkg/domain/mekparkhost/testdata/title_corpus.json`: 현재 DB 제목 회귀
   표본 226건이다. 2026-09-06 실험 당시에는 195건이었으며 9월 11일에 26건, 9월 26일에 5건을 추가했다.
-  제목 근거를 검토한 기대값이며 실제 영상 독립 검수 정답은 아니다.
+  제목 근거를 검토한 기대값이며 실제 영상을 독립 검수한 정답은 아니다.
 - `event-times.json`: read-only guard를 증명한 DB의 시작/예약/게시 시각이다.
 - `public-titles.json`: UNIT B와 ACHRORA의 videos/streams/shorts에서 직접 읽은 공개 제목
   312건이다. 6개 탭은 모두 마지막 페이지까지 수집했으며 player metadata 조회도 312건 성공했다.
 - `review-labels.json`: 모델을 보기 전에 정리한 평가 전용 사례다. 제목·개별 설명 태그에서
   식별한 두 개인 사례, 전체/릴레이 방송, 끝내 확인하지 못한 사례를 구분한다.
 
-공개 수집은 collector-owned YouTube.js 18.1.0을 사용한다. Node 26.12.0과 해당 모듈의
-설치된 의존성이 필요하다. 저장소 루트에서 실행한다.
+공개 수집은 collector-owned YouTube.js 18.1.0을 사용한다. Node 26.12.0이 필요하고 해당 모듈의
+의존성이 설치돼 있어야 한다. 저장소 루트에서 실행한다.
 
 ```bash
 node scripts/experiments/mekpark-host/fetch-public-titles.mjs
@@ -39,8 +39,8 @@ cmp .tmp/mekpark-host-ml/dataset.json .tmp/mekpark-host-ml-reproduce/dataset.jso
 실험 디렉터리의 `pyproject.toml`은 Python 3.15와 scikit-learn 1.9.1을 지정하고 `uv.lock`은
 간접 의존성까지 버전을 고정한다. Go 기준선은 `mekparkhost/cmd/classify-titles`로 실제 판별기를 호출한다.
 
-9월 6일 보고서는 당시 입력과 규칙으로 고정된 결과다. 현재 규칙·제목 표본으로 실행한 결과와
-입력 hash는 달라진다. 신규 표본의 시각을 `event-times.json`이나 공개 metadata에 반영하기
+9월 6일 보고서는 당시 입력과 규칙으로 고정된 결과다. 현재 규칙·제목 표본으로 실행하면 결과와
+입력 hash가 달라진다. 신규 표본의 시각을 `event-times.json`이나 공개 metadata에 반영하기
 전까지 기존 실험은 정확한 시각이 없는 신규 영상을 시간 분할에서 제외한다.
 
 2026-08-28 00:00 KST를 경계로 과거를 학습, 이후를 holdout으로 둔다. 두 유닛별로 같은
@@ -49,8 +49,8 @@ cmp .tmp/mekpark-host-ml/dataset.json .tmp/mekpark-host-ml-reproduce/dataset.jso
 clip과 원방송의 영상 ID가 다르고 제목도 다르면 같은 원본 방송으로 묶는 작업까지는 하지 않는다.
 
 C는 0.5/2/8 중 학습 자료의 3-fold StratifiedGroupKFold macro F1로 선택하며 동률이면 작은 C를
-사용한다. 어휘·IDF와 분류기 fit은 각 fold의 학습 부분만 본다. 10건 이상을 수락하면서
-정밀도 95% 이상인 가장 낮은 점수 기준을 학습 fold 예측에서 선택한다. 후보가 없으면 전부 보류한다.
+사용한다. 어휘·IDF와 분류기 fit은 각 fold의 학습 부분만 본다. 학습 fold 예측에서 10건 이상을
+수락하면서 정밀도가 95% 이상인 가장 낮은 점수 기준을 선택한다. 후보가 없으면 전부 보류한다.
 점수는 별도로 보정한 확률이 아니며 이 기준은 운영 성능 보장이 아니다.
 
 기본 출력은 `.tmp/mekpark-host-ml/` 아래에 생성한다.
@@ -60,7 +60,7 @@ C는 0.5/2/8 중 학습 자료의 3-fold StratifiedGroupKFold macro F1로 선택
 - `models/*.joblib`: 학습된 유닛별 원문/이름 제거 모델 네 개.
 - `models/input-contract.json`: 전처리, 멤버 사전, 환경과 입력 hash.
 
-같은 실행에서 생성한 모델을 다시 읽어 예측의 일치도 확인한다. 저장된 모델로 제목 하나를
+같은 실행에서 생성한 모델을 다시 읽어 예측이 일치하는지도 확인한다. 저장된 모델로 제목 하나를
 확인할 때는 다음처럼 실행한다. 이 명령은 재학습하지 않는다.
 
 ```bash
@@ -75,7 +75,7 @@ uv run --locked --project scripts/experiments/mekpark-host scripts/experiments/m
 
 316개 고유 영상 중 221건으로 학습하고 48건을 시간 순서로 분리해 평가했다. 원문 모델은
 48/48, 이름·태그·이모지 제거 모델은 31/48이었다. 후자는 인위적으로 입력을 바꾼 시험이며
-실제 이름 없는 제목 전체의 정확도를 뜻하지 않는다.
+실제로 이름이 없는 제목 전체의 정확도를 뜻하지 않는다.
 
 평가용 기대값에 룰에서 만든 약한 라벨이 포함되므로 룰과 원문 모델의 100% 일치가 독립적인
 실제 출연자 정확도를 증명하지 않는다. 수동 검토한 룰 보류 사례 두 건은 원문 모델의 후보가

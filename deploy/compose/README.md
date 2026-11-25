@@ -119,9 +119,9 @@ The Valkey health check runs `valkey-cli` directly, so it works on both the prev
 the official one: install the new unit files before changing `VALKEY_IMAGE`.
 
 Valkey 9.1.3은 잘못된 `RESTORE` 문자열 길이로 서버가 종료되는 결함과
-Cluster Pub/Sub의 힙 버퍼 오버플로를 수정합니다. 버전 업데이트는 기존
+Cluster Pub/Sub의 힙 버퍼 오버플로를 고친 버전입니다. 버전 업데이트는 기존
 인증·소켓·메모리 정책을 유지하며 Cluster나 Sentinel 전환을 포함하지 않습니다.
-`appendonly no`·`save ""` 구성의 재생성은 메모리 상태를 지우므로,
+`appendonly no`·`save ""` 구성을 재생성하면 메모리 상태가 지워지므로
 소비자별 데이터 보존 계약을 확인한 뒤 승인된 전환 절차를 적용합니다.
 
 ## Worker settings cutover (11.0.0)
@@ -146,9 +146,9 @@ release pair, not as extra keys or aliases in the new profile.
 - 다섯 소비자는 각 `go.mod`가 고정한 shared-go 판본과 공식 checksum을 씁니다.
   api·alarm-worker·shared는 `github.com/park285/iris-client-go/v5`를 직접,
   collector는 간접 의존성으로 고정합니다. 루트 SDK pin은 `v5.2.1`입니다.
-  운영 빌드에는 각 모듈의 정식 tag와 공식 Go checksum이 필요하며, 로컬 `go.work`의 형제 소스로 대체하지 않습니다.
-  SDK v5는 H3 `GET /auth/epoch`를 지원하는 Iris와 같은 배포 창에서 교체하며,
-  롤백도 인증 호환 조합으로 수행합니다. webhook v3와 inbox 저장 형식은 바꾸지 않습니다.
+  운영 빌드에는 각 모듈의 정식 tag와 공식 Go checksum이 필요합니다. 로컬 `go.work`의 형제 소스로 대체하지 않습니다.
+  SDK v5는 H3 `GET /auth/epoch`를 지원하는 Iris와 같은 배포 창에서 교체하며
+  롤백할 때도 인증이 호환되는 조합을 씁니다. webhook v3와 inbox 저장 형식은 바꾸지 않습니다.
 - On kapu, run the owning release/pre-push gates and independent `GOWORK=off`
   production builds. Use root/API/alarm version `11.0.0`, a clean full
   40-character source revision, and the architecture/Node/issuer manifests.
@@ -279,7 +279,7 @@ separately authorized service deployment workflow; source validation activates n
 
 ## Prepared database policy (not activated)
 
-이 절의 연결 수치는 `max_connections=61`·exporter 2로 바꾼 2026-10-25 이전 준비안 기록입니다. 현재 서버 한도와 연결 예산은
+이 절의 연결 수치는 2026-10-25에 `max_connections=61`·exporter 2로 바꾸기 전의 준비안 기록입니다. 현재 서버 한도와 연결 예산은
 [hololive-api runbook](../../docs/current/runbooks/hololive-api.md#postgresql-connections-pg19)과 `scripts/ci/postgres-capacity-policy.tsv`를 따릅니다.
 
 PostgreSQL remains `max_connections=60`, with three superuser slots. The old application/
@@ -347,12 +347,12 @@ Different logical DB numbers do not isolate instance-wide eviction. Nothing here
 Deploy this repo-side contract after `tools/sync-host.sh <host> --apply` has mirrored
 `compose.env` (central) plus the per-service env files to the target host.
 
-`scripts/deploy/lib/postgres-capacity.sh`는 host env의 PostgreSQL pool override key만 읽고 stack 전체 connection
-budget을 다시 계산하는 공통 gate입니다. Target allocation이 `max_connections=61`에서 superuser 예약
-3(`@superuser-reserved`)을 뺀 비슈퍼유저 슬롯 대비 최소 3개 control reserve를 남기지 않으면 진행하지 않습니다. 이 배포-host preflight는 Bash와 전송된 policy만 사용하며 CI용 uv/Python runtime을 요구하지 않습니다.
-중앙은 이 gate를 host `compose.env`에 대해 실행합니다. `sync-opt-current.sh`는 unit 설치 전에, `quadlet-redeploy-service.sh`는
+`scripts/deploy/lib/postgres-capacity.sh`는 공통 gate입니다. host env의 PostgreSQL pool override key만 읽고 stack 전체 connection
+budget을 다시 계산합니다. 비슈퍼유저 슬롯은 `max_connections=61`에서 superuser 예약
+3(`@superuser-reserved`)을 뺀 값입니다. Target allocation이 이 슬롯 대비 control reserve를 최소 3개 남기지 않으면 진행하지 않습니다. 이 배포-host preflight는 Bash와 전송된 policy만 사용합니다. CI용 uv/Python runtime은 필요 없습니다.
+중앙은 host `compose.env`를 대상으로 이 gate를 실행합니다. `sync-opt-current.sh`는 unit 설치 전에, `quadlet-redeploy-service.sh`는
 API·worker 교체 preflight에서 실행하며 실패하면 아무것도 바꾸지 않습니다. 중앙 unit의 기본 pool 값은
-`scripts/ci/check-postgres-capacity.sh`가 `deploy/quadlet/hololive-bot`을 원본으로 확인하고, 같은 lib로 policy 기본값의
+`scripts/ci/check-postgres-capacity.sh`가 `deploy/quadlet/hololive-bot`을 원본으로 확인하고 같은 lib로 policy 기본값의
 연결 예산을 계산합니다. host env 값은 위 배포 preflight만 확인합니다. 이 검사는 다른 env 값이나 secret을 출력하지 않습니다.
 
 ## PostgreSQL TLS
