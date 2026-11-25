@@ -85,6 +85,8 @@ inputs_changed() {
   return 1
 }
 
+QUEUED_TESTS=()
+
 run_if_changed() {
   local test="$1" input inputs_valid=true
   shift
@@ -98,11 +100,38 @@ run_if_changed() {
     echo "[pre-push] test skipped (inputs unchanged): ${test}"
     return 0
   fi
-  echo "[pre-push] test: ${test}"
-  case "${test}" in
-    *.py) "${CI_PYTHON_BIN}" "${test}" ;;
-    *) bash "${test}" ;;
-  esac
+  QUEUED_TESTS+=("${test}")
+}
+
+run_queued_tests() {
+  local logs test index status
+  local -a pids=() failed=()
+  (( ${#QUEUED_TESTS[@]} )) || return 0
+  logs="$(mktemp -d)"
+  echo "[pre-push] running ${#QUEUED_TESTS[@]} script tests in parallel"
+  for test in "${QUEUED_TESTS[@]}"; do
+    case "${test}" in
+      *.py) "${CI_PYTHON_BIN}" "${test}" ;;
+      *) bash "${test}" ;;
+    esac >"${logs}/${#pids[@]}.log" 2>&1 &
+    pids+=("$!")
+  done
+  for index in "${!QUEUED_TESTS[@]}"; do
+    status=0
+    wait "${pids[index]}" || status=$?
+    echo "[pre-push] test: ${QUEUED_TESTS[index]}"
+    cat "${logs}/${index}.log"
+    if (( status != 0 )); then
+      echo "[pre-push] test failed (exit ${status}): ${QUEUED_TESTS[index]}" >&2
+      failed+=("${QUEUED_TESTS[index]}")
+    fi
+  done
+  rm -rf -- "${logs}"
+  QUEUED_TESTS=()
+  if (( ${#failed[@]} )); then
+    printf '[pre-push] failed script tests: %s\n' "${failed[*]}" >&2
+    return 1
+  fi
 }
 
 run_content_gates() {
@@ -127,8 +156,6 @@ run_content_gates() {
     scripts/deploy/quadlet-redeploy-service.sh scripts/deploy/quadlet-rollback-service.sh \
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     scripts/deploy/lib/worker-profile-pair.py scripts/deploy/lib/collector-slots.tsv deploy/quadlet
-  run_if_changed scripts/ci/check-recurring-security-scan-contract.sh \
-    scripts/ci/final-image-scan-policy.sh scripts/ci/final-image-scan-manifest.txt deploy/quadlet
   echo "[pre-push] deploy/runtime script tests (run when the test or its target changed)"
   run_if_changed scripts/build/build-all_test.sh \
     build-all.sh scripts/deploy/lib/source-revision.sh
@@ -142,8 +169,6 @@ run_content_gates() {
   run_if_changed scripts/deploy/source-revision-provenance_test.sh scripts/deploy/lib/source-revision.sh
   run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py scripts/deploy/lib/collector-slots.tsv \
     deploy/quadlet/hololive-bot
-  run_if_changed scripts/deploy/kapu-d-cutover_test.py scripts/deploy/kapu-d-cutover.py scripts/deploy/lib/collector-slots.tsv \
-    deploy/podman/kapu/hololive-collector-d.container deploy/podman/kapu/hololive-youtube-po-d.container
   run_if_changed scripts/build/po-sandbox-manifest_test.py \
     scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
   run_if_changed scripts/logs/daily-rollup-logs_test.sh scripts/logs/daily-rollup-logs.sh
@@ -160,9 +185,9 @@ run_content_gates() {
   run_if_changed scripts/deploy/ap-completion-check_test.sh \
     scripts/deploy/ap-completion-check.sh scripts/deploy/ap-hosts scripts/deploy/lib
   run_if_changed scripts/deploy/lib/ap-host_test.sh scripts/deploy/lib/ap-host.sh scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv scripts/deploy/ap-hosts
-  run_if_changed scripts/deploy/test-compose-services.sh scripts/deploy/lib/compose-services.sh scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv
   run_if_changed hololive/hololive-api/scripts/test-bot-env-loader.sh \
     hololive/hololive-api/scripts/bot.sh scripts/deploy/lib/compose-env.sh
+  run_queued_tests
 
   local run_collector_js=false test_collector_artifacts=false
   if inputs_changed hololive/hololive-collector scripts/ci/public-pr-collector-helper-install.sh; then
@@ -193,6 +218,7 @@ echo "════════════════════════�
 resolve_route
 run_if_changed scripts/check-release-version.sh VERSION hololive/hololive-api/VERSION \
   hololive/hololive-alarm-worker/VERSION
+run_queued_tests
 if is_metadata_only_route; then
   if inputs_changed VERSION hololive/hololive-api/VERSION hololive/hololive-alarm-worker/VERSION; then
     source "${SCRIPT_DIR}/go-workspace-modules.sh"

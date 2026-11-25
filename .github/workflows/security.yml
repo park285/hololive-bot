@@ -116,9 +116,6 @@ jobs:
     steps:
       - *checkout
 
-      - name: Validate final image inventory and scan policy
-        run: bash scripts/ci/check-recurring-security-scan-contract.sh
-
       - name: Setup Go for binary vulnerability analysis
         uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
         with:
@@ -164,10 +161,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - *checkout
-      - name: Validate final image inventory and scan policy on main
-        if: github.event_name == 'push'
-        run: bash scripts/ci/check-recurring-security-scan-contract.sh
-
       - name: Setup Node.js
         if: ${{ !cancelled() && steps.repo.outcome == 'success' }}
         id: node

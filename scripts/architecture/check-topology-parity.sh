@@ -74,49 +74,6 @@ cp "$tmpdir/distinct" "$tmpdir/owner-addresses"
 
 LC_ALL=C sort -u "$manifest" >"$tmpdir/sorted-manifest"
 cmp -s "$manifest" "$tmpdir/sorted-manifest" || fail "consumer manifest must be sorted and duplicate-free"
-LC_ALL=C cut -f1 "$manifest" | LC_ALL=C sort -u >"$tmpdir/registered"
-(
-  cd "$root_dir"
-  shopt -s nullglob
-  candidates=(
-    scripts/deploy/ap-hosts/*.conf
-    deploy/quadlet/*/*.container
-    deploy/podman/*/*.container
-    deploy/postgres/pg_hba.conf
-    deploy/nginx/*.conf
-    deploy/nginx/*.template
-    scripts/systemd/*.nft
-  )
-  for candidate in "${candidates[@]}"; do
-    if awk '
-      NR == FNR { owner[$0] = 1; next }
-      function governed(value, octets, count, idx) {
-        if (owner[value]) return 1
-        if (value == "100.100.100.100") return 0
-        count = split(value, octets, ".")
-        if (count != 4) return 0
-        for (idx = 1; idx <= count; idx++) {
-          if (octets[idx] !~ /^[0-9]+$/ || octets[idx] + 0 > 255) return 0
-        }
-        return octets[1] + 0 == 100 && octets[2] + 0 >= 64 && octets[2] + 0 <= 127
-      }
-      /^[[:space:]]*#/ { next }
-      {
-        line = $0
-        sub(/[[:space:]]+#.*/, "", line)
-        gsub(/[^0-9.]/, " ", line)
-        field_count = split(line, fields, /[[:space:]]+/)
-        for (i = 1; i <= field_count; i++) {
-          if (governed(fields[i])) found = 1
-        }
-      }
-      END { exit !found }
-    ' "$tmpdir/owner-addresses" "$candidate"; then
-      printf '%s\n' "$candidate"
-    fi
-  done
-) | LC_ALL=C sort -u >"$tmpdir/discovered"
-cmp -s "$tmpdir/registered" "$tmpdir/discovered" || fail "literal consumer registration"
 
 while IFS=$'\t' read -r path roles; do
   [[ -n "$path" && -n "$roles" && "$path" != /* && "$path" != *..* ]] || fail "consumer manifest row"

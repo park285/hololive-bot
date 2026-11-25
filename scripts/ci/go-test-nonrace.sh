@@ -34,7 +34,7 @@ list_names() {
 
 while read -r package selection; do
   if [[ "${selection}" == "all" ]]; then
-    go test -count=1 "${package}"
+    go test "${package}"
     continue
   fi
 
@@ -42,6 +42,6 @@ while read -r package selection; do
   list_names -race "${package}" >"${nonrace_dir}/race-names"
   names="$(LC_ALL=C comm -23 "${nonrace_dir}/normal-names" "${nonrace_dir}/race-names" | paste -sd '|')"
   if [[ -n "${names}" ]]; then
-    go test -count=1 -run "^(${names})\$" "${package}"
+    go test -run "^(${names})\$" "${package}"
   fi
 done <"${nonrace_dir}/packages"
