@@ -31,7 +31,8 @@
 			 AND u.room_id = n.room_id
 			 AND COALESCE(u.base_client_request_id, u.client_request_id) = n.client_request_id
 		), targeted AS (
-			SELECT r.*, p.room_id IS NOT NULL AS paused
+			SELECT r.event_id, r.room_id, r.dedupe_key, r.claim_keys, r.delivery_context,
+				r.dispatch_group_key, r.send_unit_id, p.room_id IS NOT NULL AS paused
 			FROM resolved r
 			LEFT JOIN kakao_room_delivery_pauses p ON p.room_id = r.room_id
 		), inserted AS (
@@ -49,4 +50,4 @@
 			RETURNING dedupe_key, status
 		)
 		SELECT (SELECT count(dedupe_key) FROM resolved), ARRAY(SELECT dedupe_key FROM inserted),
-			(SELECT count(*) FROM inserted WHERE status = 'cancelled')
+			(SELECT count(dedupe_key) FROM inserted WHERE status = 'cancelled')
