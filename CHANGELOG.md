@@ -6,6 +6,8 @@
 
 ## 미출시
 
+## r1.2.6 - 2026-11-25
+
 - **PostgreSQL 코드 규칙:** 다섯 모듈의 운영 SQL을 모두 `shared-go/postgres` v1.0.4의 `pgxdb.Statement`로 읽고 `pgxdb.Exec`·`Query`·`QueryRow`·`Queue`로 실행합니다. `sqlassets.MustStatementReader`가 `pgxdb.Statement`를 돌려주고 `sqlassets.WithFragment` 대신 `sqlassets.Fragment` 자리표시자와 `With`로 조각을 끼우며, `dbx.Tx`는 `pgxdb.Querier`를 품으며 `dbx.Statement.SQL`은 `pgxdb.Statement`입니다. Go 코드에서 조립하던 SQL은 `queries/*.sql`의 자리표시자와 `With`·`WithToken`으로 옮겼습니다. 433개 문장을 변경 전후로 비교해 양 끝 공백 말고는 같음을 확인했습니다. 스택 ast-grep 규칙 `go-postgres-conventions.yml` 대신 golangci-lint forbidigo가 pgx·pgxpool의 SQL 직접 실행, `BeginFunc`, 트랜잭션 직접 `Rollback`, `pgxpool.New`를 거부합니다. migration 실행·역할 bootstrap DDL, 행 수만큼 `VALUES`를 만드는 일괄 쓰기, 관리자 목록 필터만 `nolint`로 둡니다.
 - **형식 검증 동기화:** `AlarmDispatchClaim` 모델에 `claim_due.sql`의 행 버전·due 재검사를 넣었습니다. 오래된 스냅샷으로 선점하는 작업자가 그 사이 회수되어 미래로 다시 예약된 retry 행을 가져가지 않는다는 `StaleClaimLeavesFutureRetry`를 검사하며, 재검사를 지운 복사본은 이 속성을 위반합니다. `CollectionJobLease`와 함께 동기화 커밋을 `5a3bb90c9`로 옮겼습니다.
 
@@ -19,8 +21,3 @@
 - **AP a 수용 readiness:** W3 수용 단계는 issuer가 준비된 뒤 collector `/ready`가 한 번 503을 돌려주면 바로 결과 불명으로 끝났습니다(2026-11-24 osaka1 정산 재개, youtube.js helper 응답 지연). 이제 기존 90초 한도 안에서 다시 확인하고, 한도가 지나면 지금처럼 결과 불명으로 끝납니다.
 - **AP a 수용 단계 정산:** `--settle`은 수용이 차단 정책을 확정하기 전(정책 `observing`, `accepted-window` 없음)에 결과 불명으로 끝난 창도 받아들이고, 관찰 기록·인계·`accepting`을 함께 보관한 뒤 다시 재개합니다. issuer가 다시 기동하지 못해 socket이 `trigger-limit-hit`으로 실패했으면 그 실패 기록을 확인하고 socket을 비활성으로 되돌립니다.
 
-## r1.2.3 - 2026-11-25
-
-- **AP a 정지 창 재개 관찰:** issuer가 정상 교체되는 순간 systemd 상태를 나눠 읽다가 `activating`과 `running`이 엇갈리면 관찰을 결과 불명으로 끝내던 경합을 고쳤습니다(2026-11-24 osaka1 W3 재개). 상태가 바뀌는 중이면 기존 재시도 한도 안에서 다시 확인하고, 같은 상태에 머물면 지금처럼 실패합니다.
-- **AP a 결과 불명 정산(`--settle`):** 후보 collector 기동 뒤 관찰만 결과 불명으로 끝난 W3 창은, 세 unit의 정지와 정지 완료 기록을 확인한 뒤 결과 표식과 1차 시도 영수증을 창 안에 보관하고 같은 후보로 다시 재개·수용할 수 있습니다. 다른 결과 불명이나 판정 가능한 실패는 지금처럼 재개하지 않습니다.
-- kapu d custody tar 안내에 두 `.container`가 참조하는 `hololive-collector.network`·`hololive-youtube-po-d.volume`을 넣었습니다.
