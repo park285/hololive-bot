@@ -7,7 +7,7 @@
 ## 미출시
 
 - **AP a native 창 정리:** PgBouncer 퇴역 전환이 끝나 W1·W2 창을 지웠습니다. native 도구는 W3에서 수용된 원점만 받습니다. 퇴역 전환 절차 문서와 그 링크도 지웠습니다.
-- **인프라 이미지 보안 수정:** 주간 `final-images` 검사가 검출한 Alpine 패키지 취약점을 고쳤습니다. nginx와 Valkey 이미지는 OpenSSL 3.5.9-r1(CVE-2026-107496, CVE-2026-95691, CVE-2026-95692 외 LOW 2건), PostgreSQL 이미지는 libxml2 2.13.9-r3(CVE-2026-86144)을 하한으로 둡니다. 이미지 태그는 `iris-stack-nginx:1.31.9-zlib1.4-r1`, `iris-stack-valkey:9.1.3-zlib1.4-r2`로 올렸습니다.
+- **인프라 image를 공식 image로 전환:** PostgreSQL·Valkey·nginx 자체 image와 빌드 recipe를 지우고 고정 digest의 공식 image(`postgres:19.0-alpine`, `valkey:9.1.3-alpine3.24`, `nginx:1.31.9-alpine-slim`)를 그대로 씁니다. 공식 image에 없는 `pg_stat_kcache`·`pg_wait_sampling` 설정을 unit에서 뺐고, Valkey health check는 `valkey-runtime` 대신 `valkey-cli`를 직접 실행합니다. 세 image는 주간 최종 image 스캔에서 빠집니다. 공식 image에는 아직 수정 전 Alpine 패키지(PostgreSQL의 libxml2 CVE-2026-86144 등)와 gosu의 Go 1.24.6 표준 라이브러리 보고가 남아 있습니다. 운영 전환은 [확장 제거 절차](docs/current/runbooks/postgres-observability.md#공식-image-전환-전-확장-제거)를 먼저 따릅니다.
 
 ## r1.2.4 - 2026-11-25
 

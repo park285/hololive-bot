@@ -93,8 +93,7 @@ Phase 0은 진행 여부를 판단하는 단계입니다. 느린 묶음마다 CP
 
 이관하지 않는 테스트:
 
-- `deploy/images/postgres/test.sh`: 컨테이너 안에서 `sh`로 실행되므로 셸로 남깁니다.
-- `scripts/ci/test-infra-images.sh`: `security.yml`이 podman으로 실행하는 855바이트짜리 진입점이므로 그대로 둡니다.
+- `deploy/images/postgres/test.sh`, `scripts/ci/test-infra-images.sh`: 인프라 image를 공식 image로 바꾸면서 지웠습니다.
 
 ### Phase 0: 준비
 
