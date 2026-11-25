@@ -12,7 +12,7 @@
 
 `!스케쥴 미코`처럼 멤버 이름으로 이번 주 포스터를 조회합니다. 카드 디자인은 채팅에서 고르지 않습니다. 관리자는 Iris Console의 **홀로라이브 → 멤버 관리**에서 멤버별로 **기존** 또는 **궤도**를 저장합니다. 다음 조회부터 적용되며 다른 멤버에게 영향을 주지 않습니다. 최초 설정은 소피아만 궤도이고 나머지는 기존입니다.
 
-궤도 카드는 하루 방송을 시간순으로 묶고, 1~8장의 PNG를 한 앨범으로 보냅니다. 이미지 예산(8장·개별 20 MiB·합계 30 MiB·공유 작업 12초)을 넘거나 명령의 남은 시간 중 ¾ 안에 이미지를 준비하지 못한 경우, 또는 참가자·태그를 생략해야 하는 편성은 전체 일정을 `schedule.txt` 하나로 보냅니다. `!스케줄`과 `!일정`은 별도의 일정 조회 명령입니다.
+궤도 카드는 하루 방송을 시간순으로 묶고 1~8장의 PNG를 한 앨범으로 보냅니다. 이미지 예산(8장·개별 20 MiB·합계 30 MiB·공유 작업 12초)을 넘거나 명령의 남은 시간 중 ¾ 안에 이미지를 준비하지 못한 경우, 또는 참가자·태그를 생략해야 하는 편성은 전체 일정을 `schedule.txt` 하나로 보냅니다. `!스케줄`과 `!일정`은 별도의 일정 조회 명령입니다.
 
 ## 시스템 아키텍처 (Architecture Overview)
 
@@ -40,7 +40,7 @@
 * 유튜브 신작 감지: `collector -> source_observations -> hololive-api YouTube plane -> alarm-worker`
 
 Iris 연결은 `iris-client-go/v5`(판본은 각 module `go.mod`)를 사용하며 기동 epoch 인증을 지원하는 Iris가 필수입니다.
-SDK는 보호 호출 전 같은 H3/TLS 대상의 공개 `GET /auth/epoch`를 조회·검증·캐시하고,
+SDK는 보호 호출 전 같은 H3/TLS 대상의 공개 `GET /auth/epoch`를 조회·검증·캐시하고
 bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 대체하지 않습니다.
 `401`과 검증된 `AUTH_EPOCH_MISMATCH`가 함께 온 경우만 원래 deadline·본문·`ClientRequestID`를 유지해
 논리 호출당 최대 한 번 epoch를 갱신하고 재서명합니다. 일반 401·5xx·전송 오류는 이 인증 복구 경로로
@@ -52,7 +52,7 @@ bootstrap 실패 시 보호 요청을 보내지 않으며 구형 인증으로 �
 
 ## 모듈 경로 계약 (Module Path Contract)
 
-`hololive/*`의 다섯 `go.mod`가 쓰는 `github.com/kapu/*` 모듈 경로는 go.work 전용 계약이다. 이 경로는 루트 `go.work`와 각 `go.mod`의 `replace ../…` 지시문으로만 해석되며 `go get`으로 받을 수 없다. 다섯 업무 모듈 분리는 루트 `go.work`의 `use` 목록이 소유하며, 이 목록에서 빠진 모듈은 아래 `go build`/`go test` 명령에서 바로 해석 실패한다. 외부 소비자가 없으므로 원격 경로와 맞추지 않는다. 이 계약은 2026-12-01 이후 재검토하며, 계기는 `hololive-shared`가 contracts·domain·다중 소비자 패키지만 남아 모듈 수 축소가 가능해지거나 외부 소비자가 hololive 모듈을 `go get`으로 가져와야 하는 경우다.
+`hololive/*`의 다섯 `go.mod`가 쓰는 `github.com/kapu/*` 모듈 경로는 go.work 전용 계약이다. 이 경로는 루트 `go.work`와 각 `go.mod`의 `replace ../…` 지시문으로만 해석되며 `go get`으로 받을 수 없다. 다섯 업무 모듈 분리는 루트 `go.work`의 `use` 목록이 소유하며 이 목록에서 빠진 모듈은 아래 `go build`/`go test` 명령에서 바로 해석 실패한다. 외부 소비자가 없으므로 원격 경로와 맞추지 않는다. 이 계약은 2026-12-01 이후 재검토한다. 계기는 `hololive-shared`가 contracts·domain·다중 소비자 패키지만 남아 모듈 수 축소가 가능해지거나 외부 소비자가 hololive 모듈을 `go get`으로 가져와야 하는 경우다.
 
 다섯 업무 모듈은 shared-go의 `/v2 v2.25.0`과 `/postgres v1.0.3`을 고정합니다. `hololive-dbtest`를 제외한 네 모듈은 `/core v1.0.0`과 `/transport v1.0.1`도 사용합니다. 개발용 `go.work`에서 형제 소스를 읽더라도 운영 이미지와 격리 CI는 각 모듈의 정식 tag와 `go.sum`으로 빌드합니다. [릴리스 수용 기준](docs/current/runbooks/release.md#1921-의존성-수용-기준)은 Hololive inbox와 공용 pgstore의 전환 조건을 구분합니다.
 
@@ -100,7 +100,7 @@ go test ../shared-go/... \
 Collector `joblease/queries/repository_lease_*`와 alarm의 member fence·sending·실패 전이는
 `clock_timestamp()`를, collector 후보·target·현재 projection 및 API의 collection/live-check/time-finalization
 조회는 `statement_timestamp()`를 사용합니다. 정확한 경로 규칙은 검사기의 `CLOCK_QUERY_POLICIES`가 소유합니다.
-주석·문자열은 제외하며, 그 밖의 기록용 `NOW()`나 기존 migration을 일괄 금지하지 않습니다.
+주석·문자열은 제외하며 그 밖의 기록용 `NOW()`나 기존 migration을 일괄 금지하지 않습니다.
 이 검사는 DB 경합 시험이 다루는 잠금 완료·시각 채취 순서나 호출자 트랜잭션을 증명하지 않습니다.
 
 트리거 집계와 원본의 운영 정합 확인은 [API runbook](docs/current/runbooks/hololive-api.md#동기-집계-정합-확인)을 따릅니다.
@@ -108,11 +108,11 @@ dbtest와 진단은 `scripts/maintenance/queries/*_drift.sql`의 독립 오라�
 
 `hololive-dbtest`와 로컬 CI가 생성하는 임시 PostgreSQL은 `/var/lib/postgresql`을 tmpfs에 두고
 `fsync`·`synchronous_commit`·`full_page_writes`를 끕니다. 빌드 호스트의 디스크 쓰기를 줄이는
-테스트 전용 설정이며, 컨테이너 중지 시 데이터가 사라지고 crash durability 검증에는 사용할 수 없습니다.
+테스트 전용 설정이며 컨테이너 중지 시 데이터가 사라지고 crash durability 검증에는 사용할 수 없습니다.
 외부 `TEST_DATABASE_URL`과 운영 PostgreSQL 설정은 변경하지 않습니다.
 
 DB 기준선은 epoch-3입니다. 기존 epoch-2 DB는 372 head의 233개 파일명·checksum 원장이 모두 일치할 때만 전환합니다.
-부분 적용 백업은 이전 릴리스로 먼저 올려야 하며, 신규 migrator 실행 후의 롤백은 전환 전 백업의 별도 복원이 필요합니다.
+부분 적용 백업은 이전 릴리스로 먼저 올려야 하며 신규 migrator 실행 후의 롤백은 전환 전 백업의 별도 복원이 필요합니다.
 [적용·복구 규약](hololive/hololive-api/scripts/migrations/CONVENTIONS.md)을 먼저 확인합니다.
 
 ```bash
@@ -121,7 +121,7 @@ go test ./hololive/hololive-dbtest/... \
   ./hololive/hololive-api/cmd/db-migrate/...
 ```
 
-`./build-all.sh`는 이미지 빌드 전에 `local-ci.sh`를 실행합니다. 아키텍처 게이트도 그 안에 있으므로 두 명령을 사전 단계로 연달아 실행할 필요가 없습니다. 게시 전에는 스택 훅이 `scripts/ci/pre-push-gate.sh`를 호출해 해당 로컬 검사에 배포 스크립트 시험과 `govulncheck`를 더합니다. 개발 중에는 변경한 경로의 검사를 선택하고, 릴리스에서는 [전체 검증 절차](docs/current/runbooks/release.md#버전-관리)를 따릅니다.
+`./build-all.sh`는 이미지 빌드 전에 `local-ci.sh`를 실행합니다. 아키텍처 게이트도 그 안에 있으므로 두 명령을 사전 단계로 연달아 실행할 필요가 없습니다. 게시 전에는 스택 훅이 `scripts/ci/pre-push-gate.sh`를 호출해 해당 로컬 검사에 배포 스크립트 시험과 `govulncheck`를 더합니다. 개발 중에는 변경한 경로의 검사를 선택하고 릴리스에서는 [전체 검증 절차](docs/current/runbooks/release.md#버전-관리)를 따릅니다.
 
 ---
 

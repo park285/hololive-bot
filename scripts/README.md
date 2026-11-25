@@ -26,7 +26,7 @@ PR/릴리스 전 제품 결함 게이트와 운영 검증 기록 렌더링 도�
 
 - `sudo ./scripts/deploy/sync-opt-current.sh` - 중앙 배포 트리·Quadlet unit·prestart 설치(`deploy/quadlet/README.md`)
 - `scripts/deploy/quadlet-prestart.sh` - 중앙 unit의 ExecStartPre/ExecCondition helper
-- `sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh <hololive-api|hololive-alarm-worker> <image> [<api-image>]` - 중앙 API·worker image를 교체합니다. 활성화 전에 migration을 실행하고 이전 pair를 보존하며, 자동 복구하지 않습니다.
+- `sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh <hololive-api|hololive-alarm-worker> <image> [<api-image>]` - 중앙 API·worker image를 교체합니다. 활성화 전에 migration을 실행하고 이전 pair를 보존하며 자동 복구하지 않습니다.
 - `sudo /opt/hololive-bot/compose/current/scripts/deploy/quadlet-rollback-service.sh <release> [--check|--apply]` - 보존한 이전 pair를 검사합니다. `--apply`에는 별도 승인이 필요합니다.
 - 원격 AP(`collector` fleet) 호스트 운영: `scripts/deploy/ap-hosts/<host>.conf` 기반
   - Osaka native: `./scripts/deploy/ap-host-native-deploy.sh osaka [--dry-run|--apply]`

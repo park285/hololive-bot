@@ -33,7 +33,7 @@ Quadlet으로 운영합니다. iris-seoul collector b는 같은 방식의 별도
 ## 설치
 
 배포할 commit의 clean checkout에서 root로 실행합니다. `/opt/hololive-bot/compose/current`는 `git archive` 결과라
-git 저장소가 아니므로 거기서 실행하면 `repo git tree missing`으로 멈춥니다.
+git 저장소가 아닙니다. 그래서 거기서 실행하면 `repo git tree missing`으로 멈춥니다.
 
 ```bash
 sudo ./scripts/deploy/sync-opt-current.sh
@@ -64,7 +64,7 @@ sudo ./scripts/deploy/sync-opt-current.sh
 이 규칙은 같은 호스트의 ChatBotGo(5432)·TwentyQ(5458) PostgreSQL 게시 포트도 loopback과 kapu(`bot_postgres_sources`)에서만 받습니다.
 Tailscale은 tailscale0에서 전달하는 패킷을 masquerade하므로, 규칙이 없으면 PostgreSQL은 원격 접속을 모두 bridge gateway(`172.23.0.1`)로 봅니다.
 `forward_preserve_postgres_source` 체인은 PostgreSQL 게시 `5433→5432`의 `postgres_sources` 접속에만 그 표시를 지웁니다. 그래서 PostgreSQL HBA가 AP별 tailnet 주소와 역할을 함께 판정합니다. 두 봇 DB 게시와 다른 게시 포트의 masquerade는 그대로 유지합니다.
-두 봇의 DB unit(`chatbotgo-postgres`·`twentyq-postgres`)도 holo-postgres처럼 이 방화벽 unit을 `Requires=`하므로, 방화벽 unit이 시작에 실패하면 기동하지 않고 멈추면 함께 멈춥니다. reload는 두 DB에 영향을 주지 않습니다.
+두 봇의 DB unit(`chatbotgo-postgres`·`twentyq-postgres`)도 holo-postgres처럼 이 방화벽 unit을 `Requires=`하므로, 방화벽 unit이 시작에 실패하면 두 DB unit이 기동하지 않고, 방화벽 unit이 멈추면 함께 멈춥니다. reload는 두 DB에 영향을 주지 않습니다.
 
 prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)로 설치됩니다.
 
@@ -79,7 +79,7 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
   서비스별 env 파일(`bot.env`, `alarm-worker.env`, `collector.env`) 다음 순서라 compose의
   `environment` > `env_file` 우선순위를 유지합니다.
 - PostgreSQL 로그인 비밀번호는 API `HOLOLIVE_DB_PASSWORD`, alarm-worker `HOLOLIVE_ALARM_WORKER_PASSWORD`,
-  collector slot별 `HOLOLIVE_COLLECTOR_A_PASSWORD`~`D_PASSWORD`로 나누고 서로·`DB_PASSWORD`와 다르게 둡니다.
+  collector slot별 `HOLOLIVE_COLLECTOR_A_PASSWORD`~`D_PASSWORD`로 나누고 서로 다르게, `DB_PASSWORD`와도 다르게 둡니다.
   이 창의 one-shot은 여섯 업무 역할의 로그인 비밀번호와 연결 한도를 변경하지 않습니다. 배포 이미지의 `db-migrate`는 창 전용 인자가 빠지면 DB 접속 전에 거부합니다. 신규 DB의 별도 초기화에서만 같은 이미지의 `--initialize`를 명시하며, 운영 one-shot은 `--schema-only`입니다.
   `--schema-only`가 대기 migration을 적용하려면 같은 트랜잭션에서 writer drain 가드의 superuser 세션과 그 advisory lock, login 게이트, 업무 역할 세션 0건이 모두 확인돼야 합니다. migrator 세션은 확인보다 먼저 `hololive-migration-window` 표식을 달고 통계 snapshot을 비운 뒤 확인하므로, 확인과 표식 사이에 가드가 끊겨도 그 틈에 로그인한 writer는 확인에서 드러납니다. 게이트는 가드 세션이 끊겨도 이 세션이 끝날 때까지 업무 역할 로그인을 막습니다.
   같은 비밀번호이면 기존 SCRAM verifier를 유지합니다. 실제 비밀번호를 바꿀 때는 해당 역할의 모든 앱 frontend를 먼저 drain·종료해야 하며, 비밀번호 변경 자체가 기존 세션을 폐기하지는 않습니다.
@@ -168,8 +168,8 @@ API·worker의 image 교체와 migration은 아래 '배포 helper'로만 합니�
 
 ## worker profile drop-in과 배포 helper
 
-release별 image·worker profile 고정은 `scripts/deploy/lib/worker-profile-pair.py`가 소유하는
-`/etc/containers/systemd/hololive-bot/<unit>.container.d/50-worker-profile.conf` drop-in입니다. 설치 도구는 이 파일을
+release별 image·worker profile 고정은 `scripts/deploy/lib/worker-profile-pair.py`가 소유하는 drop-in
+`/etc/containers/systemd/hololive-bot/<unit>.container.d/50-worker-profile.conf`입니다. 설치 도구는 이 파일을
 건드리지 않습니다. drop-in은 `Image=sha256:<id>`, pair label, release 디렉터리의 읽기 전용 mount와
 `STACK_WORKER_PROFILE_FILE`을 바꾸고, 기본 unit의 원본 mirror mount는 그대로 둡니다. 서비스 이름은 `hololive-api`,
 `hololive-alarm-worker`, `collector`(unit `hololive-collector-c`)이며 이 서비스들은 `podman`으로 고정됩니다.

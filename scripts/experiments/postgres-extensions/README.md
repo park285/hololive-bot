@@ -52,7 +52,7 @@ v0.3.4는 PostgreSQL 19용 바이너리를 제공하지 않으므로 PG 19 전�
 운영 Alpine 호환성이나 ARM64 동작을 입증하는 실험이 아니다. production Dockerfile에
 pg_jsonschema를 넣지 않는다.
 
-운영 `members.aliases`의 기존 CHECK와 동일하게 `ko`/`ja` 배열을 요구하고,
+운영 `members.aliases`의 기존 CHECK와 동일하게 `ko`/`ja` 배열을 요구하고
 SQL NULL·추가 키·배열 원소 타입 허용을 유지했다. 14개 경계 사례와 실제 CHECK의
 정상/거부 INSERT를 통과했다. 20,000행에 대한 네 회차 실행 시간 중앙값은
 내장 SQL **6.243ms**, pg_jsonschema **146.845ms**로 약 **23.5배**였다.
@@ -60,9 +60,9 @@ SQL NULL·추가 키·배열 원소 타입 허용을 유지했다. 14개 경계 
 다만 현재의 단순 계약을 그대로 옮겨서는 표현력 이득이 작고 Alpine 배포 검증이 추가로 필요하다.
 복잡한 다른 스키마로 이 성능 결과를 일반화하지 않는다.
 
-추가로 기존 coverage CHECK 형태는 키가 없을 때 SQL NULL이 되어 통과하고,
+추가로 기존 coverage CHECK 형태는 키가 없을 때 SQL NULL이 되어 통과하고
 JSON Schema의 `required`는 이를 거부함을 재현했다. 이런 전환은 계약 강화다.
-실데이터 위반 존재를 입증한 것은 아니며, 별도 앱·데이터 검토 없이 교체하지 않는다.
+실데이터 위반 존재를 입증한 것은 아니며 별도 앱·데이터 검토 없이 교체하지 않는다.
 
 ## 채택 판단
 

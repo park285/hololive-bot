@@ -64,7 +64,7 @@ PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cu
 ```
 
 이전 unit은 quiesce가 보존한 `current/artifacts/worker-profile/releases/staged-po-b-<b-staging-timestamp>/collector-b/previous/unit.container`에
-남습니다. 재개 검증 실패는 mask를 해제하지 않으며, 재개 후 실패도 두 writer를 다시 hold합니다.
+남습니다. 재개 검증이 실패하면 mask를 해제하지 않으며, 재개 후 실패할 때도 두 writer를 다시 hold합니다.
 롤백은 먼저 중앙 HBA와 설치 unit의 effective endpoint를 이전 경로로 정합화한 뒤 수행해야 합니다.
 
 ## 2026-11-06 전환 기록
@@ -77,4 +77,4 @@ PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cu
    첫 drop-in을 만들고 재시작해 `verify-live`를 확인했다. profile hash는 Docker 시절과 같다.
 
 같은 날 사용자 승인으로 Docker 쪽 b 컨테이너·볼륨·이미지·compose 네트워크와 compose 파일, `~/hololive-bot` 배포 트리를 지웠다.
-Docker 전환 이전 상태로의 롤백 경로는 더 없다. Docker에는 Redroid와 그 이미지만 남는다.
+Docker 전환 이전 상태로 롤백할 경로는 더 없다. Docker에는 Redroid와 그 이미지만 남는다.
