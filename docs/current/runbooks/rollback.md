@@ -106,7 +106,7 @@ routine rollback에 묶지 않습니다. 호환성이 입증되지 않으면 현
 
 이전 image/profile만으로는 접속 경로를 복구할 수 없습니다. 중앙·b·native helper는 현재 env/drop-in의 effective host·port와 복구점의 값을 비교하고, 다르면 재기동 전에 거절합니다. 자동 복원 중 교차 경로를 발견한 경우 collector/issuer 정지와 복구 입력을 유지합니다.
 
-PgBouncer 퇴역 전환 뒤 pooler 경로로 되돌리는 rollback은 지원하지 않습니다. 이전 HBA·pooler unit·인증 객체를 다시 세워야 하므로 호환 후보로 fix-forward합니다. 전환 중 실패는 [퇴역 전환 절차](../../../deploy/quadlet/README.md#pgbouncer-퇴역-전환)대로 hold와 복구 입력을 보존합니다. 임시 pooler 허용·우회 flag를 추가하지 않습니다. [상세 계약](../../../deploy/quadlet/README.md#복구와-자격-증명-변경)을 확인합니다.
+PgBouncer 퇴역 전환 뒤 pooler 경로로 되돌리는 rollback은 지원하지 않습니다. 이전 HBA·pooler unit·인증 객체를 다시 세워야 하므로 호환 후보로 fix-forward합니다. 임시 pooler 허용·우회 flag를 추가하지 않습니다. [상세 계약](../../../deploy/quadlet/README.md#복구와-자격-증명-변경)을 확인합니다.
 
 ## Contract Rollback
 
