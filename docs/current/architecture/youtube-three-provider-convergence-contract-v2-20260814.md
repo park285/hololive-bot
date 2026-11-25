@@ -2287,7 +2287,7 @@ bash tools/check-stack-db-access-policy.sh
 | Lifecycle | start/drain/close | worker/pool failure | cancellation/race/leak |
 | Architecture | collector/API/alarm ownership | forbidden import | producer references removed |
 
-DB/concurrency 변경에는 `go test -race`와 실제 lease/transaction invariant test를 모두 포함한다. 성능은 existing benchmark와 `scripts/perf/perf-budget.yaml`의 동일 workload 전후 측정 없이는 개선됐다고 보고하지 않는다.
+DB/concurrency 변경에는 `go test -race`와 실제 lease/transaction invariant test를 모두 포함한다. 성능은 existing benchmark의 동일 workload 전후 측정 없이는 개선됐다고 보고하지 않는다.
 
 ## 20. NFR gate
 

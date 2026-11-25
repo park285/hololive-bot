@@ -42,7 +42,6 @@ Go 판본은 `go.work`가, 외부 소스는 workflow의 checkout SHA가 정합�
 | 비밀 유출 | `check-tracked-local-artifacts.sh`·`scripts/refactor/grep-sensitive-logs.sh` | 비밀·운영 산출물 추적 또는 인증 값·응답 원문 로깅 |
 | 의존성 정책 | `scripts/ci/check-production-go-workspace.sh`·`check-recurring-security-scan-contract.sh`·`check-go-image-vex.jq` | 비고정 의존성, 취약점 검사 누락·억제 또는 부정확한 VEX 면제 |
 | DB 용량 | `scripts/ci/check-postgres-capacity.sh`(예산 산식은 배포 preflight와 같은 `scripts/deploy/lib/postgres-capacity.sh`) | pool·예약 connection과 PostgreSQL 용량 불일치 |
-| 실행 성능 | `scripts/perf/check-youtube-plane-budget.sh`·`perf-budget.yaml` | 실제 publish/claim/consume 벤치마크의 fleet cycle 시간 초과 |
 | 빌드·시험 | `scripts/ci/check-gofmt.sh`·`check-go-test-json.py` | 포맷 위반 또는 실패·panic·예상 밖 skip |
 
 import 위치·심볼 이름만 고정하던 shared-go·notification egress 소유권 검사는 제거했습니다.

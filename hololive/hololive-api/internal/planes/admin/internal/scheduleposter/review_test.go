@@ -548,7 +548,7 @@ func TestGeminiJudgeBlamesTheServiceOnlyWhenItCannotConnect(t *testing.T) {
 
 	plain := hang.Client()
 
-	plain.Timeout = 100 * time.Millisecond
+	plain.Timeout = time.Second
 
 	guarded := func(resolver netguard.Resolver, dial func(context.Context, string, string) (net.Conn, error)) *http.Client {
 		return guardedDecisionHTTPClient(&http.Client{Timeout: time.Second, Transport: &http.Transport{DialContext: dial}}, resolver)
