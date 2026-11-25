@@ -29,8 +29,8 @@ declare -A IMAGE_BY_SERVICE=(
     [collector]=localhost/hololive-collector:prod
     [youtube-po-c]=localhost/hololive-youtube-po-sandbox:prod
     [holo-postgres]=localhost/hololive-postgres:prod
-    [valkey-cache]=localhost/iris-stack-valkey:9.1.3-zlib1.4-r1
-    [admin-dashboard-ingress]=localhost/iris-stack-nginx:1.31.9-zlib1.4-r0
+    [valkey-cache]=localhost/iris-stack-valkey:9.1.3-zlib1.4-r2
+    [admin-dashboard-ingress]=localhost/iris-stack-nginx:1.31.9-zlib1.4-r1
 )
 declare -A CONTEXT_BY_SERVICE=(
     [holo-postgres]=deploy/images/postgres

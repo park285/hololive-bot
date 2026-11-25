@@ -692,7 +692,7 @@ seed_accepted() (
   mv "$native_recovery_dir" "$old_target/seed-guard"
   ln "$old_target/seed-guard/accepted-window" "$old_target/accepted-window"
 )
-case "$native_release_window" in W2) seed_accepted W1 ;; W3) seed_accepted W2 ;; esac
+seed_accepted W3
 
 ''' + scenario
     result = subprocess.run(['bash', '-c', script, 'test', *args], env=dict(os.environ, CASE=str(case)),
@@ -701,7 +701,7 @@ case "$native_release_window" in W2) seed_accepted W1 ;; W3) seed_accepted W2 ;;
 
 for name, win, port, fault, mutation, ok in (
     ('window-valid', release_window, old_port, 'normal', '', True),
-    ('window-other', ('W2' if release_window == 'W1' else 'W1'), (6433 if old_port == 5433 else 5433), 'normal', '', False),
+    ('window-other', 'W2', 6433, 'normal', '', False),
     ('window-endpoint', release_window, (6433 if old_port == 5433 else 5433), 'normal', '', False),
     ('window-guard', release_window, old_port, 'missing', '', False),
     ('window-restart', release_window, old_port, 'restart', '', False),
@@ -774,7 +774,7 @@ for n in "$po_socket" "$po_service" "$unit"; do
   ln -sT "$PWD/w1-adoption/policy/$n.conf" "$PWD/system/$n.d/90-native-window-prior.conf"
 done
 '''
-case, result = window_case('adopted-w1-to-w2', [release_window, str(old_port), 'normal'], adopted_policy + candidate_stage +
+case, result = window_case('adopted-prior-policy', [release_window, str(old_port), 'normal'], adopted_policy + candidate_stage +
                            'window_action=accepted\nnative_window_close_observation\n')
 assert result.returncode == 0, result.stderr
 assert (case/'current/accepted-window').read_text().splitlines()[0] == release_window
@@ -1023,21 +1023,18 @@ for name, mutation, valid in (
     ('copied-file', 'cp -p "$old_target/accepted-window" "$old_target/copy"; mv -T "$old_target/copy" "$old_target/accepted-window"', False),
     ('old-revision', 'echo "$EXPECTED_REVISION" > "$old_target/po-sandbox/revision"', False),
     ('writable', 'chmod 0666 "$old_target/accepted-window"', False),
-    ('direct-predecessor', 'rm -r "$old_target/seed-guard" "$old_target/accepted-window"; seed_accepted W2', release_window in ('W2', 'W3')),
-    ('pooled-origin', 'rm -r "$old_target/seed-guard" "$old_target/accepted-window"; seed_accepted W1', release_window == 'W1'),
 ):
     case, result = window_case('apply-origin-' + name, [release_window, '5433', 'normal'], '''
 if [[ -e "$old_target/accepted-window" ]]; then rm -r "$old_target/seed-guard" "$old_target/accepted-window"; fi
 seed_accepted "$native_release_window"
-other=W1; if [[ "$native_release_window" == W1 ]]; then other=W2; fi
 ''' + mutation + '\nnative_apply_preflight\n')
     assert (result.returncode == 0) == valid and (not valid or result.stdout.split()[:2] == ['old', f'{1:040d}']), (name, result.stderr)
 
-for origin in ('direct', 'W1', 'W2', 'W3'):
+for origin in ('direct', 'W3'):
     case, result = window_case('quiesce-origin-' + origin, [release_window, str(old_port), 'normal'], '''
 if [[ -e "$old_target/accepted-window" ]]; then rm -r "$old_target/seed-guard" "$old_target/accepted-window"; fi
 ''' + ('' if origin == 'direct' else f'seed_accepted {origin}\n') + 'native_window_quiesce\n')
-    allowed = origin in {'W1': ('direct',), 'W2': ('W1', 'W2'), 'W3': ('W2', 'W3')}[release_window]
+    allowed = origin == release_window
     assert (result.returncode == 0) == allowed and (case/'calls').exists() == allowed, (origin, result.stderr)
 
 origin_dispatch = source[source.index('native_same_window_baseline()'):source.index('\nnormalize_runtime_payload_permissions()')]

@@ -15,7 +15,7 @@ RUN mkdir -p /src/pg_stat_kcache /src/pg_wait_sampling \
 
 FROM docker.io/library/postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188 AS runtime-base
 # 고정 base의 brotli·curl·musl·nghttp2·zlib 보안 수정과 eMudhra 차단 루트를 뺀 CA bundle을 적용하며 PostgreSQL 버전은 유지합니다.
-RUN apk add --no-cache --upgrade 'brotli-libs>=1.2.1-r0' 'ca-certificates-bundle>=20261020-r0' 'libcurl>=8.23.0-r0' 'musl>=1.2.6-r3' 'musl-utils>=1.2.6-r3' 'nghttp2-libs>=1.70.0-r0' 'zlib>=1.4-r0' \
+RUN apk add --no-cache --upgrade 'brotli-libs>=1.2.1-r0' 'ca-certificates-bundle>=20261020-r0' 'libcurl>=8.23.0-r0' 'libxml2>=2.13.9-r3' 'musl>=1.2.6-r3' 'musl-utils>=1.2.6-r3' 'nghttp2-libs>=1.70.0-r0' 'zlib>=1.4-r0' \
     && rm /usr/local/bin/gosu
 ARG REVISION=unknown
 LABEL org.opencontainers.image.revision=$REVISION \

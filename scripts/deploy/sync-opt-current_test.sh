@@ -298,8 +298,8 @@ assert_rejected_without_change "$host" "$base_repo" "stale Valkey topology" "$st
 cp "$base_repo/deploy/topology/hosts.conf" "$host/opt/current/deploy/topology/hosts.conf"
 pass "Valkey 단독 게시는 설치된 시작 검사·토폴로지가 checkout과 다르면 거부합니다"
 
-printf 'localhost/iris-stack-valkey:9.1.3-zlib1.4-r1\n' >"$host/events.image-missing"
-assert_rejected_without_change "$host" "$base_repo" "missing Valkey image" "Valkey image is not present: localhost/iris-stack-valkey:9.1.3-zlib1.4-r1" --valkey-only
+printf 'localhost/iris-stack-valkey:9.1.3-zlib1.4-r2\n' >"$host/events.image-missing"
+assert_rejected_without_change "$host" "$base_repo" "missing Valkey image" "Valkey image is not present: localhost/iris-stack-valkey:9.1.3-zlib1.4-r2" --valkey-only
 printf 'VALKEY_IMAGE=localhost/iris-stack-valkey:pinned\n' >>"$host/etc-stack-secrets/hololive-bot/compose.env"
 printf 'localhost/iris-stack-valkey:pinned\n' >"$host/events.image-missing"
 assert_rejected_without_change "$host" "$base_repo" "missing pinned Valkey image" "Valkey image is not present: localhost/iris-stack-valkey:pinned" --valkey-only
@@ -313,7 +313,7 @@ assert_rejected_without_change "$host" "$base_repo" "empty Valkey image" "VALKEY
 sed -i 's/^VALKEY_IMAGE=.*/VALKEY_IMAGE=""/' "$host/etc-stack-secrets/hololive-bot/compose.env"
 assert_rejected_without_change "$host" "$base_repo" "empty quoted Valkey image" "VALKEY_IMAGE is empty" --valkey-only
 sed -i 's|^VALKEY_IMAGE=.*|VALKEY_IMAGE=localhost/iris-stack-valkey:pinned|' "$host/etc-stack-secrets/hololive-bot/compose.env"
-printf 'localhost/iris-stack-valkey:9.1.3-zlib1.4-r1\n' >"$host/events.image-missing"
+printf 'localhost/iris-stack-valkey:9.1.3-zlib1.4-r2\n' >"$host/events.image-missing"
 run_sync "$host" "$base_repo" --valkey-only || { cat "$host/out" >&2; fail "compose.env에 고정한 Valkey 이미지로 단독 게시 실패"; }
 cmp -s "$installed/valkey-cache.container" "$base_repo/deploy/quadlet/hololive-bot/valkey-cache.container" || fail "고정 이미지 Valkey 후보가 게시되지 않았습니다"
 sed -i '/^VALKEY_IMAGE=/d' "$host/etc-stack-secrets/hololive-bot/compose.env"

@@ -6,7 +6,7 @@ osaka 호스트를 다시 설치하는 동안에도 a를 kapu에 임시로 띄�
 
 ## 기존 실행 pair의 수동 전환
 
-이 릴리스의 `scripts/deploy/kapu-d-cutover.py`는 이미 직접 TLS 5433으로 실행 중인 kapu rootful d를 같은 endpoint의 후보로 교체하는 전용 도구다. PgBouncer 6433 원점은 받지 않는다. [퇴역 전환](../../quadlet/README.md#pgbouncer-퇴역-전환)은 직전 릴리스의 도구로 한다. 아래 명령은 운영 변경 범위와 창을 별도로 승인한 경우에만 사용한다. 첫 설치, 호스트 복구, 타 슬롯, 이미지 구축·전송, PgBouncer/HBA/DB 변경은 별도 작업이다.
+이 릴리스의 `scripts/deploy/kapu-d-cutover.py`는 이미 직접 TLS 5433으로 실행 중인 kapu rootful d를 같은 endpoint의 후보로 교체하는 전용 도구다. 아래 명령은 운영 변경 범위와 창을 별도로 승인한 경우에만 사용한다. 첫 설치, 호스트 복구, 타 슬롯, 이미지 구축·전송, PgBouncer/HBA/DB 변경은 별도 작업이다.
 
 **카드 창 입력 장착:** 검증을 마친 카드 릴리스 산출물에서 봉인한 오프라인 d custody tar의 출처와 무결성을 확인하고, 새 root 전용 디렉터리에 푼다. 아래 예에서 tar는 다음 경로들을 루트 기준으로 포함한다. 파일은 root 소유 일반 파일이어야 하며 부모 경로까지 root 외의 쓰기 권한이나 심볼릭 링크가 없어야 한다.
 
@@ -57,5 +57,5 @@ sudo -n python3 -I -B "$release/scripts/deploy/kapu-d-cutover.py" resume "$hold"
 - 네트워크: Podman 빅뱅 전환으로 kapu에서 Docker를 걷어 내 netavark는 기본 nftables driver를 쓴다(Docker FORWARD DROP과
   공존하려던 `50-kapu-netavark-iptables.conf`는 제거). metrics는 게시하지 않고 Prometheus(`obs-prometheus`)가 고정 IP
   (`10.89.15.<slot>`)로 수집한다.
-- DB: `100.100.1.8:5433`에 `verify-full` TLS로 직접 접속합니다. PostgreSQL HBA가 `hololive_collector_d`와 source `100.100.1.3/32`를 함께 제한합니다. PgBouncer에서의 전환은 [퇴역 전환 절차](../../quadlet/README.md#pgbouncer-퇴역-전환)를 따릅니다.
+- DB: `100.100.1.8:5433`에 `verify-full` TLS로 직접 접속합니다. PostgreSQL HBA가 `hololive_collector_d`와 source `100.100.1.3/32`를 함께 제한합니다.
 - HealthCmd는 distroless 이미지라 JSON 배열로 쓴다(문자열은 `/bin/sh -c`로 감싸져 실패한다).
