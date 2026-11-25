@@ -2,136 +2,54 @@
 
 ## 범위
 
-`hololive-seoul` (`100.100.1.8`)의 `holo-postgres`/`hololive`에
-`pg_stat_kcache` 2.3.2와 `pg_wait_sampling` binary 1.1.11(SQL extension 1.1)을
-선택적으로 활성화하는 절차다. 기본 preload는 계속 `pg_stat_statements` 하나다.
-새 확장과 읽기 view는 `hololive_observability` 스키마를 사용한다. 기존 `public` 스키마의
-USAGE가 없는 exporter에도 이 전용 스키마의 USAGE와 통계 객체 SELECT/EXECUTE만 부여한다.
-기존 pg_stat_statements는 public에 유지하며 관리자 소유 view가 필요한 숫자 지표를 제공한다.
-Dockerfile은 고정 PostgreSQL 19.0/Alpine PGXS로 두 CPU 아키텍처의 모듈을 빌드하며
-앱 테이블·마이그레이션·initdb를 변경하지 않는다.
-base image의 contrib인 `auto_explain`(preload), `pg_buffercache` 1.7, `amcheck` 1.5도
-같은 절차로 켠다. 두 확장은 같은 전용 스키마에 두고 확장 기본 권한을 유지한다.
-버퍼 조회는 `pg_monitor`, evict 함수와 amcheck 검사는 관리자만 실행할 수 있다.
-최종 이미지 스캔의 `CVE-2026-58055` 보고를 해소하도록 기존 `nghttp2-libs`만
-`1.69.0-r0`에서 `1.70.0-r0`으로 갱신한다. base digest·다른 OS 패키지는 유지한다.
+`hololive-seoul` (`100.100.1.8`)의 `holo-postgres`/`hololive`에서 쓰는 진단 확장과 preload를 다룬다.
+공식 PostgreSQL 19 image의 contrib만 쓴다. preload는 `pg_stat_statements`(unit 기본값)와 선택적
+`auto_explain`이고, 전용 스키마 `hololive_observability`에는 `pg_buffercache`·`amcheck`와
+`statement_info` view가 있다. 버퍼 조회는 `pg_monitor`, evict 함수와 amcheck 검사는 관리자만 실행할 수 있다.
+별도 빌드가 필요했던 `pg_stat_kcache`·`pg_wait_sampling`은 자체 PostgreSQL image와 함께 소스에서 제거했다.
 
-운영 이미지 전송·설정 쓰기·재시작·CREATE/DROP EXTENSION은 명시적으로 승인된 뒤
-`hololive-bot-ops`의 현재 no-build 배포 절차로 수행한다. 원격 Git 게시는 별도 범위다.
-기존 volume에 initdb를 재실행하지 않는다. `postgres-replication.md`의 single-primary
-경계와 현재 `DEPLOYMENT_BASELINE.md`를 유지한다.
+운영 설정 쓰기·재시작·DROP EXTENSION은 명시적으로 승인된 뒤 `hololive-bot-ops`와 `stack-platform-ops` 절차로
+수행한다. 기존 volume에 initdb를 재실행하지 않는다. `postgres-replication.md`의 single-primary 경계와 현재
+`DEPLOYMENT_BASELINE.md`를 유지한다.
 
-`pg_stat_kcache`와 `pg_wait_sampling`은 상시 preload하지 않습니다. 진단 구간에만 아래 활성화 절차로 켜고,
-수집을 마치면 복구 절차로 확장을 제거한 뒤 preload를 상시 값 `pg_stat_statements,auto_explain`으로 되돌립니다.
-서울 primary는 아직 네 확장과 두 preload가 켜진 상태이며, 상시 값으로 되돌리는 재시작은 별도 승인이 필요합니다.
-로컬 main으로의 소스 통합은 재배포·재활성화가 아닙니다. 운영 점검은 아래 읽기 전용 관측 절차를 사용합니다.
-Osaka의 적용 기록은 당시 증거로 보존하되, 해당 VM과 100GB 부트 볼륨은 모두 삭제했습니다.
-과거 복구 이미지·파일이 서울에 같은 경로로 존재한다고 가정하지 않습니다.
+## 공식 image 전환 전 확장 제거
 
-로컬 결과와 재현 명령은 [extension experiments](../../../scripts/experiments/postgres-extensions/README.md)에 있다.
-계측은 DB 안의 쿼리 CPU·대기를 설명하며 Go의 pool 대기·decode·GC 시간을 직접 측정하지 않는다.
+서울 primary는 아직 이전 자체 image에서 두 확장과 preload를 켠 상태다. 공식 image에는 두 모듈이 없으므로
+아래 순서를 지킨다. 각 단계는 따로 승인받는다.
 
-같은 major 안의 minor 갱신은 두 C 확장을 새 PGXS·헤더로 함께 재빌드한다.
-dump/restore·`pg_upgrade`는 필요하지 않으며 기존 확장을 다시 생성하지 않는다.
-해당 minor 릴리스 노트의 인덱스 재구축·제약 조건을 확인하며, 재구축·제약 수정은 별도 승인 범위다.
-18에서 19로의 major 전환은 [PostgreSQL major 전환](postgres-major-upgrade.md)을 따른다. 확장은 복원 때
-다시 만들어지며 `pg_buffercache`는 1.7, `pg_stat_statements`는 1.13이 된다. 증분 백업은 업데이트 뒤 새 전체 백업을
-기준으로 삼아야 하지만, 현재 백업 중단 정책을 이 이미지 갱신만으로 해제하지 않는다.
-
-## 로컬 준비
-
-깨끗하고 검토된 작업트리의 전체 SHA를 `REVISION`에 넣는다. 컴파일·시험은 kapu에서만 한다.
-
-```bash
-bash scripts/ci/test-infra-images.sh
-podman build --platform linux/arm64 --target test \
-  --build-arg REVISION="$(git rev-parse HEAD)" deploy/images/postgres
-podman build --platform linux/arm64 --format docker --target runtime \
-  --build-arg REVISION="$(git rev-parse HEAD)" \
-  --tag localhost/hololive-postgres:observability-candidate deploy/images/postgres
-podman image inspect --format 'sha256:{{.Id}} arch={{.Architecture}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}' \
-  localhost/hololive-postgres:observability-candidate
-```
-
-UID 999 시작과 gosu 부재, preload 누락 거부, CPU 계측, sleep/행 잠금 표본, 권한, 재시작,
-SQL 비활성화 뒤 기본 preload 복귀를 검증한다. ARM64 에뮬레이션의 `linux_hz` 자동 감지값을
-운영 설정으로 복사하지 않는다. 최종 이미지에는 compiler·테스트 데이터가 들어가지 않는다.
-저장소의 최종 이미지 스캔을 후보 태그만 담은 별도 manifest로 실행한다.
-
-## 활성화
-
-1. 운영 `transaction_read_only=on` 증명 뒤 현재 확장·preload·query ID·긴 transaction·잠금,
-   readiness와 동일 구간 DB 지표를 확인한다. 기존 image ID/tag와 deploy tree, env의 해당
-   비밀 아닌 설정 값을 복구점으로 기록한다. env 전체나 credentials를 출력하지 않는다.
-2. 검증한 arm64 이미지와 필요한 배포 파일만 전송한다. 새 image의 architecture·전체 SHA와
-   설치된 `holo-postgres.container`를 대조한다. 기존 이미지와 volume은 보존한다.
-3. `stack-secrets/hosts/hololive-seoul/hololive-bot/compose.env` 마스터에서 아래 비밀 아닌
-   키만 승인 범위에서 갱신한다. `sync-host.sh hololive-seoul --stack hololive-bot` dry-run의
-   파일 범위·삭제 부재를 확인한 뒤 `--apply`로 배포한다. 호스트
-   `/etc/stack-secrets/hololive-bot/compose.env`와 마스터의 일치 및 manifest owner/mode를
-   검증한다. 수동 명령과 systemd 재시작 모두 같은 값을 읽도록 한다.
-
-   진단 구간 값:
-
-   ```dotenv
-   HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES=pg_stat_statements,pg_stat_kcache,pg_wait_sampling,auto_explain
-   ```
-
-   상시 값:
-
-   ```dotenv
-   HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES=pg_stat_statements,auto_explain
-   ```
-
-   `holo-postgres.container`의 `Exec=`는 kcache `track=top`, planning off, wait `profile_pid=off`,
-   `profile_queries=top`, `sample_cpu=off`, profile 20ms/history 100ms·20,000 entries를 사용한다.
-   auto_explain은 1초 이상 문장을 nested 포함으로 기록하며 `log_analyze`·`log_buffers`는 켜고
-   `log_timing`은 끈다. 바인드 값은 statement log와 같이 남기지 않는다(`log_parameter_max_length=0`).
-   기본 비활성 상태의 custom GUC placeholder와 활성 상태 모두 로컬 기동을 검증한다.
-4. 승인된 새 이미지를 root store에 load하고, stack-platform-ops 절차로 compose.env master의 `POSTGRES_IMAGE`를
-   `sha256:`+`podman image inspect --format '{{.Id}}'` 값으로 바꿔 sync한 뒤(이전 값은 롤백용으로 기록)
-   `sudo systemctl restart holo-postgres.service`만 실행한다. unit은 compose.env의 identity만 쓰므로 `:prod` 재태그는 효과가 없다
-   ([Quadlet README](../../../deploy/quadlet/README.md)의 image identity 표). 런타임 peer는 `Wants=`라 함께 재시작하지 않는다.
-   DB 연결이 잠시 끊기고 진행 중인
-   transaction은 중단될 수 있다. 앱의 재연결과 작업 재시도를 확인한다. AP·앱 이미지는 바꾸지 않는다.
-5. 정상 시작 뒤 관리자 socket으로 다음 파일을 실행한다. 기존 volume에도 직접 실행해야 한다.
+1. 이전 image가 실행 중일 때 관리자 socket으로 두 확장과 그에 의존하는 view만 제거한다.
+   `pg_buffercache`·`amcheck`·`statement_info`와 스키마는 유지한다. 앱 테이블과 `pg_stat_statements`는 바뀌지 않는다.
 
    ```bash
-   sudo podman exec holo-postgres psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 \
-     -f /usr/local/share/hololive/enable-observability.sql
+   sudo podman exec -i holo-postgres psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 <<'SQL'
+   BEGIN;
+   SET LOCAL lock_timeout = '2s';
+   SET LOCAL statement_timeout = '10s';
+   DROP VIEW IF EXISTS hololive_observability.statement_resources RESTRICT;
+   DROP EXTENSION IF EXISTS pg_wait_sampling RESTRICT;
+   DROP EXTENSION IF EXISTS pg_stat_kcache RESTRICT;
+   COMMIT;
+   SQL
    ```
 
-   한 transaction에서 preload/version/schema를 검증하고 네 확장을 생성한다. 새 스키마의 통계 읽기는
-   `pg_read_all_stats` 구성원에게만 부여하며 reset은 관리자만 가능하다. public USAGE와 기존 앱 역할을
-   확장하지 않는다. 2026-10-07 읽기 확인에서는 `postgres_exporter`, `iris_db_nightly`가
-   이미 이 통계 역할을 상속했다. 적용 직전에 재확인하고 실제 `SET ROLE postgres_exporter` 상태의
-   조회까지 검증한다. 함수/테이블 privilege 플래그만으로 schema USAGE가 있다고 가정하지 않는다.
-6. 실제 running image ID, extension version, preload, CPU/wait 수집, 권한을 확인한다.
-   central/API/worker/collector와 각 AP readiness, DB 연결 오류·새 worker crash/OOM을 확인한다.
-   장애가 지속되면 승인된 복구 범위로 되돌린다.
+   `RESTRICT`가 외부 의존 객체 때문에 실패하면 중단하고 그 객체를 검토한다. `CASCADE`로 우회하지 않는다.
+2. `stack-secrets/hosts/hololive-seoul/hololive-bot/compose.env` 마스터의
+   `HOLOLIVE_POSTGRES_PRELOAD_LIBRARIES`를 `pg_stat_statements,auto_explain`으로 바꿔 sync하고, **이전 image 그대로**
+   `holo-postgres.service`를 재시작한다. `SHOW shared_preload_libraries`와 데이터 volume의
+   `postgresql.auto.conf`에 두 모듈이 없음을 확인한다. 두 모듈이 남은 채 공식 image로 바꾸면 시작에 실패한다.
+3. 새 unit 파일을 설치한 뒤 공식 image를 load하고, compose.env의 `POSTGRES_IMAGE`를 그 `sha256:` ID로 바꿔
+   재시작한다([Quadlet README](../../../deploy/quadlet/README.md#이미지)의 image identity 순서). 이전 값은 롤백용으로 기록한다.
+4. 1단계 이전에 뜬 dump는 두 확장을 참조하므로 공식 image에 복원되지 않는다. 그 dump가 보존 기간에서 모두 빠질 때까지
+   이전 image를 지우지 않는다. 백업 복원 검증의 공식 image 전환은 1단계 이후 첫 dump부터 적용한다.
+
+## auto_explain
+
+`holo-postgres.container`의 `Exec=`는 1초 이상 문장을 nested 포함으로 기록하며 `log_analyze`·`log_buffers`는 켜고
+`log_timing`은 끈다. 바인드 값은 statement log와 같이 남기지 않는다(`log_parameter_max_length=0`). preload에 없으면
+설정은 적용되지 않는다. 끌 때는 compose.env의 preload에서 `auto_explain`을 빼고 같은 image로 재시작한다.
+ALTER SYSTEM으로 바꾸지 않는다.
 
 ## 관측
-
-관리자 또는 기존 통계 역할로 두 번의 제한된 snapshot을 수집한다.
-
-```bash
-sudo podman exec -e PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000' \
-  holo-postgres psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 \
-  -f /usr/local/share/hololive/read-observability.sql
-```
-
-- query text·payload는 출력하지 않는다. query ID별 누적 CPU·실행 시간·calls·bytes의
-  같은 구간 차분을 비교한다. 기존 pg_stat_statements는 오래된 누적값이므로 신규 kcache의
-  절대 누적값과 바로 비율을 계산하지 않는다. 재시작/reset/음수 차분은 새 구간으로 취급한다.
-- kcache의 filesystem bytes는 PostgreSQL logical buffers와 다르다. background I/O worker와
-  checkpoint 등 서버 전체 I/O를 호출 쿼리에 완전히 귀속하는 지표가 아니다.
-- wait profile은 cluster 범위이며 dbid/userid가 없다. query ID만으로 다른 DB·role의
-  pg_stat_statements와 join하면 중복/오귀속될 수 있다. 표본 수×20ms는 대략적 누적 대기이며
-  정확한 latency나 CPU 시간과의 항등식을 뜻하지 않는다. 짧은 대기는 놓칠 수 있다.
-- kcache는 정상 재시작에서 저장된 통계를 복원한다. wait history/profile은 메모리 통계로
-  재시작에서 소실된다. 20,000 제한은 history ring에만 적용되며 profile cardinality 상한이 아니다.
-  `profile_pid=off`로 PID 증가를 막되 query ID 변화에 따른 entry 수·메모리를 관찰한다.
-  통계 reset은 읽기 수집에 넣지 않는다. 필요하면 대상/손실 구간 승인을 받은 관리자가 수행한다.
 
 - `pg_buffercache_summary()`·`pg_buffercache_usage_counts()`는 공유 버퍼 전체를 한 번 훑는
   짧은 조회다. relation별 점유는 `pg_buffercache`를 `pg_class.relfilenode`와 현재 DB로 묶어
@@ -142,28 +60,3 @@ sudo podman exec -e PGOPTIONS='-c default_transaction_read_only=on -c statement_
 - auto_explain 계획은 PostgreSQL 로그(Loki)에 `duration: ... plan:`으로 남는다. 시간 계측을 끈
   계획이므로 노드별 시간은 없고 실제 행 수와 버퍼만 있다. 운영 계측 비용은 같은 query ID의
   `pg_stat_statements` 구간 평균을 활성화 전후로 비교해 확인한다.
-
-## 복구
-
-새 모듈 파일이 있는 이미지가 아직 실행 중일 때 아래 SQL로 네 확장만 제거한다.
-이 작업은 새 계측 통계/객체를 버리고 앱 테이블·기존 pg_stat_statements는 보존한다.
-관리하는 두 읽기 view와 확장을 제거한 뒤 전용 스키마가 비었을 때만 제거한다.
-`RESTRICT`가 외부 의존 객체 때문에 실패하면 중단하고 그 객체를 검토한다. `CASCADE`로 우회하지 않는다.
-
-```bash
-sudo podman exec holo-postgres psql -X -U postgres_admin -d hololive -v ON_ERROR_STOP=1 \
-  -f /usr/local/share/hololive/disable-observability.sql
-```
-
-auto_explain만 끌 때는 preload에서 `auto_explain`을 빼고 같은 이미지로 `holo-postgres.service`를 재시작한다. contrib이라
-모든 이미지에 모듈이 있다. 해당 env 키를 종전 값(이번 도입 전에는 미설정/`pg_stat_statements`)으로 복구하고 이전
-image identity(compose.env `POSTGRES_IMAGE`를 기록해 둔 이전 `sha256:` 값으로 되돌림)와 deploy tree로 같은 `systemctl restart holo-postgres.service`를 수행한다.
-같은 PGDATA volume을 유지하고 readiness·앱 재연결·기존 통계를 확인한다.
-새 preload를 남긴 채 모듈 없는 이전 이미지로 바꾸면 시작에 실패한다.
-
-새 preload 때문에 서버가 시작하지 못하면, 먼저 **새 모듈 파일을 가진 이미지**를 유지한 채
-preload만 `pg_stat_statements`로 복구하여 시작하고 위 DROP SQL을 실행한 다음 이전 이미지로
-복귀한다. 모듈/확장이 생성되지 않았어도 `IF EXISTS` 경로를 쓸 수 있다.
-volume 삭제·초기화·앱 데이터 restore는 이 복구 절차에 포함하지 않는다.
-
-Fallback delta: 자동 fallback이나 오류 무시 경로를 추가하지 않는다.

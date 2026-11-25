@@ -28,14 +28,14 @@ declare -A IMAGE_BY_SERVICE=(
     [hololive-alarm-worker]=localhost/hololive-alarm-worker:prod
     [collector]=localhost/hololive-collector:prod
     [youtube-po-c]=localhost/hololive-youtube-po-sandbox:prod
-    [holo-postgres]=localhost/hololive-postgres:prod
-    [valkey-cache]=localhost/iris-stack-valkey:9.1.3-zlib1.4-r2
-    [admin-dashboard-ingress]=localhost/iris-stack-nginx:1.31.9-zlib1.4-r1
+    [holo-postgres]=docker.io/library/postgres:19.0-alpine
+    [valkey-cache]=docker.io/valkey/valkey:9.1.3-alpine3.24
+    [admin-dashboard-ingress]=docker.io/library/nginx:1.31.9-alpine-slim
 )
-declare -A CONTEXT_BY_SERVICE=(
-    [holo-postgres]=deploy/images/postgres
-    [valkey-cache]=deploy/images/valkey
-    [admin-dashboard-ingress]=deploy/images/nginx
+declare -A UPSTREAM_BY_SERVICE=(
+    [holo-postgres]=docker.io/library/postgres@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
+    [valkey-cache]=docker.io/valkey/valkey@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
+    [admin-dashboard-ingress]=docker.io/library/nginx@sha256:5bfced78d24d644270bedb0a9968697042e38d5c03fb6354603df025279c1cbe
 )
 declare -A DOCKERFILE_BY_SERVICE=(
     [hololive-api]=hololive/hololive-api/Dockerfile
@@ -185,16 +185,21 @@ fi
 build_service() {
     local service="$1"
     local image="${IMAGE_BY_SERVICE[$service]}"
+    local upstream="${UPSTREAM_BY_SERVICE[$service]:-}"
+
+    if [[ -n "${upstream}" ]]; then
+        local id
+        echo "[PULL] ${service} -> ${image} (${upstream})"
+        id="$(podman pull --quiet "${platform_args[@]}" "${upstream}")"
+        podman tag "${id}" "${image}"
+        return
+    fi
     local -a args=(build "${platform_args[@]}" --format docker --tag "${image}"
         --build-arg "REVISION=${REVISION}" --label "org.opencontainers.image.revision=${REVISION}")
 
-    if [[ -n "${DOCKERFILE_BY_SERVICE[$service]:-}" ]]; then
-        local version="${HOLO_API_VERSION}"
-        [[ "${service}" != hololive-alarm-worker ]] || version="${HOLO_ALARM_WORKER_VERSION}"
-        args+=(--build-arg "VERSION=${version}" --file "${DOCKERFILE_BY_SERVICE[$service]}" .)
-    else
-        args+=("${CONTEXT_BY_SERVICE[$service]}")
-    fi
+    local version="${HOLO_API_VERSION}"
+    [[ "${service}" != hololive-alarm-worker ]] || version="${HOLO_ALARM_WORKER_VERSION}"
+    args+=(--build-arg "VERSION=${version}" --file "${DOCKERFILE_BY_SERVICE[$service]}" .)
     echo "[BUILD] ${service} -> ${image}"
     podman "${args[@]}"
     if [[ "${REVISION}" != unknown ]]; then

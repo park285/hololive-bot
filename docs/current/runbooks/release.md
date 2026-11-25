@@ -194,7 +194,8 @@ podman image inspect localhost/<image>:prod \
   --format '{{.Architecture}} {{index .Config.Labels "org.opencontainers.image.version"}} {{index .Config.Labels "org.opencontainers.image.revision"}}'
 ```
 
-`arch=arm64`가 아니거나 revision이 `unknown`·short SHA이면 중단합니다.
+`arch=arm64`가 아니거나 revision이 `unknown`·short SHA이면 중단합니다. PostgreSQL·Valkey·nginx는 빌드하지 않고
+고정 digest의 공식 image를 공식 이름으로 태그하므로 revision label 없이 architecture만 확인합니다.
 
 ### 2. 전송
 
