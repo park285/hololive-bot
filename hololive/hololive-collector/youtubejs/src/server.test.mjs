@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { connect } from "node:net";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -439,4 +440,54 @@ function chunkedRequest(http, socketPath, path, body) {
     client.write(body.slice(0, 32));
     client.end(body.slice(32));
   });
+}
+
+test("helper answers a request header timeout with the JSON timeout failure", async () => {
+  const response = await clientErrorResponse((server, socket) => {
+    server.emit("clientError", Object.assign(new Error("request timed out"), { code: "ERR_HTTP_REQUEST_TIMEOUT" }), socket);
+  });
+  assert.match(response.head, /^HTTP\/1\.1 408 /);
+  assert.match(response.head, /\r\ncontent-type: application\/json/i);
+  assert.equal(response.body.protocol_version, 1);
+  assert.equal(response.body.error.code, "collection_timeout");
+  assert.equal(response.body.error.class, "TIMEOUT");
+});
+
+test("helper answers a malformed HTTP request with the JSON protocol failure", async () => {
+  const response = await clientErrorResponse((_server, _socket, client) => {
+    client.write("NOT-HTTP\r\n\r\n");
+  });
+  assert.match(response.head, /^HTTP\/1\.1 400 /);
+  assert.match(response.head, /\r\ncontent-type: application\/json/i);
+  assert.equal(response.body.error.code, "invalid_request");
+  assert.equal(response.body.error.class, "PROTOCOL");
+});
+
+/**
+ * @param {(server: import("node:http").Server, socket: import("node:net").Socket, client: import("node:net").Socket) => void} trigger
+ * @returns {Promise<{ head: string, body: any }>}
+ */
+async function clientErrorResponse(trigger) {
+  const dir = await mkdtemp(join(tmpdir(), "youtubejs-helper-"));
+  const socketPath = join(dir, "helper.sock");
+  const server = await listenUnix(socketPath, { requestReadTimeoutMs: 30_000, fetchers: {} });
+  try {
+    const accepted = new Promise((resolve) => server.once("connection", resolve));
+    const client = connect(socketPath);
+    const socket = /** @type {import("node:net").Socket} */ (await accepted);
+    const raw = new Promise((resolve, reject) => {
+      let data = "";
+      client.on("data", (chunk) => { data += chunk; });
+      client.on("error", reject);
+      client.on("close", () => resolve(data));
+    });
+    trigger(server, socket, client);
+    const text = /** @type {string} */ (await raw);
+    const split = text.indexOf("\r\n\r\n");
+    assert.notEqual(split, -1);
+    return { head: text.slice(0, split), body: JSON.parse(text.slice(split + 4)) };
+  } finally {
+    await closeServer(server);
+    await rm(dir, { recursive: true, force: true });
+  }
 }

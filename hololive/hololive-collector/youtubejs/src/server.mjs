@@ -1,6 +1,6 @@
 // @ts-check
 import { chmodSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, STATUS_CODES } from "node:http";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -74,8 +74,31 @@ function attachHelperServer(runtime, requestReadTimeoutMs) {
   const server = createServer((req, res) => {
     void handleIncoming(req, res, runtime, server, requestReadTimeoutMs);
   });
+  server.on("clientError", answerClientError);
   applyServerLimits(server, requestReadTimeoutMs, 0);
   return server;
+}
+
+/**
+ * @param {Error & { code?: string }} err
+ * @param {import("node:stream").Duplex} socket
+ */
+function answerClientError(err, socket) {
+  if (!socket.writable || err.code === "ECONNRESET") {
+    socket.destroy();
+    return;
+  }
+  const failure = err.code === "ERR_HTTP_REQUEST_TIMEOUT"
+    ? rpcErrorResult(408, "collection_timeout", "TIMEOUT", "request timed out before it was read")
+    : rpcErrorResult(400, "invalid_request", "PROTOCOL", "malformed HTTP request");
+  const raw = encodeResponseBody(failure.body);
+  socket.end(
+    `HTTP/1.1 ${failure.status} ${STATUS_CODES[failure.status]}\r\n` +
+    "content-type: application/json; charset=utf-8\r\n" +
+    `content-length: ${Buffer.byteLength(raw)}\r\n` +
+    "connection: close\r\n\r\n" +
+    raw,
+  );
 }
 
 /**

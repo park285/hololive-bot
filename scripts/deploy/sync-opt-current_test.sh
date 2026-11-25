@@ -456,6 +456,8 @@ run_sync "${host}" "${base_repo}" --preserve-runtime ||
   { cat "${host}/out" >&2; fail "runtime-preserving sync failed"; }
 [[ "$(runtime_snapshot "${host}")" == "${runtime_before}" ]] ||
   fail "artifact-only sync changed runtime bytes, ownership or mode"
+writable_exec="$(cd "${host}/opt/current" && find . \( -path ./data -o -path ./logs -o -path ./backups -o -path ./runtime-config -o -path ./artifacts/worker-profile \) -prune -o -perm /022 -print -quit)"
+[[ -z "${writable_exec}" ]] || fail "artifact-only sync installed group- or other-writable execution files: ${writable_exec}"
 for backup in "${host}/opt/"current.bak-*; do
   [[ ! -e "${backup}/runtime-config" ]] || fail "artifact-only backup copied runtime configuration"
 done
