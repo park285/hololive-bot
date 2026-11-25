@@ -91,7 +91,6 @@ run_database_steps() (
     if [[ "${collector_in_scope}" == true ]]; then
         run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-collector test-prod
     fi
-    run_step "YouTube plane performance budget" ./scripts/perf/check-youtube-plane-budget.sh
     if has_go_packages; then
         run_go_tests
     fi

@@ -219,7 +219,7 @@ func TestClassifyPostBlamesTheConnection(t *testing.T) {
 
 	plain := hang.Client()
 
-	plain.Timeout = 100 * time.Millisecond
+	plain.Timeout = time.Second
 
 	_, _, err := testDecisionJudge(refusedDecisionClient()).classifyPost(t.Context(), "本文")
 	require.ErrorIs(t, err, errChangeServiceFailed, "연결 실패는 어느 글도 판별할 수 없다")

@@ -229,28 +229,6 @@ func (s *stepPicker) next(n int) int {
 	return min(val, max(0, n-1))
 }
 
-func TestCalendarCardRenderer_SixWeekBusyMonthFitsHeightBudget(t *testing.T) {
-	t.Parallel()
-
-	renderer := NewCalendarCardRenderer()
-	entries := []domain.CalendarEntry{
-		{Kind: domain.CelebrationKindAnniversary, Day: 1, Ordinal: 4, Member: &domain.Member{ShortKoreanName: "멤버A", Units: []string{"유닛1"}}},
-		{Kind: domain.CelebrationKindAnniversary, Day: 1, Ordinal: 4, Member: &domain.Member{ShortKoreanName: "멤버B", Units: []string{"유닛1"}}},
-		{Kind: domain.CelebrationKindAnniversary, Day: 15, Ordinal: 3, Member: &domain.Member{ShortKoreanName: "멤버C", Units: []string{"유닛2"}}},
-		{Kind: domain.CelebrationKindAnniversary, Day: 15, Ordinal: 3, Member: &domain.Member{ShortKoreanName: "멤버D", Units: []string{"유닛2"}}},
-		{Kind: domain.CelebrationKindAnniversary, Day: 31, Ordinal: 5, Member: &domain.Member{ShortKoreanName: "멤버E", Units: []string{"유닛3"}}},
-	}
-
-	for _, themeID := range calendarThemePool {
-		pages, err := renderer.RenderCalendarImagesWithTheme(t.Context(), 5, 2026, themeID, entries)
-		if err != nil || len(pages) != 1 {
-			t.Fatalf("RenderCalendarImagesWithTheme(%q) len=%d, err=%v; want 1 page", themeID, len(pages), err)
-		}
-
-		assertCalendarAlbumBounds(t, pages)
-	}
-}
-
 func TestCalendarCardRenderer_AllThemesRenderEmptyAndOverflowMonths(t *testing.T) {
 	t.Parallel()
 

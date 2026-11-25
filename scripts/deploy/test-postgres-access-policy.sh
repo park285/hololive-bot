@@ -5,7 +5,7 @@ if [[ -n "${CONTAINER_HOST:-}${CONTAINER_CONNECTION:-}" ]] || [[ "$(podman info 
   exit 2
 fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-image="${POSTGRES_POLICY_TEST_IMAGE:-localhost/hololive-postgres:prod}"
+image="${POSTGRES_POLICY_TEST_IMAGE:-docker.io/library/postgres@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188}"
 fixture="$(mktemp -d)"
 id="holo-policy-$(date +%s)-$$"
 server="${id}-server"
@@ -30,8 +30,8 @@ podman unshare chown -R 999:999 "$fixture/server"
 podman network create --internal --subnet 172.31.249.0/24 "$network" >/dev/null
 podman volume create --driver local --opt type=tmpfs --opt device=tmpfs \
   --opt o=size=16m,mode=3775,uid=999,gid=999 "$socket" >/dev/null
-podman run -d --name "$server" --pull never --security-opt label=disable --network "$network" --network-alias holo-postgres \
-  --tmpfs /var/lib/postgresql:rw,size=512m \
+podman run -d --name "$server" --pull never --user 999:999 --security-opt label=disable --network "$network" --network-alias holo-postgres \
+  --tmpfs /var/lib/postgresql:rw,size=512m,mode=0700,U \
   --mount "type=volume,src=$socket,dst=/var/run/postgresql" \
   --mount "type=bind,src=$fixture/server,dst=/fixture,readonly" \
   --mount "type=bind,src=$fixture/pg_hba.conf,dst=/policy/pg_hba.conf,readonly" \

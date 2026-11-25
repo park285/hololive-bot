@@ -5,8 +5,9 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 python3 - "$root" <<'PY'
 import hashlib
 import fcntl
-import json
 import os
+from concurrent.futures import ThreadPoolExecutor
+import json
 import socket
 import threading
 import re
@@ -1338,7 +1339,7 @@ runs += [('b', 'staged_' + scenario) for scenario in (
     'changed_seal', 'absent_hold', 'foreign_hold', 'missing_seal', 'other_owner', 'other_invocation', 'other_cid', 'old_start_cid',
     'candidate_check_failure', 'database_query_failure', 'profile_drift', 'wrong_window', 'wrong_boot', 'wrong_tool',
     'expire_after_stop', 'expire_after_unmask', 'expire_after_issuer', 'expired_late_notify_client', 'running_pooled_origin')]
-for slot, case in runs:
+def run_case(slot, case):
     expected_status, restored = central_cases.get(case, (0, False))
     service, port = slot_table[slot]['service'], int(slot_table[slot]['port'])
     slot_vars = slots[slot] + f'slot={slot} service="$slot_service" port="$slot_port" host_label="$slot_host"\n'
@@ -1519,7 +1520,7 @@ for slot, case in runs:
                         (hold / f'{issuer_unit}.stop-cid').is_file() and not (hold / 'quiesced').exists() and
                         not any(c.startswith('guard seal ') for c in calls) and active.read_text() == origin_pair,
                         'b: settle the submitted issuer stop; no second stop or seal after expiry', result)
-                continue
+                return
             if preflight_failure:
                 calls = calls_now()
                 expected_check = 'pair check-database' if scenario == 'database_query_failure' else 'pair check'
@@ -1530,13 +1531,13 @@ for slot, case in runs:
                             (state / f'{k}.runtime').read_text() == 'old' for k in ('collector', 'issuer')) and
                         not any(c.startswith(('guard arm ', 'systemctl stop ', held_start, 'pair activate ')) for c in calls),
                         f'{label}: incompatible profile or pooled preflight cannot stop the healthy W2 pair', result)
-                continue
+                return
             if scenario in ('archive_drift', 'partial_transport', 'origin_stale', 'other_owner', 'other_invocation', 'other_cid', 'unsafe_stage', 'running_pooled_origin'):
                 require(result.returncode != 0 and not hold.exists() and not backup.exists() and
                         all((state / f'{k}.running').read_text() == 'true' for k in ('collector', 'issuer')) and
                         not any(c.startswith(mutations) for c in calls_now()) and active.read_text() == expected_active,
                         f'{label}: staged bytes and admitted W2 owner proven before effects', result)
-                continue
+                return
             require(result.returncode == 0 and (hold / 'quiesced').read_text() == 'guarded-stop-v1\n' and
                     (backup / 'card-origin').read_text() == origin_pair and
                     (backup / 'transport.sha256').read_text().strip() == (state / 'trusted-seal').read_text(),
@@ -1582,20 +1583,20 @@ for slot, case in runs:
                         after.count(start) == 1 and not any(c.startswith(mutations) for c in after[after.index(start) + 1:]) and
                         active.read_text() == origin_pair, 'b: expired client failure retains the submitted and settled job without another writer action', result)
                 print(f'[PASS] {label}')
-                continue
+                return
             if scenario == 'expire_after_unmask':
                 require(result.returncode != 0 and '[OUTCOME] unconfirmed:' in result.stderr and masks[1].is_symlink() and
                         [c for c in after if c.startswith('systemctl unmask ')] == ['systemctl unmask ' + issuer_unit] and
                         not any(c.startswith((held_start, 'systemctl stop ', 'guard arm ')) for c in after),
                         'b: an admitted unmask does not authorize a start or rehold after expiry', result)
-                continue
+                return
             if scenario == 'expire_after_issuer':
                 require(result.returncode != 0 and '[OUTCOME] unconfirmed:' in result.stderr and
                         [c for c in after if c.startswith(held_start)] == [held_start + issuer_unit] and
                         (backup / f'resume-{issuer_unit}.start').is_file() and masks[1].is_symlink() and
                         f'systemctl unmask {collector_unit}' not in after and not any(c.startswith('systemctl stop ') for c in after),
                         'b: settle issuer start; collector remains masked and no expired rehold is submitted', result)
-                continue
+                return
             if scenario in ('absent_hold', 'foreign_hold', 'missing_seal', 'changed_seal', 'wrong_window', 'wrong_boot', 'wrong_tool', 'profile_drift'):
                 require(result.returncode != 0 and not any(c.startswith(mutations) for c in after) and
                         all(m.is_symlink() for m in masks) and active.read_text() == origin_pair,
@@ -1604,7 +1605,7 @@ for slot, case in runs:
                     refused = invoke('rollback')
                     require(refused.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
                             'b: rollback cannot substitute the staged tool receipt', refused)
-                continue
+                return
             require([c for c in after if c.startswith((held_start, 'systemctl restart '))] ==
                     [held_start + u for u in (issuer_unit, collector_unit)] and not any(
                         c.startswith('pair activate ') and c.endswith('/previous') for c in after),
@@ -1647,7 +1648,7 @@ for slot, case in runs:
                         all((state / f'{k}.runtime').read_text() == 'old' for k in ('issuer', 'collector')),
                         'b: separately authorized confirmed hold may restore admitted W2, not pre-card publisher', restored_pair)
             print(f'[PASS] {label}')
-            continue
+            return
         if case.startswith('maintenance_'):
             scenario = case.removeprefix('maintenance_')
             hold = state / f'po-{slot}.hold'
@@ -1684,7 +1685,7 @@ for slot, case in runs:
                         f'{slot}: refuse unrelated mask before snapshot', result)
                 require(masks[0].is_symlink() and not any(c.startswith(mutations) for c in calls_now()),
                         f'{slot}: unrelated mask untouched', result)
-                continue
+                return
             if scenario == 'lock_busy':
                 with (state / f'po-{slot}.lock').open('w') as lock_file:
                     (state / f'po-{slot}.lock').chmod(0o600)
@@ -1692,7 +1693,7 @@ for slot, case in runs:
                     result = invoke('quiesce')
                     require(result.returncode != 0 and not backup.exists() and not calls_now(),
                             f'{slot}: competing operation rejected by slot lock', result)
-                continue
+                return
             if scenario == 'foreign_guard':
                 guards[1].write_text('operator guard\n')
             if slot == 'c' and scenario == 'success':
@@ -1707,12 +1708,12 @@ for slot, case in runs:
                 require(result.returncode != 0 and not hold.exists() and
                         not any(c.startswith(('podman load ', 'systemctl stop ', held_start)) for c in calls_now()),
                         f'{slot}: wrong original route or retained candidate cannot open the migration window', result)
-                continue
+                return
             if scenario.startswith('load_'):
                 require(result.returncode != 0 and not hold.exists() and
                         not any(c.startswith(('mask link ', 'systemctl stop ', 'systemctl restart ')) for c in calls_now()),
                         f'{slot} {scenario}: changed live pair rejected before hold', result)
-                continue
+                return
             if scenario in ('guard_failure', 'guard_check_failure', 'foreign_guard', 'arm_collector_profile'):
                 require(result.returncode != 0 and '[OUTCOME] unconfirmed:' in result.stderr and
                         not (hold / 'quiesced').exists() and not any(c.startswith(('systemctl stop ', 'guard seal ', 'systemctl restart ')) for c in calls_now()),
@@ -1720,7 +1721,7 @@ for slot, case in runs:
                 if scenario == 'foreign_guard':
                     require(guards[1].read_text() == 'operator guard\n' and not any(m.is_symlink() for m in masks),
                             f'{slot}: foreign guard not replaced or adopted', result)
-                continue
+                return
             if scenario in ('collector_143', 'collected_143'):
                 evidence = (backup / 'guarded-stop.log').read_text()
                 outcome = evidence.split(f'unit={collector_unit} stop=true invocation={"1".zfill(32)}', 1)
@@ -1741,7 +1742,7 @@ for slot, case in runs:
                     refused = invoke(mode)
                     require(refused.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
                             f'{slot}: incomplete stop cannot release the pair', refused)
-                continue
+                return
             if scenario in ('mask_failure', 'stop_failure', 'stop_control_pid', 'stop_leftover_id'):
                 require(result.returncode != 0 and hold.exists() and (backup / 'snapshot-complete').exists(),
                         f'{slot} {scenario}: partial failure retains recovery', result)
@@ -1758,7 +1759,7 @@ for slot, case in runs:
                 rejected = invoke('resume')
                 require(rejected.returncode != 0 and not any(c.startswith(mutations) for c in calls_now()[before:]),
                         f'{slot} {scenario}: incomplete hold cannot resume', rejected)
-                continue
+                return
             require(result.returncode == 0, f'{slot} {scenario}: pooled original pair quiesced', result)
             assert_held(result)
             if scenario == 'success':
@@ -1877,7 +1878,7 @@ for slot, case in runs:
                         f'{slot}: cross-endpoint rollback refused under hold', result)
                 assert_held(result)
                 if scenario == 'rollback_cross':
-                    continue
+                    return
                 unit_path.write_text(installed_definition)
                 failed_restore = scenario in ('rollback_image', 'rollback_profile', 'rollback_unhealthy', 'rollback_issuer_failure', 'rollback_replaced')
                 before = len(calls_now())
@@ -1892,13 +1893,13 @@ for slot, case in runs:
                                 not (hold / 'quiesced').exists() and '[OUTCOME] unconfirmed:' in result.stderr,
                                 f'{slot}: held rollback never stops replacement or certifies it as the original', result)
                         assert_new_manager_blocks()
-                        continue
+                        return
                     assert_held(result)
                     reopened = [issuer_unit] if scenario == 'rollback_issuer_failure' else [issuer_unit, collector_unit]
                     require([c for c in calls_now()[before:] if c.startswith('guard arm ')] == [f'guard arm {u}' for u in reopened] and
                             (hold / 'quiesced').is_file() and (hold / 'quiesced').read_text() == 'guarded-stop-v1\n',
                             f'{slot}: failed manual rollback re-holds only opened units', result)
-                    continue
+                    return
                 require(result.returncode == 0 and not hold.exists() and all(not m.is_symlink() for m in masks),
                         f'{slot}: coordinated rollback releases owned masks', result)
                 require(all((state / f'{k}.runtime').read_text() == 'old' for k in ('issuer', 'collector')),
@@ -1984,7 +1985,7 @@ for slot, case in runs:
                                 require((state / 'notify.246s').is_file() and not (state / 'notify.pending').exists(),
                                         f'{label}: tracked collector job completed after 245s within its own limit', result)
                         assert_new_manager_blocks()
-                        continue
+                        return
                     if scenario == 'substitution_failure':
                         require('[OUTCOME] unconfirmed:' in result.stderr and not (hold / 'quiesced').exists() and
                                 not masks[0].is_symlink() and guards[0].is_file() and masks[1].is_symlink() and
@@ -2018,7 +2019,7 @@ for slot, case in runs:
                         require(not any(c.startswith(('systemctl restart ', 'systemctl unmask ')) for c in subsequent),
                                 f'{slot} {scenario}: validation fails before unmask or activation', result)
             print(f'[PASS] {slot} maintenance {scenario}')
-            continue
+            return
         manager_stop = threading.Event()
         manager = None
         if case == 'client_lost_pending':
@@ -2120,4 +2121,8 @@ for slot, case in runs:
         expected_issuer = 'new' if case in ('restore_failure', 'manager_probe_failure') else 'absent' if case == 'absent_candidate_check_failure' else expected_runtime
         require((state / 'issuer.runtime').read_text() == expected_issuer, f'{label}: issuer runtime', result)
         print(f'[PASS] {label}: exit={result.returncode}, collector={(state / "collector.runtime").read_text()}, issuer={(state / "issuer.runtime").read_text()}')
+
+with ThreadPoolExecutor(max_workers=len(os.sched_getaffinity(0))) as pool:
+    for future in [pool.submit(run_case, slot, case) for slot, case in runs]:
+        future.result()
 PY

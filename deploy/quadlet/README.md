@@ -293,6 +293,9 @@ binfmt가 필요)입니다.
   둡니다. `name:tag@sha256:<digest>` 형식은 Podman store에서 찾지 못해 `Pull=never` unit이 5초 간격 재시작만
   반복합니다. 값은 stack-secrets master(`hosts/hololive-seoul/hololive-bot/compose.env`)에 반영해 `sync-host.sh` 미러가
   되돌리지 않게 합니다. 교체는 load → build host identity 대조 → compose.env 갱신 → 승인된 restart 순서입니다.
+  이전 자체 image에서 공식 image로 바꿀 때는 새 unit 파일을 먼저 설치합니다. 이전 `valkey-cache` unit의 health check는
+  공식 image에 없는 `valkey-runtime`을 실행하므로 이 순서를 바꾸면 Valkey가 unhealthy로 재시작만 반복합니다.
+  PostgreSQL은 [확장 제거 절차](../../docs/current/runbooks/postgres-observability.md#공식-image-전환-전-확장-제거)를 먼저 끝냅니다.
 - PO issuer는 `:prod` tag를 따르며 `:prod`는 `scripts/deploy/lib/po-central-remote.sh`만 옮깁니다(`:candidate`로 적재해
   검증한 뒤 cutover에서 `:prod`로 옮기고, 실패하면 `:rollback-*`에서 되돌립니다). compose.env에
   `HOLOLIVE_YOUTUBE_PO_IMAGE`를 두지 않습니다. 빈 값도 unit 기본값을 덮어 기동이 실패하고, sha256으로 고정하면 이

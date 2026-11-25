@@ -71,7 +71,7 @@ trap 'exit 143' TERM
 exec 3>&2
 exec 2> >(tee "$evidence/stderr" >&3)
 postgres=docker.io/library/postgres@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
-valkey=localhost/iris-stack-valkey:9.1.3-zlib1.4-r2
+valkey=docker.io/valkey/valkey@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
 revision=$(git rev-parse HEAD)
 if [[ -z $binary ]]; then
     CGO_ENABLED=0 go build -p 2 -ldflags "-X main.Version=$revision" -o "$fixture/worker" ./hololive/hololive-alarm-worker/cmd/alarm-worker

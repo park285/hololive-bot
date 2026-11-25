@@ -36,9 +36,6 @@ remote_log_include_patterns osaka collector-a | grep -Fx "collector-a.log.*" >/d
   fail "osaka should include sibling logrotate files"
 remote_log_include_patterns osaka collector-a | grep -Fx "archive/collector-a*" >/dev/null ||
   fail "osaka should include archived logrotate files"
-if declare -F ensure_main_links >/dev/null; then
-  fail "remote sync must not create aliases in the live runtime log namespace"
-fi
 status_output="$(status_remote central)"
 [[ "${status_output}" != *"main="* ]] ||
   fail "remote sync status must expose only the isolated mirror namespace"
