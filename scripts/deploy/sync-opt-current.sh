@@ -219,7 +219,7 @@ for path in sorted(directories | files):
         sys.exit(f"unsafe installed coordinator authority: {path}")
 PY
 fi
-git -C "$REPO_ROOT" archive "$HEAD_REVISION" | tar -x -C "$STAGING"
+git -c tar.umask=0022 -C "$REPO_ROOT" archive "$HEAD_REVISION" | tar -x -C "$STAGING"
 printf '%s\n' "$HEAD_REVISION" >"$STAGING/.source-revision"
 log "staged tracked tree ($(find "$STAGING" -type f | wc -l) files)"
 

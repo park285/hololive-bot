@@ -6,6 +6,11 @@
 
 ## 미출시
 
+## r1.2.7 - 2026-11-25
+
+- **collector helper 연결 오류 응답:** youtube.js helper가 연결을 받은 뒤 2초(`headersTimeout`) 안에 요청 헤더를 다 읽지 못하면 Node 기본 처리로 본문 없는 `408`을 보냈습니다. collector는 이를 helper 프로토콜 불일치로 보고 런타임을 멈췄습니다(2026-11-25 배포 직후 부하가 높던 osaka1에서 두 번). 이제 helper는 연결 단계 오류도 프로토콜 JSON으로 답합니다. 시간 초과는 `collection_timeout`(TIMEOUT), 잘못된 HTTP는 `invalid_request`(PROTOCOL)이고, collector는 시간 초과를 다시 시도할 수 있는 실패로 처리합니다.
+- **중앙 소스 트리 동기화:** `sync-opt-current.sh --preserve-runtime`이 `git archive`의 기본 `tar.umask`(0002) 때문에 그룹 쓰기 권한으로 풀린 파일로 실행 트리 검증에서 실패했습니다. 스테이징을 `tar.umask=0022`로 만들어 모든 모드에서 실행 트리를 root만 쓸 수 있게 했습니다.
+
 ## r1.2.6 - 2026-11-25
 
 - **PostgreSQL 코드 규칙:** 다섯 모듈의 운영 SQL을 모두 `shared-go/postgres` v1.0.4의 `pgxdb.Statement`로 읽고 `pgxdb.Exec`·`Query`·`QueryRow`·`Queue`로 실행합니다. `sqlassets.MustStatementReader`가 `pgxdb.Statement`를 돌려주고 `sqlassets.WithFragment` 대신 `sqlassets.Fragment` 자리표시자와 `With`로 조각을 끼우며, `dbx.Tx`는 `pgxdb.Querier`를 품으며 `dbx.Statement.SQL`은 `pgxdb.Statement`입니다. Go 코드에서 조립하던 SQL은 `queries/*.sql`의 자리표시자와 `With`·`WithToken`으로 옮겼습니다. 433개 문장을 변경 전후로 비교해 양 끝 공백 말고는 같음을 확인했습니다. 스택 ast-grep 규칙 `go-postgres-conventions.yml` 대신 golangci-lint forbidigo가 pgx·pgxpool의 SQL 직접 실행, `BeginFunc`, 트랜잭션 직접 `Rollback`, `pgxpool.New`를 거부합니다. migration 실행·역할 bootstrap DDL, 행 수만큼 `VALUES`를 만드는 일괄 쓰기, 관리자 목록 필터만 `nolint`로 둡니다.
@@ -15,9 +20,3 @@
 
 - **AP a native 창 정리:** PgBouncer 퇴역 전환이 끝나 W1·W2 창을 지웠습니다. native 도구는 W3에서 수용된 원점만 받습니다. 퇴역 전환 절차 문서와 그 링크도 지웠습니다.
 - **인프라 image를 공식 image로 전환:** PostgreSQL·Valkey·nginx 자체 image와 빌드 recipe를 지우고 고정 digest의 공식 image(`postgres:19.0-alpine`, `valkey:9.1.3-alpine3.24`, `nginx:1.31.9-alpine-slim`)를 그대로 씁니다. 공식 image에 없는 `pg_stat_kcache`·`pg_wait_sampling` 설정을 unit에서 뺐고, Valkey health check는 `valkey-runtime` 대신 `valkey-cli`를 직접 실행합니다. 세 image는 주간 최종 image 스캔에서 빠집니다. 공식 image에는 아직 수정 전 Alpine 패키지(PostgreSQL의 libxml2 CVE-2026-86144 등)와 gosu의 Go 1.24.6 표준 라이브러리 보고가 남아 있습니다. 운영 전환은 [확장 제거 절차](docs/current/runbooks/postgres-observability.md#공식-image-전환-전-확장-제거)를 먼저 따릅니다.
-
-## r1.2.4 - 2026-11-25
-
-- **AP a 수용 readiness:** W3 수용 단계는 issuer가 준비된 뒤 collector `/ready`가 한 번 503을 돌려주면 바로 결과 불명으로 끝났습니다(2026-11-24 osaka1 정산 재개, youtube.js helper 응답 지연). 이제 기존 90초 한도 안에서 다시 확인하고, 한도가 지나면 지금처럼 결과 불명으로 끝납니다.
-- **AP a 수용 단계 정산:** `--settle`은 수용이 차단 정책을 확정하기 전(정책 `observing`, `accepted-window` 없음)에 결과 불명으로 끝난 창도 받아들이고, 관찰 기록·인계·`accepting`을 함께 보관한 뒤 다시 재개합니다. issuer가 다시 기동하지 못해 socket이 `trigger-limit-hit`으로 실패했으면 그 실패 기록을 확인하고 socket을 비활성으로 되돌립니다.
-
