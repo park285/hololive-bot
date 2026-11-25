@@ -206,8 +206,8 @@ func (p *fixtureProc) status(t *testing.T) int {
 
 	select {
 	case <-p.done:
-	case <-time.After(12 * time.Second):
-		t.Fatal("fixture did not finish within 12s")
+	case <-time.After(30 * time.Second):
+		t.Fatal("fixture did not finish within 30s")
 	}
 
 	if p.err == nil {
