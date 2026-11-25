@@ -54,10 +54,6 @@ func LoadRuntime() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("load collector runtime: %w", err)
 	}
 
-	if key, found := retiredCollectorEnvKey(os.Environ()); found {
-		return nil, fmt.Errorf("load collector runtime: env %s uses the retired YOUTUBE_COLLECTOR_ prefix; rename it to COLLECTOR_", key)
-	}
-
 	config, err := buildRuntimeConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load collector runtime: %w", err)
@@ -68,17 +64,6 @@ func LoadRuntime() (*RuntimeConfig, error) {
 	}
 
 	return config, nil
-}
-
-func retiredCollectorEnvKey(environ []string) (string, bool) {
-	for _, entry := range environ {
-		key, _, _ := strings.Cut(entry, "=")
-		if strings.HasPrefix(key, "YOUTUBE_COLLECTOR_") {
-			return key, true
-		}
-	}
-
-	return "", false
 }
 
 func buildRuntimeConfig() (*RuntimeConfig, error) {

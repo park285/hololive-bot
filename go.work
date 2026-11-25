@@ -11,6 +11,7 @@ use (
 	./hololive/hololive-collector
 	./hololive/hololive-dbtest
 	./hololive/hololive-shared
+	./scripts/scripttest
 )
 
 replace github.com/park285/shared-go/v2 v2.25.0 => ../shared-go

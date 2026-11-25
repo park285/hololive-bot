@@ -11,8 +11,9 @@ stack AGENTS.md의 기준에 따라 checker 자체 테스트, 문서 동기화�
 ## 실행 순서
 
 `scripts/architecture/ci-boundary-gate.sh`는 비밀·로컬 산출물 추적,
-SQL 안전 정책과 topology 설정 일치를
-검사한 뒤 환경 파일·health gate·서비스 선택·AP QUIC UDP 버퍼 판정·원격 로그 동기화의 동작 테스트를 실행합니다.
+SQL 안전 정책과 topology 설정 일치를 검사합니다.
+배포·로그·빌드 스크립트의 동작 시험은 Go 모듈 `scripts/scripttest`가 소유합니다. 각 패키지는 대상 스크립트를 임시 fixture에서 bash로 실행하고 결과와 부작용만 단언합니다.
+`local-ci-packages.sh`의 `scripttest_packages_for`가 바뀐 경로에 맞는 패키지만 고르며, 전체 범위에서는 모듈 전체를 실행합니다. `pre-push-gate.sh`의 `run_if_changed`에는 Python 스크립트 시험, 정기 보안 검사 계약 검사와 release version 검사만 남습니다.
 native 실행 권한 제한은 golangci-lint `depguard`가 맡습니다.
 
 Go 파일·함수 크기는 golangci-lint의 `revive` `file-length-limit`(비테스트 파일 800줄)과
@@ -47,7 +48,7 @@ Go 판본은 `go.work`가, 외부 소스는 workflow의 checkout SHA가 정합�
 import 위치·심볼 이름만 고정하던 shared-go·notification egress 소유권 검사는 제거했습니다.
 Go `internal` 경계와 실제 발송·저장 동작 시험을 유지하며, 제거한 이름을 찾는 별도 검사는 두지 않습니다.
 SQL 파일 위치·문서 문자열 검사도 두지 않습니다. `render-release-notes.sh`는 gate가 아닌 수동 기록 도구입니다.
-`source-revision-provenance_test.sh`는 checkout·image revision의 실제 판정만 시험하며,
+`scripts/scripttest/deployenv`의 source revision 시험은 checkout·image revision의 실제 판정만 확인하며,
 Dockerfile 문구를 고정하던 단언은 제거했습니다. 배포·로그·failover 시험은 실행 결과와 부작용을 검사하므로 유지합니다.
 
 ## 로컬 실행

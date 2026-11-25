@@ -78,8 +78,7 @@ if [[ "$staged_pair" == true ]]; then
     done
   )
   if [[ "$mode" == quiesce ]]; then
-    legacy_backup="${backup%/*}/card-po-b-$change_id"
-    [[ ! -e "$legacy_backup" && ! -L "$legacy_backup" && ! -e "$backup" && ! -L "$backup" ]] || exit 1
+    [[ ! -e "$backup" && ! -L "$backup" ]] || exit 1
   else
     [[ ! -L "$backup" && "$(stat -c '%u:%g %a' "$backup")" == '0:0 700' ]] || exit 1
   fi
@@ -160,7 +159,7 @@ require_unmasked_units() {
   local unit state
   for unit in "$issuer_unit" "$collector_unit"; do
     [[ ! -e "$system_unit_dir/$unit" && ! -L "$system_unit_dir/$unit" ]] || return 1
-    state="$(systemctl show -p LoadState --value "$unit")" || return
+    state="$(systemctl show -p LoadState --value "$unit")" || return "$?"
     [[ "$state" == loaded ]] || { echo "$unit is not an unmasked loaded unit" >&2; return 1; }
   done
 }
@@ -229,7 +228,7 @@ require_mask_inode() {
 
 stop_guard() {
   local op="$1" unit="$2" anchor
-  anchor="$(mask_anchor "$unit")" || return
+  anchor="$(mask_anchor "$unit")" || return "$?"
   require_mask_inode "$unit" "$anchor" || return 1
   local -a command=(python3 -I -B "$staging/scripts/deploy/lib/systemd-stop-guard.py" "$op" "$unit" "$anchor" "$(<"$hold/$unit")")
   case "$op" in
@@ -254,7 +253,7 @@ require_stopped_unit() {
   [[ -z "$job" && "$(systemctl show -p LoadState --value "$unit")" == masked &&
      "$(systemctl show -p MainPID --value "$unit")" == 0 &&
      "$(systemctl show -p ControlPID --value "$unit")" == 0 ]] || return 1
-  state="$(systemctl show -p ActiveState --value "$unit")" || return
+  state="$(systemctl show -p ActiveState --value "$unit")" || return "$?"
   if [[ "$state" != inactive ]]; then
     [[ "$unit" == "$issuer_unit" && "$state" == failed && -s "$hold/issuer-stop.invocation" ]] || return 1
     invocation="$(<"$hold/issuer-stop.invocation")"
@@ -294,14 +293,14 @@ record_confirmed_hold() {
 
 create_hold() {
   local unit anchor
-  mkdir -m 0700 -- "$hold" || return
-  printf '%s\n' "$backup" > "$hold/backup" || return
-  stat -c '%d:%i' "$backup/card-candidate" > "$hold/card-candidate" || return
+  mkdir -m 0700 -- "$hold" || return "$?"
+  printf '%s\n' "$backup" > "$hold/backup" || return "$?"
+  stat -c '%d:%i' "$backup/card-candidate" > "$hold/card-candidate" || return "$?"
   hold_owned=true
   for unit in "$issuer_unit" "$collector_unit"; do
-    anchor="$(mask_anchor "$unit")" || return
-    writer_change ln -sT -- /dev/null "$anchor" || return
-    stat -c '%d:%i' "$anchor" > "$hold/$unit" || return
+    anchor="$(mask_anchor "$unit")" || return "$?"
+    writer_change ln -sT -- /dev/null "$anchor" || return "$?"
+    stat -c '%d:%i' "$anchor" > "$hold/$unit" || return "$?"
   done
   sync -- "$backup/card-candidate" "$backup" "$hold/card-candidate" "$hold/backup" \
     "$hold/$issuer_unit" "$hold/$collector_unit" "$system_unit_dir" "$hold" "$remote_root"
@@ -456,7 +455,7 @@ release_unit() {
     rm -- "$hold/quiesced" && sync -- "$hold" || return 1
   fi
   release_attempted[$unit]=opening
-  writer_change systemctl unmask "$unit" || return
+  writer_change systemctl unmask "$unit" || return "$?"
   release_attempted[$unit]=opened
 }
 
@@ -574,9 +573,9 @@ clear_hold() {
     require_mask_inode "$unit" "$anchor" || return 1
     if [[ -v 'launched_inv[$unit]' ]]; then require_launched_unit "$unit" || return 1; fi
   done
-  retired="$(mktemp -d -- "$remote_root/.po-$slot-released.XXXXXX")" || return
+  retired="$(mktemp -d -- "$remote_root/.po-$slot-released.XXXXXX")" || return "$?"
   trap '' INT TERM HUP
-  writer_change mv -T -- "$hold" "$retired/hold" || return
+  writer_change mv -T -- "$hold" "$retired/hold" || return "$?"
   hold="$retired/hold"
   hold_owned=false
   trap 'echo "activation verified; retired hold cleanup incomplete" >&2' ERR
@@ -637,7 +636,7 @@ prepare_candidate_pair() {
       [[ "$(<"$current/.source-revision")" == "$revision" ]] || return 1
     else
       cmp -- "$staging/$slot_unit_dir/$collector_container.container" \
-        "$unit_dir/$collector_container.container" || return
+        "$unit_dir/$collector_container.container" || return "$?"
     fi
     [[ "$slot" != c ]] || env_file="${compose_env:-/etc/stack-secrets/hololive-bot/compose.env}"
     if [[ "$slot" == c ]]; then expected='holo-postgres|5432'; else expected='100.100.1.8|5433'; fi
@@ -668,12 +667,12 @@ validate_candidate_pair() {
 
 image_id() {
   local id
-  id="$(podman image inspect -f '{{.Id}}' "$1")" || return
+  id="$(podman image inspect -f '{{.Id}}' "$1")" || return "$?"
   printf 'sha256:%s\n' "$id"
 }
 container_image_id() {
   local id
-  id="$(podman inspect -f '{{.Image}}' "$1")" || return
+  id="$(podman inspect -f '{{.Image}}' "$1")" || return "$?"
   printf 'sha256:%s\n' "$id"
 }
 image_label() {
@@ -745,8 +744,8 @@ restore_collector_base_unit() {
   local recorded="$profile_release/previous/unit.container" installed="$unit_dir/$collector_container.container" tmp
   [[ -f "$recorded" ]] || { echo "[WARN] $recorded is missing; the installed collector unit definition stays as is" >&2; return 0; }
   ! cmp -s -- "$recorded" "$installed" || return 0
-  cp -p -- "$installed" "$profile_release/rollback-replaced-$collector_container.container" || return
-  tmp="$(mktemp "$unit_dir/.$collector_container.container.XXXXXX")" || return
+  cp -p -- "$installed" "$profile_release/rollback-replaced-$collector_container.container" || return "$?"
+  tmp="$(mktemp "$unit_dir/.$collector_container.container.XXXXXX")" || return "$?"
   if ! install -m 0644 -- "$recorded" "$tmp" || ! writer_change mv -f -- "$tmp" "$installed"; then
     rm -f -- "$tmp"
     return 1
@@ -764,9 +763,9 @@ collector_rollback_endpoint_validate() {
   local env_file=- current_endpoint previous_endpoint
   [[ "$slot" != c ]] || env_file="${compose_env:-/etc/stack-secrets/hololive-bot/compose.env}"
   [[ -f "$recorded" ]] || recorded="$installed"
-  current_endpoint="$(postgres_endpoint_quadlet "$installed" "$env_file")" || return
-  previous_endpoint="$(postgres_endpoint_quadlet "$recorded" "$env_file" "$installed")" || return
-  postgres_endpoint_require_same "$current_endpoint" "$previous_endpoint" || return
+  current_endpoint="$(postgres_endpoint_quadlet "$installed" "$env_file")" || return "$?"
+  previous_endpoint="$(postgres_endpoint_quadlet "$recorded" "$env_file" "$installed")" || return "$?"
+  postgres_endpoint_require_same "$current_endpoint" "$previous_endpoint" || return "$?"
   [[ -s "$backup/collector.endpoint" ]] || return 1
   postgres_endpoint_require_same "$current_endpoint" "$(<"$backup/collector.endpoint")"
 }
@@ -883,18 +882,18 @@ restore() {
   if [[ "$slot" == c ]]; then
     local previous_unit="$profile_release/previous/unit.container"
     [[ -f "$previous_unit" ]] || previous_unit="$unit_dir/$collector_container.container"
-    postgres_capacity_assert_service "$staging" "$compose_env" "$unit_dir" "$collector_container" "$previous_unit" || return
+    postgres_capacity_assert_service "$staging" "$compose_env" "$unit_dir" "$collector_container" "$previous_unit" || return "$?"
   fi
-  if [[ "$hold_owned" == true ]]; then require_held_units || return; fi
+  if [[ "$hold_owned" == true ]]; then require_held_units || return "$?"; fi
   if [[ "$staged_pair" == true ]]; then claim_staged_attempt || return 1; fi
-  writer_change python3 "$pair_tool" activate "$service" "$profile_release/previous" "$current" || return
-  restore_collector_base_unit || return
-  writer_change podman tag "$collector_rollback" "$collector" || return
-  writer_change systemctl daemon-reload || return
+  writer_change python3 "$pair_tool" activate "$service" "$profile_release/previous" "$current" || return "$?"
+  restore_collector_base_unit || return "$?"
+  writer_change podman tag "$collector_rollback" "$collector" || return "$?"
+  writer_change systemctl daemon-reload || return "$?"
   if [[ "$state" == present ]]; then
-    writer_change podman tag "$issuer_rollback" "$issuer" || return
-    writer_change install -D -m 0644 "$backup/po-prechange-manifest.json" "$current/$manifest" || return
-    writer_change install -D -m 0644 "$backup/po-prechange.image-id" "$current/$image_id_file" || return
+    writer_change podman tag "$issuer_rollback" "$issuer" || return "$?"
+    writer_change install -D -m 0644 "$backup/po-prechange-manifest.json" "$current/$manifest" || return "$?"
+    writer_change install -D -m 0644 "$backup/po-prechange.image-id" "$current/$image_id_file" || return "$?"
     if [[ "$hold_owned" == true ]]; then
       release_unit "$issuer_unit"
     fi
@@ -910,11 +909,11 @@ restore() {
     if [[ "$state" == present ]]; then require_launched_unit "$issuer_unit"; fi
     release_unit "$collector_unit"
   fi
-  start_slot_unit "$collector_unit" || return
-  verify_collector_runtime "$old_revision" "$(<"$backup/collector-prechange.image-id")" || return
-  python3 "$pair_tool" verify-live "$service" "$profile_release/previous" "$collector_container" || return
-  postgres_endpoint_require_same "$(collector_database_endpoint "$collector_container")" "$(<"$backup/collector.endpoint")" || return
-  publish_card_pair "$backup/card-origin" || return
+  start_slot_unit "$collector_unit" || return "$?"
+  verify_collector_runtime "$old_revision" "$(<"$backup/collector-prechange.image-id")" || return "$?"
+  python3 "$pair_tool" verify-live "$service" "$profile_release/previous" "$collector_container" || return "$?"
+  postgres_endpoint_require_same "$(collector_database_endpoint "$collector_container")" "$(<"$backup/collector.endpoint")" || return "$?"
+  publish_card_pair "$backup/card-origin" || return "$?"
   if [[ "$hold_owned" == true ]]; then
     if [[ "$state" == absent ]]; then release_unit "$issuer_unit"; fi
     clear_hold

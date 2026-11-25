@@ -11,7 +11,7 @@ StartLimitIntervalSec=0
 ContainerName=holo-postgres
 Image=${POSTGRES_IMAGE}
 Pull=never
-# alpine 이미지의 postgres는 uid 70이지만 스택 공통으로 999를 쓴다(TwentyQ·ChatBotGo와 동일).
+# alpine 이미지의 postgres는 uid 70이지만 스택 공통으로 999를 쓴다(ChatBotGo와 동일).
 User=999
 Group=999
 # 호스트 ID와 분리한다(크기는 스택 공통 65536). data·socket·TLS는 :idmap으로 on-disk 999를 그대로 쓴다.

@@ -15,7 +15,7 @@ native_release_dir_resolve() {
   local current_link="$3"
   local root_real release_dir release_real current_real
 
-  native_release_id_validate "$release_id" || return
+  native_release_id_validate "$release_id" || return "$?"
   root_real="$(realpath -e -- "$releases_root" 2>/dev/null)" || {
     echo "host-native releases root is unavailable: $releases_root" >&2
     return 1

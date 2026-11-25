@@ -32,13 +32,3 @@ func TestLoadRuntimeRejectsInvalidEnvValues(t *testing.T) {
 		})
 	}
 }
-
-func TestLoadRuntimeRejectsRetiredCollectorEnvPrefix(t *testing.T) {
-	setYouTubeCollectorRuntimeLoadEnv(t)
-	t.Setenv("YOUTUBE_COLLECTOR_MAX_PAGES", "3")
-
-	_, err := LoadRuntime()
-	if err == nil || !strings.Contains(err.Error(), "YOUTUBE_COLLECTOR_MAX_PAGES") {
-		t.Fatalf("LoadRuntime() error = %v, want rejection naming YOUTUBE_COLLECTOR_MAX_PAGES", err)
-	}
-}

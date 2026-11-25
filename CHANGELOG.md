@@ -6,6 +6,14 @@
 
 ## 미출시
 
+- **PostgreSQL major 전환 도구 퇴역:** 18→19 전환이 끝나 `pg-major-upgrade.sh`, 전역 객체·지문·default ACL 정리 SQL, 전환 런북과 prestart의 `.pg-major.pending` 처리를 지웠습니다. 빈 cluster 옆에 이전 cluster volume이 있으면 기동을 거부하는 검사는 유지합니다.
+- **collector 구 이름 키 거부 퇴역:** 이름 전환이 끝나 compose env 검사와 collector 기동이 `YOUTUBE_COLLECTOR_*` 구 키를 따로 거부하지 않습니다.
+- **TwentyQ 게시 포트 방화벽 규칙 제거:** TwentyQ를 stack에서 내리면서 중앙 방화벽(`admin-dashboard-ingress.nft`)의 5458 허용·거부 규칙과 운영 문서의 `twentyq-postgres` 기동·정지 안내를 지웠습니다. 적용은 다음 중앙 배포의 방화벽 reload입니다.
+- **AP native 배포의 구 cache 키 거부 퇴역:** osaka1 `collector.env`에 `CACHE_*` 키가 없어, native 배포가 이 키를 이유로 거부하던 검사를 지웠습니다.
+- **b 정지의 구 backup 이름 검사 퇴역:** quiesce가 이제 같은 change의 `card-po-b-<change>` 구 backup 경로를 따로 확인하지 않고, 새 backup 경로만 비어 있는지 확인합니다.
+- **신호 처리 중 복원 실패 보고:** 배포 도구가 신호 trap 안에서 복원할 때, 인수 없는 `return`이 bash 규칙에 따라 trap 이전의 성공 상태를 돌려줘 guard 해제 실패 같은 오류를 성공으로 처리할 수 있었습니다. 중앙·b·native 배포 라이브러리의 해당 `return`이 실제 실패 상태를 돌려주도록 고쳤습니다.
+- **AP a 정지 창 퇴역:** W3 수용이 끝나 `osaka --quiesce`·`--resume`·`--settle`·`--install-initial`을 지웠습니다. native 도구는 `--dry-run`·`--apply`·`--prepare-profile`만 받습니다. 분리 정지 창, collector 이름 전환, webhook nonce 저장소 전환 절차 문서도 지웠습니다.
+
 ## r1.2.7 - 2026-11-25
 
 - **collector helper 연결 오류 응답:** youtube.js helper가 연결을 받은 뒤 2초(`headersTimeout`) 안에 요청 헤더를 다 읽지 못하면 Node 기본 처리로 본문 없는 `408`을 보냈습니다. collector는 이를 helper 프로토콜 불일치로 보고 런타임을 멈췄습니다(2026-11-25 배포 직후 부하가 높던 osaka1에서 두 번). 이제 helper는 연결 단계 오류도 프로토콜 JSON으로 답합니다. 시간 초과는 `collection_timeout`(TIMEOUT), 잘못된 HTTP는 `invalid_request`(PROTOCOL)이고, collector는 시간 초과를 다시 시도할 수 있는 실패로 처리합니다.

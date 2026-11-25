@@ -69,7 +69,7 @@ Phase 0은 진행 여부를 판단하는 단계입니다. 느린 묶음마다 CP
    - 호출 순서 단언
 
    테스트는 실행 결과와 부작용만 단언하고, 스크립트 본문 문자열은 단언하지 않습니다.
-3. **호스트 의존 테스트**는 build tag `hosttest`로 분리합니다. 대상은 systemd user bus, `systemd-run`, rootless podman 이미지 빌드가 필요한 테스트입니다. pre-push는 kapu에서 `-tags hosttest`로 실행하고, GitHub CI는 태그 없이 실행합니다. 태그 파일도 vet 대상에 넣습니다. `t.Skip`으로 숨기지 않습니다.
+3. **호스트 의존 테스트**도 같은 모듈에 태그 없이 둡니다. 모듈을 GitHub CI matrix에 넣지 않는 동안에는 kapu의 local-ci만 실행하므로 build tag가 필요 없습니다. 이미지 빌드처럼 무거운 테스트는 별도 패키지(`imagepermissions`)로 나눠 입력이 바뀔 때만 고릅니다. matrix에 넣기로 하면 그때 태그를 도입합니다. `t.Skip`으로 숨기지 않습니다.
 4. **변경 범위 선택**은 `scripts/ci/local-ci-packages.sh`의 `configure_go_packages`가 맡습니다. 이 함수에 경로→scripttest 패키지 매핑을 추가하고, 각 패키지의 입력에는 지금의 `run_if_changed` 입력 목록을 그대로 옮깁니다. 이렇게 하면 AP 묶음은 지금처럼 AP 관련 입력이 바뀔 때만 실행됩니다.
 5. **GitHub CI에는 기본적으로 넣지 않습니다.** 지금처럼 로컬 pre-push에서 변경 범위에 따라서만 실행합니다. `ci.yml`의 `go-modules` matrix는 모든 PR에서 모듈 전체를 범위 구분 없이 실행하므로, 여기에 넣으면 게이트가 오히려 늘어납니다. matrix와 `public-pr-go-gate.sh` 허용 목록에 추가할지는 사용자가 정합니다(미결). 모듈 tidy·vet·lint는 local-ci의 `GO_OWNED_MODULES` 경로로 검사합니다.
 6. **케이스는 `t.Run`과 `t.Parallel`로 실행합니다.** 일부 케이스는 스크립트의 대기 루프에 걸릴 수 있습니다. 예를 들어 `quadlet-redeploy-service.sh`의 `started_generation`은 0.25초 간격으로 polling하고, `quadlet-prestart.sh`의 tailnet 대기는 1초씩 90회 반복합니다. 이런 케이스는 Phase 0 프로파일로 찾아내고, 가짜 명령이 기대 상태를 바로 돌려주게 만듭니다. 테스트를 위해 스크립트에 설정을 추가하지는 않습니다.
@@ -80,7 +80,7 @@ Phase 0은 진행 여부를 판단하는 단계입니다. 느린 묶음마다 CP
 |---|---|---|---|
 | `deploy/env` | `test-compose-env.sh`, `test-compose-services.sh`, `lib/require-quic-udp-buffer_test.sh`, `lib/public-bind-mounts_test.sh`, `lib/youtubejs-node-version_test.sh`, `source-revision-provenance_test.sh`, `hololive-api/scripts/test-bot-env-loader.sh` | 1 | `perf/gate-speedup`(`test-compose-services` 실행 위치) |
 | `logs` | `daily-rollup-logs_test.sh`, `test-stream-mirror-retention.sh`, `test-remote-sync-main-logs.sh` | 1 | `perf/gate-speedup` |
-| `build` | `build-all_test.sh`, `build-hololive-collector-go_test.sh`, `image-runtime-tree-permissions_test.sh`(hosttest) | 1 | 대상 `build-all.sh`만 여러 브랜치가 수정 |
+| `buildscripts`, `collectorartifact`, `imagepermissions` | `build-all_test.sh`, `build-hololive-collector-go_test.sh`, `image-runtime-tree-permissions_test.sh` | 1 | 대상 `build-all.sh`만 여러 브랜치가 수정 |
 | `runtime` | `set-iris-base-url_test.sh` | 1 | 없음 |
 | `deploy/prestart` | `admin-bind_test.sh`, `pg-major-upgrade_test.sh` | 2 | 경합 브랜치 전부 |
 | `deploy/syncopt` | `sync-opt-current_test.sh`, `verify-exec-tree-ownership_test.sh` | 2 | 경합 브랜치 전부 |
@@ -99,33 +99,36 @@ Phase 0은 진행 여부를 판단하는 단계입니다. 느린 묶음마다 CP
 
 - [ ] `perf/gate-speedup`이 main에 합쳐진 것을 확인합니다. 이 브랜치는 pre-push 병렬 실행, 중복 실행 제거, `collector-cutover-failure_test.sh` 수정을 커밋하지 않은 상태로 진행 중입니다.
 - [ ] Phase 2·3은 `perf/db-stage0`과 `perf/audit-fadeout`이 합쳐지거나 폐기된 뒤 시작합니다. 시작할 때 경합 브랜치 목록을 다시 확인합니다.
-- [ ] `tools/ops/stack-worktree.sh add <branch> hololive-bot`로 작업 worktree를 만들고, 이 계획 파일을 그 브랜치로 옮깁니다.
+- [x] `test/gate-script-tests-go` worktree를 만들었습니다(기준 origin/main `0794e2307`).
 - [ ] 이관 전 기준선을 기록합니다. 27개 테스트 각각의 시간(3회)과 케이스 라벨 목록(`[PASS]`·`require`·`fail` 메시지)을 남깁니다.
 - [ ] 느린 세 묶음(AP native, quadlet-redeploy, admin-bind)에서 어느 케이스와 대기가 시간을 쓰는지 분해합니다. CPU 시간과 벽시계 시간도 비교하고, 진행 여부와 목표 시간을 이 문서에 적습니다.
 - [ ] race 시험과 govulncheck를 포함한 full pre-push 전체 시간을 측정해, 셸 테스트가 차지하는 비율을 확정합니다.
 
 ### Phase 1: 모듈, harness, 배선, 소형 테스트
 
-- [ ] 모듈, `go.work`·`go.work.sum`, `configure_go_packages` 매핑, pre-push의 `go test` 실행(`-timeout` 명시), `hosttest` 실행·vet 경로를 추가합니다.
-- [ ] 표의 Phase 1 테스트를 이관합니다. 각 이관 커밋에서 옛 셸 파일과 `run_if_changed`·`ci-boundary-gate.sh` 항목을 함께 지웁니다.
+- [x] 모듈 `scripts/scripttest`(표준 라이브러리만), `go.work`, `configure_go_packages`의 `scripttest_packages_for` 매핑을 추가했습니다. 기존 local-ci의 race 시험·golangci-lint·NilAway·tidy·vet 경로가 그대로 적용되므로 pre-push에 별도 `go test` 실행은 두지 않았습니다. `go.work.sum`은 바뀌지 않습니다.
+- [x] Phase 1 셸 테스트 14개를 패키지 `deployenv`, `logscripts`, `buildscripts`, `collectorartifact`, `imagepermissions`, `runtimescripts`로 옮기고, 옛 셸 파일과 `run_if_changed`·`ci-boundary-gate.sh` 항목을 지웠습니다.
+  - 대상 스크립트를 비운 상태에서 각 패키지가 실패하는 것을 확인했습니다. `compose-env`는 원래 셸 테스트와 같은 결함 주입에서 둘 다 실패했습니다.
+  - `test-remote-sync-main-logs.sh`의 제거 함수 재등장 검사(`ensure_main_links`)와 `test-bot-env-loader.sh`의 퇴역 옵션 이름은 옮기지 않았습니다. 후자는 일반 미지 인자 거부 동작으로 바꿔 시험합니다.
+  - 이 패키지들은 `build-all.sh`가 실행하는 전체 범위 local-ci에도 포함됩니다. `hololive-shared`·`hololive-dbtest`·migration 변경은 제품 모듈 전체를 고르지만 `scripts/scripttest`는 고르지 않습니다.
 
 ### Phase 2: 중형 테스트
 
 경합 브랜치가 정리된 뒤 진행합니다.
 
-- [ ] `admin-bind`와 `pg-major-upgrade`를 이관합니다.
-- [ ] `sync-opt-current`와 `verify-exec-tree-ownership`을 이관합니다.
-- [ ] `quadlet-redeploy-service`를 이관합니다.
+- [x] `admin-bind`를 이관했습니다. PostgreSQL 18→19 전환이 끝나 `pg-major-upgrade.sh`와 그 시험은 이관하지 않고 지웠습니다.
+- [x] `sync-opt-current`와 `verify-exec-tree-ownership`을 이관했습니다.
+- [x] `quadlet-redeploy-service`를 이관했습니다.
 
 ### Phase 3: AP native 묶음 병합
 
-- [ ] 세 파일은 `ap-host-native-remote-apply.sh`와 `po-central-remote.sh`의 함수를 정규식이나 awk로 잘라 실행합니다. 이 추출을 harness 한 곳으로 모으고, 같은 함수와 같은 시나리오를 검사하는 케이스는 하나로 합칩니다.
-- [ ] 원격 적용 스크립트를 source할 수 있게 바꿀 수 있는지 확인합니다. 이 스크립트들은 `ssh`의 `bash -s` 본문으로 전송될 수 있어서 구조가 충돌할 수 있습니다. 바꿀 수 없으면 함수 추출 방식을 유지합니다.
-- [ ] 중첩 실행을 없앱니다.
+- [x] `po-central-remote.sh` 함수 추출은 `pocentral` 패키지 한 곳으로 모았습니다. 사례는 1:1로 옮겼고 합치지 않았습니다.
+- [x] 원격 적용 스크립트는 `ssh`의 `bash -s` 본문으로 전송되므로 구조를 바꾸지 않고, 시험도 같은 방식으로 stdin에 본문을 넣어 실행합니다.
+- [x] 중첩 실행을 없앴습니다. AP a 분리 정지 창(`osaka --quiesce`·`--resume`·`--settle`·`--install-initial`)은 전환이 끝나 시험과 함께 퇴역했고, 수용 창 검사(`ap-host-native-window.sh`)를 포함한 나머지는 `apnative`와 `pocentral` 패키지로 옮겼습니다. `collector-cutover-failure_test.sh`의 Python 사례 254개는 `pocentral` subtest로 옮겼으며 이름이 바뀐 사례는 `legacy_receipt`→`blank_receipt`, `running_pooled_origin`→`running_other_endpoint_origin` 두 개입니다.
 
 ### Phase 4: 정리
 
-- [ ] `ci-gates.md`, README의 검증 절, runbook과 skill에 남은 옛 테스트 경로 참조를 갱신합니다.
+- [x] `ci-gates.md`, README의 검증 절, runbook에 남은 옛 테스트 경로 참조를 갱신했습니다. stack의 hololive-bot-ops skill 참조에는 옛 경로가 없었습니다.
 - [ ] 마지막에 `git grep`으로 옛 경로 참조가 하나도 남지 않았는지 확인합니다.
 
 ## 검증

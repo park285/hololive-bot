@@ -24,7 +24,6 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     secrets_dir=/etc/stack-secrets/hololive-bot
     installed_firewall=/etc/nftables.d/admin-dashboard-ingress.nft
     quadlet_dir=/etc/containers/systemd/hololive-bot
-    pg_major_marker=/var/lib/hololive-bot/.pg-major.pending
 else
     test_root="${HOLOLIVE_QUADLET_TEST_ROOT:?non-root execution is only for tests and requires HOLOLIVE_QUADLET_TEST_ROOT}"
     deploy_root="${test_root}/deploy"
@@ -34,7 +33,6 @@ else
     secrets_dir="${test_root}/secrets"
     installed_firewall="${test_root}/installed.nft"
     quadlet_dir="${test_root}/units"
-    pg_major_marker="${test_root}/var/lib/hololive-bot/.pg-major.pending"
 fi
 central_slot="$(collector_slots_where host central)" && [[ "$central_slot" =~ ^[a-z]$ ]] ||
     die "central collector slot is missing from $(collector_slots_file)"
@@ -114,20 +112,8 @@ wait_for_tailnet_address() {
     die "tailscale0 does not carry ${name}=${address} after 90s"
 }
 
-pg_major_phase() {
-    [[ -e "$pg_major_marker" || -L "$pg_major_marker" ]] || return 1
-    [[ -f "$pg_major_marker" && ! -L "$pg_major_marker" ]] \
-        || die "PostgreSQL major upgrade marker is not a regular file: ${pg_major_marker}"
-    sed -n 's/^phase=//p' "$pg_major_marker"
-}
-
 assert_postgres_data_volume() {
-    local volume_unit="${quadlet_dir}/holo-pg-data.volume" phase target mountpoint volumes name
-    if phase="$(pg_major_phase)"; then
-        [[ "$phase" == restore ]] \
-            || die "PostgreSQL major upgrade in progress (phase ${phase:-unknown}); holo-postgres stays stopped. Inspect ${pg_major_marker}"
-        return 0
-    fi
+    local volume_unit="${quadlet_dir}/holo-pg-data.volume" target mountpoint volumes name
     target="$(sed -n 's/^VolumeName=//p' "$volume_unit")"
     [[ -n "$target" ]] || die "VolumeName is missing from ${volume_unit}"
     mountpoint="$(podman volume inspect --format '{{.Mountpoint}}' "$target")" \
@@ -136,7 +122,7 @@ assert_postgres_data_volume() {
     volumes="$(podman volume ls --format '{{.Name}}')" || die "cannot list Podman volumes"
     while IFS= read -r name; do
         if [[ "$name" =~ ^hololive-bot_holo-pg-data[0-9]*$ && "$name" != "$target" ]]; then
-            die "PostgreSQL volume ${target} has no cluster while ${name} holds a previous one; run scripts/deploy/pg-major-upgrade.sh instead of starting an empty cluster"
+            die "PostgreSQL volume ${target} has no cluster while ${name} holds a previous one; restore that cluster before starting an empty one"
         fi
     done <<<"$volumes"
 }

@@ -31,8 +31,8 @@ native_rollback_endpoint_validate() {
     echo '정지 창이 퇴역시킨 native release는 endpoint가 같아도 복원할 수 없습니다.' >&2
     return 1
   }
-  previous_endpoint="$(native_root_endpoint "$previous_target/rollback-contract/${slot_host_env##*/}")" || return
-  current_endpoint="$(native_root_endpoint "$current_env")" || return
+  previous_endpoint="$(native_root_endpoint "$previous_target/rollback-contract/${slot_host_env##*/}")" || return "$?"
+  current_endpoint="$(native_root_endpoint "$current_env")" || return "$?"
   postgres_endpoint_require_same "$current_endpoint" "$previous_endpoint"
 }
 

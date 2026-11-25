@@ -56,10 +56,6 @@ compose_env_validate_file_format() {
                 print "[ERROR] Duplicate env key: " FILENAME ":" NR > "/dev/stderr"
                 exit 1
             }
-            if (key == "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR" || key ~ /^(HOLOLIVE_)?YOUTUBE_COLLECTOR_/) {
-                print "[ERROR] Env key uses the retired youtube collector name; rename it to the collector name: " FILENAME ":" NR > "/dev/stderr"
-                exit 1
-            }
         }
     ' "${env_file}"
 }

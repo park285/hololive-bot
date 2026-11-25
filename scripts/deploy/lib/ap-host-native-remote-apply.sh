@@ -24,18 +24,12 @@ unit_file="/etc/systemd/system/${slot_collector_unit%%@*}@.service"
 unit="$slot_collector_unit"
 po_apply_lib="$payload/bin/ap-host-native-po.sh"
 worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
-swapfile="/swapfile"
 window_action="${9:?native command required}"
-# shellcheck disable=SC2034
-window_name="${10:-}" window_old="${11:-}" window_digest="${12:-}" window_nonce="${13:-}"
-same_window=false
-settled=false
-if [[ "$window_action" == same-window || "$window_action" == apply-origin || "$window_action" == apply-accepted ]]; then
-  [[ "$(hostname -s)" == osaka1 && "$service" == "$slot_service" ]]
-  native_release_id_validate "$release_id"
-  release_dir="$releases_root/$release_id" window="$releases_root/$release_id/native-observation"
-  window_units=("$po_socket" "$po_service" "$unit")
-fi
+window_old="" window_digest="" window_nonce=""
+[[ "$(hostname -s)" == osaka1 && "$service" == "$slot_service" ]]
+native_release_id_validate "$release_id"
+release_dir="$releases_root/$release_id" window="$releases_root/$release_id/native-observation"
+window_units=("$po_socket" "$po_service" "$unit")
 collector_readiness_fetch() {
   systemctl is-active --quiet "$unit" || return 1
   sudo -n -u hololive env \
@@ -46,7 +40,6 @@ collector_readiness_fetch() {
 native_deployment_inputs() {
   sudo -n test -r /etc/stack-secrets/hololive-bot/collector.env
   sudo -n test -r "$worker_profile"
-  sudo -n awk '/^CACHE_(PASSWORD|HOST|PORT|DB|SOCKET_PATH)=/ {exit 1}' /etc/stack-secrets/hololive-bot/collector.env
   sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
   sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
   sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
@@ -97,10 +90,6 @@ native_same_window_baseline() {
 }
 
 case "$window_action" in
-  quiesce) [[ $# == 13 && -z "$window_nonce" ]]; native_window_quiesce; exit ;;
-  resume) [[ $# == 13 && -n "$window_nonce" ]]; native_window_resume_claim ;;
-  settle) [[ $# == 13 && -n "$window_nonce" ]]; native_window_settle; window_action=resume settled=true ;;
-  accepted|observation-failed) [[ $# == 13 && -n "$window_nonce" ]]; native_window_close_observation; exit ;;
   apply-origin)
     [[ $# == 13 && ! -e "$payload" && ! -L "$payload" ]]
     apply_origin_pin="$(native_apply_preflight)"
@@ -118,37 +107,21 @@ case "$window_action" in
     profile_digest="$(native_file_digest "$payload/${slot_host_env##*/}")"
     issuer_digest="$(native_file_digest "$payload/$po_service")"
     native_same_window_baseline "$profile_digest" "$(native_file_digest "$payload/${unit_file##*/}")" "$issuer_digest" "$(native_file_digest "$payload/$po_socket")" >&2
-    window_action=deploy same_window=true ;;
-  apply-accepted) [[ $# == 10 ]]; window_nonce="${10}"; native_apply_close_observation; exit ;;
-  deploy)
-    remote_host="$(hostname -s)"
-    [[ $# == 9 && -n "$remote_host" && "$remote_host" != osaka1 ]]; native_recovery_require_clear ;;
-  install-initial)
-    [[ $# == 9 && "$(hostname -s)" == osaka1 && "$service" == "$slot_service" ]]
-    sudo -n test ! -e "$current_link"
-    sudo -n test ! -L "$current_link"
-    sudo -n test ! -e "$previous_link"
-    sudo -n test ! -L "$previous_link"
-    for retired in "$unit_file" "$po_unit_file" "$po_socket_file" "$unit_file.d" "${unit_file%/*}/$unit.d" \
-      "${unit_file%/*}/$po_service.d" "${unit_file%/*}/$po_socket.d"; do
-      sudo -n test ! -e "$retired"
-      sudo -n test ! -L "$retired"
-    done
-    native_recovery_require_clear
-    window_action=deploy ;;
-  initial-accepted)
-    [[ $# == 9 ]]
-    native_release_id_validate "$release_id"
-    release_dir="$releases_root/$release_id" window_units=("$po_socket" "$po_service" "$unit")
-    native_initial_accept
-    exit ;;
+    ;;
+  apply-accepted)
+    [[ $# == 10 ]]
+    # shellcheck disable=SC2034
+    window_nonce="${10}"
+    native_apply_close_observation
+    exit
+    ;;
   *) exit 2 ;;
 esac
 
 normalize_runtime_payload_permissions() {
   local root="$1"
-  sudo -n test -d "$root/youtubejs" || return
-  sudo -n test ! -L "$root/youtubejs" || return
+  sudo -n test -d "$root/youtubejs" || return "$?"
+  sudo -n test ! -L "$root/youtubejs" || return "$?"
 
   sudo -n find -P "$root/youtubejs" \
     \( -type d ! -perm -0555 -o -type f \( ! -perm -0444 -o -perm /0111 ! -perm -0111 \) \) -exec chmod a+rX -- {} +
@@ -156,59 +129,13 @@ normalize_runtime_payload_permissions() {
 
 test -r "$release_path_lib"
 test -r "$po_apply_lib"
-
-if [[ "$same_window" != true ]]; then
-if ! getent group opc >/dev/null; then
-  sudo -n groupadd --system opc
-fi
-if ! id hololive >/dev/null 2>&1; then
-  sudo -n useradd --system --gid opc --home-dir /nonexistent --shell /usr/sbin/nologin hololive
-fi
-
-native_deployment_inputs
-
-sudo -n install -d -m 0755 -o root -g root "$releases_root"
-sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive
-sudo -n install -d -m 0750 -o root -g root /etc/hololive-bot
-sudo -n install -d -m 0755 -o root -g root /var/lib/hololive-bot
-sudo -n install -d -m 0755 -o root -g root /etc/sysctl.d
-native_logrotate_body | sudo -n tee /etc/logrotate.d/hololive-bot >/dev/null
-if command -v logrotate >/dev/null 2>&1; then
-  sudo -n logrotate -d /etc/logrotate.d/hololive-bot >/dev/null
-fi
-native_udp_body "$required_udp_buffer" | sudo -n tee /etc/sysctl.d/99-hololive-quic-udp-buffer.conf >/dev/null
-sudo -n sysctl -w "net.core.rmem_max=${required_udp_buffer}" "net.core.wmem_max=${required_udp_buffer}" >/dev/null
-if ! sudo -n test -f "$swapfile"; then
-  if command -v fallocate >/dev/null 2>&1; then
-    sudo -n fallocate -l "${swapfile_size_mib}M" "$swapfile" || sudo -n dd if=/dev/zero of="$swapfile" bs=1M count="$swapfile_size_mib" status=none
-  else
-    sudo -n dd if=/dev/zero of="$swapfile" bs=1M count="$swapfile_size_mib" status=none
-  fi
-fi
-sudo -n chown root:root "$swapfile"
-sudo -n chmod 600 "$swapfile"
-if ! sudo -n file "$swapfile" | grep -q 'swap file'; then
-  sudo -n mkswap "$swapfile" >/dev/null
-fi
-if ! swapon --noheadings --show=NAME | grep -Fxq "$swapfile"; then
-  sudo -n swapon "$swapfile"
-fi
-if ! sudo -n grep -Eq '^/swapfile[[:space:]]+none[[:space:]]+swap[[:space:]]+' /etc/fstab; then
-  printf '/swapfile none swap sw 0 0\n' | sudo -n tee -a /etc/fstab >/dev/null
-fi
-native_swap_body | sudo -n tee /etc/sysctl.d/99-hololive-swap.conf >/dev/null
-sudo -n sysctl -w vm.swappiness=10 >/dev/null
-fi
-
-if [[ "$window_action" == deploy ]]; then native_cutover_claim "$releases_root/$release_id"; fi
+native_cutover_claim "$releases_root/$release_id"
 old_target=""
 if [[ -L "$current_link" ]]; then
   old_target="$(readlink -f "$current_link" || true)"
 fi
-if [[ "$same_window" == true ]]; then
-  [[ "$old_target" == "$releases_root/$window_old" && -d "$old_target" &&
-     "$(native_window_identity apply "$window_old" '')" == "$apply_origin_pin" ]]
-fi
+[[ "$old_target" == "$releases_root/$window_old" && -d "$old_target" &&
+   "$(native_window_identity apply "$window_old" '')" == "$apply_origin_pin" ]]
 old_previous_target=""
 if [[ -L "$previous_link" ]]; then
   old_previous_target="$(readlink -f "$previous_link" || true)"
@@ -220,36 +147,16 @@ if [[ -n "$old_previous_target" && ( "$old_previous_target" != "$releases_root/"
   echo 'previous release pointer is not an existing immutable release' >&2
   exit 1
 fi
-if [[ -z "$old_target" && ( -e "$po_unit_file" || -e "$po_socket_file" ) ]]; then
-  echo 'unmanaged issuer units exist before initial install' >&2
-  exit 1
-fi
-if [[ -z "$old_target" && -n "$old_previous_target" ]]; then
-  echo 'refusing initial native install with stale previous release pointer' >&2
-  exit 1
-fi
-if [[ "$settled" == true ]]; then
-  release_dir="$releases_root/$release_id"
-  for reserved in accepted-window native-window native-observation; do
-    sudo -n test ! -e "$release_dir/$reserved" && sudo -n test ! -L "$release_dir/$reserved" || exit 1
-  done
-  [[ "$(cat "$release_dir/po-sandbox/revision")" == "${EXPECTED_REVISION:?expected native source SHA missing}" ]]
-  (cd "$release_dir/po-sandbox" && sudo -n sha256sum --check --strict rootfs.tar.sha256)
-  po_validate_release "$release_dir"
-  sudo -n sh -c 'cd "$1" && sha256sum --check --strict --status SHA256SUMS' sh "$release_dir"
-else
 release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$current_link")"
 
 sudo -n mkdir "$release_dir"
 sudo -n rsync -a --delete "$payload/" "$release_dir/"
 sudo -n chown -R -P root:root "$release_dir"
-if [[ "$window_action" == resume || "$same_window" == true ]]; then
-  for reserved in accepted-window native-window native-observation; do
-    sudo -n test ! -e "$release_dir/$reserved" && sudo -n test ! -L "$release_dir/$reserved" || exit 1
-  done
-  copied_digest="$(sudo -n bash -c "$(declare -f native_payload_digest); native_payload_digest \"\$1\"" _ "$release_dir")"
-  [[ "$copied_digest" == "$window_digest" ]]
-fi
+for reserved in accepted-window native-window native-observation; do
+  sudo -n test ! -e "$release_dir/$reserved" && sudo -n test ! -L "$release_dir/$reserved" || exit 1
+done
+copied_digest="$(sudo -n bash -c "$(declare -f native_payload_digest); native_payload_digest \"\$1\"" _ "$release_dir")"
+[[ "$copied_digest" == "$window_digest" ]]
 normalize_runtime_payload_permissions "$release_dir"
 [[ "$(cat "$release_dir/po-sandbox/revision")" == "${EXPECTED_REVISION:?expected native source SHA missing}" ]]
 po_install_root="$release_dir/po-sandbox/rootfs"
@@ -271,26 +178,11 @@ sudo -n systemd-run --quiet --wait --pipe --collect \
   /usr/bin/env "STACK_WORKER_PROFILE_FILE=$release_dir/worker-profile.json" \
   "$release_dir/bin/hololive-collector-wrapper" "$release_dir/bin/hololive-collector" --check-worker-profile
 sudo -n sh -c 'cd "$1" && sha256sum bin/hololive-collector worker-profile.json > SHA256SUMS && chmod 0444 SHA256SUMS' sh "$release_dir"
-fi
 
-if [[ "$window_action" == resume ]]; then
-  if [[ "$settled" == true ]]; then
-    native_window_pins "$release_dir"
-    native_window_inputs "$release_dir"
-  else
-    native_window_pins
-    native_window_inputs
-  fi
+if sudo -n test -d "$old_target/rollback-contract"; then
+  native_rollback_validate "$old_target"
 else
-  if [[ "$same_window" == true ]] && sudo -n test -d "$old_target/rollback-contract"; then
-    native_rollback_validate "$old_target"
-  elif [[ -n "$old_target" && -d "$old_target" ]]; then
-    native_snapshot_before_cutover
-  fi
-  native_capture_collector_state "$unit" "$old_target" || {
-    echo 'collector state or persistent enablement is unconfirmed; writer unchanged' >&2
-    exit 1
-  }
+  native_snapshot_before_cutover
 fi
 
 sudo -n cmp -s "$worker_profile" "$release_dir/worker-profile.json" || {
@@ -303,49 +195,15 @@ if [[ "$candidate_endpoint" != '100.100.1.8|5433' ]]; then
   exit 1
 fi
 
-if [[ "$same_window" == true ]]; then
-  native_apply_before_stop
-  native_existing_host_check "$required_udp_buffer" "$swapfile_size_mib"
-  sudo -n cmp -s "$old_target/worker-profile.json" "$release_dir/worker-profile.json"
-  native_release_pin check profile "$host_env" "$old_target" "$release_dir" "$profile_digest"
-  native_release_pin check issuer "$po_unit_file" "$old_target" "$release_dir" "$issuer_digest"
-  sudo -n mkdir -m 0700 "$window"
-  native_window_boot | sudo -n tee "$window/boot" >/dev/null
-  printf '%s\n' "$apply_origin_pin" "$release_dir" "$window_digest" "${native_claim_nonce:?}" | sudo -n tee "$window/pins" >/dev/null
-  sudo -n sha256sum "$old_target/rollback-contract/SHA256SUMS" | sudo -n tee "$window/inputs.sha256" >/dev/null
-fi
-stop_native_units_and_require_inactive() {
-  local target load active persistent status failed=0
-  local -a stopped=()
-  for target in "$po_socket" "$po_service" "$unit"; do
-    status=0
-    load="$(systemctl show "$target" -p LoadState --value)" || status=$?
-    if [[ "$load" == not-found ]] && (( status == 0 || status == 4 )); then
-      continue
-    fi
-    if (( status != 0 )) || [[ "$load" != loaded && "$load" != masked ]]; then
-      failed=1
-    fi
-    if [[ "$load" == masked ]]; then
-      sudo -n systemctl stop "$target" || failed=1
-    else
-      sudo -n systemctl disable --now "$target" >/dev/null || failed=1
-    fi
-    stopped+=("$target")
-  done
-  for target in "${stopped[@]}"; do
-    active="$(systemctl show "$target" -p ActiveState --value)" || failed=1
-    persistent="$(systemctl show "$target" -p UnitFileState --value)" || failed=1
-    if [[ "$active" != inactive && "$active" != failed ]] ||
-       [[ "$persistent" != disabled && "$persistent" != masked ]]; then
-      failed=1
-    fi
-  done
-  if (( failed != 0 )); then
-    echo 'could not confirm native collector and issuer persistently stopped; recovery guard retained' >&2
-    return 1
-  fi
-}
+native_apply_before_stop
+native_existing_host_check "$required_udp_buffer" "$swapfile_size_mib"
+sudo -n cmp -s "$old_target/worker-profile.json" "$release_dir/worker-profile.json"
+native_release_pin check profile "$host_env" "$old_target" "$release_dir" "$profile_digest"
+native_release_pin check issuer "$po_unit_file" "$old_target" "$release_dir" "$issuer_digest"
+sudo -n mkdir -m 0700 "$window"
+native_window_boot | sudo -n tee "$window/boot" >/dev/null
+printf '%s\n' "$apply_origin_pin" "$release_dir" "$window_digest" "${native_claim_nonce:?}" | sudo -n tee "$window/pins" >/dev/null
+sudo -n sha256sum "$old_target/rollback-contract/SHA256SUMS" | sudo -n tee "$window/inputs.sha256" >/dev/null
 
 native_same_window_origin() {
   local link="$current_link" current prior
@@ -503,48 +361,6 @@ native_same_window_issuer() {
   native_window_candidates "$po_socket" "$po_service"
 }
 
-native_restore_recorded_runtime() {
-  if [[ "${window_action:-deploy}" == resume ]]; then
-    native_window_rehold
-    return
-  fi
-  if [[ "${same_window:-false}" == true ]]; then
-    native_same_window_restore
-    return
-  fi
-  stop_native_units_and_require_inactive
-  if [[ "${native_pool_check_pending:-false}" == true ]]; then
-    echo 'database endpoint proof incomplete; collector and issuer remain disabled; recovery guard retained' >&2
-    return 1
-  fi
-  if [[ -n "$old_target" && -d "$old_target" ]]; then
-    rollback_contract_dir="$old_target/rollback-contract"
-    native_rollback_validate "$old_target"
-    native_rollback_endpoint_validate "$old_target" "$release_dir/${slot_host_env##*/}" || {
-      echo "automatic rollback blocked; collector and issuer stopped; retain $old_target and $release_dir; recovery guard retained: ${native_recovery_dir?}" >&2
-      return 1
-    }
-    native_rollback_endpoint_validate "$old_target" "$host_env" || return
-    sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/${slot_host_env##*/}" "$host_env"
-    sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/${slot_collector_unit%%@*}@.service" "$unit_file"
-    sudo -n ln -sfn "$old_target" "$current_link"
-    native_previous_link_restore "$releases_root" "$previous_link" "$rollback_contract_dir/previous-before-cutover"
-    po_restore_previous "$old_target"
-    sudo -n systemctl daemon-reload
-    if [[ "${collector_prechange_running:?}" == true ]]; then
-      sudo -n systemctl enable --now "$unit"
-    else
-      if [[ "${collector_prechange_enabled:?}" == true ]]; then
-        sudo -n systemctl enable "$unit"
-      fi
-      echo "collector was not running before the change (ActiveState=${collector_prechange_state:-unknown}); restored $unit without starting it. Start it only after the schema matches the restored release." >&2
-    fi
-  else
-    po_restore_previous ""
-    sudo -n rm -f "$current_link" "$host_env" "$unit_file"
-    sudo -n systemctl daemon-reload
-  fi
-}
 restore_native_after_failed_cutover() {
   local status="${1:-$?}" restore_status=0
   if [[ "$BASHPID" != "${cutover_restore_owner_pid:?cutover restore owner not armed}" ]]; then
@@ -555,20 +371,14 @@ restore_native_after_failed_cutover() {
   if [[ "${native_phase_active:-false}" == true && "${native_phase_started:-false}" == true ]]; then
     native_cutover_unknown
   fi
-  if [[ "${same_window:-false}" == true ]]; then
-    if [[ "${native_outcome_unknown:-false}" == true ]] || ! native_same_window_recoverable; then
-      sudo -n touch "$window/blocked"
-      native_cutover_unknown
-      exit "$status"
-    fi
-  fi
-  if [[ "${native_outcome_unknown:-false}" == true ]]; then
-    if [[ "${window_action:-deploy}" == resume ]]; then sudo -n touch "$window/blocked"; fi
+  if [[ "${native_outcome_unknown:-false}" == true ]] || ! native_same_window_recoverable; then
+    sudo -n touch "$window/blocked"
+    native_cutover_unknown
     exit "$status"
   fi
   set +e
   native_signal_status=0
-  native_cutover_run restore native_restore_recorded_runtime
+  native_cutover_run restore native_same_window_restore
   restore_status="$?"
   set -e
   if (( ${native_signal_status:-0} != 0 )); then
@@ -576,14 +386,8 @@ restore_native_after_failed_cutover() {
   fi
   if [[ "${native_outcome_unknown:-false}" == true || "${native_worker_status:-$restore_status}" -ne 0 || "${native_completion_verified:-false}" != true ]]; then
     echo "host-native collector cutover failed and the recorded runtime could not be restored" >&2
-    if [[ "${window_action:-deploy}" == resume || "${same_window:-false}" == true ]]; then
-      sudo -n touch "$window/blocked"
-      native_cutover_unknown
-    elif [[ "${native_outcome_unknown:-false}" != true && "${native_completion_verified:-false}" == true ]]; then
-      stop_native_units_and_require_inactive || echo 'native failure brake not verified' >&2
-    fi
-  elif [[ "${window_action:-deploy}" == resume ]]; then
-    echo "후보 정지 후에도 hold와 복구 입력을 유지합니다: $window" >&2
+    sudo -n touch "$window/blocked"
+    native_cutover_unknown
   else
     native_cutover_release_guard || echo 'recorded runtime restored but native recovery guard could not be released' >&2
   fi
@@ -610,23 +414,13 @@ arm_native_cutover_restore() {
   trap 'native_cutover_signal 143' TERM
 }
 arm_native_cutover_restore
-if [[ "$same_window" == true ]]; then native_same_window_stop_phase; fi
-if [[ -n "$old_target" && -d "$old_target" ]]; then
-  native_cutover_run previous-link sudo -n ln -sfn "$old_target" "$previous_link"
-fi
-if [[ "$same_window" == true ]]; then
-  native_cutover_run host-env native_release_pin apply profile "$host_env" "$old_target" "$release_dir" "$profile_digest"
-else
-  if [[ "$window_action" == deploy ]]; then native_cutover_run stop stop_native_units_and_require_inactive; fi
-  native_cutover_run host-env sudo -n install -m 0640 -o root -g root "$release_dir/${slot_host_env##*/}" "$host_env"
-  native_cutover_run collector-unit sudo -n install -m 0644 -o root -g root "$release_dir/${unit_file##*/}" "$unit_file"
-fi
+native_same_window_stop_phase
+native_cutover_run previous-link sudo -n ln -sfn "$old_target" "$previous_link"
+native_cutover_run host-env native_release_pin apply profile "$host_env" "$old_target" "$release_dir" "$profile_digest"
 native_cutover_run current-link sudo -n ln -sfn "$release_dir" "$current_link"
 
-if [[ "$same_window" == true ]]; then
-  # shellcheck disable=SC2034
-  apply_start_since="@$EPOCHREALTIME"
-fi
+# shellcheck disable=SC2034
+apply_start_since="@$EPOCHREALTIME"
 native_pool_check_pending=true
 native_cutover_run database-endpoint sudo -n systemd-run --quiet --wait --pipe --collect \
   --property=User=hololive --property=Group=opc --property=NoNewPrivileges=yes --property=RuntimeMaxSec=40s \
@@ -641,24 +435,12 @@ native_cutover_run database-endpoint sudo -n systemd-run --quiet --wait --pipe -
   "$release_dir/bin/hololive-collector-wrapper" "$release_dir/bin/hololive-collector" --check-database-endpoint
 native_pool_check_pending=false
 
-if [[ "${same_window:-false}" == true ]]; then
-  native_cutover_run issuer native_same_window_issuer
-else
-  native_cutover_run issuer po_install_release "$release_dir" "$EXPECTED_REVISION"
-fi
+native_cutover_run issuer native_same_window_issuer
 sudo -n systemd-analyze verify "$unit_file"
 native_cutover_run daemon-reload sudo -n systemctl daemon-reload
 native_cutover_run collector-enable sudo -n systemctl enable "$unit"
-if [[ "$window_action" == resume ]]; then
-  native_window_candidates "$po_socket" "$po_service"
-  native_cutover_run collector-start native_window_start "$unit"
-  native_window_candidates "${window_units[@]}"
-elif [[ "$same_window" == true ]]; then
-  native_window_terminal "$unit"
-  native_cutover_run collector-restart sudo -n systemctl --job-mode=fail start "$unit"
-else
-  native_cutover_run collector-restart sudo -n systemctl restart "$unit"
-fi
+native_window_terminal "$unit"
+native_cutover_run collector-restart sudo -n systemctl --job-mode=fail start "$unit"
 
 since_epoch="$(date -u -d "$change_started_at" +%s)"
 for _ in $(seq 1 30); do
@@ -678,7 +460,6 @@ printf 'net.core.wmem_max=%s\n' "$(sysctl -n net.core.wmem_max)"
 ready="$(collector_readiness_poll 90 2 collector_readiness_fetch)"
 printf '%s\n' "$ready"
 collector_readiness_validate "$ready"
-if [[ "$window_action" == resume ]]; then native_window_candidates "${window_units[@]}"; fi
 sudo -n -u hololive env \
   HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
@@ -710,12 +491,5 @@ fi
 (( grep_status == 1 )) || return "$grep_status"
 }
 native_post_cutover_log_check
-if [[ "${window_action:-deploy}" == resume ]]; then
-  native_window_await_observation
-elif [[ "${same_window:-false}" == true ]]; then
-  native_apply_await_observation >&3
-  trap - ERR HUP INT TERM
-else
-  trap - ERR HUP INT TERM
-  native_cutover_release_guard
-fi
+native_apply_await_observation >&3
+trap - ERR HUP INT TERM
