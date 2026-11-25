@@ -72,7 +72,7 @@ func (f buildFixture) build(t *testing.T, label string, targets ...string) (harn
 
 	harness.Write(t, f.log, "")
 
-	env := []string{"FAKE_PODMAN_LOG=" + f.log, "FAKE_PODMAN_STATE=" + f.state}
+	env := []string{"FAKE_PODMAN_LOG=" + f.log, "FAKE_PODMAN_STATE=" + f.state, "HOLOLIVE_BUILD_PLATFORM="}
 
 	if label != "" {
 		env = append(env, "FAKE_LABEL="+label)
