@@ -371,8 +371,8 @@ suppresses normal/slow/error statement logging while setting role passwords; the
 Go bootstrap sends client-generated SCRAM verifiers. Synthetic failure/log checks are required.
 
 Local acceptance (not run by this preparation): `bash scripts/ci/check-postgres-capacity.sh` and
-`bash scripts/deploy/test-postgres-access-policy.sh`. The latter requires the official PG19.0 image
-already present locally (`POSTGRES_POLICY_TEST_IMAGE` may select another tag), rootless Podman and OpenSSL;
+`bash scripts/deploy/test-postgres-access-policy.sh`. The latter requires the digest-pinned official PG19.0
+image already present locally (`POSTGRES_POLICY_TEST_IMAGE` may select another), rootless Podman and OpenSSL;
 it uses a disposable internal network, tmpfs database/socket and synthetic certificates only,
 publishes no ports, and proves HBA rejection, runtime/exporter TLS, migration/nightly socket
 access and aggregate role limits. It never reads runtime env files or pulls/builds images.
