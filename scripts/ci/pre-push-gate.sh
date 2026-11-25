@@ -156,6 +156,8 @@ run_content_gates() {
     scripts/deploy/quadlet-redeploy-service.sh scripts/deploy/quadlet-rollback-service.sh \
     scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     scripts/deploy/lib/worker-profile-pair.py scripts/deploy/lib/collector-slots.tsv deploy/quadlet
+  run_if_changed scripts/ci/check-recurring-security-scan-contract.sh \
+    scripts/ci/final-image-scan-policy.sh scripts/ci/final-image-scan-manifest.txt deploy/quadlet
   echo "[pre-push] deploy/runtime script tests (run when the test or its target changed)"
   run_if_changed scripts/build/build-all_test.sh \
     build-all.sh scripts/deploy/lib/source-revision.sh
