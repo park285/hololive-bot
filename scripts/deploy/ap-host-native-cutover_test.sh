@@ -551,7 +551,17 @@ systemctl() {
   if [[ "$1" == --job-mode=fail ]]; then shift; fi
   case "$1" in
     show) printf 'InvocationID=%s\n' "$gen" ;;
-    daemon-reload) touch reload ;;
+    daemon-reload)
+      touch reload
+      local u f
+      for u in "$po_socket" "$po_service" "$unit"; do
+        : >"loaded-dropins-$u"
+        if [[ -d "${unit_file%/*}/$u.d" ]]; then
+          for f in "${unit_file%/*}/$u.d"/*.conf; do
+            if [[ -e "$f" || -L "$f" ]]; then printf '%s\n' "$f" >>"loaded-dropins-$u"; fi
+          done
+        fi
+      done ;;
     enable)
       if [[ "$2" != --now ]]; then rm "disabled-$2"; return; fi
       [[ "$3" == "$po_socket" ]]
@@ -590,12 +600,20 @@ native_window_prop() {
       if [[ "$fault" == restart || $(readlink "$window/policy") == permanent ]]; then echo always
       else echo no; fi ;;
     DropInPaths)
-      if [[ -d "$PWD/w1-adoption" ]]; then printf '%s ' "$PWD/system/$1.d/90-native-window-prior.conf"; fi
-      printf '%s/%s.d/90-native-window-%s.conf\n' "${unit_file%/*}" "$1" "$native_claim_nonce" ;;
+      if [[ -f "loaded-dropins-$1" ]]; then
+        paste -sd' ' "loaded-dropins-$1"
+      elif [[ -d "${unit_file%/*}/$1.d" ]]; then
+        local d
+        local -a found=()
+        for d in "${unit_file%/*}/$1.d"/*.conf; do
+          if [[ -e "$d" || -L "$d" ]]; then found+=("$d"); fi
+        done
+        printf '%s\n' "${found[*]}"
+      fi ;;
     MainPID) if [[ -f "live-$1" && ! -f "down-$1" ]]; then echo "$BASHPID"; else echo 0; fi ;;
     ControlPID) echo 0 ;;
     LoadState) echo loaded ;;
-    NeedDaemonReload) echo no ;;
+    NeedDaemonReload) if [[ "$fault" == need_reload ]]; then echo yes; else echo no; fi ;;
     UnitFileState) if [[ -f "disabled-$1" ]]; then echo disabled; else echo enabled; fi ;;
     Result) if [[ -e "failed-$1" ]]; then echo trigger-limit-hit; else echo success; fi ;;
     *) return 93 ;;
@@ -617,7 +635,12 @@ busctl() {
   fi
   [[ "$3" == get-property && "$4" == org.freedesktop.systemd1 && "$5" == "$object" ]] || return 1
   if [[ "${!#}" == ExecConditionEx ]]; then
-    python3 -I -B - "$current_link/native-window" "$native_recovery_dir/accepting" "$([[ -d "$PWD/w1-adoption" ]] && echo 2 || echo 1)" <<'PY_CONDITION'
+    local count=1
+    if [[ -f "loaded-dropins-$n" ]]; then
+      count="$(wc -l < "loaded-dropins-$n")"
+      if (( count == 0 )); then count=1; fi
+    fi
+    python3 -I -B - "$current_link/native-window" "$native_recovery_dir/accepting" "$count" <<'PY_CONDITION'
 import json,sys
 print(json.dumps({"type":"a(sasasttttuii)", "data":[["/usr/bin/test",["/usr/bin/test","!","-e",p],["privileged"],0,0,0,0,0,0,0] for p in sys.argv[1:3]]*int(sys.argv[3])}))
 PY_CONDITION
@@ -780,6 +803,10 @@ assert result.returncode == 0, result.stderr
 assert (case/'current/accepted-window').read_text().splitlines()[0] == release_window
 assert (case/'w1-adoption/original-guard/outcome').read_text() == 'outcome_unknown\n'
 assert (case/'releases/old/accepted-window').samefile(case/'releases/old/seed-guard/accepted-window')
+for unit_name in ('issuer.socket', 'issuer.service', 'collector.service'):
+    dropins = sorted((case / 'system' / f'{unit_name}.d').iterdir())
+    assert [p.name for p in dropins] == ['90-native-window-permanent.conf'], (unit_name, dropins)
+    assert dropins[0].is_file() and not dropins[0].is_symlink() and (dropins[0].stat().st_mode & 0o777) == 0o644
 
 exit_during_probe = '''
 eval "fixture_$(declare -f sudo)"
@@ -899,6 +926,29 @@ for name, action, mutation, expected in (
     if name == 'issuer-retired-before-brake':
         expected_stops[0] = 'issuer.socket'
     assert stops == expected_stops, (name, stops)
+    if expected == 'accepted':
+        for unit_name in ('issuer.socket', 'issuer.service', 'collector.service'):
+            dropins = sorted((case / 'system' / f'{unit_name}.d').iterdir())
+            assert [p.name for p in dropins] == ['90-native-window-permanent.conf'], (name, unit_name, dropins)
+            assert dropins[0].is_file() and not dropins[0].is_symlink() and (dropins[0].stat().st_mode & 0o777) == 0o644
+
+post_finish_brake = '''
+eval "fixture_$(declare -f native_window_probe_units)"
+native_window_probe_units() {
+  if [[ "${FUNCNAME[1]}" == native_window_commit_policy && "$(readlink "$window/policy")" == permanent && -f fail-after-finish ]]; then
+    rm fail-after-finish
+    return 1
+  fi
+  fixture_native_window_probe_units "$@"
+}
+touch fail-after-finish
+'''
+case, result = window_case('observe-brake-after-finish', [release_window, str(old_port), 'normal'], candidate_stage + post_finish_brake +
+                           'window_action=accepted\nnative_window_close_observation\n')
+assert result.returncode != 0, result.stderr
+assert not (case/'current/accepted-window').exists() and (case/'recovery').is_dir() and not (case/'recovery/outcome').exists()
+assert (case/'releases/old/native-window/blocked').exists()
+assert (case/'calls').read_text().splitlines()[2:] == ['issuer.socket issuer.service', 'collector.service']
 
 failed_stage = candidate_stage.replace('native_window_await_observation\n', 'native_window_uncertain || true\n')
 real_inputs = '''
@@ -1059,7 +1109,7 @@ native_deployment_inputs() { [[ "$fault" != inputs ]]; }
 native_window_prop() {
   case "$2" in
     DropInPaths|Job) : ;; ActiveState) echo active ;; InvocationID) echo "$gen" ;;
-    ControlPID) echo 0 ;; UnitFileState) echo enabled ;; NeedDaemonReload) echo no ;;
+    ControlPID) echo 0 ;; UnitFileState) echo enabled ;; NeedDaemonReload) if [[ "$fault" == need-reload ]]; then echo yes; else echo no; fi ;;
     *) return 99 ;;
   esac
 }
@@ -1075,9 +1125,11 @@ case "$fault" in
   prior-guard) mkdir "$native_recovery_dir"; echo preserved > "$native_recovery_dir/claim" ;;
 esac
 '''
-for fault in ('normal','env','collector','issuer','socket','profile','infra','inputs','used-stage','used-release','drop-dir','prior-guard'):
+for fault in ('normal','env','collector','issuer','socket','profile','infra','inputs','used-stage','used-release','drop-dir','prior-guard','need-reload'):
     case, result = window_case('ordinary-origin-' + fault, [release_window, '5433', fault], ordinary_origin + origin_dispatch)
     assert (result.returncode == 0) == (fault == 'normal'), (fault, result)
+    if fault == 'need-reload':
+        assert 'NeedDaemonReload' in result.stderr, result.stderr
     if fault == 'prior-guard':
         assert list((case/'recovery').iterdir()) == [case/'recovery/claim'] and (case/'recovery/claim').read_text() == 'preserved\n'
     else:
@@ -1201,9 +1253,47 @@ for name, mutation, fault, accepted in (
                                '\nnative_apply_close_observation\nnative_apply_preflight new\n')
     assert (result.returncode == 0) == accepted, (name, result.stderr)
     assert (case/'current/accepted-window').is_file() == accepted and (case/'recovery').exists() != accepted
+    if accepted:
+        for unit_name in ('issuer.socket', 'issuer.service', 'collector.service'):
+            dropins = sorted((case / 'system' / f'{unit_name}.d').iterdir())
+            assert [p.name for p in dropins] == ['90-native-window-permanent.conf'], (name, unit_name, dropins)
+            assert dropins[0].is_file() and not dropins[0].is_symlink() and (dropins[0].stat().st_mode & 0o777) == 0o644
     if fault == 'load_failure':
         assert not (case/'releases/new/native-observation/issuer.socket.requesting').exists()
         assert all((case/f'down-{target}').exists() for target in ('issuer.socket', 'issuer.service', 'collector.service'))
+
+seed_legacy_dropins = '''
+mkdir -p "$PWD/legacy-rel1/permanent" "$PWD/legacy-rel2/permanent"
+for n in "$po_socket" "$po_service" "$unit"; do
+  mkdir -p -m 0755 "$PWD/system/$n.d"
+  native_window_barrier_body "$n" permanent > "$PWD/legacy-rel1/permanent/$n.conf"
+  ln -sT "$PWD/legacy-rel1/permanent/$n.conf" "$PWD/system/$n.d/90-native-window-11111111-1111-1111-1111-111111111111.conf"
+done
+native_window_barrier_body "$po_service" permanent > "$PWD/legacy-rel2/permanent/$po_service.conf"
+ln -sT "$PWD/legacy-rel2/permanent/$po_service.conf" "$PWD/system/$po_service.d/90-native-window-22222222-2222-2222-2222-222222222222.conf"
+'''
+case, result = window_case('apply-close-consolidates-legacy', [release_window, '5433', 'normal'],
+                           seed_legacy_dropins + apply_stage + '\nnative_apply_close_observation\nnative_apply_preflight new\n')
+assert result.returncode == 0, result.stderr
+for unit_name in ('issuer.socket', 'issuer.service', 'collector.service'):
+    dropins = sorted((case / 'system' / f'{unit_name}.d').iterdir())
+    assert [p.name for p in dropins] == ['90-native-window-permanent.conf'], (unit_name, dropins)
+    assert dropins[0].is_file() and not dropins[0].is_symlink() and (dropins[0].stat().st_mode & 0o777) == 0o644
+
+seed_existing_permanent = '''
+for n in "$po_socket" "$po_service" "$unit"; do
+  mkdir -p -m 0755 "$PWD/system/$n.d"
+  native_window_barrier_body "$n" permanent > "$PWD/system/$n.d/90-native-window-permanent.conf"
+  chmod 0644 "$PWD/system/$n.d/90-native-window-permanent.conf"
+done
+'''
+case, result = window_case('apply-close-redeploy-idempotent', [release_window, '5433', 'normal'],
+                           seed_existing_permanent + apply_stage + '\nnative_apply_close_observation\nnative_apply_preflight new\n')
+assert result.returncode == 0, result.stderr
+for unit_name in ('issuer.socket', 'issuer.service', 'collector.service'):
+    dropins = sorted((case / 'system' / f'{unit_name}.d').iterdir())
+    assert [p.name for p in dropins] == ['90-native-window-permanent.conf'], (unit_name, dropins)
+    assert dropins[0].is_file() and not dropins[0].is_symlink() and (dropins[0].stat().st_mode & 0o777) == 0o644
 
 initial_install = '''
 rm "$current_link"
