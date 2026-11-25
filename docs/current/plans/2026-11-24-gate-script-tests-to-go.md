@@ -10,7 +10,7 @@ pre-push 게이트가 실행하는 배포·로그·빌드 셸 테스트를 Go �
 
 완료 기준:
 
-- 아래 표의 이관 대상 셸 테스트 25개가 없고, `pre-push-gate.sh`의 `run_if_changed`에는 Python 테스트·release version·security scan contract만 남습니다.
+- 아래 표의 이관 대상 셸 테스트 25개가 없고, `pre-push-gate.sh`의 `run_if_changed`에는 Python 테스트·release version만 남습니다.
 - `scripts/architecture/ci-boundary-gate.sh`에는 검사 3개(추적 산출물, SQL 소유권, topology parity)만 남습니다.
 - 기존 케이스 라벨과 Go subtest의 대응표에 누락이 없습니다. 합친 케이스는 합친 이유를 함께 적습니다.
 - 스크립트 테스트 구간 시간이 이관 전보다 짧습니다. 같은 부하 조건에서 3회 측정한 중앙값으로 비교하고, 구체 목표값은 Phase 0 측정 뒤 이 문서에 적습니다. 시간 단축 효과는 아직 입증되지 않았습니다(아래 "효율화의 근거와 한계").
@@ -139,7 +139,7 @@ Phase 0은 진행 여부를 판단하는 단계입니다. 느린 묶음마다 CP
 
 ## 범위 밖
 
-- Python 테스트 3개(`worker-profile-pair_test.py`, `kapu-d-cutover_test.py`, `po-sandbox-manifest_test.py`): 대상이 Python 스크립트입니다.
+- Python 테스트 2개(`worker-profile-pair_test.py`, `po-sandbox-manifest_test.py`): 대상이 Python 스크립트입니다.
 - 게이트 밖 수동 테스트 4개:
   - `test-pgbouncer.sh`: PgBouncer 퇴역 브랜치가 삭제합니다.
   - `test-postgres-access-policy.sh`, `test-terminal-live-head-repair.sh`: 직접 실행하는 수동 테스트로 남깁니다.
