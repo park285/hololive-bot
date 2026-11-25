@@ -17,6 +17,6 @@ replace github.com/park285/shared-go/v2 v2.25.0 => ../shared-go
 
 replace github.com/park285/shared-go/core v1.0.0 => ../shared-go/core
 
-replace github.com/park285/shared-go/postgres v1.0.3 => ../shared-go/postgres
+replace github.com/park285/shared-go/postgres v1.0.4 => ../shared-go/postgres
 
 replace github.com/park285/shared-go/transport v1.0.1 => ../shared-go/transport
