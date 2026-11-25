@@ -6,6 +6,14 @@
 
 ## 미출시
 
+- **PostgreSQL major 전환 도구 퇴역:** 18→19 전환이 끝나 `pg-major-upgrade.sh`, 전역 객체·지문·default ACL 정리 SQL, 전환 런북과 prestart의 `.pg-major.pending` 처리를 지웠습니다. 빈 cluster 옆에 이전 cluster volume이 있으면 기동을 거부하는 검사는 유지합니다.
+- **collector 구 이름 키 거부 퇴역:** 이름 전환이 끝나 compose env 검사와 collector 기동이 `YOUTUBE_COLLECTOR_*` 구 키를 따로 거부하지 않습니다.
+- **TwentyQ 게시 포트 방화벽 규칙 제거:** TwentyQ를 stack에서 내리면서 중앙 방화벽(`admin-dashboard-ingress.nft`)의 5458 허용·거부 규칙과 운영 문서의 `twentyq-postgres` 기동·정지 안내를 지웠습니다. 적용은 다음 중앙 배포의 방화벽 reload입니다.
+- **AP native 배포의 구 cache 키 거부 퇴역:** osaka1 `collector.env`에 `CACHE_*` 키가 없어, native 배포가 이 키를 이유로 거부하던 검사를 지웠습니다.
+- **b 정지의 구 backup 이름 검사 퇴역:** quiesce가 이제 같은 change의 `card-po-b-<change>` 구 backup 경로를 따로 확인하지 않고, 새 backup 경로만 비어 있는지 확인합니다.
+- **신호 처리 중 복원 실패 보고:** 배포 도구가 신호 trap 안에서 복원할 때, 인수 없는 `return`이 bash 규칙에 따라 trap 이전의 성공 상태를 돌려줘 guard 해제 실패 같은 오류를 성공으로 처리할 수 있었습니다. 중앙·b·native 배포 라이브러리의 해당 `return`이 실제 실패 상태를 돌려주도록 고쳤습니다.
+- **AP a 정지 창 퇴역:** W3 수용이 끝나 `osaka --quiesce`·`--resume`·`--settle`·`--install-initial`을 지웠습니다. native 도구는 `--dry-run`·`--apply`·`--prepare-profile`만 받습니다. 분리 정지 창, collector 이름 전환, webhook nonce 저장소 전환 절차 문서도 지웠습니다.
+
 ## r1.2.9 - 2026-11-25
 
 - **osaka1 영구 drop-in 고정화 및 preflight 진단:** 배포 창 수용 시 unit별 `/etc/systemd/system/<unit>.d/90-native-window-<nonce>.conf` symlink가 누적되어 구 릴리스 정리를 막던 문제를 고쳤습니다. 이제 수용 단계에서 릴리스 경로에 의존하지 않는 고정 파일 `90-native-window-permanent.conf`를 설치하고 `daemon-reload` 적재를 확인한 뒤 세 unit의 기존 `90-native-window-*.conf` symlink를 걷어 냅니다. `apply-origin`과 `native_same_window_baseline`의 각 실패 지점에도 표준 오류 진단 메시지를 추가했습니다.

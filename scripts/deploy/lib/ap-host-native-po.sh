@@ -37,11 +37,11 @@ po_issuer_active() {
 
 po_require_running_without_failure() {
   local since="$1" journal result=0
-  systemctl is-active --quiet "$po_socket" || return
-  po_issuer_active || return
+  systemctl is-active --quiet "$po_socket" || return "$?"
+  po_issuer_active || return "$?"
   [[ "$(systemctl show "$po_service" -p Result --value)" == success ]] || return 1
   [[ "$(systemctl show "$po_service" -p ExecMainStatus --value)" == 0 ]] || return 1
-  journal="$(journalctl -u "$po_service" --since "$since" --no-pager)" || return
+  journal="$(journalctl -u "$po_service" --since "$since" --no-pager)" || return "$?"
   grep -F 'Failed with result' <<<"$journal" >/dev/null || result=$?
   (( result == 1 ))
 }
@@ -124,30 +124,4 @@ po_restore_previous() {
       ;;
     *) echo 'invalid previous issuer unit state' >&2; return 1 ;;
   esac
-}
-
-po_install_release() {
-  local release="$1" revision
-  revision="$(cat "$release/po-sandbox/revision")"
-  [[ "$revision" == "$2" ]] || return 1
-  (cd "$release/po-sandbox" && sudo -n sha256sum --check --strict rootfs.tar.sha256)
-  po_validate_release "$release"
-  sudo -n install -m 0644 -o root -g root "$release/$po_service" "$po_unit_file"
-  sudo -n install -m 0644 -o root -g root "$release/$po_socket" "$po_socket_file"
-  po_verify_units "$release" "$po_unit_file" "$po_socket_file"
-  sudo -n systemctl daemon-reload
-  if [[ "${window_action:-deploy}" == resume ]]; then
-    native_window_admit_candidate
-    sudo -n systemctl enable "$po_socket"
-    native_window_start "$po_socket"
-    native_window_start "$po_service"
-    native_window_open_rotation
-  elif [[ "${same_window:-false}" == true ]]; then
-    native_apply_start_issuer
-  else
-    sudo -n systemctl enable --now "$po_socket"
-    sudo -n systemctl restart "$po_service"
-  fi
-  po_wait_ready "$release"
-  if [[ "${window_action:-deploy}" == resume || "${same_window:-false}" == true ]]; then native_window_candidates "$po_socket" "$po_service"; fi
 }

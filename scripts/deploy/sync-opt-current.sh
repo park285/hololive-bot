@@ -177,7 +177,7 @@ if [[ -n "$source_base" ]]; then
     [[ "$status" == M && "$old_mode" == "$new_mode" && "$old_mode" =~ ^100(644|755)$ ]] || die "source-only requires regular-file modifications"
     case "$path" in
       hololive/*/scripts/*|hololive/*/internal/migrationrunner/*|scripts/ci/postgres-capacity-policy.tsv) die "protected source path: $path" ;;
-      README.md|CHANGELOG.md|VERSION|go.work|go.work.sum|.github/workflows/*.yml|docs/*|deploy/compose/README.md|hololive/*|scripts/README.md|scripts/ci/*|scripts/deploy/sync-opt-current.sh|scripts/deploy/sync-opt-current_test.sh) ;;
+      README.md|CHANGELOG.md|VERSION|go.work|go.work.sum|.github/workflows/*.yml|docs/*|deploy/compose/README.md|hololive/*|scripts/README.md|scripts/ci/*|scripts/deploy/sync-opt-current.sh|scripts/scripttest/syncopt/*) ;;
       *) die "unapproved source-only path: $path" ;;
     esac
     live="$OPT_CURRENT/$path"

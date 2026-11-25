@@ -61,10 +61,10 @@ sudo ./scripts/deploy/sync-opt-current.sh
 
 방화벽 규칙(`scripts/systemd/admin-dashboard-ingress.nft`)이 바뀐 배포에서는 설치 뒤
 `sudo systemctl reload admin-dashboard-ingress-firewall.service`로 적용합니다(아래 '기동·정지·의존').
-이 규칙은 같은 호스트의 ChatBotGo(5432)·TwentyQ(5458) PostgreSQL 게시 포트도 loopback과 kapu(`bot_postgres_sources`)에서만 받습니다.
+이 규칙은 같은 호스트의 ChatBotGo(5432) PostgreSQL 게시 포트도 loopback과 kapu(`bot_postgres_sources`)에서만 받습니다.
 Tailscale은 tailscale0에서 전달하는 패킷을 masquerade하므로, 규칙이 없으면 PostgreSQL은 원격 접속을 모두 bridge gateway(`172.23.0.1`)로 봅니다.
-`forward_preserve_postgres_source` 체인은 PostgreSQL 게시 `5433→5432`의 `postgres_sources` 접속에만 그 표시를 지웁니다. 그래서 PostgreSQL HBA가 AP별 tailnet 주소와 역할을 함께 판정합니다. 두 봇 DB 게시와 다른 게시 포트의 masquerade는 그대로 유지합니다.
-두 봇의 DB unit(`chatbotgo-postgres`·`twentyq-postgres`)도 holo-postgres처럼 이 방화벽 unit을 `Requires=`하므로, 방화벽 unit이 시작에 실패하면 두 DB unit이 기동하지 않고, 방화벽 unit이 멈추면 함께 멈춥니다. reload는 두 DB에 영향을 주지 않습니다.
+`forward_preserve_postgres_source` 체인은 PostgreSQL 게시 `5433→5432`의 `postgres_sources` 접속에만 그 표시를 지웁니다. 그래서 PostgreSQL HBA가 AP별 tailnet 주소와 역할을 함께 판정합니다. ChatBotGo DB 게시와 다른 게시 포트의 masquerade는 그대로 유지합니다.
+ChatBotGo DB unit(`chatbotgo-postgres`)도 holo-postgres처럼 이 방화벽 unit을 `Requires=`하므로, 방화벽 unit이 시작에 실패하면 기동하지 않고, 방화벽 unit이 멈추면 함께 멈춥니다. reload는 이 DB에 영향을 주지 않습니다.
 
 prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)로 설치됩니다.
 
@@ -95,10 +95,6 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
 - 역할별 연결 한도는 `deploy/postgres/role-limits.sql`, 앱 풀 상한과 서버 예산은 `scripts/ci/postgres-capacity-policy.tsv`가 소유합니다. 배포 helper는 compose.env와 설치 unit·drop-in의 effective 풀 상한으로 같은 예산을 다시 계산합니다. collector 네 역할은 `@probe-reserve`로 한 연결을 남깁니다(역할 한도 7, 풀 상한 6). 전환 도구의 후보 `--check-database-endpoint`가 같은 역할로 직접 접속하므로, 실행 중인 collector 풀이 꽉 차도 검사가 한도에 걸리지 않습니다.
 - 앱의 30초 `statement_timeout`은 연결 startup 파라미터로 전달합니다. 역할 단위 `ALTER ROLE … SET`은 쓰지 않습니다.
 - 마이그레이션 창의 writer 차단은 PostgreSQL 19 login event trigger `hololive_writer_admission`이 맡습니다. `writer-drain-guard.py`가 관리 socket의 superuser 세션으로 `bootstrap_writer_admission.sql`을 멱등 적용합니다. 같은 DB에 `application_name`이 `hololive-writers-draining`/`hololive-writers-drained`인 superuser 세션이 있는 동안 여섯 업무 역할의 새 로그인은 `57P03`으로 거부됩니다. 가드는 업무 역할 backend가 0건인 것을 확인한 뒤에만 migrator를 시작합니다. trigger 함수가 고장 나면 superuser가 `-c event_triggers=off`로 접속해 복구합니다.
-
-### Epoch 4 배포 경계
-
-후속 변경이 없는 20.0.0 one-shot은 기존 032 head나 새 기준선 1개를 **읽기만** 한다. 정상 032 DB에서는 DDL·업무 DML·원장·로그인 변경이 없다. 원래 PostgreSQL 세대·보호 inode·서비스와 writer endpoint를 그대로 보존한다. 19.2.1 source-only 창은 migration/보호 경로 변경을 거부하는 것이 정상이다. 20.0.0 전체 소스 staging, peer CAS, worker/collector별 이미지·프로필·실제 DB SQL 수용은 별도 릴리스 창에서 증명한다. 새 DB 초기화/구 DB 복구는 [규약](../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md)을 따른다.
 
 ### writer 정지·재개 계약
 
@@ -134,12 +130,12 @@ prestart helper는 `/usr/local/libexec/hololive-bot/quadlet-prestart`(+ `lib/`)�
   보안 전제인 `admin-dashboard-ingress-firewall.service`와 migration의 PostgreSQL 의존만 `Requires=`입니다.
 - 방화벽 규칙 갱신은 `sudo systemctl reload admin-dashboard-ingress-firewall.service`로만 합니다. reload는 table
   선언·삭제·재정의를 한 nft transaction으로 적용해 규칙이 빈 순간이 없고, 새 파일이 거부되면 기존 table이 남습니다.
-  `restart`·`stop`은 `Requires=`로 묶인 `holo-postgres`·`hololive-api`·`admin-dashboard-ingress`와 두 봇의
-  `chatbotgo-postgres`·`twentyq-postgres`를 함께 재시작·정지합니다. reload는 전파되지 않습니다(systemd 257 user unit으로 실측).
+  `restart`·`stop`은 `Requires=`로 묶인 `holo-postgres`·`hololive-api`·`admin-dashboard-ingress`와
+  `chatbotgo-postgres`를 함께 재시작·정지합니다. reload는 전파되지 않습니다(systemd 257 user unit으로 실측).
 - `stop` 뒤 방화벽 unit을 다시 `start`해도 함께 멈춘 unit은 다시 뜨지 않습니다. 방화벽 unit이 active인지 확인한 뒤
-  `sudo systemctl start holo-postgres.service hololive-api.service admin-dashboard-ingress.service chatbotgo-postgres.service twentyq-postgres.service`로
+  `sudo systemctl start holo-postgres.service hololive-api.service admin-dashboard-ingress.service chatbotgo-postgres.service`로
   직접 기동하고 각 unit 상태를 확인합니다.
-- 방화벽 unit을 없애려면 먼저 이 저장소와 두 봇 저장소 unit의 `Requires=`·`After=` 의존을 지우고 반영합니다.
+- 방화벽 unit을 없애려면 먼저 이 저장소와 ChatBotGo 저장소 unit의 `Requires=`·`After=` 의존을 지우고 반영합니다.
   의존이 남은 채 unit만 지우면 다음 기동이 실패합니다.
 - `hololive-api`를 시작하면 `hololive-alarm-worker`도 함께 시작됩니다(Wants).
 - collector c는 compose.env의 `HOLOLIVE_DISABLE_COLLECTOR=1`이면 `ExecCondition`으로 건너뜁니다.

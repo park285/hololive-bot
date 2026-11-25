@@ -42,24 +42,6 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 	}
 }
 
-func TestAPIRouter_DoesNotRegisterRemovedUserNameRoute(t *testing.T) {
-	ctx := t.Context()
-	appConfig := &apiconfig.AdminPlaneConfig{
-		Server: settings.ServerConfig{APIKey: testAPIKey},
-	}
-
-	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, slog.New(slog.DiscardHandler), testAdminDomainHandlers(), sharedtestutil.NewTestCacheService(ctx, t), sharedreadiness.NewProbe("admin"))
-	if err != nil {
-		t.Fatalf("ProvideAPIRouter() error = %v", err)
-	}
-
-	for _, route := range router.Routes() {
-		if route.Path == "/api/holo/names/user" {
-			t.Fatalf("removed route re-registered: %s %s", route.Method, route.Path)
-		}
-	}
-}
-
 func expectedAdminAPIDomainRoutes() map[string][]string {
 	return map[string][]string{
 		"member": {

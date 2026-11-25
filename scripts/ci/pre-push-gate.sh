@@ -140,68 +140,25 @@ run_content_gates() {
   echo "[pre-push] formal verification (TLC, Lean)"
   bash scripts/ci/verify-tools.sh formal
 
-  run_if_changed scripts/deploy/admin-bind_test.sh scripts/deploy/lib/admin-bind.sh scripts/deploy/quadlet-prestart.sh \
-    scripts/deploy/lib/public-bind-mounts.sh scripts/deploy/lib/compose-env.sh \
-    scripts/systemd/admin-dashboard-ingress.nft deploy/topology/hosts.conf
   if inputs_changed deploy/quadlet; then
     QUADLET_UNIT_DIRS="${ROOT_DIR}/deploy/quadlet/hololive-bot" /usr/libexec/podman/quadlet -dryrun >/dev/null
   fi
-  run_if_changed scripts/deploy/pg-major-upgrade_test.sh scripts/deploy/pg-major-upgrade.sh scripts/deploy/quadlet-prestart.sh \
-    scripts/maintenance/pg-major-globals.sql scripts/maintenance/pg-major-fingerprint.sql scripts/maintenance/pg-major-clear-default-acl.sql \
-    scripts/deploy/lib/compose-env.sh scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv
-  run_if_changed scripts/deploy/sync-opt-current_test.sh \
-    scripts/deploy/sync-opt-current.sh scripts/deploy/quadlet-prestart.sh scripts/deploy/lib \
-    scripts/ci/postgres-capacity-policy.tsv scripts/systemd deploy/postgres deploy/nginx deploy/quadlet
-  run_if_changed scripts/deploy/quadlet-redeploy-service_test.sh \
-    scripts/deploy/quadlet-redeploy-service.sh scripts/deploy/quadlet-rollback-service.sh \
-    scripts/deploy/lib/postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
-    scripts/deploy/lib/worker-profile-pair.py scripts/deploy/lib/collector-slots.tsv deploy/quadlet
   run_if_changed scripts/ci/check-recurring-security-scan-contract.sh \
     scripts/ci/final-image-scan-policy.sh scripts/ci/final-image-scan-manifest.txt deploy/quadlet
   echo "[pre-push] deploy/runtime script tests (run when the test or its target changed)"
-  run_if_changed scripts/build/build-all_test.sh \
-    build-all.sh scripts/deploy/lib/source-revision.sh
-  run_if_changed scripts/build/image-runtime-tree-permissions_test.sh \
-    hololive/hololive-collector/{Dockerfile,Dockerfile.po-sandbox}{,.dockerignore} \
-    hololive/hololive-alarm-worker/Dockerfile{,.dockerignore} \
-    hololive/hololive-collector/{po-sandbox,youtubejs}/{package.json,package-lock.json,src} \
-    hololive/hololive-collector/eventgrade/server.mjs \
-    hololive/hololive-alarm-worker/xspaces/{package.json,package-lock.json,src}
-  run_if_changed scripts/deploy/lib/youtubejs-node-version_test.sh scripts/deploy/lib/youtubejs-node-version.sh
-  run_if_changed scripts/deploy/source-revision-provenance_test.sh scripts/deploy/lib/source-revision.sh
   run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py scripts/deploy/lib/collector-slots.tsv \
     deploy/quadlet/hololive-bot
   run_if_changed scripts/build/po-sandbox-manifest_test.py \
     scripts/build/po-sandbox-manifest.py scripts/deploy/lib/po-sandbox-image.sh
-  run_if_changed scripts/logs/daily-rollup-logs_test.sh scripts/logs/daily-rollup-logs.sh
-  run_if_changed scripts/logs/test-stream-mirror-retention.sh scripts/logs/lib/stream.sh
-  run_if_changed scripts/deploy/verify-exec-tree-ownership_test.sh scripts/deploy/verify-exec-tree-ownership.sh
-  run_if_changed scripts/deploy/lib/public-bind-mounts_test.sh scripts/deploy/lib/public-bind-mounts.sh deploy/nginx
-  run_if_changed scripts/runtime/set-iris-base-url_test.sh scripts/runtime/set-iris-base-url.sh
-  run_if_changed scripts/deploy/ap-host-native-deploy_test.sh \
-    scripts/deploy/ap-host-native-deploy.sh scripts/deploy/ap-host-native-rollback.sh \
-    scripts/deploy/ap-host-native-collector-wrapper_test.sh scripts/deploy/ap-host-native-cutover_test.sh \
-    scripts/deploy/collector-cutover-failure_test.sh \
-    scripts/deploy/ap-completion-check.sh \
-    scripts/deploy/lib scripts/logs/ap-host-native-status.sh
-  run_if_changed scripts/deploy/ap-completion-check_test.sh \
-    scripts/deploy/ap-completion-check.sh scripts/deploy/ap-hosts scripts/deploy/lib
-  run_if_changed scripts/deploy/lib/ap-host_test.sh scripts/deploy/lib/ap-host.sh scripts/deploy/lib/collector-slots.sh scripts/deploy/lib/collector-slots.tsv scripts/deploy/ap-hosts
-  run_if_changed hololive/hololive-api/scripts/test-bot-env-loader.sh \
-    hololive/hololive-api/scripts/bot.sh scripts/deploy/lib/compose-env.sh
   run_queued_tests
 
-  local run_collector_js=false test_collector_artifacts=false
+  local run_collector_js=false
   if inputs_changed hololive/hololive-collector scripts/ci/public-pr-collector-helper-install.sh; then
     run_collector_js=true
   fi
-  if inputs_changed scripts/build/build-hololive-collector-go{,_test}.sh scripts/build/check-hololive-collector-go-artifact.sh \
-    scripts/ci/public-pr-go-gate.sh scripts/ci/python-{runtime,runner}.sh .python-version; then
-    test_collector_artifacts=true
-  fi
   echo "[pre-push] mode=${PRE_PUSH_MODE} local_ci_go_scope=${LOCAL_CI_GO_SCOPE}"
   source "${SCRIPT_DIR}/local-ci.sh"
-  run_local_ci "${run_collector_js}" "${test_collector_artifacts}"
+  run_local_ci "${run_collector_js}"
 }
 
 run_dependency_hygiene() {

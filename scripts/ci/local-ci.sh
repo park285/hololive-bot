@@ -98,7 +98,7 @@ run_database_steps() (
 )
 
 run_local_ci() {
-    local run_collector_js="$1" test_collector_artifacts="$2" collector_in_scope=false package
+    local run_collector_js="$1" collector_in_scope=false package
     configure_go_packages
     echo "[LOCAL CI] Go package scope: ${LOCAL_CI_GO_SCOPE} (${#GO_PACKAGES[@]} package patterns)"
     if has_go_packages; then
@@ -127,11 +127,7 @@ run_local_ci() {
     if [[ "${collector_in_scope}" == true || "${run_collector_js}" == true ]]; then
         run_step "collector YouTube.js dependencies" bash scripts/ci/public-pr-collector-helper-install.sh
     fi
-    if [[ "${test_collector_artifacts}" == true ]]; then
-        run_step "collector production build and artifact tests" bash scripts/build/build-hololive-collector-go_test.sh
-    else
-        run_step "collector production build" bash scripts/ci/public-pr-go-gate.sh hololive/hololive-collector build-prod
-    fi
+    run_step "collector production build" bash scripts/ci/public-pr-go-gate.sh hololive/hololive-collector build-prod
     run_step "X Spaces helper tests" bash scripts/ci/public-pr-x-spaces-helper-gate.sh
     run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
     run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
@@ -160,5 +156,5 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
             LOCAL_CI_GO_SCOPE=all
         fi
     fi
-    run_local_ci false false
+    run_local_ci false
 fi

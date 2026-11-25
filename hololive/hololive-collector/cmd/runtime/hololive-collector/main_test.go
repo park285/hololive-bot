@@ -54,8 +54,8 @@ func TestDatabaseEndpointAllowed(t *testing.T) {
 			}
 
 			for name, change := range map[string]func(*settings.PostgresConfig){
-				"host":     func(p *settings.PostgresConfig) { p.Host = "holo-pgbouncer" },
-				"port":     func(p *settings.PostgresConfig) { p.Port = 6433 },
+				"host":     func(p *settings.PostgresConfig) { p.Host = "other-pooler" },
+				"port":     func(p *settings.PostgresConfig) { p.Port = 6001 },
 				"role":     func(p *settings.PostgresConfig) { p.User = "hololive_runtime" },
 				"database": func(p *settings.PostgresConfig) { p.Database = "postgres" },
 				"socket":   func(p *settings.PostgresConfig) { p.SocketPath = "/run/postgresql" },

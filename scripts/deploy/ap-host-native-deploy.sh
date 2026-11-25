@@ -62,14 +62,8 @@ done < "$REPO_ROOT/deploy/topology/hosts.conf"
 [[ -n "$AP_POSTGRES_HOST" ]] || { echo 'topology central address missing' >&2; exit 1; }
 case "$MODE" in
   --dry-run|--apply|--prepare-profile) [[ $# -le 2 ]] || exit 2 ;;
-  --install-initial) [[ ${1:-} == osaka && $# == 2 ]] || exit 2 ;;
-  --quiesce|--resume|--settle)
-    [[ ${1:-} == osaka && ${3:-} == "$native_release_window" && -n ${RELEASE_ID:-} &&
-       -n ${HOLO_BOT_VERSION:-} && -n ${4:-} && ${HOLO_NATIVE_PAYLOAD_SHA256:-} =~ ^[0-9a-f]{64}$ ]] || exit 2
-    if [[ "$MODE" == --quiesce ]]; then [[ $# == 4 ]]; else [[ $# == 5 && "$5" =~ ^[0-9a-f-]{36}$ ]]; fi
-    ;;
   *)
-    echo "Usage: $0 <ap-host> [--dry-run|--apply|--prepare-profile] | osaka --install-initial | osaka --quiesce|--resume|--settle W3 <old-release> [nonce]" >&2
+    echo "Usage: $0 <ap-host> [--dry-run|--apply|--prepare-profile]" >&2
     exit 2
     ;;
 esac
@@ -123,13 +117,6 @@ fi
 release_id="${RELEASE_ID:-$(date -u +%Y%m%dT%H%M%SZ)-${native_revision:0:12}-$AP_NAME}"
 artifact_dir="${ARTIFACT_DIR:-$REPO_ROOT/artifacts/ap-host-native/$release_id}"
 native_release_id_validate "$release_id"
-if [[ "$MODE" == --quiesce || "$MODE" == --resume || "$MODE" == --settle ]]; then
-  native_release_id_validate "$4"
-  [[ "$4" != "$release_id" ]]
-  artifact_dir="$(realpath -e "$artifact_dir")"
-  digest="$(native_payload_digest "$artifact_dir")"
-  [[ "$digest" == "$HOLO_NATIVE_PAYLOAD_SHA256" ]] || { echo "검증 당시 native payload digest와 다릅니다." >&2; exit 1; }
-fi
 
 if [[ "$AP_GOAMD64" != v1 ]]; then
   if ! ap_remote_bash "$AP_GOAMD64" <<'REMOTE'
@@ -239,30 +226,18 @@ verify_native_collector() {
 apply_remote() {
   {
     printf '%s\n' "$AP_SLOT_PREAMBLE"
-    if [[ "$AP_NAME" == osaka ]]; then
-      local base="$slot_root" oldroot
-      local -a custody=("$base")
-      if [[ "$MODE" == --quiesce || "$MODE" == --resume || "$MODE" == --settle ]]; then
-        oldroot="$base/releases/${window_args[1]}"
-        custody+=("$oldroot" "$oldroot/bin/"{po-sandbox-manifest,worker-profile-pair}.py \
-          "$base/cutover-recovery" "$oldroot/native-window" "$base/releases/$release_id" \
-          "/etc/systemd/system/$slot_collector_unit.d" \
-          "/etc/systemd/system/$slot_issuer_unit.d" "/etc/systemd/system/${slot_issuer_unit%.service}.socket.d")
-      fi
-      printf 'set -euo pipefail\nsudo -n bash -s --'
-      printf ' %q' "${custody[@]}"
-      printf " <<'NATIVE_CUSTODY'\n"
-      native_tool_blob scripts/deploy/verify-exec-tree-ownership.sh || return
-      printf '\nNATIVE_CUSTODY\n'
-    fi
+    printf 'set -euo pipefail\nsudo -n bash -s -- %q' "$slot_root"
+    printf " <<'NATIVE_CUSTODY'\n"
+    native_tool_blob scripts/deploy/verify-exec-tree-ownership.sh || return "$?"
+    printf '\nNATIVE_CUSTODY\n'
     local fragment
-    for fragment in "${CUTOVER_LIBS[@]}"; do native_tool_blob "scripts/deploy/lib/$fragment.sh" || return; done
+    for fragment in "${CUTOVER_LIBS[@]}"; do native_tool_blob "scripts/deploy/lib/$fragment.sh" || return "$?"; done
   } |
     ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "${change_started_at:-}" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" "$native_revision" "$1" "${window_args[@]}"
 }
 
 window_args=()
-if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
+if [[ "$MODE" == --apply ]]; then
   window_args+=("$(write_host_env /dev/stdout | stream_sha256)")
   window_args+=("$(stream_sha256 < "$UNIT_TEMPLATE")")
   window_args+=("$(render_po_unit | stream_sha256)")
@@ -274,24 +249,11 @@ if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
   mkdir -p -- "$(dirname -- "$artifact_dir")"
   mkdir -- "$artifact_dir"
 fi
-if [[ "$MODE" == --quiesce || "$MODE" == --resume || "$MODE" == --settle ]]; then
-  verify_native_collector
-  cmp -s "$COLLECTOR_WRAPPER_LIB" "$artifact_dir/bin/hololive-collector-wrapper"
-  cmp -s "$UNIT_TEMPLATE" "$artifact_dir/${slot_collector_unit%%@*}@.service"
-  cmp -s "$PO_SOCKET_TEMPLATE" "$artifact_dir/${slot_issuer_unit%.service}.socket"
-  render_po_unit | cmp -s - "$artifact_dir/$slot_issuer_unit"
-  write_host_env /dev/stdout | cmp -s - "$artifact_dir/${slot_host_env##*/}"
-  [[ "$(<"$artifact_dir/po-sandbox/revision")" == "$native_revision" &&
-     "$(<"$artifact_dir/po-sandbox/version")" == "$version" && "$(<"$artifact_dir/po-sandbox/architecture")" == amd64 ]]
-  (cd "$artifact_dir/po-sandbox" && sha256sum --strict --check rootfs.tar.sha256)
-  window_args=("$3" "$4" "$HOLO_NATIVE_PAYLOAD_SHA256" "${5:-}")
-else
-  build_native_payload
-  if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
-    digest="$(native_payload_digest "$artifact_dir")"
-    window_args+=("$digest")
-    printf 'native attempt: release=%s payload_sha256=%s\n' "$release_id" "$digest" >&2
-  fi
+build_native_payload
+if [[ "$MODE" == --apply ]]; then
+  digest="$(native_payload_digest "$artifact_dir")"
+  window_args+=("$digest")
+  printf 'native attempt: release=%s payload_sha256=%s\n' "$release_id" "$digest" >&2
 fi
 
 RSYNC_RSH="$(ap_rsync_rsh)"
@@ -304,31 +266,22 @@ if [[ "$MODE" == "--dry-run" ]]; then
   exit 0
 fi
 
-if [[ "$MODE" != --resume && "$MODE" != --settle ]]; then
-  ap_remote_bash "$payload_name" <<'REMOTE'
+ap_remote_bash "$payload_name" <<'REMOTE'
 set -eu
 mkdir -m 0700 -- "$HOME/$1"
 REMOTE
 
-  rsync -ai --delete "$artifact_dir/" -e "$RSYNC_RSH" "$(ap_rsync_target "./$payload_name/")"
-fi
+rsync -ai --delete "$artifact_dir/" -e "$RSYNC_RSH" "$(ap_rsync_target "./$payload_name/")"
 change_started_at="$(ap_remote_bash <<'REMOTE'
 date -u +%Y-%m-%dT%H:%M:%SZ
 REMOTE
 )"
 
-action=deploy
-if [[ "$MODE" == --quiesce || "$MODE" == --resume || "$MODE" == --settle ]]; then action="${MODE#--}"; fi
-if [[ "$MODE" == --install-initial ]]; then action=install-initial; fi
 apply_cutover() {
-  if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then
-    local nonce
-    nonce="$(apply_remote same-window)" || return
-    [[ "$nonce" =~ ^[0-9a-f-]{36}$ ]] || return 1
-    window_args=("$nonce")
-  else
-    apply_remote "$action"
-  fi
+  local nonce
+  nonce="$(apply_remote same-window)" || return "$?"
+  [[ "$nonce" =~ ^[0-9a-f-]{36}$ ]] || return 1
+  window_args=("$nonce")
 }
 apply_cutover || {
   status=$?
@@ -337,19 +290,12 @@ apply_cutover || {
   fi
   exit "$status"
 }
-if [[ "$MODE" == --quiesce ]]; then exit 0; fi
 
 for observer in "$tool_root/scripts/logs/ap-host-native-status.sh" "$tool_root/scripts/deploy/ap-completion-check.sh"; do
   REPO_ROOT="$REPO_ROOT" CHANGE_STARTED_AT="$change_started_at" "$observer" "$AP_NAME" || {
     status=$?
-    if [[ ( "$MODE" == --resume || "$MODE" == --settle ) && "$status" != 255 ]]; then
-      apply_remote observation-failed
-    else
-      echo 'native post-cutover observation failed; current state unconfirmed; no automatic change' >&2
-    fi
+    echo 'native post-cutover observation failed; current state unconfirmed; no automatic change' >&2
     exit "$status"
   }
 done
-if [[ "$MODE" == --resume || "$MODE" == --settle ]]; then apply_remote accepted; fi
-if [[ "$MODE" == --apply && "$AP_NAME" == osaka ]]; then apply_remote apply-accepted; fi
-if [[ "$MODE" == --install-initial ]]; then apply_remote initial-accepted; fi
+apply_remote apply-accepted

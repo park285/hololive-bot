@@ -24,7 +24,7 @@
 | 외부 계약 보존 | 현재 계약 문서 | wire JSON, DB 상태 의미, env 이름, metric 이름, HTTP route는 별도 승인 없이 바꾸지 않습니다. |
 | 운영 경계 | [hololive AGENTS.md](../../AGENTS.md) | 운영 log·metric·DB 조회는 `hololive-bot-ops`와 `stack-platform-ops`가 소유합니다. 배포·DB 쓰기·Git 게시는 이 계획의 승인 범위가 아닙니다. |
 
-2026-09-26 stack 감사는 Hololive 후보 131건을 분류했고, 그중 97건은 삭제한 뒤 운영 배포까지 마쳤습니다. 이 계획은 그 감사가 다루지 않은 항목만 새로 추가합니다. 조건부로 남긴 퇴역 env 가드와 종단 데이터 경로는 [retired-guards.tsv](../../../docs/contracts/retired-guards.tsv)의 조건과 `remove_after`를 그대로 따릅니다.
+2026-09-26 stack 감사는 Hololive 후보 131건을 분류했고, 그중 97건은 삭제한 뒤 운영 배포까지 마쳤습니다. 이 계획은 그 감사가 다루지 않은 항목만 새로 추가합니다. 조건부로 남긴 퇴역 env 가드와 종단 데이터 경로는 당시 메타 `docs/contracts/retired-guards.tsv`(Git 이력)의 조건과 `remove_after`를 따랐습니다.
 
 ## 분석 기준과 범위
 
@@ -242,7 +242,7 @@ stack 규칙은 이런 가드를 금지하고 과거의 "영구 계약" 표기�
 
 이 경로들은 구형 행을 fail-closed로 종단 처리하므로 fallback이 아닙니다. 해당 데이터가 남아 있는 동안은 유지하고, 소유 ops skill로 read-only 조회한 근거가 생기면 제거합니다.
 
-이미 추적 중인 항목은 [retired-guards.tsv](../../../docs/contracts/retired-guards.tsv)의 조건을 따릅니다. `config/settings`의 퇴역 env 존재 기준 가드, worker profile drain 필드, [dispatchops의 send_unit_id NULL 조회](../../hololive/hololive-api/internal/planes/admin/internal/service/dispatchops/model.go#L268)(2026-09-28 종단 NULL 420건), [Twitch·Chzzk 전용 envelope 드레인 종단](../../hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go#L240)이 해당하며, 대부분 `remove_after 2026-12-31`입니다. `config_youtube_producer_retired.go` 가드는 추적표에 "2026-10-01 이후 재검토"로 적혀 있으므로 0단계에서 조건을 확인합니다.
+이미 추적 중이던 항목은 당시 메타 `docs/contracts/retired-guards.tsv`(Git 이력)의 조건을 따랐습니다. `config/settings`의 퇴역 env 존재 기준 가드, worker profile drain 필드, [dispatchops의 send_unit_id NULL 조회](../../hololive/hololive-api/internal/planes/admin/internal/service/dispatchops/model.go#L268)(2026-09-28 종단 NULL 420건), [Twitch·Chzzk 전용 envelope 드레인 종단](../../hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go#L240)이 해당하며, 대부분 `remove_after 2026-12-31`입니다. `config_youtube_producer_retired.go` 가드는 추적표에 "2026-10-01 이후 재검토"로 적혀 있으므로 0단계에서 조건을 확인합니다.
 
 이전 감사가 다루지 않은 항목은 다음과 같습니다.
 

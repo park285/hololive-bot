@@ -87,14 +87,9 @@ Runtime service names:
 `richtext` 저장 경로 제약은 epoch-4 baseline에 포함되어 있으며 기존 `text` 행은 바꾸지 않습니다.
 새 RichText 요청을 저장한 이후에는 해당 타입을 모르는 구형 API/alarm writer로 롤백하지 않습니다.
 구형 writer는 저장 요청을 거부하거나 같은 ID에 다른 타입을 보내므로 현재 revision을 forward-fix합니다.
-`markdown` route·kind 재생 경로는 퇴역했으며(#763), 남은 `markdown` 요청은 Iris를 호출하지 않고 지원하지 않는 형식으로 거절됩니다.
 이 변경의 로컬 DB·HTTP 검증은 운영 migration·배포·rollback 승인이나 완료를 뜻하지 않습니다.
 
-### 이전 Valkey 축소 revision과의 경계
-
-migration 231~233 이전 image의 image-only rollback, session 일괄 삭제, systemd
-비활성화 절차는 현재 운영 경로가 아닙니다. 당시 분석은
-[Valkey 축소 계획](../plans/2026-09-28-valkey-dependency-reduction.md#2차-rollback-규칙migration-231233-적용-뒤)과 Git 이력에 보존합니다.
+### 호환되지 않는 이전 image
 
 현재 schema·migration ledger·방 이름 정본을 이해하지
 못하는 이전 image는 pair가 있더라도 적용하지 않습니다. 구 migrator(`hololive-db-migrate.service`) 실행이나
@@ -102,11 +97,9 @@ migration 231~233 이전 image의 image-only rollback, session 일괄 삭제, sy
 소유자의 검증·복구 절차로 처리합니다. 데이터/세션 파괴나 서비스 자동 기동 정책 변경을
 routine rollback에 묶지 않습니다. 호환성이 입증되지 않으면 현재 revision으로 fix-forward합니다.
 
-### 퇴역한 pooler 경로로의 복구
+### 접속 경로가 다른 복구점
 
-이전 image/profile만으로는 접속 경로를 복구할 수 없습니다. 중앙·b·native helper는 현재 env/drop-in의 effective host·port와 복구점의 값을 비교하고, 다르면 재기동 전에 거절합니다. 자동 복원 중 교차 경로를 발견한 경우 collector/issuer 정지와 복구 입력을 유지합니다.
-
-PgBouncer 퇴역 전환 뒤 pooler 경로로 되돌리는 rollback은 지원하지 않습니다. 이전 HBA·pooler unit·인증 객체를 다시 세워야 하므로 호환 후보로 fix-forward합니다. 임시 pooler 허용·우회 flag를 추가하지 않습니다. [상세 계약](../../../deploy/quadlet/README.md#복구와-자격-증명-변경)을 확인합니다.
+이전 image/profile만으로는 접속 경로를 복구할 수 없습니다. 중앙·b·native helper는 현재 env/drop-in의 effective host·port와 복구점의 값을 비교하고, 다르면 재기동 전에 거절합니다. 자동 복원 중 교차 경로를 발견한 경우 collector/issuer 정지와 복구 입력을 유지합니다. 이때는 호환 후보로 fix-forward합니다. [상세 계약](../../../deploy/quadlet/README.md#복구와-자격-증명-변경)을 확인합니다.
 
 ## Contract Rollback
 
@@ -131,5 +124,3 @@ done
 - `release.md`
 - `../CONTRACT_MAP.md`
 - `../QUEUE_AND_PUBSUB_CONTRACTS.md`
-
-**20.0.0 원장:** 완료된 epoch-3 032는 32쌍을 그대로 읽을 뿐이다. 기존/신규 어느 DB에도 과거 migrator 자동실행을 붙이지 않는다. 이미지·프로필 rollback은 실제 writer 호환성 검증과 별개이며, DB를 되돌릴 때는 전환 전 백업을 별도 복원하거나 fix-forward한다.

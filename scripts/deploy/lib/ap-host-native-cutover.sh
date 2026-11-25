@@ -2,34 +2,6 @@
 native_recovery_dir="${slot_root:?collector slot preamble required}/cutover-recovery"
 native_claim_nonce=""
 
-native_capture_collector_state() {
-  local unit="$1" previous="$2" load persistent status=0
-  load="$(systemctl show "$unit" -p LoadState --value)" || status=$?
-  if [[ -z "$previous" && "$load" == not-found ]] && (( status == 0 || status == 4 )); then
-    collector_prechange_state=not-found
-    collector_prechange_enabled=false
-    collector_prechange_running=false
-    return 0
-  fi
-  [[ -n "$previous" && "$load" == loaded && "$status" == 0 ]] || return 1
-  collector_prechange_state="$(systemctl show "$unit" -p ActiveState --value)" || return 1
-  persistent="$(systemctl show "$unit" -p UnitFileState --value)" || return 1
-  case "$collector_prechange_state" in
-    active|activating|reloading) collector_prechange_running=true ;;
-    inactive|failed)
-      # shellcheck disable=SC2034
-      collector_prechange_running=false ;;
-    *) return 1 ;;
-  esac
-  case "$persistent" in
-    enabled) collector_prechange_enabled=true ;;
-    disabled)
-      # shellcheck disable=SC2034
-      collector_prechange_enabled=false ;;
-    *) return 1 ;;
-  esac
-}
-
 native_recovery_require_clear() {
   local guard_status=0
   sudo -n test ! -e "$native_recovery_dir" || guard_status=$?
@@ -44,9 +16,9 @@ native_cutover_claim() {
   native_claim_nonce=""
   IFS= read -r nonce < /proc/sys/kernel/random/uuid || return 1
   [[ "$nonce" =~ ^[0-9a-f-]{36}$ ]] || return 1
-  sudo -n mkdir -m 0700 "$native_recovery_dir" || return
+  sudo -n mkdir -m 0700 "$native_recovery_dir" || return "$?"
   sudo -n sh -ec 'umask 077; printf "%s\n" "$1" > "$2/release"; printf "%s\n" "$3" > "$2/owner-pid"; printf "%s\n" "$4" > "$2/claim"' \
-    sh "$1" "$native_recovery_dir" "$BASHPID" "$nonce" || return
+    sh "$1" "$native_recovery_dir" "$BASHPID" "$nonce" || return "$?"
   native_claim_nonce="$nonce"
 }
 
@@ -91,7 +63,7 @@ native_cutover_release_guard() {
     done
     rm -f -- step terminal worker-pid release owner-pid claim
     rmdir -- "$1"
-  ' sh "$native_recovery_dir" "$native_claim_nonce" "$BASHPID" || return
+  ' sh "$native_recovery_dir" "$native_claim_nonce" "$BASHPID" || return "$?"
   native_claim_nonce=""
 }
 

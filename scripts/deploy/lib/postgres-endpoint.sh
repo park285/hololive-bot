@@ -29,17 +29,17 @@ PY
 
 postgres_endpoint_env() {
   local file="$1" host port socket
-  compose_env_validate_file_format "$file" || return
-  host="$(compose_env_read_value_from_file "$file" POSTGRES_HOST)" || return
-  port="$(compose_env_read_value_from_file "$file" POSTGRES_PORT)" || return
-  socket="$(compose_env_read_value_from_file "$file" POSTGRES_SOCKET_PATH)" || return
+  compose_env_validate_file_format "$file" || return "$?"
+  host="$(compose_env_read_value_from_file "$file" POSTGRES_HOST)" || return "$?"
+  port="$(compose_env_read_value_from_file "$file" POSTGRES_PORT)" || return "$?"
+  socket="$(compose_env_read_value_from_file "$file" POSTGRES_SOCKET_PATH)" || return "$?"
   [[ -z "$socket" ]] || { echo '[postgres-endpoint] socket route is not an app TCP endpoint' >&2; return 1; }
   postgres_endpoint_validate "$host" "$port"
 }
 
 postgres_endpoint_container() {
   local values key value host="" port="" socket=""
-  values="$(podman inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$1")" || return
+  values="$(podman inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$1")" || return "$?"
   while IFS='=' read -r key value; do
     case "$key" in
       POSTGRES_HOST) host="$value" ;;
@@ -228,7 +228,7 @@ postgres_quadlet_environment() {
   shift 3
   local -A container=() service_env=()
   local use_compose=false
-  quadlet_override_origins "$installed_unit" || return
+  quadlet_override_origins "$installed_unit" || return "$?"
   values="$(python3 - "$unit_file" "$installed_unit" "$@" <<'PY'
 import pathlib
 import re
@@ -293,7 +293,7 @@ except (OSError, ValueError) as error:
     detail = str(error) if isinstance(error, ValueError) and str(error).startswith("unsupported Quadlet") else "unreviewed environment source or syntax"
     sys.exit("[postgres-endpoint] cannot interpret Quadlet environment: " + detail)
 PY
-)" || return
+)" || return "$?"
   while IFS='=' read -r key value; do
     case "$key" in
       CONTAINER_*) container["${key#CONTAINER_}"]="$value" ;;
@@ -303,10 +303,10 @@ PY
   done <<< "$values"
   if [[ "$use_compose" == true ]]; then
     [[ "$compose_file" != - ]] || { echo '[postgres-endpoint] missing compose environment source' >&2; return 1; }
-    compose_env_validate_file_format "$compose_file" || return
+    compose_env_validate_file_format "$compose_file" || return "$?"
     for key in "${!service_env[@]}"; do
       if compose_env_key_exists_in_file "$compose_file" "$key"; then
-        service_env["$key"]="$(compose_env_read_value_from_file "$compose_file" "$key")" || return
+        service_env["$key"]="$(compose_env_read_value_from_file "$compose_file" "$key")" || return "$?"
       fi
     done
   fi
@@ -326,7 +326,7 @@ PY
 
 postgres_endpoint_quadlet() {
   local values key value host="" port="" socket=""
-  values="$(postgres_quadlet_environment "$1" "$2" "${3:-$1}" POSTGRES_HOST POSTGRES_PORT POSTGRES_SOCKET_PATH)" || return
+  values="$(postgres_quadlet_environment "$1" "$2" "${3:-$1}" POSTGRES_HOST POSTGRES_PORT POSTGRES_SOCKET_PATH)" || return "$?"
   while IFS='=' read -r key value; do
     case "$key" in
       POSTGRES_HOST) host="$value" ;;

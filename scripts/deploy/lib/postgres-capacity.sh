@@ -205,12 +205,12 @@ postgres_capacity_assert_target() {
 postgres_capacity_effective_env() {
     local policy="$1" compose="$2" units="$3" replacement_service="${4:-}" replacement_unit="${5:-}"
     local owner service key source instances maximum role unit values
-    postgres_capacity_assert_policy_target "$policy" "$compose" >&2 || return
+    postgres_capacity_assert_policy_target "$policy" "$compose" >&2 || return "$?"
     while IFS='|' read -r owner service key source instances maximum role; do
         [[ -n "$source" && "$owner" != \#* && "$owner" != @* ]] || continue
         unit="$units/$service.container"
         [[ "$service" != "$replacement_service" ]] || unit="$replacement_unit"
-        values="$(postgres_quadlet_environment "$unit" "$compose" "$units/$service.container" "$key")" || return
+        values="$(postgres_quadlet_environment "$unit" "$compose" "$units/$service.container" "$key")" || return "$?"
         printf '%s=%s\n' "$source" "${values#*=}"
     done < "$policy"
 }
@@ -258,9 +258,9 @@ postgres_capacity_assert_installed() (
     local policy="$1/scripts/ci/postgres-capacity-policy.tsv" compose="$2" units="$3" temporary
     . "$(dirname "${BASH_SOURCE[0]}")/compose-env.sh"
     . "$(dirname "${BASH_SOURCE[0]}")/postgres-endpoint.sh"
-    temporary="$(mktemp)" || return
+    temporary="$(mktemp)" || return "$?"
     trap 'rm -f -- "$temporary"' EXIT
-    postgres_capacity_effective_env "$policy" "$compose" "$units" "${4:-}" "${5:-}" >"$temporary" || return
+    postgres_capacity_effective_env "$policy" "$compose" "$units" "${4:-}" "${5:-}" >"$temporary" || return "$?"
     postgres_capacity_assert_policy_target "$policy" "$temporary"
 )
 
@@ -268,7 +268,7 @@ postgres_capacity_assert_service() (
     local repo="$1" compose="$2" units="$3" service="$4" unit="$5" endpoint
     . "$(dirname "${BASH_SOURCE[0]}")/compose-env.sh"
     . "$(dirname "${BASH_SOURCE[0]}")/postgres-endpoint.sh"
-    endpoint="$(postgres_endpoint_quadlet "$unit" "$compose" "$units/$service.container")" || return
+    endpoint="$(postgres_endpoint_quadlet "$unit" "$compose" "$units/$service.container")" || return "$?"
     case "$endpoint" in
         'holo-postgres|5432')
             postgres_capacity_assert_installed "$repo" "$compose" "$units" "$service" "$unit"

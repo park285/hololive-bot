@@ -221,9 +221,7 @@ writer must stay stopped even when its profile CLI succeeds.
 
 API·alarm-worker는 `100.100.1.8:16379`에 TLS와 기존 개별 자격으로 직접 접속합니다. 먼저 이 주소가 실제 최신 쓰기 primary인지 검증합니다. replica면 중단합니다. 승격이나 `SENTINEL FAILOVER`로 맞추지 않습니다.
 
-메타 저장소의 `tools/ops/prepare-valkey-ha.py --group hololive --stage standalone-persistent`가 승인된 기존 정본(root 옵션)에서 앱·health·operator 비밀번호와 ACL verifier를 대조합니다. 신규 비밀번호나 기존 파일 교체는 없습니다. `deploy/valkey-ha/stage.py standalone-persistent hololive --source-run-id … --ha-fenced-direct-rw-verified`는 failback·Sentinel·replica 차단과 직접 읽기/쓰기 확인 후에만 사용합니다. `--valkey-only` 게시 뒤 별도 재기동해 동일 볼륨·AOF와 앱 동작을 확인합니다.
-
-PG nonce 원장과 [구 수신기 차단·유효창](../../docs/current/runbooks/release.md#iris-webhook-nonce-저장소-전환), 신규 API의 서명 재사용 거부 및 worker의 PG 대기 작업 처리를 확인한 뒤에만 `stage.py ephemeral hololive --source-run-id … --old-writers-fenced --last-legacy-receiver-at <마지막 드레인 epoch> --clock-error-seconds <실측 최대 오차> --application-cutover-verified`를 선택합니다. 재기동한 최종 캐시는 AOF·자동 RDB가 없고 `/data`는 빈 읽기 전용 tmpfs입니다. 옛 볼륨을 마운트하거나 삭제하지 않으며 최종 앱의 첫 쓰기 이후 이를 단순 재생하지 않습니다.
+중앙 `valkey-cache`는 휘발 캐시 단계(`ephemeral`)로 운영합니다. AOF·자동 RDB가 없고 `/data`는 빈 읽기 전용 tmpfs이며, unit의 `ExecStartPre`가 `/opt/iris-stack/valkey-ha/stage.py check hololive`로 선택한 단계와 설정·ACL 해시를 확인합니다. 단계 기록이 없는 새 호스트에서는 `/etc/stack-secrets/valkey/hololive/ephemeral.{conf,acl}`을 정본에서 배치한 뒤 `stage.py ephemeral hololive`로 한 번만 선택합니다. 옛 영속 볼륨은 마운트하거나 삭제하지 않습니다.
 
 ## Runtime Env Inputs
 

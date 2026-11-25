@@ -44,6 +44,8 @@ PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_ROLLBACK=true scripts/deploy/po-central-
 
 unit 교체 전에 `b quiesce`로 실행 중 이전 pair를 보존·정지하고, 설치된 후보와 중앙 재개가 끝난 뒤 `b resume`으로 재개합니다. 두 단계 모두 `<clean-candidate-tree> <trusted-receipt-dir> <b-staging-timestamp> <owner-window-id> <trusted-origin-pair-dir>` 다섯 인자를 받고, `b quiesce`는 여섯째 인자로 준비한 재개 grant 파일을 받아 정지 grant에서 단계만 `resume`으로 바꾼 줄을 담은 일반 파일인지 확인하고, 그 줄을 영수증 디렉터리의 `b.<owner-window-id>.resume-grant`에 남깁니다. backup 하나만 주는 `b resume <backup>`은 `staged-po-b-*` backup을 받지 않습니다. `b preflight`는 `b quiesce`와 같은 여섯 인자로 `b quiesce`가 grant를 소비하기 전까지의 검사만 하고 SSH를 열지 않으므로 정지 창을 열기 전에 실행합니다. `b quiesce`는 stage 완료 영수증의 seal만 요구하고, c 후보 수용 영수증(`c.accepted`)은 resume·check·rollback에서 확인합니다. stage archive의 `source-files.sha256`은 c와 같이 `po-central-files.txt`와 `manifest.txt`의 002 이후 migration·계약 SQL을 모두 담아야 하므로, c `quiesce-verified`에 쓴 pair와 같은 seal이 됩니다. 이 release의 `b quiesce`는 staging 후보 unit이 설치된 unit과 바이트 단위로 같을 때만 진행하고, 그 unit으로 정지 전 실제 경로(`--check-database-endpoint`)를 확인합니다. 정지된 collector에 일반 `deploy`를 적용하지 않습니다. 실패 시 hold와 backup을 보존합니다. endpoint가 다른 이전 pair로의 `rollback`은 거부되므로 호환 후보로 fix-forward합니다.
 
+kapu의 영수증 디렉터리는 실행 사용자 소유 0700이며 심볼릭 링크 없는 절대 경로로 지정합니다. 이 디렉터리에는 b staging이 남긴 `arm64/` archive와 `b.stage.<b-staging-timestamp>.finished`(`<revision> <seal> <b-staging-timestamp>` 한 줄), 승인 주체가 쓴 정지 grant `b.current-grant`가 있어야 하며, 영수증 파일은 모두 실행 사용자 소유 0600 일반 파일입니다. 승인 주체는 grant를 게시하거나 회수할 때 영수증 디렉터리의 `receipts.lock`을 `flock -n`으로 잡고, `b quiesce`·`b resume`도 같은 잠금 안에서 grant를 다시 검증하고 소비합니다. grant는 하드 링크가 1개인 한 줄 `PO_B_PAIR_V1 iris-seoul <owner-window-id> quiesce <b-staging-timestamp> <tool-revision> <revision> <seal> <origin-revision> <origin-collector-id> <origin-issuer-id> <origin-digest> <expires>`입니다. 재개 grant는 `quiesce`만 `resume`으로 바꾼 같은 줄이므로 `expires`(Unix 초)가 정지부터 b 재개까지를 덮어야 합니다. `b quiesce`는 `expires`가 1시간 이상, `b preflight`는 1시간 30분 이상 남았을 때만 통과합니다.
+
 `b/current`는 source checkout이 아니라 release pair 저장소이므로 `.source-revision`을 만들지 않습니다.
 `quiesce`는 동일 full revision으로 빌드한 image/manifest와 bounded source checksum을 전송하고 보존합니다.
 helper·migration·후보 collector unit도 checksum 대상입니다. `resume`은 helper를 실행하기 전에 이를 대조하고,
@@ -66,15 +68,3 @@ PO_B_SSH_TARGET=iris-seoul APPROVE_PO_B_DEPLOY=true scripts/deploy/po-central-cu
 이전 unit은 quiesce가 보존한 `current/artifacts/worker-profile/releases/staged-po-b-<b-staging-timestamp>/collector-b/previous/unit.container`에
 남습니다. 재개 검증이 실패하면 mask를 해제하지 않으며, 재개 후 실패할 때도 두 writer를 다시 hold합니다.
 롤백은 먼저 중앙 HBA와 설치 unit의 effective endpoint를 이전 경로로 정합화한 뒤 수행해야 합니다.
-
-## 2026-11-06 전환 기록
-
-1. Docker의 `:prod` 두 image를 `docker save | podman load`로 옮겼다. image ID가 같다(collector `dc2f1776…`, issuer `785dc3e7…`).
-2. issuer 영수증 `~/hololive-bot/backups/po-sandbox-current-b.{json,image-id}`를 `po-current-b/`에 설치하고
-   `po_verify_image`로 대조했다.
-3. Docker 컨테이너 둘을 `docker stop`하고(삭제하지 않음) unit을 기동했다. 수집 중단은 약 25초였다.
-4. 실행 중 container 기준으로 `worker-profile-pair.py prepare collector-b …/releases/podman-cutover-20261106T1148Z/collector-b/previous`로
-   첫 drop-in을 만들고 재시작해 `verify-live`를 확인했다. profile hash는 Docker 시절과 같다.
-
-같은 날 사용자 승인으로 Docker 쪽 b 컨테이너·볼륨·이미지·compose 네트워크와 compose 파일, `~/hololive-bot` 배포 트리를 지웠다.
-Docker 전환 이전 상태로 롤백할 경로는 더 없다. Docker에는 Redroid와 그 이미지만 남는다.
