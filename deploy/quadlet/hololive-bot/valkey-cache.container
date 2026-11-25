@@ -28,11 +28,11 @@ Memory=512m
 PidsLimit=256
 PodmanArgs=--oom-score-adj=-300
 LogDriver=journald
-HealthCmd=["valkey-runtime","health","/run/valkey/health-password","/run/valkey-certs/ca.pem","16379"]
+HealthCmd=valkey-cli -e --raw --tls --cacert /run/valkey-certs/ca.pem --askpass --user health -h 127.0.0.1 -p 16379 ping </run/valkey/health-password
 HealthInterval=30s
 HealthTimeout=5s
 HealthRetries=3
-HealthStartupCmd=["valkey-runtime","health","/run/valkey/health-password","/run/valkey-certs/ca.pem","16379"]
+HealthStartupCmd=valkey-cli -e --raw --tls --cacert /run/valkey-certs/ca.pem --askpass --user health -h 127.0.0.1 -p 16379 ping </run/valkey/health-password
 HealthStartupInterval=2s
 HealthStartupTimeout=5s
 HealthOnFailure=stop
@@ -41,7 +41,7 @@ StopTimeout=60
 Exec=valkey-server /run/valkey/${VALKEY_STAGE}.conf
 
 [Service]
-Environment=VALKEY_IMAGE=localhost/iris-stack-valkey:9.1.3-zlib1.4-r2
+Environment=VALKEY_IMAGE=docker.io/valkey/valkey:9.1.3-alpine3.24
 EnvironmentFile=/etc/stack-secrets/hololive-bot/compose.env
 EnvironmentFile=/var/lib/iris-valkey-standalone/hololive.env
 ExecStartPre=/usr/local/libexec/hololive-bot/quadlet-prestart valkey-cache

@@ -196,7 +196,7 @@ preload합니다. 상시 목표 값은 `pg_stat_statements,auto_explain`이며 k
 복구 기록 경로는 `/opt/hololive-bot/compose/deploy-backups/pre-pg-auto-explain-20261027T150624Z/`입니다.
 새 통계는 `hololive_observability` 스키마에서 기존 `pg_read_all_stats` 역할이 읽습니다.
 exporter의 public USAGE 차단과 앱 역할의 권한은 유지했습니다.
-[활성화·복구 절차](runbooks/postgres-observability.md)를 따릅니다.
+소스는 공식 PostgreSQL image로 옮겼지만 운영은 아직 이전 자체 image입니다. 두 확장 제거·preload 복귀·image 교체는 승인 대기 중이며 [제거 절차](runbooks/postgres-observability.md#공식-image-전환-전-확장-제거)를 따릅니다.
 이후 별도 계측 브랜치의 검증된 소스를 로컬 main에 통합했습니다. 그 소스 통합만으로는 운영 이미지를
 바꾸거나 확장 활성화 SQL을 다시 실행하지 않았습니다. 현재 image와 복구점은 위 18.7 적용 기록을 따릅니다.
 

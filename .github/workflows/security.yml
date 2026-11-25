@@ -142,7 +142,7 @@ jobs:
       - name: Register arm64 emulation
         run: docker run --rm --privileged tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 --install arm64
 
-      - name: Build final production images
+      - name: Build final application images
         env:
           HOLOLIVE_BUILD_PLATFORM: linux/arm64
         run: ./build-all.sh --no-bump --build-only --skip-local-ci
@@ -152,13 +152,8 @@ jobs:
           mkdir -p "${XDG_RUNTIME_DIR}/podman"
           nohup podman system service --time=0 "unix://${XDG_RUNTIME_DIR}/podman/podman.sock" >/dev/null 2>&1 &
 
-      - name: Scan every final production image
+      - name: Scan every final application image
         run: bash scripts/ci/run-final-image-scan.sh
-
-      - name: Test amd64 PostgreSQL image
-        if: ${{ !cancelled() && steps.repo.outcome == 'success' }}
-        run: bash scripts/ci/test-infra-images.sh
-
   npm-security:
     runs-on: ubuntu-latest
     timeout-minutes: 15
