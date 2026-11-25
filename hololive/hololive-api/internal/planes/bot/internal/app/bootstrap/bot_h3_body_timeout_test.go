@@ -11,8 +11,8 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/park285/iris-client-go/v5/webhook"
-	"github.com/park285/iris-client-go/v5/webhooksign"
+	"github.com/park285/iris-client-go/v6/webhook"
+	"github.com/park285/iris-client-go/v6/webhooksign"
 	"github.com/stretchr/testify/require"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"

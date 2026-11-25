@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/sendfence"
@@ -19,6 +19,7 @@ const (
 	fenceActionHandoffReissue    = "handoff_reissue"
 	fenceActionHandoffDLQ        = "handoff_dlq"
 	fenceActionHandoffQuarantine = "handoff_quarantine"
+	fenceActionHandoffRoomPause  = "handoff_room_pause"
 )
 
 const handoffClaimKeyReleaseTimeout = 5 * time.Second
@@ -46,12 +47,14 @@ type HandoffClaimer interface {
 	ClaimHandoffDue(ctx context.Context, limit int, softClaim time.Duration) ([]HandoffClaim, error)
 }
 
+//nolint:interfacebloat // one settlement method per handoff decision action
 type HandoffSettler interface {
 	CompleteHandoff(ctx context.Context, claim *HandoffClaim) error
 	RescheduleHandoff(ctx context.Context, claim *HandoffClaim, step, horizon time.Duration) error
 	ReissueAfterHandoff(ctx context.Context, claim *HandoffClaim, retryAfter time.Duration, code, detail string) error
 	DLQAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error
 	QuarantineAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error
+	PauseRoomAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error
 }
 
 var _ HandoffRepository = (*PgxRepository)(nil)
@@ -148,6 +151,10 @@ func (r *PgxRepository) DLQAfterHandoff(ctx context.Context, claim *HandoffClaim
 
 func (r *PgxRepository) QuarantineAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error {
 	return r.applyHandoff(ctx, fenceActionHandoffQuarantine, handoffQuarantineSQL, claim, sanitizeStoredError(detail), code)
+}
+
+func (r *PgxRepository) PauseRoomAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error {
+	return r.applyHandoff(ctx, fenceActionHandoffRoomPause, handoffRoomPauseSQL, claim, sanitizeStoredError(detail), code)
 }
 
 func (r *PgxRepository) applyHandoff(ctx context.Context, action string, query pgxdb.Statement, claim *HandoffClaim, extra ...any) error {
@@ -295,6 +302,14 @@ func (c *HandoffConsumer) QuarantineAfterHandoff(ctx context.Context, claim *Han
 	}
 
 	observePGQuarantined(len(claim.DeliveryIDs))
+
+	return nil
+}
+
+func (c *HandoffConsumer) PauseRoomAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) error {
+	if err := c.repository.PauseRoomAfterHandoff(ctx, claim, code, detail); err != nil {
+		return fmt.Errorf("cancel alarm delivery and pause room after handoff: %w", err)
+	}
 
 	return nil
 }

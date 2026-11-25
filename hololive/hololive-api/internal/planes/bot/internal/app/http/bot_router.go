@@ -7,7 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/iris-client-go/v5/webhook"
+	"github.com/park285/iris-client-go/v6/webhook"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/readiness"

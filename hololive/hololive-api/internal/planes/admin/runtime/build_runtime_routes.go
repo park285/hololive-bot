@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-api/internal/service/scheduleposter"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
+	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
@@ -28,10 +29,14 @@ func buildAdminHandlers(
 	collector server.SchedulePosterCollector,
 	logger *slog.Logger,
 ) (*server.DomainHandlers, error) {
-	var dispatchOps server.DispatchOperations
+	var (
+		dispatchOps    server.DispatchOperations
+		deliveryPauses server.DeliveryPauseStore
+	)
 
 	if infra.Postgres != nil {
 		dispatchOps = dispatchops.NewRepository(infra.Postgres.GetPool())
+		deliveryPauses = kakaoroom.NewDeliveryPauses(infra.Postgres.GetPool())
 	}
 
 	domains, err := server.NewDomainHandlers(server.Deps{
@@ -46,6 +51,7 @@ func buildAdminHandlers(
 		Settings:        adminSettings.service,
 		Applier:         adminSettings.applier,
 		Iris:            deps.IrisRooms,
+		DeliveryPauses:  deliveryPauses,
 		DispatchOps:     dispatchOps,
 		XSpaceSessions:  xSpaceSessions,
 		SchedulePosters: schedulePosters,

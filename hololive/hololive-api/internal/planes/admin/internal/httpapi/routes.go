@@ -35,6 +35,8 @@ func registerRoomRoutes(holoAPI *gin.RouterGroup, handler *api.RoomHandler) {
 	holoAPI.POST("/rooms", handler.AddRoom)
 	holoAPI.DELETE("/rooms", handler.RemoveRoom)
 	holoAPI.POST("/rooms/acl", handler.SetACL)
+	holoAPI.GET("/rooms/delivery-pauses", handler.GetDeliveryPauses)
+	holoAPI.DELETE("/rooms/delivery-pauses/:roomId", handler.ResumeDeliveryPause)
 }
 
 func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *api.SettingsHandler) {

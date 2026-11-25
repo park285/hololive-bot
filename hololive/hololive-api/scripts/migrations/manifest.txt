@@ -4,3 +4,4 @@
 004 004_epoch4_retire_row_triggers.sql
 005 005_epoch4_retire_shadow_state.sql
 006 006_epoch4_bot_webhook_nonces.sql
+007 007_epoch4_kakao_room_delivery_pauses.sql

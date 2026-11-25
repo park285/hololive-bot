@@ -14,7 +14,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -32,6 +32,7 @@ const (
 	opReissue       = "reissue"
 	opExhaust       = "exhaust"
 	opQuarantine    = "quarantine"
+	opRoomNotJoined = "room_not_joined"
 	stateCompleted  = "handoff_completed"
 	stateFailed     = "failed"
 	stateQueued     = "queued"
@@ -130,6 +131,10 @@ func (l *testLedger) Quarantine(_ context.Context, claim *testClaim, code, _ str
 	return l.record(ledgerCall{op: opQuarantine, id: claim.id, code: code})
 }
 
+func (l *testLedger) RoomNotJoined(_ context.Context, claim *testClaim, code, _ string) error {
+	return l.record(ledgerCall{op: opRoomNotJoined, id: claim.id, code: code})
+}
+
 type testStatusClient struct {
 	mu       sync.Mutex
 	queried  []string
@@ -156,6 +161,12 @@ func status(state string) func(string) (*iris.ReplyStatusSnapshot, error) {
 	return func(requestID string) (*iris.ReplyStatusSnapshot, error) {
 		return &iris.ReplyStatusSnapshot{RequestID: requestID, State: state}, nil
 	}
+}
+
+func roomNotJoinedStatus(requestID string) (*iris.ReplyStatusSnapshot, error) {
+	reason := iris.ReplyFailureReasonRoomNotJoined
+
+	return &iris.ReplyStatusSnapshot{RequestID: requestID, State: stateFailed, Reason: &reason}, nil
 }
 
 func statusError(code int) func(string) (*iris.ReplyStatusSnapshot, error) {
@@ -261,6 +272,11 @@ func TestReconcilerRoutesDecisionToLedger(t *testing.T) {
 			name: "failed without budget", status: status(stateFailed),
 			want:      ledgerCall{op: opExhaust, code: contractsalarm.HandoffCodeFailed},
 			wantLevel: slog.LevelError, wantLog: "test ledger handoff failed; reissue budget exhausted",
+		},
+		{
+			name: "room not joined with budget", status: roomNotJoinedStatus, claim: testClaim{budgetLeft: true},
+			want:      ledgerCall{op: opRoomNotJoined, code: contractsalarm.HandoffCodeRoomNotJoined},
+			wantLevel: slog.LevelWarn, wantLog: "test ledger handoff rejected because the bot account is not in the room; delivery closed and room paused",
 		},
 		{
 			name: "queued before horizon", status: status(stateQueued), claim: testClaim{elapsed: 30 * time.Second},

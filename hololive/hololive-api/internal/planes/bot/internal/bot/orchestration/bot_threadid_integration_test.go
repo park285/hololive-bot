@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v5/iris"
-	"github.com/park285/iris-client-go/v5/webhook"
+	"github.com/park285/iris-client-go/v6/iris"
+	"github.com/park285/iris-client-go/v6/webhook"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"

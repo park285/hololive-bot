@@ -95,16 +95,17 @@ func (r PublishReceipt) Accepted() bool {
 }
 
 type PublishBatchResult struct {
-	Receipts            []PublishReceipt
-	RequestedEvents     int
-	InsertedEvents      int
-	DuplicateEvents     int
-	HashConflictEvents  int
-	RequestedDeliveries int
-	ProcessedDeliveries int
-	InsertedDeliveries  int
-	DuplicateDeliveries int
-	TerminalDuplicates  int
+	Receipts             []PublishReceipt
+	RequestedEvents      int
+	InsertedEvents       int
+	DuplicateEvents      int
+	HashConflictEvents   int
+	RequestedDeliveries  int
+	ProcessedDeliveries  int
+	InsertedDeliveries   int
+	PausedRoomDeliveries int
+	DuplicateDeliveries  int
+	TerminalDuplicates   int
 }
 
 func processedPublishBatchResult(result *PublishBatchResult) PublishBatchResult {

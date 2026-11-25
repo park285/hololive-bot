@@ -267,6 +267,7 @@ Reply 발송은 admission(`202`)에서 끝나고 `/reply-status`를 polling하�
 | Iris 관측 | 전이 | `last_error` |
 |---|---|---|
 | `handoff_completed` | `handoff_completed`(payload 제거) | 빈 값 |
+| `failed`, `reason: room_not_joined` | 예산과 관계없이 `dead`(payload 제거). 봇 계정이 없는 방이라 재발송하지 않음 | `handoff_room_not_joined` |
 | `failed`, attempt·144시간 예산 남음 | `retryable_pre_dispatch`. 다음 발송의 SDK ladder가 409 `CLIENT_REQUEST_ID_FAILED`를 지나 `:r1`/`:r2`로 보내며 세대 상한 2를 넘지 않음. 세 세대 모두 409이면 `permanent_conflict` | `handoff_failed` |
 | `failed`, 예산 소진 | `dead`(payload 제거) | `handoff_failed` |
 | `outcome_unknown`, 알 수 없는 상태, 빈 응답, 다른 `requestId` | `manual_review`(payload 보존) | `handoff_outcome_unknown` |

@@ -26,6 +26,7 @@ const (
 type outboxMetricSet struct {
 	enqueueOutboxesTotal    *prometheus.CounterVec
 	enqueueTargetRoomsTotal prometheus.Counter
+	enqueuePausedRoomsTotal prometheus.Counter
 	enqueueDuration         prometheus.Histogram
 
 	deliveryClaimedTotal    prometheus.Counter
@@ -67,6 +68,12 @@ var outboxMetrics = sync.OnceValue(func() *outboxMetricSet {
 			prometheus.CounterOpts{
 				Name: "hololive_youtube_outbox_enqueue_target_rooms_total",
 				Help: "Total target rooms enqueued for YouTube outbox delivery rows.",
+			},
+		),
+		enqueuePausedRoomsTotal: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "hololive_youtube_outbox_enqueue_paused_rooms_total",
+				Help: "Total subscribed rooms skipped during YouTube outbox fanout because their Kakao room delivery is paused.",
 			},
 		),
 		enqueueDuration: promauto.NewHistogram(
@@ -228,6 +235,14 @@ func observeOutboxEnqueueTargetRooms(n int) {
 	}
 
 	outboxMetrics().enqueueTargetRoomsTotal.Add(float64(n))
+}
+
+func observeOutboxEnqueuePausedRooms(n int) {
+	if n <= 0 {
+		return
+	}
+
+	outboxMetrics().enqueuePausedRoomsTotal.Add(float64(n))
 }
 
 func observeOutboxDispatchDuration(duration time.Duration) {

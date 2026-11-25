@@ -3,9 +3,10 @@ package kakaoroom
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 )
 
 type stubLister struct {
@@ -79,6 +80,8 @@ type errStore struct {
 
 func (s errStore) upsert(context.Context, Facts) error { return s.err }
 
+func (s errStore) resume(context.Context, string) (bool, error) { return false, s.err }
+
 func (s errStore) get(context.Context, string) (Facts, bool, error) {
 	return Facts{}, false, s.err
 }
@@ -141,5 +144,38 @@ func TestFactsFromSummary(t *testing.T) {
 
 	if !got.OpenChat() || got.RoomLinkID != linkURL {
 		t.Fatalf("open link summary = %+v", got)
+	}
+}
+
+func TestCatalogObserveResumesDeliveryForEveryObservedRoom(t *testing.T) {
+	t.Parallel()
+
+	var resumed, upserted []string
+
+	c := New(nil, nil, nil)
+
+	c.store = catalogStoreFuncs{
+		resumeFunc: func(_ context.Context, roomID string) (bool, error) {
+			resumed = append(resumed, roomID)
+
+			return true, nil
+		},
+		upsertFunc: func(_ context.Context, facts Facts) error {
+			upserted = append(upserted, facts.RoomID)
+
+			return nil
+		},
+	}
+
+	c.Observe(t.Context(), " 11 ", "", "")
+	c.Observe(t.Context(), "12", "OM", "link")
+	c.Observe(t.Context(), " ", "OM", "link")
+
+	if want := []string{"11", "12"}; !slices.Equal(resumed, want) {
+		t.Fatalf("resumed rooms = %v, want %v", resumed, want)
+	}
+
+	if want := []string{"12"}; !slices.Equal(upserted, want) {
+		t.Fatalf("upserted rooms = %v, want %v", upserted, want)
 	}
 }

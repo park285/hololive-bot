@@ -18,6 +18,7 @@ type handoffFailure struct {
 	due        lifecycle.DueSpec
 	reissue    bool
 	quarantine bool
+	pauseRoom  bool
 }
 
 type handoffSettlement struct {
@@ -160,6 +161,12 @@ func applyHandoffFailure(
 		}
 	}
 
+	if failure.pauseRoom {
+		if pauseErr := pauseHandoffRooms(ctx, tx, units); pauseErr != nil {
+			return nil, pauseErr
+		}
+	}
+
 	if failure.reissue {
 		err = reissueHandoffRequest(ctx, tx, claim)
 	} else {
@@ -242,6 +249,19 @@ func recordHandoffQuarantinedLedger(ctx context.Context, tx pgxdb.Querier, units
 
 	if err := RecordDeliveryLedgerWrites(ctx, tx, LedgerStatusQuarantined, writes); err != nil {
 		return fmt.Errorf("record quarantined ledger: %w", err)
+	}
+
+	return nil
+}
+
+func pauseHandoffRooms(ctx context.Context, tx pgxdb.Querier, units []handoffUnit) error {
+	roomIDs := make([]string, 0, len(units))
+	for i := range units {
+		roomIDs = append(roomIDs, units[i].key.RoomID)
+	}
+
+	if _, err := pgxdb.Exec(ctx, tx, handoffRoomPauseSQL, roomIDs); err != nil {
+		return fmt.Errorf("pause rooms after handoff: %w", err)
 	}
 
 	return nil

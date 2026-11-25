@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	iris "github.com/park285/iris-client-go/v5/iris"
+	iris "github.com/park285/iris-client-go/v6/iris"
 	"github.com/park285/shared-go/v2/pkg/irisdurable"
 )
 

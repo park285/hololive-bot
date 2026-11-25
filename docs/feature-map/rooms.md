@@ -8,7 +8,7 @@
 
 ## 사용자 경로
 
-- `/api/holo/rooms`에서 `GET`, `POST`, `DELETE`; `GET /api/holo/rooms/joined`는 Iris 가입 방, `POST /api/holo/rooms/acl`은 정책 전환이다. `POST /api/holo/names/room`은 방 이름을 저장한다.
+- `/api/holo/rooms`에서 `GET`, `POST`, `DELETE`; `GET /api/holo/rooms/joined`는 Iris 가입 방, `POST /api/holo/rooms/acl`은 정책 전환이다. `GET /api/holo/rooms/delivery-pauses`는 봇 계정이 없어 발송을 멈춘 방 목록이고 `DELETE /api/holo/rooms/delivery-pauses/{roomId}`는 그 방의 발송을 재개한다. `POST /api/holo/names/room`은 방 이름을 저장한다.
 - `GET`·`POST /api/holo/settings`로 `alarmAdvanceMinutes`를 읽고 고친다. 내부 worker 연결은 `PUT /internal/alarm/settings`, `PUT /internal/alarm/room-name`. 경로·역할은 `internal/planes/admin/internal/httpapi/routes.go`와 worker의 `internal/service/alarm/httpapi/handler.go`에서 대조한다.
 
 ## hololive-runtime.sh로 구동

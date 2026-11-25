@@ -39,12 +39,14 @@ type Claimer[C any] interface {
 	Check(claim *C) Check
 }
 
+//nolint:interfacebloat // one settlement method per handoff decision action
 type Settler[C any] interface {
 	Complete(ctx context.Context, claim *C) error
 	Reschedule(ctx context.Context, claim *C, step, horizon time.Duration) error
 	Reissue(ctx context.Context, claim *C, code, detail string) error
 	Exhaust(ctx context.Context, claim *C, code, detail string) error
 	Quarantine(ctx context.Context, claim *C, code, detail string) error
+	RoomNotJoined(ctx context.Context, claim *C, code, detail string) error
 }
 
 type Ledger[C any] interface {
@@ -205,6 +207,8 @@ func (r *Reconciler[C]) apply(ctx context.Context, claim *C, check Check, decisi
 		err = r.ledger.Exhaust(ctx, claim, decision.Code, decision.Detail)
 	case handoffcheck.ActionQuarantine:
 		err = r.ledger.Quarantine(ctx, claim, decision.Code, decision.Detail)
+	case handoffcheck.ActionRoomNotJoined:
+		err = r.ledger.RoomNotJoined(ctx, claim, decision.Code, decision.Detail)
 	default:
 		return fmt.Errorf("apply %s handoff: unsupported action %d", r.config.Name, decision.Action)
 	}
@@ -249,6 +253,9 @@ func (r *Reconciler[C]) logOutcome(check Check, decision handoffcheck.Decision, 
 		r.logger.Error(r.config.Name+" handoff failed; reissue budget exhausted", attrs...)
 	case handoffcheck.ActionQuarantine:
 		r.logger.Error(r.config.Name+" handoff outcome unknown; quarantined", attrs...)
+	case handoffcheck.ActionRoomNotJoined:
+		handoffRoomNotJoinedTotal.WithLabelValues(r.config.Name).Inc()
+		r.logger.Warn(r.config.Name+" handoff rejected because the bot account is not in the room; delivery closed and room paused", attrs...)
 	case handoffcheck.ActionComplete, handoffcheck.ActionReschedule:
 	}
 }

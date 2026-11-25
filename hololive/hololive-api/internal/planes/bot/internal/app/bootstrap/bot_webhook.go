@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/iris-client-go/v5/webhook"
+	"github.com/park285/iris-client-go/v6/webhook"
 	"github.com/park285/shared-go/postgres/pgxdb"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"

@@ -9,7 +9,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/kapu/hololive-dbtest v0.0.0
-	github.com/park285/iris-client-go/v5 v5.2.1
+	github.com/park285/iris-client-go/v6 v6.0.0
 	github.com/park285/shared-go/core v1.0.0
 	github.com/park285/shared-go/postgres v1.0.4
 	github.com/park285/shared-go/transport v1.0.1
