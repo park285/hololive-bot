@@ -76,7 +76,7 @@ const cutoverHostCheck = `
 set -Eeuo pipefail
 . "$1"
 cd "$2"
-swapfile=/swapfile releases_root=/releases host_env=/host.env
+releases_root=/releases host_env=/host.env
 unit_file=/collector po_unit_file=/issuer po_socket_file=/socket
 sysctl() {
   [[ "$*" == '-n net.core.rmem_max net.core.wmem_max vm.swappiness' ]]

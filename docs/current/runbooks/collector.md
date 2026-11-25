@@ -307,7 +307,7 @@ Osaka의 일반 `--apply`는 최초 설치 명령이 아닙니다. kapu 빌드·
 
 native 배포·수동 rollback·profile preparation은 기존 SSH와 `sudo -n` 경로를 사용합니다. env·인증서·profile 소비 경로와 immutable release의 current/previous 계약은 유지하며 별도 암호화 저장소 helper를 요구하지 않습니다.
 
-전송 staging은 SSH 사용자 홈의 `.hololive-host-native-<AP_NAME>-<release_id>`입니다. 배포는 기존 `/swapfile`을 유지하고, 없으면 `AP_SWAPFILE_SIZE_MIB` 크기(기본 2048MiB)의 파일을 준비하여 활성화하고 `/etc/fstab`에 등록합니다. 값은 양수여야 합니다. 이전 release·staging·원본 데이터 삭제는 별도 승인 대상입니다.
+전송 staging은 SSH 사용자 홈의 `.hololive-host-native-<AP_NAME>-<release_id>`입니다. 배포는 swap을 만들지 않고, 기존 `/swapfile`이 활성 swap이며 `AP_SWAPFILE_SIZE_MIB` 크기(기본 2048MiB)·root 소유 0600·`/etc/fstab` 한 줄과 맞는지 확인합니다. 하나라도 다르면 이전 writer를 멈추기 전에 거부합니다. 이전 release·staging·원본 데이터 삭제는 별도 승인 대상입니다.
 일반 `--apply`는 rsync 전에 staging을 독점 생성합니다. 동명 staging이 있으면 덮어쓰거나 이어서 전송하지 않습니다.
 
 ### Native AP 배포 산출물 보존

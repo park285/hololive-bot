@@ -6,6 +6,10 @@
 
 ## 미출시
 
+## r1.2.11 - 2026-11-25
+
+- **osaka1 배포의 swap 경로 누락:** #881이 최초 설치용 swap 생성 코드를 지우면서 `swapfile=/swapfile` 정의도 함께 지웠습니다. 그 결과 기존 호스트 검사(`native_existing_host_check`)가 `swapfile: parameter null or not set`으로 실패해, main의 `ap-host-native-deploy.sh osaka --apply`가 원점 확인 단계에서 항상 멈췄습니다. 검사 함수가 경로를 직접 가집니다. collector 런북의 swap 서술도 "없으면 만든다"에서 "기존 swap을 확인하고 다르면 거부한다"로 고쳤습니다.
+
 ## r1.2.10 - 2026-11-25
 
 - **AP a 수용 중 issuer 종료 허용:** osaka1 native 배포의 수용 단계는 `accepting` 표식이 있는 동안 모든 기동을 막습니다. 이때 issuer가 `worker_timeout` 같은 정상 종료로 내려가면 socket 기동이 조건 불충족으로 반복해서 건너뛰어지고 `trigger-limit-hit`으로 실패해, 수용이 결과 기록 없이 중단됐습니다(2026-11-25 osaka1 r1.2.9 배포 14:32Z·15:06Z 두 번). 이제 수용은 issuer가 정상 종료로 비활성이고 socket이 살아 있거나, 이번 socket 실행의 trigger 한도 기록이 journal에 있는 상태를 차단 중 정지로 받아들입니다. 수용 표식을 게시한 뒤 `reset-failed`와 socket 기동으로 issuer를 다시 열고, 후보 issuer가 healthy인지 확인합니다. 정책 확정 직후 재시작이 `ExecCondition`으로 건너뛰어진 경우(`Result=exec-condition`)도 같은 정지로 봅니다.
@@ -24,7 +28,3 @@
 ## r1.2.9 - 2026-11-25
 
 - **osaka1 영구 drop-in 고정화 및 preflight 진단:** 배포 창 수용 시 unit별 `/etc/systemd/system/<unit>.d/90-native-window-<nonce>.conf` symlink가 누적되어 구 릴리스 정리를 막던 문제를 고쳤습니다. 이제 수용 단계에서 릴리스 경로에 의존하지 않는 고정 파일 `90-native-window-permanent.conf`를 설치하고 `daemon-reload` 적재를 확인한 뒤 세 unit의 기존 `90-native-window-*.conf` symlink를 걷어 냅니다. `apply-origin`과 `native_same_window_baseline`의 각 실패 지점에도 표준 오류 진단 메시지를 추가했습니다.
-
-## r1.2.8 - 2026-11-25
-
-- **봇 계정이 없는 방의 발송 일시정지:** Iris `/reply-status`가 `failed`와 `reason: room_not_joined`를 돌려주면(미참가·나가기·강퇴·계정 변경) alarm dispatch는 멤버를 `cancelled`(`handoff_room_not_joined`)로, youtube delivery는 `FAILED`로 닫고 재발급·DLQ로 보내지 않습니다. 같은 정산에서 방을 새 표 `kakao_room_delivery_pauses`(migration 007)에 넣어 구독은 두고 발송만 멈춥니다. 멈춘 방의 새 alarm delivery는 `cancelled`/`room_paused`로 기록하고, YouTube fan-out은 그 방을 건너뜁니다. 봇 명령 응답도 `dead`(`handoff_room_not_joined`)로 끝납니다. hololive-api가 그 방의 메시지를 관측하면 자동으로 재개하고, 관리자는 `GET`/`DELETE /api/holo/rooms/delivery-pauses`로 목록을 보고 재개합니다. 지표 `alarm_handoff_room_not_joined_total{ledger}`, `alarm_dispatch_pg_paused_room_total`, `hololive_youtube_outbox_enqueue_paused_rooms_total`을 더했습니다. iris-client-go를 v6.0.0으로 올렸습니다. 운영 전환은 migration 007을 코드보다 먼저 적용해야 합니다.
