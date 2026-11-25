@@ -112,9 +112,11 @@ native_cutover_run() {
     native_cutover_unknown
     return "$worker_status"
   }
-  wait "$native_worker_pid" || worker_status=$?
+  while (( ${native_signal_status:-0} == 0 )) && kill -0 "$native_worker_pid" 2>/dev/null; do
+    sleep 0.1
+  done
   if (( ${native_signal_status:-0} != 0 )); then
-    for (( signal_wait=0; signal_wait<50; signal_wait++ )); do
+    for (( signal_wait=0; signal_wait<300; signal_wait++ )); do
       kill -0 "$native_worker_pid" 2>/dev/null || break
       sleep 0.1
     done
@@ -125,9 +127,8 @@ native_cutover_run() {
       $monitor_was_set || set +m
       return "${native_signal_status}"
     fi
-    worker_status=0
-    wait "$native_worker_pid" || worker_status=$?
   fi
+  wait "$native_worker_pid" || worker_status=$?
   $monitor_was_set || set +m
   # shellcheck disable=SC2034 # 복원 terminal status와 요청 신호 상태를 분리합니다.
   native_worker_status="$worker_status"
