@@ -110,7 +110,9 @@ replacement, and failed cutover restoration. No live operation is implied by the
 `docker.io/library/postgres:19.0-alpine`, `docker.io/valkey/valkey:9.1.3-alpine3.24` and
 `docker.io/library/nginx:1.31.9-alpine-slim` (`Pull=never`) without a local recipe.
 `./build-all.sh --no-bump --build-only` pulls each from the multi-arch index digest pinned in
-`UPSTREAM_BY_SERVICE` for the target platform and tags the pulled image ID with that name.
+`UPSTREAM_BY_SERVICE` for the target platform and prints the pulled image ID. It does not retag the shared
+upstream name, so an arm64 build on kapu leaves the host-platform tag that other repositories' tests run in place.
+Host `compose.env` pins that ID, and the image moves with `podman save --format docker-archive sha256:<id>`.
 These upstream images are not in the final image scan manifest; security fixes arrive by moving the
 pinned digest to a newer upstream release. ChatBotGo loads the same Valkey image for its host architecture.
 The Valkey health check runs `valkey-cli` directly, so it works on both the previous owned image and

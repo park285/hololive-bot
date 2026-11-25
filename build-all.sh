@@ -189,9 +189,8 @@ build_service() {
 
     if [[ -n "${upstream}" ]]; then
         local id
-        echo "[PULL] ${service} -> ${image} (${upstream})"
         id="$(podman pull --quiet "${platform_args[@]}" "${upstream}")"
-        podman tag "${id}" "${image}"
+        echo "[PULL] ${service} ${image} (${upstream}) -> sha256:${id}"
         return
     fi
     local -a args=(build "${platform_args[@]}" --format docker --tag "${image}"
