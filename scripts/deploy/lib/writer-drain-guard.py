@@ -28,12 +28,15 @@ WRITERS = """ARRAY['hololive_runtime','hololive_alarm_worker','hololive_collecto
                   'hololive_collector_b','hololive_collector_c','hololive_collector_d']::name[]"""
 
 
-def verify_writers_closed():
-    sql = f"""BEGIN READ ONLY;
-SELECT ({SETTINGS}) AND EXISTS (
+GATE_INSTALLED = """EXISTS (
  SELECT FROM pg_catalog.pg_event_trigger e JOIN pg_catalog.pg_proc p ON p.oid = e.evtfoid
  WHERE e.evtname = 'hololive_writer_admission' AND e.evtevent = 'login' AND e.evtenabled = 'A'
-   AND p.oid = pg_catalog.to_regprocedure('hololive_writer_admission.reject_during_writer_drain()') AND p.prosecdef)
+   AND p.oid = pg_catalog.to_regprocedure('hololive_writer_admission.reject_during_writer_drain()') AND p.prosecdef)"""
+
+
+def verify_writers_closed(gate=GATE_INSTALLED):
+    sql = f"""BEGIN READ ONLY;
+SELECT ({SETTINGS}) AND {gate}
 AND NOT EXISTS (
  SELECT FROM pg_catalog.pg_stat_activity a
  WHERE a.usename = ANY({WRITERS}) AND a.backend_type = 'client backend');
@@ -73,7 +76,12 @@ def main():
 
 if __name__ == '__main__':
     try:
-        main()
+        if sys.argv[1:] == ['--precheck']:
+            verify_writers_closed(gate='true')
+        elif sys.argv[1:]:
+            raise ValueError('사용법: writer-drain-guard.py [--precheck]')
+        else:
+            main()
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
         reason = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
         print(f'[writer-drain] {reason}; 기존 hold를 보존하십시오', file=sys.stderr)

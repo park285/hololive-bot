@@ -664,6 +664,7 @@ run_migration() {
   if [[ "$mode" == resume ]]; then
     check_receipt
     assert_infrastructure
+    python3 -I -B "$ROOT_DIR/scripts/deploy/lib/writer-drain-guard.py" --precheck
     mkdir -- "$migration"
     sync_paths "$migration" "${release_paths[hololive-api]}"
   fi
