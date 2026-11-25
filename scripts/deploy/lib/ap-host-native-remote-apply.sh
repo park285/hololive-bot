@@ -49,43 +49,45 @@ native_deployment_inputs() {
 native_same_window_baseline() {
   local old_target="$releases_root/$window_old" n file paths drop directory persistent
   local -a drops
-  [[ "$#" == 4 ]]
-  for n in "$@"; do [[ "$n" =~ ^[0-9a-f]{64}$ ]]; done
-  native_release_dir_resolve "$releases_root" "$release_id" "$current_link" >/dev/null
-  native_window_previous >/dev/null
-  native_existing_host_check "$required_udp_buffer" "$swapfile_size_mib"
-  native_deployment_inputs
-  sudo -n cmp -s "$old_target/worker-profile.json" "$worker_profile"
-  native_release_pin check profile "$host_env" "$old_target" "$release_dir" "$1"
-  native_release_pin check issuer "$po_unit_file" "$old_target" "$release_dir" "$3"
-  [[ "$(native_file_digest "$unit_file")" == "$2" && "$(native_file_digest "$po_socket_file")" == "$4" ]]
-  original_port=5433 native_window_verify_original
-  [[ "$(realpath -e "${unit_file%/*}")" == "${unit_file%/*}" ]]
+  [[ "$#" == 4 ]] || { echo "baseline: expected 4 candidate digests, got $#" >&2; return 1; }
+  for n in "$@"; do [[ "$n" =~ ^[0-9a-f]{64}$ ]] || { echo "baseline: invalid digest format: $n" >&2; return 1; }; done
+  native_release_dir_resolve "$releases_root" "$release_id" "$current_link" >/dev/null || { echo "baseline: release dir resolve failed: $release_id" >&2; return 1; }
+  native_window_previous >/dev/null || { echo "baseline: previous pointer validation failed: $previous_link" >&2; return 1; }
+  native_existing_host_check "$required_udp_buffer" "$swapfile_size_mib" || { echo "baseline: existing host baseline check failed" >&2; return 1; }
+  native_deployment_inputs || { echo "baseline: deployment inputs check failed" >&2; return 1; }
+  sudo -n cmp -s "$old_target/worker-profile.json" "$worker_profile" || { echo "baseline: worker profile drift between $old_target/worker-profile.json and $worker_profile" >&2; return 1; }
+  native_release_pin check profile "$host_env" "$old_target" "$release_dir" "$1" || { echo "baseline: host env release pin check failed: $host_env" >&2; return 1; }
+  native_release_pin check issuer "$po_unit_file" "$old_target" "$release_dir" "$3" || { echo "baseline: issuer unit release pin check failed: $po_unit_file" >&2; return 1; }
+  [[ "$(native_file_digest "$unit_file")" == "$2" ]] || { echo "baseline: collector unit drift: $unit_file" >&2; return 1; }
+  [[ "$(native_file_digest "$po_socket_file")" == "$4" ]] || { echo "baseline: issuer socket unit drift: $po_socket_file" >&2; return 1; }
+  original_port=5433 native_window_verify_original || { echo "baseline: original runtime verification failed" >&2; return 1; }
+  [[ "$(realpath -e "${unit_file%/*}")" == "${unit_file%/*}" ]] || { echo "baseline: systemd unit directory is not canonical: ${unit_file%/*}" >&2; return 1; }
   for n in "${window_units[@]}"; do
-    native_window_live_generation "$n" >/dev/null
-    [[ "$(native_window_prop "$n" ControlPID)" == 0 && "$(native_window_prop "$n" NeedDaemonReload)" == no ]]
+    native_window_live_generation "$n" >/dev/null || { echo "baseline: unit is not active and idle: $n" >&2; return 1; }
+    [[ "$(native_window_prop "$n" ControlPID)" == 0 ]] || { echo "baseline: unit has active ControlPID: $n" >&2; return 1; }
+    [[ "$(native_window_prop "$n" NeedDaemonReload)" == no ]] || { echo "baseline: unit requires daemon-reload (NeedDaemonReload!=no): $n" >&2; return 1; }
     persistent="$(native_window_prop "$n" UnitFileState)"
-    [[ "$persistent" == enabled || ( "$n" == "$po_service" && "$persistent" == disabled ) ]]
+    [[ "$persistent" == enabled || ( "$n" == "$po_service" && "$persistent" == disabled ) ]] || { echo "baseline: unexpected UnitFileState=$persistent for $n" >&2; return 1; }
     directory="${unit_file%/*}/$n.d"
-    sudo -n test ! -L "$directory"
+    sudo -n test ! -L "$directory" || { echo "baseline: drop-in directory is a symlink: $directory" >&2; return 1; }
     if sudo -n test -e "$directory"; then
-      sudo -n test -d "$directory"
-      [[ "$(sudo -n stat -c '%u:%g:%a' "$directory")" == 0:0:755 ]]
+      sudo -n test -d "$directory" || { echo "baseline: drop-in path is not a directory: $directory" >&2; return 1; }
+      [[ "$(sudo -n stat -c '%u:%g:%a' "$directory")" == 0:0:755 ]] || { echo "baseline: unexpected drop-in directory ownership/mode: $directory" >&2; return 1; }
     fi
     paths="$(native_window_prop "$n" DropInPaths)"
     read -r -a drops <<< "$paths"
     for drop in "${drops[@]}"; do
-      native_window_barrier_body "$n" permanent | sudo -n cmp -s - "$drop"
+      native_window_barrier_body "$n" permanent | sudo -n cmp -s - "$drop" || { echo "baseline: drop-in does not match permanent policy: $drop" >&2; return 1; }
     done
   done
-  sudo -n test ! -L "$old_target/rollback-contract"
+  sudo -n test ! -L "$old_target/rollback-contract" || { echo "baseline: rollback-contract is a symlink: $old_target/rollback-contract" >&2; return 1; }
   if sudo -n test -e "$old_target/rollback-contract"; then
-    sudo -n test -d "$old_target/rollback-contract"
+    sudo -n test -d "$old_target/rollback-contract" || { echo "baseline: rollback-contract is not a directory: $old_target/rollback-contract" >&2; return 1; }
     for file in "$host_env" "$unit_file" "$po_unit_file" "$po_socket_file"; do
-      sudo -n cmp -s "$file" "$old_target/rollback-contract/${file##*/}"
+      sudo -n cmp -s "$file" "$old_target/rollback-contract/${file##*/}" || { echo "baseline: rollback-contract file mismatch: $file" >&2; return 1; }
     done
-    [[ "$(native_window_previous)" == "$(sudo -n cat "$old_target/rollback-contract/previous-before-cutover")" ]]
-    sudo -n sh -ec 'cd "$1"; sha256sum --check --strict --status rollback-contract/SHA256SUMS' sh "$old_target"
+    [[ "$(native_window_previous)" == "$(sudo -n cat "$old_target/rollback-contract/previous-before-cutover")" ]] || { echo "baseline: previous-before-cutover mismatch" >&2; return 1; }
+    sudo -n sh -ec 'cd "$1"; sha256sum --check --strict --status rollback-contract/SHA256SUMS' sh "$old_target" || { echo "baseline: rollback-contract checksum mismatch" >&2; return 1; }
   fi
 }
 

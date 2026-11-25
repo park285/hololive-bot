@@ -58,6 +58,26 @@ func lines(t *testing.T, path string) []string {
 	return strings.Split(strings.TrimSpace(harness.Read(t, path)), "\n")
 }
 
+func requirePermanentDropIns(t *testing.T, dir string) {
+	t.Helper()
+
+	for _, unit := range []string{issuerSocket, issuerService, collectorService} {
+		entries := listDir(t, filepath.Join(dir, "system", unit+".d"))
+		if len(entries) != 1 || entries[0].Name() != "90-native-window-permanent.conf" {
+			t.Fatalf("%s drop-ins: %v", unit, entries)
+		}
+
+		info, err := os.Lstat(filepath.Join(dir, "system", unit+".d", entries[0].Name()))
+		if err != nil {
+			t.Fatalf("stat %s drop-in: %v", unit, err)
+		}
+
+		if !info.Mode().IsRegular() || info.Mode().Perm() != 0o644 {
+			t.Fatalf("%s permanent drop-in must be a 0644 regular file: %v", unit, info.Mode())
+		}
+	}
+}
+
 func TestApplyPreflightAcceptsOnlyTheRecordedOrigin(t *testing.T) {
 	t.Parallel()
 
@@ -100,13 +120,17 @@ func TestApplyOriginDispatchRejectsDrift(t *testing.T) {
 
 	e := newCutoverEnv(t)
 
-	for _, fault := range []string{normalMode, "env", "collector", "issuer", "socket", "profile", "infra", "inputs", "used-stage", "used-release", "drop-dir", "prior-guard"} {
+	for _, fault := range []string{normalMode, "env", "collector", "issuer", "socket", "profile", "infra", "inputs", "used-stage", "used-release", "drop-dir", "prior-guard", "need-reload"} {
 		t.Run(fault, func(t *testing.T) {
 			t.Parallel()
 
 			dir, r := e.windowCase(t, fault, cutoverOrdinaryOrigin+e.originDispatch)
 			if (r.ExitCode == 0) != (fault == normalMode) {
 				t.Fatalf("%s", r)
+			}
+
+			if fault == "need-reload" && !strings.Contains(r.Stderr, "NeedDaemonReload") {
+				t.Fatalf("a pending daemon-reload must be named: %s", r.Stderr)
 			}
 
 			if fault == "prior-guard" {
@@ -266,6 +290,10 @@ func TestApplyAcceptanceRequiresTheObservedCandidate(t *testing.T) {
 				t.Fatal("only an accepted candidate may carry the marker, and only it releases the guard")
 			}
 
+			if c.accepted {
+				requirePermanentDropIns(t, dir)
+			}
+
 			if c.fault == "load_failure" {
 				if exists(filepath.Join(dir, "releases/new/native-observation/issuer.socket.requesting")) {
 					t.Fatal("a load failure must not leave a start request")
@@ -277,6 +305,47 @@ func TestApplyAcceptanceRequiresTheObservedCandidate(t *testing.T) {
 					}
 				}
 			}
+		})
+	}
+}
+
+const seedLegacyDropIns = `
+mkdir -p "$PWD/legacy-rel1/permanent" "$PWD/legacy-rel2/permanent"
+for n in "$po_socket" "$po_service" "$unit"; do
+  mkdir -p -m 0755 "$PWD/system/$n.d"
+  native_window_barrier_body "$n" permanent > "$PWD/legacy-rel1/permanent/$n.conf"
+  ln -sT "$PWD/legacy-rel1/permanent/$n.conf" "$PWD/system/$n.d/90-native-window-11111111-1111-1111-1111-111111111111.conf"
+done
+native_window_barrier_body "$po_service" permanent > "$PWD/legacy-rel2/permanent/$po_service.conf"
+ln -sT "$PWD/legacy-rel2/permanent/$po_service.conf" "$PWD/system/$po_service.d/90-native-window-22222222-2222-2222-2222-222222222222.conf"
+`
+
+const seedExistingPermanent = `
+for n in "$po_socket" "$po_service" "$unit"; do
+  mkdir -p -m 0755 "$PWD/system/$n.d"
+  native_window_barrier_body "$n" permanent > "$PWD/system/$n.d/90-native-window-permanent.conf"
+  chmod 0644 "$PWD/system/$n.d/90-native-window-permanent.conf"
+done
+`
+
+func TestApplyAcceptanceLeavesOnlyThePermanentDropIn(t *testing.T) {
+	t.Parallel()
+
+	e := newCutoverEnv(t)
+
+	for name, seed := range map[string]string{
+		"consolidates-legacy-symlinks": seedLegacyDropIns,
+		"redeploy-is-idempotent":       seedExistingPermanent,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir, r := e.windowCase(t, normalMode, seed+applyStageScenario+"\nnative_apply_close_observation\nnative_apply_preflight new\n")
+			if r.ExitCode != 0 {
+				t.Fatalf("%s", r)
+			}
+
+			requirePermanentDropIns(t, dir)
 		})
 	}
 }

@@ -237,7 +237,17 @@ systemctl() {
   if [[ "$1" == --job-mode=fail ]]; then shift; fi
   case "$1" in
     show) printf 'InvocationID=%s\n' "$gen" ;;
-    daemon-reload) touch reload ;;
+    daemon-reload)
+      touch reload
+      local u f
+      for u in "$po_socket" "$po_service" "$unit"; do
+        : >"loaded-dropins-$u"
+        if [[ -d "${unit_file%/*}/$u.d" ]]; then
+          for f in "${unit_file%/*}/$u.d"/*.conf; do
+            if [[ -e "$f" || -L "$f" ]]; then printf '%s\n' "$f" >>"loaded-dropins-$u"; fi
+          done
+        fi
+      done ;;
     enable)
       if [[ "$2" != --now ]]; then rm "disabled-$2"; return; fi
       [[ "$3" == "$po_socket" ]]
@@ -276,12 +286,20 @@ native_window_prop() {
       if [[ "$fault" == restart || $(readlink "$window/policy") == permanent ]]; then echo always
       else echo no; fi ;;
     DropInPaths)
-      if [[ -d "$PWD/w1-adoption" ]]; then printf '%s ' "$PWD/system/$1.d/90-native-window-prior.conf"; fi
-      printf '%s/%s.d/90-native-window-%s.conf\n' "${unit_file%/*}" "$1" "$native_claim_nonce" ;;
+      if [[ -f "loaded-dropins-$1" ]]; then
+        paste -sd' ' "loaded-dropins-$1"
+      elif [[ -d "${unit_file%/*}/$1.d" ]]; then
+        local d
+        local -a found=()
+        for d in "${unit_file%/*}/$1.d"/*.conf; do
+          if [[ -e "$d" || -L "$d" ]]; then found+=("$d"); fi
+        done
+        printf '%s\n' "${found[*]}"
+      fi ;;
     MainPID) if [[ -f "live-$1" && ! -f "down-$1" ]]; then echo "$BASHPID"; else echo 0; fi ;;
     ControlPID) echo 0 ;;
     LoadState) echo loaded ;;
-    NeedDaemonReload) echo no ;;
+    NeedDaemonReload) if [[ "$fault" == need_reload ]]; then echo yes; else echo no; fi ;;
     UnitFileState) if [[ -f "disabled-$1" ]]; then echo disabled; else echo enabled; fi ;;
     Result) if [[ -e "failed-$1" ]]; then echo trigger-limit-hit; else echo success; fi ;;
     *) return 93 ;;
@@ -303,7 +321,12 @@ busctl() {
   fi
   [[ "$3" == get-property && "$4" == org.freedesktop.systemd1 && "$5" == "$object" ]] || return 1
   if [[ "${!#}" == ExecConditionEx ]]; then
-    python3 -I -B - "$current_link/native-window" "$native_recovery_dir/accepting" "$([[ -d "$PWD/w1-adoption" ]] && echo 2 || echo 1)" <<'PY_CONDITION'
+    local count=1
+    if [[ -f "loaded-dropins-$n" ]]; then
+      count="$(wc -l < "loaded-dropins-$n")"
+      if (( count == 0 )); then count=1; fi
+    fi
+    python3 -I -B - "$current_link/native-window" "$native_recovery_dir/accepting" "$count" <<'PY_CONDITION'
 import json,sys
 print(json.dumps({"type":"a(sasasttttuii)", "data":[["/usr/bin/test",["/usr/bin/test","!","-e",p],["privileged"],0,0,0,0,0,0,0] for p in sys.argv[1:3]]*int(sys.argv[3])}))
 PY_CONDITION
@@ -402,7 +425,7 @@ native_deployment_inputs() { [[ "$fault" != inputs ]]; }
 native_window_prop() {
   case "$2" in
     DropInPaths|Job) : ;; ActiveState) echo active ;; InvocationID) echo "$gen" ;;
-    ControlPID) echo 0 ;; UnitFileState) echo enabled ;; NeedDaemonReload) echo no ;;
+    ControlPID) echo 0 ;; UnitFileState) echo enabled ;; NeedDaemonReload) if [[ "$fault" == need-reload ]]; then echo yes; else echo no; fi ;;
     *) return 99 ;;
   esac
 }

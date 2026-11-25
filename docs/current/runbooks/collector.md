@@ -301,6 +301,8 @@ Osaka의 일반 `--apply`는 최초 설치 명령이 아닙니다. kapu 빌드·
 
 원격 staging에서 root 소유 후보로 복사한 직후에도 전체 payload를 확인합니다. kapu에서 방금 빌드한 digest와 같아야 합니다. `accepted-window`가 먼저 생겨도 복구 guard가 남으면 미수용입니다. 실제 영수증과 남은 허가 시간을 확인한 뒤 guard를 `accepted-guard`로 넘깁니다. 인계 중단 시 남은 영수증과 후보를 보존하고 자동으로 다시 시도하지 않습니다.
 
+수용 단계는 릴리스 경로에 의존하지 않는 고정 파일 `/etc/systemd/system/<unit>.d/90-native-window-permanent.conf`를 설치하고 `daemon-reload`로 적재를 확인한 뒤에만 릴리스를 가리키는 `90-native-window-<nonce>.conf` symlink를 제거합니다. 퇴역 release의 기동 차단은 유지하면서 오래된 release 디렉터리 정리가 막히지 않습니다. 실패 시에는 이전 release의 marker와 drop-in을 삭제하지 않습니다.
+
 ### 일반 native 배포
 
 native 배포·수동 rollback·profile preparation은 기존 SSH와 `sudo -n` 경로를 사용합니다. env·인증서·profile 소비 경로와 immutable release의 current/previous 계약은 유지하며 별도 암호화 저장소 helper를 요구하지 않습니다.
