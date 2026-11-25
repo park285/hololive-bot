@@ -59,8 +59,14 @@ PY
 }
 
 native_apply_preflight() {
-  [[ "$(hostname -s)" == osaka1 && "${service?}" == "${slot_service?}" ]] || return 1
-  native_recovery_require_clear && sudo -n test ! -L "$native_recovery_dir" || return 1
+  [[ "$(hostname -s)" == osaka1 && "${service?}" == "${slot_service?}" ]] || {
+    echo "native preflight: host/service mismatch ($(hostname -s)/${service:-})" >&2
+    return 1
+  }
+  if ! native_recovery_require_clear || ! sudo -n test ! -L "$native_recovery_dir"; then
+    echo "native preflight: recovery guard present or symlink: $native_recovery_dir" >&2
+    return 1
+  fi
   native_window_identity apply "${1:-}" ''
 }
 
@@ -212,8 +218,116 @@ native_window_barrier_body() {
   fi
 }
 
+native_window_permanent_dropin() {
+  printf '%s/%s.d/90-native-window-permanent.conf\n' "${unit_file%/*}" "$1"
+}
+
+native_window_ensure_dropin_dir() {
+  sudo -n sh -ec '
+    test ! -L "$1"
+    test "$(readlink -e -- "${1%/*}")" = "${1%/*}"
+    if test -e "$1"; then
+      test -d "$1" && test "$(stat -c "%u:%g:%a" "$1")" = "$(id -u):$(id -g):755"
+    else
+      mkdir -m 0755 -- "$1"
+    fi
+  ' sh "$1"
+}
+
+native_window_install_permanent_dropin() {
+  local n="$1" directory permanent_file
+  directory="${unit_file%/*}/$n.d"
+  permanent_file="$(native_window_permanent_dropin "$n")"
+  native_window_ensure_dropin_dir "$directory"
+  native_window_barrier_body "$n" permanent | sudo -n python3 -I -B -c '
+from pathlib import Path
+import os, stat, sys, tempfile
+
+target = Path(sys.argv[1])
+body = sys.stdin.buffer.read()
+if not body:
+    sys.exit("empty permanent drop-in body")
+uid, gid = os.geteuid(), os.getegid()
+if os.path.lexists(target):
+    s = target.lstat()
+    if not stat.S_ISREG(s.st_mode) or s.st_nlink != 1 or (s.st_uid, s.st_gid) != (uid, gid) or stat.S_IMODE(s.st_mode) != 0o644:
+        sys.exit(f"unexpected permanent drop-in file metadata: {target}")
+    if target.read_bytes() == body:
+        sys.exit(0)
+with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".90-native-window-permanent.", delete=False) as tmp:
+    name = tmp.name
+    try:
+        tmp.write(body)
+        tmp.flush()
+        os.fchown(tmp.fileno(), uid, gid)
+        os.fchmod(tmp.fileno(), 0o644)
+        os.fsync(tmp.fileno())
+        os.replace(name, target)
+        fd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    finally:
+        if os.path.lexists(name):
+            os.unlink(name)
+' "$permanent_file"
+}
+
+native_window_prune_legacy_dropins() {
+  local n="$1" directory permanent_file
+  directory="${unit_file%/*}/$n.d"
+  permanent_file="$(native_window_permanent_dropin "$n")"
+  native_window_barrier_body "$n" permanent | sudo -n python3 -I -B -c '
+from pathlib import Path
+import os, stat, sys
+
+directory, permanent = Path(sys.argv[1]), Path(sys.argv[2])
+expected = sys.stdin.buffer.read()
+if not expected:
+    sys.exit("empty permanent drop-in body")
+for entry in sorted(directory.iterdir()):
+    if entry == permanent or not (entry.name.startswith("90-native-window-") and entry.name.endswith(".conf")):
+        continue
+    if not stat.S_ISLNK(entry.lstat().st_mode):
+        sys.exit(f"unexpected non-symlink window drop-in: {entry}")
+    if entry.read_bytes() != expected:
+        sys.exit(f"refusing to remove non-permanent window drop-in: {entry}")
+    entry.unlink()
+fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+try:
+    os.fsync(fd)
+finally:
+    os.close(fd)
+' "$directory" "$permanent_file"
+}
+
+native_window_verify_permanent_dropin() {
+  local n="$1" directory permanent_file
+  directory="${unit_file%/*}/$n.d"
+  permanent_file="$(native_window_permanent_dropin "$n")"
+  native_window_barrier_body "$n" permanent | sudo -n python3 -I -B -c '
+from pathlib import Path
+import os, stat, sys
+
+directory, permanent = Path(sys.argv[1]), Path(sys.argv[2])
+expected = sys.stdin.buffer.read()
+if not expected:
+    sys.exit("empty permanent drop-in body")
+uid, gid = os.geteuid(), os.getegid()
+s = permanent.lstat()
+if not stat.S_ISREG(s.st_mode) or s.st_nlink != 1 or (s.st_uid, s.st_gid) != (uid, gid) or stat.S_IMODE(s.st_mode) != 0o644:
+    sys.exit(f"permanent drop-in metadata mismatch: {permanent}")
+if permanent.read_bytes() != expected:
+    sys.exit(f"permanent drop-in content mismatch: {permanent}")
+for entry in sorted(directory.iterdir()):
+    if entry != permanent and entry.name.startswith("90-native-window-") and entry.name.endswith(".conf"):
+        sys.exit(f"unexpected window drop-in remains: {entry}")
+' "$directory" "$permanent_file"
+}
+
 native_window_barriers() {
-  local action="$1" n file directory link object policy force paths drop
+  local action="$1" n file directory link permanent_file object policy force paths drop
   case "$action" in arm|check|rotate|observing|finish|permanent|rearm) ;; *) return 2 ;; esac
   shift
   if (( $# == 0 )); then set -- "${window_units[@]}"; fi
@@ -223,11 +337,40 @@ native_window_barriers() {
     sudo -n mkdir -- "$window/held" "$window/observing" "$window/permanent"
     sudo -n ln -sT held "$window/policy"
     native_window_rotation_hook | sudo -n sh -ec 'umask 077; set -C; cat >"$1"' sh "$window/issuer-rotation.sh"
-  elif [[ "$action" == finish || "$action" == rearm || "$action" == rotate ]]; then
-    local next=permanent
-    case "$action" in rearm) next=held ;; rotate) next=observing ;; esac
-    sudo -n ln -sT "$next" "$window/policy.$next"
-    sudo -n mv -T "$window/policy.$next" "$window/policy"
+  elif [[ "$action" == finish ]]; then
+    for n in "${window_units[@]}"; do
+      native_window_install_permanent_dropin "$n"
+    done
+    sudo -n ln -sT permanent "$window/policy.permanent"
+    sudo -n mv -T "$window/policy.permanent" "$window/policy"
+    sudo -n systemctl daemon-reload
+    for n in "${window_units[@]}"; do
+      permanent_file="$(native_window_permanent_dropin "$n")"
+      paths="$(native_window_prop "$n" DropInPaths)"
+      [[ " $paths " == *" $permanent_file "* ]]
+    done
+    for n in "${window_units[@]}"; do
+      native_window_prune_legacy_dropins "$n"
+    done
+    sudo -n systemctl daemon-reload
+    return
+  elif [[ "$action" == rearm ]]; then
+    sudo -n ln -sT held "$window/policy.held"
+    sudo -n mv -T "$window/policy.held" "$window/policy"
+    for n in "$@"; do
+      directory="${unit_file%/*}/$n.d"
+      file="$window/policy/$n.conf"
+      link="$directory/90-native-window-$native_claim_nonce.conf"
+      if sudo -n test -f "$window/held/$n.conf" && ! sudo -n test -L "$link"; then
+        native_window_ensure_dropin_dir "$directory"
+        sudo -n ln -sT "$file" "$link"
+      fi
+    done
+    sudo -n systemctl daemon-reload
+    return
+  elif [[ "$action" == rotate ]]; then
+    sudo -n ln -sT observing "$window/policy.observing"
+    sudo -n mv -T "$window/policy.observing" "$window/policy"
     sudo -n systemctl daemon-reload
     return
   fi
@@ -236,16 +379,9 @@ native_window_barriers() {
     directory="${unit_file%/*}/$n.d"
     file="$window/policy/$n.conf"
     link="$directory/90-native-window-$native_claim_nonce.conf"
+    permanent_file="$(native_window_permanent_dropin "$n")"
     if [[ "$action" == arm ]]; then
-      sudo -n sh -ec '
-        test ! -L "$1"
-        test "$(readlink -e -- "${1%/*}")" = "${1%/*}"
-        if test -e "$1"; then
-          test -d "$1" && test "$(stat -c "%u:%g:%a" "$1")" = "$(id -u):$(id -g):755"
-        else
-          mkdir -m 0755 -- "$1"
-        fi
-      ' sh "$directory"
+      native_window_ensure_dropin_dir "$directory"
       native_window_barrier_body "$n" held | sudo -n tee "$window/held/$n.conf" >/dev/null
       native_window_barrier_body "$n" observing | sudo -n tee "$window/observing/$n.conf" >/dev/null
       native_window_barrier_body "$n" permanent | sudo -n tee "$window/permanent/$n.conf" >/dev/null
@@ -254,16 +390,31 @@ native_window_barriers() {
       policy="$action"
       if [[ "$action" == check ]]; then policy=held; fi
       [[ "$(sudo -n readlink "$window/policy")" == "$policy" ]]
-      native_window_barrier_body "$n" "$policy" | sudo -n cmp -s - "$file"
-      [[ "$(sudo -n readlink "$link")" == "$file" ]]
-      paths="$(native_window_prop "$n" DropInPaths)"
-      [[ " $paths " == *" $link "* ]]
-      read -r -a drops <<< "$paths"
-      for drop in "${drops[@]}"; do
-        if [[ "$drop" != "$link" ]]; then
-          native_window_barrier_body "$n" permanent | sudo -n cmp -s - "$drop"
+      if [[ "$action" == permanent ]]; then
+        if sudo -n test -e "$file"; then
+          native_window_barrier_body "$n" permanent | sudo -n cmp -s - "$file"
         fi
-      done
+        native_window_verify_permanent_dropin "$n"
+        [[ "$(native_window_prop "$n" NeedDaemonReload)" == no ]]
+        paths="$(native_window_prop "$n" DropInPaths)"
+        [[ " $paths " == *" $permanent_file "* ]]
+        read -r -a drops <<< "$paths"
+        for drop in "${drops[@]}"; do
+          sudo -n test ! -L "$drop"
+          native_window_barrier_body "$n" permanent | sudo -n cmp -s - "$drop"
+        done
+      else
+        native_window_barrier_body "$n" "$policy" | sudo -n cmp -s - "$file"
+        [[ "$(sudo -n readlink "$link")" == "$file" ]]
+        paths="$(native_window_prop "$n" DropInPaths)"
+        [[ " $paths " == *" $link "* ]]
+        read -r -a drops <<< "$paths"
+        for drop in "${drops[@]}"; do
+          if [[ "$drop" != "$link" ]]; then
+            native_window_barrier_body "$n" permanent | sudo -n cmp -s - "$drop"
+          fi
+        done
+      fi
       object="$(busctl --system call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager LoadUnit s "$n")"
       [[ "$object" =~ ^o\ \"(/org/freedesktop/systemd1/unit/[a-zA-Z0-9_]+)\"$ ]]
       local object_path="${BASH_REMATCH[1]}" permit=''
@@ -872,7 +1023,7 @@ native_window_commit_policy() {
   native_window_issuer_ready || { native_window_uncertain; return 1; }
   native_window_lease_live || { native_window_uncertain; return 1; }
   native_window_barriers finish "$@"
-  native_window_barriers permanent "$@"
+  native_window_barriers permanent "${window_units[@]}"
   native_window_probe_units "${window_units[@]}"
 }
 
