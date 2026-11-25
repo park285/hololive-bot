@@ -13,6 +13,7 @@
 - **b 정지의 구 backup 이름 검사 퇴역:** quiesce가 이제 같은 change의 `card-po-b-<change>` 구 backup 경로를 따로 확인하지 않고, 새 backup 경로만 비어 있는지 확인합니다.
 - **신호 처리 중 복원 실패 보고:** 배포 도구가 신호 trap 안에서 복원할 때, 인수 없는 `return`이 bash 규칙에 따라 trap 이전의 성공 상태를 돌려줘 guard 해제 실패 같은 오류를 성공으로 처리할 수 있었습니다. 중앙·b·native 배포 라이브러리의 해당 `return`이 실제 실패 상태를 돌려주도록 고쳤습니다.
 - **AP a 정지 창 퇴역:** W3 수용이 끝나 `osaka --quiesce`·`--resume`·`--settle`·`--install-initial`을 지웠습니다. native 도구는 `--dry-run`·`--apply`·`--prepare-profile`만 받습니다. 분리 정지 창, collector 이름 전환, webhook nonce 저장소 전환 절차 문서도 지웠습니다.
+- **스크립트 시험 fixture 정리:** `scripts/scripttest`가 각 fixture 명령을 새 세션에서 실행하고 시험이 끝날 때 그 세션에 남은 프로세스를 모두 종료합니다. 신호 시험의 worker 하위 프로세스나 FIFO를 기다리는 python이 고아로 남아 몇 시간씩 실행되던 문제를 고쳤습니다.
 
 ## r1.2.9 - 2026-11-25
 
