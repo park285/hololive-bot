@@ -195,6 +195,10 @@ helper는 다음 순서로 진행하며 어느 단계도 재시도하지 않습�
 4. 활성화 전에 `hololive-db-migrate.container.d/50-migrator-image.conf`(`Image=sha256:<API id>`)로 migrator를 고정하고
    `systemctl start hololive-db-migrate.service`를 실행합니다. fence 조건으로 건너뛴 oneshot도 start는 0으로 끝나므로 start
    전후 모두 fence 표식이 없어야 합니다. 실패하면 활성화하지 않고 `[OUTCOME] not_activated`로 끝납니다.
+   단일 서비스 배포는 preflight에서 대기 migration이 0건인지 먼저 확인하고, 남아 있으면
+   `migration lineage not confirmed; no single-writer migration or new writer activation`으로 거부합니다. 이 단계의
+   migrator는 writer drain 가드 없이 실행되므로 migration을 적용하지 않습니다. 대기 migration은
+   [동시 전환](#iris-소비자-동시-전환)의 `--resume`만 적용합니다.
 5. candidate drop-in을 활성화하고 `daemon-reload`, `NRestarts` 기준 기록, `systemctl restart`(`Notify=healthy`가
    health gate) 뒤 `verify-live`와 `NRestarts=0`(명시적 restart가 0으로 되돌림)을 확인합니다.
 6. 활성화 뒤 실패하면 자동으로 되돌리지 않고 `[OUTCOME] failed_after_activation`으로
@@ -226,6 +230,9 @@ sudo "$helper" --resume '<api-release-dir>' '<alarm-release-dir>'
   정지만 증명하며 migration·후보 활성화·배포 완료를 뜻하지 않습니다.
 - 중앙 두 writer의 소유 표식 `artifacts/worker-profile/releases/.central-writer-hold`는 해당 API release의 `captured.invocation`과 같은 inode입니다. 부분 정지라도 이 표식이나 기동 차단 파일이 남아 있으면 단일 배포와 단일 `rollback --apply`는 거부합니다. 같은 내용을 복사하거나 표식을 지워 재개하지 않습니다.
 - `--resume`은 두 release가 같은 정지 작업에서 나왔고 그 작업이 만든 영속 mask가 유지되는지 확인합니다. 설치된 후보의 revision·image·프로필·기본 unit·실효 endpoint가 일치해야 합니다. 두 후보 drop-in을 게시하더라도 API는 worker가 수용될 때까지 차단합니다.
+- `--resume`은 `migration/` 표식을 만들기 전에 `writer-drain-guard.py --precheck`로 여섯 업무 역할의 기존 연결이
+  0건인지 읽기 전용으로 확인합니다. 연결이 남아 있으면 표식 없이 거부하므로, 연결을 닫은 뒤 같은 명령으로 다시 재개할
+  수 있습니다. collector a~d를 이 창에 맞춰 멈추는 순서는 [대기 migration 적용 창](../../docs/current/runbooks/release.md#대기-migration-적용-창)에 있습니다.
 - 완료는 exit 0과 두 서비스의 `[OUTCOME] deployed`, 실제 image/profile·health·`NRestarts=0`으로 확인합니다.
   실행 중 pair를 잃은 뒤 과거 파일 이름만으로 복구점을 만들지 않습니다.
 - 준비 뒤 drift·부분 게시·실패는 성공으로 바꾸지 않습니다. 기동 전 실패는 hold를 유지하며, 부분 mask나

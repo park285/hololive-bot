@@ -124,6 +124,53 @@ Iris와 인증 계약을 함께 전환할 때는 위 단일 서비스 호출 대
 [동시 전환의 `--quiesce`/`--resume`](../../../deploy/quadlet/README.md#iris-소비자-동시-전환)을 사용합니다.
 정지 완료와 배포 완료를 구분하고 두 후보 drop-in을 모두 설치하기 전에는 peer를 기동하지 않습니다.
 
+#### 대기 migration 적용 창
+
+새 migration이 든 release는 단일 서비스 helper가 거부합니다(`migration lineage not confirmed`). 이때는 중앙 두 writer를
+동시 전환으로 보존·정지하고, collector a~d의 DB 연결을 닫은 상태에서 `--resume`이 migration을 적용한 뒤 두 후보를
+엽니다. collector는 실행 중인 release 그대로 멈췄다가 다시 띄웁니다. migration이 collector가 쓰는 표를 바꾸면 이
+창을 쓰지 않고 collector 후보 교체를 함께 설계합니다.
+
+1. 준비: 같은 release의 중앙 배포 트리 동기화와 API·worker 후보 image 적재를 마치고, 네 collector가 모두 active인지
+   확인합니다. osaka1에 `cutover-recovery`가 있으면 창을 열지 않습니다.
+2. 중앙에서 두 writer를 정지합니다. `[OUTCOME] quiesced`가 출력한 두 release 경로를 기록합니다.
+
+   ```bash
+   helper=/opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh
+   sudo "$helper" --quiesce sha256:<api-id> sha256:<worker-id>
+   ```
+3. kapu의 이 release clean checkout에서 collector를 d→b→a→c 순서로 멈춥니다. 각 명령이 `[OUTCOME] stopped <unit>`로
+   끝난 뒤에만 다음 명령을 실행합니다. 도구는 collector unit만 멈추고 issuer는 건드리지 않습니다.
+
+   ```bash
+   export APPROVE_COLLECTOR_PAUSE=true
+   scripts/deploy/collector-pause.sh d stop
+   PO_B_SSH_TARGET=iris-seoul scripts/deploy/collector-pause.sh b stop
+   scripts/deploy/collector-pause.sh a stop
+   PO_C_SSH_TARGET=<central> scripts/deploy/collector-pause.sh c stop
+   ```
+4. 곧바로 중앙에서 재개합니다. `--resume`은 먼저 여섯 업무 역할의 연결이 0건인지 확인하고, 신규 로그인 차단 게이트
+   아래에서 migration을 적용한 뒤 두 후보를 엽니다. 마지막 줄이 `[OUTCOME] deployed`여야 합니다.
+
+   ```bash
+   sudo "$helper" --resume '<api-release-dir>' '<alarm-release-dir>'
+   ```
+5. collector를 c→a→b→d 순서로 다시 띄웁니다. `start`는 같은 unit이 60초 동안 재시작 없이 유지되는지 확인하고,
+   a는 이어서 `ap-completion-check.sh osaka`를 실행합니다.
+
+   ```bash
+   PO_C_SSH_TARGET=<central> scripts/deploy/collector-pause.sh c start
+   scripts/deploy/collector-pause.sh a start
+   PO_B_SSH_TARGET=iris-seoul scripts/deploy/collector-pause.sh b start
+   scripts/deploy/collector-pause.sh d start
+   ```
+
+멈춘 collector는 기동 차단 표식이 없으므로 호스트 재부팅이나 수동 start로 다시 뜰 수 있습니다. 4단계의 연결 확인이
+거부하면 migration 표식이 생기지 않으므로, 다시 뜬 collector를 멈춘 뒤 같은 `--resume`을 다시 실행합니다.
+`--resume`이 `migration/`을 만든 뒤 실패하면(`previous migration failed or its outcome is unknown; not retrying`)
+재시도하지 않고 hold와 표식을 보존한 채 별도 승인 복구로 넘깁니다. 이 경우에도 collector는 migration과 무관하므로
+5단계로 다시 띄웁니다.
+
 마지막 줄이 `[OUTCOME] deployed`가 아니면 실패입니다. `not_activated`는 실행 중 pair를 바꾸지 않았다는 뜻입니다(migration은
 적용됐을 수 있음). `failed_after_activation`은 candidate가 활성화된 채 남았다는 뜻이며 helper는 자동으로 되돌리지 않습니다.
 release 디렉터리를 보존하고, 스키마·admission 호환성을 승인받은 뒤에만 [rollback 런북](rollback.md)의 `--check`·`--apply`로
