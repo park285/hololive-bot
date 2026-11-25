@@ -519,7 +519,7 @@ run_native_units() (
   sudo() {
     [[ "${1:-}" != "-n" ]] || shift
     if [[ "$1" == systemctl || "$1" == bash ]]; then
-      "$@"
+      FIXTURE_PRIVILEGED=1 "$@"
     else
       printf 'sudo %s\n' "$*" >>"${state}/calls"
     fi
@@ -528,7 +528,8 @@ run_native_units() (
     local target
     printf '%s\n' "$*" >>"${state}/calls"
     case "$1" in
-      cat | daemon-reload | enable) return 0 ;;
+      cat) [[ -n "${FIXTURE_PRIVILEGED:-}" ]] ;;
+      daemon-reload | enable) return 0 ;;
       is-active) [[ -e "${state}/active/${*: -1}" ]] ;;
       show)
         case "$4" in

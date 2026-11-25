@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **AP a 수용 중 issuer 종료 허용:** osaka1 native 배포의 수용 단계는 `accepting` 표식이 있는 동안 모든 기동을 막습니다. 이때 issuer가 `worker_timeout` 같은 정상 종료로 내려가면 socket 기동이 조건 불충족으로 반복해서 건너뛰어지고 `trigger-limit-hit`으로 실패해, 수용이 결과 기록 없이 중단됐습니다(2026-11-25 osaka1 r1.2.9 배포 14:32Z·15:06Z 두 번). 이제 수용은 issuer가 정상 종료로 비활성이고 socket이 살아 있거나, 이번 socket 실행의 trigger 한도 기록이 journal에 있는 상태를 차단 중 정지로 받아들입니다. 수용 표식을 게시한 뒤 `reset-failed`와 socket 기동으로 issuer를 다시 열고, 후보 issuer가 healthy인지 확인합니다. 정책 확정 직후 재시작이 `ExecCondition`으로 건너뛰어진 경우(`Result=exec-condition`)도 같은 정지로 봅니다.
+- **AP native rollback의 collector 정지 누락:** rollback이 `systemctl cat`을 권한 없이 호출해, root 전용 drop-in 대상을 읽지 못하면 collector unit이 없다고 보고 `disable --now`를 건너뛴 뒤 "collector unit still active"로 끝났습니다. 이제 `sudo -n systemctl cat`으로 확인합니다.
 - **PostgreSQL major 전환 도구 퇴역:** 18→19 전환이 끝나 `pg-major-upgrade.sh`, 전역 객체·지문·default ACL 정리 SQL, 전환 런북과 prestart의 `.pg-major.pending` 처리를 지웠습니다. 빈 cluster 옆에 이전 cluster volume이 있으면 기동을 거부하는 검사는 유지합니다.
 - **collector 구 이름 키 거부 퇴역:** 이름 전환이 끝나 compose env 검사와 collector 기동이 `YOUTUBE_COLLECTOR_*` 구 키를 따로 거부하지 않습니다.
 - **TwentyQ 게시 포트 방화벽 규칙 제거:** TwentyQ를 stack에서 내리면서 중앙 방화벽(`admin-dashboard-ingress.nft`)의 5458 허용·거부 규칙과 운영 문서의 `twentyq-postgres` 기동·정지 안내를 지웠습니다. 적용은 다음 중앙 배포의 방화벽 reload입니다.

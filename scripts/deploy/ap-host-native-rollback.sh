@@ -102,7 +102,7 @@ fi
 if sudo -n systemctl is-active --quiet "$po_service"; then
   sudo -n systemctl stop "$po_service"
 fi
-if systemctl cat "$unit" >/dev/null 2>&1; then
+if sudo -n systemctl cat "$unit" >/dev/null 2>&1; then
   sudo -n systemctl disable --now "$unit" >/dev/null
 fi
 if systemctl is-active --quiet "$unit" 2>/dev/null; then

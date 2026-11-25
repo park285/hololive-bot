@@ -677,20 +677,78 @@ native_window_issuer_state() {
   return 1
 }
 
+native_window_socket_trip() {
+  local receipt
+  receipt="$(sudo -n cat "$window/$po_socket.started")" || return 1
+  [[ "$receipt" =~ ^[0-9a-f]{32}[[:blank:]][1-9][0-9]*[[:blank:]]([0-9a-f]{32})$ ]] || return 1
+  local id="${BASH_REMATCH[1]}" record
+  record="$(sudo -n journalctl --boot --quiet --no-pager -o json --output-fields=INVOCATION_ID,UNIT_RESULT \
+    --since="@$(sudo -n stat -c %Y "$window/$po_socket.started")" \
+    _PID=1 "UNIT=$po_socket" "INVOCATION_ID=$id" UNIT_RESULT=trigger-limit-hit MESSAGE_ID=d9b373ed55a64feb8242e02dbe79a49c)" || return 1
+  python3 -I -B -c 'import json,sys; r=json.loads(sys.stdin.readline()); assert r["INVOCATION_ID"]==sys.argv[1] and r["UNIT_RESULT"]=="trigger-limit-hit"' "$id" <<< "$record"
+}
+
+native_window_issuer_down() {
+  local attempt result
+  for attempt in {1..6}; do
+    result="$(native_window_prop "$po_service" Result)" || return 1
+    if [[ -z "$(native_window_prop "$po_service" Job)" && "$(native_window_prop "$po_service" ControlPID)" == 0 &&
+          "$(native_window_prop "$po_service" ActiveState)" == inactive && "$(native_window_prop "$po_service" MainPID)" == 0 ]]; then
+      [[ "$result" == success || "$result" == exec-condition ]]
+      return
+    fi
+    (( attempt == 6 )) || sleep 1
+  done
+  return 1
+}
+
+native_window_fenced_idle() {
+  sudo -n test -d "$native_recovery_dir/accepting" && native_window_issuer_down || return 1
+  case "$(native_window_prop "$po_socket" ActiveState)" in
+    active) native_window_owned "$po_socket" ;;
+    failed) [[ "$(native_window_prop "$po_socket" Result)" == trigger-limit-hit ]] && native_window_socket_trip ;;
+    *) return 1 ;;
+  esac
+}
+
+native_window_fence_probe() {
+  native_window_probe_units "${window_units[@]}" || { native_window_fenced_idle && native_window_probe_units "$unit"; }
+}
+
+native_window_fenced_issuer_ready() { native_window_issuer_ready || native_window_fenced_idle; }
+
+native_window_reopen_issuer() {
+  local deadline=$((SECONDS+90))
+  if [[ "$(native_window_prop "$po_socket" ActiveState)" == failed ]]; then
+    [[ "$(native_window_prop "$po_socket" Result)" == trigger-limit-hit ]] && native_window_socket_trip || return 1
+    sudo -n systemctl reset-failed "$po_socket"
+    sudo -n systemctl start "$po_socket"
+  fi
+  while (( SECONDS < deadline )); do
+    if [[ "$(native_window_prop "$po_socket" ActiveState)" == active ]] && po_health_ready "$release_dir" &&
+        [[ "$(native_window_prop "$po_service" ActiveState)" == active ]] && native_window_candidate_runtime "$po_service"; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "accepted window but the issuer did not reopen: $po_socket" >&2
+  return 1
+}
+
 native_window_commit_policy() {
   native_window_lease_live || { native_window_uncertain; return 1; }
   local n pid
-  native_window_probe_units "${window_units[@]}"
+  native_window_fence_probe
   pid="$(native_window_prop "$unit" MainPID)"; [[ "$pid" =~ ^[1-9][0-9]*$ ]]
   for n in "$po_socket" "$unit"; do native_window_candidate_runtime "$n"; done
   native_window_process_endpoint "$pid" 5433
   native_window_lease_live || { native_window_uncertain; return 1; }
   native_window_barriers observing "$@"
-  native_window_issuer_ready || { native_window_uncertain; return 1; }
+  native_window_fenced_issuer_ready || { native_window_uncertain; return 1; }
   native_window_lease_live || { native_window_uncertain; return 1; }
   native_window_barriers finish "$@"
   native_window_barriers permanent "${window_units[@]}"
-  native_window_probe_units "${window_units[@]}"
+  native_window_fence_probe
 }
 
 native_apply_before_stop() {
@@ -764,13 +822,14 @@ native_apply_close_observation() {
   sudo -n sync -f "$native_recovery_dir"
   native_cutover_run accept native_window_commit_policy "$po_service"
   native_window_accept_guard accept
+  native_window_reopen_issuer
 }
 
 native_window_accept_guard() {
   local step="$1" dest="$window/accepted-guard" expires permit status=0
   native_window_identity stage "$release_id" "$EXPECTED_REVISION"
   native_window_lease_live || { native_window_uncertain; return 1; }
-  native_window_issuer_ready || { native_window_uncertain; return 1; }
+  native_window_fenced_issuer_ready || { native_window_uncertain; return 1; }
   expires="$(native_window_lease_deadline)" || { native_window_uncertain; return 1; }
   permit="$(native_window_permit rotation)"
   sudo -n python3 -I -B - "$native_recovery_dir" "$dest" "$native_claim_nonce" "$owner" "$release_dir" "$step" "$current_link" "$permit" "$expires" <<'PY' || status=$?

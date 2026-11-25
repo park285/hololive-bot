@@ -266,6 +266,11 @@ func TestApplyAcceptanceRequiresTheObservedCandidate(t *testing.T) {
 		{normalMode, "", normalMode, true},
 		{"issuer-rotation", "retire_issuer rotate", normalMode, true},
 		{"issuer-failed", "retire_issuer rotate 23", normalMode, false},
+		{"issuer-exits-under-fence", issuerExitsUnderFence, normalMode, true},
+		{"issuer-exits-after-commit", issuerExitsAfterCommit, normalMode, true},
+		{"issuer-exits-during-fence-probe", issuerExitsDuringFenceProbe, normalMode, true},
+		{"issuer-skipped-by-exec-condition", issuerSkippedByExecCondition, normalMode, true},
+		{"socket-failed-without-trip", socketFailsWithoutTrip, normalMode, false},
 		{"permit-expired", `rmdir "$(native_window_permit rotation)"`, normalMode, false},
 		{"unobserved", `rm "$window/await-observation"`, normalMode, false},
 		{"foreign-nonce", `window_nonce=$(printf "%036d" 7)`, normalMode, false},
@@ -292,6 +297,7 @@ func TestApplyAcceptanceRequiresTheObservedCandidate(t *testing.T) {
 
 			if c.accepted {
 				requirePermanentDropIns(t, dir)
+				requireServingIssuer(t, dir)
 			}
 
 			if c.fault == "load_failure" {
@@ -308,6 +314,76 @@ func TestApplyAcceptanceRequiresTheObservedCandidate(t *testing.T) {
 		})
 	}
 }
+
+func requireServingIssuer(t *testing.T, dir string) {
+	t.Helper()
+
+	for _, unit := range []string{issuerSocket, issuerService} {
+		if exists(filepath.Join(dir, "failed-"+unit)) || exists(filepath.Join(dir, "down-"+unit)) {
+			t.Fatalf("%s must be serving after acceptance", unit)
+		}
+	}
+}
+
+const socketActivation = `
+eval "fixture_$(declare -f po_health_ready)"
+po_health_ready() {
+  if [[ ! -e "$native_recovery_dir/accepting" && ! -e "failed-$po_socket" && ! -e "down-$po_socket" && -e "down-$po_service" ]]; then
+    rm "down-$po_service"
+    printf '%032d\n' 301 > "live-$po_service"
+  fi
+  fixture_po_health_ready "$@"
+}
+trip_issuer_socket() {
+  retire_issuer stop
+  touch "failed-$po_socket" "tripped-$po_socket" "down-$po_socket"
+}
+`
+
+const issuerExitsUnderFence = socketActivation + `
+eval "fixture_$(declare -f native_window_commit_policy)"
+native_window_commit_policy() {
+  trip_issuer_socket
+  fixture_native_window_commit_policy "$@"
+}
+`
+
+const issuerExitsAfterCommit = socketActivation + `
+eval "fixture_$(declare -f native_window_barriers)"
+native_window_barriers() {
+  fixture_native_window_barriers "$@" || return
+  if [[ "$1" == finish ]]; then trip_issuer_socket; fi
+}
+`
+
+const issuerExitsDuringFenceProbe = socketActivation + `
+eval "fixture_$(declare -f native_window_probe_units)"
+native_window_probe_units() {
+  if [[ "${FUNCNAME[1]}" == native_window_fence_probe && -e "$native_recovery_dir/accepting" && ! -e probe-tripped ]]; then
+    touch probe-tripped
+    trip_issuer_socket
+    return 1
+  fi
+  fixture_native_window_probe_units "$@"
+}
+`
+
+const issuerSkippedByExecCondition = issuerExitsAfterCommit + `
+eval "fixture_$(declare -f native_window_prop)"
+native_window_prop() {
+  if [[ "$1" == "$po_service" && "$2" == Result && -e "down-$po_service" ]]; then echo exec-condition; return; fi
+  fixture_native_window_prop "$@"
+}
+`
+
+const socketFailsWithoutTrip = socketActivation + `
+eval "fixture_$(declare -f native_window_commit_policy)"
+native_window_commit_policy() {
+  retire_issuer stop
+  touch "failed-$po_socket" "down-$po_socket"
+  fixture_native_window_commit_policy "$@"
+}
+`
 
 const seedLegacyDropIns = `
 mkdir -p "$PWD/legacy-rel1/permanent" "$PWD/legacy-rel2/permanent"
