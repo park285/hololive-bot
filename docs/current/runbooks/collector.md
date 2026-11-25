@@ -242,7 +242,7 @@ REPO_ROOT="${PRODUCT_CHECKOUT:?}" AP_NATIVE_PRODUCT_REVISION="$product_sha" \
 
 호출자는 제품과 도구의 full SHA 및 release window를 대조합니다. 원격 cutover 본문은 도구 commit의 blob이며, 제품 checkout에서 collector·issuer를 빌드하고 unit·wrapper·보존 helper를 가져옵니다. host env는 **실행 중인 도구**의 `write_host_env`가 생성합니다. 그 함수의 바이트가 승인된 제품 commit의 동일 함수와 일치해야 하며, 경로·endpoint·용량·서비스 값은 제품 설정에서 읽습니다.
 
-`--apply`는 **최초 설치나 정지 창 전환이 아닙니다**. 전송 전 `apply-origin`에서 같은 창(이 release는 W2 또는 W3)에 수용된 기존 release의 ID·제품 SHA·inode 영수증과 설치된 설정을 읽어 대조합니다. 후보 host env의 `STACK_WORKER_PROFILE_FILE` 한 줄 및 issuer unit의 불변 `RootDirectory` 경로 외에 차이가 있으면 중단합니다. 계정·로그 설정·sysctl·swap·fstab의 차이를 고치거나 이전 host env를 통째로 덮어쓰지 않습니다. 실제 전환은 출처·네 개의 사전 대조 digest를 확인한 같은 호출자가 `same-window`로만 요청합니다. 기존 `current`나 수용 영수증이 없으면 최초 설치 분기로 우회하지 않습니다.
+`--apply`는 **최초 설치나 정지 창 전환이 아닙니다**. 전송 전 `apply-origin`에서 같은 창(이 release는 W3)에 수용된 기존 release의 ID·제품 SHA·inode 영수증과 설치된 설정을 읽어 대조합니다. 후보 host env의 `STACK_WORKER_PROFILE_FILE` 한 줄 및 issuer unit의 불변 `RootDirectory` 경로 외에 차이가 있으면 중단합니다. 계정·로그 설정·sysctl·swap·fstab의 차이를 고치거나 이전 host env를 통째로 덮어쓰지 않습니다. 실제 전환은 출처·네 개의 사전 대조 digest를 확인한 같은 호출자가 `same-window`로만 요청합니다. 기존 `current`나 수용 영수증이 없으면 최초 설치 분기로 우회하지 않습니다.
 
 새 시도의 `native deploy source` 두 SHA, 새 release ID와 `native attempt`의 payload SHA-256을 함께 보존합니다. 원격 비교 위치는 로그인 사용자의 `~/.hololive-host-native-osaka-<ID>`가 아니라 `/opt/hololive-bot/collector/releases/<ID>`입니다. root 소유로 복사한 직후(권한 정규화·rootfs 해제·profile 추가 전)의 전체 트리 digest가 kapu의 값과 같아야 합니다. 그 뒤 로그인 사용자와 `hololive:opc` 실행 역할의 실제 접근권, 세 unit의 Job·실행 세대, readiness 및 `apply-accepted`까지 별도로 확인합니다. 출처·전송 성공만으로 수용한 것이 아닙니다.
 
@@ -297,7 +297,7 @@ guard가 남으면 새 배포와 수동 rollback `--apply` 모두 거절합니�
 
 Osaka의 일반 `--apply`는 최초 설치나 창 전환 명령이 아닙니다. kapu 빌드·staging 전송 전에 osaka1의 실제 `current/accepted-window`가 이 소스의 창과 같은지 확인합니다. 이 root 전용 파일은 창 이름, release ID, 설치된 `po-sandbox/revision`의 전체 SHA와 release 디렉터리 식별자를 묶습니다. 다른 release에 복사한 파일, 남은 복구 guard 또는 수용 기록이 없는 endpoint는 증거가 아닙니다. 원격에서도 guard 선점 뒤, 이전 writer를 정지하기 전에 같은 원점과 실행 파일·DB endpoint를 다시 확인합니다.
 
-일반 배포도 새 socket·issuer·collector의 이번 부팅 및 기동 완료 job·invocation 영수증을 남깁니다. 두 외부 관찰이 성공한 뒤 같은 nonce·current·revision·실행 세대를 재확인한 경우에만 새 release에 `accepted-window`를 게시합니다. 관찰 실패나 인계 중단 시에는 새 창 수용을 추정하거나 marker를 복사·작성하지 않습니다. 이 release의 전용 창은 W3입니다. W2 또는 W3에서 수용되어 `100.100.1.8:5433`에 직접 TLS로 접속 중인 원점만 대상으로 합니다. W2 표식은 PgBouncer 6433 원점에서도 생기므로 표식만으로는 직결 원점이 증명되지 않습니다. 6433 원점은 정지 전에 host env와 실행 중 프로세스의 endpoint를 `100.100.1.8:5433`과 대조하는 검사가 거부합니다. PgBouncer 6433 원점을 받는 W2 전환은 [퇴역 전환](../../../deploy/quadlet/README.md#pgbouncer-퇴역-전환)대로 1–9단계용 commit의 도구와 문서로 합니다. 창 이름이 다른 도구와 제품 checkout을 함께 쓰면 `ap-host-native-deploy.sh`가 전송 전에 거부합니다.
+일반 배포도 새 socket·issuer·collector의 이번 부팅 및 기동 완료 job·invocation 영수증을 남깁니다. 두 외부 관찰이 성공한 뒤 같은 nonce·current·revision·실행 세대를 재확인한 경우에만 새 release에 `accepted-window`를 게시합니다. 관찰 실패나 인계 중단 시에는 새 창 수용을 추정하거나 marker를 복사·작성하지 않습니다. 이 release의 전용 창은 W3입니다. W3에서 수용되어 `100.100.1.8:5433`에 직접 TLS로 접속 중인 원점만 대상으로 합니다. 정지 전에 host env와 실행 중 프로세스의 endpoint를 `100.100.1.8:5433`과 대조하는 검사가 다른 endpoint의 원점을 거부합니다. 창 이름이 다른 도구와 제품 checkout을 함께 쓰면 `ap-host-native-deploy.sh`가 전송 전에 거부합니다.
 
 원격 staging에서 root 소유 후보로 복사한 직후에도 전체 payload를 확인합니다. 일반 배포는 kapu에서 방금 빌드한 digest, 전용 창은 별도 승인 기록의 digest와 같아야 합니다. `accepted-window`가 먼저 생겨도 복구 guard가 남으면 미수용입니다. 실제 영수증과 남은 허가 시간을 확인한 뒤 guard를 `accepted-guard`로 넘깁니다. 인계 중단 시 남은 영수증과 후보를 보존하고 자동으로 다시 시도하지 않습니다.
 

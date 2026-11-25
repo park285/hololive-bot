@@ -42,22 +42,18 @@ def identity(w, record):
     return f'{w}\n{release.name}\n{revision}\n{s.st_dev}:{s.st_ino}:{record.st_ino}\n'.encode('ascii')
 
 if action == 'stage':
-    assert family in ('W1','W2','W3') and expected_id and expected_rev and not os.path.lexists(marker)
+    assert family == 'W3' and expected_id and expected_rev and not os.path.lexists(marker)
     owned(guard, stat.S_ISDIR)
     with os.fdopen(os.open(guard/'accepted-window', os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600), 'wb') as f:
         f.write(identity(family, os.fstat(f.fileno())))
         f.flush()
         os.fsync(f.fileno())
-elif action == 'quiesce' and family == 'W1':
-    assert not os.path.lexists(marker) and not os.path.lexists(release/'native-observation')
 else:
-    assert action in ('apply','quiesce') and family in ('W1','W2','W3')
+    assert action in ('apply','quiesce') and family == 'W3'
     record = owned(marker, stat.S_ISREG)
     assert stat.S_IMODE(record.st_mode) == 0o600
-    origins = {('quiesce','W2'): ('W1','W2'), ('quiesce','W3'): ('W2','W3'), ('apply','W3'): ('W2','W3')}
-    families = origins.get((action, family), (family,))
     data = marker.read_bytes()
-    assert data in [identity(w, record) for w in families], '현재 릴리스는 요청한 창에서 수용되지 않았습니다'
+    assert data == identity(family, record), '현재 릴리스는 요청한 창에서 수용되지 않았습니다'
     print(' '.join(data.decode('ascii').splitlines()[1:]))
 PY
 }
