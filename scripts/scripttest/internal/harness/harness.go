@@ -1,14 +1,18 @@
 package harness
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 )
 
@@ -106,10 +110,19 @@ func run(ctx context.Context, tb testing.TB, c Cmd) Result {
 
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 
 	result := Result{}
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		tb.Fatalf("start bash: %v", err)
+	}
+
+	sid := cmd.Process.Pid
+
+	tb.Cleanup(func() { KillSession(tb, sid) })
+
+	if err := cmd.Wait(); err != nil {
 		exitErr, ok := errors.AsType[*exec.ExitError](err)
 		if !ok {
 			tb.Fatalf("run bash: %v", err)
@@ -122,6 +135,44 @@ func run(ctx context.Context, tb testing.TB, c Cmd) Result {
 	result.Stderr = stderr.String()
 
 	return result
+}
+
+func KillSession(tb testing.TB, sid int) {
+	tb.Helper()
+
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		tb.Errorf("list processes: %v", err)
+
+		return
+	}
+
+	for _, entry := range entries {
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil {
+			continue
+		}
+
+		stat, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "stat")) // #nosec G304 -- procfs 경로만 읽는다.
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH) {
+			continue
+		}
+
+		if err != nil {
+			tb.Errorf("read process %d: %v", pid, err)
+
+			continue
+		}
+
+		fields := strings.Fields(string(stat[bytes.LastIndexByte(stat, ')')+1:]))
+		if len(fields) < 4 || fields[3] != strconv.Itoa(sid) {
+			continue
+		}
+
+		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			tb.Errorf("kill process %d of session %d: %v", pid, sid, err)
+		}
+	}
 }
 
 func Succeeds(tb testing.TB, label string, r Result) {

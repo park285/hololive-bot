@@ -288,7 +288,7 @@ func (e cutoverEnv) runSignalCase(t *testing.T, c signalCase) (string, int) {
 		close(p.done)
 	}()
 
-	t.Cleanup(func() { killGroup(t, cmd.Process.Pid) })
+	t.Cleanup(func() { harness.KillSession(t, cmd.Process.Pid) })
 
 	if c.target != "" {
 		e.deliver(t, p, dir, c)
