@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"context"
 
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/service/acl"

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	irisclient "github.com/park285/iris-client-go/v5/iris"
+	irisclient "github.com/park285/iris-client-go/v6/iris"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"

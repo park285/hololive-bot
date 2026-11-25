@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/park285/iris-client-go/v5/webhook"
+	"github.com/park285/iris-client-go/v6/webhook"
 	"github.com/park285/shared-go/core/stringutil"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 

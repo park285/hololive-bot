@@ -96,6 +96,14 @@ func (l handoffLedger) Exhaust(ctx context.Context, claim *dispatchoutbox.Handof
 	return nil
 }
 
+func (l handoffLedger) RoomNotJoined(ctx context.Context, claim *dispatchoutbox.HandoffClaim, code, detail string) error {
+	if err := l.PauseRoomAfterHandoff(ctx, claim, code, detail); err != nil {
+		return fmt.Errorf("pause room after handoff: %w", err)
+	}
+
+	return nil
+}
+
 func (l handoffLedger) Quarantine(ctx context.Context, claim *dispatchoutbox.HandoffClaim, code, detail string) error {
 	if err := l.QuarantineAfterHandoff(ctx, claim, code, detail); err != nil {
 		return fmt.Errorf("quarantine after handoff: %w", err)

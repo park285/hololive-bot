@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -38,6 +38,7 @@ const (
 	ActionReissue
 	ActionExhausted
 	ActionQuarantine
+	ActionRoomNotJoined
 )
 
 func (a Action) String() string {
@@ -52,6 +53,8 @@ func (a Action) String() string {
 		return "exhausted"
 	case ActionQuarantine:
 		return "quarantine"
+	case ActionRoomNotJoined:
+		return "room_not_joined"
 	}
 
 	return fmt.Sprintf("action(%d)", uint8(a))
@@ -100,6 +103,10 @@ func Decide(in Input) Decision {
 	case iris.ReplyStatusHandoffCompleted:
 		return Decision{Action: ActionComplete}
 	case iris.ReplyStatusFailed:
+		if iris.ReplyStatusRoomNotJoined(in.Snapshot) {
+			return Decision{Action: ActionRoomNotJoined, Code: contractsalarm.HandoffCodeRoomNotJoined, Detail: "iris reply status failed: bot account is not in the room"}
+		}
+
 		if in.Generation < iris.ReplyReissueMaxGenerations && in.RetryBudgetLeft {
 			return Decision{Action: ActionReissue, Code: contractsalarm.HandoffCodeFailed, Detail: "iris reply status failed"}
 		}

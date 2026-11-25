@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
@@ -83,6 +83,10 @@ func decideReplyHandoff(
 	case iris.ReplyStatusHandoffCompleted:
 		return replyHandoffDecision{status: durability.ReplyOutboxHandoffCompleted}
 	case iris.ReplyStatusFailed:
+		if iris.ReplyStatusRoomNotJoined(snapshot) {
+			return replyHandoffDecision{status: durability.ReplyOutboxDead, lastError: contractsalarm.HandoffCodeRoomNotJoined}
+		}
+
 		retry := !claim.ReplayHorizonExpired &&
 			int64(claim.Attempts) < int64(maxAttempts)+int64(claim.OperatorReplayGrants)
 		if retry {

@@ -8,7 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"

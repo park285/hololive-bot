@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/park285/iris-client-go/v5/webhook"
+	"github.com/park285/iris-client-go/v6/webhook"
 	"github.com/park285/shared-go/core/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"

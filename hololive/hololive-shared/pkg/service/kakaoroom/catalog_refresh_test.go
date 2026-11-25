@@ -22,6 +22,7 @@ func (f catalogListerFunc) GetRooms(ctx context.Context) ([]Facts, error) {
 type catalogStoreFuncs struct {
 	getFunc    func(context.Context, string) (Facts, bool, error)
 	upsertFunc func(context.Context, Facts) error
+	resumeFunc func(context.Context, string) (bool, error)
 }
 
 func (s catalogStoreFuncs) get(ctx context.Context, roomID string) (Facts, bool, error) {
@@ -30,6 +31,14 @@ func (s catalogStoreFuncs) get(ctx context.Context, roomID string) (Facts, bool,
 	}
 
 	return s.getFunc(ctx, roomID)
+}
+
+func (s catalogStoreFuncs) resume(ctx context.Context, roomID string) (bool, error) {
+	if s.resumeFunc == nil {
+		return false, nil
+	}
+
+	return s.resumeFunc(ctx, roomID)
 }
 
 func (s catalogStoreFuncs) upsert(ctx context.Context, facts Facts) error {

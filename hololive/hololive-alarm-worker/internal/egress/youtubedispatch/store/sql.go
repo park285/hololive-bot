@@ -40,6 +40,8 @@ var (
 	handoffMembersSQL                            = mustSQL("handoff_members.sql")
 	handoffRequestCloseSQL                       = mustSQL("handoff_request_close.sql")
 	handoffRequestReissueSQL                     = mustSQL("handoff_request_reissue.sql")
+	handoffRoomPauseSQL                          = mustSQL("handoff_room_pause.sql")
+	pausedRoomsSQL                               = mustSQL("paused_rooms.sql")
 	handoffRequestStateSQL                       = mustSQL("handoff_request_state.sql")
 	sendRequestAdvanceSQL                        = mustSQL("send_request_advance.sql")
 	sendRequestBindSQL                           = mustSQL("send_request_bind.sql")

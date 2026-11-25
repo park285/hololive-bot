@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/handoffcheck"
@@ -24,6 +24,7 @@ const (
 	handoffActionReissue    = "handoff_reissue"
 	handoffActionExhaust    = "handoff_exhaust"
 	handoffActionQuarantine = "handoff_quarantine"
+	handoffActionRoomPause  = "handoff_room_pause"
 )
 
 var ErrHandoffCheckClosed = errors.New("youtube handoff check closed without transition")
@@ -276,6 +277,12 @@ func (s *TransitionStore) ExhaustAfterHandoff(ctx context.Context, claim *Handof
 func (s *TransitionStore) QuarantineAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) (ApplyResult, error) {
 	return s.settleHandoffFailure(ctx, claim, handoffFailure{
 		action: handoffActionQuarantine, status: lifecycle.StatusQuarantined, quarantine: true,
+	}, handoffErrorText(code, detail))
+}
+
+func (s *TransitionStore) PauseRoomAfterHandoff(ctx context.Context, claim *HandoffClaim, code, detail string) (ApplyResult, error) {
+	return s.settleHandoffFailure(ctx, claim, handoffFailure{
+		action: handoffActionRoomPause, status: lifecycle.StatusFailed, pauseRoom: true,
 	}, handoffErrorText(code, detail))
 }
 

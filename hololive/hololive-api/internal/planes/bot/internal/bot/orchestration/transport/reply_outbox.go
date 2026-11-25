@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 )
 
 const ReplyPhase = replyPhaseReply

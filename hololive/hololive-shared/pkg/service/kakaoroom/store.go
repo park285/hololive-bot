@@ -30,6 +30,14 @@ func (s *store) upsert(ctx context.Context, facts Facts) error {
 	return nil
 }
 
+func (s *store) resume(ctx context.Context, roomID string) (bool, error) {
+	if s == nil || s.pool == nil {
+		return false, nil
+	}
+
+	return resumeDelivery(ctx, s.pool, roomID)
+}
+
 func (s *store) get(ctx context.Context, roomID string) (Facts, bool, error) {
 	if s == nil || s.pool == nil {
 		return Facts{}, false, nil

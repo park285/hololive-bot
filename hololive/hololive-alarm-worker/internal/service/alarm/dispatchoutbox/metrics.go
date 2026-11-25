@@ -23,6 +23,7 @@ var (
 	alarmDispatchPGMarkSentFailedTotal        prometheus.Counter
 	alarmDispatchPGQuarantinedTotal           prometheus.Counter
 	alarmDispatchPGDLQTotal                   prometheus.Counter
+	alarmDispatchPGPausedRoomTotal            prometheus.Counter
 	alarmDispatchPGRetryScheduledTotal        prometheus.Counter
 	alarmDispatchPGTransitionPartialTotal     *prometheus.CounterVec
 	alarmDispatchPGClaimReleasedTotal         prometheus.Counter
@@ -85,6 +86,12 @@ func registerPGDispatchMetrics() {
 		prometheus.CounterOpts{
 			Name: "alarm_dispatch_pg_dlq_total",
 			Help: "Total PG dispatch rows moved to DLQ.",
+		},
+	)
+	alarmDispatchPGPausedRoomTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_pg_paused_room_total",
+			Help: "Total PG dispatch rows recorded as canceled because their Kakao room delivery is paused.",
 		},
 	)
 	alarmDispatchPGRetryScheduledTotal = promauto.NewCounter(
@@ -164,6 +171,14 @@ func observePGDLQ(rows int) {
 	}
 
 	alarmDispatchPGDLQTotal.Add(float64(rows))
+}
+
+func observePGPausedRoom(rows int) {
+	if alarmDispatchPGPausedRoomTotal == nil || rows <= 0 {
+		return
+	}
+
+	alarmDispatchPGPausedRoomTotal.Add(float64(rows))
 }
 
 func observePGRetryScheduled(rows int) {

@@ -41,7 +41,7 @@ Iris / Redroid is an external KakaoTalk automation boundary used for webhook ing
 // Do not invent payload fields in this document.
 ```
 
-새 Markdown 응답은 `iris-client-go/v5`(각 모듈 `go.mod`가 고정한 판본)의 `SendRichText`로 `/reply`에 `type:"richtext"`와 원문을 보냅니다.
+새 Markdown 응답은 `iris-client-go/v6`(각 모듈 `go.mod`가 고정한 판본)의 `SendRichText`로 `/reply`에 `type:"richtext"`와 원문을 보냅니다.
 서버는 RichText 지원 Iris와 카카오톡 26.9.1 대응 bridge가 필요합니다. 기존 `BOT_MARKDOWN_REPLIES`와
 오픈채팅 판정은 유지하고, 일반 텍스트 및 다른 메시지 유형은 전환하지 않습니다.
 SDK의 기존 `SendMarkdown`·`Sender`·`BotClient` 계약은 변경하지 않으며 필요한 소비자 인터페이스만 확장합니다.

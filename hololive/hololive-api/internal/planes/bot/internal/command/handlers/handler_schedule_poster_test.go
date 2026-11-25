@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v5/webhook"
+	"github.com/park285/iris-client-go/v6/webhook"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"

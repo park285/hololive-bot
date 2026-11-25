@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/v5/iris"
+	"github.com/park285/iris-client-go/v6/iris"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
@@ -15,6 +15,10 @@ const testRequestID = "iris-request-1"
 
 func snapshot(state string) *iris.ReplyStatusSnapshot {
 	return &iris.ReplyStatusSnapshot{RequestID: testRequestID, State: state}
+}
+
+func failedWithReason(reason string) *iris.ReplyStatusSnapshot {
+	return &iris.ReplyStatusSnapshot{RequestID: testRequestID, State: "failed", Reason: &reason}
 }
 
 func TestDecideRoutesEveryObservation(t *testing.T) {
@@ -35,6 +39,9 @@ func TestDecideRoutesEveryObservation(t *testing.T) {
 		{"capitalized failed is not reissued", Input{Snapshot: snapshot("Failed"), RetryBudgetLeft: true}, ActionQuarantine, contractsalarm.HandoffCodeOutcomeUnknown},
 		{"failed with generation and budget left", Input{Snapshot: snapshot("failed"), Generation: 1, RetryBudgetLeft: true}, ActionReissue, contractsalarm.HandoffCodeFailed},
 		{"failed at the last generation", Input{Snapshot: snapshot("failed"), Generation: iris.ReplyReissueMaxGenerations, RetryBudgetLeft: true}, ActionExhausted, contractsalarm.HandoffCodeFailed},
+		{"room not joined is never reissued", Input{Snapshot: failedWithReason(iris.ReplyFailureReasonRoomNotJoined), Generation: 0, RetryBudgetLeft: true}, ActionRoomNotJoined, contractsalarm.HandoffCodeRoomNotJoined},
+		{"room not joined at the last generation", Input{Snapshot: failedWithReason(iris.ReplyFailureReasonRoomNotJoined), Generation: iris.ReplyReissueMaxGenerations}, ActionRoomNotJoined, contractsalarm.HandoffCodeRoomNotJoined},
+		{"unknown failure reason keeps the reissue budget", Input{Snapshot: failedWithReason("future_reason"), Generation: 1, RetryBudgetLeft: true}, ActionReissue, contractsalarm.HandoffCodeFailed},
 		{"failed without attempt budget", Input{Snapshot: snapshot("failed"), RetryBudgetLeft: false}, ActionExhausted, contractsalarm.HandoffCodeFailed},
 		{"outcome unknown", Input{Snapshot: snapshot("outcome_unknown"), RetryBudgetLeft: true}, ActionQuarantine, contractsalarm.HandoffCodeOutcomeUnknown},
 		{"unrecognized state", Input{Snapshot: snapshot("delivered")}, ActionQuarantine, contractsalarm.HandoffCodeOutcomeUnknown},
