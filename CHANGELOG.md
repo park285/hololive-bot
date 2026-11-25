@@ -6,6 +6,8 @@
 
 ## 미출시
 
+## r1.2.5 - 2026-11-25
+
 - **AP a native 창 정리:** PgBouncer 퇴역 전환이 끝나 W1·W2 창을 지웠습니다. native 도구는 W3에서 수용된 원점만 받습니다. 퇴역 전환 절차 문서와 그 링크도 지웠습니다.
 - **인프라 image를 공식 image로 전환:** PostgreSQL·Valkey·nginx 자체 image와 빌드 recipe를 지우고 고정 digest의 공식 image(`postgres:19.0-alpine`, `valkey:9.1.3-alpine3.24`, `nginx:1.31.9-alpine-slim`)를 그대로 씁니다. 공식 image에 없는 `pg_stat_kcache`·`pg_wait_sampling` 설정을 unit에서 뺐고, Valkey health check는 `valkey-runtime` 대신 `valkey-cli`를 직접 실행합니다. 세 image는 주간 최종 image 스캔에서 빠집니다. 공식 image에는 아직 수정 전 Alpine 패키지(PostgreSQL의 libxml2 CVE-2026-86144 등)와 gosu의 Go 1.24.6 표준 라이브러리 보고가 남아 있습니다. 운영 전환은 [확장 제거 절차](docs/current/runbooks/postgres-observability.md#공식-image-전환-전-확장-제거)를 먼저 따릅니다.
 
@@ -19,8 +21,3 @@
 - **AP a 정지 창 재개 관찰:** issuer가 정상 교체되는 순간 systemd 상태를 나눠 읽다가 `activating`과 `running`이 엇갈리면 관찰을 결과 불명으로 끝내던 경합을 고쳤습니다(2026-11-24 osaka1 W3 재개). 상태가 바뀌는 중이면 기존 재시도 한도 안에서 다시 확인하고, 같은 상태에 머물면 지금처럼 실패합니다.
 - **AP a 결과 불명 정산(`--settle`):** 후보 collector 기동 뒤 관찰만 결과 불명으로 끝난 W3 창은, 세 unit의 정지와 정지 완료 기록을 확인한 뒤 결과 표식과 1차 시도 영수증을 창 안에 보관하고 같은 후보로 다시 재개·수용할 수 있습니다. 다른 결과 불명이나 판정 가능한 실패는 지금처럼 재개하지 않습니다.
 - kapu d custody tar 안내에 두 `.container`가 참조하는 `hololive-collector.network`·`hololive-youtube-po-d.volume`을 넣었습니다.
-
-## r1.2.2 - 2026-11-24
-
-- **`!달력` 플랫 포스터 테마 6종 추가·7종 페이지별 독립 랜덤 회전:** 기존 다크(`starlight_orbit`)의 그라데이션·글로우·반투명 장식을 걷어내고 `Alpha=255` 솔리드 색지·`136px×7열` 정수 격자·`BlackHanSans` 조판 기반 플랫 포스터 테마 6종(다크 3종 `cream_bromide`·`kurokami_risograph`·`holo_stage`, 라이트 3종 `shirokami_risograph`·`sakura_sora_press`·`museum_archive`)을 추가했습니다. 기존 라이트(`prism_daylight`) 1세트와 합쳐 총 7종 테마 풀을 다크·라이트 구분 없이 운영하며, 생일 달력(1/2)과 데뷔 기념일 달력(2/2)이 각자 직전 테마만 피해 독립적으로 테마를 뽑으므로 `라이트+다크`·`다크+라이트`·`라이트+라이트`·`다크+다크` 모든 조합이 허용됩니다. 메모리(상한 64장)와 공유 Valkey 캐시(`bot:calendar:album:v7:<YYYY-MM>:<kind>:<theme>`)를 페이지 종류·테마 단위로 분리해 교차 조합 시에도 이미 렌더된 페이지를 재사용합니다.
-- **PO 검증 쌍 전송:** kapu의 rsync가 3.5.0으로 올라간 뒤 `po-central-cutover.sh`의 `--files-from=<(...)`가 `/dev/fd/63`을 열지 못해, c `quiesce-verified`와 deploy 전송이 원격 단계에 들어가기 전에 실패했습니다. 파일 목록을 표준 입력(`--files-from=-`)으로 넘깁니다.
