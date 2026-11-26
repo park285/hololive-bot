@@ -805,3 +805,30 @@ func TestReadPeriodStreamsFromVertexWithADC(t *testing.T) {
 	require.Equal(t, "Bearer vertex-token", exchange.authorization)
 	require.Empty(t, exchange.apiKey)
 }
+
+func TestReadPeriodReportsFinishReasonWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeStreamChunks(t, w,
+			`{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"first_month\":"}]}}]}`,
+			`{"candidates":[{"finishReason":"SAFETY"}],"usageMetadata":{"promptTokenCount":1200,"candidatesTokenCount":3}}`)
+	}))
+	t.Cleanup(server.Close)
+
+	period, spent, err := newGeminiJudge(decisionTestKey, newTestGenAIClient(t, server.URL)).readPeriod(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
+	require.ErrorIs(t, err, errUnjudgeable)
+	require.ErrorContains(t, err, "finish reason SAFETY")
+	require.Equal(t, printedPeriod{}, period)
+	require.Equal(t, usage{model: periodModel, prompt: 1200, output: 3}, spent)
+}
+
+func TestFailedModelCallWithoutUsageLogsNothing(t *testing.T) {
+	t.Parallel()
+
+	translator, _ := matchServer(t, http.StatusTooManyRequests, `{"error":{"code":429,"message":"quota","status":"RESOURCE_EXHAUSTED"}}`)
+
+	_, spent, err := translator.matchPost(t.Context(), "match prompt")
+	require.Error(t, err)
+	require.Equal(t, usage{}, spent)
+}

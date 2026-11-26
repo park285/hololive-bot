@@ -147,6 +147,10 @@ func (j *geminiJudge) readPeriod(ctx context.Context, src source) (printedPeriod
 		return printedPeriod{}, spent, periodFailure(err)
 	}
 
+	if len(response.Candidates) == 0 || response.Candidates[0] == nil || response.Candidates[0].Content == nil {
+		return printedPeriod{}, spent, fmt.Errorf("%w: period response has no candidate (%s)", errUnjudgeable, emptyResponseReason(response))
+	}
+
 	period, err := parsePeriod(response.Text())
 
 	return period, spent, err

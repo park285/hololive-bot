@@ -12,6 +12,7 @@ import (
 var errIncompleteStream = errors.New("schedule poster model stream ended before the model finished")
 
 type streamedResponse struct {
+	model     string
 	response  genai.GenerateContentResponse
 	candidate *genai.Candidate
 	spent     usage
@@ -26,7 +27,7 @@ func generateContent(
 ) (*genai.GenerateContentResponse, usage, error) {
 	config.AutomaticContinuation = new(false)
 
-	streamed := &streamedResponse{spent: usage{model: model}}
+	streamed := &streamedResponse{model: model}
 
 	for hop := config; hop != nil; {
 		token, err := streamed.read(ctx, models, model, contents, hop)
@@ -63,7 +64,7 @@ func (s *streamedResponse) read(
 
 	for chunk, err := range models.GenerateContentStream(ctx, model, contents, config) {
 		if err != nil {
-			s.spent = s.spent.add(hopUsage)
+			s.spent = s.spent.add(s.model, hopUsage)
 
 			return nil, err
 		}
@@ -75,7 +76,7 @@ func (s *streamedResponse) read(
 		s.merge(chunk)
 	}
 
-	s.spent = s.spent.add(hopUsage)
+	s.spent = s.spent.add(s.model, hopUsage)
 
 	return s.continuationToken(), nil
 }
@@ -169,10 +170,12 @@ type usage struct {
 	output        int32
 }
 
-func (u usage) add(metadata *genai.GenerateContentResponseUsageMetadata) usage {
+func (u usage) add(model string, metadata *genai.GenerateContentResponseUsageMetadata) usage {
 	if metadata == nil {
 		return u
 	}
+
+	u.model = model
 
 	u.prompt += metadata.PromptTokenCount
 	u.toolUsePrompt += metadata.ToolUsePromptTokenCount
