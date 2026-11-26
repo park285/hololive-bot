@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 usage() {
-  echo "usage: $0 <module> <tidy|vet|race|race-json|test-prod|build-prod>" >&2
+  echo "usage: $0 <module> <tidy|vet|race|test-prod|build-prod>" >&2
   exit 2
 }
 
@@ -23,7 +23,7 @@ case "${module}" in
 esac
 
 case "${stage}" in
-  tidy|vet|race|race-json|test-prod|build-prod)
+  tidy|vet|race|test-prod|build-prod)
     ;;
   *)
     echo "unsupported public PR stage: ${stage}" >&2
@@ -31,9 +31,9 @@ case "${stage}" in
     ;;
 esac
 
-if [[ "${stage}" == @(race-json|test-prod|build-prod) ]]; then
+if [[ "${stage}" == "test-prod" || "${stage}" == "build-prod" ]]; then
   if [[ "${module}" != "hololive/hololive-collector" ]]; then
-    echo "race-json, test-prod and build-prod are only valid for hololive/hololive-collector" >&2
+    echo "test-prod and build-prod are only valid for hololive/hololive-collector" >&2
     exit 2
   fi
   . "${SCRIPT_DIR}/python-runtime.sh"
@@ -73,26 +73,6 @@ run_with_failure_tail() {
   rm -f "${output_file}"
 }
 
-run_collector_json_tests() {
-  local jsonl test_status=0 json_status=0
-  jsonl="$(mktemp)"
-  go test -json "$@" ./... >"${jsonl}" || test_status=$?
-  if [[ "${stage}" == race-json && "${test_status}" == 0 ]]; then
-    bash "${SCRIPT_DIR}/go-test-nonrace.sh" --cgo-disabled --json ./... >>"${jsonl}" || test_status=$?
-  fi
-  "${CI_PYTHON_BIN}" "${ROOT_DIR}/scripts/ci/check-go-test-json.py" \
-    --input "${jsonl}" \
-    --require-pass \
-    --allow-skip-file "${ROOT_DIR}/scripts/ci/collector-test-skip-allowlist.txt" || json_status=$?
-  if (( test_status != 0 || json_status != 0 )); then
-    echo "::error title=collector JSON tests failed::module=${module} stage=${stage}"
-    tail -n 400 "${jsonl}" >&2
-    rm -f "${jsonl}"
-    return 1
-  fi
-  rm -f "${jsonl}"
-}
-
 case "${stage}" in
   tidy)
     echo "[public-pr] module=${module} go mod tidy -diff"
@@ -103,22 +83,42 @@ case "${stage}" in
     echo "[public-pr] module=${module} go vet ./..."
     go vet ./...
     ;;
-  race|race-json)
+  race)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
     use_shared_test_database
     echo "[public-pr] module=${module} go test -race -p 2 -count=1 ./..."
-    if [[ "${stage}" == race-json ]]; then
-      run_collector_json_tests -race -p 2 -count=1
-    else
-      run_with_failure_tail "race tests" go test -race -p 2 -count=1 ./...
-      run_with_failure_tail "non-race-only tests" bash "${SCRIPT_DIR}/go-test-nonrace.sh" ./...
-    fi
+    run_with_failure_tail "race tests" go test -race -p 2 -count=1 ./...
+    run_with_failure_tail "non-race-only tests" bash "${SCRIPT_DIR}/go-test-nonrace.sh" ./...
     ;;
   test-prod)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
-    use_shared_test_database
+    if [[ -n "${RUNNER_TEMP:-}" ]]; then
+      [[ "${RUNNER_TEMP}" == /* ]] || {
+        echo "RUNNER_TEMP must be an absolute path" >&2
+        exit 1
+      }
+      work_root="${RUNNER_TEMP}"
+      mkdir -p "${work_root}"
+    else
+      work_root="$(mktemp -d)"
+      trap 'rm -rf "${work_root}"' EXIT
+    fi
+    jsonl="${work_root}/collector-go-default-json.jsonl"
     echo "[public-pr] module=${module} CGO_ENABLED=0 go test -json -count=1 ./..."
-    CGO_ENABLED=0 run_collector_json_tests -count=1
+    set +e
+    CGO_ENABLED=0 go test -json -count=1 ./... >"${jsonl}"
+    test_status=$?
+    "${CI_PYTHON_BIN}" "${ROOT_DIR}/scripts/ci/check-go-test-json.py" \
+      --input "${jsonl}" \
+      --require-pass \
+      --allow-skip-file "${ROOT_DIR}/scripts/ci/collector-test-skip-allowlist.txt"
+    json_status=$?
+    set -e
+    if [[ "${test_status}" -ne 0 || "${json_status}" -ne 0 ]]; then
+      echo "::error title=default JSON tests failed::module=${module} stage=${stage}"
+      tail -n 400 "${jsonl}" >&2
+      exit 1
+    fi
     ;;
   build-prod)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"

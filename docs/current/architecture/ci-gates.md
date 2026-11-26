@@ -23,9 +23,10 @@ Go 파일·함수 크기는 golangci-lint의 `revive` `file-length-limit`(비테
 `funlen`(함수 120줄)이 검사합니다. 복잡도는 설정된 린터가 맡으며 별도 구조 예산 검사는 없습니다.
 staticcheck도 golangci-lint에 포함된 판본으로 한 번만 실행하며 별도 staticcheck 실행은 두지 않습니다.
 
-로컬 제품 Go 검증과 PR matrix는 race 시험을 실행합니다. 로컬 golangci-lint에 govet가 포함되므로 별도 모듈별 `go vet`는 반복하지 않습니다. 독립 모듈의 정합성은 `go mod tidy -diff`와 PR matrix의 `GOWORK=off` vet·race가 검사합니다.
-로컬 collector `race-json` 단계는 race 시험의 JSON 결과에서 실패·panic·예상 밖 skip을 한 번 판정합니다. `go-test-nonrace.sh`는 race와 일반 빌드의 소스·시험 파일을 비교하고, 일반 빌드에만 추가된 Test·Example·Fuzz 또는 구현이 다른 패키지만 추가로 실행합니다. collector의 일반 빌드는 `CGO_ENABLED=0`으로 비교하며 추가 시험의 JSON에도 같은 판정을 적용합니다. CGO 비활성 운영 바이너리 빌드는 유지합니다.
-외부 PostgreSQL 상태를 사용하는 제품 race 시험은 `-count=1`을 유지합니다. Go 시험과 명시적으로 선택한 통합 시험은 일회용 PostgreSQL 서버를 공유합니다. dbtest는 시험별 DB를 복제하며 자동 생성한 서버만으로 통합 시험을 활성화하지 않습니다.
+로컬 제품 Go 검증과 PR matrix는 race 시험을 실행합니다. 변경 범위에 선택된 제품 모듈의 `GOWORK=off` vet는 게시된 의존성을, workspace의 golangci-lint·NilAway는 형제 checkout을 검사하므로 둘을 유지합니다. 표준 라이브러리만 사용하는 스크립트 시험 모듈은 별도 canonical vet를 반복하지 않고 기본 `go test` vet로 검사합니다.
+`go-test-nonrace.sh`는 일반 빌드에만 포함된 시험 파일이 있는 패키지에서 Go에 등록된 Test·Example·Fuzz를 비교합니다. 양쪽에 서로 다른 전용 파일이 있으면 같은 이름도 의미가 다를 수 있으므로 해당 패키지는 일반 모드로 전부 실행합니다.
+collector의 CGO 비활성 전체 시험과 race 전체 시험은 유지합니다. 제품 패키지의 파일 구성이 같아도 표준 라이브러리나 외부 의존성에서 선택되는 CGO·race 구현은 다를 수 있으므로 두 실행을 같은 검사로 취급하지 않습니다. CGO 비활성 시험의 JSON 결과에서 실패·panic·예상 밖 skip을 검사하며 운영 바이너리의 CGO 비활성 빌드도 유지합니다.
+외부 PostgreSQL 상태를 사용하는 제품 시험은 `-count=1`을 유지합니다. Go 시험과 명시적으로 선택한 통합 시험은 일회용 PostgreSQL 서버를 공유합니다. dbtest는 시험별 DB를 복제하며 자동 생성한 서버만으로 통합 시험을 활성화하지 않습니다.
 NilAway는 고정 바이너리의 `go vet -vettool` unitchecker로 의존성 분석을 재사용하며,
 로컬 기본값과 security workflow는 `-p 1`로 분석 메모리 사용을 제한합니다.
 

@@ -32,12 +32,18 @@ run_step() {
 }
 
 check_canonical_modules() {
-    local module
+    local module package
     for module in "${GO_OWNED_MODULES[@]}"; do
         (
             cd "${module}"
             export GOWORK=off
             run_step "go mod tidy -diff: ${module}" go mod tidy -diff
+            for package in "${GO_PACKAGES[@]}"; do
+                if [[ "${package}" == "./${module}/..." ]]; then
+                    run_step "Canonical vet (GOWORK=off): ${module}" go vet ./...
+                    break
+                fi
+            done
         )
     done
 }
@@ -73,26 +79,14 @@ check_golangci_lint() {
 }
 
 run_go_tests() {
-    local package
-    local -a parallel=() packages=()
+    local -a parallel=()
 
     [[ -z "${RACE_TEST_PARALLEL:-}" ]] || parallel=(-p "${RACE_TEST_PARALLEL}")
-    for package in "${GO_PACKAGES[@]}"; do
-        [[ "${package}" == ./hololive/hololive-collector/... ]] || packages+=("${package}")
-    done
-    if [[ "${collector_in_scope}" == true ]]; then
-        if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
-            run_step "collector race tests and JSON results" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-collector race-json
-        else
-            run_step "collector production JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-collector test-prod
-        fi
-    fi
-    (( ${#packages[@]} )) || return 0
     if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
-        run_step "Go race test" go_mod_readonly go test -race "${parallel[@]}" -count=1 "${packages[@]}"
-        run_step "Go non-race-only tests" go_mod_readonly bash scripts/ci/go-test-nonrace.sh "${packages[@]}"
+        run_go_package_step "Go race test" go_mod_readonly go test -race "${parallel[@]}" -count=1
+        run_go_package_step "Go non-race-only tests" go_mod_readonly bash scripts/ci/go-test-nonrace.sh
     else
-        run_step "Go test" go_mod_readonly go test "${parallel[@]}" -count=1 "${packages[@]}"
+        run_go_package_step "Go test" go_mod_readonly go test "${parallel[@]}" -count=1
     fi
 }
 
@@ -100,6 +94,9 @@ run_database_steps() (
     if has_go_packages; then
         if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
             run_step "Provision test PostgreSQL" provision_integration_test_database
+        fi
+        if [[ "${collector_in_scope}" == true ]]; then
+            run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-collector test-prod
         fi
         run_go_tests
     fi

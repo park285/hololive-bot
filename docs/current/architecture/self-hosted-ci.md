@@ -28,9 +28,9 @@ self-hosted runner를 다시 붙인다면 이미 신뢰된 코드를 checkout하
    않았으면 건너뜁니다. 범위를 모르거나, `PRE_PUSH_MODE=full`이거나, 선언된 입력이 저장소에 없으면 실행합니다.
    `deploy/quadlet/` 변경·범위 미상·`full`이면 중앙 Quadlet 원본도 `quadlet -dryrun`으로 생성합니다.
 3. `scripts/ci/local-ci.sh`를 실행합니다. architecture gate, 민감 로그 검사, Go toolchain 확인,
-   전체 workspace의 Go 소스·테스트 import를 사용한 `go work sync` drift(루트와 소유 모듈의 메타데이터만 대조), 소유 모듈별 `go mod tidy -diff`, integration tag vet,
+   전체 workspace의 Go 소스·테스트 import를 사용한 `go work sync` drift(루트와 소유 모듈의 메타데이터만 대조), 소유 모듈별 `go mod tidy -diff`, 선택된 제품 모듈의 `GOWORK=off` vet, integration tag vet,
    golangci-lint(staticcheck·formatters·modernize 포함), NilAway와 Go build를 실행합니다. collector production 빌드는 한 번만 합니다. 빌더·검사기·시험 입력이 바뀌었거나 범위 미상·`full`이면 그 산출물의 사본으로 손상 거부도 확인합니다. X Spaces helper, production Go workspace와 PostgreSQL 용량 검사도 유지합니다.
-   제품 race·non-race 시험과 선택한 통합 시험은 같은 일회용 PostgreSQL 서버를 씁니다. collector가 범위에 있으면 race JSON에서 실패·panic·예상 밖 skip을 검사하고 소스·시험 구성이 다른 CGO 비활성 패키지만 추가로 실행합니다. 배포·runtime 스크립트 시험은 제품 목록과 분리하여 `-p 1 -parallel 4 -count=1`로 실행하며, 스크립트만 선택된 경우 PostgreSQL 서버를 만들지 않습니다.
+   제품 race·non-race 시험과 선택한 통합 시험은 같은 일회용 PostgreSQL 서버를 씁니다. collector가 범위에 있으면 의존성 구현이 다른 CGO 비활성 전체 시험과 race 전체 시험을 모두 실행합니다. CGO 비활성 시험의 JSON에서 실패·panic·예상 밖 skip을 검사합니다. 배포·runtime 스크립트 시험은 제품 목록과 분리하여 `-p 1 -parallel 4 -count=1`로 실행하며, 스크립트만 선택된 경우 PostgreSQL 서버를 만들지 않습니다.
    fast는 두 게시 tip의 차이에서 이전·새 경로를 모두 읽습니다. 수동 실행은 staged·unstaged·untracked 입력도 포함합니다. Go 입력은 확장자가 아니라 소유 모듈과 소비자로 판정합니다. 공통 모듈·migration·워크스페이스 입력, `full` 또는 미상 범위는 전체 소유 모듈을 선택합니다.
    통합 시험의 opt-in 조건은 [scripts/README.md](../../../scripts/README.md)에 있습니다.
 4. collector 또는 helper 설치기 변경·범위 미상·`full`이면 YouTube.js helper의 typecheck와
