@@ -8,3 +8,4 @@
 008 008_epoch4_retention_protected_set.sql
 009 009_epoch4_schedule_poster_notices.sql
 010 010_epoch4_source_observation_index_shrink.sql
+011 011_epoch4_source_observation_schedule_relocation.sql

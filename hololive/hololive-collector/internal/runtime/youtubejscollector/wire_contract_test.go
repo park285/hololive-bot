@@ -97,10 +97,14 @@ func TestChannelLiveRunnerPublishesWireFixture(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got := payload.Sessions[i].ScheduleObservedAt
-			if (session.ScheduleObservedAt == nil) != (got == nil) ||
-				(got != nil && !got.Equal(*session.ScheduleObservedAt)) {
-				t.Fatalf("%s: session %d schedule observed at = %v, want %v", valid.Name, i, got, session.ScheduleObservedAt)
+			if payload.Sessions[i].ScheduleObservedAt != nil {
+				t.Fatalf("%s: session %d keeps its schedule observation inside the payload", valid.Name, i)
+			}
+
+			got, ok := observations[0].ScheduleObservedAt[payload.Sessions[i].VideoID]
+			if (session.ScheduleObservedAt == nil) == ok ||
+				(ok && !got.Equal(*session.ScheduleObservedAt)) {
+				t.Fatalf("%s: session %d schedule observed at = %v (%t), want %v", valid.Name, i, got, ok, session.ScheduleObservedAt)
 			}
 		}
 	}

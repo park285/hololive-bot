@@ -79,6 +79,7 @@ type Observation struct {
 	Completeness         contract.Completeness
 	Continuity           contract.Continuity
 	Payload              jsontext.Value
+	ScheduleObservedAt   map[string]time.Time
 	PayloadSHA256        string
 	EvidenceSHA256       string
 	CollectorInstance    string
@@ -106,7 +107,8 @@ func (o *Observation) Envelope() contract.Envelope {
 		ContractGeneration: o.ContractGeneration, ScheduledFor: o.ScheduledFor,
 		ObservedAt: o.ObservedAt, SourceEventAt: o.SourceEventAt, ScopeSHA256: o.ScopeSHA256,
 		Completeness: o.Completeness, Continuity: o.Continuity, Payload: o.Payload,
-		PayloadSHA256: o.PayloadSHA256, EvidenceSHA256: o.EvidenceSHA256,
+		ScheduleObservedAt: o.ScheduleObservedAt,
+		PayloadSHA256:      o.PayloadSHA256, EvidenceSHA256: o.EvidenceSHA256,
 		CollectorInstance: o.CollectorInstance,
 		Lease: contract.LeaseProof{
 			JobKey: o.JobKey, CollectionJobKind: o.CollectionJobKind,

@@ -4,6 +4,7 @@ import (
 	"context"
 	jsonv2 "encoding/json/v2"
 	"fmt"
+	"time"
 
 	"github.com/kapu/hololive-api/internal/youtube/reconcile/live"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -65,7 +66,7 @@ func liveEvidenceFromObservation(observation *Observation) (live.Evidence, error
 			TopicID:            payload.Sessions[i].TopicID,
 			ThumbnailURL:       payload.Sessions[i].ThumbnailURL,
 			ScheduledAt:        payload.Sessions[i].ScheduledAt,
-			ScheduleObservedAt: payload.Sessions[i].ScheduleObservedAt,
+			ScheduleObservedAt: sessionScheduleObservedAt(observation, &payload.Sessions[i]),
 			StartedAt:          payload.Sessions[i].StartedAt,
 			EndedAt:            payload.Sessions[i].EndedAt,
 			LiveStartConfirmed: liveStartConfirmed(observation.Provider, &payload.Sessions[i]),
@@ -112,4 +113,17 @@ func videoIDsOf(evidence *live.Evidence) []string {
 	}
 
 	return ids
+}
+
+func sessionScheduleObservedAt(observation *Observation, session *contract.LiveSessionV1) *time.Time {
+	if session.ScheduleObservedAt != nil {
+		return session.ScheduleObservedAt
+	}
+
+	observed, ok := observation.ScheduleObservedAt[session.VideoID]
+	if !ok {
+		return nil
+	}
+
+	return &observed
 }

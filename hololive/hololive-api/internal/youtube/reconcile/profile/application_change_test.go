@@ -13,3 +13,15 @@ func TestReduceUnchangedProfileRecordsNoApplication(t *testing.T) {
 		t.Fatalf("applications = %#v", got.Applications)
 	}
 }
+
+func TestReduceSameProfileValueRecordsNoApplication(t *testing.T) {
+	t.Parallel()
+
+	first := profileAt(1, t1(), Field{Present: true, Value: testDescription}, Field{})
+	second := profileAt(2, t2(), Field{Present: true, Value: testDescription}, Field{})
+	got := mustReduceAll(t, []Evidence{first, second}, Policy{})
+
+	if len(got.Applications) != 0 {
+		t.Fatalf("applications = %#v", got.Applications)
+	}
+}

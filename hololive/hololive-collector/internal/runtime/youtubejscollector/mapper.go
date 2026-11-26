@@ -1,6 +1,8 @@
 package youtubejscollector
 
 import (
+	"time"
+
 	"github.com/kapu/hololive-collector/internal/runtime/youtubejs"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
@@ -96,23 +98,36 @@ func shortsListPayload(channelID string, items []youtubejs.ContentItem, maxResul
 	}
 }
 
-func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem, query *contract.LiveSnapshotQueryV1) contract.LiveSnapshotV1 {
+func liveSnapshotPayload(
+	channelID string,
+	sessions []youtubejs.LiveSessionItem,
+	query *contract.LiveSnapshotQueryV1,
+) (contract.LiveSnapshotV1, map[string]time.Time) {
 	mapped := make([]contract.LiveSessionV1, 0, len(sessions))
+
+	var observed map[string]time.Time
 
 	for _, session := range sessions {
 		item := contract.LiveSessionV1{
-			VideoID:            session.VideoID,
-			ChannelID:          channelID,
-			Status:             session.Status,
-			ScheduledAt:        session.ScheduledAt,
-			ScheduleObservedAt: session.ScheduleObservedAt,
-			StartedAt:          session.StartedAt,
-			EndedAt:            session.EndedAt,
-			Title:              session.Title,
-			ThumbnailURL:       session.ThumbnailURL,
+			VideoID:      session.VideoID,
+			ChannelID:    channelID,
+			Status:       session.Status,
+			ScheduledAt:  session.ScheduledAt,
+			StartedAt:    session.StartedAt,
+			EndedAt:      session.EndedAt,
+			Title:        session.Title,
+			ThumbnailURL: session.ThumbnailURL,
 		}
 
 		mapped = append(mapped, item)
+
+		if session.ScheduleObservedAt != nil {
+			if observed == nil {
+				observed = make(map[string]time.Time)
+			}
+
+			observed[session.VideoID] = *session.ScheduleObservedAt
+		}
 	}
 
 	return contract.LiveSnapshotV1{
@@ -123,7 +138,7 @@ func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem,
 			GroupKey:            channelID,
 			Filters:             contract.LiveFiltersV1{Statuses: query.Statuses},
 		},
-	}
+	}, observed
 }
 
 func channelProfilePayload(channelID string, profile youtubejs.ChannelProfileItem) (contract.ChannelProfileV1, bool) {

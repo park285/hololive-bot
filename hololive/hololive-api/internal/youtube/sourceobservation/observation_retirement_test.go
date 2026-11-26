@@ -165,8 +165,8 @@ func TestObservationRetirementRestorePreservesNotificationState(t *testing.T) {
 		SELECT id, observation_kind, schema_version, canonical_profile, payload_sha256, payload, created_at FROM jsonb_populate_record(NULL::source_observation_payloads,$1)`, payload)
 	require.NoError(t, err)
 
-	_, err = pool.Exec(ctx, `INSERT INTO source_observations (id, provider, observation_kind, subject_key, observation_key, schema_version, contract_generation, scheduled_for, observed_at, source_event_at, received_at, scope_sha256, completeness, continuity, evidence_sha256, provenance_id, fence_epoch, projection_generation, created_at, payload_id) OVERRIDING SYSTEM VALUE
-		SELECT id, provider, observation_kind, subject_key, observation_key, schema_version, contract_generation, scheduled_for, observed_at, source_event_at, received_at, scope_sha256, completeness, continuity, evidence_sha256, provenance_id, fence_epoch, projection_generation, created_at, payload_id FROM jsonb_populate_record(NULL::source_observations,$1)`, observation)
+	_, err = pool.Exec(ctx, `INSERT INTO source_observations (id, provider, observation_kind, subject_key, observation_key, schema_version, contract_generation, scheduled_for, observed_at, source_event_at, received_at, scope_sha256, completeness, continuity, evidence_sha256, provenance_id, fence_epoch, projection_generation, schedule_observed_at, payload_id) OVERRIDING SYSTEM VALUE
+		SELECT id, provider, observation_kind, subject_key, observation_key, schema_version, contract_generation, scheduled_for, observed_at, source_event_at, received_at, scope_sha256, completeness, continuity, evidence_sha256, provenance_id, fence_epoch, projection_generation, schedule_observed_at, payload_id FROM jsonb_populate_record(NULL::source_observations,$1)`, observation)
 	require.NoError(t, err)
 
 	updated, err := pool.Exec(ctx, `INSERT INTO source_observation_applications

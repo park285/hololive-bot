@@ -178,8 +178,6 @@ func applyNewer(
 	}
 
 	if current.Set && current.Value == value {
-		appendProfileApp(apps, sample.ChannelID, name, "REPLAY")
-
 		return false
 	}
 
