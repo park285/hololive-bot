@@ -19,6 +19,7 @@
 - `youtube-egress-logical-delivery-ledger-20260831.md` - physical cleanup과 분리된 logical terminal evidence, fixed-high-water backfill(운영 완료, 명령·gate는 삭제되고 migration 227이 완료를 확인)
 - `youtube-egress-lifecycle-commit-adjudication-20260831.md` - effect 인접 transaction의 commit ambiguity, primary read-back과 금지 retry 규약
 - `youtube-egress-lifecycle-library-review-20260831.md` - 직접 planner와 Go FSM/persistence 후보의 hard gate, 비용, 재검토 조건
+- [PostgreSQL 19 get-or-create 적용](postgres19-get-or-create-20261126.md) - replay epoch·발송 요청의 단일 SQL 처리, 동시성·권한 계약과 관측 데이터 최적화의 후속 검증 조건
 
 ## Rule
 

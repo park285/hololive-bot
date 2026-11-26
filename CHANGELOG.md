@@ -7,6 +7,11 @@
 ## 미출시
 
 - **일정 포스터 모델 호출 SSE 전환:** hololive-api 일정 포스터의 Gemini 호출 네 곳(행 추출·번역·게시물 대조·기간 읽기)이 `generateContent` 대신 `streamGenerateContent`(SSE)를 씁니다. 청크의 parts를 이어 붙이고 마지막 사용량·종료 사유로 하나의 응답을 만든 뒤 기존 해석을 그대로 적용합니다. SDK 자동 continuation은 끄며, 후보가 있는데 종료 사유 없이 끝난 스트림은 형식 오류가 아니라 재시도 가능한 미완료 오류로 끝납니다. Decisions API(`/v1beta/decisions`)는 스트리밍 모드가 없어 그대로입니다. Fallback delta: none.
+
+## r1.2.12 - 2026-11-26
+
+- **종료 live head 일회성 복구 퇴역:** 2026-09-28에 승인 범위 24건을 적용해 끝난 과거 LIVE head 대조 복구(`scripts/maintenance/preview-terminal-live-heads.sql`·`reconcile-terminal-live-heads.sql`, `scripts/runtime/test-terminal-live-head-repair.sh`, runbook)를 지웠습니다. 대상 조건이 2026-08-17 이전 head로 고정돼 다시 쓸 일이 없습니다.
+- **PostgreSQL 19의 기존 행 반환 활용:** replay epoch 활성화와 YouTube 발송 요청 동결에 `ON CONFLICT DO SELECT ... RETURNING`을 적용했습니다. replay epoch는 중복 활성화 시, 발송 요청은 신규·중복 요청 모두에서 별도 재조회 한 번을 줄입니다. 최초 활성화 여부는 `OLD.singleton IS NULL`로 구분하고 기존 cutoff·작업자·사유를 보존합니다. 발송 요청은 저장된 본문 해시·경로·수신방·멤버·중복 제거 키의 검증과 재발급 세대를 유지합니다. 스키마·권한·행 잠금 강도는 바꾸지 않으며 PostgreSQL 19가 필요합니다. 적용 범위와 후속 관측 데이터 최적화 조건은 [설계 문서](docs/current/architecture/postgres19-get-or-create-20261126.md)에 정리했습니다.
 - **AP 전환 owner의 신호 처리:** owner가 worker pid를 기록하는 사이에 신호가 도착하면, 이어서 시작한 차단형 `wait`이 멈춘 worker를 끝없이 기다릴 수 있었습니다. 이제 신호 상태와 worker 생존을 0.1초 간격으로 함께 확인하며 기다립니다. 신호가 온 뒤 worker 종료를 기다리는 시간도 5초에서 30초로 늘렸습니다. 끝나 가는 `systemctl restart`나 부하로 늦어진 종료가 `outcome_unknown`으로 잘못 남지 않게 하기 위해서입니다. 30초 뒤에도 남은 worker는 이전과 같이 guard를 보존한 채 `outcome_unknown`으로 남습니다.
 
 ## r1.2.11 - 2026-11-25
@@ -27,7 +32,3 @@
 - **신호 처리 중 복원 실패 보고:** 배포 도구가 신호 trap 안에서 복원할 때, 인수 없는 `return`이 bash 규칙에 따라 trap 이전의 성공 상태를 돌려줘 guard 해제 실패 같은 오류를 성공으로 처리할 수 있었습니다. 중앙·b·native 배포 라이브러리의 해당 `return`이 실제 실패 상태를 돌려주도록 고쳤습니다.
 - **AP a 정지 창 퇴역:** W3 수용이 끝나 `osaka --quiesce`·`--resume`·`--settle`·`--install-initial`을 지웠습니다. native 도구는 `--dry-run`·`--apply`·`--prepare-profile`만 받습니다. 분리 정지 창, collector 이름 전환, webhook nonce 저장소 전환 절차 문서도 지웠습니다.
 - **스크립트 시험 fixture 정리:** `scripts/scripttest`가 각 fixture 명령을 새 세션에서 실행하고 시험이 끝날 때 그 세션에 남은 프로세스를 모두 종료합니다. 신호 시험에서 worker가 만든 하위 프로세스(가짜 `systemctl`)가 프로세스 그룹 정리를 빠져나가 고아로 남던 문제를 고쳤습니다.
-
-## r1.2.9 - 2026-11-25
-
-- **osaka1 영구 drop-in 고정화 및 preflight 진단:** 배포 창 수용 시 unit별 `/etc/systemd/system/<unit>.d/90-native-window-<nonce>.conf` symlink가 누적되어 구 릴리스 정리를 막던 문제를 고쳤습니다. 이제 수용 단계에서 릴리스 경로에 의존하지 않는 고정 파일 `90-native-window-permanent.conf`를 설치하고 `daemon-reload` 적재를 확인한 뒤 세 unit의 기존 `90-native-window-*.conf` symlink를 걷어 냅니다. `apply-origin`과 `native_same_window_baseline`의 각 실패 지점에도 표준 오류 진단 메시지를 추가했습니다.

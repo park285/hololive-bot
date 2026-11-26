@@ -2,10 +2,8 @@ package sourceobservation
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/park285/shared-go/postgres/pgxdb"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -44,37 +42,18 @@ func activateReplayEpochTx(
 	tx dbx.Tx,
 	input ReplayEpochInput,
 ) (ReplayEpochActivation, error) {
-	epoch, err := scanReplayEpoch(pgxdb.QueryRow(ctx, tx,
+	var activation ReplayEpochActivation
+
+	err := pgxdb.QueryRow(ctx, tx,
 		activateReplayEpochTxSQL,
 		input.ActivatedBy,
 		input.Reason,
-	))
-	if err == nil {
-		return ReplayEpochActivation{Epoch: epoch, Activated: true}, nil
-	}
-
-	if !errors.Is(err, pgx.ErrNoRows) {
+	).Scan(&activation.Epoch.CutoffReceivedAt, &activation.Epoch.ActivatedBy, &activation.Epoch.Reason, &activation.Activated)
+	if err != nil {
 		return ReplayEpochActivation{}, fmt.Errorf("activate source observation replay epoch: %w", err)
 	}
 
-	epoch, err = scanReplayEpoch(pgxdb.QueryRow(ctx, tx,
-		activateReplayEpochTx2SQL,
-	))
-	if err != nil {
-		return ReplayEpochActivation{}, fmt.Errorf("load active source observation replay epoch: %w", err)
-	}
+	activation.Epoch.CutoffReceivedAt = activation.Epoch.CutoffReceivedAt.UTC()
 
-	return ReplayEpochActivation{Epoch: epoch}, nil
-}
-
-func scanReplayEpoch(row pgx.Row) (ReplayEpoch, error) {
-	var epoch ReplayEpoch
-
-	if err := row.Scan(&epoch.CutoffReceivedAt, &epoch.ActivatedBy, &epoch.Reason); err != nil {
-		return ReplayEpoch{}, fmt.Errorf("scan source observation replay epoch: %w", err)
-	}
-
-	epoch.CutoffReceivedAt = epoch.CutoffReceivedAt.UTC()
-
-	return epoch, nil
+	return activation, nil
 }

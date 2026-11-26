@@ -301,13 +301,14 @@ func insertFrozenRequest(ctx context.Context, tx pgxdb.Querier, request FrozenRe
 
 	request.MessageHash = hex.EncodeToString(sum[:])
 
-	if _, err := pgxdb.Exec(ctx, tx, sendRequestInsertSQL, request.BaseID, request.RoomID, request.Message, request.MessageHash, request.DedupeKeys, request.MemberIDs, request.Route); err != nil {
+	rows, err := pgxdb.Query(ctx, tx, sendRequestInsertSQL, request.BaseID, request.RoomID, request.Message, request.MessageHash, request.DedupeKeys, request.MemberIDs, request.Route)
+	if err != nil {
 		return FrozenRequest{}, fmt.Errorf("insert frozen request: %w", err)
 	}
 
-	frozen, err := loadFrozenRequest(ctx, tx, request.BaseID)
+	frozen, err := pgx.CollectExactlyOneRow(rows, scanFrozenRequest)
 	if err != nil {
-		return FrozenRequest{}, err
+		return FrozenRequest{}, fmt.Errorf("insert frozen request: scan: %w", err)
 	}
 
 	if frozen.RoomID != request.RoomID || frozen.Route != request.Route || frozen.MessageHash != request.MessageHash || !slices.Equal(frozen.MemberIDs, request.MemberIDs) || !slices.Equal(frozen.DedupeKeys, request.DedupeKeys) {
