@@ -6,6 +6,8 @@
 
 ## 미출시
 
+## r1.2.14 - 2026-11-26
+
 - **일정 포스터 모델 진단 문구:** 빈 응답의 진단 문구(로그와 오류)에 공급자의 `blockReasonMessage`·`finishMessage` 원문을 넣지 않고 차단·종료 사유 enum만 남깁니다. 기간 읽기를 Vertex로 옮기면서 이 원문이 기간 읽기 오류에 들어가던 문제입니다. 행 추출·게시물 대조도 같은 문구를 씁니다. 문구의 thinking·출력 token 수는 continuation hop 전체를 더한 값입니다. Fallback delta: none.
 
 ## r1.2.13 - 2026-11-26
@@ -20,6 +22,3 @@
 - **PostgreSQL 19의 기존 행 반환 활용:** replay epoch 활성화와 YouTube 발송 요청 동결에 `ON CONFLICT DO SELECT ... RETURNING`을 적용했습니다. replay epoch는 중복 활성화 시, 발송 요청은 신규·중복 요청 모두에서 별도 재조회 한 번을 줄입니다. 최초 활성화 여부는 `OLD.singleton IS NULL`로 구분하고 기존 cutoff·작업자·사유를 보존합니다. 발송 요청은 저장된 본문 해시·경로·수신방·멤버·중복 제거 키의 검증과 재발급 세대를 유지합니다. 스키마·권한·행 잠금 강도는 바꾸지 않으며 PostgreSQL 19가 필요합니다. 적용 범위와 후속 관측 데이터 최적화 조건은 [설계 문서](docs/current/architecture/postgres19-get-or-create-20261126.md)에 정리했습니다.
 - **AP 전환 owner의 신호 처리:** owner가 worker pid를 기록하는 사이에 신호가 도착하면, 이어서 시작한 차단형 `wait`이 멈춘 worker를 끝없이 기다릴 수 있었습니다. 이제 신호 상태와 worker 생존을 0.1초 간격으로 함께 확인하며 기다립니다. 신호가 온 뒤 worker 종료를 기다리는 시간도 5초에서 30초로 늘렸습니다. 끝나 가는 `systemctl restart`나 부하로 늦어진 종료가 `outcome_unknown`으로 잘못 남지 않게 하기 위해서입니다. 30초 뒤에도 남은 worker는 이전과 같이 guard를 보존한 채 `outcome_unknown`으로 남습니다.
 
-## r1.2.11 - 2026-11-25
-
-- **osaka1 배포의 swap 경로 누락:** #881이 최초 설치용 swap 생성 코드를 지우면서 `swapfile=/swapfile` 정의도 함께 지웠습니다. 그 결과 기존 호스트 검사(`native_existing_host_check`)가 `swapfile: parameter null or not set`으로 실패해, main의 `ap-host-native-deploy.sh osaka --apply`가 원점 확인 단계에서 항상 멈췄습니다. 검사 함수가 경로를 직접 가집니다. collector 런북의 swap 서술도 "없으면 만든다"에서 "기존 swap을 확인하고 다르면 거부한다"로 고쳤습니다.
