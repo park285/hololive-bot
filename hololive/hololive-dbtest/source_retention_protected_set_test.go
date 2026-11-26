@@ -56,16 +56,20 @@ func seedProtectedRetentionSet(t *testing.T, pool *pgxpool.Pool, base time.Time)
 		VALUES ('set-live','UC_set','LIVE','observed'), ('set-upcoming','UC_set','UPCOMING','metadata_only'),
 		       ('set-pending-live','UC_set','LIVE','observed'), ('set-pending-upcoming','UC_set','UPCOMING','metadata_only'),
 		       ('set-ended','UC_set','ENDED','observed');
-		INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
-		SELECT id,source_observation_entity_kind_id('youtube_live_session'),
-			CASE subject_key WHEN 'older' THEN 'set-live' ELSE 'set-'||subject_key END,
-			source_observation_decision_id('APPLIED')
-		FROM source_observations WHERE subject_key IN ('older','live','upcoming','ended');
 		INSERT INTO youtube_live_pending_ends
 			(video_id,channel_id,kind,observation_id,effective_at,received_at,scheduled_for,negative_eligible,scope_covers)
 		SELECT 'set-'||subject_key,'UC_set','EXPLICIT_END',id,observed_at,received_at,scheduled_for,true,true
 		FROM source_observations WHERE subject_key IN ('pending-live','pending-upcoming','ended')`)
 	require.NoError(t, err)
+
+	for index, key := range keys {
+		switch key {
+		case "older":
+			finalizeLiveSessionApplication(t, pool, ids[index], "set-live")
+		case "live", "upcoming", "ended":
+			finalizeLiveSessionApplication(t, pool, ids[index], "set-"+key)
+		}
+	}
 
 	return ids, protected, eligible
 }

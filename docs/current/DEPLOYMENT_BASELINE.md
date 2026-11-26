@@ -186,7 +186,7 @@ WAL 버퍼, 캐시 추정치를 아래 값으로 조정하고 같은 ARM64 이�
 | `random_page_cost` / `jit` | 1.1 / off | `holo-postgres.container` 시작 인자; NVMe SSD 기반 OCI Block Volume과 짧은 OLTP 쿼리 기준. 2026-11-13 02:36 UTC `holo-postgres` 재시작부터 운영에 적용됐고 이전 값은 4 / on(기본값)입니다. unit 설치 뒤 첫 재시작부터 적용되므로 설치와 재시작을 같은 창에서 합니다 |
 | `work_mem` / `maintenance_work_mem` | 4MB / 128MB | `holo-postgres.container` 시작 인자; 동시 쿼리·autovacuum의 메모리 배수를 고려 |
 | `max_wal_size` | 2GB | 기존 `holo-pg-data`의 `pgdata/postgresql.auto.conf`; `ALTER SYSTEM`과 설정 reload로 적용 |
-| `checkpoint_timeout` / `checkpoint_completion_target` | 15min / 0.9 | 기존 `postgresql.auto.conf` / PostgreSQL 기본값 유지 |
+| `checkpoint_timeout` / `checkpoint_completion_target` | 30min / 0.9 | `holo-postgres.container` 시작 인자 / PostgreSQL 기본값; 체크포인트 직후 첫 페이지 수정의 full-page image를 줄이며 crash recovery 재생량이 그만큼 늘어남. 설치 뒤 첫 재시작부터 적용 |
 | `wal_compression` | `lz4` | 기존 `postgresql.auto.conf` 유지 |
 
 메모리 한도에는 프로세스·공유 버퍼뿐 아니라 파일 캐시도 계상됩니다. `max_connections=61`(postgres_exporter의 collector 연결 1개를 예산에 더한 2026-10-25 값),

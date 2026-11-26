@@ -327,7 +327,7 @@ Server command flags prepare TCP keepalive 60/10/6, lock waits, all temp files, 
 at 1s, and bind-parameter lengths 0 for normal/error logging. SQL literals/comments can still
 be sensitive; verify synthetic password/payload non-disclosure, retention and access controls.
 No global runtime lock timeout is introduced. Existing WAL settings are explicitly encoded:
-checkpoint 900s, max WAL 2GB, compression lz4, also in the inactive standby reference.
+checkpoint 1800s, max WAL 2GB, compression lz4, also in the inactive standby reference.
 Persisted `postgresql.auto.conf` cleanup is a **separately approved operation**: capture old
 values/sources and rollback flags, remove only the three approved entries (never RESET ALL),
 then verify `source='command line'` and `pending_restart` after an approved `holo-postgres.service` restart.
