@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **YouTube 원본 보관 정리의 보호 판정 지연:** 보존 대상 판정(`source_observation_retention_protected_ids`)의 "세션의 최신 적용 원본" 조건을 PostgreSQL이 해시 집합으로 바꿔, 요청 1,000건마다 LIVE·UPCOMING 세션 전체의 적용 기록(운영 약 42만 행)을 훑었습니다. 정리 한 번이 최대 9.9초 걸려 10초 예산을 넘기면 `SQLSTATE 57014`로 취소됐고, DB slot 하나를 그동안 붙잡아 같은 slot을 기다리던 원본 소비가 `acquire DB slot: context deadline exceeded`로 실패했습니다. migration 008이 이 조건을 요청 id에서 출발하도록 바꿉니다. 운영 데이터에서 판정 결과는 같고, 오래된 원본 1,000건 판정이 4.8초에서 12ms로 줄었습니다. 대기 migration이므로 `docs/current/runbooks/release.md`의 "대기 migration 적용 창" 절차로 배포합니다.
+
 ## r1.2.12 - 2026-11-26
 
 - **종료 live head 일회성 복구 퇴역:** 2026-09-28에 승인 범위 24건을 적용해 끝난 과거 LIVE head 대조 복구(`scripts/maintenance/preview-terminal-live-heads.sql`·`reconcile-terminal-live-heads.sql`, `scripts/runtime/test-terminal-live-head-repair.sh`, runbook)를 지웠습니다. 대상 조건이 2026-08-17 이전 head로 고정돼 다시 쓸 일이 없습니다.
