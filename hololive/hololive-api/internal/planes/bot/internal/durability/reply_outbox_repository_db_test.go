@@ -249,6 +249,12 @@ func assertReplyOutboxClientRequestIDMatchesTheIrisContract(
 	outcome, err = repo.Insert(ctx, hashed)
 	require.NoError(t, err, "해시 폴백 id도 CHECK 정규식을 통과해야 한다")
 	assert.Equal(t, ReplyOutboxInserted, outcome)
+
+	notice := newReplyOutboxEntry("schedule-notice:9:18478615493603057", 0, `{"body":"x"}`)
+
+	outcome, err = repo.Insert(ctx, notice)
+	require.NoError(t, err, "수신 메시지 없이 보내는 일정 알림 키도 저장된다")
+	assert.Equal(t, ReplyOutboxInserted, outcome)
 }
 
 func assertReplyOutboxRejectsInvalidEntries(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository) {

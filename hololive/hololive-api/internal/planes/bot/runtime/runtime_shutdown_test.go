@@ -180,7 +180,7 @@ func newShutdownOrderBot(t *testing.T, logger *slog.Logger) *orchestration.Bot {
 	bot, err := orchestration.NewBot(&orchestration.Dependencies{
 		Logger: logger, Client: &stubIrisClient{}, ReplyOutbox: dispatchingReplyOutbox{client: &stubIrisClient{}}, MessageAdapter: messaging.NewMessageAdapter("!"),
 		Formatter: formatter.NewResponseFormatter("!", nil), Cache: cachemocks.NewLenientClient(), Postgres: postgres, MemberRepository: member.NewMemberRepository(postgres),
-		Holodex: &holodexprovider.Service{}, Alarm: testAlarmCRUD{}, Matcher: &matcher.Matcher{}, MembersData: &stubMemberDataProvider{},
+		Holodex: &holodexprovider.Service{}, Alarm: testAlarmCRUD{}, ScheduleRooms: testLiveRooms{}, Matcher: &matcher.Matcher{}, MembersData: &stubMemberDataProvider{},
 	})
 	if err != nil {
 		t.Fatal(err)

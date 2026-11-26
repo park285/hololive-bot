@@ -156,9 +156,17 @@ func (s *Store) RecordMatch(ctx context.Context, schedule PublishedSchedule, pos
 			}
 		}
 
-		if slices.ContainsFunc(result.Changes, func(change Change) bool { return change.Kind.Applied() }) {
+		applied := slices.ContainsFunc(result.Changes, func(change Change) bool { return change.Kind.Applied() })
+
+		if applied {
 			if _, requeueErr := pgxdb.Exec(ctx, tx, requeueLaterPostsSQL, post.ID, schedule.PosterID, schedule.ExtractedAt); requeueErr != nil {
 				return fmt.Errorf("requeue later posts: %w", requeueErr)
+			}
+		}
+
+		if applied && result.Status == PostMatched {
+			if noticeErr := insertNotice(ctx, tx, NoticeChanged, schedule.PosterID, &post.ID); noticeErr != nil {
+				return noticeErr
 			}
 		}
 

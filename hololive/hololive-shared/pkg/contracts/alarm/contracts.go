@@ -10,14 +10,15 @@ import (
 const (
 	BasePath = "/internal/alarm"
 
-	AddRoute      = "/add"
-	RemoveRoute   = "/remove"
-	RoomViewRoute = "/room/:id/view"
-	ClearRoute    = "/clear"
-	SettingsRoute = "/settings"
-	RoomNameRoute = "/room-name"
-	KeysRoute     = "/keys"
-	CountRoute    = "/count"
+	AddRoute       = "/add"
+	RemoveRoute    = "/remove"
+	RoomViewRoute  = "/room/:id/view"
+	ClearRoute     = "/clear"
+	SettingsRoute  = "/settings"
+	RoomNameRoute  = "/room-name"
+	KeysRoute      = "/keys"
+	CountRoute     = "/count"
+	LiveRoomsRoute = "/channel/:id/live-rooms"
 
 	AddPath      = BasePath + AddRoute
 	RemovePath   = BasePath + RemoveRoute
@@ -61,6 +62,14 @@ func NormalizeRoomName(roomID, roomName string) (string, string, error) {
 	}
 
 	return roomID, roomName, nil
+}
+
+type LiveRoomsResponse struct {
+	RoomIDs []string `json:"room_ids"`
+}
+
+func LiveRoomsPath(channelID string) string {
+	return BasePath + "/channel/" + url.PathEscape(channelID) + "/live-rooms"
 }
 
 func RoomAlarmsViewPath(roomID string) string {

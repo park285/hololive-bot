@@ -9,7 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
-func NewInternalRouteRegistrar(apiKey string, alarmService AlarmService, grades EventGradeRegistrar, logger *slog.Logger) func(*gin.Engine) error {
+func NewInternalRouteRegistrar(apiKey string, alarmService AlarmService, grades EventGradeRegistrar, liveRooms LiveRoomResolver, logger *slog.Logger) func(*gin.Engine) error {
 	return func(router *gin.Engine) error {
 		if router == nil {
 			return errors.New("register alarm routes: router is nil")
@@ -26,6 +26,10 @@ func NewInternalRouteRegistrar(apiKey string, alarmService AlarmService, grades 
 
 		if grades != nil {
 			registerGradeRoute(internalAlarm, grades)
+		}
+
+		if liveRooms != nil {
+			registerLiveRoomsRoute(internalAlarm, liveRooms, logger)
 		}
 
 		return nil

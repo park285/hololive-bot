@@ -66,6 +66,7 @@ deployment baseline for the terminated Osaka VM (its boot volume was deleted on
 - Runtime runbook index: `runbooks/README.md`
 - Deployment baseline: `DEPLOYMENT_BASELINE.md`
 - YouTube notification split: `collector` AP fleet owns external fetch/normalize/collection lease/checkpoint/`source_observation` Publish; `hololive-api` YouTube plane owns observation consume, canonical persist, notification intent, live-end finalizer, and retention/replay; `alarm-worker` owns room resolution, rendering, retry, delivery rows, and Iris/Kakao egress.
+- 일정 포스터 알림: hololive-api admin plane이 행 추출·게시물 대응과 같은 트랜잭션에서 `schedule_poster_notices`를 기록하고, bot plane이 카드를 한 번 그려 bot reply outbox로 LIVE 구독 방에 보낸다. 방 목록만 worker의 `/internal/alarm/channel/:id/live-rooms`가 준다. worker dispatch ledger는 텍스트 전용이라 카드를 실을 수 없어 이 경로만 API가 직접 보낸다. 상세 계약은 `services/hololive-api.md`의 "일정 알림"을 따른다.
 - X Spaces: alarm-worker의 선택적 Node helper가 무료 웹 내부 API 관측을 수행하고 기존 dispatch ledger로 LIVE 구독 방에 시작 링크를 보낸다. Iris Console은 후보 세션 제출·상태 화면을, hololive-api는 암호화된 후보 저장을, worker는 검증·승격을 소유한다. 상세 계약은 `services/x-spaces.md`를 따른다.
 - X Spaces 연결 복구는 관리 앱의 수동 쿠키 제출과 worker 후보 검증을 사용한다. 연결 상태는 현재 세션과 후보 검증 결과만 제공한다.
 

@@ -82,30 +82,52 @@ func (c *SchedulePosterCommand) Execute(ctx context.Context, cmdCtx *botcommand.
 }
 
 func (c *SchedulePosterCommand) replySchedule(ctx context.Context, room string, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID) error {
-	pages, err := c.Deps().ScheduleCards.RenderScheduleCards(ctx, member, schedule, template)
+	reply, err := renderScheduleReply(ctx, c.Deps(), member, &schedule, template)
+	if err != nil {
+		return err
+	}
+
+	return sendScheduleReply(ctx, c.Deps(), room, reply)
+}
+
+type scheduleReply struct {
+	cards [][]byte
+	text  string
+}
+
+func renderScheduleReply(ctx context.Context, deps *handlercore.Dependencies, member *domain.Member, schedule *scheduleposter.PublishedSchedule, template cardtemplate.ID) (scheduleReply, error) {
+	pages, err := deps.ScheduleCards.RenderScheduleCards(ctx, member, *schedule, template)
 	if errors.Is(err, schedulecard.ErrRenderBudget) {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
+			return scheduleReply{}, ctxErr
 		}
 
-		c.Deps().Logger.InfoContext(ctx, "sending complete schedule as text file", slog.Int64("poster_id", schedule.PosterID), slog.Int("member_id", member.ID))
+		deps.Logger.InfoContext(ctx, "sending complete schedule as text file", slog.Int64("poster_id", schedule.PosterID), slog.Int("member_id", member.ID))
 
-		if fileErr := c.Deps().SendTextFile(ctx, room, "schedule.txt", scheduleText(member.DisplayName(), &schedule)); fileErr != nil {
-			return fmt.Errorf("send complete schedule file: %w", fileErr)
+		return scheduleReply{text: scheduleText(member.DisplayName(), schedule)}, nil
+	}
+
+	if err != nil {
+		return scheduleReply{}, fmt.Errorf("render schedule card: %w", err)
+	}
+
+	return scheduleReply{cards: pages}, nil
+}
+
+func sendScheduleReply(ctx context.Context, deps *handlercore.Dependencies, room string, reply scheduleReply) error {
+	if reply.text != "" {
+		if err := deps.SendTextFile(ctx, room, "schedule.txt", reply.text); err != nil {
+			return fmt.Errorf("send complete schedule file: %w", err)
 		}
 
 		return nil
 	}
 
-	if err != nil {
-		return fmt.Errorf("render schedule card: %w", err)
-	}
-
-	if len(pages) == 1 {
+	if len(reply.cards) == 1 {
 		ctx = transport.WithImageContentType(ctx, scheduleCardContentType)
 	}
 
-	if err := c.Deps().SendImages(ctx, room, pages); err != nil {
+	if err := deps.SendImages(ctx, room, reply.cards); err != nil {
 		return fmt.Errorf("send schedule card: %w", err)
 	}
 

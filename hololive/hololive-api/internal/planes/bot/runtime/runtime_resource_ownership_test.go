@@ -194,7 +194,7 @@ func TestBotRuntimeClosePreservesFatalAndResourceErrorsAfterTasksJoin(t *testing
 		Formatter:      formatter.NewResponseFormatter("!", nil),
 		Cache:          &cachemocks.Client{WaitUntilReadyFunc: func(context.Context, time.Duration) error { return fatalErr }},
 		Postgres:       postgres, MemberRepository: member.NewMemberRepository(postgres), Holodex: &holodexprovider.Service{},
-		Alarm: testAlarmCRUD{}, Matcher: &matcher.Matcher{}, MembersData: &stubMemberDataProvider{},
+		Alarm: testAlarmCRUD{}, ScheduleRooms: testLiveRooms{}, Matcher: &matcher.Matcher{}, MembersData: &stubMemberDataProvider{},
 	})
 	if err != nil {
 		t.Fatal(err)

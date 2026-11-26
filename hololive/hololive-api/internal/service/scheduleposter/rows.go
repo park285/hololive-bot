@@ -172,13 +172,15 @@ func (s *Store) RecordRows(ctx context.Context, item PendingRows, rows []Row, da
 	recorded := false
 
 	err = dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		tag, markErr := pgxdb.Exec(ctx, tx, recordRowsSQL, item.ID, item.RowsRevision, dayShift)
-		if markErr != nil {
-			return fmt.Errorf("mark rows extracted: %w", markErr)
+		var firstRows bool
+
+		markErr := pgxdb.QueryRow(ctx, tx, recordRowsSQL, item.ID, item.RowsRevision, dayShift).Scan(&firstRows)
+		if errors.Is(markErr, pgx.ErrNoRows) {
+			return nil
 		}
 
-		if tag.RowsAffected() != 1 {
-			return nil
+		if markErr != nil {
+			return fmt.Errorf("mark rows extracted: %w", markErr)
 		}
 
 		if deleteErr := deleteRows(ctx, tx, item.ID); deleteErr != nil {
@@ -187,6 +189,12 @@ func (s *Store) RecordRows(ctx context.Context, item PendingRows, rows []Row, da
 
 		if _, insertErr := pgxdb.Exec(ctx, tx, insertRowsSQL, item.ID, payload); insertErr != nil {
 			return fmt.Errorf("insert rows: %w", insertErr)
+		}
+
+		if firstRows {
+			if noticeErr := insertNotice(ctx, tx, NoticePublished, item.ID, nil); noticeErr != nil {
+				return noticeErr
+			}
 		}
 
 		recorded = true
@@ -321,13 +329,21 @@ func (s *Store) PublishedRows(ctx context.Context, channelID string, day time.Ti
 }
 
 func (s *Store) PublishedMemberRows(ctx context.Context, memberID int, channelID string, day time.Time) (PublishedSchedule, cardtemplate.ID, bool, error) {
+	return s.cardRows(ctx, publishedRowsSQL, channelID, day, memberID, cardtemplate.Classic)
+}
+
+func (s *Store) MemberPosterRows(ctx context.Context, posterID int64, memberID int, channelID string, day time.Time) (PublishedSchedule, cardtemplate.ID, bool, error) {
+	return s.cardRows(ctx, noticeRowsSQL, channelID, day, memberID, cardtemplate.Classic, posterID)
+}
+
+func (s *Store) cardRows(ctx context.Context, statement pgxdb.Statement, args ...any) (PublishedSchedule, cardtemplate.ID, bool, error) {
 	var (
 		schedule PublishedSchedule
 		template cardtemplate.ID
 	)
 
 	err := dbx.InPgxTxOptions(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		rows, queryErr := pgxdb.Query(ctx, tx, publishedRowsSQL, channelID, day, memberID, cardtemplate.Classic)
+		rows, queryErr := pgxdb.Query(ctx, tx, statement, args...)
 		if queryErr != nil {
 			return fmt.Errorf("load rows: %w", queryErr)
 		}
