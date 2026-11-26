@@ -38,10 +38,10 @@ func seedProvenanceCutoverRows(t *testing.T, pool *pgxpool.Pool) {
 		'ACTIVE',now(),now(),'collector-a',now()+interval '1 minute');
 	INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin) VALUES ('vocab-live','UC_vocab','LIVE','observed');
 	INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
-	SELECT id,source_observation_entity_kind_id('youtube_live_session'),'vocab-live',source_observation_decision_id('APPLIED') FROM source_observations WHERE subject_key='live';
-	INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
 	SELECT id,source_observation_entity_kind_id('community_window'),'UC_vocab',source_observation_decision_id('CANONICALIZED') FROM source_observations WHERE subject_key='shared'`)
 	require.NoError(t, err)
+
+	finalizeLiveSessionApplication(t, pool, observationIDBySubject(t, pool, "live"), "vocab-live")
 }
 
 func observationIDBySubject(t *testing.T, pool *pgxpool.Pool, subject string) int64 {
@@ -158,7 +158,7 @@ func TestApplicationVocabMigrationsPreserveAuditSemantics(t *testing.T) {
 	}
 
 	require.NoError(t, rows.Err())
-	require.Equal(t, []string{"idx_source_application_entity_latest", "source_observation_applications_pkey"}, indexes)
+	require.Equal(t, []string{"source_observation_applications_pkey"}, indexes)
 
 	var primaryKey []string
 
