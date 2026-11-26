@@ -36,15 +36,7 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 
 	r.startWorkerProfileChecker(runCtx)
 
-	if r.Bot != nil {
-		r.tasksWG.Go(func() {
-			if err := panicguard.RunE(r.Logger, panicscope.BackgroundTask, "bot-runtime", func() error {
-				return r.Bot.Start(runCtx)
-			}); err != nil && !isContextTermination(err, runCtx.Err()) {
-				r.recordBackgroundError(runCtx, errCh, fmt.Errorf("bot runtime error: %w", err))
-			}
-		})
-	}
+	r.startBot(runCtx, errCh)
 
 	if r.h3CertReloadStart != nil {
 		r.tasksWG.Go(func() {
@@ -76,6 +68,26 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r.Logger != nil && r.ServerAddr != "" {
 		r.Logger.Info("HTTP server started", slog.String("addr", r.ServerAddr))
 	}
+}
+
+func (r *BotRuntime) startBot(runCtx context.Context, errCh chan<- error) {
+	if r.Bot == nil {
+		return
+	}
+
+	r.tasksWG.Go(func() {
+		if err := panicguard.RunE(r.Logger, panicscope.BackgroundTask, "bot-runtime", func() error {
+			return r.Bot.Start(runCtx)
+		}); err != nil && !isContextTermination(err, runCtx.Err()) {
+			r.recordBackgroundError(runCtx, errCh, fmt.Errorf("bot runtime error: %w", err))
+		}
+	})
+
+	r.tasksWG.Go(func() {
+		panicguard.Run(r.Logger, panicscope.BackgroundTask, "bot-schedule-poster-notices", func() {
+			r.Bot.RunScheduleNotices(runCtx)
+		})
+	})
 }
 
 func (r *BotRuntime) recordBackgroundError(ctx context.Context, errCh chan<- error, err error) {

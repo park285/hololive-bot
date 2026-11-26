@@ -121,7 +121,7 @@ func (ma *MessageAdapter) tryScheduleCommand(command string, args []string, raw 
 	}, true
 }
 
-var scheduleCommandAliases = []string{"일정", "스케줄", "schedule", "멤버", "member"}
+var scheduleCommandAliases = []string{"일정", "schedule", "멤버", "member"}
 
 var schedulePosterCommandAliases = []string{"스케쥴"}
 

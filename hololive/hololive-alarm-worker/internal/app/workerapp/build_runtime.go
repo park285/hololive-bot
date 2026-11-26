@@ -25,6 +25,7 @@ import (
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 )
 
 const runtimeRoleWorker = "worker"
@@ -228,6 +229,7 @@ func buildAlarmWorkerHTTPRuntime(
 			appConfig.Server.APIKey,
 			foundation.AlarmService,
 			foundation.EventGrades,
+			alarmstore.NewLiveRooms(alarmstore.NewSubscriberResolver(infra.Cache, infra.Postgres.GetPool()), kakaoroom.NewDeliveryPauses(infra.Postgres.GetPool())),
 			logger,
 		),
 	})

@@ -14,6 +14,8 @@ X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한
 
 `GET /internal/alarm/count` 집계 실패는 HTTP 500과 `count_alarm_entries_failed` 코드를 반환하며 개수를 0으로 대체하지 않는다.
 
+일정 알림의 방 목록은 인증된 `GET /internal/alarm/channel/:id/live-rooms`로 `{"success":true,"data":{"room_ids":["…"]}}`를 받는다. 그 채널을 LIVE 알림으로 구독한 서로 다른 방을 정렬해 돌려주며 `kakao_room_delivery_pauses`의 일시 정지 방은 뺀다. 구독 방이 없으면 빈 배열이다. 조회 실패는 HTTP 500과 `live_rooms_failed` 코드이며, client는 누락·null `room_ids`를 오류로 거절한다. 카드 발송 자체는 이 계약 밖의 hololive-api bot reply outbox가 한다([일정 알림](../services/hololive-api.md#일정-알림)). worker를 먼저 배포한 뒤 API를 배포한다.
+
 - `alarm.http`
 - `alarm.dispatch`
 - `youtube.outbox.egress`
@@ -236,7 +238,7 @@ the stored target list is absent/empty under the existing settings contract.
 
 | Field | Value |
 |---|---|
-| HTTP paths | `/internal/alarm/add`, `/remove`, `/room/:id/view`, `/clear`, `/settings`, `/room-name`, `/keys`, `/count` |
+| HTTP paths | `/internal/alarm/add`, `/remove`, `/room/:id/view`, `/clear`, `/settings`, `/room-name`, `/keys`, `/count`, `/channel/:id/live-rooms` |
 | Dispatch storage | `alarm_dispatch_events`, `alarm_dispatch_deliveries`; wakeup list `alarm:dispatch:wakeup` |
 | Method | mixed HTTP methods; PostgreSQL batch insert and leased claim; Valkey `LPUSH` wakeup token |
 | Version | HTTP unversioned; envelope `QueueEnvelopeVersionV1 = 1`; the publisher rejects any other version, including a missing (`0`) version |

@@ -86,6 +86,7 @@ func buildBotInfrastructureServices(
 	)
 
 	deps.EventGrades = alarmClient
+	deps.ScheduleRooms = alarmClient
 
 	return &BotInfrastructure{
 		Deps:           deps,
