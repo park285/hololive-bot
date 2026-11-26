@@ -236,6 +236,26 @@ func TestMatchPostFollowsContinuationToken(t *testing.T) {
 	require.Contains(t, bodies[1], "aG9wLTE=")
 }
 
+func TestMatchPostStopsWhenContinuationTokenRepeats(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		writeStreamChunks(t, w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"{"}]},`+
+			`"finishReason":"CONTINUATION","continuationToken":"c2FtZQ=="}],"usageMetadata":{"promptTokenCount":900,"candidatesTokenCount":1}}`)
+	}))
+	t.Cleanup(server.Close)
+
+	translator := &vertexTranslator{client: newTestGenAIClient(t, server.URL), rows: RowsConfig{Match: RowStageConfig{Model: testMatchModel}}}
+
+	_, spent, err := translator.matchPost(t.Context(), "match prompt")
+	require.ErrorIs(t, err, errIncompleteStream)
+	require.EqualValues(t, 2, requests.Load())
+	require.Equal(t, usage{model: testMatchModel, prompt: 1800, output: 2}, spent)
+}
+
 func TestMatchPostDoesNotResumeCutStreamFromCheckpoint(t *testing.T) {
 	t.Parallel()
 
