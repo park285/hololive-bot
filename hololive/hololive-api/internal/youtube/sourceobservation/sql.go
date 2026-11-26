@@ -30,7 +30,6 @@ var mustSQL = func() func(string) pgxdb.Statement {
 }()
 
 var (
-	activateReplayEpochTx2SQL                       = mustSQL("activate_replay_epoch_tx_2.sql")
 	activateReplayEpochTxSQL                        = mustSQL("activate_replay_epoch_tx.sql")
 	claimObservationsSQL                            = mustSQL("claim_observations.sql")
 	completeFinalizeObservation2SQL                 = mustSQL("complete_finalize_observation_2.sql")
