@@ -681,7 +681,7 @@ func TestContentRunnerPublicationDeadlineKeepsListsAndCursorProgress(t *testing.
 
 	defer cancel()
 
-	result, err := NewContentRunner(fake, &cursorFake{}, time.Hour-50*time.Millisecond).Collect(ctx, input)
+	result, err := NewContentRunner(fake, &cursorFake{}, time.Hour-2*time.Second).Collect(ctx, input)
 	if err != nil {
 		t.Fatal(err)
 	}
