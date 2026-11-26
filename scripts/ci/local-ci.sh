@@ -38,6 +38,9 @@ check_canonical_modules() {
             cd "${module}"
             export GOWORK=off
             run_step "go mod tidy -diff: ${module}" go mod tidy -diff
+            if [[ "${module}" == scripts/scripttest ]] && (( ${#SCRIPTTEST_PACKAGES[@]} )); then
+                run_step "Canonical vet (GOWORK=off): ${module}" go vet "${SCRIPTTEST_PACKAGES[@]}"
+            fi
             for package in "${GO_PACKAGES[@]}"; do
                 if [[ "${package}" == "./${module}/..." ]]; then
                     run_step "Canonical vet (GOWORK=off): ${module}" go vet ./...
@@ -66,7 +69,12 @@ run_go_package_step() {
 }
 
 check_golangci_lint() {
-    if ! has_go_packages; then
+    local package
+    local -a lint_packages=("${GO_PACKAGES[@]}")
+    for package in "${SCRIPTTEST_PACKAGES[@]}"; do
+        lint_packages+=("./scripts/scripttest/${package#./}")
+    done
+    if (( ${#lint_packages[@]} == 0 )); then
         echo "[LOCAL CI] Skip golangci-lint: no Go packages in scope"
         echo
         return 0
@@ -75,7 +83,7 @@ check_golangci_lint() {
     local golangci_lint_bin
     golangci_lint_bin="$(ensure_golangci_lint)"
 
-    run_step "golangci-lint" "${golangci_lint_bin}" run -c .golangci.yml "${GO_PACKAGES[@]}"
+    run_step "golangci-lint" "${golangci_lint_bin}" run -c .golangci.yml "${lint_packages[@]}"
 }
 
 run_go_tests() {
