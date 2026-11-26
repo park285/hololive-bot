@@ -10,7 +10,7 @@
 
 - 직접 명령 없이 collector 스케줄러 → Holodex/공식 일정/YouTube.js → `source_observations` → API YouTube plane → 정본·알림 의도. [방송 목록](streams.md), [이력](history.md), [발송](dispatch.md)에서 결과를 관찰한다.
 - YouTube.js 내부 `GET /health`, `POST /v1/bootstrap`, `/v1/community`, `/v1/content`, `/v1/channel`, `/v1/channel_live_check`, `/v1/video_live_check`. PO broker는 Unix 소켓에서 `GET /health`, `POST`·`DELETE /v1/session`, `POST /v1/challenge`, `/v1/activate`, `/v1/mint`를 제공한다. 사용자용 외부 API가 아니다.
-- `source-observation-replay-epoch --activated-by … --reason …`은 이력 재처리의 불변 기준점을 등록한다. 운영자의 종료 근거 검토 경로는 `scripts/maintenance/preview-terminal-live-heads.sql`, `reconcile-terminal-live-heads.sql`이다. 이 명령들을 공유 DB에 연결하지 않는다.
+- `source-observation-replay-epoch --activated-by … --reason …`은 이력 재처리의 불변 기준점을 등록한다. 이 명령을 공유 DB에 연결하지 않는다.
 
 ## Node 기록 테스트로 구동
 
