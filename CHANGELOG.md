@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **일정 포스터 모델 진단 문구:** 빈 응답의 진단 문구(로그와 오류)에 공급자의 `blockReasonMessage`·`finishMessage` 원문을 넣지 않고 차단·종료 사유 enum만 남깁니다. 기간 읽기를 Vertex로 옮기면서 이 원문이 기간 읽기 오류에 들어가던 문제입니다. 행 추출·게시물 대조도 같은 문구를 씁니다. 문구의 thinking·출력 token 수는 continuation hop 전체를 더한 값입니다. Fallback delta: none.
+
 ## r1.2.13 - 2026-11-26
 
 - **YouTube 원본 보관 정리의 보호 판정 지연:** 보존 대상 판정(`source_observation_retention_protected_ids`)의 "세션의 최신 적용 원본" 조건을 PostgreSQL이 해시 집합으로 바꿔, 요청 1,000건마다 LIVE·UPCOMING 세션 전체의 적용 기록(운영 약 42만 행)을 훑었습니다. 정리 한 번이 최대 9.9초 걸려 10초 예산을 넘기면 `SQLSTATE 57014`로 취소됐고, DB slot 하나를 그동안 붙잡아 같은 slot을 기다리던 원본 소비가 `acquire DB slot: context deadline exceeded`로 실패했습니다. migration 008이 이 조건을 요청 id에서 출발하도록 바꿉니다. 운영 데이터에서 판정 결과는 같고, 오래된 원본 1,000건 판정이 4.8초에서 12ms로 줄었습니다. 대기 migration이므로 `docs/current/runbooks/release.md`의 "대기 migration 적용 창" 절차로 배포합니다.
