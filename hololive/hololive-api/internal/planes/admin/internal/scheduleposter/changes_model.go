@@ -60,14 +60,14 @@ func matchRequest(stage RowStageConfig, prompt string) ([]*genai.Content, *genai
 func (t *vertexTranslator) matchPost(ctx context.Context, prompt string) ([]matchItem, usage, error) {
 	contents, config := matchRequest(t.rows.Match, prompt)
 
-	response, err := t.client.Models.GenerateContent(ctx, t.rows.Match.Model, contents, config)
+	response, spent, err := generateContent(ctx, t.client.Models, t.rows.Match.Model, contents, config)
 	if err != nil {
-		return nil, usage{}, fmt.Errorf("match post: %w", err)
+		return nil, spent, fmt.Errorf("match post: %w", err)
 	}
 
 	items, err := decodeMatchResponse(response)
 
-	return items, responseUsage(t.rows.Match.Model, response), err
+	return items, spent, err
 }
 
 func decodeMatchResponse(response *genai.GenerateContentResponse) ([]matchItem, error) {
