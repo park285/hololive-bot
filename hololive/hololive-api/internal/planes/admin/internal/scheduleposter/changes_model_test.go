@@ -340,3 +340,17 @@ func TestMatchPostStageTimeoutCancelsStalledStream(t *testing.T) {
 	require.True(t, retryableTranslationError(err))
 	require.Less(t, time.Since(started), 10*time.Second)
 }
+
+func TestMatchPostStreamStatusStaysAPIError(t *testing.T) {
+	t.Parallel()
+
+	translator, _ := matchServer(t, http.StatusNotFound, `{"error":{"code":404,"message":"model not found","status":"NOT_FOUND"}}`)
+
+	_, _, err := translator.matchPost(t.Context(), "match prompt")
+
+	apiErr, ok := errors.AsType[genai.APIError](err)
+	require.True(t, ok, "스트림 요청의 HTTP 상태도 genai.APIError여야 분류가 유지된다: %v", err)
+	require.Equal(t, http.StatusNotFound, apiErr.Code)
+	require.False(t, retryableTranslationError(err))
+	require.True(t, vertexServiceFailure(err))
+}
