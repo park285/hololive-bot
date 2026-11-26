@@ -158,7 +158,7 @@ func (j *geminiJudge) readPeriod(ctx context.Context, src source) (printedPeriod
 
 	contents, config := periodRequest(src)
 
-	response, err := j.client.Models.GenerateContent(ctx, periodModel, contents, config)
+	response, err := generateContent(ctx, j.client.Models, periodModel, contents, config)
 	if err != nil {
 		return printedPeriod{}, usage{}, periodFailure(err)
 	}

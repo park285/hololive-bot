@@ -2,11 +2,86 @@ package scheduleposter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"google.golang.org/genai"
 )
+
+var errIncompleteStream = errors.New("schedule poster model stream ended without finish reason")
+
+func generateContent(
+	ctx context.Context,
+	models *genai.Models,
+	model string,
+	contents []*genai.Content,
+	config *genai.GenerateContentConfig,
+) (*genai.GenerateContentResponse, error) {
+	config.AutomaticContinuation = new(false)
+
+	merged := &genai.GenerateContentResponse{}
+
+	var candidate *genai.Candidate
+
+	for chunk, err := range models.GenerateContentStream(ctx, model, contents, config) {
+		if err != nil {
+			return nil, err
+		}
+
+		if chunk == nil {
+			continue
+		}
+
+		if chunk.UsageMetadata != nil {
+			merged.UsageMetadata = chunk.UsageMetadata
+		}
+
+		if chunk.PromptFeedback != nil {
+			merged.PromptFeedback = chunk.PromptFeedback
+		}
+
+		if chunk.ModelVersion != "" {
+			merged.ModelVersion = chunk.ModelVersion
+		}
+
+		if len(chunk.Candidates) == 0 || chunk.Candidates[0] == nil {
+			continue
+		}
+
+		if candidate == nil {
+			candidate = &genai.Candidate{}
+			merged.Candidates = []*genai.Candidate{candidate}
+		}
+
+		mergeCandidate(candidate, chunk.Candidates[0])
+	}
+
+	if candidate != nil && !terminalFinishReason(candidate.FinishReason) {
+		return nil, errIncompleteStream
+	}
+
+	return merged, nil
+}
+
+func mergeCandidate(merged, chunk *genai.Candidate) {
+	if chunk.Content != nil {
+		if merged.Content == nil {
+			merged.Content = &genai.Content{Role: chunk.Content.Role}
+		}
+
+		merged.Content.Parts = append(merged.Content.Parts, chunk.Content.Parts...)
+	}
+
+	if chunk.FinishReason != "" {
+		merged.FinishReason = chunk.FinishReason
+		merged.FinishMessage = chunk.FinishMessage
+	}
+}
+
+func terminalFinishReason(reason genai.FinishReason) bool {
+	return reason != "" && reason != genai.FinishReasonUnspecified && reason != genai.FinishReasonContinuation
+}
 
 type usage struct {
 	model         string

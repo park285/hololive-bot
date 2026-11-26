@@ -195,7 +195,7 @@ func translateRequest(stage RowStageConfig, prompt string) ([]*genai.Content, *g
 func (t *vertexTranslator) extractRows(ctx context.Context, src source, prompt string) ([]extractedRow, usage, error) {
 	contents, config := extractRequest(t.rows.Extract, src, prompt)
 
-	response, err := t.client.Models.GenerateContent(ctx, t.rows.Extract.Model, contents, config)
+	response, err := generateContent(ctx, t.client.Models, t.rows.Extract.Model, contents, config)
 	if err != nil {
 		return nil, usage{}, fmt.Errorf("extract poster rows: %w", err)
 	}
@@ -208,7 +208,7 @@ func (t *vertexTranslator) extractRows(ctx context.Context, src source, prompt s
 func (t *vertexTranslator) translateRows(ctx context.Context, prompt string) ([]translatedRow, usage, error) {
 	contents, config := translateRequest(t.rows.Translate, prompt)
 
-	response, err := t.client.Models.GenerateContent(ctx, t.rows.Translate.Model, contents, config)
+	response, err := generateContent(ctx, t.client.Models, t.rows.Translate.Model, contents, config)
 	if err != nil {
 		return nil, usage{}, fmt.Errorf("translate poster rows: %w", err)
 	}
