@@ -44,10 +44,6 @@ func (f *fakeIrisClient) SendMultipleImages(context.Context, string, [][]byte, .
 	return &iris.ReplyAcceptedResponse{}, nil
 }
 
-func (f *fakeIrisClient) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return &iris.ReplyAcceptedResponse{}, nil
-}
-
 func (f *fakeIrisClient) SendRichText(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return &iris.ReplyAcceptedResponse{}, nil
 }

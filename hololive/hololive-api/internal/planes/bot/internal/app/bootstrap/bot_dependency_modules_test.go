@@ -83,10 +83,6 @@ func (s *stubBotIrisClient) SendMultipleImages(context.Context, string, [][]byte
 	return &iris.ReplyAcceptedResponse{}, nil
 }
 
-func (s *stubBotIrisClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return &iris.ReplyAcceptedResponse{}, nil
-}
-
 func (s *stubBotIrisClient) SendRichText(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return &iris.ReplyAcceptedResponse{}, nil
 }

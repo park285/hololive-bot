@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **구형 `SendMarkdown` 전달 경로 정리:** `iris-client-go`를 `v6.1.0`으로 올리고 퇴역한 `RuntimeIrisClient.SendMarkdown`과 테스트 스텁을 제거했습니다. Markdown 응답은 기존과 같이 `SendRichText`(`type:"richtext"`) 경로만 사용합니다. Fallback delta: none.
+
 ## r1.2.19 - 2026-11-27
 
 - **방화벽 사전 검사의 jq 1.8 호환:** `scripts/deploy/lib/admin-bind.sh`의 jq 필터가 jq 1.8.1에서 문법 오류를 내던 문제를 고쳤습니다. 함수 선언과 입력 바인딩을 조건식 앞으로 옮겼고 허용·거부 조건은 같습니다. Fallback delta: none.

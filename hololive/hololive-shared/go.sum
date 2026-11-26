@@ -151,8 +151,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/pandatix/go-abnf v0.5.5 h1:EXex5KkRQx4Dm6GnpAcQnIMBs9KiK0uf8p/wq+4t9PM=
 github.com/pandatix/go-abnf v0.5.5/go.mod h1:AE0KD3/VNoCjGzc1gqetRKshbI4SYErXQ/8kPenR5mc=
-github.com/park285/iris-client-go/v6 v6.0.0 h1:lsNfho0o6jNx9R/nynEiPww9cnlbFjjbN+fDUr0Rsns=
-github.com/park285/iris-client-go/v6 v6.0.0/go.mod h1:koOZhn0r4lFaNHXudIRxkT5bWCtRoQhS72KUE6EzNW8=
+github.com/park285/iris-client-go/v6 v6.1.0 h1:pIoyDiTn+SCF4yMwx6gksz4z1hiprfqOfrkBqz3MyjQ=
+github.com/park285/iris-client-go/v6 v6.1.0/go.mod h1:koOZhn0r4lFaNHXudIRxkT5bWCtRoQhS72KUE6EzNW8=
 github.com/park285/shared-go/core v1.0.0 h1:njjHcpmuefz77MdkT7u4/GUbDIdtUXpHmn1XRZn1VEQ=
 github.com/park285/shared-go/core v1.0.0/go.mod h1:IpLckMRu7X4bg/79bgJFufCyVjTC/RCs233qKFwMIeU=
 github.com/park285/shared-go/postgres v1.0.4 h1:IXvDtVVQGEEAIQmzTlX8OH+7CXG7W7Qzt0HOZPF/k2Q=
