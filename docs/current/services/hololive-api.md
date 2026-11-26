@@ -313,7 +313,6 @@ bot plane은 `BROADCAST_TYPE_GEMINI_API_KEY_FILE`(Gemini Developer API 키 파�
 | 최초공개 (`mergeContentPremieres`) | `Repository.Finalize`(`video_list`) | `finalizeTx` 첫 문장, shared | 전역 → queue 행 → advisory `content_subject_head` → content 행 잠금·저장 → advisory `live_subject_head`(subject key) → 확정 최초공개 영상 세션 `FOR UPDATE`(video_id 순) → 분류 upsert → 충돌 감사 insert → queue 완료 → 갱신 |
 | 시각 확정 (`reconcileEndedVideoTimes`) | `video_live_check`와 같은 트랜잭션 | `finalizeTx` 첫 문장, shared | (video live check의 세션 → head → pending(동결 ENDED 제외) 잠금 뒤) `youtube_live_time_finalizations` `FOR UPDATE` → 한 문장에서 진행 행 → 세션 시각 → head `ended_at` 순으로 저장 → (video live check와 함께) 갱신 |
 | 수동 검토 영수증 (`record_youtube_live_review`) | 운영자 READ COMMITTED 트랜잭션 | DB 함수, exclusive | 전역 → 세션 → head → pending → availability `FOR UPDATE` → snapshot CAS → 영수증·사실 insert → 갱신(해당 영상) |
-| maintenance: terminal head 복구 (`reconcile-terminal-live-heads.sql`) | 단독 | 스크립트 첫 잠금, exclusive | 전역 → 세션 → head `FOR UPDATE`(video_id 순) → head 갱신 → 갱신(복구 영상) |
 | maintenance: 원본 retention (`delete_source_observation_retention_batch`) | 단독 | DB 함수 첫 문장, exclusive | 전역 → retention 커서 singleton `FOR UPDATE` → 원본 후보 잠금·삭제(FK `SET NULL`·`CASCADE`). 수명 모델 입력이 아니므로 갱신 없음 |
 | maintenance: queue·collision·payload·absence slot·checkpoint retention | 단계별 단독 | 없음 | 각 표의 제한된 DELETE. 라이브 원본 표를 쓰지 않음 |
 | claim (`ClaimBatch`) | 단독 | 없음 | due queue 행 `FOR UPDATE SKIP LOCKED`(replay epoch 이전·시도 소진 후보와 선점 후보) → 같은 트랜잭션에서 종료 후보 DEAD_LETTER 집합 갱신 |
