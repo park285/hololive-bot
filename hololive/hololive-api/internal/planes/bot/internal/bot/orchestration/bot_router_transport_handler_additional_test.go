@@ -160,10 +160,6 @@ func (c *testIrisClient) SendRichText(ctx context.Context, room, markdown string
 	return &iris.ReplyAcceptedResponse{RequestID: "reply-richtext", Delivery: testDeliveryQueued, Room: room, Type: "richtext"}, nil
 }
 
-func (c *testIrisClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, errors.New("unexpected legacy markdown send")
-}
-
 func (c *testIrisClient) GetReplyStatus(_ context.Context, requestID string) (*iris.ReplyStatusSnapshot, error) {
 	return &iris.ReplyStatusSnapshot{RequestID: requestID, State: "handoff_completed"}, nil
 }

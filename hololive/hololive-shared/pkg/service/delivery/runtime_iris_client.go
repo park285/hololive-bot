@@ -343,21 +343,6 @@ func (c *RuntimeIrisClient) SendMultipleImages(ctx context.Context, room string,
 	return out, nil
 }
 
-func (c *RuntimeIrisClient) SendMarkdown(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	binding, err := c.acquire(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer c.release(binding)
-
-	out, err := binding.client.SendMarkdown(ctx, room, markdown, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("send markdown: %w", err)
-	}
-
-	return out, nil
-}
-
 func (c *RuntimeIrisClient) SendRichText(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	binding, err := c.acquire(ctx)
 	if err != nil {
