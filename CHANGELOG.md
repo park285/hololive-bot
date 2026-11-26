@@ -6,6 +6,9 @@
 
 ## 미출시
 
+- **방화벽 사전 검사의 jq 1.8 호환:** `scripts/deploy/lib/admin-bind.sh`의 jq 필터가 jq 1.8.1에서 문법 오류를 내던 문제를 고쳤습니다. 함수 선언과 입력 바인딩을 조건식 앞으로 옮겼고 허용·거부 조건은 같습니다. Fallback delta: none.
+- **스크립트 동작 시험 분리:** 스크립트 시험을 제품 모듈 게이트와 분리해 패키지 병렬도 1, 시험 병렬도 4로 실행하고, PR CI에서 전체를 실행하며 skip과 누락된 결과를 실패로 판정합니다. 호출되지 않던 `go-lint-matrix.py`·`resolve-go-tool.py` 사본과 Dockerfile 문자열·Trivy 인자 자기검사를 지웠습니다.
+
 ## r1.2.18 - 2026-11-27
 
 - **변화 없는 결정의 감사 행 생략:** `source_observation_applications`에 정본 상태를 바꾼 결정만 남깁니다. 값이 같은 더 새 영상 목록 관측(누락 해제가 없을 때), 바뀐 것이 없는 영상·프로필·사진 `REPLAY`, 프로필·사진의 `RAW_RETAINED`는 더 이상 행을 만들지 않습니다. 운영 감사 323만 행 중 `youtube_video APPLIED` 82만 행이 영상 472개에서 나왔고 대부분 값이 같은 반복 관측이었습니다. `youtube_live_session` 결정은 보존 보호의 최신 근거라 모두 남기고, 커뮤니티 창 `CANONICALIZED`도 그대로입니다. migration은 없습니다. Fallback delta: none.
