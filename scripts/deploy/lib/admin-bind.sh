@@ -56,6 +56,10 @@ admin_network_assert_firewall() {
         def reviewed_ports: [.[] | .match? | select(.left.payload.field? == "dport")] as $ports |
             ($ports | length > 0) and ($ports | all(.op == "==" and (.right | literal_port)));
         [.nftables[] | .set // empty | select(.name == "postgres_sources")] as $sources |
+        {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5433}} as $postgres |
+        [.nftables[] | .rule // empty | select(.chain == "input") | .expr] as $input |
+        [$input[] | select(matches_postgres)] as $published |
+        ($input | index([$published[2]])) as $boundary |
         ($sources | length == 1) and
         ($sources[0].elem | sort == ["100.100.1.3", "100.100.1.5", "100.100.1.6", "100.100.1.8"]) and
         ([.nftables[] | .set // empty | select(.name == "bot_postgres_sources")] as $bot |
@@ -65,10 +69,6 @@ admin_network_assert_firewall() {
             ($forward | length == 6) and
             ($forward[2].expr == dnat(5433; 5432) + sources + [{"accept":null}]) and
             ($forward[3].expr == dnat(5433; 5432) + [{"reject":{"type":"tcp reset"}}])) and
-        {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5433}} as $postgres |
-        [.nftables[] | .rule // empty | select(.chain == "input") | .expr] as $input |
-        [$input[] | select(matches_postgres)] as $published |
-        ($input | index([$published[2]])) as $boundary |
         any(.nftables[]; .chain.hook == "input" and .chain.name == "input" and .chain.prio == -20) and
         ($published == [
             [{"match":{"op":"==","left":{"meta":{"key":"iifname"}},"right":"lo"}}, $postgres, {"accept":null}],
