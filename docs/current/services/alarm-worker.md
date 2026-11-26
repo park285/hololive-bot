@@ -29,6 +29,7 @@ worker의 DB 권한은 이벤트 등급 canonical 테이블 쓰기, 관측·지�
 ## Owns
 
 - Alarm HTTP provider route registration for `/internal/alarm/*` (`internal/service/alarm/httpapi`: handler with required-field checks, route registrar; the request/response wire types are shared `pkg/contracts/alarm`)
+- LIVE subscriber room list for hololive-api schedule poster notices (`GET /internal/alarm/channel/:id/live-rooms`, `alarmstore.LiveRooms`: LIVE subscribers minus `kakao_room_delivery_pauses`). The card egress itself is hololive-api's bot reply outbox, not a worker delivery row.
 - YouTube alarm checking and scheduling loops
 - Dispatch queue publish path
 - Dispatch queue consume/render/send path, serialized by PostgreSQL `FOR UPDATE SKIP LOCKED` row claims and the single Quadlet instance

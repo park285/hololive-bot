@@ -8,7 +8,7 @@
 
 ## 사용자 경로
 
-- 방에서 `!스케쥴 미코`. `!스케줄`이나 `!일정`이 아니라 **쥴**이다. 템플릿은 채팅 인자가 아니라 Console의 멤버 관리에서 선택한다.
+- 방에서 `!스케쥴 미코`. `!일정`(Holodex 일정)과 다른 명령이다. 템플릿은 채팅 인자가 아니라 Console의 멤버 관리에서 선택한다.
 - `/api/holo/members/:id/schedule-card-template`에서 `GET`, `PATCH`. 포스터 기본 경로 `P=/api/holo/schedule-posters`에서 `GET P`, `GET P/summary`, `POST P/collect`, `GET`·`POST P/memo`.
 - 한 건 `D=P/:id`에서 `GET D`, `GET D/image`, `GET D/changes`, `POST D/changes/revoke`, `POST D/changes/restore`, `GET`·`POST D/rows`, `POST D/rows/polish`, `POST D/changes/polish`, `POST D/confirm`, `POST D/week`, `POST D/reject`. 제공 경로의 원본은 `hololive/hololive-api/internal/planes/admin/internal/httpapi/routes.go`다.
 

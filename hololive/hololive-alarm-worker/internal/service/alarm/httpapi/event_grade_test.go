@@ -18,7 +18,7 @@ import (
 
 func TestEventGradeRequiresInternalKeyAndStrictBody(t *testing.T) {
 	router := gin.New()
-	require.NoError(t, NewInternalRouteRegistrar("test-key", fakeAlarmCRUD{}, eventgrade.NewRepository(nil), slog.New(slog.DiscardHandler))(router))
+	require.NoError(t, NewInternalRouteRegistrar("test-key", fakeAlarmCRUD{}, eventgrade.NewRepository(nil), nil, slog.New(slog.DiscardHandler))(router))
 
 	for _, tt := range []struct {
 		key, body string
@@ -58,7 +58,7 @@ func TestEventGradeRouteSeparatesUnavailableFromDatabaseFailure(t *testing.T) {
 		{fakeEventGradeRegistrar{err: errors.New("database unavailable")}, http.StatusServiceUnavailable, ""},
 	} {
 		router := gin.New()
-		require.NoError(t, NewInternalRouteRegistrar("test-key", fakeAlarmCRUD{}, tt.registrar, slog.New(slog.DiscardHandler))(router))
+		require.NoError(t, NewInternalRouteRegistrar("test-key", fakeAlarmCRUD{}, tt.registrar, nil, slog.New(slog.DiscardHandler))(router))
 
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, contract.EventGradePath, strings.NewReader(`{"region":"jp","score":1,"room_id":"1","user_id":"2"}`))
 		req.Header.Set("X-API-Key", "test-key")

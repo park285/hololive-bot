@@ -13,10 +13,10 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-func TestShadowStateRetirementRequiresConsumedEventGradeObservations(t *testing.T) {
-	pool := dbtest.NewBlankPool(t)
+func migrationsThrough(t *testing.T, head string) fstest.MapFS {
+	t.Helper()
 
-	through004 := fstest.MapFS{}
+	through := fstest.MapFS{}
 
 	require.NoError(t, fs.WalkDir(migrations.FS, ".", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
@@ -33,7 +33,7 @@ func TestShadowStateRetirementRequiresConsumedEventGradeObservations(t *testing.
 			kept := lines[:0]
 
 			for _, line := range lines {
-				if version, _, _ := strings.Cut(line, " "); version <= "004" {
+				if version, _, _ := strings.Cut(line, " "); version <= head {
 					kept = append(kept, line)
 				}
 			}
@@ -41,12 +41,18 @@ func TestShadowStateRetirementRequiresConsumedEventGradeObservations(t *testing.
 			body = []byte(strings.Join(kept, ""))
 		}
 
-		through004[path] = &fstest.MapFile{Data: body}
+		through[path] = &fstest.MapFile{Data: body}
 
 		return nil
 	}))
 
-	_, err := Run(t.Context(), pool, through004, Config{})
+	return through
+}
+
+func TestShadowStateRetirementRequiresConsumedEventGradeObservations(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	_, err := Run(t.Context(), pool, migrationsThrough(t, "004"), Config{})
 	require.NoError(t, err)
 
 	_, err = pool.Exec(t.Context(), "UPDATE public.event_grade_regions SET published_seq = published_seq + 1 WHERE region = 'jp'")
@@ -66,5 +72,5 @@ func TestShadowStateRetirementRequiresConsumedEventGradeObservations(t *testing.
 
 	result, err := Run(t.Context(), pool, migrations.FS, Config{})
 	require.NoError(t, err)
-	require.Equal(t, 4, result.Applied)
+	require.Equal(t, 5, result.Applied)
 }

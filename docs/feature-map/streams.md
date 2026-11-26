@@ -9,7 +9,7 @@
 ## 사용자 경로
 
 - `!라이브` (`live`, `방송중`, `생방송`), `!예정` (`upcoming`)에 멤버 이름을 줄 수 있다. `!예정 전체`와 숫자 제한은 `message_parser_stream.go`에서 해석한다.
-- `!일정 미코 7`, `!스케줄 미코`, `!schedule 미코`, `!멤버 미코`, `!member 미코`: 기본 7일, 지정값은 1~30일. 인자 없는 `!멤버`는 프로필 조회로 넘어간다.
+- `!일정 미코 7`, `!schedule 미코`, `!멤버 미코`, `!member 미코`: 기본 7일, 지정값은 1~30일. 인자 없는 `!멤버`는 프로필 조회로 넘어간다.
 - Console → H3 `GET /api/holo/streams/live`, `GET /api/holo/streams/upcoming` (`org` 선택). 관리자 API와 bot의 데이터 조합·표시는 같지 않을 수 있다.
 
 ## Go 핸들러 테스트로 구동

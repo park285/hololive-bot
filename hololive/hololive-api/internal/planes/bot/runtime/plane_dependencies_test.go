@@ -77,6 +77,7 @@ func newInjectedDependencyBot(t *testing.T, alarm *recordingAlarm) (*orchestrati
 		Postgres:         postgres,
 		Holodex:          &holodexprovider.Service{},
 		Alarm:            alarm,
+		ScheduleRooms:    testLiveRooms{},
 		Matcher:          &matcher.Matcher{},
 		MembersData:      &stubMemberDataProvider{},
 		MemberRepository: member.NewMemberRepository(postgres),

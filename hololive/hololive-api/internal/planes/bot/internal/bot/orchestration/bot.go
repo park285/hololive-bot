@@ -43,6 +43,7 @@ type Bot struct {
 	transport             *transport.CommandTransport
 	lifecycle             *lifecycle.BotLifecycle
 	rooms                 *kakaoroom.Catalog
+	scheduleNotices       *command.SchedulePosterNotifier
 }
 
 func NewBot(deps *Dependencies) (*Bot, error) {
@@ -110,6 +111,11 @@ func (b *Bot) initializeCommands(deps *Dependencies, calendarFinder handlercore.
 		registry.Register(cmd)
 	}
 
+	b.scheduleNotices = command.NewSchedulePosterNotifier(commandDeps, schedulePosters, deps.ScheduleRooms)
+	if err := b.scheduleNotices.CheckDependencies(); err != nil {
+		return fmt.Errorf("initialize schedule poster notifier: %w", err)
+	}
+
 	b.commandExecutor = orchcmd.NewCommandRouter(registry, b.logger, b.sendMessage, b.messageStrings, b.cache)
 	b.logger.Info("Commands initialized", slog.Int("count", registry.Count()))
 
@@ -122,6 +128,10 @@ func (b *Bot) Start(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (b *Bot) RunScheduleNotices(ctx context.Context) {
+	b.scheduleNotices.Run(ctx)
 }
 
 func (b *Bot) Shutdown(ctx context.Context) error {

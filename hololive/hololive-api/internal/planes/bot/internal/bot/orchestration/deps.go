@@ -50,6 +50,7 @@ type Dependencies struct {
 	Holodex               domain.StreamProvider
 	Alarm                 handlercore.AlarmService
 	EventGrades           handlers.EventGradeRegistrar
+	ScheduleRooms         handlers.LiveRoomLister
 	Matcher               *matcher.Matcher
 	MembersData           domain.MemberDataProvider
 	ACL                   *acl.Service

@@ -17,7 +17,7 @@ import (
 
 func TestNewInternalRouteRegistrarRegistersCompleteAlarmRouteSet(t *testing.T) {
 	router := gin.New()
-	registrar := NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, nil, slog.New(slog.DiscardHandler))
+	registrar := NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, nil, nil, slog.New(slog.DiscardHandler))
 
 	require.NoError(t, registrar(router))
 
@@ -36,7 +36,7 @@ func TestNewInternalRouteRegistrarRegistersCompleteAlarmRouteSet(t *testing.T) {
 
 func TestNewInternalRouteRegistrarAppliesAPIKeyAuth(t *testing.T) {
 	router := gin.New()
-	registrar := NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, nil, slog.New(slog.DiscardHandler))
+	registrar := NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, nil, nil, slog.New(slog.DiscardHandler))
 	require.NoError(t, registrar(router))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, contractsalarm.BasePath+contractsalarm.KeysRoute, http.NoBody)
@@ -49,9 +49,9 @@ func TestNewInternalRouteRegistrarAppliesAPIKeyAuth(t *testing.T) {
 func TestNewInternalRouteRegistrarFailsWhenRouterOrAlarmServiceMissing(t *testing.T) {
 	router := gin.New()
 
-	require.ErrorContains(t, NewInternalRouteRegistrar("secret", nil, nil, slog.New(slog.DiscardHandler))(router), "alarm service is nil")
+	require.ErrorContains(t, NewInternalRouteRegistrar("secret", nil, nil, nil, slog.New(slog.DiscardHandler))(router), "alarm service is nil")
 	assert.Empty(t, router.Routes())
-	require.ErrorContains(t, NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, nil, slog.New(slog.DiscardHandler))(nil), "router is nil")
+	require.ErrorContains(t, NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, nil, nil, slog.New(slog.DiscardHandler))(nil), "router is nil")
 }
 
 func routeKeys(routes gin.RoutesInfo) []string {

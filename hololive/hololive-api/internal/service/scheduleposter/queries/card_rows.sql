@@ -2,7 +2,7 @@ WITH poster AS (
     SELECT id, week_start, week_end, rows_extracted_at, posted_at, rows_status, rows_day_shift
     FROM schedule_posters
     WHERE id = (
-/* fragment:published_poster */
+/* fragment:card_poster */
 
     )
 )

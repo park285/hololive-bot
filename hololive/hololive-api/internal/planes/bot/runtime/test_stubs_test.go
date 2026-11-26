@@ -99,3 +99,9 @@ func (testAlarmCRUD) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, err
 }
 
 func (testAlarmCRUD) WarmCacheFromDB(context.Context) error { return nil }
+
+type testLiveRooms struct{}
+
+func (testLiveRooms) LiveSubscriberRooms(context.Context, string) ([]string, error) {
+	return []string{}, nil
+}
