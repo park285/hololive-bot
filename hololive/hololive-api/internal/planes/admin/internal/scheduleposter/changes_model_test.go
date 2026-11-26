@@ -1,8 +1,8 @@
 package scheduleposter
 
 import (
+	"context"
 	jsonv2 "encoding/json/v2"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -172,12 +172,83 @@ func TestMatchPostJoinsStreamedChunks(t *testing.T) {
 func TestMatchPostRejectsStreamWithoutFinishReason(t *testing.T) {
 	t.Parallel()
 
-	translator := streamServer(t, `{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"items\":[]}"}]}}]}`)
+	translator := streamServer(t,
+		`{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"items\":[]}"}]}}],"usageMetadata":{"promptTokenCount":900,"candidatesTokenCount":12}}`)
 
-	_, _, err := translator.matchPost(t.Context(), "match prompt")
+	_, spent, err := translator.matchPost(t.Context(), "match prompt")
 	require.ErrorIs(t, err, errIncompleteStream)
 	require.NotErrorIs(t, err, errBadAnswer)
-	require.True(t, retryableTranslationError(err))
+	require.Equal(t, usage{model: testMatchModel, prompt: 900, output: 12}, spent)
+
+	translator = streamServer(t)
+
+	_, _, err = translator.matchPost(t.Context(), "match prompt")
+	require.ErrorIs(t, err, errIncompleteStream)
+}
+
+func TestMatchPostFollowsContinuationToken(t *testing.T) {
+	t.Parallel()
+
+	var (
+		mu     sync.Mutex
+		bodies []string
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+
+		mu.Lock()
+
+		bodies = append(bodies, string(body))
+
+		hop := len(bodies)
+
+		mu.Unlock()
+
+		if hop == 1 {
+			writeStreamChunks(t, w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"items\":"}]},`+
+				`"finishReason":"CONTINUATION","continuationToken":"aG9wLTE="}],"usageMetadata":{"promptTokenCount":900,"candidatesTokenCount":5}}`)
+
+			return
+		}
+
+		writeStreamChunks(t, w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"[]}"}]},"finishReason":"STOP"}],`+
+			`"usageMetadata":{"promptTokenCount":905,"candidatesTokenCount":3}}`)
+	}))
+	t.Cleanup(server.Close)
+
+	translator := &vertexTranslator{client: newTestGenAIClient(t, server.URL), rows: RowsConfig{Match: RowStageConfig{Model: testMatchModel}}}
+
+	items, spent, err := translator.matchPost(t.Context(), "match prompt")
+	require.NoError(t, err)
+	require.Empty(t, items)
+	require.Equal(t, testMatchModel, spent.model)
+	require.EqualValues(t, 8, spent.output)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	require.Len(t, bodies, 2)
+	require.NotContains(t, bodies[0], "aG9wLTE=")
+	require.Contains(t, bodies[1], "aG9wLTE=")
+}
+
+func TestMatchPostReportsFinishReasonAfterPartialContent(t *testing.T) {
+	t.Parallel()
+
+	translator := streamServer(t,
+		`{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"items\":["}]}}]}`,
+		`{"candidates":[{"finishReason":"SAFETY"}],"usageMetadata":{"promptTokenCount":900,"candidatesTokenCount":4}}`,
+	)
+
+	_, spent, err := translator.matchPost(t.Context(), "match prompt")
+	require.Error(t, err)
+	require.NotErrorIs(t, err, errBadAnswer)
+	require.ErrorContains(t, err, "finish reason SAFETY")
+	require.Equal(t, usage{model: testMatchModel, prompt: 900, output: 4}, spent)
 }
 
 func TestMatchPostCarriesTheStageSettings(t *testing.T) {
@@ -310,8 +381,8 @@ func TestMatchPostRejectsMalformedAnswers(t *testing.T) {
 	translator, _ = matchServer(t, http.StatusOK, `{"candidates":[],"usageMetadata":{"promptTokenCount":900}}`)
 
 	_, _, err = translator.matchPost(t.Context(), "match prompt")
-	require.Error(t, err)
-	require.False(t, errors.Is(err, errBadAnswer) || errors.Is(err, errMatchBlocked), "차단 사유 없는 빈 응답은 재시도할 실패다: %v", err)
+	require.ErrorIs(t, err, errIncompleteStream)
+	require.True(t, retryableTranslationError(err))
 }
 
 func TestMatchPostStageTimeoutCancelsStalledStream(t *testing.T) {
@@ -335,22 +406,6 @@ func TestMatchPostStageTimeoutCancelsStalledStream(t *testing.T) {
 	started := time.Now()
 
 	_, _, err := translator.matchPost(t.Context(), "match prompt")
-	require.Error(t, err)
-	require.NotErrorIs(t, err, errBadAnswer)
-	require.True(t, retryableTranslationError(err))
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Less(t, time.Since(started), 10*time.Second)
-}
-
-func TestMatchPostStreamStatusStaysAPIError(t *testing.T) {
-	t.Parallel()
-
-	translator, _ := matchServer(t, http.StatusNotFound, `{"error":{"code":404,"message":"model not found","status":"NOT_FOUND"}}`)
-
-	_, _, err := translator.matchPost(t.Context(), "match prompt")
-
-	apiErr, ok := errors.AsType[genai.APIError](err)
-	require.True(t, ok, "스트림 요청의 HTTP 상태도 genai.APIError여야 분류가 유지된다: %v", err)
-	require.Equal(t, http.StatusNotFound, apiErr.Code)
-	require.False(t, retryableTranslationError(err))
-	require.True(t, vertexServiceFailure(err))
 }

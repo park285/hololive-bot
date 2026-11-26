@@ -103,13 +103,9 @@ func New(ctx context.Context, config *Config, apiKey string, store *posterstore.
 	service.changes, service.ledger, service.matcher = store, store, translator
 
 	if apiKey != "" {
-		judge, err := newGeminiJudge(ctx, apiKey)
-		if err != nil {
-			return nil, err
-		}
+		judge := newGeminiJudge(apiKey, translator.client)
 
-		service.judge = judge
-		service.classifier = judge
+		service.judge, service.classifier = judge, judge
 	}
 
 	return service, nil

@@ -6,7 +6,8 @@
 
 ## 미출시
 
-- **일정 포스터 모델 호출 SSE 전환:** hololive-api 일정 포스터의 Gemini 호출 네 곳(행 추출·번역·게시물 대조·기간 읽기)이 `generateContent` 대신 `streamGenerateContent`(SSE)를 씁니다. 청크의 parts를 이어 붙이고 마지막 사용량·종료 사유로 하나의 응답을 만든 뒤 기존 해석을 그대로 적용합니다. SDK 자동 continuation은 끄며, 후보가 있는데 종료 사유 없이 끝난 스트림은 형식 오류가 아니라 재시도 가능한 미완료 오류로 끝납니다. Decisions API(`/v1beta/decisions`)는 스트리밍 모드가 없어 그대로입니다. Fallback delta: none.
+- **일정 포스터 모델 호출 SSE 전환:** hololive-api 일정 포스터의 Gemini 호출 네 곳(행 추출·번역·게시물 대조·기간 읽기)이 `generateContent` 대신 `streamGenerateContent`(SSE)를 씁니다. 청크의 parts를 이어 붙이고 마지막 사용량·종료 사유로 하나의 응답을 만든 뒤 기존 해석을 그대로 적용합니다. `CONTINUATION` 종료는 이전처럼 SDK가 continuation token으로 이어 받습니다. 종료 사유 없이 끝나거나 후보도 차단 사유도 없이 끝난 스트림은 형식 오류가 아니라 재시도 가능한 미완료 오류(`errIncompleteStream`)입니다. 일부 내용을 보낸 뒤 `SAFETY` 같은 사유로 끝난 응답은 잘린 내용 대신 그 종료 사유로 실패합니다. 스트림이 실패해도 그때까지 받은 사용량을 기록합니다. Decisions API(`/v1beta/decisions`)는 스트리밍 모드가 없어 그대로입니다. Fallback delta: none.
+- **일정 포스터 기간 읽기 Vertex 이전:** 자동 검토의 기간 읽기(`gemini-4-hydrogen`)가 Gemini Developer API 키 대신 일정표 행 추출·번역과 같은 Vertex client(ADC)를 씁니다. `SCHEDULE_POSTER_GEMINI_API_KEY_FILE`은 Vertex에 없는 Decisions API(후보 판정·변경 글 판별)에만 쓰며 설정과 mount는 바뀌지 않습니다. 기간 읽기 실패의 분류도 Vertex 기준으로 바뀌어, DNS·연결 거절·TLS·ADC 토큰 실패와 `FAILED_PRECONDITION`, 401·403·404·429·503은 자동 검토 불가로, 그 밖의 400은 후보 문제로 봅니다. Fallback delta: none.
 
 ## r1.2.12 - 2026-11-26
 

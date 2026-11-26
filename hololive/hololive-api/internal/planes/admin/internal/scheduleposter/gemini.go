@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"slices"
 	"time"
 
 	"google.golang.org/genai"
@@ -91,26 +90,11 @@ type printedPeriod struct {
 
 type geminiJudge struct {
 	decisions *geminidecision.Client
-	client    *genai.Client
+	vertex    *genai.Client
 }
 
-func newGeminiJudge(ctx context.Context, key string) (*geminiJudge, error) {
-	httpClient := geminidecision.GuardedHTTPClient()
-
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		Backend:    genai.BackendGeminiAPI,
-		APIKey:     key,
-		HTTPClient: httpClient,
-		HTTPOptions: genai.HTTPOptions{
-			APIVersion:   "v1beta",
-			RetryOptions: &genai.HTTPRetryOptions{Attempts: new(int32(1))},
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create gemini api client: %w", geminidecision.SafeClientError(err))
-	}
-
-	return &geminiJudge{decisions: geminidecision.NewWithHTTPClient(key, httpClient), client: client}, nil
+func newGeminiJudge(key string, vertex *genai.Client) *geminiJudge {
+	return &geminiJudge{decisions: geminidecision.New(key), vertex: vertex}
 }
 
 func (j *geminiJudge) judge(ctx context.Context, src source) (posterScores, usage, error) {
@@ -158,28 +142,27 @@ func (j *geminiJudge) readPeriod(ctx context.Context, src source) (printedPeriod
 
 	contents, config := periodRequest(src)
 
-	response, err := generateContent(ctx, j.client.Models, periodModel, contents, config)
+	response, spent, err := generateContent(ctx, j.vertex.Models, periodModel, contents, config)
 	if err != nil {
-		return printedPeriod{}, usage{}, periodFailure(err)
+		return printedPeriod{}, spent, periodFailure(err)
 	}
 
 	period, err := parsePeriod(response.Text())
 
-	return period, responseUsage(periodModel, response), err
+	return period, spent, err
 }
 
 func periodFailure(err error) error {
 	apiErr, ok := errors.AsType[genai.APIError](err)
 
-	if !ok {
-		return unreachable(fmt.Errorf("read poster period: %w", geminidecision.SafeClientError(err)))
+	switch {
+	case ok:
+		return apiFailure(apiErr.Code, apiErr.Status == "FAILED_PRECONDITION", fmt.Errorf("read poster period: HTTP %d", apiErr.Code))
+	case vertexUnreachable(err):
+		return fmt.Errorf("%w: read poster period: %w", errReviewUnavailable, err)
+	default:
+		return fmt.Errorf("read poster period: %w", err)
 	}
-
-	configFailure := apiErr.Status == "FAILED_PRECONDITION" || slices.ContainsFunc(apiErr.Details, func(detail map[string]any) bool {
-		return detail["reason"] == "API_KEY_INVALID"
-	})
-
-	return apiFailure(apiErr.Code, configFailure, fmt.Errorf("read poster period: HTTP %d", apiErr.Code))
 }
 
 func apiFailure(code int, configFailure bool, err error) error {

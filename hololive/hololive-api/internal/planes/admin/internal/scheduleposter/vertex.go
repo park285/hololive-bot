@@ -9,7 +9,7 @@ import (
 	"google.golang.org/genai"
 )
 
-var errIncompleteStream = errors.New("schedule poster model stream ended without finish reason")
+var errIncompleteStream = errors.New("schedule poster model stream ended before the model finished")
 
 func generateContent(
 	ctx context.Context,
@@ -17,16 +17,14 @@ func generateContent(
 	model string,
 	contents []*genai.Content,
 	config *genai.GenerateContentConfig,
-) (*genai.GenerateContentResponse, error) {
-	config.AutomaticContinuation = new(false)
-
+) (*genai.GenerateContentResponse, usage, error) {
 	merged := &genai.GenerateContentResponse{}
 
 	var candidate *genai.Candidate
 
 	for chunk, err := range models.GenerateContentStream(ctx, model, contents, config) {
 		if err != nil {
-			return nil, err
+			return nil, responseUsage(model, merged), err
 		}
 
 		if chunk == nil {
@@ -57,11 +55,14 @@ func generateContent(
 		mergeCandidate(candidate, chunk.Candidates[0])
 	}
 
-	if candidate != nil && !terminalFinishReason(candidate.FinishReason) {
-		return nil, errIncompleteStream
+	switch {
+	case candidate == nil && merged.PromptFeedback == nil, candidate != nil && !terminalFinishReason(candidate.FinishReason):
+		return nil, responseUsage(model, merged), errIncompleteStream
+	case candidate != nil && !completeFinishReason(candidate.FinishReason):
+		candidate.Content = nil
 	}
 
-	return merged, nil
+	return merged, responseUsage(model, merged), nil
 }
 
 func mergeCandidate(merged, chunk *genai.Candidate) {
@@ -77,6 +78,10 @@ func mergeCandidate(merged, chunk *genai.Candidate) {
 		merged.FinishReason = chunk.FinishReason
 		merged.FinishMessage = chunk.FinishMessage
 	}
+}
+
+func completeFinishReason(reason genai.FinishReason) bool {
+	return reason == genai.FinishReasonStop || reason == genai.FinishReasonMaxTokens
 }
 
 func terminalFinishReason(reason genai.FinishReason) bool {
