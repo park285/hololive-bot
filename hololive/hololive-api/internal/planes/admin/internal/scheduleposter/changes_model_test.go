@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -225,8 +226,7 @@ func TestMatchPostFollowsContinuationToken(t *testing.T) {
 	items, spent, err := translator.matchPost(t.Context(), "match prompt")
 	require.NoError(t, err)
 	require.Empty(t, items)
-	require.Equal(t, testMatchModel, spent.model)
-	require.EqualValues(t, 8, spent.output)
+	require.Equal(t, usage{model: testMatchModel, prompt: 1805, output: 8}, spent)
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -234,6 +234,24 @@ func TestMatchPostFollowsContinuationToken(t *testing.T) {
 	require.Len(t, bodies, 2)
 	require.NotContains(t, bodies[0], "aG9wLTE=")
 	require.Contains(t, bodies[1], "aG9wLTE=")
+}
+
+func TestMatchPostDoesNotResumeCutStreamFromCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		writeStreamChunks(t, w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"items\":"}]},"continuationToken":"Y2twdC0x"}]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	translator := &vertexTranslator{client: newTestGenAIClient(t, server.URL), rows: RowsConfig{Match: RowStageConfig{Model: testMatchModel}}}
+
+	_, _, err := translator.matchPost(t.Context(), "match prompt")
+	require.ErrorIs(t, err, errIncompleteStream)
+	require.EqualValues(t, 1, requests.Load())
 }
 
 func TestMatchPostReportsFinishReasonAfterPartialContent(t *testing.T) {

@@ -11,6 +11,12 @@ import (
 
 var errIncompleteStream = errors.New("schedule poster model stream ended before the model finished")
 
+type streamedResponse struct {
+	response  genai.GenerateContentResponse
+	candidate *genai.Candidate
+	spent     usage
+}
+
 func generateContent(
 	ctx context.Context,
 	models *genai.Models,
@@ -18,51 +24,114 @@ func generateContent(
 	contents []*genai.Content,
 	config *genai.GenerateContentConfig,
 ) (*genai.GenerateContentResponse, usage, error) {
-	merged := &genai.GenerateContentResponse{}
+	config.AutomaticContinuation = new(false)
 
-	var candidate *genai.Candidate
+	streamed := &streamedResponse{spent: usage{model: model}}
+
+	for hop := config; hop != nil; {
+		token, err := streamed.read(ctx, models, model, contents, hop)
+		if err != nil {
+			return nil, streamed.spent, err
+		}
+
+		hop = continuationConfig(config, token)
+	}
+
+	return streamed.finish()
+}
+
+func continuationConfig(config *genai.GenerateContentConfig, token []byte) *genai.GenerateContentConfig {
+	if len(token) == 0 {
+		return nil
+	}
+
+	next := *config
+
+	next.ContinuationToken = token
+
+	return &next
+}
+
+func (s *streamedResponse) read(
+	ctx context.Context,
+	models *genai.Models,
+	model string,
+	contents []*genai.Content,
+	config *genai.GenerateContentConfig,
+) ([]byte, error) {
+	var hopUsage *genai.GenerateContentResponseUsageMetadata
 
 	for chunk, err := range models.GenerateContentStream(ctx, model, contents, config) {
 		if err != nil {
-			return nil, responseUsage(model, merged), err
+			s.spent = s.spent.add(hopUsage)
+
+			return nil, err
 		}
 
-		if chunk == nil {
-			continue
+		if chunk != nil && chunk.UsageMetadata != nil {
+			hopUsage = chunk.UsageMetadata
 		}
 
-		if chunk.UsageMetadata != nil {
-			merged.UsageMetadata = chunk.UsageMetadata
-		}
-
-		if chunk.PromptFeedback != nil {
-			merged.PromptFeedback = chunk.PromptFeedback
-		}
-
-		if chunk.ModelVersion != "" {
-			merged.ModelVersion = chunk.ModelVersion
-		}
-
-		if len(chunk.Candidates) == 0 || chunk.Candidates[0] == nil {
-			continue
-		}
-
-		if candidate == nil {
-			candidate = &genai.Candidate{}
-			merged.Candidates = []*genai.Candidate{candidate}
-		}
-
-		mergeCandidate(candidate, chunk.Candidates[0])
+		s.merge(chunk)
 	}
 
+	s.spent = s.spent.add(hopUsage)
+
+	return s.continuationToken(), nil
+}
+
+func (s *streamedResponse) merge(chunk *genai.GenerateContentResponse) {
+	if chunk == nil {
+		return
+	}
+
+	if chunk.UsageMetadata != nil {
+		s.response.UsageMetadata = chunk.UsageMetadata
+	}
+
+	if chunk.PromptFeedback != nil {
+		s.response.PromptFeedback = chunk.PromptFeedback
+	}
+
+	if chunk.ModelVersion != "" {
+		s.response.ModelVersion = chunk.ModelVersion
+	}
+
+	if len(chunk.Candidates) == 0 || chunk.Candidates[0] == nil {
+		return
+	}
+
+	if s.candidate == nil {
+		s.candidate = &genai.Candidate{}
+		s.response.Candidates = []*genai.Candidate{s.candidate}
+	}
+
+	mergeCandidate(s.candidate, chunk.Candidates[0])
+}
+
+func (s *streamedResponse) continuationToken() []byte {
+	candidate := s.candidate
+	if candidate == nil || s.response.PromptFeedback != nil ||
+		candidate.FinishReason != genai.FinishReasonContinuation || len(candidate.ContinuationToken) == 0 {
+		return nil
+	}
+
+	token := candidate.ContinuationToken
+
+	candidate.FinishReason, candidate.FinishMessage, candidate.ContinuationToken = "", "", nil
+
+	return token
+}
+
+func (s *streamedResponse) finish() (*genai.GenerateContentResponse, usage, error) {
 	switch {
-	case candidate == nil && merged.PromptFeedback == nil, candidate != nil && !terminalFinishReason(candidate.FinishReason):
-		return nil, responseUsage(model, merged), errIncompleteStream
-	case candidate != nil && !completeFinishReason(candidate.FinishReason):
-		candidate.Content = nil
+	case s.candidate == nil && s.response.PromptFeedback == nil, s.candidate != nil && !terminalFinishReason(s.candidate.FinishReason):
+		return nil, s.spent, errIncompleteStream
+	case s.candidate != nil && !completeFinishReason(s.candidate.FinishReason):
+		s.candidate.Content = nil
 	}
 
-	return merged, responseUsage(model, merged), nil
+	return &s.response, s.spent, nil
 }
 
 func mergeCandidate(merged, chunk *genai.Candidate) {
@@ -72,6 +141,10 @@ func mergeCandidate(merged, chunk *genai.Candidate) {
 		}
 
 		merged.Content.Parts = append(merged.Content.Parts, chunk.Content.Parts...)
+	}
+
+	if len(chunk.ContinuationToken) > 0 {
+		merged.ContinuationToken = chunk.ContinuationToken
 	}
 
 	if chunk.FinishReason != "" {
@@ -96,20 +169,17 @@ type usage struct {
 	output        int32
 }
 
-func responseUsage(model string, response *genai.GenerateContentResponse) usage {
-	if response == nil || response.UsageMetadata == nil {
-		return usage{model: model}
+func (u usage) add(metadata *genai.GenerateContentResponseUsageMetadata) usage {
+	if metadata == nil {
+		return u
 	}
 
-	metadata := response.UsageMetadata
+	u.prompt += metadata.PromptTokenCount
+	u.toolUsePrompt += metadata.ToolUsePromptTokenCount
+	u.thoughts += metadata.ThoughtsTokenCount
+	u.output += metadata.CandidatesTokenCount
 
-	return usage{
-		model:         model,
-		prompt:        metadata.PromptTokenCount,
-		toolUsePrompt: metadata.ToolUsePromptTokenCount,
-		thoughts:      metadata.ThoughtsTokenCount,
-		output:        metadata.CandidatesTokenCount,
-	}
+	return u
 }
 
 type vertexTranslator struct {
