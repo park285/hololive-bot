@@ -66,5 +66,5 @@ func TestShadowStateRetirementRequiresConsumedEventGradeObservations(t *testing.
 
 	result, err := Run(t.Context(), pool, migrations.FS, Config{})
 	require.NoError(t, err)
-	require.Equal(t, 3, result.Applied)
+	require.Equal(t, 4, result.Applied)
 }
