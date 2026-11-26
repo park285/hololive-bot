@@ -42,12 +42,6 @@ func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
 	changed = reduceClearable(&head.Country, sample.Country, "country", sample, policy, &apps, &conflicts) || changed
 	changed = reduceJoined(&head.JoinedDate, sample, &apps, &conflicts) || changed
 
-	if len(apps) == 0 {
-		apps = append(apps, Application{
-			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID, Decision: "RAW_RETAINED",
-		})
-	}
-
 	return Decision{
 		Sample:       sample,
 		Head:         head,
@@ -221,10 +215,6 @@ func trackEmpty(current *CanonicalField, name string, sample *Sample, policy Pol
 	}
 
 	if current.EmptyLastAt != nil && current.EmptyLastAt.Equal(sample.ScheduledFor) {
-		*apps = append(*apps, Application{
-			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/" + name, Decision: "REPLAY",
-		})
-
 		return false
 	}
 

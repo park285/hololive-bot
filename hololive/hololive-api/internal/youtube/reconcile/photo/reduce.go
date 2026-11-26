@@ -46,12 +46,6 @@ func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
 		return Decision{}, fmt.Errorf("reduce photo kinds: %w", err)
 	}
 
-	if len(apps) == 0 {
-		apps = append(apps, Application{
-			EntityKind: entityKindChannelPhoto, EntityKey: sample.ChannelID, Decision: "RAW_RETAINED",
-		})
-	}
-
 	return Decision{
 		Sample:       sample,
 		Head:         head,
@@ -116,7 +110,7 @@ func reduceKind(current *Canonical, kind string, variants []Variant, sample *Sam
 	identified := identifiedVariants(variants)
 
 	if len(identified) == 0 {
-		return *current, false, []Application{{EntityKind: entityKindChannelPhoto, EntityKey: key, Decision: "RAW_RETAINED"}}, nil, nil
+		return *current, false, nil, nil, nil
 	}
 
 	chosen, ok, conflict := chooseIdentity(identified)
@@ -194,7 +188,7 @@ func applyPhotoChange(current *Canonical, key string, chosen *Variant, sample *S
 	}
 
 	if replayedPhotoChange(current, identity, sample) {
-		return *current, false, []Application{{EntityKind: entityKindChannelPhoto, EntityKey: key, Decision: "REPLAY"}}, nil
+		return *current, false, nil, nil
 	}
 
 	if err := trackPhotoCandidate(current, chosen, identity, sample); err != nil {

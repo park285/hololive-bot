@@ -1400,7 +1400,7 @@ transaction 순서는 다음과 같다.
 5. canonical/provenance row를 필요한 최소 범위로 lock한다.
 6. reducer를 실행한다.
 7. canonical state와 notification intent를 멱등 key로 write한다.
-8. `source_observation_applications`를 insert한다.
+8. 정본 상태를 바꾼 결정만 `source_observation_applications`에 insert한다. 값이 같은 더 새 영상 관측, 바뀐 것이 없는 `REPLAY`, 채널 프로필·사진의 `RAW_RETAINED`는 남기지 않는다. `youtube_live_session` 결정은 보존 보호의 최신 근거이므로 모두 남긴다. 어떤 결정도 남지 않은 관측도 `PROCESSED`가 된다.
 9. queue를 `PROCESSED`로 전환한다.
 10. consumer offset을 upsert한다.
 11. commit한다.

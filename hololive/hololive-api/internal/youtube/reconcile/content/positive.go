@@ -82,17 +82,21 @@ func applyEqualTimePositive(session *reduceSession, existing *EntityState, entit
 		return
 	}
 
-	clearMissingIfDue(existing, session.evidence.EffectiveAt)
+	cleared := clearMissingIfDue(existing, session.evidence.EffectiveAt)
 	commitPositive(session, existing)
 
-	session.applications = append(session.applications, Application{
-		EntityKind: entityKindVideo, EntityKey: entity.VideoID, Decision: "REPLAY",
-	})
+	if cleared {
+		session.applications = append(session.applications, Application{
+			EntityKind: entityKindVideo, EntityKey: entity.VideoID, Decision: "REPLAY",
+		})
+	}
 }
 
 func applyNewerPositive(session *reduceSession, existing *EntityState, entity *Entity) {
 	digest := valueDigest(entity)
-	if digest != existing.LastPositiveValueSHA256 {
+
+	changed := digest != existing.LastPositiveValueSHA256
+	if changed {
 		session.fieldUpdates = append(session.fieldUpdates, *entity)
 	}
 
@@ -102,12 +106,15 @@ func applyNewerPositive(session *reduceSession, existing *EntityState, entity *E
 	existing.LastPositiveCoverage = session.evidence.Coverage
 	existing.Clock.LastPositiveEffectiveAt = session.evidence.EffectiveAt
 	existing.Clock.LastPositiveReceivedAt = session.evidence.ReceivedAt
-	clearMissingIfDue(existing, session.evidence.EffectiveAt)
+
+	cleared := clearMissingIfDue(existing, session.evidence.EffectiveAt)
 	commitPositive(session, existing)
 
-	session.applications = append(session.applications, Application{
-		EntityKind: entityKindVideo, EntityKey: entity.VideoID, Decision: "APPLIED",
-	})
+	if changed || cleared {
+		session.applications = append(session.applications, Application{
+			EntityKind: entityKindVideo, EntityKey: entity.VideoID, Decision: "APPLIED",
+		})
+	}
 }
 
 func commitPositive(session *reduceSession, entity *EntityState) {
@@ -115,10 +122,14 @@ func commitPositive(session *reduceSession, entity *EntityState) {
 	applyStoredNegatives(session, entity.VideoID)
 }
 
-func clearMissingIfDue(entity *EntityState, positiveAt time.Time) {
-	if shouldClearMissing(entity, positiveAt) {
-		clearMissing(entity)
+func clearMissingIfDue(entity *EntityState, positiveAt time.Time) bool {
+	if !shouldClearMissing(entity, positiveAt) {
+		return false
 	}
+
+	clearMissing(entity)
+
+	return true
 }
 
 func shouldClearMissing(entity *EntityState, positiveAt time.Time) bool {
