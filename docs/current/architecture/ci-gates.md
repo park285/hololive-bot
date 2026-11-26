@@ -13,25 +13,29 @@ stack AGENTS.md의 기준에 따라 checker 자체 테스트, 문서 동기화�
 `scripts/architecture/ci-boundary-gate.sh`는 비밀·로컬 산출물 추적,
 SQL 안전 정책과 topology 설정 일치를 검사합니다.
 배포·로그·빌드 스크립트의 동작 시험은 Go 모듈 `scripts/scripttest`가 소유합니다. 각 패키지는 대상 스크립트를 임시 fixture에서 bash로 실행하고 결과와 부작용만 단언합니다.
-`local-ci-packages.sh`의 `scripttest_packages_for`가 바뀐 경로에 맞는 패키지만 고르며, 전체 범위에서는 모듈 전체를 실행합니다. `pre-push-gate.sh`의 `run_if_changed`에는 Python 스크립트 시험, 정기 보안 검사 계약 검사와 release version 검사만 남습니다.
+`local-ci-packages.sh`의 `scripttest_packages_for`가 바뀐 경로에 맞는 패키지만 고르며, 전체 범위에서는 모듈 전체를 실행합니다. 선택한 패키지는 `run-script-tests.sh`가 `GOWORK=off go test -p 1 -parallel 4 -count=1`로 실행합니다. 한 번에 패키지 하나와 병렬 시험 최대 네 개를 실행하며, Go가 추적하지 못하는 외부 Bash 파일 변경도 다시 검증하도록 시험 결과 캐시는 사용하지 않습니다.
+이 모듈은 배포되는 Go 제품이 아니므로 제품의 golangci-lint·NilAway·race·govulncheck 대상과 분리합니다. 기본 `go test`의 vet와 컴파일은 유지하며, 원격 `fast-gate`도 하네스 전체를 컴파일합니다. 이미지·소유권 fixture를 포함한 전체 동작 시험은 로컬 rootless Podman 환경에서 실행합니다.
+같은 시험이 시작한 Bash 세션은 시험 정리 시 `/proc`를 한 번 읽어 함께 종료합니다. Bash job control이 별도 process group을 만드는 경우도 세션 ID로 찾아 정리합니다.
+`pre-push-gate.sh`의 `run_if_changed`에는 Python 스크립트 시험, 운영 이미지 목록 검사와 release version 검사만 남습니다.
 native 실행 권한 제한은 golangci-lint `depguard`가 맡습니다.
 
 Go 파일·함수 크기는 golangci-lint의 `revive` `file-length-limit`(비테스트 파일 800줄)과
 `funlen`(함수 120줄)이 검사합니다. 복잡도는 설정된 린터가 맡으며 별도 구조 예산 검사는 없습니다.
 staticcheck도 golangci-lint에 포함된 판본으로 한 번만 실행하며 별도 staticcheck 실행은 두지 않습니다.
 
-로컬 Go 검증과 PR matrix는 race 시험을 실행합니다. `go-test-nonrace.sh`는 일반 빌드에만 포함된 시험 파일이 있는 패키지에서 Go에 등록된 Test·Example·Fuzz를 비교합니다. 양쪽에 서로 다른 전용 파일이 있으면 같은 이름도 의미가 다를 수 있으므로 해당 패키지는 일반 모드로 전부 실행합니다.
-collector CGO 비활성 시험·성능 측정·Go 시험과 명시적으로 선택한 통합 시험은 일회용 PostgreSQL 서버를 공유합니다. dbtest는 시험별 DB를 복제하며 자동 생성한 서버만으로 통합 시험을 활성화하지 않습니다.
+로컬 제품 Go 검증과 PR matrix는 race 시험을 실행합니다. 로컬 golangci-lint에 govet가 포함되므로 별도 모듈별 `go vet`는 반복하지 않습니다. 독립 모듈의 정합성은 `go mod tidy -diff`와 PR matrix의 `GOWORK=off` vet·race가 검사합니다.
+로컬 collector `race-json` 단계는 race 시험의 JSON 결과에서 실패·panic·예상 밖 skip을 한 번 판정합니다. `go-test-nonrace.sh`는 race와 일반 빌드의 소스·시험 파일을 비교하고, 일반 빌드에만 추가된 Test·Example·Fuzz 또는 구현이 다른 패키지만 추가로 실행합니다. collector의 일반 빌드는 `CGO_ENABLED=0`으로 비교하며 추가 시험의 JSON에도 같은 판정을 적용합니다. CGO 비활성 운영 바이너리 빌드는 유지합니다.
+외부 PostgreSQL 상태를 사용하는 제품 race 시험은 `-count=1`을 유지합니다. Go 시험과 명시적으로 선택한 통합 시험은 일회용 PostgreSQL 서버를 공유합니다. dbtest는 시험별 DB를 복제하며 자동 생성한 서버만으로 통합 시험을 활성화하지 않습니다.
 NilAway는 고정 바이너리의 `go vet -vettool` unitchecker로 의존성 분석을 재사용하며,
 로컬 기본값과 security workflow는 `-p 1`로 분석 메모리 사용을 제한합니다.
 
 `run-npm-audit.sh`는 추적된 모든 `package-lock.json`을 직접 감사합니다. 별도 등록 목록은 없지만 `packageManager`로 npm을 선언한 프로젝트에서 lockfile만 추적 해제하면 실패합니다. 한 프로젝트의 실패로 나머지 감사를 생략하지 않습니다.
-이미지는 중앙 Quadlet의 운영 이미지와 arm64 스캔 목록을 대조합니다. Trivy 억제 금지 설정과 실제 취약점 판정은 별도 검사입니다. 태그의 플랫폼과 불변 ID를 한 번에 읽고, Go finding은 같은 ELF에서 추출·검증한 심볼로 VEX를 판정합니다. 다른 이미지나 lockfile의 검사가 성공해도 앞선 실패를 덮지 않습니다.
+이미지는 중앙 Quadlet의 운영 이미지와 arm64 스캔 목록을 대조합니다. Trivy는 `final-image-scan-policy.sh`의 억제 없는 인자를 실제 스캔에 적용하며, 같은 인자 배열을 다시 검사하는 가드는 두지 않습니다. 태그의 플랫폼과 불변 ID를 한 번에 읽고, Go finding은 같은 ELF에서 추출·검증한 심볼로 VEX를 판정합니다. 다른 이미지나 lockfile의 검사가 성공해도 앞선 실패를 덮지 않습니다.
 
 `security.yml`의 SDK·shared-go 체크아웃은 스택에서 검증·게시한 commit SHA로 고정합니다.
 과거 release tag를 그대로 쓰면 sibling을 단독으로 검사할 때 보안 패치 전 의존성이 선택될 수 있습니다.
 Go 판본은 `go.work`가, 외부 소스는 workflow의 checkout SHA가 정합니다.
-`govulncheck`는 기존대로 `go.work`의 모든 모듈을 검사하고, 도달 가능한 취약점이 있으면 실패합니다.
+`govulncheck`는 로컬에서는 소유 제품 모듈을, 정기 보안 workflow에서는 외부 SDK·shared-go를 포함한 workspace 제품 모듈을 검사합니다. 표준 라이브러리만 사용하는 `scripts/scripttest`는 배포 의존성 감사에서 제외하며, 제품의 도달 가능한 취약점은 계속 실패합니다.
 
 ## 보존하는 제품 검사
 
@@ -41,7 +45,7 @@ Go 판본은 `go.work`가, 외부 소스는 workflow의 checkout SHA가 정합�
 | SQL 안전 정책 | `check-sql-ownership.sh`·`.py` | 런타임 DDL, wildcard projection, 불완전 쿼리, lease·조회 시계 위반 또는 재관측 INSERT의 기존 발송 상태 덮어쓰기 |
 | 네트워크 경계 | `check-topology-parity.sh` | 호스트 주소와 방화벽·DB·ingress·중앙 Quadlet·collector Podman unit 설정 불일치 |
 | 비밀 유출 | `check-tracked-local-artifacts.sh`·`scripts/refactor/grep-sensitive-logs.sh` | 비밀·운영 산출물 추적 또는 인증 값·응답 원문 로깅 |
-| 의존성 정책 | `scripts/ci/check-production-go-workspace.sh`·`check-recurring-security-scan-contract.sh`·`check-go-image-vex.jq` | 비고정 의존성, 취약점 검사 누락·억제 또는 부정확한 VEX 면제 |
+| 의존성 정책 | `scripts/ci/check-production-go-workspace.sh`·`check-recurring-security-scan-contract.sh`·`check-go-image-vex.jq` | 비고정 외부 모듈, 운영 이미지 스캔 목록 누락 또는 부정확한 VEX 면제 |
 | DB 용량 | `scripts/ci/check-postgres-capacity.sh`(예산 산식은 배포 preflight와 같은 `scripts/deploy/lib/postgres-capacity.sh`) | pool·예약 connection과 PostgreSQL 용량 불일치 |
 | 빌드·시험 | `scripts/ci/check-gofmt.sh`·`check-go-test-json.py` | 포맷 위반 또는 실패·panic·예상 밖 skip |
 

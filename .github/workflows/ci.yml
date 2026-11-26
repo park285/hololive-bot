@@ -119,6 +119,12 @@ jobs:
       - name: gofmt
         run: bash scripts/ci/check-gofmt.sh
 
+      - name: Compile script tests
+        working-directory: scripts/scripttest
+        env:
+          GOWORK: "off"
+        run: go test -mod=readonly -p 1 -parallel 4 -run '^$' ./...
+
       - name: Require canonical verification
         if: always()
         env:

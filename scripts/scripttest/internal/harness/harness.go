@@ -31,6 +31,13 @@ type Result struct {
 	ExitCode int
 }
 
+type sessionSet struct {
+	sync.Mutex
+	ids map[int]struct{}
+}
+
+var testSessions sync.Map
+
 func (r Result) String() string {
 	return fmt.Sprintf("exit %d\nstdout:\n%s\nstderr:\n%s", r.ExitCode, r.Stdout, r.Stderr)
 }
@@ -120,7 +127,7 @@ func run(ctx context.Context, tb testing.TB, c Cmd) Result {
 
 	sid := cmd.Process.Pid
 
-	tb.Cleanup(func() { KillSession(tb, sid) })
+	TrackSession(tb, sid)
 
 	if err := cmd.Wait(); err != nil {
 		exitErr, ok := errors.AsType[*exec.ExitError](err)
@@ -137,7 +144,26 @@ func run(ctx context.Context, tb testing.TB, c Cmd) Result {
 	return result
 }
 
-func KillSession(tb testing.TB, sid int) {
+func TrackSession(tb testing.TB, sid int) {
+	tb.Helper()
+
+	value, loaded := testSessions.LoadOrStore(tb, &sessionSet{ids: make(map[int]struct{})})
+	sessions := value.(*sessionSet)
+	sessions.Lock()
+	sessions.ids[sid] = struct{}{}
+	sessions.Unlock()
+
+	if !loaded {
+		tb.Cleanup(func() {
+			testSessions.Delete(tb)
+			sessions.Lock()
+			defer sessions.Unlock()
+			killSessions(tb, sessions.ids)
+		})
+	}
+}
+
+func killSessions(tb testing.TB, sessions map[int]struct{}) {
 	tb.Helper()
 
 	entries, err := os.ReadDir("/proc")
@@ -165,7 +191,16 @@ func KillSession(tb testing.TB, sid int) {
 		}
 
 		fields := strings.Fields(string(stat[bytes.LastIndexByte(stat, ')')+1:]))
-		if len(fields) < 4 || fields[3] != strconv.Itoa(sid) {
+		if len(fields) < 4 {
+			continue
+		}
+
+		sid, err := strconv.Atoi(fields[3])
+		if err != nil {
+			continue
+		}
+
+		if _, tracked := sessions[sid]; !tracked {
 			continue
 		}
 
