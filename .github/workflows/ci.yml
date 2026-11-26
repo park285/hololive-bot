@@ -124,7 +124,7 @@ jobs:
           bash scripts/ci/python-runner.sh --print-interpreter
           test -x /usr/libexec/podman/quadlet
           test "$(podman info --format '{{.Host.Security.Rootless}}')" = true
-          unshare --user --map-root-user --mount true
+          podman unshare unshare --mount true
           command -v rsync
 
       - name: Shell syntax

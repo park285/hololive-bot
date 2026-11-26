@@ -135,8 +135,8 @@ func newSyncEnv(t *testing.T) syncEnv {
 		t.Fatalf("quadlet generator missing: %s", quadletGenerator)
 	}
 
-	if err := exec.CommandContext(t.Context(), "unshare", "--user", "--map-root-user", "--mount", "true").Run(); err != nil {
-		t.Fatalf("unprivileged user+mount namespace unavailable: %v", err)
+	if err := exec.CommandContext(t.Context(), "podman", "unshare", "unshare", "--mount", "true").Run(); err != nil {
+		t.Fatalf("rootless Podman user+mount namespace unavailable: %v", err)
 	}
 
 	e := syncEnv{tmp: t.TempDir()}
@@ -408,7 +408,7 @@ func (e syncEnv) syncOpt(t *testing.T, h syncHost, repo, optRoot string, args ..
 
 	return harness.Bash(t, harness.Cmd{
 		Script: `: >"$1/events"
-unshare --user --map-root-user --mount bash -c "$SYNC_DRIVER" _ "$@"`,
+podman unshare unshare --mount bash -c "$SYNC_DRIVER" _ "$@"`,
 		Args: driverArgs,
 		Env:  []string{"SYNC_DRIVER=" + syncDriver},
 	})

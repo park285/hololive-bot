@@ -245,7 +245,7 @@ func TestSyncOptAndCollectorCRejectAHeldCentralWriterLock(t *testing.T) {
 	e.rejects(t, h, repo, "card writer lock", "another central Quadlet writer is running", "--application-only")
 
 	r := harness.Bash(t, harness.Cmd{
-		Script: `unshare --user --map-root-user --mount bash -c "$COLLECTOR_DEPLOY" _ "$1" "$SCRIPTTEST_ROOT"`,
+		Script: `podman unshare unshare --mount bash -c "$COLLECTOR_DEPLOY" _ "$1" "$SCRIPTTEST_ROOT"`,
 		Args:   []string{string(h)},
 		Env:    []string{"COLLECTOR_DEPLOY=" + collectorDeploy},
 	})
