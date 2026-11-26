@@ -125,6 +125,9 @@ jobs:
           GOWORK: "off"
         run: go test -mod=readonly -p 1 -parallel 4 -run '^$' ./...
 
+      - name: Log and runtime script tests
+        run: bash scripts/ci/run-script-tests.sh ./logscripts/... ./runtimescripts/...
+
       - name: Require canonical verification
         if: always()
         env:

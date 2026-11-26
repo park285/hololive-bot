@@ -147,20 +147,23 @@ func run(ctx context.Context, tb testing.TB, c Cmd) Result {
 func TrackSession(tb testing.TB, sid int) {
 	tb.Helper()
 
-	value, loaded := testSessions.LoadOrStore(tb, &sessionSet{ids: make(map[int]struct{})})
+	value, _ := testSessions.LoadOrStore(tb, &sessionSet{ids: make(map[int]struct{})})
 	sessions := value.(*sessionSet)
 	sessions.Lock()
 	sessions.ids[sid] = struct{}{}
 	sessions.Unlock()
 
-	if !loaded {
-		tb.Cleanup(func() {
-			testSessions.Delete(tb)
-			sessions.Lock()
-			defer sessions.Unlock()
-			killSessions(tb, sessions.ids)
-		})
-	}
+	tb.Cleanup(func() {
+		value, loaded := testSessions.LoadAndDelete(tb)
+		if !loaded {
+			return
+		}
+
+		sessions := value.(*sessionSet)
+		sessions.Lock()
+		defer sessions.Unlock()
+		killSessions(tb, sessions.ids)
+	})
 }
 
 func killSessions(tb testing.TB, sessions map[int]struct{}) {
