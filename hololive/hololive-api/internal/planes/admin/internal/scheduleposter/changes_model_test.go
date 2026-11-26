@@ -1,15 +1,17 @@
 package scheduleposter
 
 import (
+	"context"
 	jsonv2 "encoding/json/v2"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
@@ -76,23 +78,25 @@ func matchServer(t *testing.T, status int, response string) (*vertexTranslator, 
 		exchanges = append(exchanges, matchExchange{path: r.URL.Path, timeout: r.Header.Get("x-server-timeout"), body: body})
 		mu.Unlock()
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
+		if status != http.StatusOK {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
 
-		if _, err := io.WriteString(w, response); err != nil {
-			t.Error(err)
+			if _, err := io.WriteString(w, response); err != nil {
+				t.Error(err)
+			}
+
+			return
 		}
+
+		writeStreamChunks(t, w, response)
 	}))
 	t.Cleanup(server.Close)
 
-	client, err := genai.NewClient(t.Context(), &genai.ClientConfig{
-		Backend: genai.BackendGeminiAPI, APIKey: "test",
-		HTTPOptions: genai.HTTPOptions{BaseURL: server.URL, APIVersion: "v1", RetryOptions: &genai.HTTPRetryOptions{Attempts: new(int32(1))}},
-	})
-	require.NoError(t, err)
+	client := newTestGenAIClient(t, server.URL)
 
 	translator := &vertexTranslator{client: client, rows: RowsConfig{
-		Match: RowStageConfig{Model: "match-model", ThinkingLevel: genai.ThinkingLevelMedium, Temperature: new(float32(0.3)), TimeoutSeconds: 240},
+		Match: RowStageConfig{Model: testMatchModel, ThinkingLevel: genai.ThinkingLevelMedium, Temperature: new(float32(0.3)), TimeoutSeconds: 240},
 	}}
 
 	return translator, func() []matchExchange {
@@ -103,14 +107,166 @@ func matchServer(t *testing.T, status int, response string) (*vertexTranslator, 
 	}
 }
 
+const testMatchModel = "match-model"
+
+func newTestGenAIClient(t *testing.T, baseURL string) *genai.Client {
+	t.Helper()
+
+	client, err := genai.NewClient(t.Context(), &genai.ClientConfig{
+		Backend: genai.BackendGeminiAPI, APIKey: "test",
+		HTTPOptions: genai.HTTPOptions{BaseURL: baseURL, APIVersion: "v1", RetryOptions: &genai.HTTPRetryOptions{Attempts: new(int32(1))}},
+	})
+	require.NoError(t, err)
+
+	return client
+}
+
 func candidateResponse(text string) string {
 	encoded, err := jsonv2.Marshal(text)
 	if err != nil {
 		panic(err)
 	}
 
-	return `{"candidates":[{"content":{"role":"model","parts":[{"text":` + string(encoded) + `}]}}],` +
+	return `{"candidates":[{"content":{"role":"model","parts":[{"text":` + string(encoded) + `}]},"finishReason":"STOP"}],` +
 		`"usageMetadata":{"promptTokenCount":900,"candidatesTokenCount":40}}`
+}
+
+func writeStreamChunks(t *testing.T, w http.ResponseWriter, chunks ...string) {
+	t.Helper()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+
+	for _, chunk := range chunks {
+		if _, err := io.WriteString(w, "data: "+chunk+"\r\n\r\n"); err != nil {
+			t.Error(err)
+		}
+	}
+}
+
+func streamServer(t *testing.T, chunks ...string) *vertexTranslator {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeStreamChunks(t, w, chunks...)
+	}))
+	t.Cleanup(server.Close)
+
+	client := newTestGenAIClient(t, server.URL)
+
+	return &vertexTranslator{client: client, rows: RowsConfig{Match: RowStageConfig{Model: testMatchModel}}}
+}
+
+func TestMatchPostJoinsStreamedChunks(t *testing.T) {
+	t.Parallel()
+
+	translator := streamServer(t,
+		`{"candidates":[{"content":{"role":"model","parts":[{"text":"thinking","thought":true},{"text":"{\"items\":["}]}}]}`,
+		`{"candidates":[{"content":{"role":"model","parts":[{"text":"]}"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":900,"candidatesTokenCount":40,"thoughtsTokenCount":7}}`,
+	)
+
+	items, spent, err := translator.matchPost(t.Context(), "match prompt")
+	require.NoError(t, err)
+	require.Empty(t, items)
+	require.Equal(t, usage{model: testMatchModel, prompt: 900, thoughts: 7, output: 40}, spent)
+}
+
+func TestMatchPostRejectsStreamWithoutFinishReason(t *testing.T) {
+	t.Parallel()
+
+	translator := streamServer(t,
+		`{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"items\":[]}"}]}}],"usageMetadata":{"promptTokenCount":900,"candidatesTokenCount":12}}`)
+
+	_, spent, err := translator.matchPost(t.Context(), "match prompt")
+	require.ErrorIs(t, err, errIncompleteStream)
+	require.NotErrorIs(t, err, errBadAnswer)
+	require.Equal(t, usage{model: testMatchModel, prompt: 900, output: 12}, spent)
+
+	translator = streamServer(t)
+
+	_, _, err = translator.matchPost(t.Context(), "match prompt")
+	require.ErrorIs(t, err, errIncompleteStream)
+}
+
+func TestMatchPostFollowsContinuationToken(t *testing.T) {
+	t.Parallel()
+
+	var (
+		mu     sync.Mutex
+		bodies []string
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+
+		mu.Lock()
+
+		bodies = append(bodies, string(body))
+
+		hop := len(bodies)
+
+		mu.Unlock()
+
+		if hop == 1 {
+			writeStreamChunks(t, w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"items\":"}]},`+
+				`"finishReason":"CONTINUATION","continuationToken":"aG9wLTE="}],"usageMetadata":{"promptTokenCount":900,"candidatesTokenCount":5}}`)
+
+			return
+		}
+
+		writeStreamChunks(t, w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"[]}"}]},"finishReason":"STOP"}],`+
+			`"usageMetadata":{"promptTokenCount":905,"candidatesTokenCount":3}}`)
+	}))
+	t.Cleanup(server.Close)
+
+	translator := &vertexTranslator{client: newTestGenAIClient(t, server.URL), rows: RowsConfig{Match: RowStageConfig{Model: testMatchModel}}}
+
+	items, spent, err := translator.matchPost(t.Context(), "match prompt")
+	require.NoError(t, err)
+	require.Empty(t, items)
+	require.Equal(t, usage{model: testMatchModel, prompt: 1805, output: 8}, spent)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	require.Len(t, bodies, 2)
+	require.NotContains(t, bodies[0], "aG9wLTE=")
+	require.Contains(t, bodies[1], "aG9wLTE=")
+}
+
+func TestMatchPostDoesNotResumeCutStreamFromCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		writeStreamChunks(t, w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"items\":"}]},"continuationToken":"Y2twdC0x"}]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	translator := &vertexTranslator{client: newTestGenAIClient(t, server.URL), rows: RowsConfig{Match: RowStageConfig{Model: testMatchModel}}}
+
+	_, _, err := translator.matchPost(t.Context(), "match prompt")
+	require.ErrorIs(t, err, errIncompleteStream)
+	require.EqualValues(t, 1, requests.Load())
+}
+
+func TestMatchPostReportsFinishReasonAfterPartialContent(t *testing.T) {
+	t.Parallel()
+
+	translator := streamServer(t,
+		`{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"items\":["}]}}]}`,
+		`{"candidates":[{"finishReason":"SAFETY"}],"usageMetadata":{"promptTokenCount":900,"candidatesTokenCount":4}}`,
+	)
+
+	_, spent, err := translator.matchPost(t.Context(), "match prompt")
+	require.Error(t, err)
+	require.NotErrorIs(t, err, errBadAnswer)
+	require.ErrorContains(t, err, "finish reason SAFETY")
+	require.Equal(t, usage{model: testMatchModel, prompt: 900, output: 4}, spent)
 }
 
 func TestMatchPostCarriesTheStageSettings(t *testing.T) {
@@ -126,11 +282,11 @@ func TestMatchPostCarriesTheStageSettings(t *testing.T) {
 	require.Equal(t, []matchItem{{
 		Row: new(2), Date: songDate, Start: new("20:00"), Status: posterstore.RowPlanned, Evidence: "20時から",
 	}}, items)
-	require.Equal(t, usage{model: "match-model", prompt: 900, output: 40}, spent)
+	require.Equal(t, usage{model: testMatchModel, prompt: 900, output: 40}, spent)
 
 	sent := exchanges()
 	require.Len(t, sent, 1)
-	require.Equal(t, "/v1/models/match-model:generateContent", sent[0].path)
+	require.Equal(t, "/v1/models/match-model:streamGenerateContent", sent[0].path)
 	require.Equal(t, "240", sent[0].timeout)
 
 	var request struct {
@@ -202,11 +358,7 @@ func TestMatchPostKeepsTheVertexStatusForClassification(t *testing.T) {
 	refused := httptest.NewServer(http.NotFoundHandler())
 	refused.Close()
 
-	client, err := genai.NewClient(t.Context(), &genai.ClientConfig{
-		Backend: genai.BackendGeminiAPI, APIKey: "test",
-		HTTPOptions: genai.HTTPOptions{BaseURL: refused.URL, APIVersion: "v1", RetryOptions: &genai.HTTPRetryOptions{Attempts: new(int32(1))}},
-	})
-	require.NoError(t, err)
+	client := newTestGenAIClient(t, refused.URL)
 
 	_, _, err = (&vertexTranslator{client: client, rows: RowsConfig{Match: RowStageConfig{Model: "m"}}}).matchPost(t.Context(), "match prompt")
 	require.True(t, vertexUnreachable(err), "연결 거부는 Vertex에 닿지 못한 실패다: %v", err)
@@ -247,6 +399,31 @@ func TestMatchPostRejectsMalformedAnswers(t *testing.T) {
 	translator, _ = matchServer(t, http.StatusOK, `{"candidates":[],"usageMetadata":{"promptTokenCount":900}}`)
 
 	_, _, err = translator.matchPost(t.Context(), "match prompt")
-	require.Error(t, err)
-	require.False(t, errors.Is(err, errBadAnswer) || errors.Is(err, errMatchBlocked), "차단 사유 없는 빈 응답은 재시도할 실패다: %v", err)
+	require.ErrorIs(t, err, errIncompleteStream)
+	require.True(t, retryableTranslationError(err))
+}
+
+func TestMatchPostStageTimeoutCancelsStalledStream(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeStreamChunks(t, w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"items\":["}]}}]}`)
+
+		if err := http.NewResponseController(w).Flush(); err != nil {
+			t.Error(err)
+		}
+
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	client := newTestGenAIClient(t, server.URL)
+
+	translator := &vertexTranslator{client: client, rows: RowsConfig{Match: RowStageConfig{Model: testMatchModel, TimeoutSeconds: 1}}}
+
+	started := time.Now()
+
+	_, _, err := translator.matchPost(t.Context(), "match prompt")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(started), 10*time.Second)
 }

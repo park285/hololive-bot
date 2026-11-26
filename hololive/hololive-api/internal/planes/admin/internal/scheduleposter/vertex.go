@@ -2,11 +2,165 @@ package scheduleposter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"google.golang.org/genai"
 )
+
+var errIncompleteStream = errors.New("schedule poster model stream ended before the model finished")
+
+type streamedResponse struct {
+	model     string
+	response  genai.GenerateContentResponse
+	candidate *genai.Candidate
+	spent     usage
+}
+
+func generateContent(
+	ctx context.Context,
+	models *genai.Models,
+	model string,
+	contents []*genai.Content,
+	config *genai.GenerateContentConfig,
+) (*genai.GenerateContentResponse, usage, error) {
+	config.AutomaticContinuation = new(false)
+
+	streamed := &streamedResponse{model: model}
+
+	for hop := config; hop != nil; {
+		token, err := streamed.read(ctx, models, model, contents, hop)
+		if err != nil {
+			return nil, streamed.spent, err
+		}
+
+		hop = continuationConfig(config, token)
+	}
+
+	return streamed.finish()
+}
+
+func continuationConfig(config *genai.GenerateContentConfig, token []byte) *genai.GenerateContentConfig {
+	if len(token) == 0 {
+		return nil
+	}
+
+	next := *config
+
+	next.ContinuationToken = token
+
+	return &next
+}
+
+func (s *streamedResponse) read(
+	ctx context.Context,
+	models *genai.Models,
+	model string,
+	contents []*genai.Content,
+	config *genai.GenerateContentConfig,
+) ([]byte, error) {
+	var hopUsage *genai.GenerateContentResponseUsageMetadata
+
+	for chunk, err := range models.GenerateContentStream(ctx, model, contents, config) {
+		if err != nil {
+			s.spent = s.spent.add(s.model, hopUsage)
+
+			return nil, err
+		}
+
+		if chunk != nil && chunk.UsageMetadata != nil {
+			hopUsage = chunk.UsageMetadata
+		}
+
+		s.merge(chunk)
+	}
+
+	s.spent = s.spent.add(s.model, hopUsage)
+
+	return s.continuationToken(), nil
+}
+
+func (s *streamedResponse) merge(chunk *genai.GenerateContentResponse) {
+	if chunk == nil {
+		return
+	}
+
+	if chunk.UsageMetadata != nil {
+		s.response.UsageMetadata = chunk.UsageMetadata
+	}
+
+	if chunk.PromptFeedback != nil {
+		s.response.PromptFeedback = chunk.PromptFeedback
+	}
+
+	if chunk.ModelVersion != "" {
+		s.response.ModelVersion = chunk.ModelVersion
+	}
+
+	if len(chunk.Candidates) == 0 || chunk.Candidates[0] == nil {
+		return
+	}
+
+	if s.candidate == nil {
+		s.candidate = &genai.Candidate{}
+		s.response.Candidates = []*genai.Candidate{s.candidate}
+	}
+
+	mergeCandidate(s.candidate, chunk.Candidates[0])
+}
+
+func (s *streamedResponse) continuationToken() []byte {
+	candidate := s.candidate
+	if candidate == nil || s.response.PromptFeedback != nil ||
+		candidate.FinishReason != genai.FinishReasonContinuation || len(candidate.ContinuationToken) == 0 {
+		return nil
+	}
+
+	token := candidate.ContinuationToken
+
+	candidate.FinishReason, candidate.FinishMessage, candidate.ContinuationToken = "", "", nil
+
+	return token
+}
+
+func (s *streamedResponse) finish() (*genai.GenerateContentResponse, usage, error) {
+	switch {
+	case s.candidate == nil && s.response.PromptFeedback == nil, s.candidate != nil && !terminalFinishReason(s.candidate.FinishReason):
+		return nil, s.spent, errIncompleteStream
+	case s.candidate != nil && !completeFinishReason(s.candidate.FinishReason):
+		s.candidate.Content = nil
+	}
+
+	return &s.response, s.spent, nil
+}
+
+func mergeCandidate(merged, chunk *genai.Candidate) {
+	if chunk.Content != nil {
+		if merged.Content == nil {
+			merged.Content = &genai.Content{Role: chunk.Content.Role}
+		}
+
+		merged.Content.Parts = append(merged.Content.Parts, chunk.Content.Parts...)
+	}
+
+	if len(chunk.ContinuationToken) > 0 {
+		merged.ContinuationToken = chunk.ContinuationToken
+	}
+
+	if chunk.FinishReason != "" {
+		merged.FinishReason = chunk.FinishReason
+		merged.FinishMessage = chunk.FinishMessage
+	}
+}
+
+func completeFinishReason(reason genai.FinishReason) bool {
+	return reason == genai.FinishReasonStop || reason == genai.FinishReasonMaxTokens
+}
+
+func terminalFinishReason(reason genai.FinishReason) bool {
+	return reason != "" && reason != genai.FinishReasonUnspecified && reason != genai.FinishReasonContinuation
+}
 
 type usage struct {
 	model         string
@@ -16,20 +170,19 @@ type usage struct {
 	output        int32
 }
 
-func responseUsage(model string, response *genai.GenerateContentResponse) usage {
-	if response == nil || response.UsageMetadata == nil {
-		return usage{model: model}
+func (u usage) add(model string, metadata *genai.GenerateContentResponseUsageMetadata) usage {
+	if metadata == nil {
+		return u
 	}
 
-	metadata := response.UsageMetadata
+	u.model = model
 
-	return usage{
-		model:         model,
-		prompt:        metadata.PromptTokenCount,
-		toolUsePrompt: metadata.ToolUsePromptTokenCount,
-		thoughts:      metadata.ThoughtsTokenCount,
-		output:        metadata.CandidatesTokenCount,
-	}
+	u.prompt += metadata.PromptTokenCount
+	u.toolUsePrompt += metadata.ToolUsePromptTokenCount
+	u.thoughts += metadata.ThoughtsTokenCount
+	u.output += metadata.CandidatesTokenCount
+
+	return u
 }
 
 type vertexTranslator struct {

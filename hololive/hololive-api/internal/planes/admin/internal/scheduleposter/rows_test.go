@@ -1016,25 +1016,18 @@ func TestRowRequestsCarryTheStageSettings(t *testing.T) {
 
 		requests = append(requests, capturedRequest{path: r.URL.Path, timeout: r.Header.Get("x-server-timeout"), body: body})
 
-		w.Header().Set("Content-Type", "application/json")
-
-		if _, err := io.WriteString(w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"rows\":[]}"}]}}]}`); err != nil {
-			t.Error(err)
-		}
+		writeStreamChunks(t, w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"rows\":[]}"}]},"finishReason":"STOP"}]}`)
 	}))
 	t.Cleanup(server.Close)
 
-	client, err := genai.NewClient(t.Context(), &genai.ClientConfig{
-		Backend: genai.BackendGeminiAPI, APIKey: "test", HTTPOptions: genai.HTTPOptions{BaseURL: server.URL, APIVersion: "v1"},
-	})
-	require.NoError(t, err)
+	client := newTestGenAIClient(t, server.URL)
 
 	translator := &vertexTranslator{client: client, rows: RowsConfig{
 		Extract:   RowStageConfig{Model: "extract-model", ThinkingLevel: genai.ThinkingLevelLow, TimeoutSeconds: 120},
 		Translate: RowStageConfig{Model: "translate-model", ThinkingLevel: genai.ThinkingLevelHigh, Temperature: new(float32(0.5)), TimeoutSeconds: 300},
 	}}
 
-	_, _, err = translator.extractRows(t.Context(), source{MIME: mimeJPEG, Data: []byte("original")}, "extract prompt")
+	_, _, err := translator.extractRows(t.Context(), source{MIME: mimeJPEG, Data: []byte("original")}, "extract prompt")
 	require.NoError(t, err)
 
 	_, _, err = translator.translateRows(t.Context(), "rows prompt")
@@ -1044,13 +1037,13 @@ func TestRowRequestsCarryTheStageSettings(t *testing.T) {
 
 	extract, translate := generationConfig(t, requests[0]).GenerationConfig, generationConfig(t, requests[1]).GenerationConfig
 
-	require.Equal(t, "/v1/models/extract-model:generateContent", requests[0].path)
+	require.Equal(t, "/v1/models/extract-model:streamGenerateContent", requests[0].path)
 	require.Equal(t, "120", requests[0].timeout)
 	require.Equal(t, map[string]string{"thinkingLevel": "LOW"}, extract.ThinkingConfig)
 	require.Nil(t, extract.Temperature, "temperature가 없으면 모델 기본값을 쓴다")
 	require.Equal(t, "application/json", extract.ResponseMIMEType)
 
-	require.Equal(t, "/v1/models/translate-model:generateContent", requests[1].path)
+	require.Equal(t, "/v1/models/translate-model:streamGenerateContent", requests[1].path)
 	require.Equal(t, "300", requests[1].timeout)
 	require.Equal(t, map[string]string{"thinkingLevel": "HIGH"}, translate.ThinkingConfig)
 	require.NotNil(t, translate.Temperature)

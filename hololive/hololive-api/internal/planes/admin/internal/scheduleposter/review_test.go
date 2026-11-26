@@ -16,10 +16,12 @@ import (
 	"os"
 	"slices"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"cloud.google.com/go/auth"
 	"github.com/park285/shared-go/v2/pkg/netguard"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genai"
@@ -399,26 +401,28 @@ func blame(err error) string {
 	}
 }
 
-const geminiAPIHost = "generativelanguage.googleapis.com"
+const (
+	geminiAPIHost = "generativelanguage.googleapis.com"
+	vertexAPIHost = "aiplatform.googleapis.com"
+)
 
 func TestPeriodFailureBlame(t *testing.T) {
 	t.Parallel()
-
-	keyInvalid := []map[string]any{{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": "API_KEY_INVALID"}}
 
 	for _, tc := range []struct {
 		err  error
 		want string
 	}{
 		{genai.APIError{Code: http.StatusBadRequest, Status: "INVALID_ARGUMENT", Message: "Unable to process input image."}, blameCandidate},
-		{genai.APIError{Code: http.StatusBadRequest, Status: "INVALID_ARGUMENT", Details: keyInvalid}, blameService},
 		{genai.APIError{Code: http.StatusBadRequest, Status: "FAILED_PRECONDITION", Message: "User location is not supported"}, blameService},
 		{genai.APIError{Code: http.StatusNotFound, Status: "NOT_FOUND", Message: "model is not found"}, blameService},
 		{genai.APIError{Code: http.StatusTooManyRequests, Status: "RESOURCE_EXHAUSTED"}, blameService},
 		{genai.APIError{Code: http.StatusServiceUnavailable, Status: "UNAVAILABLE"}, blameService},
 		{genai.APIError{Code: http.StatusInternalServerError, Status: "INTERNAL"}, blameNobody},
-		{&url.Error{Op: "Post", URL: "https://" + geminiAPIHost, Err: errors.New("connection refused")}, blameService},
-		{&url.Error{Op: "Post", URL: "https://" + geminiAPIHost, Err: context.DeadlineExceeded}, blameNobody},
+		{&url.Error{Op: "Post", URL: "https://" + vertexAPIHost, Err: &net.OpError{Op: "dial", Err: syscall.ECONNREFUSED}}, blameService},
+		{fmt.Errorf("fetch token: %w", &auth.Error{}), blameService},
+		{&url.Error{Op: "Post", URL: "https://" + vertexAPIHost, Err: context.DeadlineExceeded}, blameNobody},
+		{errIncompleteStream, blameNobody},
 	} {
 		require.Equal(t, tc.want, blame(periodFailure(tc.err)), "%v", tc.err)
 	}
@@ -751,4 +755,80 @@ func TestPeriodRequestAsksOnlyForPrintedDates(t *testing.T) {
 
 	_, err = parsePeriod(`{"first_month":11,"week":"this"}`)
 	require.ErrorIs(t, err, errUnjudgeable)
+}
+
+type staticTokenProvider struct{}
+
+func (staticTokenProvider) Token(context.Context) (*auth.Token, error) {
+	return &auth.Token{Value: "vertex-token", Type: "Bearer"}, nil
+}
+
+type periodExchange struct {
+	path          string
+	authorization string
+	apiKey        string
+}
+
+func TestReadPeriodStreamsFromVertexWithADC(t *testing.T) {
+	t.Parallel()
+
+	exchanges := make(chan periodExchange, 1)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		exchanges <- periodExchange{
+			path:          r.URL.Path,
+			authorization: r.Header.Get("Authorization"),
+			apiKey:        r.Header.Get("X-Goog-Api-Key") + r.URL.Query().Get("key"),
+		}
+
+		writeStreamChunks(t, w,
+			`{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"first_month\":11,\"first_day\":30,"}]}}]}`,
+			`{"candidates":[{"content":{"role":"model","parts":[{"text":"\"first_weekday\":1,\"last_month\":12,\"last_day\":6,\"last_weekday\":7}"}]},`+
+				`"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1200,"candidatesTokenCount":40}}`)
+	}))
+	t.Cleanup(server.Close)
+
+	vertex, err := genai.NewClient(t.Context(), &genai.ClientConfig{
+		Backend: genai.BackendVertexAI, Project: "test-project", Location: "global",
+		Credentials: auth.NewCredentials(&auth.CredentialsOptions{TokenProvider: staticTokenProvider{}}),
+		HTTPOptions: genai.HTTPOptions{BaseURL: server.URL, APIVersion: "v1", RetryOptions: &genai.HTTPRetryOptions{Attempts: new(int32(1))}},
+	})
+	require.NoError(t, err)
+
+	period, spent, err := newGeminiJudge(decisionTestKey, vertex).readPeriod(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
+	require.NoError(t, err)
+	require.Equal(t, printedPeriod{FirstMonth: 11, FirstDay: 30, FirstWeekday: 1, LastMonth: 12, LastDay: 6, LastWeekday: 7}, period)
+	require.Equal(t, usage{model: periodModel, prompt: 1200, output: 40}, spent)
+
+	exchange := <-exchanges
+	require.Equal(t, "/v1/projects/test-project/locations/global/publishers/google/models/"+periodModel+":streamGenerateContent", exchange.path)
+	require.Equal(t, "Bearer vertex-token", exchange.authorization)
+	require.Empty(t, exchange.apiKey)
+}
+
+func TestReadPeriodReportsFinishReasonWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeStreamChunks(t, w,
+			`{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"first_month\":"}]}}]}`,
+			`{"candidates":[{"finishReason":"SAFETY"}],"usageMetadata":{"promptTokenCount":1200,"candidatesTokenCount":3}}`)
+	}))
+	t.Cleanup(server.Close)
+
+	period, spent, err := newGeminiJudge(decisionTestKey, newTestGenAIClient(t, server.URL)).readPeriod(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
+	require.ErrorIs(t, err, errUnjudgeable)
+	require.ErrorContains(t, err, "finish reason SAFETY")
+	require.Equal(t, printedPeriod{}, period)
+	require.Equal(t, usage{model: periodModel, prompt: 1200, output: 3}, spent)
+}
+
+func TestFailedModelCallWithoutUsageLogsNothing(t *testing.T) {
+	t.Parallel()
+
+	translator, _ := matchServer(t, http.StatusTooManyRequests, `{"error":{"code":429,"message":"quota","status":"RESOURCE_EXHAUSTED"}}`)
+
+	_, spent, err := translator.matchPost(t.Context(), "match prompt")
+	require.Error(t, err)
+	require.Equal(t, usage{}, spent)
 }
