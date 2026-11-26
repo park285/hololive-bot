@@ -335,6 +335,7 @@ func scanLockedObservation(row pgx.Row) (Observation, error) {
 		&completeness,
 		&continuity,
 		&observation.Payload,
+		&observation.ScheduleObservedAt,
 		&observation.PayloadSHA256,
 		&observation.EvidenceSHA256,
 		&observation.CollectorInstance,

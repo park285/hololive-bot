@@ -31,6 +31,7 @@ type publishBatchRow struct {
 	Completeness         contract.Completeness    `json:"completeness"`
 	Continuity           contract.Continuity      `json:"continuity"`
 	Payload              jsontext.Value           `json:"payload"`
+	ScheduleObservedAt   map[string]time.Time     `json:"schedule_observed_at,omitempty"`
 	PayloadSHA256        string                   `json:"payload_sha256"`
 	EvidenceSHA256       string                   `json:"evidence_sha256"`
 	CollectorInstance    string                   `json:"collector_instance"`
@@ -101,7 +102,8 @@ func newPublishBatchRow(
 		ScheduledFor: observation.ScheduledFor, ObservedAt: observation.ObservedAt,
 		SourceEventAt: observation.SourceEventAt, ScopeSHA256: observation.ScopeSHA256,
 		Completeness: observation.Completeness, Continuity: observation.Continuity,
-		Payload: observation.Payload, PayloadSHA256: observation.PayloadSHA256,
+		Payload: observation.Payload, ScheduleObservedAt: observation.ScheduleObservedAt,
+		PayloadSHA256:  observation.PayloadSHA256,
 		EvidenceSHA256: observation.EvidenceSHA256, CollectorInstance: observation.CollectorInstance,
 		JobKey: observation.Lease.JobKey, CollectionJobKind: observation.Lease.CollectionJobKind,
 		FenceEpoch: observation.Lease.FenceEpoch, ProjectionGeneration: observation.Lease.ProjectionGeneration,

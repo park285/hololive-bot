@@ -60,6 +60,21 @@ func Envelope(
 	return out, nil
 }
 
+func WithScheduleObservations(envelope contract.Envelope, observed map[string]time.Time) (contract.Envelope, error) {
+	if len(observed) == 0 {
+		return envelope, nil
+	}
+
+	envelope.ScheduleObservedAt = observed
+
+	out, err := contract.PrepareEnvelope(envelope)
+	if err != nil {
+		return out, payloadFailure(fmt.Errorf("prepare envelope with schedule observations: %w", err))
+	}
+
+	return out, nil
+}
+
 func payloadFailure(err error) error {
 	if errors.Is(err, contract.ErrPayloadTooLarge) {
 		return collecterr.Wrap(contract.ErrorResponseTooLarge, contract.ClassResourceLimit, err)

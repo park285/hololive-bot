@@ -3,6 +3,7 @@ package sourceobservation
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -36,6 +37,7 @@ func clonePublishEnvelope(src *contract.Envelope) contract.Envelope {
 	dst := *src
 
 	dst.Payload = slices.Clone(src.Payload)
+	dst.ScheduleObservedAt = maps.Clone(src.ScheduleObservedAt)
 
 	if src.SourceEventAt != nil {
 		timestamp := *src.SourceEventAt
