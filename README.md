@@ -121,7 +121,7 @@ go test ./hololive/hololive-dbtest/... \
   ./hololive/hololive-api/cmd/db-migrate/...
 ```
 
-`./build-all.sh`는 이미지 빌드 전에 `local-ci.sh`를 실행합니다. 아키텍처 게이트도 그 안에 있으므로 두 명령을 사전 단계로 연달아 실행할 필요가 없습니다. 배포·로그·빌드 스크립트 동작 시험(`scripts/scripttest`)은 `local-ci.sh`의 Go 시험에 포함됩니다. 게시 전에는 스택 훅이 `scripts/ci/pre-push-gate.sh`를 호출해 해당 로컬 검사에 Python 스크립트 시험, 정기 보안 검사 계약 검사와 `govulncheck`를 더합니다. 개발 중에는 변경한 경로의 검사를 선택하고 릴리스에서는 [전체 검증 절차](docs/current/runbooks/release.md#버전-관리)를 따릅니다.
+`./build-all.sh`는 이미지 빌드 전에 `local-ci.sh`를 실행합니다. 아키텍처 게이트도 그 안에 있으므로 두 명령을 사전 단계로 연달아 실행할 필요가 없습니다. 배포·로그·빌드 스크립트 동작 시험(`scripts/scripttest`)은 `local-ci.sh`에서 제품 race 시험과 별도로 실행합니다. `bash scripts/ci/run-script-tests.sh`로 직접 실행할 수 있으며 패키지 병렬도는 1, 시험 병렬도는 4로 제한합니다. 게시 전에는 스택 훅이 `scripts/ci/pre-push-gate.sh`를 호출해 해당 로컬 검사에 Python 스크립트 시험, 운영 이미지 스캔 목록 검사와 `govulncheck`를 더합니다. 개발 중에는 변경한 경로의 검사를 선택하고 릴리스에서는 [전체 검증 절차](docs/current/runbooks/release.md#버전-관리)를 따릅니다.
 
 ---
 

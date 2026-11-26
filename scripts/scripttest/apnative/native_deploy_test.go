@@ -292,9 +292,10 @@ rm -rf "${unit_copy_dir}"
 const nativeTraversalScript = `mkdir -p "${tmp}/bin" "${tmp}/success" "${tmp}/failure"
 touch "${tmp}/KR.key"
 
+printf '#!/usr/bin/env bash\necho kapu\n' > "${tmp}/bin/hostname"
 printf '#!/usr/bin/env bash\nexit 1\n' > "${tmp}/bin/ssh"
 printf '#!/usr/bin/env bash\n[[ "$3" == status ]] && exit 0\nexec %q "$@"\n' "$(command -v git)" > "${tmp}/bin/git"
-chmod +x "${tmp}/bin/ssh" "${tmp}/bin/git"
+chmod +x "${tmp}/bin/hostname" "${tmp}/bin/ssh" "${tmp}/bin/git"
 if PATH="${tmp}/bin:${PATH}" \
    RELEASE_ID='../active' \
    ARTIFACT_DIR="${tmp}/traversal-artifact" \

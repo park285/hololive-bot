@@ -144,7 +144,7 @@ run_content_gates() {
     QUADLET_UNIT_DIRS="${ROOT_DIR}/deploy/quadlet/hololive-bot" /usr/libexec/podman/quadlet -dryrun >/dev/null
   fi
   run_if_changed scripts/ci/check-recurring-security-scan-contract.sh \
-    scripts/ci/final-image-scan-policy.sh scripts/ci/final-image-scan-manifest.txt deploy/quadlet
+    scripts/ci/final-image-scan-manifest.txt deploy/quadlet
   echo "[pre-push] deploy/runtime script tests (run when the test or its target changed)"
   run_if_changed scripts/deploy/lib/worker-profile-pair_test.py scripts/deploy/lib/worker-profile-pair.py scripts/deploy/lib/collector-slots.tsv \
     deploy/quadlet/hololive-bot
@@ -165,7 +165,7 @@ run_dependency_hygiene() {
   local module govulncheck_bin
 
   govulncheck_bin="$(ensure_govulncheck)"
-  for module in "${GO_OWNED_MODULES[@]}"; do
+  for module in "${GO_PRODUCT_MODULES[@]}"; do
     echo "[pre-push] dependency hygiene: ${module}"
     (cd "${module}" && GOWORK=off "${govulncheck_bin}" ./...)
   done
@@ -181,7 +181,7 @@ run_queued_tests
 if is_metadata_only_route; then
   if inputs_changed VERSION hololive/hololive-api/VERSION hololive/hololive-alarm-worker/VERSION; then
     source "${SCRIPT_DIR}/go-workspace-modules.sh"
-    for module in "${GO_OWNED_MODULES[@]}"; do
+    for module in "${GO_PRODUCT_MODULES[@]}"; do
       echo "[pre-push] version-only build: ${module}"
       (cd "${module}" && GOWORK=off go build -mod=readonly ./...)
     done

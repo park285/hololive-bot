@@ -12,7 +12,7 @@ self-hosted runner를 다시 붙인다면 이미 신뢰된 코드를 checkout하
 
 ## Workflow 분담
 
-- `ci.yml`의 필수 `fast-gate`는 다섯 Go 모듈의 결과를 모은 뒤 같은 SHA의 셸 문법·gofmt를 직접 검사합니다. 별도의 정책 러너는 없습니다. collector 작업은 Node 설치 한 번으로 Go 통합 시험과 YouTube.js 타입 검사·시험을 수행합니다.
+- `ci.yml`의 필수 `fast-gate`는 다섯 Go 모듈의 결과를 모은 뒤 같은 SHA의 셸 문법·gofmt와 스크립트 시험 모듈 전체를 검사합니다. 스크립트 시험은 rootless Podman 이미지 빌드·실행과 user/mount namespace의 소유권 fixture를 포함하며, 로컬과 동일하게 패키지 병렬도 1·시험 병렬도 4로 실행합니다. 별도의 정책 러너는 없습니다. collector 작업은 Node 설치 한 번으로 Go 통합 시험과 YouTube.js 타입 검사·시험을 수행합니다.
 - `security.yml`은 비밀 없이 `main` push·정기·수동 이벤트에서 실행합니다. Go 스캐너는 고정된 형제 checkout과 Go 설치를 공유하고 npm은 독립적으로 감사합니다. 정기·수동 arm64 이미지 검사는 별도 러너에서 실행되며 새 main push가 취소하지 않습니다.
   Go 검사에는 고정 SHA의 형제 SDK를 사용합니다. API의 독립 Valkey 어댑터는 공개 프록시에서 `go.mod`의
   판본으로 별도 다운로드해 `go.sum` 변경이 없는지 확인한 뒤 workspace에 넣습니다. SDK 루트 checkout의
@@ -28,17 +28,17 @@ self-hosted runner를 다시 붙인다면 이미 신뢰된 코드를 checkout하
    않았으면 건너뜁니다. 범위를 모르거나, `PRE_PUSH_MODE=full`이거나, 선언된 입력이 저장소에 없으면 실행합니다.
    `deploy/quadlet/` 변경·범위 미상·`full`이면 중앙 Quadlet 원본도 `quadlet -dryrun`으로 생성합니다.
 3. `scripts/ci/local-ci.sh`를 실행합니다. architecture gate, 민감 로그 검사, Go toolchain 확인,
-   전체 workspace의 Go 소스·테스트 import를 사용한 `go work sync` drift(루트와 소유 모듈의 메타데이터만 대조), 소유 모듈별 `go mod tidy -diff`와 `GOWORK=off` vet, integration tag vet,
+   전체 workspace의 Go 소스·테스트 import를 사용한 `go work sync` drift(루트와 소유 모듈의 메타데이터만 대조), 소유 모듈별 `go mod tidy -diff`, 선택된 제품 모듈의 `GOWORK=off` vet, integration tag vet,
    golangci-lint(staticcheck·formatters·modernize 포함), NilAway와 Go build를 실행합니다. collector production 빌드는 한 번만 합니다. 빌더·검사기·시험 입력이 바뀌었거나 범위 미상·`full`이면 그 산출물의 사본으로 손상 거부도 확인합니다. X Spaces helper, production Go workspace와 PostgreSQL 용량 검사도 유지합니다.
-   collector CGO 비활성 시험(collector가 범위에 있을 때), 성능 예산, race·non-race 시험과 선택한 통합 시험은 같은 일회용 PostgreSQL 서버를 씁니다.
+   제품 race·non-race 시험과 선택한 통합 시험은 같은 일회용 PostgreSQL 서버를 씁니다. collector가 범위에 있으면 의존성 구현이 다른 CGO 비활성 전체 시험과 race 전체 시험을 모두 실행합니다. CGO 비활성 시험의 JSON에서 실패·panic·예상 밖 skip을 검사합니다. 배포·runtime 스크립트 시험은 제품 목록과 분리하여 `-p 1 -parallel 4 -count=1`로 실행하며, 스크립트만 선택된 경우 PostgreSQL 서버를 만들지 않습니다.
    fast는 두 게시 tip의 차이에서 이전·새 경로를 모두 읽습니다. 수동 실행은 staged·unstaged·untracked 입력도 포함합니다. Go 입력은 확장자가 아니라 소유 모듈과 소비자로 판정합니다. 공통 모듈·migration·워크스페이스 입력, `full` 또는 미상 범위는 전체 소유 모듈을 선택합니다.
    통합 시험의 opt-in 조건은 [scripts/README.md](../../../scripts/README.md)에 있습니다.
 4. collector 또는 helper 설치기 변경·범위 미상·`full`이면 YouTube.js helper의 typecheck와
    테스트를 실행합니다.
-5. 의존성 hygiene으로 `go.work`의 소유 모듈마다 `govulncheck`를 실행합니다. 형제 저장소 모듈은 각 저장소
+5. 의존성 hygiene으로 `go.work`의 소유 제품 모듈마다 `govulncheck`를 실행합니다. 형제 저장소 모듈은 각 저장소
    게이트가 검사합니다.
 
 pre-push hook이 넘긴 정확한 push 범위(`BASE_SHA..HEAD_SHA`)가 있고 `full` 모드가 아니며, 그 범위의 변경이
 문서와 `VERSION`·`hololive/hololive-api/VERSION`·`hololive/hololive-alarm-worker/VERSION`뿐이면
-이 저장소 게이트는 Python을 준비하지 않고 2~5단계를 건너뜁니다. 상위 스택 훅의 비밀 게시 검사는 그대로 실행합니다. `VERSION` 파일이 바뀌었으면 소유 모듈마다
+이 저장소 게이트는 Python을 준비하지 않고 2~5단계를 건너뜁니다. 상위 스택 훅의 비밀 게시 검사는 그대로 실행합니다. `VERSION` 파일이 바뀌었으면 소유 제품 모듈마다
 `GOWORK=off go build -mod=readonly ./...`도 실행합니다.

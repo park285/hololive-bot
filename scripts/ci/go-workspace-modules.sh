@@ -26,14 +26,17 @@ workspace_modules="$(load_go_workspace_modules)" || {
 mapfile -t GO_WORKSPACE_MODULES < <(printf '%s\n' "${workspace_modules}")
 unset workspace_modules
 GO_OWNED_MODULES=()
+GO_PRODUCT_MODULES=()
 for workspace_module in "${GO_WORKSPACE_MODULES[@]}"; do
-    [[ "${workspace_module}" == ../* ]] || GO_OWNED_MODULES+=("${workspace_module}")
+    [[ "${workspace_module}" != ../* ]] || continue
+    GO_OWNED_MODULES+=("${workspace_module}")
+    [[ "${workspace_module}" == scripts/scripttest ]] || GO_PRODUCT_MODULES+=("${workspace_module}")
 done
 unset workspace_module
 
 go_workspace_package_patterns() {
     local module
-    for module in "${GO_OWNED_MODULES[@]}"; do
+    for module in "${GO_PRODUCT_MODULES[@]}"; do
         printf './%s/...\n' "${module}"
     done
 }

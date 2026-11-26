@@ -50,7 +50,16 @@ admin_network_assert_firewall() {
              {"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"@postgres_sources"}}];
         def preserve:
             [{"mangle":{"key":{"meta":{"key":"mark"}},"value":{"&":[{"meta":{"key":"mark"}},4278255615]}}}];
+        def dport: .match? | select(.left.payload.field? == "dport") | .right;
+        def matches_postgres: [.[] | dport | select(. == 5433 or (type == "object" and (.set // [] | index(5433) != null)))] | length > 0;
+        def literal_port: type == "number" or (type == "object" and keys == ["set"] and (.set | length > 0 and all(type == "number")));
+        def reviewed_ports: [.[] | .match? | select(.left.payload.field? == "dport")] as $ports |
+            ($ports | length > 0) and ($ports | all(.op == "==" and (.right | literal_port)));
         [.nftables[] | .set // empty | select(.name == "postgres_sources")] as $sources |
+        {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5433}} as $postgres |
+        [.nftables[] | .rule // empty | select(.chain == "input") | .expr] as $input |
+        [$input[] | select(matches_postgres)] as $published |
+        ($input | index([$published[2]])) as $boundary |
         ($sources | length == 1) and
         ($sources[0].elem | sort == ["100.100.1.3", "100.100.1.5", "100.100.1.6", "100.100.1.8"]) and
         ([.nftables[] | .set // empty | select(.name == "bot_postgres_sources")] as $bot |
@@ -60,20 +69,11 @@ admin_network_assert_firewall() {
             ($forward | length == 6) and
             ($forward[2].expr == dnat(5433; 5432) + sources + [{"accept":null}]) and
             ($forward[3].expr == dnat(5433; 5432) + [{"reject":{"type":"tcp reset"}}])) and
-        def dport: .match? | select(.left.payload.field? == "dport") | .right;
-        def matches_postgres: [.[] | dport | select(. == 5433 or (type == "object" and (.set // [] | index(5433) != null)))] | length > 0;
-        {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5433}} as $postgres |
-        [.nftables[] | .rule // empty | select(.chain == "input") | .expr] as $input |
-        [$input[] | select(matches_postgres)] as $published |
-        ($input | index([$published[2]])) as $boundary |
         any(.nftables[]; .chain.hook == "input" and .chain.name == "input" and .chain.prio == -20) and
         ($published == [
             [{"match":{"op":"==","left":{"meta":{"key":"iifname"}},"right":"lo"}}, $postgres, {"accept":null}],
             sources + [$postgres, {"accept":null}],
             [$postgres, {"reject":{"type":"tcp reset"}}]]) and
-        def literal_port: type == "number" or (type == "object" and keys == ["set"] and (.set | length > 0 and all(type == "number")));
-        def reviewed_ports: [.[] | .match? | select(.left.payload.field? == "dport")] as $ports |
-            ($ports | length > 0) and ($ports | all(.op == "==" and (.right | literal_port)));
         ($boundary != null) and ([$input[0:$boundary][] | reviewed_ports] | all) and
         any(.nftables[]; .chain.hook == "forward" and .chain.name == "forward_preserve_postgres_source" and .chain.prio == 10) and
         ([.nftables[] | .rule // empty | select(.chain == "forward_preserve_postgres_source") | .expr] ==

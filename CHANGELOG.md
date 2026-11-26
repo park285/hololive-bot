@@ -8,6 +8,8 @@
 
 ## r1.2.19 - 2026-11-27
 
+- **방화벽 사전 검사의 jq 1.8 호환:** `scripts/deploy/lib/admin-bind.sh`의 jq 필터가 jq 1.8.1에서 문법 오류를 내던 문제를 고쳤습니다. 함수 선언과 입력 바인딩을 조건식 앞으로 옮겼고 허용·거부 조건은 같습니다. Fallback delta: none.
+- **스크립트 동작 시험 분리:** 스크립트 시험을 제품 모듈 게이트와 분리해 패키지 병렬도 1, 시험 병렬도 4로 실행하고, PR CI에서 전체를 실행하며 skip과 누락된 결과를 실패로 판정합니다. 호출되지 않던 `go-lint-matrix.py`·`resolve-go-tool.py` 사본과 Dockerfile 문자열·Trivy 인자 자기검사를 지웠습니다.
 - **재사용 일정 시각을 payload 밖으로(migration 011):** live snapshot에서 helper가 재사용한 예정 시각의 확인 슬롯(`schedule_observed_at`)을 payload 세션이 아니라 관측 행의 새 열 `source_observations.schedule_observed_at`(video ID별 시각)에 싣습니다. 이 값은 `evidence_sha256`에 포함되고, 값이 없는 관측의 hash는 이전과 같습니다. 운영 하루치 `live_snapshot` payload 17,457개가 이 값만 빼면 1,986개로 줄어듭니다(-89%). API는 두 모양을 모두 읽고, 같은 시각을 두 곳에 싣거나 목록에 없는 영상·UPCOMING이 아닌 세션·재사용 창 밖 시각을 실은 관측은 거부합니다. collector가 새 모양으로 발행하려면 이 릴리스의 collector로 바꿔야 하며, 반드시 API를 먼저 수용한 뒤 교체합니다. 새 collector가 발행한 관측이 남은 채 API를 r1.2.18 이하로 되돌리면 그 관측은 `invalid_payload`로 dead letter가 됩니다. Fallback delta: none.
 - **`source_observations.created_at` 삭제(migration 011):** 항상 `received_at`과 같던 열을 지웠습니다(운영에서 다른 행 0건). 어느 코드도 읽거나 쓰지 않았습니다. migration 011은 대기 migration이므로 "대기 migration 적용 창"에서 적용합니다. 실행 중인 collector는 두 열 이름을 쓰지 않으므로 그대로 둡니다. 새 열은 비어 있지 않은 4096바이트 이하 객체만 받습니다. Fallback delta: none.
 - **릴리스:** 루트 VERSION 1.2.19, hololive-api 1.2.12, hololive-alarm-worker 1.0.10(공유 계약 변경으로 image가 바뀜).
