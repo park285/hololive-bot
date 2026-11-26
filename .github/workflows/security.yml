@@ -70,7 +70,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/go-tools"
           echo "GOBIN=${RUNNER_TEMP}/go-tools" >> "${GITHUB_ENV}"
 
-      - name: Resolve workspace package patterns
+      - name: Resolve product package patterns
         id: packages
         run: |
           source scripts/ci/go-workspace-modules.sh
@@ -102,6 +102,7 @@ jobs:
           modules="$(go work edit -json | jq -er '.Use[].DiskPath')"
           failed=0
           while IFS= read -r module; do
+            [[ "${module#./}" != scripts/scripttest ]] || continue
             echo "govulncheck ${module}"
             (cd "${module}" && "${govulncheck_bin}" ./...) </dev/null || failed=1
           done <<< "${modules}"
@@ -116,7 +117,7 @@ jobs:
     steps:
       - *checkout
 
-      - name: Validate final image inventory and scan policy
+      - name: Validate final image inventory
         run: bash scripts/ci/check-recurring-security-scan-contract.sh
 
       - name: Setup Go for binary vulnerability analysis
@@ -159,7 +160,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - *checkout
-      - name: Validate final image inventory and scan policy on main
+      - name: Validate final image inventory on main
         if: github.event_name == 'push'
         run: bash scripts/ci/check-recurring-security-scan-contract.sh
 

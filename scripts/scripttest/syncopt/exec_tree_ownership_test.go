@@ -49,14 +49,19 @@ func rootOwnedReference(t *testing.T) string {
 	t.Helper()
 
 	for _, candidate := range []string{"/usr/bin/env", "/bin/true", "/usr/bin/true", "/bin/sh"} {
-		info, err := os.Stat(candidate)
+		path, err := filepath.EvalSymlinks(candidate)
+		if err != nil {
+			continue
+		}
+
+		info, err := os.Stat(path)
 		if err != nil {
 			continue
 		}
 
 		stat, ok := info.Sys().(*syscall.Stat_t)
 		if ok && stat.Uid == 0 && info.Mode().Perm()&0o022 == 0 {
-			return candidate
+			return path
 		}
 	}
 

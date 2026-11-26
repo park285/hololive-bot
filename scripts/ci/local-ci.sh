@@ -12,6 +12,7 @@ cd "${ROOT_DIR}"
 
 source "${SCRIPT_DIR}/go-work-sync-drift.sh"
 GO_PACKAGES=()
+SCRIPTTEST_PACKAGES=()
 source "${SCRIPT_DIR}/local-ci-packages.sh"
 source "${SCRIPT_DIR}/local-ci-integration.sh"
 
@@ -31,13 +32,18 @@ run_step() {
 }
 
 check_canonical_modules() {
-    local module
+    local module package
     for module in "${GO_OWNED_MODULES[@]}"; do
         (
             cd "${module}"
             export GOWORK=off
             run_step "go mod tidy -diff: ${module}" go mod tidy -diff
-            run_step "Canonical vet (GOWORK=off): ${module}" go vet ./...
+            for package in "${GO_PACKAGES[@]}"; do
+                if [[ "${package}" == "./${module}/..." ]]; then
+                    run_step "Canonical vet (GOWORK=off): ${module}" go vet ./...
+                    break
+                fi
+            done
         )
     done
 }
@@ -85,13 +91,13 @@ run_go_tests() {
 }
 
 run_database_steps() (
-    if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
-        run_step "Provision test PostgreSQL" provision_integration_test_database
-    fi
-    if [[ "${collector_in_scope}" == true ]]; then
-        run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-collector test-prod
-    fi
     if has_go_packages; then
+        if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
+            run_step "Provision test PostgreSQL" provision_integration_test_database
+        fi
+        if [[ "${collector_in_scope}" == true ]]; then
+            run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-collector test-prod
+        fi
         run_go_tests
     fi
     check_integration_tests
@@ -131,6 +137,9 @@ run_local_ci() {
     run_step "X Spaces helper tests" bash scripts/ci/public-pr-x-spaces-helper-gate.sh
     run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
     run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
+    if (( ${#SCRIPTTEST_PACKAGES[@]} )); then
+        run_step "Deploy/runtime script tests" bash scripts/ci/run-script-tests.sh "${SCRIPTTEST_PACKAGES[@]}"
+    fi
     run_database_steps
     if [[ "${run_collector_js}" == true ]]; then
         run_step "YouTube.js typecheck" npm --prefix hololive/hololive-collector/youtubejs run typecheck

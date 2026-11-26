@@ -100,10 +100,11 @@ scripttest_packages_for() {
 
 configure_go_packages() {
     local file module package
-    local all_product=false
+    local all_product=false all_scripttest=false
     local -A selected=() scripttest=()
     mapfile -t GO_PACKAGES < <(go_workspace_package_patterns)
     wait "$!"
+    SCRIPTTEST_PACKAGES=(./...)
     case "${LOCAL_CI_GO_SCOPE}" in
         all) return 0 ;;
         changed) ;;
@@ -118,8 +119,17 @@ configure_go_packages() {
             continue
         fi
         case "${file}" in
+            scripts/scripttest/internal/*|scripts/scripttest/go.mod|scripts/scripttest/go.sum)
+                all_scripttest=true
+                continue
+                ;;
+            scripts/scripttest/*)
+                package="${file#scripts/scripttest/}"
+                scripttest[${package%%/*}]=1
+                continue
+                ;;
             go.work|go.work.sum|go.mod|go.sum|*/go.mod|*/go.sum|.golangci.yml|\
-            scripts/ci/go-*.sh|scripts/ci/local-ci*.sh|scripts/ci/nilaway-inputs.sh|scripts/ci/nilaway-models/*|scripts/ci/pre-push-gate.sh)
+            scripts/ci/go-*.sh|scripts/ci/local-ci*.sh|scripts/ci/run-script-tests.sh|scripts/ci/nilaway-inputs.sh|scripts/ci/nilaway-models/*|scripts/ci/pre-push-gate.sh)
                 return 0
                 ;;
             hololive/hololive-shared/*|hololive/hololive-dbtest/*|hololive/hololive-api/scripts/migrations/*)
@@ -139,7 +149,7 @@ configure_go_packages() {
             scripts/ci/check-go-test-json.py|scripts/ci/collector-test-skip-allowlist.txt)
                 selected[hololive/hololive-collector]=1 ;;
         esac
-        for module in "${GO_OWNED_MODULES[@]}"; do
+        for module in "${GO_PRODUCT_MODULES[@]}"; do
             if [[ "${file}" == "${module}/"* ]]; then
                 selected[${module}]=1
                 break
@@ -151,14 +161,15 @@ configure_go_packages() {
     done
 
     GO_PACKAGES=()
-    for module in "${GO_OWNED_MODULES[@]}"; do
-        if [[ -n "${selected[${module}]:-}" || ( "${all_product}" == true && "${module}" != scripts/scripttest ) ]]; then
+    for module in "${GO_PRODUCT_MODULES[@]}"; do
+        if [[ -n "${selected[${module}]:-}" || "${all_product}" == true ]]; then
             GO_PACKAGES+=("./${module}/...")
         fi
     done
-    if [[ -z "${selected[scripts/scripttest]:-}" ]]; then
+    if [[ "${all_scripttest}" != true ]]; then
+        SCRIPTTEST_PACKAGES=()
         for package in "${!scripttest[@]}"; do
-            GO_PACKAGES+=("./scripts/scripttest/${package}/...")
+            SCRIPTTEST_PACKAGES+=("./${package}/...")
         done
     fi
 }
