@@ -1,6 +1,7 @@
 package scheduleposter
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ var errIncompleteStream = errors.New("schedule poster model stream ended before 
 
 type streamedResponse struct {
 	model     string
+	token     []byte
 	response  genai.GenerateContentResponse
 	candidate *genai.Candidate
 	spent     usage
@@ -118,6 +120,11 @@ func (s *streamedResponse) continuationToken() []byte {
 	}
 
 	token := candidate.ContinuationToken
+	if bytes.Equal(token, s.token) {
+		return nil
+	}
+
+	s.token = token
 
 	candidate.FinishReason, candidate.FinishMessage, candidate.ContinuationToken = "", "", nil
 
