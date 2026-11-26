@@ -447,7 +447,7 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		}},
 		roles.runtime: {dir: consumeQueryDir, queries: []observationRoleQuery{
 			{name: "activate_replay_epoch_tx.sql", args: []any{"grant-test", "verify replay epoch runtime grant"}},
-			{name: "activate_replay_epoch_tx_2.sql"},
+			{name: "activate_replay_epoch_tx.sql", args: []any{"grant-repeat", "verify replay epoch conflict runtime grant"}},
 			{name: "lock_claim.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
 			{name: "repository_live_pending_ends.sql", args: []any{[]string{}}},
 			{name: "repository_live_absence_slots.sql", args: []any{[]string{}, nil, time.Now().UTC(), []string{}}},
