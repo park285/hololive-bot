@@ -8,7 +8,7 @@ require (
 	github.com/moby/moby/api v1.57.0
 	github.com/moby/moby/client v0.6.3
 	github.com/park285/shared-go/postgres v1.0.4
-	github.com/park285/shared-go/v2 v2.25.0
+	github.com/park285/shared-go/v2 v2.26.1
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.45.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.45.0

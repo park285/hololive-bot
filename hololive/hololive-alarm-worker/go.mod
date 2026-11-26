@@ -13,7 +13,7 @@ require (
 	github.com/park285/shared-go/core v1.0.0
 	github.com/park285/shared-go/postgres v1.0.4
 	github.com/park285/shared-go/transport v1.0.1
-	github.com/park285/shared-go/v2 v2.25.0
+	github.com/park285/shared-go/v2 v2.26.1
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/stretchr/testify v1.12.1
