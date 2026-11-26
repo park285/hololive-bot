@@ -304,8 +304,9 @@ type Envelope struct {
     Completeness Completeness `json:"completeness"`
     Continuity   Continuity   `json:"continuity"`
 
-    Payload        json.RawMessage `json:"payload"`
-    PayloadSHA256  string          `json:"payload_sha256"`
+    Payload            json.RawMessage      `json:"payload"`
+    ScheduleObservedAt map[string]time.Time `json:"schedule_observed_at,omitempty"`
+    PayloadSHA256      string               `json:"payload_sha256"`
     EvidenceSHA256 string          `json:"evidence_sha256"`
 
     CollectorInstance string     `json:"collector_instance"`
@@ -350,8 +351,11 @@ type EvidenceDigestV1 struct {
     Completeness       Completeness    `json:"completeness"`
     Continuity         Continuity      `json:"continuity"`
     PayloadSHA256      string          `json:"payload_sha256"`
+    ScheduleObservedAt map[string]time.Time `json:"schedule_observed_at,omitempty"`
 }
 ```
+
+`schedule_observed_at`은 live snapshot에서 helper가 재사용한 예정 시각을 처음 확인한 슬롯 시각이며, video ID별로 담는다. 이 값은 payload 밖 관측 행(`source_observations.schedule_observed_at`)에 두므로 같은 목록을 본 관측은 payload 행 하나를 공유한다. 값이 없으면 digest에서 빠져 이전과 같은 hash가 된다. 같은 시각을 payload 세션과 관측 행에 함께 싣거나, 목록에 없는 video ID·UPCOMING이 아닌 세션·재사용 창 밖 시각을 실으면 거부한다.
 
 `observed_at`, `received_at`, collector instance, job owner와 lease expiry는 semantic hash에서 제외한다. 동일 수집 슬롯의 network retry가 clock 차이만으로 collision이 되지 않게 하기 위함이다.
 
@@ -956,7 +960,11 @@ CREATE TABLE source_observations (
     collection_job_kind TEXT NOT NULL,
     fence_epoch BIGINT NOT NULL CHECK (fence_epoch > 0),
     projection_generation BIGINT NOT NULL CHECK (projection_generation > 0),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    schedule_observed_at JSONB CHECK (
+        schedule_observed_at IS NULL
+        OR (jsonb_typeof(schedule_observed_at) = 'object' AND schedule_observed_at <> '{}'::jsonb
+            AND octet_length(schedule_observed_at::text) <= 4096)
+    ),
     CONSTRAINT uq_source_observation_identity UNIQUE (
         observation_key,
         schema_version,

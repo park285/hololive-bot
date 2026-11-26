@@ -74,38 +74,40 @@ type LeaseProof struct {
 }
 
 type Envelope struct {
-	Provider           Provider        `json:"provider"`
-	ObservationKind    ObservationKind `json:"observation_kind"`
-	SubjectKey         string          `json:"subject_key"`
-	ObservationKey     string          `json:"observation_key"`
-	SchemaVersion      int16           `json:"schema_version"`
-	ContractGeneration int64           `json:"contract_generation"`
-	ScheduledFor       time.Time       `json:"scheduled_for"`
-	ObservedAt         time.Time       `json:"observed_at"`
-	SourceEventAt      *time.Time      `json:"source_event_at,omitempty"`
-	ScopeSHA256        string          `json:"scope_sha256"`
-	Completeness       Completeness    `json:"completeness"`
-	Continuity         Continuity      `json:"continuity"`
-	Payload            jsontext.Value  `json:"payload"`
-	PayloadSHA256      string          `json:"payload_sha256"`
-	EvidenceSHA256     string          `json:"evidence_sha256"`
-	CollectorInstance  string          `json:"collector_instance"`
-	Lease              LeaseProof      `json:"lease"`
+	Provider           Provider             `json:"provider"`
+	ObservationKind    ObservationKind      `json:"observation_kind"`
+	SubjectKey         string               `json:"subject_key"`
+	ObservationKey     string               `json:"observation_key"`
+	SchemaVersion      int16                `json:"schema_version"`
+	ContractGeneration int64                `json:"contract_generation"`
+	ScheduledFor       time.Time            `json:"scheduled_for"`
+	ObservedAt         time.Time            `json:"observed_at"`
+	SourceEventAt      *time.Time           `json:"source_event_at,omitempty"`
+	ScopeSHA256        string               `json:"scope_sha256"`
+	Completeness       Completeness         `json:"completeness"`
+	Continuity         Continuity           `json:"continuity"`
+	Payload            jsontext.Value       `json:"payload"`
+	ScheduleObservedAt map[string]time.Time `json:"schedule_observed_at,omitempty"`
+	PayloadSHA256      string               `json:"payload_sha256"`
+	EvidenceSHA256     string               `json:"evidence_sha256"`
+	CollectorInstance  string               `json:"collector_instance"`
+	Lease              LeaseProof           `json:"lease"`
 }
 
 type EvidenceDigestV1 struct {
-	Provider           Provider        `json:"provider"`
-	ObservationKind    ObservationKind `json:"observation_kind"`
-	SubjectKey         string          `json:"subject_key"`
-	ObservationKey     string          `json:"observation_key"`
-	SchemaVersion      int16           `json:"schema_version"`
-	ContractGeneration int64           `json:"contract_generation"`
-	ScheduledFor       time.Time       `json:"scheduled_for"`
-	SourceEventAt      *time.Time      `json:"source_event_at,omitempty"`
-	ScopeSHA256        string          `json:"scope_sha256"`
-	Completeness       Completeness    `json:"completeness"`
-	Continuity         Continuity      `json:"continuity"`
-	PayloadSHA256      string          `json:"payload_sha256"`
+	Provider           Provider             `json:"provider"`
+	ObservationKind    ObservationKind      `json:"observation_kind"`
+	SubjectKey         string               `json:"subject_key"`
+	ObservationKey     string               `json:"observation_key"`
+	SchemaVersion      int16                `json:"schema_version"`
+	ContractGeneration int64                `json:"contract_generation"`
+	ScheduledFor       time.Time            `json:"scheduled_for"`
+	SourceEventAt      *time.Time           `json:"source_event_at,omitempty"`
+	ScopeSHA256        string               `json:"scope_sha256"`
+	Completeness       Completeness         `json:"completeness"`
+	Continuity         Continuity           `json:"continuity"`
+	PayloadSHA256      string               `json:"payload_sha256"`
+	ScheduleObservedAt map[string]time.Time `json:"schedule_observed_at,omitempty"`
 }
 
 type ObservationClock struct {
@@ -137,6 +139,7 @@ func PrepareEnvelope(envelope Envelope) (Envelope, error) {
 	}
 
 	envelope.Lease.ScheduledFor = envelope.Lease.ScheduledFor.UTC()
+	envelope.ScheduleObservedAt = utcTimes(envelope.ScheduleObservedAt)
 	envelope.Payload = canonicalPayload
 	envelope.ScopeSHA256 = SHA256Hex(canonicalScope)
 	envelope.PayloadSHA256 = SHA256Hex(canonicalPayload)
@@ -338,6 +341,19 @@ func (e *Envelope) matchCanonicalDigests(canonicalPayload, canonicalScope []byte
 	return nil
 }
 
+func utcTimes(values map[string]time.Time) map[string]time.Time {
+	if len(values) == 0 {
+		return nil
+	}
+
+	out := make(map[string]time.Time, len(values))
+	for key, value := range values {
+		out[key] = value.UTC()
+	}
+
+	return out
+}
+
 func (e *Envelope) expectedEvidenceSHA256() (string, error) {
 	digest := EvidenceDigestV1{
 		Provider:           e.Provider,
@@ -352,6 +368,7 @@ func (e *Envelope) expectedEvidenceSHA256() (string, error) {
 		Completeness:       e.Completeness,
 		Continuity:         e.Continuity,
 		PayloadSHA256:      e.PayloadSHA256,
+		ScheduleObservedAt: utcTimes(e.ScheduleObservedAt),
 	}
 	if digest.SourceEventAt != nil {
 		sourceEventAt := digest.SourceEventAt.UTC()

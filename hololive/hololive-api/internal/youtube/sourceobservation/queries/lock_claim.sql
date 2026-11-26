@@ -17,6 +17,7 @@ SELECT observation.id,
            payload.observation_kind, payload.schema_version, payload.canonical_profile,
            payload.payload_sha256, payload.payload
        ) AS payload,
+       observation.schedule_observed_at,
        encode(payload.payload_sha256, 'hex') AS payload_sha256,
        encode(observation.evidence_sha256, 'hex') AS evidence_sha256,
        provenance.collector_instance,

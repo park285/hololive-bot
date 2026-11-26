@@ -88,11 +88,16 @@ func (r *ChannelLiveRunner) liveSnapshotEnvelope(ctx context.Context, input *col
 		return nil, collecterr.New(contract.ErrorParserDrift, contract.ClassDataContract, "live query proof does not match helper pagination and restrictions")
 	}
 
-	payload := liveSnapshotPayload(input.Subject(), result.LiveSessions, result.LiveQuery)
+	payload, observed := liveSnapshotPayload(input.Subject(), result.LiveSessions, result.LiveQuery)
 
 	envelope, err := subjectEnvelope(input, contract.KindLiveSnapshot, completeness, continuity, payload)
 	if err != nil {
 		return nil, fmt.Errorf("envelope: %w", err)
+	}
+
+	envelope, err = collection.WithScheduleObservations(envelope, observed)
+	if err != nil {
+		return nil, fmt.Errorf("schedule observations: %w", err)
 	}
 
 	return &envelope, nil

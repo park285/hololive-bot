@@ -14,6 +14,7 @@ type payloadDecodeInput struct {
 	scheduledFor       time.Time
 	observedAt         time.Time
 	schemaVersion      int16
+	scheduleObservedAt map[string]time.Time
 }
 
 type payloadDecoder func(raw []byte, input payloadDecodeInput) (any, any, error)
@@ -47,6 +48,10 @@ func canonicalPayloadAndScope(envelope *Envelope) (payloadJSON, coverageJSON []b
 		return nil, nil, fmt.Errorf("unsupported observation kind %q", envelope.ObservationKind)
 	}
 
+	if len(envelope.ScheduleObservedAt) > 0 && envelope.ObservationKind != KindLiveSnapshot {
+		return nil, nil, fmt.Errorf("schedule observation times are not allowed for %q", envelope.ObservationKind)
+	}
+
 	payload, coverage, err := decode(raw, payloadDecodeInput{
 		subjectKey:         envelope.SubjectKey,
 		completeness:       envelope.Completeness,
@@ -54,6 +59,7 @@ func canonicalPayloadAndScope(envelope *Envelope) (payloadJSON, coverageJSON []b
 		scheduledFor:       envelope.ScheduledFor,
 		observedAt:         envelope.ObservedAt,
 		schemaVersion:      envelope.SchemaVersion,
+		scheduleObservedAt: envelope.ScheduleObservedAt,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("decode: %w", err)
@@ -174,25 +180,62 @@ func decodeLiveSnapshotPayload(raw []byte, input payloadDecodeInput) (payload, c
 }
 
 func validateLiveScheduleObservations(value *LiveSnapshotV1, input payloadDecodeInput) error {
+	slot := input.scheduledFor.UTC()
+
 	for i := range value.Sessions {
 		observed := value.Sessions[i].ScheduleObservedAt
 		if observed == nil {
 			continue
 		}
 
-		if input.contractGeneration != LiveSnapshotQueryContractGeneration {
-			return errors.New("only streams-query live snapshots can carry schedule observation times")
+		if err := validateScheduleObservation(&value.Sessions[i], *observed, slot, input.contractGeneration); err != nil {
+			return err
+		}
+	}
+
+	return validateRelocatedScheduleObservations(value, input, slot)
+}
+
+func validateRelocatedScheduleObservations(value *LiveSnapshotV1, input payloadDecodeInput, slot time.Time) error {
+	if len(input.scheduleObservedAt) == 0 {
+		return nil
+	}
+
+	sessions := make(map[string]*LiveSessionV1, len(value.Sessions))
+	for i := range value.Sessions {
+		sessions[value.Sessions[i].VideoID] = &value.Sessions[i]
+	}
+
+	for videoID, observed := range input.scheduleObservedAt {
+		session, ok := sessions[videoID]
+		if !ok {
+			return fmt.Errorf("schedule observation time for %q has no session", videoID)
 		}
 
-		if value.Sessions[i].Status != "UPCOMING" || value.Sessions[i].ScheduledAt == nil {
-			return errors.New("schedule observation time requires an upcoming scheduled time")
+		if session.ScheduleObservedAt != nil {
+			return fmt.Errorf("schedule observation time for %q appears in both the payload and the envelope", videoID)
 		}
 
-		slot := input.scheduledFor.UTC()
-		if !observed.Before(slot) || observed.Before(slot.Add(-LiveScheduleObservationMaxAge)) {
-			return fmt.Errorf("schedule observation time %s is outside the reuse window before %s",
-				observed.Format(time.RFC3339Nano), slot.Format(time.RFC3339Nano))
+		if err := validateScheduleObservation(session, observed, slot, input.contractGeneration); err != nil {
+			return err
 		}
+	}
+
+	return nil
+}
+
+func validateScheduleObservation(session *LiveSessionV1, observed, slot time.Time, contractGeneration int64) error {
+	if contractGeneration != LiveSnapshotQueryContractGeneration {
+		return errors.New("only streams-query live snapshots can carry schedule observation times")
+	}
+
+	if session.Status != "UPCOMING" || session.ScheduledAt == nil {
+		return errors.New("schedule observation time requires an upcoming scheduled time")
+	}
+
+	if !observed.Before(slot) || observed.Before(slot.Add(-LiveScheduleObservationMaxAge)) {
+		return fmt.Errorf("schedule observation time %s is outside the reuse window before %s",
+			observed.Format(time.RFC3339Nano), slot.Format(time.RFC3339Nano))
 	}
 
 	return nil
