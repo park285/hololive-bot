@@ -159,8 +159,8 @@ github.com/park285/shared-go/postgres v1.0.4 h1:IXvDtVVQGEEAIQmzTlX8OH+7CXG7W7Qz
 github.com/park285/shared-go/postgres v1.0.4/go.mod h1:OPcoJxYzmEkyV/WqabBL295iKtkvG43OHLuEZlhSyOk=
 github.com/park285/shared-go/transport v1.0.1 h1:KORquAb07pBOGQk7vYvdPyIQ32LGkti7Ue80xfK/yRY=
 github.com/park285/shared-go/transport v1.0.1/go.mod h1:1ISrFk/Zi1izwr1DQgKE6mMVUAiqmWdnVM2L/i1vNBk=
-github.com/park285/shared-go/v2 v2.25.0 h1:iPb0DRfZs/sCk1IgA+jFo1oW3JkgfL4tXzWspIt170Q=
-github.com/park285/shared-go/v2 v2.25.0/go.mod h1:nP1O/PEzHzPxazCEIN2ufa2zgn5kUNqExGhJnvDLmkA=
+github.com/park285/shared-go/v2 v2.26.1 h1:+PGq64xD/M/BKDdZ/z+T3nXB+4THBiK1TTmbpnOcYRY=
+github.com/park285/shared-go/v2 v2.26.1/go.mod h1:LvazEzjoflY+4JHJNN0TYa5FbOkXNjLlgrL8AAVMuLY=
 github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
 github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

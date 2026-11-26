@@ -121,7 +121,7 @@ func TestBuildNotificationSenderUsesMarkdownOnlyForOpenChat(t *testing.T) {
 				assert.Equal(t, "**world**", stub.richTextMessage)
 				assert.Equal(t, 1, stub.richTextOpts)
 			} else {
-				assert.Equal(t, "𝘄𝗼𝗿𝗹𝗱", stub.message)
+				assert.Equal(t, "world", stub.message)
 				assert.Equal(t, 1, stub.opts)
 				assert.Empty(t, stub.richTextRoomID)
 			}

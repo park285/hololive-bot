@@ -90,7 +90,7 @@ func TestIrisMessageSenderRendersPlainTextForRegularChat(t *testing.T) {
 	assert.Empty(t, client.richTextCalls)
 	require.Len(t, client.textCalls, 1)
 	assert.Equal(t, testIrisSenderRoomID, client.textCalls[0].roomID)
-	assert.Equal(t, "【𝗵𝗲𝗹𝗹𝗼】", client.textCalls[0].message)
+	assert.Equal(t, "hello", client.textCalls[0].message)
 	assert.Equal(t, 1, client.textCalls[0].opts)
 }
 
@@ -106,7 +106,7 @@ func TestIrisMessageSenderRendersPlainTextForOpenChatWhenMarkdownDisabled(t *tes
 
 	assert.Empty(t, client.richTextCalls)
 	require.Len(t, client.textCalls, 1)
-	assert.Equal(t, "𝗵𝗲𝗹𝗹𝗼", client.textCalls[0].message)
+	assert.Equal(t, "hello", client.textCalls[0].message)
 }
 
 func TestIrisMessageSenderRendersPlainTextForUnknownRoom(t *testing.T) {
@@ -117,7 +117,7 @@ func TestIrisMessageSenderRendersPlainTextForUnknownRoom(t *testing.T) {
 
 	assert.Empty(t, client.richTextCalls)
 	require.Len(t, client.textCalls, 1)
-	assert.Equal(t, "𝗵𝗲𝗹𝗹𝗼", client.textCalls[0].message)
+	assert.Equal(t, "hello", client.textCalls[0].message)
 }
 
 func TestIrisMessageSenderPlainTextPropagatesClientRequestID(t *testing.T) {
