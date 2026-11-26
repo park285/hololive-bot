@@ -99,7 +99,10 @@ frozen request의 기존 복원·fallback·delivery binding 시험을 함께 실
 이 변경만 되돌릴 때에는 이전 앱 이미지를 사용하며 스키마 rollback이나 데이터 복원은 필요하지 않다.
 실제 배포·롤백은 현행 release runbook과 이미지 식별자 검증을 따른다.
 
-## 후속 1: 관측 보존의 집합 삭제
+## 후속 1: 관측 보존의 집합 삭제 (보류)
+
+2026-11-26 운영 `pg_stat_statements`(통계 창 2026-11-22 09:45 UTC부터)에서 CASCADE가 만든 `source_observation_applications` 개별 삭제는 86.8만 회, 실행 시간 합계 20.6초였다. 같은 창의 보존 함수 전체는 3,043회, 1,080초다.
+집합 삭제로 줄일 수 있는 몫이 2% 미만이고 CASCADE 트리거 호출은 부모마다 남으므로 아래 변경은 적용하지 않았다.
 
 보존 함수 변경은 별도 008 suffix와 동일 이름의 전체 물리·권한 계약으로 준비한다.
 이미 적용된 baseline은 수정하지 않고 현재 manifest head 다음 번호를 작업 시점에 다시 확인한다.
@@ -116,19 +119,24 @@ FK CASCADE 트리거는 부모별로 남는다. 집합 삭제가 그 호출 자�
 보호된 자식 보존, 잠긴 부모 건너뛰기, 부모·자식·커서의 원자 롤백, 권한과 대량 fanout을 시험한다.
 합성 fixture의 처리 시간·버퍼·WAL 비교와 기존 bounded retention 회귀시험 후 적용 여부를 결정한다.
 
-## 후속 2: 인덱스와 identity 계약
+## 후속 2: 인덱스와 identity 계약 (migration 010)
 
-latest application 인덱스의 부분화는 동적으로 배정되는 `entity_kind_id`를 먼저 해결해야 한다.
-특정 숫자를 모든 DB의 `youtube_live_session` ID로 가정하지 않는다. predicate와 실제 query plan도 함께 검증한다.
-별도 head를 도입한다면 현재 최신성 기준인 최대 observation ID를 유지해야 한다.
-처리 완료 시각으로 대체하거나 APPLIED만 반영하면 기존 REPLAY 등 감사 기록의 보호 의미가 달라진다.
-backfill, 역순·병행 처리, retention과 replay, head 복구 경로를 함께 이행한 뒤 기존 인덱스를 제거한다.
+latest application 인덱스의 부분화는 동적으로 배정되는 `entity_kind_id` 때문에 쓰지 않았다.
+대신 `youtube_live_session_application_heads(video_id, observation_id)`가 세션별 최신 적용 관측을 들고 있다.
+최신성 기준은 기존과 같은 최대 observation ID이며 결정 종류(APPLIED·REPLAY 등)와 무관하다.
+`write_finalize_applications.sql`이 감사 행과 같은 문장에서 head를 올리고, 더 작은 ID는 head를 되돌리지 않는다(역순 도착).
+같은 세션의 병행 기록은 head 행 잠금에서 직렬화된다. 감사 행이 있는 경로는 이 문장 하나뿐이므로 replay도 같은 규칙을 따른다.
+head는 관측 FK `ON DELETE CASCADE`로 원본과 함께 지워진다. 보호 중인 원본은 지워지지 않으므로 LIVE·UPCOMING 세션의 head는 남는다.
+010은 감사 표를 SHARE로 잠근 채 기존 감사에서 세션별 최대 ID를 채운 뒤 `idx_source_application_entity_latest`를 지운다.
+같은 질의로 head를 다시 만들 수 있다.
 
 observation identity 해시는 provider·kind·subject·scope·scheduled time을 포함한다.
 그러나 DB의 길이 제약만으로 해시와 원래 열의 대응을 증명할 수는 없다.
-UNIQUE를 해시·schema version·contract generation으로 줄이기 전 기존 중복·불일치를 감사한다.
-identity 조회, advisory lock, uniqueness, semantic evidence collision 기록이 동일한 식별 규칙을 사용하게 한다.
-현재 migrator가 `CONCURRENTLY`를 지원하지 않으므로 인덱스 변경의 잠금 시간과 정비 절차도 별도로 설계한다.
+collector는 envelope 검증에서 이 해시를 필드로 다시 계산해 비교하므로 해시가 같으면 provider·kind·subject도 같다.
+2026-11-26 운영 감사에서 `(observation_key, schema_version, contract_generation)`이 같은 관측 묶음은 0건이었다.
+010은 `uq_source_observation_identity`를 이 세 열로 줄였다. identity 조회와 advisory lock은 그대로 여섯 열을 쓰며 첫 열이 해시라 새 인덱스를 탄다.
+해시는 같은데 다른 열이 다른 행은 collision으로 기록되지 않고 unique 위반으로 실패한다.
+`CONCURRENTLY`가 없으므로 010은 "대기 migration 적용 창"에서 writer를 멈춘 채 적용한다. 인덱스 생성 동안 `source_observations`에 SHARE 잠금이 걸린다.
 
 어휘 resolver는 SELECT-first를 유지한다. INSERT-first로 일괄 치환하면 충돌에도 identity sequence가 소모될 수 있다.
 특히 smallint kind·decision ID는 반복 조회로 번호를 소비하지 않도록 해야 한다.

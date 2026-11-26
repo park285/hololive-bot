@@ -69,7 +69,7 @@ The workstation `.3` is not a PostgreSQL fallback. A route rollback needs explic
 authorization and all affected consumers/certificates; binary rollback alone is not
 authorization to reinstate retired DNS routes.
 
-Prepared WAL settings are command-line `checkpoint_timeout=900s`, `max_wal_size=2GB`,
+Prepared WAL settings are command-line `checkpoint_timeout=1800s`, `max_wal_size=2GB`,
 `wal_compression=lz4` in production; a reactivated standby definition must carry the same values. No source edit cleans
 existing `postgresql.auto.conf`; that exact cleanup, role-limit changes, HBA installation,
 DB recreation and refreshed-session acceptance remain separate approved operations.

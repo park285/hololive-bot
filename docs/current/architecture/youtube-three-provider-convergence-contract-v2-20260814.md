@@ -958,9 +958,6 @@ CREATE TABLE source_observations (
     projection_generation BIGINT NOT NULL CHECK (projection_generation > 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_source_observation_identity UNIQUE (
-        provider,
-        observation_kind,
-        subject_key,
         observation_key,
         schema_version,
         contract_generation

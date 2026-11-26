@@ -333,13 +333,13 @@ func TestSourceRetentionProtectsProjectionLeaseAndActiveSessions(t *testing.T) {
 		VALUES ('leased','youtubejs','SUBJECT','community_collect','leased',9003,120000,
 			'ACTIVE',now(),now(),'collector',now()+interval '1 minute');
 		INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin)
-		VALUES ('retention-live','UC_retention','LIVE','observed'),('retention-upcoming','UC_retention','UPCOMING','metadata_only');
-		INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
-		SELECT id,source_observation_entity_kind_id('youtube_live_session'),'retention-'||subject_key,source_observation_decision_id('APPLIED') FROM source_observations
-		WHERE subject_key IN ('live','upcoming')`)
+		VALUES ('retention-live','UC_retention','LIVE','observed'),('retention-upcoming','UC_retention','UPCOMING','metadata_only')`)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	finalizeLiveSessionApplication(t, pool, ids[3], "retention-live")
+	finalizeLiveSessionApplication(t, pool, ids[4], "retention-upcoming")
 
 	if got := deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{base.Add(time.Hour)}, 1000); len(got) != 1 || got[0] != eligible {
 		t.Fatalf("protected retention deleted %v, want only %d", got, eligible)
@@ -380,13 +380,13 @@ func TestSourceRetentionProtectsOnlyLatestActiveSessionApplication(t *testing.T)
 	latest := insertRetentionObservation(t, pool, communityPageKind, base.Add(2*time.Hour), "session-latest")
 
 	_, err := pool.Exec(t.Context(), `INSERT INTO youtube_live_sessions(video_id,channel_id,status,lifecycle_origin)
-		VALUES ('ret-long-upcoming','UC_retention','UPCOMING','observed');
-		INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
-		SELECT id,source_observation_entity_kind_id('youtube_live_session'),'ret-long-upcoming',
-			source_observation_decision_id('APPLIED')
-		FROM source_observations WHERE subject_key LIKE 'session-%'`)
+		VALUES ('ret-long-upcoming','UC_retention','UPCOMING','observed')`)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	for _, id := range []int64{older, middle, latest} {
+		finalizeLiveSessionApplication(t, pool, id, "ret-long-upcoming")
 	}
 
 	got := deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{cutoff}, 1000)
@@ -411,12 +411,7 @@ func TestSourceRetentionProtectsOnlyLatestActiveSessionApplication(t *testing.T)
 	}
 
 	recent := insertRetentionObservation(t, pool, communityPageKind, cutoff.Add(time.Hour), "session-recent")
-	if _, err := pool.Exec(t.Context(), `INSERT INTO source_observation_applications
-		(observation_id,entity_kind_id,entity_key,decision_id)
-		VALUES ($1,source_observation_entity_kind_id('youtube_live_session'),'ret-long-upcoming',
-			source_observation_decision_id('APPLIED'))`, recent); err != nil {
-		t.Fatal(err)
-	}
+	finalizeLiveSessionApplication(t, pool, recent, "ret-long-upcoming")
 
 	if got := deleteRetentionBatch(t, pool, []string{communityPageKind}, []time.Time{cutoff}, 1000); !slices.Equal(got, []int64{latest}) {
 		t.Fatalf("superseded session evidence retention deleted %v, want %d", got, latest)

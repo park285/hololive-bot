@@ -7,3 +7,4 @@
 007 007_epoch4_kakao_room_delivery_pauses.sql
 008 008_epoch4_retention_protected_set.sql
 009 009_epoch4_schedule_poster_notices.sql
+010 010_epoch4_source_observation_index_shrink.sql

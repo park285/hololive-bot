@@ -31,7 +31,7 @@ func TestSchedulePosterNoticesStartSettledForWhatAlreadyExists(t *testing.T) {
 
 	result, err := Run(ctx, pool, migrations.FS, Config{})
 	require.NoError(t, err)
-	require.Equal(t, 1, result.Applied)
+	require.Equal(t, 2, result.Applied)
 
 	rows, err := pool.Query(ctx, `SELECT kind, poster_id, COALESCE(post_id, 0), status, settled_at IS NOT NULL FROM schedule_poster_notices ORDER BY kind, poster_id`)
 	require.NoError(t, err)
