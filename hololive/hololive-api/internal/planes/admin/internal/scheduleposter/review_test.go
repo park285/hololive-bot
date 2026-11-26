@@ -477,7 +477,17 @@ func TestGeminiModelDiagnosticsExcludeResponseText(t *testing.T) {
 	_, periodErr := parsePeriod(`{"` + echo + `":0}`)
 	require.ErrorIs(t, periodErr, errUnjudgeable)
 
-	for _, err := range []error{reviewErr, postErr, periodErr} {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeStreamChunks(t, w, `{"promptFeedback":{"blockReason":"PROHIBITED_CONTENT","blockReasonMessage":"`+echo+`"},`+
+			`"candidates":[{"finishReason":"SAFETY","finishMessage":"`+echo+`"}]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	_, _, readErr := newGeminiJudge(decisionTestKey, newTestGenAIClient(t, server.URL)).readPeriod(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
+	require.ErrorIs(t, readErr, errUnjudgeable)
+	require.ErrorContains(t, readErr, "block reason PROHIBITED_CONTENT")
+
+	for _, err := range []error{reviewErr, postErr, periodErr, readErr} {
 		require.NotContains(t, err.Error(), echo)
 	}
 }
@@ -804,6 +814,29 @@ func TestReadPeriodStreamsFromVertexWithADC(t *testing.T) {
 	require.Equal(t, "/v1/projects/test-project/locations/global/publishers/google/models/"+periodModel+":streamGenerateContent", exchange.path)
 	require.Equal(t, "Bearer vertex-token", exchange.authorization)
 	require.Empty(t, exchange.apiKey)
+}
+
+func TestReadPeriodReportsTokensAcrossContinuationHops(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			writeStreamChunks(t, w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"{"}]},"finishReason":"CONTINUATION","continuationToken":"aG9wLTE="}],`+
+				`"usageMetadata":{"promptTokenCount":1000,"candidatesTokenCount":5,"thoughtsTokenCount":7}}`)
+
+			return
+		}
+
+		writeStreamChunks(t, w, `{"candidates":[{"finishReason":"SAFETY"}],"usageMetadata":{"promptTokenCount":1010,"candidatesTokenCount":3,"thoughtsTokenCount":2}}`)
+	}))
+	t.Cleanup(server.Close)
+
+	_, spent, err := newGeminiJudge(decisionTestKey, newTestGenAIClient(t, server.URL)).readPeriod(t.Context(), source{MIME: mimeJPEG, Data: []byte("jpeg")})
+	require.ErrorIs(t, err, errUnjudgeable)
+	require.ErrorContains(t, err, "thoughts 9 tokens, output 8 tokens")
+	require.Equal(t, usage{model: periodModel, prompt: 2010, thoughts: 9, output: 8}, spent)
 }
 
 func TestReadPeriodReportsFinishReasonWithoutContent(t *testing.T) {

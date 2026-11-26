@@ -66,7 +66,7 @@ func (s *streamedResponse) read(
 
 	for chunk, err := range models.GenerateContentStream(ctx, model, contents, config) {
 		if err != nil {
-			s.spent = s.spent.add(s.model, hopUsage)
+			s.closeHop(hopUsage)
 
 			return nil, err
 		}
@@ -78,18 +78,33 @@ func (s *streamedResponse) read(
 		s.merge(chunk)
 	}
 
-	s.spent = s.spent.add(s.model, hopUsage)
+	s.closeHop(hopUsage)
 
 	return s.continuationToken(), nil
+}
+
+func (s *streamedResponse) closeHop(hop *genai.GenerateContentResponseUsageMetadata) {
+	s.spent = s.spent.add(s.model, hop)
+
+	if hop == nil {
+		return
+	}
+
+	if s.response.UsageMetadata == nil {
+		s.response.UsageMetadata = &genai.GenerateContentResponseUsageMetadata{}
+	}
+
+	total := s.response.UsageMetadata
+
+	total.PromptTokenCount += hop.PromptTokenCount
+	total.CandidatesTokenCount += hop.CandidatesTokenCount
+	total.ThoughtsTokenCount += hop.ThoughtsTokenCount
+	total.TotalTokenCount += hop.TotalTokenCount
 }
 
 func (s *streamedResponse) merge(chunk *genai.GenerateContentResponse) {
 	if chunk == nil {
 		return
-	}
-
-	if chunk.UsageMetadata != nil {
-		s.response.UsageMetadata = chunk.UsageMetadata
 	}
 
 	if chunk.PromptFeedback != nil {
@@ -225,13 +240,11 @@ func emptyResponseReason(response *genai.GenerateContentResponse) string {
 	var reasons []string
 
 	if feedback := response.PromptFeedback; feedback != nil && feedback.BlockReason != "" {
-		reasons = append(reasons, strings.TrimSpace("block reason "+string(feedback.BlockReason)+" "+feedback.BlockReasonMessage))
+		reasons = append(reasons, "block reason "+string(feedback.BlockReason))
 	}
 
 	if len(response.Candidates) > 0 && response.Candidates[0] != nil && response.Candidates[0].FinishReason != "" {
-		candidate := response.Candidates[0]
-
-		reasons = append(reasons, strings.TrimSpace("finish reason "+string(candidate.FinishReason)+" "+candidate.FinishMessage))
+		reasons = append(reasons, "finish reason "+string(response.Candidates[0].FinishReason))
 	}
 
 	if usage := response.UsageMetadata; usage != nil {
