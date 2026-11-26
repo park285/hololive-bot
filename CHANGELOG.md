@@ -7,6 +7,7 @@
 ## 미출시
 
 - **구형 `SendMarkdown` 전달 경로 정리:** `iris-client-go`를 `v6.1.0`으로 올리고 퇴역한 `RuntimeIrisClient.SendMarkdown`과 테스트 스텁을 제거했습니다. Markdown 응답은 기존과 같이 `SendRichText`(`type:"richtext"`) 경로만 사용합니다. Fallback delta: none.
+- **스크립트 시험 모듈 lint·vet 복원:** r1.2.19에서 스크립트 시험을 제품 모듈과 분리하면서 `scripts/scripttest`가 `golangci-lint`와 canonical vet 범위에서 빠졌습니다. 그사이 생긴 시험 하네스 위반 7건(Mutex embedding, 미확인 type assertion, 공백)을 고치고, 시험 대상 패키지를 lint·vet에 다시 넣었습니다.
 
 ## r1.2.19 - 2026-11-27
 

@@ -32,7 +32,7 @@ type Result struct {
 }
 
 type sessionSet struct {
-	sync.Mutex
+	mu  sync.Mutex
 	ids map[int]struct{}
 }
 
@@ -148,10 +148,16 @@ func TrackSession(tb testing.TB, sid int) {
 	tb.Helper()
 
 	value, _ := testSessions.LoadOrStore(tb, &sessionSet{ids: make(map[int]struct{})})
-	sessions := value.(*sessionSet)
-	sessions.Lock()
+
+	sessions, ok := value.(*sessionSet)
+	if !ok {
+		tb.Fatalf("session registry holds %T", value)
+	}
+
+	sessions.mu.Lock()
+
 	sessions.ids[sid] = struct{}{}
-	sessions.Unlock()
+	sessions.mu.Unlock()
 
 	tb.Cleanup(func() {
 		value, loaded := testSessions.LoadAndDelete(tb)
@@ -159,9 +165,16 @@ func TrackSession(tb testing.TB, sid int) {
 			return
 		}
 
-		sessions := value.(*sessionSet)
-		sessions.Lock()
-		defer sessions.Unlock()
+		sessions, ok := value.(*sessionSet)
+		if !ok {
+			tb.Errorf("session registry holds %T", value)
+
+			return
+		}
+
+		sessions.mu.Lock()
+		defer sessions.mu.Unlock()
+
 		killSessions(tb, sessions.ids)
 	})
 }
