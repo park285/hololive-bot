@@ -7,8 +7,7 @@
 스키마, 역할 권한, 트랜잭션 경계와 명시적 행 잠금은 추가하거나 변경하지 않는다.
 서버 설정, 관측 데이터 보존 정책, 인덱스와 collector payload 계약은 후속 작업이다.
 
-이 문서를 작성한 환경에는 지정 검증 호스트 연결과 필요한 Go·PostgreSQL 19 검증 구성이 없다.
-아래 시험은 작성한 검증 항목이며 실행 성공 기록이 아니다. 병합 전에는 실제 PG19 시험과 기존 gate 결과가 필요하다.
+아래 시험은 2026-11-26 kapu의 `scripts/ci/pre-push-gate.sh` 전체 실행(일회용 PostgreSQL 19, golangci-lint, race 시험)에서 통과했다.
 소스 변경과 검증 설계는 운영 반영을 의미하지 않는다.
 
 ## 줄어드는 데이터베이스 왕복
@@ -70,12 +69,12 @@ frozen request는 COMMIT 후 동일 payload를 복원하고, 다른 payload는 c
 
 | 시험 | 확인할 동작 | 상태 |
 |---|---|---|
-| `TestReplayEpochActivationIsImmutableAndIdempotent` | 최초 생성·재요청의 반환 값과 단일 행 유지 | 실행 필요 |
-| `TestReplayEpochActivationWaitsForConcurrentInsert` | 실제 충돌 대기를 확인한 뒤 COMMIT·ROLLBACK 결과 비교 | 실행 필요 |
-| `TestFrozenRequestInsertReturnsStoredSnapshotWithoutRewrite` | 최초·반복 요청, generation 보존, 행 버전 무변경 | 실행 필요 |
-| `TestFrozenRequestInsertRejectsConflictingPayload` | room·본문·route·멤버·dedupe 값 및 순서 불일치 거부 | 실행 필요 |
-| `TestFrozenRequestInsertRejectsCorruptStoredHash` | 손상된 저장 hash 거부 | 실행 필요 |
-| `TestFrozenRequestInsertWaitsForConcurrentInsert` | COMMIT·ROLLBACK과 동일·상이 payload의 네 경합 조합 | 실행 필요 |
+| `TestReplayEpochActivationIsImmutableAndIdempotent` | 최초 생성·재요청의 반환 값과 단일 행 유지 | 통과 |
+| `TestReplayEpochActivationWaitsForConcurrentInsert` | 실제 충돌 대기를 확인한 뒤 COMMIT·ROLLBACK 결과 비교 | 통과 |
+| `TestFrozenRequestInsertReturnsStoredSnapshotWithoutRewrite` | 최초·반복 요청, generation 보존, 행 버전 무변경 | 통과 |
+| `TestFrozenRequestInsertRejectsConflictingPayload` | room·본문·route·멤버·dedupe 값 및 순서 불일치 거부 | 통과 |
+| `TestFrozenRequestInsertRejectsCorruptStoredHash` | 손상된 저장 hash 거부 | 통과 |
+| `TestFrozenRequestInsertWaitsForConcurrentInsert` | COMMIT·ROLLBACK과 동일·상이 payload의 네 경합 조합 | 통과 |
 
 시험은 실제 PG19와 기존 역할 권한을 사용해야 한다. 고정 sleep만으로 경합이 발생했다고 간주하지 않는다.
 행 버전 무변경 확인은 충돌 경로가 기존 행을 갱신하지 않는다는 검사이며 WAL 0을 증명하지 않는다.

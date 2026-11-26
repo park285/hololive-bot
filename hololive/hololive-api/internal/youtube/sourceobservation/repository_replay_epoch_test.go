@@ -62,72 +62,83 @@ func TestReplayEpochActivationWaitsForConcurrentInsert(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			pool := dbtest.NewPool(t)
-			repo := NewRepository(pool)
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-
-			defer cancel()
-
-			blocker, err := pool.Begin(ctx)
-			require.NoError(t, err)
-
-			defer rollbackPublishTestTx(t.Context(), t, blocker, "replay epoch activation blocker")
-
-			first, err := activateReplayEpochTx(ctx, blocker, ReplayEpochInput{
-				ActivatedBy: "first-operator",
-				Reason:      "first activation awaiting transaction outcome",
-			})
-			require.NoError(t, err)
-			require.True(t, first.Activated)
-
-			input := ReplayEpochInput{
-				ActivatedBy: "waiting-operator",
-				Reason:      "activation competing with an uncommitted epoch",
-			}
-			done := make(chan error, 1)
-
-			var second ReplayEpochActivation
-
-			var workers sync.WaitGroup
-
-			workers.Go(func() {
-				var activationErr error
-
-				second, activationErr = repo.ActivateReplayEpoch(ctx, input)
-				done <- activationErr
-			})
-
-			defer func() {
-				cancel()
-				workers.Wait()
-			}()
-
-			waitObservationSettlementLock(ctx, t, pool, blocker.Conn().PgConn().PID(), done)
-
-			if commit {
-				require.NoError(t, blocker.Commit(ctx))
-			} else {
-				require.NoError(t, pgxdb.Rollback(ctx, blocker))
-			}
-
-			require.NoError(t, <-done)
-			require.Equal(t, !commit, second.Activated)
-
-			if commit {
-				require.Equal(t, first.Epoch, second.Epoch)
-			} else {
-				require.Equal(t, input.ActivatedBy, second.Epoch.ActivatedBy)
-				require.Equal(t, input.Reason, second.Epoch.Reason)
-				require.False(t, second.Epoch.CutoffReceivedAt.IsZero())
-			}
-
-			repeated, err := repo.ActivateReplayEpoch(ctx, input)
-			require.NoError(t, err)
-			require.False(t, repeated.Activated)
-			require.Equal(t, second.Epoch, repeated.Epoch)
-			assertTableCount(t, pool, "source_observation_replay_epoch", 1)
+			testReplayEpochConcurrentActivation(t, commit)
 		})
 	}
+}
+
+func testReplayEpochConcurrentActivation(t *testing.T, commit bool) {
+	t.Helper()
+
+	pool := dbtest.NewPool(t)
+	repo := NewRepository(pool)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	blocker, err := pool.Begin(ctx)
+	require.NoError(t, err)
+
+	defer rollbackPublishTestTx(t.Context(), t, blocker, "replay epoch activation blocker")
+
+	first, err := activateReplayEpochTx(ctx, blocker, ReplayEpochInput{
+		ActivatedBy: "first-operator",
+		Reason:      "first activation awaiting transaction outcome",
+	})
+	require.NoError(t, err)
+	require.True(t, first.Activated)
+
+	input := ReplayEpochInput{
+		ActivatedBy: "waiting-operator",
+		Reason:      "activation competing with an uncommitted epoch",
+	}
+	done := make(chan error, 1)
+
+	var second ReplayEpochActivation
+
+	var workers sync.WaitGroup
+
+	workers.Go(func() {
+		var activationErr error
+
+		second, activationErr = repo.ActivateReplayEpoch(ctx, input)
+		done <- activationErr
+	})
+
+	defer func() {
+		cancel()
+		workers.Wait()
+	}()
+
+	waitObservationSettlementLock(ctx, t, pool, blocker.Conn().PgConn().PID(), done)
+
+	if commit {
+		require.NoError(t, blocker.Commit(ctx))
+	} else {
+		require.NoError(t, pgxdb.Rollback(ctx, blocker))
+	}
+
+	require.NoError(t, <-done)
+
+	want := first.Epoch
+
+	if !commit {
+		want = ReplayEpoch{CutoffReceivedAt: second.Epoch.CutoffReceivedAt, ActivatedBy: input.ActivatedBy, Reason: input.Reason}
+		require.False(t, want.CutoffReceivedAt.IsZero())
+	}
+
+	requireReplayEpochSettled(ctx, t, repo, input, ReplayEpochActivation{Epoch: want, Activated: !commit}, second)
+	assertTableCount(t, pool, "source_observation_replay_epoch", 1)
+}
+
+func requireReplayEpochSettled(ctx context.Context, t *testing.T, repo *Repository, input ReplayEpochInput, want, got ReplayEpochActivation) {
+	t.Helper()
+
+	require.Equal(t, want, got)
+
+	repeated, err := repo.ActivateReplayEpoch(ctx, input)
+	require.NoError(t, err)
+	require.Equal(t, ReplayEpochActivation{Epoch: want.Epoch}, repeated)
 }
 
 func TestReplayEpochDeadLettersPreEpochAutomaticClaim(t *testing.T) {

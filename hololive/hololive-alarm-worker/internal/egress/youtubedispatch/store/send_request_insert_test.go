@@ -25,10 +25,7 @@ func TestFrozenRequestInsertReturnsStoredSnapshotWithoutRewrite(t *testing.T) {
 
 	first, err := insertFrozenRequestAsWorker(ctx, t, pool, request)
 	require.NoError(t, err)
-
-	sum := sha256.Sum256([]byte(request.Message))
-	request.MessageHash = hex.EncodeToString(sum[:])
-	require.Equal(t, request, first)
+	require.Equal(t, frozenInsertWithHash(request), first)
 
 	_, err = pool.Exec(ctx, `UPDATE youtube_notification_send_request SET generation = 1 WHERE base_id = $1`, request.BaseID)
 	require.NoError(t, err)
@@ -44,7 +41,7 @@ func TestFrozenRequestInsertReturnsStoredSnapshotWithoutRewrite(t *testing.T) {
 	require.Equal(t, first, repeated)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT xmin::text || ':' || ctid::text FROM youtube_notification_send_request WHERE base_id = $1`, request.BaseID).Scan(&after))
 	require.Equal(t, before, after)
-	requireFrozenInsertRowCount(t, pool)
+	requireFrozenInsertRowCount(ctx, t, pool)
 }
 
 func TestFrozenRequestInsertRejectsConflictingPayload(t *testing.T) {
@@ -81,7 +78,7 @@ func TestFrozenRequestInsertRejectsConflictingPayload(t *testing.T) {
 			stored, err := loadFrozenRequest(t.Context(), pool, first.BaseID)
 			require.NoError(t, err)
 			require.Equal(t, first, stored)
-			requireFrozenInsertRowCount(t, pool)
+			requireFrozenInsertRowCount(t.Context(), t, pool)
 		})
 	}
 }
@@ -100,7 +97,7 @@ func TestFrozenRequestInsertRejectsCorruptStoredHash(t *testing.T) {
 
 	_, err = insertFrozenRequestAsWorker(ctx, t, pool, request)
 	require.ErrorContains(t, err, "message hash mismatch")
-	requireFrozenInsertRowCount(t, pool)
+	requireFrozenInsertRowCount(ctx, t, pool)
 }
 
 func TestFrozenRequestInsertWaitsForConcurrentInsert(t *testing.T) {
@@ -126,10 +123,16 @@ func TestFrozenRequestInsertWaitsForConcurrentInsert(t *testing.T) {
 	}
 }
 
+type frozenInsertResult struct {
+	request FrozenRequest
+	err     error
+}
+
 func testFrozenRequestConcurrentInsert(t *testing.T, commit, conflict bool) {
 	t.Helper()
 
 	pool := dbtest.NewPool(t)
+
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
@@ -147,18 +150,13 @@ func testFrozenRequestConcurrentInsert(t *testing.T, commit, conflict bool) {
 		request.Message = "competing body"
 	}
 
-	type result struct {
-		request FrozenRequest
-		err     error
-	}
-
-	done := make(chan result, 1)
+	done := make(chan frozenInsertResult, 1)
 
 	var workers sync.WaitGroup
 
 	workers.Go(func() {
 		frozen, insertErr := insertFrozenRequest(ctx, secondTx, request)
-		done <- result{request: frozen, err: insertErr}
+		done <- frozenInsertResult{request: frozen, err: insertErr}
 	})
 
 	defer func() {
@@ -174,7 +172,7 @@ func testFrozenRequestConcurrentInsert(t *testing.T, commit, conflict bool) {
 		require.NoError(t, pgxdb.Rollback(ctx, firstTx))
 	}
 
-	var second result
+	var second frozenInsertResult
 
 	select {
 	case second = <-done:
@@ -184,26 +182,29 @@ func testFrozenRequestConcurrentInsert(t *testing.T, commit, conflict bool) {
 
 	expected := first
 
-	if commit && conflict {
+	if !commit {
+		expected = frozenInsertWithHash(request)
+	}
+
+	requireConcurrentFrozenInsertOutcome(ctx, t, pool, secondTx, second, expected, commit && conflict)
+}
+
+func requireConcurrentFrozenInsertOutcome(ctx context.Context, t *testing.T, pool *pgxpool.Pool, tx pgx.Tx, second frozenInsertResult, expected FrozenRequest, collision bool) {
+	t.Helper()
+
+	if collision {
 		require.ErrorContains(t, second.err, "existing request collision")
-		require.NoError(t, pgxdb.Rollback(ctx, secondTx))
+		require.NoError(t, pgxdb.Rollback(ctx, tx))
 	} else {
 		require.NoError(t, second.err)
-		require.NoError(t, secondTx.Commit(ctx))
-
-		if !commit {
-			sum := sha256.Sum256([]byte(request.Message))
-			request.MessageHash = hex.EncodeToString(sum[:])
-			expected = request
-		}
-
+		require.NoError(t, tx.Commit(ctx))
 		require.Equal(t, expected, second.request)
 	}
 
-	stored, err := loadFrozenRequest(ctx, pool, request.BaseID)
+	stored, err := loadFrozenRequest(ctx, pool, expected.BaseID)
 	require.NoError(t, err)
 	require.Equal(t, expected, stored)
-	requireFrozenInsertRowCount(t, pool)
+	requireFrozenInsertRowCount(ctx, t, pool)
 }
 
 func waitFrozenInsertBlocked(ctx context.Context, t *testing.T, pool *pgxpool.Pool, first, second pgx.Tx) {
@@ -211,6 +212,7 @@ func waitFrozenInsertBlocked(ctx context.Context, t *testing.T, pool *pgxpool.Po
 
 	firstPID := int64(first.Conn().PgConn().PID())
 	secondPID := int64(second.Conn().PgConn().PID())
+
 	require.Eventually(t, func() bool {
 		var blocked bool
 
@@ -227,6 +229,14 @@ func frozenInsertTestRequest() FrozenRequest {
 	}
 }
 
+func frozenInsertWithHash(request FrozenRequest) FrozenRequest {
+	sum := sha256.Sum256([]byte(request.Message))
+
+	request.MessageHash = hex.EncodeToString(sum[:])
+
+	return request
+}
+
 func beginFrozenInsertWorkerTx(ctx context.Context, t *testing.T, pool *pgxpool.Pool) pgx.Tx {
 	t.Helper()
 
@@ -234,7 +244,7 @@ func beginFrozenInsertWorkerTx(ctx context.Context, t *testing.T, pool *pgxpool.
 	require.NoError(t, err)
 
 	if _, err = tx.Exec(ctx, "SET LOCAL ROLE hololive_alarm_worker"); err != nil {
-		rollbackPlanModeSQLTest(t, tx)
+		require.NoError(t, pgxdb.Rollback(ctx, tx))
 		t.Fatalf("set frozen request worker role: %v", err)
 	}
 
@@ -245,21 +255,22 @@ func insertFrozenRequestAsWorker(ctx context.Context, t *testing.T, pool *pgxpoo
 	t.Helper()
 
 	tx := beginFrozenInsertWorkerTx(ctx, t, pool)
-	defer rollbackPlanModeSQLTest(t, tx)
 
 	frozen, err := insertFrozenRequest(ctx, tx, request)
 	if err != nil {
+		require.NoError(t, pgxdb.Rollback(ctx, tx))
+
 		return FrozenRequest{}, err
 	}
 
 	return frozen, tx.Commit(ctx)
 }
 
-func requireFrozenInsertRowCount(t *testing.T, pool *pgxpool.Pool) {
+func requireFrozenInsertRowCount(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
 	var count int
 
-	require.NoError(t, pool.QueryRow(t.Context(), `SELECT count(*) FROM youtube_notification_send_request`).Scan(&count))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM youtube_notification_send_request`).Scan(&count))
 	require.Equal(t, 1, count)
 }
