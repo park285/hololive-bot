@@ -135,7 +135,16 @@ jobs:
         run: bash scripts/ci/check-gofmt.sh
 
       - name: Deploy and runtime script tests
-        run: bash scripts/ci/run-script-tests.sh -json ./...
+        run: |
+          jsonl="${RUNNER_TEMP}/script-tests.jsonl"
+          test_status=0
+          bash scripts/ci/run-script-tests.sh -json ./... >"${jsonl}" || test_status=$?
+          json_status=0
+          bash scripts/ci/python-runner.sh -- scripts/ci/check-go-test-json.py --input "${jsonl}" --require-pass || json_status=$?
+          if (( test_status != 0 || json_status != 0 )); then
+            tail -n 400 "${jsonl}" >&2
+            exit 1
+          fi
 
       - name: Require canonical verification
         if: always()
