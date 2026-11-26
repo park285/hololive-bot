@@ -48,6 +48,8 @@ func TestFrozenRequestInsertReturnsStoredSnapshotWithoutRewrite(t *testing.T) {
 }
 
 func TestFrozenRequestInsertRejectsConflictingPayload(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	first, err := insertFrozenRequestAsWorker(ctx, t, pool, frozenInsertTestRequest())
