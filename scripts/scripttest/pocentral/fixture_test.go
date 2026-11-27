@@ -337,6 +337,7 @@ podman() {
       value="$(<"$file")"
       case "$format" in
         '{{.Id}}') hex_of "$value" ;;
+        '{{index .Config.Labels "org.opencontainers.image.revision"}} {{.Os}}/{{.Architecture}} {{.Id}}') printf '%s linux/arm64 %s\n' "$(revision_of "$value")" "$(hex_of "$value")" ;;
         *image.revision*) revision_of "$value" ;;
         *image.version*) if [[ "$value" == old ]]; then printf '6.0.0\n'; else printf '6.0.1\n'; fi ;;
         '{{.Os}}/{{.Architecture}}') printf 'linux/arm64\n' ;;

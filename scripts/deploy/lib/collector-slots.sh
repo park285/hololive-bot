@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 collector_slots_file() {
-    printf '%s\n' "${COLLECTOR_SLOTS_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/collector-slots.tsv}"
+    local dir=.
+    [[ "${BASH_SOURCE[0]}" != */* ]] || dir="${BASH_SOURCE[0]%/*}"
+    printf '%s\n' "${COLLECTOR_SLOTS_FILE:-$(cd "${dir:-/}" && pwd -P)/collector-slots.tsv}"
 }
 
 collector_slot() {

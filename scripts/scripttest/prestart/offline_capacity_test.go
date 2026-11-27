@@ -31,12 +31,17 @@ func newOffline(t *testing.T) offline {
 func (o offline) check(t *testing.T, service string) harness.Result {
 	t.Helper()
 
+	return o.run(t, `postgres_capacity_assert_service "$SCRIPTTEST_ROOT" "$ENV_FILE" "$UNITS" "$1" "$UNITS/$1.container"`, service)
+}
+
+func (o offline) run(t *testing.T, script string, args ...string) harness.Result {
+	t.Helper()
+
 	return harness.Bash(t, harness.Cmd{
 		Script: `unset HOLOLIVE_QUADLET_TEST_ROOT
 . "$SCRIPTTEST_ROOT/scripts/deploy/lib/postgres-capacity.sh"
-postgres_capacity_assert_service "$SCRIPTTEST_ROOT" "$ENV_FILE" "$UNITS" "$1" "$UNITS/$1.container"
-`,
-		Args: []string{service},
+` + script,
+		Args: args,
 		Env: []string{
 			"ENV_FILE=" + filepath.Join(o.dir, "offline.env"), "UNITS=" + o.units,
 			"QUADLET_UNIT_DIRS=" + o.foreign, "SYSTEMD_UNIT_PATH=" + o.foreign,
@@ -95,5 +100,26 @@ func TestOfflineCapacityCheckEnforcesCollectorRoleLimits(t *testing.T) {
 		if !strings.Contains(r.Stdout+r.Stderr, want) {
 			t.Errorf("pool %s: missing %q:\n%s", limit, want, r)
 		}
+	}
+}
+
+func TestOfflineCapacityEnvKeepsEachPoolSource(t *testing.T) {
+	t.Parallel()
+
+	o := newOffline(t)
+	harness.Write(t, filepath.Join(o.dir, "offline.env"), "APP_ENV=production\n"+
+		"BOT_POSTGRES_POOL_MAX_CONNS=1\nADMIN_API_POSTGRES_POOL_MAX_CONNS=2\n"+
+		"YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS=3\nALARM_WORKER_POSTGRES_POOL_MAX_CONNS=5\n")
+
+	r := o.run(t, `. "$SCRIPTTEST_ROOT/scripts/deploy/lib/compose-env.sh"
+. "$SCRIPTTEST_ROOT/scripts/deploy/lib/postgres-endpoint.sh"
+postgres_capacity_effective_env "$SCRIPTTEST_ROOT/scripts/ci/postgres-capacity-policy.tsv" "$ENV_FILE" "$UNITS"`)
+	harness.Succeeds(t, "effective env", r)
+
+	want := "BOT_POSTGRES_POOL_MAX_CONNS=1\nADMIN_API_POSTGRES_POOL_MAX_CONNS=2\n" +
+		"YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS=3\nALARM_WORKER_POSTGRES_POOL_MAX_CONNS=5\n" +
+		"COLLECTOR_POSTGRES_POOL_MAX_CONNS=6\n"
+	if r.Stdout != want {
+		t.Fatalf("effective env:\n%s", r)
 	}
 }
