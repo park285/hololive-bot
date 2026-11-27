@@ -12,7 +12,7 @@ self-hosted runner를 다시 붙인다면 이미 신뢰된 코드를 checkout하
 
 ## Workflow 분담
 
-- `ci.yml`의 필수 `fast-gate`는 다섯 Go 모듈의 결과를 모은 뒤 같은 SHA의 셸 문법·gofmt와 스크립트 시험 모듈 전체를 검사합니다. 스크립트 시험은 rootless Podman 이미지 빌드·실행과 user/mount namespace의 소유권 fixture를 포함하며, 로컬과 동일하게 패키지 병렬도 1·시험 병렬도 4로 실행합니다. 별도의 정책 러너는 없습니다. collector 작업은 Node 설치 한 번으로 Go 통합 시험과 YouTube.js 타입 검사·시험을 수행합니다.
+- `ci.yml`의 `script-tests`는 다섯 Go 모듈 job과 병렬로 같은 SHA의 셸 문법·gofmt와 스크립트 시험 모듈 전체를 검사하고, 필수 `fast-gate`는 두 쪽 결과가 모두 성공인지 판정합니다. 스크립트 시험은 rootless Podman 이미지 빌드·실행과 user/mount namespace의 소유권 fixture를 포함하며, 로컬과 동일하게 패키지 병렬도 1·시험 병렬도 4로 실행합니다. 별도의 정책 러너는 없습니다. collector 작업은 Node 설치 한 번으로 Go 통합 시험과 YouTube.js 타입 검사·시험을 수행합니다.
 - `security.yml`은 비밀 없이 `main` push·정기·수동 이벤트에서 실행합니다. Go 스캐너는 고정된 형제 checkout과 Go 설치를 공유하고 npm은 독립적으로 감사합니다. 정기·수동 arm64 이미지 검사는 별도 러너에서 실행되며 새 main push가 취소하지 않습니다.
   Go 검사에는 고정 SHA의 형제 SDK를 사용합니다. API의 독립 Valkey 어댑터는 공개 프록시에서 `go.mod`의
   판본으로 별도 다운로드해 `go.sum` 변경이 없는지 확인한 뒤 workspace에 넣습니다. SDK 루트 checkout의
