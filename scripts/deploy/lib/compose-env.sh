@@ -119,5 +119,23 @@ compose_env_read_value_from_file() {
 compose_env_key_exists_in_file() {
     local env_file="$1"
     local want="$2"
-    compose_env_list_keys_from_file "${env_file}" | grep -qx -- "${want}"
+
+    awk -v k="${want}" '
+        /^[[:space:]]*(#|$)/ { next }
+        {
+            line = $0
+            sub(/\r$/, "", line)
+            if (index(line, "=") == 0) {
+                next
+            }
+            key = substr(line, 1, index(line, "=") - 1)
+            sub(/^[[:space:]]+/, "", key)
+            sub(/[[:space:]]+$/, "", key)
+            if (key != "" && key == k) {
+                found = 1
+                exit
+            }
+        }
+        END { exit !found }
+    ' "${env_file}"
 }
