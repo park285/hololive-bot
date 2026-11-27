@@ -8,7 +8,7 @@ replay_epoch AS MATERIALIZED (
            queue.available_at,
            CASE WHEN queue.status = 'PROCESSING' THEN queue.lease_expires_at ELSE queue.available_at END AS eligible_at,
            queue.attempt_count,
-           observation.observation_kind,
+           kind.name AS observation_kind,
            observation.subject_key,
            observation.scheduled_for,
            (queue.status = 'PENDING' AND queue.available_at <= NOW())
@@ -16,8 +16,11 @@ replay_epoch AS MATERIALIZED (
            (queue.status = 'PROCESSING' AND queue.lease_expires_at <= NOW()) AS due
     FROM source_observation_queue AS queue
     JOIN source_observations AS observation ON observation.id = queue.observation_id
+    JOIN source_observation_kinds AS kind ON kind.id = observation.observation_kind_id
     WHERE (queue.status = 'PENDING' OR queue.status = 'PROCESSING')
-      AND observation.observation_kind = ANY($1::text[])
+      AND observation.observation_kind_id = ANY(ARRAY(
+          SELECT kind.id FROM source_observation_kinds AS kind WHERE kind.name = ANY($1::text[])
+      ))
       AND NOT EXISTS (
           SELECT 1
           FROM replay_epoch AS epoch

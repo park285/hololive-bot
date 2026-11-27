@@ -6,7 +6,9 @@ WITH {{ready_relation}}
       ON observation.id = queue.observation_id
     JOIN replay_epoch AS epoch
       ON observation.received_at < epoch.cutoff_received_at
-    WHERE observation.observation_kind = ANY($1::text[])
+    WHERE observation.observation_kind_id = ANY(ARRAY(
+        SELECT kind.id FROM source_observation_kinds AS kind WHERE kind.name = ANY($1::text[])
+    ))
       AND (
           (queue.status = 'PENDING' AND queue.available_at <= NOW())
           OR
@@ -81,13 +83,15 @@ WITH {{ready_relation}}
 SELECT observation.id,
        TRUE AS claimed,
        claimed.lease_token,
-       observation.observation_kind,
+       kind.name AS observation_kind,
        observation.subject_key,
        claimed.attempt_count,
        FALSE AS replay_epoch_rejected
 FROM claimed
 JOIN source_observations AS observation
   ON observation.id = claimed.observation_id
+JOIN source_observation_kinds AS kind
+  ON kind.id = observation.observation_kind_id
 UNION ALL
 SELECT replay.observation_id, FALSE, NULL, NULL, NULL, replay.attempt_count, TRUE
 FROM replay_expired_candidates AS replay

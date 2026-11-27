@@ -195,8 +195,8 @@ WITH input AS MATERIALIZED (
     RETURNING 1 AS inserted
 ), observation_write AS (
     INSERT INTO source_observations (
-        provider,
-        observation_kind,
+        provider_id,
+        observation_kind_id,
         subject_key,
         observation_key,
         schema_version,
@@ -205,8 +205,8 @@ WITH input AS MATERIALIZED (
         observed_at,
         source_event_at,
         scope_sha256,
-        completeness,
-        continuity,
+        completeness_id,
+        continuity_id,
         payload_id,
         schedule_observed_at,
         evidence_sha256,
@@ -214,8 +214,8 @@ WITH input AS MATERIALIZED (
         fence_epoch,
         projection_generation
     )
-    SELECT existing.provider,
-           existing.observation_kind,
+    SELECT provider_value.id,
+           kind.id,
            existing.subject_key,
            decode(existing.observation_key, 'hex'),
            existing.schema_version,
@@ -224,8 +224,8 @@ WITH input AS MATERIALIZED (
            existing.observed_at,
            existing.source_event_at,
            decode(existing.scope_sha256, 'hex'),
-           existing.completeness,
-           existing.continuity,
+           completeness_value.id,
+           continuity_value.id,
            payload_resolution.id,
            existing.schedule_observed_at,
            decode(existing.evidence_sha256, 'hex'),
@@ -238,12 +238,13 @@ WITH input AS MATERIALIZED (
       ON provenance_resolved.job_key = existing.job_key
      AND provenance_resolved.collector_instance = existing.collector_instance
      AND provenance_resolved.collection_job_kind = existing.collection_job_kind
+    LEFT JOIN source_observation_providers AS provider_value ON provider_value.name = existing.provider
+    LEFT JOIN source_observation_kinds AS kind ON kind.name = existing.observation_kind
+    LEFT JOIN source_observation_completeness_values AS completeness_value ON completeness_value.name = existing.completeness
+    LEFT JOIN source_observation_continuity_values AS continuity_value ON continuity_value.name = existing.continuity
     CROSS JOIN payload_guard
     ORDER BY existing.ordinal
     RETURNING id,
-              provider,
-              observation_kind,
-              subject_key,
               encode(observation_key, 'hex') AS observation_key,
               schema_version,
               contract_generation
@@ -353,10 +354,7 @@ LEFT JOIN checkpoint_write
  AND checkpoint_write.subject_key = existing.subject_key
  AND checkpoint_write.scope_sha256 = existing.scope_sha256
 LEFT JOIN observation_write
-  ON observation_write.provider = existing.provider
- AND observation_write.observation_kind = existing.observation_kind
- AND observation_write.subject_key = existing.subject_key
- AND observation_write.observation_key = existing.observation_key
+  ON observation_write.observation_key = existing.observation_key
  AND observation_write.schema_version = existing.schema_version
  AND observation_write.contract_generation = existing.contract_generation
 ORDER BY existing.ordinal

@@ -841,7 +841,14 @@ CREATE TABLE observation_contract_generations (
     current_generation BIGINT NOT NULL CHECK (current_generation > 0),
     updated_by TEXT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    provider_id SMALLINT NOT NULL,
+    observation_kind_id SMALLINT NOT NULL,
     PRIMARY KEY (provider, observation_kind),
+    CONSTRAINT uq_observation_contract_generation_ids UNIQUE (provider_id, observation_kind_id),
+    CONSTRAINT fk_observation_contract_provider_name
+        FOREIGN KEY (provider_id, provider) REFERENCES source_observation_providers(id, name),
+    CONSTRAINT fk_observation_contract_kind_name
+        FOREIGN KEY (observation_kind_id, observation_kind) REFERENCES source_observation_kinds(id, name),
     CONSTRAINT chk_observation_provider_vocab CHECK (
         provider IN ('holodex', 'youtubejs', 'hololive_official')
     ),
@@ -953,6 +960,10 @@ CREATE TABLE source_observations (
     scope_sha256 BYTEA NOT NULL,
     completeness TEXT NOT NULL,
     continuity TEXT NOT NULL,
+    provider_id SMALLINT NOT NULL,
+    observation_kind_id SMALLINT NOT NULL,
+    completeness_id SMALLINT NOT NULL,
+    continuity_id SMALLINT NOT NULL,
     payload_id BIGINT NOT NULL REFERENCES source_observation_payloads(id) ON DELETE RESTRICT,
     evidence_sha256 BYTEA NOT NULL,
     collector_instance TEXT NOT NULL,
@@ -990,7 +1001,19 @@ CREATE TABLE source_observations (
     ),
     CONSTRAINT chk_source_observation_continuity CHECK (
         continuity IN ('CONTIGUOUS', 'GAP_UNRESOLVED', 'NOT_APPLICABLE')
-    )
+    ),
+    CONSTRAINT fk_source_observation_contract_ids
+        FOREIGN KEY (provider_id, observation_kind_id)
+        REFERENCES observation_contract_generations(provider_id, observation_kind_id)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_source_observation_provider_name
+        FOREIGN KEY (provider_id, provider) REFERENCES source_observation_providers(id, name),
+    CONSTRAINT fk_source_observation_kind_name
+        FOREIGN KEY (observation_kind_id, observation_kind) REFERENCES source_observation_kinds(id, name),
+    CONSTRAINT fk_source_observation_completeness_name
+        FOREIGN KEY (completeness_id, completeness) REFERENCES source_observation_completeness_values(id, name),
+    CONSTRAINT fk_source_observation_continuity_name
+        FOREIGN KEY (continuity_id, continuity) REFERENCES source_observation_continuity_values(id, name)
 );
 
 CREATE TABLE source_observation_queue (
@@ -1041,6 +1064,8 @@ CREATE TABLE source_observation_queue (
 ```
 
 immutable evidence와 mutable delivery state를 분리해 queue retention과 evidence retention을 독립적으로 운영한다.
+
+`provider`, `observation_kind`, `completeness`, `continuity`는 사전 표 `source_observation_providers`, `source_observation_kinds`, `source_observation_completeness_values`, `source_observation_continuity_values`의 `smallint` id로 저장한다. 사전 표는 `(id, name)`을 고정 값으로 두고 `hololive_runtime`과 `hololive_scraper`에 SELECT만 준다. 전환 기간에는 텍스트 열과 id 열을 함께 두고, `derive_source_observation_vocabulary` trigger가 INSERT 때 빠진 쪽을 채운다. `(id, name)` FK가 두 값의 일치를 강제한다. collector는 id만 쓰고, 소비자 SQL은 id로 거른 뒤 사전 표에서 이름을 읽는다. evidence hash와 Go 계약 값은 계속 텍스트 이름을 쓴다. 텍스트 열, 텍스트 FK와 `idx_source_observations_kind_received_id`는 다음 migration에서 삭제하고 표를 재작성한다.
 
 ### 9.4 Collision audit
 
@@ -1236,7 +1261,7 @@ CREATE INDEX CONCURRENTLY idx_source_observation_replay_pending
 `idx_source_observations_subject_time`, `idx_source_observations_received`,
 `idx_source_observations_kind_id`는 운영 조회가 선택하지 않았습니다. 2026-08-23 통계 초기화 이후
 각각 2·98·64·3회만 scan됐고 마지막 사용은 수동 조회였습니다. migration `213`–`216`에서 하나씩
-`DROP INDEX CONCURRENTLY`로 제거합니다. 보존 삭제는 `idx_source_observations_kind_received_id`를,
+`DROP INDEX CONCURRENTLY`로 제거합니다. 보존 삭제는 `idx_source_observations_kind_id_received_id`를,
 shorts claim은 활성 queue partial index를 사용합니다. 현재 live slot 재조회를 위한
 `idx_youtube_live_absence_slots_scheduled_for`는 migration `212`가 추가합니다.
 
