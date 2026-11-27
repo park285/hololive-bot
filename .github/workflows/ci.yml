@@ -91,10 +91,8 @@ jobs:
         working-directory: hololive/hololive-collector/eventgrade
         run: npm test
 
-  fast-gate:
-    name: fast-gate
-    if: always()
-    needs: go-modules
+  script-tests:
+    name: script-tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -146,8 +144,17 @@ jobs:
             exit 1
           fi
 
+  fast-gate:
+    name: fast-gate
+    if: always()
+    needs: [go-modules, script-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
       - name: Require canonical verification
-        if: always()
         env:
           GO_MODULES_RESULT: ${{ needs.go-modules.result }}
-        run: test "${GO_MODULES_RESULT}" = "success"
+          SCRIPT_TESTS_RESULT: ${{ needs.script-tests.result }}
+        run: |
+          test "${GO_MODULES_RESULT}" = "success"
+          test "${SCRIPT_TESTS_RESULT}" = "success"

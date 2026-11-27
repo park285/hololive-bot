@@ -14,7 +14,7 @@ stack AGENTS.md의 기준에 따라 checker 자체 테스트, 문서 동기화�
 SQL 안전 정책과 topology 설정 일치를 검사합니다.
 배포·로그·빌드 스크립트의 동작 시험은 Go 모듈 `scripts/scripttest`가 소유합니다. 각 패키지는 대상 스크립트를 임시 fixture에서 bash로 실행하고 결과와 부작용만 단언합니다.
 `local-ci-packages.sh`의 `scripttest_packages_for`가 바뀐 경로에 맞는 패키지만 고르며, 전체 범위에서는 모듈 전체를 실행합니다. 선택한 패키지는 `run-script-tests.sh`가 `GOWORK=off go test -p 1 -parallel 4 -count=1`로 실행합니다. 한 번에 패키지 하나와 병렬 시험 최대 네 개를 실행하며, Go가 추적하지 못하는 외부 Bash 파일 변경도 다시 검증하도록 시험 결과 캐시는 사용하지 않습니다.
-이 모듈은 배포되는 Go 제품이 아니므로 제품의 golangci-lint·NilAway·race·govulncheck 대상과 분리합니다. 기본 `go test`의 vet와 컴파일은 유지하며, 원격 `fast-gate`도 동일한 실행기로 전체 동작 시험을 실행합니다. GitHub hosted runner는 저장소에 고정된 Python과 uv를 준비하고 rootless Podman·quadlet·user/mount namespace 지원을 먼저 확인합니다. 소유권 fixture는 `podman unshare`로 호출자를 namespace의 UID 0으로 매핑하고 별도의 mount namespace에서 배포 스크립트를 실행합니다. 이미지 빌드·실행 권한과 소유권 단언을 모두 실제 검사합니다.
+이 모듈은 배포되는 Go 제품이 아니므로 제품의 golangci-lint·NilAway·race·govulncheck 대상과 분리합니다. 기본 `go test`의 vet와 컴파일은 유지하며, 원격 `script-tests` job도 동일한 실행기로 전체 동작 시험을 실행하며, 필수 `fast-gate`는 이 job과 Go 모듈 job이 모두 성공했는지 판정합니다. GitHub hosted runner는 저장소에 고정된 Python과 uv를 준비하고 rootless Podman·quadlet·user/mount namespace 지원을 먼저 확인합니다. 소유권 fixture는 `podman unshare`로 호출자를 namespace의 UID 0으로 매핑하고 별도의 mount namespace에서 배포 스크립트를 실행합니다. 이미지 빌드·실행 권한과 소유권 단언을 모두 실제 검사합니다.
 같은 시험이 시작한 Bash 세션은 시험 정리 시 `/proc`를 한 번 읽어 함께 종료합니다. Bash job control이 별도 process group을 만드는 경우도 세션 ID로 찾아 정리합니다.
 `pre-push-gate.sh`의 `run_if_changed`에는 Python 스크립트 시험, 운영 이미지 목록 검사와 release version 검사만 남습니다.
 native 실행 권한 제한은 golangci-lint `depguard`가 맡습니다.

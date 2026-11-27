@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **스크립트 동작 시험을 Go 모듈 검사와 병렬 실행:** CI의 스크립트 동작 시험은 다섯 Go 모듈 job이 끝난 뒤에야 시작했습니다. 이 시험을 별도 `script-tests` job으로 옮겨 Go 모듈 job과 함께 돌리고, 필수 `fast-gate`는 두 job이 모두 성공했는지만 판정합니다. 검사 내용은 바뀌지 않습니다.
+
 ## r1.2.21 - 2026-11-27
 
 - **관측 어휘 텍스트 열 삭제(migration 013):** r1.2.20에서 id로 옮긴 `source_observations`의 `provider`, `observation_kind`, `completeness`, `continuity` 텍스트 열과 이름 일치 FK, vocab CHECK, `derive_source_observation_vocabulary` trigger와 함수, 이전 인덱스 `idx_source_observations_kind_received_id`(운영 54MB)를 지우고 표를 다시 씁니다. completeness와 continuity는 사전 표 id를 직접 참조하고, provider와 kind는 계약 표의 id 쌍 FK로 검증합니다. 운영 SQL은 r1.2.20에서 이미 id만 쓰므로 바뀌지 않았고, 시험 fixture는 id 열로 고쳤습니다. 운영 규모 합성 표(108만 행)에서 migration 013은 4.2초였고, heap은 314MB에서 265MB로, 인덱스는 204MB에서 150MB로 줄었습니다. 실행 중인 r1.2.20 collector와 API는 텍스트 열을 쓰지 않으므로 대기 migration 적용 창에서 적용하고 collector는 교체하지 않습니다. 이 migration 뒤에는 API와 collector를 r1.2.19 이하로 되돌릴 수 없습니다. Fallback delta: none.
