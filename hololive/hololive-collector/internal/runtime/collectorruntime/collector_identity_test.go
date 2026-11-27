@@ -139,7 +139,7 @@ func TestCollectorSessionPublishesPartialAndDefers(t *testing.T) {
 	)
 
 	if err := pool.QueryRow(ctx, `
-		SELECT (SELECT count(*) FROM source_observations WHERE observation_kind = 'video_list'), slot_state = 'DEFERRED'
+		SELECT (SELECT count(*) FROM source_observations WHERE observation_kind_id = (SELECT id FROM source_observation_kinds WHERE name = 'video_list')), slot_state = 'DEFERRED'
 		FROM youtube_collection_job_leases WHERE job_key = $1
 	`, spec.JobKey).Scan(&count, &deferred); err != nil {
 		t.Fatal(err)
@@ -396,11 +396,11 @@ func newIdentityExecutor(t *testing.T, pool *pgxpool.Pool, owner string, runner 
 func copyObservation(ctx context.Context, session *pgxpool.Pool, observationID int64) error {
 	_, err := session.Exec(ctx, `
 		INSERT INTO source_observations (
-			provider, observation_kind, subject_key, observation_key, schema_version, contract_generation,
-			scheduled_for, observed_at, source_event_at, scope_sha256, completeness, continuity,
+			provider_id, observation_kind_id, subject_key, observation_key, schema_version, contract_generation,
+			scheduled_for, observed_at, source_event_at, scope_sha256, completeness_id, continuity_id,
 			payload_id, evidence_sha256, provenance_id, fence_epoch, projection_generation)
-		SELECT provider, observation_kind, subject_key, observation_key, schema_version, contract_generation,
-		       scheduled_for, observed_at, source_event_at, scope_sha256, completeness, continuity,
+		SELECT provider_id, observation_kind_id, subject_key, observation_key, schema_version, contract_generation,
+		       scheduled_for, observed_at, source_event_at, scope_sha256, completeness_id, continuity_id,
 		       payload_id, evidence_sha256, provenance_id, fence_epoch, projection_generation
 		FROM source_observations WHERE id = $1`, observationID)
 

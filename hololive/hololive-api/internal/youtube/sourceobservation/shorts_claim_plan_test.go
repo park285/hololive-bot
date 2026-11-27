@@ -28,15 +28,15 @@ func TestShortsClaimWorkIsBoundedByActiveQueueNotRetainedHistory(t *testing.T) {
 
 	_, err := pool.Exec(ctx, `
 		INSERT INTO source_observations (
-			provider, observation_kind, subject_key, observation_key, schema_version, contract_generation,
-			scheduled_for, observed_at, scope_sha256, completeness, continuity, payload_id,
+			provider_id, observation_kind_id, subject_key, observation_key, schema_version, contract_generation,
+			scheduled_for, observed_at, scope_sha256, completeness_id, continuity_id, payload_id,
 			evidence_sha256, provenance_id, fence_epoch, projection_generation
 		)
-		SELECT provider, observation_kind,
+		SELECT provider_id, observation_kind_id,
 			CASE WHEN n <= 10000 THEN subject_key ELSE 'UC_history_' || n END,
 			sha256(('history-' || n)::bytea), schema_version, contract_generation,
 			scheduled_for - n * INTERVAL '1 minute', observed_at, scope_sha256,
-			completeness, continuity, payload_id, evidence_sha256,
+			completeness_id, continuity_id, payload_id, evidence_sha256,
 			provenance_id, fence_epoch, projection_generation
 		FROM source_observations CROSS JOIN generate_series(1, 30000) AS n
 		WHERE id = $1

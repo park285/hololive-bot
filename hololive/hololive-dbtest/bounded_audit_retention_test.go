@@ -174,13 +174,13 @@ func TestProvenanceResolverRecreatesRowDeletedByConcurrentRetention(t *testing.T
 
 		err := pool.QueryRow(ctx, `
 			INSERT INTO public.source_observations (
-				provider, observation_kind, subject_key, observation_key,
+				provider_id, observation_kind_id, subject_key, observation_key,
 				schema_version, contract_generation, scheduled_for, observed_at, received_at,
-				scope_sha256, completeness, continuity, payload_id, evidence_sha256,
+				scope_sha256, completeness_id, continuity_id, payload_id, evidence_sha256,
 				provenance_id, fence_epoch, projection_generation
 			)
-			SELECT 'youtubejs', 'live_snapshot', 'raced-job', sha256(convert_to('raced-job', 'UTF8')), 1, 1,
-				now(), now(), now(), decode(repeat('a', 64), 'hex'), 'COMPLETE', 'CONTIGUOUS', payload.id,
+			SELECT (SELECT id FROM source_observation_providers WHERE name = 'youtubejs'), (SELECT id FROM source_observation_kinds WHERE name = 'live_snapshot'), 'raced-job', sha256(convert_to('raced-job', 'UTF8')), 1, 1,
+				now(), now(), now(), decode(repeat('a', 64), 'hex'), (SELECT id FROM source_observation_completeness_values WHERE name = 'COMPLETE'), (SELECT id FROM source_observation_continuity_values WHERE name = 'CONTIGUOUS'), payload.id,
 				decode(repeat('c', 64), 'hex'),
 				public.source_observation_provenance_id('raced-job', 'dbtest', 'live_snapshot'), 1, 1
 			FROM public.source_observation_payloads AS payload

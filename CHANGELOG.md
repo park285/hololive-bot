@@ -6,6 +6,11 @@
 
 ## 미출시
 
+## r1.2.21 - 2026-11-27
+
+- **관측 어휘 텍스트 열 삭제(migration 013):** r1.2.20에서 id로 옮긴 `source_observations`의 `provider`, `observation_kind`, `completeness`, `continuity` 텍스트 열과 이름 일치 FK, vocab CHECK, `derive_source_observation_vocabulary` trigger와 함수, 이전 인덱스 `idx_source_observations_kind_received_id`(운영 54MB)를 지우고 표를 다시 씁니다. completeness와 continuity는 사전 표 id를 직접 참조하고, provider와 kind는 계약 표의 id 쌍 FK로 검증합니다. 운영 SQL은 r1.2.20에서 이미 id만 쓰므로 바뀌지 않았고, 시험 fixture는 id 열로 고쳤습니다. 운영 규모 합성 표(108만 행)에서 migration 013은 4.2초였고, heap은 314MB에서 265MB로, 인덱스는 204MB에서 150MB로 줄었습니다. 실행 중인 r1.2.20 collector와 API는 텍스트 열을 쓰지 않으므로 대기 migration 적용 창에서 적용하고 collector는 교체하지 않습니다. 이 migration 뒤에는 API와 collector를 r1.2.19 이하로 되돌릴 수 없습니다. Fallback delta: none.
+- **릴리스:** 루트 VERSION 1.2.21, hololive-api 1.2.14, hololive-alarm-worker 1.0.12(배포 트리 revision과 같은 label의 image가 필요해 다시 빌드함).
+
 ## r1.2.20 - 2026-11-27
 
 - **관측 어휘 열을 smallint 사전 id로(migration 012):** `source_observations`의 `provider`, `observation_kind`, `completeness`, `continuity`를 고정 사전 표 4개(`source_observation_providers`, `source_observation_kinds`, `source_observation_completeness_values`, `source_observation_continuity_values`)의 `smallint` id 열로도 저장합니다. `observation_contract_generations`에도 `provider_id`, `observation_kind_id`와 id 기준 unique를 더해 관측의 계약 FK를 id로 겁니다. 이번 단계에서는 텍스트 열을 지우지 않습니다. `derive_source_observation_vocabulary` trigger가 INSERT 때 빠진 쪽을 채우고, `(id, name)` FK가 두 값의 일치를 강제합니다. 새 collector는 id만 씁니다. API 소비 SQL과 보존·fence·잠금 DB 함수는 id로 거르고 이름은 사전 표에서 읽습니다. 보존 삭제는 새 인덱스 `idx_source_observations_kind_id_received_id`를 씁니다. evidence hash와 Go 계약 값은 계속 텍스트 이름을 쓰므로 바뀌지 않습니다. 운영 규모 합성 표(108만 행)에서 migration 전체는 12.8초였습니다. 텍스트 열과 이전 인덱스를 지우고 표를 다시 쓰는 다음 단계까지 마치면 heap은 303MB에서 265MB로, 인덱스는 198MB에서 150MB로 줄어듭니다. 같은 어휘를 쓰는 다른 16개 표의 23개 열은 이번 범위가 아닙니다. Fallback delta: none.
@@ -22,7 +27,3 @@
 - **`source_observations.created_at` 삭제(migration 011):** 항상 `received_at`과 같던 열을 지웠습니다(운영에서 다른 행 0건). 어느 코드도 읽거나 쓰지 않았습니다. migration 011은 대기 migration이므로 "대기 migration 적용 창"에서 적용합니다. 실행 중인 collector는 두 열 이름을 쓰지 않으므로 그대로 둡니다. 새 열은 비어 있지 않은 4096바이트 이하 객체만 받습니다. Fallback delta: none.
 - **릴리스:** 루트 VERSION 1.2.19, hololive-api 1.2.12, hololive-alarm-worker 1.0.10(공유 계약 변경으로 image가 바뀜).
 - **프로필 같은 값 `REPLAY` 행 생략:** r1.2.18이 남겨 둔 프로필 필드별 `REPLAY`(이미 같은 값인 필드를 다시 관측한 경우)도 감사 행을 만들지 않습니다. r1.2.18 배포 뒤 8분 동안 15행이 생겼습니다. Fallback delta: none.
-
-## r1.2.18 - 2026-11-27
-
-- **변화 없는 결정의 감사 행 생략:** `source_observation_applications`에 정본 상태를 바꾼 결정만 남깁니다. 값이 같은 더 새 영상 목록 관측(누락 해제가 없을 때), 바뀐 것이 없는 영상·프로필·사진 `REPLAY`, 프로필·사진의 `RAW_RETAINED`는 더 이상 행을 만들지 않습니다. 운영 감사 323만 행 중 `youtube_video APPLIED` 82만 행이 영상 472개에서 나왔고 대부분 값이 같은 반복 관측이었습니다. `youtube_live_session` 결정은 보존 보호의 최신 근거라 모두 남기고, 커뮤니티 창 `CANONICALIZED`도 그대로입니다. migration은 없습니다. Fallback delta: none.

@@ -26,11 +26,11 @@ func seedProtectedPrefix(t *testing.T, pool *pgxpool.Pool, protected int) {
 	ageObservations(t, pool, ids[1:], 48*time.Hour)
 
 	_, err := pool.Exec(ctx, `WITH copies AS (
-		INSERT INTO source_observations(provider,observation_kind,subject_key,observation_key,schema_version,contract_generation,
-			scheduled_for,observed_at,received_at,scope_sha256,completeness,continuity,payload_id,evidence_sha256,
+		INSERT INTO source_observations(provider_id,observation_kind_id,subject_key,observation_key,schema_version,contract_generation,
+			scheduled_for,observed_at,received_at,scope_sha256,completeness_id,continuity_id,payload_id,evidence_sha256,
 			provenance_id, fence_epoch,projection_generation)
-		SELECT provider,observation_kind,subject_key,sha256(('protected-copy-'||s)::bytea),schema_version,contract_generation,
-			scheduled_for,observed_at,received_at,scope_sha256,completeness,continuity,payload_id,evidence_sha256,
+		SELECT provider_id,observation_kind_id,subject_key,sha256(('protected-copy-'||s)::bytea),schema_version,contract_generation,
+			scheduled_for,observed_at,received_at,scope_sha256,completeness_id,continuity_id,payload_id,evidence_sha256,
 			provenance_id, fence_epoch,projection_generation
 		FROM source_observations CROSS JOIN generate_series(1,$2::int) s WHERE id=$1 RETURNING id
 	) INSERT INTO source_observation_queue(observation_id) SELECT id FROM copies`, ids[0], protected-1)

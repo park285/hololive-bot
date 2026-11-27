@@ -153,13 +153,13 @@ func insertRetentionObservation(
 
 	if err := pool.QueryRow(t.Context(), `
 		INSERT INTO public.source_observations (
-			provider, observation_kind, subject_key, observation_key,
+			provider_id, observation_kind_id, subject_key, observation_key,
 			schema_version, contract_generation, scheduled_for, observed_at, received_at,
-			scope_sha256, completeness, continuity, payload_id, evidence_sha256,
+			scope_sha256, completeness_id, continuity_id, payload_id, evidence_sha256,
 			provenance_id, fence_epoch, projection_generation
 		) VALUES (
-			$1, $2, $3, sha256(convert_to($3, 'UTF8')), 1, 1, $4, $4, $4,
-			decode(pg_catalog.repeat('a', 64), 'hex'), 'COMPLETE', 'CONTIGUOUS',
+			(SELECT id FROM source_observation_providers WHERE name = $1), (SELECT id FROM source_observation_kinds WHERE name = $2), $3, sha256(convert_to($3, 'UTF8')), 1, 1, $4, $4, $4,
+			decode(pg_catalog.repeat('a', 64), 'hex'), (SELECT id FROM source_observation_completeness_values WHERE name = 'COMPLETE'), (SELECT id FROM source_observation_continuity_values WHERE name = 'CONTIGUOUS'),
 			(SELECT id FROM public.source_observation_payloads WHERE observation_kind=$2 AND schema_version=1
 			 AND canonical_profile='source-observation-canonical-json-v1' AND payload_sha256=decode(repeat('b',64),'hex')),
 			decode(pg_catalog.repeat('c', 64), 'hex'),

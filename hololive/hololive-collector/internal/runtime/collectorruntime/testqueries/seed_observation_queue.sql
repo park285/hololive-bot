@@ -7,8 +7,8 @@ WITH sequence AS (
     RETURNING id
 ), observations AS (
     INSERT INTO source_observations (
-        provider,
-        observation_kind,
+        provider_id,
+        observation_kind_id,
         subject_key,
         observation_key,
         schema_version,
@@ -16,16 +16,16 @@ WITH sequence AS (
         scheduled_for,
         observed_at,
         scope_sha256,
-        completeness,
-        continuity,
+        completeness_id,
+        continuity_id,
         payload_id,
         evidence_sha256,
         provenance_id,
         fence_epoch,
         projection_generation
     )
-    SELECT 'youtubejs',
-           'community_page',
+    SELECT (SELECT id FROM source_observation_providers WHERE name = 'youtubejs'),
+           (SELECT id FROM source_observation_kinds WHERE name = 'community_page'),
            $4::text || ':subject:' || sequence.ordinal::text,
            sha256(($4::text || ':observation:' || sequence.ordinal::text)::bytea),
            1,
@@ -33,8 +33,8 @@ WITH sequence AS (
            clock_timestamp(),
            clock_timestamp(),
            decode(repeat('a', 64), 'hex'),
-           'COMPLETE',
-           'CONTIGUOUS',
+           (SELECT id FROM source_observation_completeness_values WHERE name = 'COMPLETE'),
+           (SELECT id FROM source_observation_continuity_values WHERE name = 'CONTIGUOUS'),
            payload.id,
            decode(repeat('c', 64), 'hex'),
            source_observation_provenance_id($4::text || ':job:' || sequence.ordinal::text, 'collector-test', 'community_collect'),
