@@ -4,19 +4,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInboxReadySnapshotPreservesHeadAndScheduledAge(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 
 	for _, id := range []string{"message:head", "message:follower"} {
 		admitOne(t.Context(), t, repo, InboxMessage{MessageID: id, RoomID: testDurableRoomID, OrderingKey: "room:one", Payload: []byte(`{"body":"ready"}`)})
 	}
 
-	_, err := pool.Exec(t.Context(), `UPDATE bot_webhook_inbox SET available_at = clock_timestamp() + INTERVAL '1 hour' WHERE message_id = 'message:head'`)
+	_, err := store.Exec(t.Context(), `UPDATE bot_webhook_inbox SET available_at = ?1 WHERE message_id = 'message:head'`, time.Now().Add(time.Hour).UnixMilli())
 	require.NoError(t, err)
 
 	snapshot, err := repo.ReadySnapshot(t.Context())
@@ -25,9 +24,10 @@ func TestInboxReadySnapshotPreservesHeadAndScheduledAge(t *testing.T) {
 
 	claim, err := repo.Claim(t.Context(), testClaimToken, durabilityTestLease)
 	require.NoError(t, err)
-	require.Nil(t, claim)
+	require.Nil(t, claim, "a scheduled head cannot expose its follower")
 
-	_, err = pool.Exec(t.Context(), `UPDATE bot_webhook_inbox SET created_at = clock_timestamp() - INTERVAL '1 day', available_at = clock_timestamp() WHERE message_id = 'message:head'`)
+	_, err = store.Exec(t.Context(), `UPDATE bot_webhook_inbox SET created_at = ?1, available_at = ?2 WHERE message_id = 'message:head'`,
+		time.Now().Add(-24*time.Hour).UnixMilli(), time.Now().UnixMilli())
 	require.NoError(t, err)
 
 	snapshot, err = repo.ReadySnapshot(t.Context())
@@ -35,25 +35,12 @@ func TestInboxReadySnapshotPreservesHeadAndScheduledAge(t *testing.T) {
 	require.Equal(t, int64(1), snapshot.Depth)
 	require.Less(t, snapshot.OldestAge, 5*time.Second)
 
-	tx, err := pool.Begin(t.Context())
-	require.NoError(t, err)
-
-	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), tx)) }()
-
-	_, err = tx.Exec(t.Context(), `SELECT id FROM bot_webhook_inbox WHERE message_id = 'message:head' FOR UPDATE`)
-	require.NoError(t, err)
-
-	claim, err = repo.Claim(t.Context(), testClaimToken, durabilityTestLease)
-	require.NoError(t, err)
-	require.Nil(t, claim, "locked head cannot expose its follower")
-	require.NoError(t, tx.Rollback(t.Context()))
-
 	claim, err = repo.Claim(t.Context(), testClaimToken, durabilityTestLease)
 	require.NoError(t, err)
 	require.NotNil(t, claim)
 	require.Equal(t, "message:head", claim.MessageID)
 
-	_, err = pool.Exec(t.Context(), `UPDATE bot_webhook_inbox SET lease_until = clock_timestamp() - INTERVAL '1 second' WHERE message_id = 'message:head'`)
+	_, err = store.Exec(t.Context(), `UPDATE bot_webhook_inbox SET lease_until = ?1 WHERE message_id = 'message:head'`, time.Now().Add(-time.Second).UnixMilli())
 	require.NoError(t, err)
 
 	snapshot, err = repo.ReadySnapshot(t.Context())
@@ -62,22 +49,28 @@ func TestInboxReadySnapshotPreservesHeadAndScheduledAge(t *testing.T) {
 }
 
 func TestReplyReadySnapshotPreservesPredecessorSafetyAndScheduledAge(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := newTestReplyOutboxRepository(pool)
+	store := newTestStore(t)
+	repo := newTestReplyOutboxRepository(store)
 	first := newReplyOutboxEntry("message:head", 0, `{"body":"head"}`)
 	second := newReplyOutboxEntry("message:follower", 0, `{"body":"follower"}`)
 
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(t.Context(), t, repo, first))
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(t.Context(), t, repo, second))
 
-	_, err := pool.Exec(t.Context(), `UPDATE bot_reply_outbox SET available_at = clock_timestamp() + INTERVAL '1 hour' WHERE client_request_id = $1`, first.ClientRequestID)
+	_, err := store.Exec(t.Context(), `UPDATE bot_reply_outbox SET row_version = row_version + 1, available_at = ?2 WHERE client_request_id = ?1`,
+		first.ClientRequestID, time.Now().Add(time.Hour).UnixMilli())
 	require.NoError(t, err)
 
 	snapshot, err := repo.ReadySnapshot(t.Context())
 	require.NoError(t, err)
 	require.Zero(t, snapshot.Depth)
 
-	_, err = pool.Exec(t.Context(), `UPDATE bot_reply_outbox SET created_at = clock_timestamp() - INTERVAL '1 day', available_at = clock_timestamp() WHERE client_request_id = $1`, first.ClientRequestID)
+	claim, err := repo.Claim(t.Context(), testClaimToken, durabilityTestLease)
+	require.NoError(t, err)
+	require.Nil(t, claim, "a scheduled room predecessor blocks its successor")
+
+	_, err = store.Exec(t.Context(), `UPDATE bot_reply_outbox SET row_version = row_version + 1, created_at = ?2, available_at = ?3 WHERE client_request_id = ?1`,
+		first.ClientRequestID, time.Now().Add(-24*time.Hour).UnixMilli(), time.Now().UnixMilli())
 	require.NoError(t, err)
 
 	snapshot, err = repo.ReadySnapshot(t.Context())
@@ -85,20 +78,7 @@ func TestReplyReadySnapshotPreservesPredecessorSafetyAndScheduledAge(t *testing.
 	require.Equal(t, int64(1), snapshot.Depth)
 	require.Less(t, snapshot.OldestAge, 5*time.Second)
 
-	tx, err := pool.Begin(t.Context())
-	require.NoError(t, err)
-
-	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), tx)) }()
-
-	_, err = tx.Exec(t.Context(), `SELECT id FROM bot_reply_outbox WHERE client_request_id = $1 FOR UPDATE`, first.ClientRequestID)
-	require.NoError(t, err)
-
-	claim, err := repo.Claim(t.Context(), testClaimToken, durabilityTestLease)
-	require.NoError(t, err)
-	require.Nil(t, claim, "SKIP LOCKED cannot bypass a room predecessor")
-	require.NoError(t, tx.Rollback(t.Context()))
-
-	_, err = pool.Exec(t.Context(), `UPDATE bot_reply_outbox SET attempts = $2 WHERE client_request_id = $1`, first.ClientRequestID, repo.maxAttempts)
+	_, err = store.Exec(t.Context(), `UPDATE bot_reply_outbox SET row_version = row_version + 1, attempts = ?2 WHERE client_request_id = ?1`, first.ClientRequestID, repo.maxAttempts)
 	require.NoError(t, err)
 
 	snapshot, err = repo.ReadySnapshot(t.Context())
@@ -109,7 +89,7 @@ func TestReplyReadySnapshotPreservesPredecessorSafetyAndScheduledAge(t *testing.
 	require.NoError(t, err)
 	require.Nil(t, claim)
 
-	status, _, _, _ := replyOutboxRow(t.Context(), t, pool, first.ClientRequestID)
+	status, _, _, _ := replyOutboxRow(t.Context(), t, store, first.ClientRequestID)
 	require.Equal(t, ReplyOutboxManualReview, status)
 
 	snapshot, err = repo.ReadySnapshot(t.Context())

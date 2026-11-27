@@ -36,6 +36,7 @@ AddHost=host.docker.internal:host-gateway
 AddHost=vnic-kapu-iris-seoul-fk:100.100.1.5
 AddHost=vnic-kapu-iris-seoul-fk.tail742dd8.ts.net:100.100.1.5
 Volume=/opt/hololive-bot/compose/current/data:/app/data:idmap
+Volume=/opt/hololive-bot/compose/bot-durable:/app/bot-durable:idmap
 Volume=${LIVE_LOGS_PATH}:/app/logs:idmap
 # IRIS_BASE_URL_FILE은 소유자가 root이거나 실행 uid여야 한다. idmap이 없으면 root 소유 파일이 overflow uid(65534)로 보여 기동하지 못한다.
 Volume=/opt/hololive-bot/compose/current/runtime-config:/app/runtime-config:ro,idmap
@@ -98,6 +99,7 @@ Environment=HOLOLIVE_ADMIN_API_PORT=30006
 Environment=HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS=${HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS}
 Environment=HOLOLIVE_ADMIN_API_H3_ADDR=${HOLOLIVE_ADMIN_API_H3_ADDR}
 Environment=ALARM_INTERNAL_URL=https://hololive-alarm-worker:30007
+Environment=BOT_DURABLE_STORE_PATH=/app/bot-durable/bot-durable.db
 Environment=BOT_POSTGRES_POOL_MIN_CONNS=${BOT_POSTGRES_POOL_MIN_CONNS}
 Environment=BOT_POSTGRES_POOL_MAX_CONNS=${BOT_POSTGRES_POOL_MAX_CONNS}
 Environment=ADMIN_API_POSTGRES_POOL_MIN_CONNS=${ADMIN_API_POSTGRES_POOL_MIN_CONNS}

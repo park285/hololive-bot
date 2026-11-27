@@ -19,9 +19,10 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
-func newBotReadyProbe(postgres sharedreadiness.Pinger, cacheClient sharedreadiness.ConnectionChecker) *sharedreadiness.Probe {
+func newBotReadyProbe(postgres, durable sharedreadiness.Pinger, cacheClient sharedreadiness.ConnectionChecker) *sharedreadiness.Probe {
 	return sharedreadiness.NewProbe("bot",
 		sharedreadiness.PostgresCheck(postgres),
+		sharedreadiness.Check{Name: "durable_store", Probe: durable.Ping},
 		sharedreadiness.ValkeyCheck(cacheClient),
 	)
 }
@@ -47,11 +48,11 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 		return nil, errors.New("infra is nil")
 	}
 
-	if infra.Postgres == nil || infra.Postgres.GetPool() == nil {
-		return nil, errors.New("durable postgres pool is nil")
+	if infra.Durable == nil {
+		return nil, errors.New("durable store is nil")
 	}
 
-	outbox, err := newDurableReplyOutbox(infra.Postgres.GetPool(), appConfig.APIWorkerProfile)
+	outbox, err := newDurableReplyOutbox(infra.Durable, appConfig.APIWorkerProfile)
 	if err != nil {
 		return nil, fmt.Errorf("build reply outbox: %w", err)
 	}
@@ -63,7 +64,7 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 		return nil, fmt.Errorf("create bot: %w", err)
 	}
 
-	durable, err := newDurableRuntime(botBot, infra.Deps.Client, infra.Postgres.GetPool(), outbox, appConfig.APIWorkerProfile, logger)
+	durable, err := newDurableRuntime(botBot, infra.Deps.Client, infra.Durable, outbox, appConfig.APIWorkerProfile, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build durable runtime: %w", err)
 	}
@@ -74,7 +75,7 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 		accept: botBot.AcceptsMessage,
 		logger: logger,
 		totals: durable.inboxTotals,
-	}, infra.Postgres.GetPool(), logger)
+	}, infra.Durable, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build webhook handler: %w", err)
 	}
@@ -85,7 +86,7 @@ func buildBotRuntime(ctx context.Context, appConfig *apiconfig.BotPlaneConfig, l
 		}
 	}()
 
-	readyProbe := newBotReadyProbe(infra.Postgres, infra.Cache)
+	readyProbe := newBotReadyProbe(infra.Postgres, infra.Durable, infra.Cache)
 
 	var (
 		h3Server          *http3.Server

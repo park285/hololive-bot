@@ -16,13 +16,14 @@
 | Ready (bot) | `https://127.0.0.1:30001/internal/ready` with `X-API-Key` returns success through container `./bin/healthcheck` |
 | Health (admin) | `https://127.0.0.1:30006/health` returns success through container `./bin/healthcheck` |
 | Logs | no repeated webhook, Iris, DB, or Valkey errors |
-| Queue | webhook를 `bot_webhook_inbox`에 commit한 뒤 처리하고 reply를 `bot_reply_outbox`에서 Iris로 전달합니다. proactive 알림 outbox dispatch는 소유하지 않습니다. |
+| Queue | webhook를 로컬 SQLite 저장소(`BOT_DURABLE_STORE_PATH`)의 `bot_webhook_inbox`에 commit한 뒤 처리하고 reply를 같은 저장소의 `bot_reply_outbox`에서 Iris로 전달합니다. proactive 알림 outbox dispatch는 소유하지 않습니다. |
 
 ## Dependencies
 
 | Dependency | Required | Failure impact |
 |---|---|---|
-| PostgreSQL | yes | commands, admin reads/writes, subscriptions, outbox fail |
+| PostgreSQL | yes | commands, admin reads/writes, subscriptions fail |
+| Bot durable SQLite (`BOT_DURABLE_STORE_PATH`) | yes | webhook admission·reply outbox·nonce 판정이 실패하고 webhook은 503을 받습니다 |
 | Valkey | yes | cache/config/session/PubSub behavior degrades |
 | Iris | yes | Kakao ingress/reply fails |
 | `alarm-worker` | partial | alarm API and proactive delivery drain depend on alarm-worker |
@@ -55,6 +56,18 @@ Epoch activation은 irreversible production data write이고 통합 `hololive-ap
 
 Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 시작하지 않습니다. 기존 image rollback tag는 더 이상 안전한 rollback target이 아니며, 사전 관찰한 epoch-aware image를 유지하거나 source processing을 중지한 채 fix-forward합니다.
 
+## Bot durable store PostgreSQL → SQLite 전환
+
+이 전환은 운영 데이터 쓰기이며 `hololive-api` 중지를 동반하므로 대상 host·중지·이관·재시작을 모두 포함한 승인 아래에서만 실행합니다.
+
+1. Iris webhook 전달을 멈추고 `hololive-api`를 중지합니다. 전환 전 image가 PostgreSQL의 bot 표에 더 쓰지 않아야 합니다.
+2. SQLite를 쓰는 image를 설치하되 시작하지 않습니다. 호스트 `/opt/hololive-bot/compose/bot-durable/`에 `bot-durable.db`가 없는지 확인합니다. 이 디렉터리는 `sync-opt-current.sh` 전체 동기화가 uid 1000 소유 `0700`으로 만들며, SELinux 호스트에서는 스택 호스트 보안 프로필의 `container_file_t` 규칙이 먼저 적용돼 있어야 합니다.
+3. `bot-durable-admin import-postgres`를 일회성으로 한 번 실행합니다. 명령은 PostgreSQL을 `REPEATABLE READ READ ONLY` 스냅숏 하나로 읽어 bot 표 7개(inbox·heads·명령 기록·reply outbox·감사 두 표·nonce)의 모든 행을 id 그대로 옮기고, 표별·상태별 행 수가 원본 스냅숏과 같을 때만 한 트랜잭션으로 커밋합니다. 대상에 행이 있거나 소유 잠금을 얻지 못하면(`hololive-api` 실행 중) 아무것도 쓰지 않고 실패합니다. PostgreSQL 연결은 앱과 같은 `POSTGRES_*` 해석을 따릅니다. `hololive_runtime`은 감사 표를 읽을 수 없으므로 관리 socket의 `hololive_migrator`로 접속합니다(`POSTGRES_SOCKET_PATH=/var/run/postgresql`, `POSTGRES_USER=hololive_migrator`, `POSTGRES_DB=hololive`, `POSTGRES_SSLMODE=disable`, `POSTGRES_PASSWORD`에는 migrate unit의 `PGPASSWORD`와 같은 migrator 비밀번호). 이 접속 조합은 unit을 정의할 때 실제로 검증합니다. 저장소에는 이 one-shot unit이 없습니다. `hololive-db-migrate.container` 형식(`[Install]` 없음, `Type=oneshot`, `Network=none`, `holo-pg-admin-socket.volume`)에 `Entrypoint=/app/bin/bot-durable-admin`, `Exec=import-postgres`, `hololive-api.container`와 같은 `bot-durable` volume·`BOT_DURABLE_STORE_PATH`·`User=1000`을 더한 unit을 `hololive-bot-ops` 절차로 정의·검토하고 승인받습니다.
+4. stdout의 `<표>/<상태>=<행 수>` 목록을 보관합니다. 실패하면 부분 커밋이 없으므로 원인을 해소한 뒤 비어 있는 대상에 다시 실행합니다.
+5. `hololive-api`를 시작하고 readiness의 `durable_store`, webhook·reply 처리, `list-manual-review` 결과를 확인한 뒤 Iris webhook 전달을 재개합니다.
+
+전환 뒤 PostgreSQL의 bot 표는 갱신되지 않습니다. 전환 전 image는 멈춘 시점의 PostgreSQL 행을 다시 처리하므로 전환 뒤에는 그 image로 돌아가지 않고 fix-forward합니다. 이 저장소의 배포 스크립트와 스택 도구는 SQLite 파일을 백업하지 않습니다. PostgreSQL 표·함수 제거와 백업 편입은 전환 확인 뒤 별도 작업입니다.
+
 ## Key environment variables
 
 | Env | Purpose | Required |
@@ -63,6 +76,7 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 | `HOLOLIVE_HTTP_TRANSPORTS` | enabled transports | yes |
 | `IRIS_*` | Iris URL/certs/tokens | yes |
 | `STACK_WORKER_PROFILE_FILE` | strict `hololive/api` profile for `bot_webhook_inbox`, `bot_reply_outbox`, `source_observation` | yes |
+| `BOT_DURABLE_STORE_PATH` | bot plane inbox·outbox·명령 기록·webhook nonce를 담는 SQLite 파일의 절대 경로. 상위 디렉터리는 실행 uid 소유 `0700`이어야 하고, `<path>.lock` 배타 잠금으로 한 프로세스만 소유합니다. 중앙 Quadlet 값은 `/app/bot-durable/bot-durable.db`(호스트 `/opt/hololive-bot/compose/bot-durable/`). 이 디렉터리는 `hololive-api`에만 마운트하며, `current/data`를 함께 쓰는 collector·alarm-worker는 읽거나 쓸 수 없습니다. 배포 동기화는 `current` 밖에 있는 이 디렉터리를 지우거나 백업 사본에 넣지 않습니다 | yes |
 | `PHOTO_SYNC_ENABLED=true` | admin plane `members.photo` Holodex PhotoSync | yes |
 | `BOT_SEE_MORE_FOLD` | bot plane의 조회·보고서 2건 이상과 프로필·전체 도움말 텍스트에 전체보기 패딩 적용; 0·1건 목록과 알림은 펼침. 기본 `true`, `false`는 자동 패딩 차단 (`docs/current/architecture/MESSAGE_STYLE_GUIDE.md` §8) | no |
 | `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 새 응답을 `SendRichText`로 전송. 미설정은 `false`; RichText 운영 시 API·알람 워커 양쪽에 `true` 명시 | RichText 운영 시 필수 |
@@ -260,9 +274,9 @@ Rollback:
 
 ### 2. Durable webhook or reply backlog grows
 
-`bot_webhook_inbox`의 `pending`/`retry`와 `bot_reply_outbox`의 `pending`/`retryable_pre_dispatch`가 지속 증가하면 PostgreSQL, command handler, Iris 상태를 함께 확인합니다. `dead`는 poison payload 또는 bounded retry 소진, `outcome_unknown`은 부수 효과 결과를 확정할 수 없어 자동 재실행하지 않은 상태입니다. `accepted`는 Iris `202` admission과 `requestId` 저장을 마치고 lease 없이 handoff 확인을 기다리는 상태입니다. lease heartbeat가 살아 있는 command는 reclaim 대상이 아닙니다.
+`bot_webhook_inbox`의 `pending`/`retry`와 `bot_reply_outbox`의 `pending`/`retryable_pre_dispatch`가 지속 증가하면 SQLite 저장소, command handler, Iris 상태를 함께 확인합니다. `dead`는 poison payload 또는 bounded retry 소진, `outcome_unknown`은 부수 효과 결과를 확정할 수 없어 자동 재실행하지 않은 상태입니다. `accepted`는 Iris `202` admission과 `requestId` 저장을 마치고 lease 없이 handoff 확인을 기다리는 상태입니다. lease heartbeat가 살아 있는 command는 reclaim 대상이 아닙니다.
 
-Reply 발송은 admission(`202`)에서 끝나고 `/reply-status`를 polling하지 않습니다. 같은 API process의 `durable-reply-handoff-reconciler`가 `accepted` 행을 `FOR UPDATE SKIP LOCKED` batch로 골라 저장된 `iris_request_id`의 `/reply-status`를 조회합니다. 확인 간격은 봇 전용 250ms→500ms→1s→2s→5s→15s→60s이며 지평은 `bot_reply_outbox` executor `attempt_timeout`입니다(새 설정 key 없음). 알림 워커의 5s→15s→60s→5min과 다른 이유는 같은 방 순서(`accepted` 선행 행이 후속 응답을 막는 권고안 A)를 유지하기 때문입니다. 5초부터 확인하면 대화형 후속 응답이 매번 최소 5초 막힙니다. 결과는 다음과 같습니다.
+Reply 발송은 admission(`202`)에서 끝나고 `/reply-status`를 polling하지 않습니다. 같은 API process의 `durable-reply-handoff-reconciler`가 `accepted` 행을 단일 writer 트랜잭션에서 batch로 골라 저장된 `iris_request_id`의 `/reply-status`를 조회합니다. 확인 간격은 봇 전용 250ms→500ms→1s→2s→5s→15s→60s이며 지평은 `bot_reply_outbox` executor `attempt_timeout`입니다(새 설정 key 없음). 알림 워커의 5s→15s→60s→5min과 다른 이유는 같은 방 순서(`accepted` 선행 행이 후속 응답을 막는 권고안 A)를 유지하기 때문입니다. 5초부터 확인하면 대화형 후속 응답이 매번 최소 5초 막힙니다. 결과는 다음과 같습니다.
 
 | Iris 관측 | 전이 | `last_error` |
 |---|---|---|
@@ -278,48 +292,38 @@ Reply 발송은 admission(`202`)에서 끝나고 `/reply-status`를 polling하�
 
 Reply outbox의 `outcome_unknown`은 같은 `client_request_id`로 최대 5회, 최초 dispatch인 `first_attempt_at`부터 144시간 미만인 동안에만 durable backoff 후 재확인합니다. attempt 또는 시간 경계에 도달한 행과 위 표의 확인 불가 행은 자동 발송 없이 payload를 보존한 `manual_review`로 이동합니다. 만료 lease reclaim은 `submitting`만 다루며 attempt·시간 경계에 닿은 행만 `manual_review`로 옮깁니다. Reply outbox의 attempt `success`는 Iris admission(`202`) 완료를 뜻하며 handoff 완료를 뜻하지 않습니다. handoff 완료를 세는 지표는 없습니다. reconciler 결과는 `reply handoff failed; requeued for reissue`(WARN), `reply handoff reached non-success terminal state`(ERROR, `status`·`reason` 포함), `reply handoff status query deferred`(WARN) 로그와 `bot_reply_outbox_manual_review_backlog`·`bot_reply_outbox_manual_review_oldest_age_seconds`, `status = 'accepted'` 행 수로 관측합니다. `queue="reply_handoff"` label은 빈 claim 횟수(`bot_durable_claim_idle_total`)에만 붙습니다. Manual review는 Iris 수리 여부와 같은 `client_request_id`의 처리 이력을 조사합니다. 두 manual review 값은 durable maintenance 주기마다 갱신하며, 조회가 실패하면 마지막 성공 값을 유지한 채 `bot_reply_outbox_manual_review_snapshot_success`가 0이 되고 `bot_reply_outbox_manual_review_snapshot_last_success_timestamp_seconds`는 마지막 성공 시각에 머뭅니다. success가 0이거나 마지막 성공 시각이 오래됐으면 건수·경과를 현재 상태로 해석하지 않습니다. `bot_reply_outbox_accepted_reclaimed_total`은 엄격 CHECK 릴리스에서 삭제됐으므로 이 지표를 쓰는 대시보드·alert는 지웁니다.
 
-엄격 shape CHECK 릴리스(migration 332·334·335)는 326·333과 handoff reconciler를 포함한 직전 릴리스가 운영에서 돈 뒤에만 적용합니다. 직전 릴리스의 lease reclaim이 이전 binary의 lease 있는 `accepted`를 `manual_review`로 옮기므로, 적용 전에 아래 결과가 0인지 확인합니다. 0이 아니면 직전 릴리스를 유지한 채 lease 만료와 maintenance 주기를 기다립니다. 332는 표를 잠근 뒤 남은 행이 있으면 SQLSTATE `55000`으로 중단하고 제약을 바꾸지 않습니다. 이전 실행이 남긴 `chk_bot_reply_outbox_state_shape_next`가 있으면 재실행은 VALIDATE·교체부터 이어 갑니다. 이 제약은 사전 조회를 통과한 같은 트랜잭션에서 추가돼 새 INSERT·UPDATE에도 적용되므로, 정상 runner 순서에서는 재검증할 위반 행이 남지 않습니다. 잠금 대기(`55P03`)나 statement timeout(`57014`)으로 중단됐다면 경합·실행 시간을 확인하고 원인을 해소한 뒤 db-migrate를 다시 실행합니다.
-
-```sql
-SELECT count(*) FROM bot_reply_outbox WHERE status = 'accepted' AND claim_token IS NOT NULL;
-```
-
-순서는 manifest대로 332(엄격 CHECK, NOT VALID → VALIDATE → 교체) → 334(`idx_bot_reply_outbox_submitting_lease_expiry` CONCURRENTLY 생성) → 335(`idx_bot_reply_outbox_lease_expiry` CONCURRENTLY 삭제) → 새 API binary입니다. 334가 실패하면 runner가 그 invalid index를 지우고 멈추므로, 원인을 해소한 뒤 db-migrate를 다시 실행합니다.
-
 Command claim이 만료되어 `outcome_unknown`으로 닫히면 `bot_durable_command_outcome_unknown_total`이 증가하고 `inspect bot_command_executions status=outcome_unknown` action log가 기록됩니다. 자동 재실행하지 말고 해당 시점의 부수 효과를 조사합니다. Inbox reclaim이 아직 살아 있는 command claim과 만난 경우에는 inbox payload를 완료·scrub하지 않고 command stale cutoff 이후로 미룹니다.
 
-조사 결과 재발송이 필요한 한 행만 골라 아래 operator artifact를 실행합니다. 이 artifact가 replay 가능 시간과 상태 전이의 유일한 소유자이며, 기존 `attempts` 이력을 보존한 채 `operator_replay_grants`를 1 증가시켜 추가 dispatch 한 번만 허용합니다. `operator_actor`는 64자 이하의 계정/handle, `operator_reason`은 256 bytes 이하의 ticket·incident 근거만 사용하며 secret이나 사용자 원문을 넣지 않습니다. 출력은 `replayed`, `cutoff_expired`, `invalid_operator_metadata`, `not_manual_review`, `not_found` 중 하나입니다.
+조사할 행은 실행 중인 컨테이너에서 `bot-durable-admin list-manual-review`로 찾습니다. 명령은 같은 SQLite 파일에 소유 잠금 없이 붙어 오래 멈춘 순서로 `id`, `client_request_id`, `iris_request_id`, 시도 횟수, replay grant 수, 시각, `last_error`를 출력하며 payload는 출력하지 않습니다(`--limit` 기본 50, 최대 1000).
 
 ```bash
-# 중앙 런타임 호스트. 쿼리 파일은 /migrations 밖이라 별도 마운트가 필요합니다.
-sudo -n env MIGRATIONS_DIR=/opt/hololive-bot/compose/current/hololive/hololive-api/internal/planes/bot/internal/durability/queries \
-  ./scripts/runtime/db-maintenance-exec.sh \
-  psql -w -X -v ON_ERROR_STOP=1 \
-  -v outbox_id='<bot_reply_outbox.id>' \
-  -v operator_actor='<operator-handle>' \
-  -v operator_reason='<ticket-or-incident-reason>' \
-  -f /migrations/reply_outbox_replay_manual_review.sql
+sudo podman exec hololive-api ./bin/bot-durable-admin list-manual-review
 ```
 
-Replay cutoff는 row의 `created_at`부터 144시간입니다. Iris admission retention 168시간보다 24시간 짧게 닫아 operator 판단 뒤 실제 dispatch와 sweep이 지연되더라도 dedup retention 경계를 넘지 않게 합니다. 144시간 경계와 그 이후에는 fail-closed합니다. `cutoff_expired`이면 재발송하지 않습니다. `bot_reply_outbox_replay_audit`에는 grant 시점의 `granted`, 실제 claim 시점의 `replayed` event가 같은 actor/reason과 별도 `recorded_at`으로 append되므로 이후 outbox `updated_at` 변경과 분리해 조사합니다. `invalid_operator_metadata`, `not_manual_review`, `not_found`도 상태를 임의로 고치지 말고 현재 행과 운영 이력을 다시 확인합니다.
-
-Iris `/reply-status/{requestId}`가 `outcome_unknown`처럼 handoff 결과를 증명하지 못하고 operator가 중복 방지를 위해 재발송하지 않기로 결정한 경우에는 직접 `UPDATE`하지 않습니다. 아래 artifact는 대상이 아직 `manual_review`인지 row lock으로 재검증하고, 관측한 Iris 상태와 actor/reason을 immutable audit에 기록한 뒤 `discarded` terminal 상태로 전이하면서 payload를 제거합니다. 출력은 `discarded`, `invalid_operator_metadata`, `invalid_iris_state`, `not_manual_review`, `not_found` 중 하나입니다.
+조사 결과 재발송이 필요한 한 행만 골라 `grant-replay`를 실행합니다. 이 명령이 replay 가능 시간과 상태 전이의 유일한 소유자이며, 기존 `attempts` 이력을 보존한 채 `operator_replay_grants`를 1 증가시켜 추가 dispatch 한 번만 허용합니다. `--actor`는 64자 이하의 계정/handle, `--reason`은 256 bytes 이하의 ticket·incident 근거만 사용하며 secret이나 사용자 원문을 넣지 않습니다. 판정과 감사 기록은 writer를 얻은 뒤 한 트랜잭션에서 이뤄집니다. stdout의 `outcome=` 값은 `replayed`, `cutoff_expired`, `invalid_operator_metadata`, `not_manual_review`, `not_found` 중 하나이며 `replayed`가 아니면 종료 코드는 1입니다.
 
 ```bash
-sudo -n env MIGRATIONS_DIR=/opt/hololive-bot/compose/current/hololive/hololive-api/internal/planes/bot/internal/durability/queries \
-  ./scripts/runtime/db-maintenance-exec.sh \
-  psql -w -X -v ON_ERROR_STOP=1 \
-  -v outbox_id='<bot_reply_outbox.id>' \
-  -v operator_actor='<operator-handle>' \
-  -v operator_reason='<ticket-or-incident-reason>' \
-  -v observed_iris_state='<reply-status-state-or-not_found>' \
-  -f /migrations/reply_outbox_discard_manual_review.sql
+sudo podman exec hololive-api ./bin/bot-durable-admin grant-replay \
+  --outbox-id='<bot_reply_outbox.id>' \
+  --actor='<operator-handle>' \
+  --reason='<ticket-or-incident-reason>'
 ```
 
-`discarded`는 재발송 권한을 만들지 않고 terminal retention을 따릅니다. 실행 전에는 반드시 같은 `iris_request_id`의 최신 `/reply-status`를 조회하고, `queued`/`preparing`/`prepared`/`sending`이면 진행 중인 handoff가 끝날 때까지 보류합니다. `failed`에서 재발송이 필요하다고 판단한 경우에는 discard가 아니라 위 replay artifact와 144시간 cutoff를 사용합니다.
+Replay cutoff는 row의 `created_at`부터 144시간입니다(`durability.ManualReplayCutoff`). Iris admission retention 168시간보다 24시간 짧게 닫아 operator 판단 뒤 실제 dispatch와 sweep이 지연되더라도 dedup retention 경계를 넘지 않게 합니다. 144시간 경계와 그 이후에는 fail-closed합니다. `cutoff_expired`이면 재발송하지 않습니다. `bot_reply_outbox_replay_audit`에는 grant 시점의 `granted`, 실제 claim 시점의 `replayed` event가 같은 actor/reason과 별도 `recorded_at`으로 append되므로 이후 outbox `updated_at` 변경과 분리해 조사합니다. 감사 행은 trigger가 수정을 거부하고, 대상 outbox 행이 남아 있는 동안 삭제도 거부합니다. `invalid_operator_metadata`, `not_manual_review`, `not_found`도 상태를 임의로 고치지 말고 현재 행과 운영 이력을 다시 확인합니다.
 
-Durable bot admission 스키마(`bot_webhook_inbox`·`bot_reply_outbox`)는 epoch-4 baseline에 포함되어 있어 별도 선행 migration이 없습니다. 신규 설치에는 내장된 기준선 SQL 하나만 실행합니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. epoch-4 baseline은 현행 terminal payload CHECK를 유지하며 구 status-only writer를 위한 scrub trigger는 제공하지 않습니다.
-현행 네 writer가 종결 payload를 직접 비워야 합니다. 스키마 변경은 새 forward migration으로만 진행합니다.
+Iris `/reply-status/{requestId}`가 `outcome_unknown`처럼 handoff 결과를 증명하지 못하고 operator가 중복 방지를 위해 재발송하지 않기로 결정한 경우에는 `discard`를 씁니다. 명령은 대상이 아직 `manual_review`인지 writer 트랜잭션 안에서 재검증하고, 관측한 Iris 상태와 actor/reason을 immutable audit에 기록한 뒤 `discarded` terminal 상태로 전이하면서 payload를 제거합니다. `outcome=` 값은 `discarded`, `invalid_operator_metadata`, `invalid_iris_state`, `not_manual_review`, `not_found` 중 하나입니다.
+
+```bash
+sudo podman exec hololive-api ./bin/bot-durable-admin discard \
+  --outbox-id='<bot_reply_outbox.id>' \
+  --actor='<operator-handle>' \
+  --reason='<ticket-or-incident-reason>' \
+  --observed-iris-state='<reply-status-state-or-not_found>'
+```
+
+`discarded`는 재발송 권한을 만들지 않고 terminal retention을 따릅니다. 실행 전에는 반드시 같은 `iris_request_id`의 최신 `/reply-status`를 조회하고, `queued`/`preparing`/`prepared`/`sending`이면 진행 중인 handoff가 끝날 때까지 보류합니다. `failed`에서 재발송이 필요하다고 판단한 경우에는 discard가 아니라 위 `grant-replay`와 144시간 cutoff를 사용합니다.
+
+Bot plane 내구 스키마(`bot_webhook_inbox`·`bot_webhook_heads`·`bot_command_executions`·`bot_reply_outbox`·감사 두 표·`bot_webhook_nonces`)는 `hololive/hololive-api/internal/planes/bot/internal/durability/migrations/`의 SQLite migration이 정의합니다. `hololive-api`가 기동할 때 소유 잠금을 잡은 뒤 적용하며, 적용한 파일의 sha256이 원장과 다르면 기동하지 않습니다. 스키마 변경은 새 forward migration 파일로만 진행합니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. 종결 행의 payload는 writer가 직접 비우고, 비종결 행에 payload가 없으면 CHECK가 거부합니다. PostgreSQL에 남은 같은 이름의 표와 `reserve_bot_webhook_nonce`·replay·discard 함수는 [전환](#bot-durable-store-postgresql--sqlite-전환) 원본이며 현행 runtime은 읽거나 쓰지 않습니다.
 
 기존 DB는 032 완료 원본 32쌍이나 신규 실적용 1쌍만 수용합니다. 부분 DB를 추정하거나 원장을 교체하지 않습니다. [migration 규약](../../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md)을 따릅니다.
 
@@ -362,6 +366,7 @@ sudo podman exec hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
   함께 복원합니다. 원장만 되돌리거나 baseline SQL을 기존 DB에 다시 실행하지 않습니다.
 - 비-durable runtime, 구형 accepted lease 모양, Iris v3 webhook payload로 돌아가는 과거 rollback 창과 전용 preflight는 폐기했습니다.
   현행 webhook 원본·lease 없는 accepted 계약을 만족하는 릴리스만 같은 DB를 사용할 수 있습니다.
+- bot durable store를 SQLite로 전환한 뒤에는 전환 전 image로 돌아가지 않습니다. 그 image는 멈춘 PostgreSQL bot 표를 다시 처리합니다.
 - 복구 뒤 webhook/reply, 봇 명령, dashboard health를 확인합니다.
 
 ## Post-deploy monitoring (unified runtime)
@@ -371,7 +376,7 @@ bot/admin/YouTube plane을 한 프로세스에 묶었으므로 평균값보다 �
 ### 단일 프로세스 blast-radius (먼저 인지할 것)
 
 - 3 plane이 한 프로세스이므로 **한 plane의 자원 폭주(OOM/goroutine leak/GC thrash)가 전체 컨테이너를 끌어내립니다.** healthcheck(`30001/internal/ready`·`30006/health`)는 각 URL을 순차 검사해 하나라도 실패하면 exit 1 → unhealthy → `HealthOnFailure=stop`으로 컨테이너가 SIGTERM·`StopTimeout`(45초) 안에 종료되고 systemd(`Restart=always`)가 unit 전체를 다시 시작합니다.
-- `30001/internal/ready`는 인증된 dependency readiness(PostgreSQL/Valkey)를 포함합니다. 외부에서 접근 가능한 `/ready`는 dependency ping 없이 process health만 반환합니다.
+- `30001/internal/ready`는 인증된 dependency readiness(PostgreSQL/Valkey/bot durable SQLite `durable_store`)를 포함합니다. 외부에서 접근 가능한 `/ready`는 dependency ping 없이 process health만 반환합니다.
 
 ### 경계값 (initial threshold — 실측으로 보정)
 

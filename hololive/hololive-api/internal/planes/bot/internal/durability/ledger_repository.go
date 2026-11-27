@@ -2,12 +2,10 @@ package durability
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type DurableLedgerMaintenance struct {
@@ -16,10 +14,10 @@ type DurableLedgerMaintenance struct {
 	DeletedOutbox  int64
 }
 
-type DurableLedgerRepository struct{ pool *pgxpool.Pool }
+type DurableLedgerRepository struct{ store *Store }
 
-func NewDurableLedgerRepository(pool *pgxpool.Pool) *DurableLedgerRepository {
-	return &DurableLedgerRepository{pool: pool}
+func NewDurableLedgerRepository(store *Store) *DurableLedgerRepository {
+	return &DurableLedgerRepository{store: store}
 }
 
 func (r *DurableLedgerRepository) Maintain(
@@ -28,7 +26,7 @@ func (r *DurableLedgerRepository) Maintain(
 	manualReviewRetention time.Duration,
 	batchSize int32,
 ) (DurableLedgerMaintenance, error) {
-	if err := ensurePool(r.pool); err != nil {
+	if err := ensureStore(r.store); err != nil {
 		return DurableLedgerMaintenance{}, err
 	}
 
@@ -53,11 +51,35 @@ func (r *DurableLedgerRepository) Maintain(
 
 	var result DurableLedgerMaintenance
 
-	err = pgxdb.QueryRow(ctx, r.pool, durablePruneTerminalSQL, terminalMS, manualReviewMS, batchSize).
-		Scan(&result.DeletedInbox, &result.DeletedCommand, &result.DeletedOutbox)
+	err = r.store.write(ctx, func(tx *sql.Tx, now int64) error {
+		terminalCutoff, manualReviewCutoff := now-terminalMS, now-manualReviewMS
+
+		var pruneErr error
+
+		if result.DeletedInbox, pruneErr = deleteCount(ctx, tx, durablePruneInboxSQL, terminalCutoff, batchSize); pruneErr != nil {
+			return pruneErr
+		}
+
+		if result.DeletedCommand, pruneErr = deleteCount(ctx, tx, durablePruneCommandSQL, terminalCutoff, batchSize); pruneErr != nil {
+			return pruneErr
+		}
+
+		result.DeletedOutbox, pruneErr = deleteCount(ctx, tx, durablePruneOutboxSQL, terminalCutoff, manualReviewCutoff, batchSize)
+
+		return pruneErr
+	})
 	if err != nil {
 		return DurableLedgerMaintenance{}, fmt.Errorf("prune durable terminal ledgers: %w", err)
 	}
 
 	return result, nil
+}
+
+func deleteCount(ctx context.Context, tx *sql.Tx, query string, args ...any) (int64, error) {
+	result, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("delete terminal ledger rows: %w", err)
+	}
+
+	return rowsAffected(result)
 }

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v6/webhook"
 	"github.com/park285/iris-client-go/v6/webhooksign"
 	"github.com/prometheus/client_golang/prometheus"
@@ -17,7 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
-	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability/durabilitytest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
@@ -83,16 +83,16 @@ func TestBuildDurableBotWebhookHandlerRequiresHMAC(t *testing.T) {
 func buildDurableBotWebhookHandlerForTest(t *testing.T, admitter webhook.MessageAdmitter) *webhook.Handler {
 	t.Helper()
 
-	return newDurableTestHandler(t, admitter, dbtest.NewPool(t))
+	return newDurableTestHandler(t, admitter, durabilitytest.Open(t).Store)
 }
 
-func newDurableTestHandler(t *testing.T, admitter webhook.MessageAdmitter, pool *pgxpool.Pool) *webhook.Handler {
+func newDurableTestHandler(t *testing.T, admitter webhook.MessageAdmitter, store *durability.Store) *webhook.Handler {
 	t.Helper()
 
 	handler, err := BuildDurableBotWebhookHandler(
 		testDurableWebhookConfig(),
 		admitter,
-		pool,
+		store,
 		slog.New(slog.DiscardHandler),
 	)
 	require.NoError(t, err)

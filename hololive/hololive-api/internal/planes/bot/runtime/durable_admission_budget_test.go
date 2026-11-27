@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/config/configtest"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-shared/pkg/config/settingstest"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -37,10 +37,10 @@ func TestDurableConfiguredSettlementTimeoutLeavesSharedShutdownHeadroom(t *testi
 	}
 }
 
-func mustDurableReplyOutbox(t *testing.T, pool *pgxpool.Pool, profile *apiconfig.APIWorkerProfile) durableReplyOutbox {
+func mustDurableReplyOutbox(t *testing.T, store *durability.Store, profile *apiconfig.APIWorkerProfile) durableReplyOutbox {
 	t.Helper()
 
-	outbox, err := newDurableReplyOutbox(pool, profile)
+	outbox, err := newDurableReplyOutbox(store, profile)
 	if err != nil {
 		t.Fatal(err)
 	}

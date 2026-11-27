@@ -51,6 +51,7 @@ func SetRequiredLoadEnv(t *testing.T) {
 	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", URLHostname(t, server.URL))
 	t.Setenv("IRIS_TRANSPORT", "http1")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
+	t.Setenv("BOT_DURABLE_STORE_PATH", filepath.Join(t.TempDir(), "bot-durable", "bot-durable.db"))
 	SetH3CertificateEnv(t)
 }
 

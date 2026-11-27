@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v6/iris"
-	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
@@ -115,7 +114,7 @@ func (r *durableRuntime) runReplyHandoffReconciler(ctx context.Context) {
 }
 
 func (r *durableRuntime) reconcileReplyHandoffBatch(ctx context.Context, _ func()) bool {
-	claimCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
+	claimCtx, cancel := context.WithTimeout(ctx, r.settlementTimeout)
 	claims, err := r.outbox.ClaimHandoffDue(claimCtx, replyHandoffBatchSize, replyHandoffSoftClaim)
 
 	cancel()
@@ -157,7 +156,7 @@ func (r *durableRuntime) reconcileReplyHandoff(ctx context.Context, claim durabi
 
 	decision := decideReplyHandoff(claim, snapshot, queryErr, r.dispatchBudget, r.outboxMaxAttempts)
 
-	settleCtx, cancelSettle := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), r.settlementTimeout)
+	settleCtx, cancelSettle := context.WithTimeout(context.WithoutCancel(ctx), r.settlementTimeout)
 	defer cancelSettle()
 
 	if decision.status == "" {

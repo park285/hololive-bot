@@ -463,7 +463,9 @@ else
     [[ -d "$OPT_CURRENT/$d" ]] && chown -R 1000:1000 "$OPT_CURRENT/$d"
   done
   chown root:root "$OPT_ROOT" "$(dirname "$OPT_ROOT")"
-  log "ownership normalized (exec tree root, runtime data uid 1000)"
+  install -Z -d -m 0700 -- "$OPT_ROOT/bot-durable"
+  chown 1000:1000 "$OPT_ROOT/bot-durable"
+  log "ownership normalized (exec tree root, runtime data uid 1000, bot durable store 0700)"
 fi
 
 install -d -m0755 -o root -g root "$LIBEXEC_DIR" "$LIBEXEC_DIR/lib"

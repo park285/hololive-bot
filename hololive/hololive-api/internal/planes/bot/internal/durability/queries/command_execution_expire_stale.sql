@@ -1,16 +1,12 @@
-WITH candidate AS MATERIALIZED (
+UPDATE bot_command_executions
+SET status = 'outcome_unknown',
+    completed_at = ?1,
+    updated_at = ?1
+WHERE id IN (
     SELECT id
     FROM bot_command_executions
     WHERE status = 'claimed'
-      AND claimed_at <= clock_timestamp() - ($1::bigint * INTERVAL '1 millisecond')
+      AND claimed_at <= ?1 - ?2
     ORDER BY claimed_at ASC, id ASC
-    LIMIT $2
-    FOR UPDATE SKIP LOCKED
+    LIMIT ?3
 )
-UPDATE bot_command_executions AS executions
-SET status = 'outcome_unknown',
-    result_summary = 'outcome_unknown',
-    completed_at = clock_timestamp(),
-    updated_at = clock_timestamp()
-FROM candidate
-WHERE executions.id = candidate.id

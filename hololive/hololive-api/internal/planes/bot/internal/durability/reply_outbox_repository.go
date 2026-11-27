@@ -3,14 +3,11 @@ package durability
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type ReplyOutboxInsertOutcome int
@@ -46,7 +43,7 @@ const (
 )
 
 type replyOutboxSettlementPolicy struct {
-	sql   pgxdb.Statement
+	sql   string
 	retry bool
 }
 
@@ -87,12 +84,12 @@ type ReplyOutboxSettlement struct {
 }
 
 type ReplyOutboxRepository struct {
-	pool                   *pgxpool.Pool
+	store                  *Store
 	maxAttempts            int32
 	automaticReplayHorizon time.Duration
 }
 
-func NewReplyOutboxRepositoryWithPolicy(pool *pgxpool.Pool, maxAttempts int32, automaticReplayHorizon time.Duration) (*ReplyOutboxRepository, error) {
+func NewReplyOutboxRepositoryWithPolicy(store *Store, maxAttempts int32, automaticReplayHorizon time.Duration) (*ReplyOutboxRepository, error) {
 	if maxAttempts < 1 {
 		return nil, errors.Join(ErrInvalidArgument, errors.New("reply outbox max attempts must be positive"))
 	}
@@ -101,11 +98,11 @@ func NewReplyOutboxRepositoryWithPolicy(pool *pgxpool.Pool, maxAttempts int32, a
 		return nil, errors.Join(ErrInvalidArgument, fmt.Errorf("reply outbox automatic replay horizon: %w", err))
 	}
 
-	return &ReplyOutboxRepository{pool: pool, maxAttempts: maxAttempts, automaticReplayHorizon: automaticReplayHorizon}, nil
+	return &ReplyOutboxRepository{store: store, maxAttempts: maxAttempts, automaticReplayHorizon: automaticReplayHorizon}, nil
 }
 
 func (r *ReplyOutboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSnapshot, error) {
-	if err := ensurePool(r.pool); err != nil {
+	if err := ensureStore(r.store); err != nil {
 		return ReadyQueueSnapshot{}, err
 	}
 
@@ -115,22 +112,22 @@ func (r *ReplyOutboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSn
 	}
 
 	var (
-		snapshot         ReadyQueueSnapshot
-		oldestAgeSeconds float64
+		snapshot    ReadyQueueSnapshot
+		oldestAgeMS int64
 	)
 
-	if err := pgxdb.QueryRow(ctx, r.pool, replyOutboxReadySnapshotSQL, r.maxAttempts, replayHorizonMS).
-		Scan(&snapshot.Depth, &oldestAgeSeconds); err != nil {
+	if err := r.store.read().QueryRowContext(ctx, replyOutboxReadySnapshotSQL, r.store.nowMS(), r.maxAttempts, replayHorizonMS).
+		Scan(&snapshot.Depth, &oldestAgeMS); err != nil {
 		return ReadyQueueSnapshot{}, fmt.Errorf("snapshot reply outbox ready queue: %w", err)
 	}
 
-	snapshot.OldestAge = time.Duration(oldestAgeSeconds * float64(time.Second))
+	snapshot.OldestAge = time.Duration(oldestAgeMS) * time.Millisecond
 
 	return snapshot, nil
 }
 
 func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEntry) (ReplyOutboxInsertOutcome, error) {
-	if err := ensurePool(r.pool); err != nil {
+	if err := ensureStore(r.store); err != nil {
 		return ReplyOutboxInserted, err
 	}
 
@@ -146,39 +143,48 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 	digest := sha256.Sum256(normalized.Payload)
 	payloadHash := hex.EncodeToString(digest[:])
 
-	tag, err := pgxdb.Exec(ctx, r.pool, replyOutboxInsertSQL,
-		normalized.MessageID,
-		normalized.Phase,
-		normalized.Ordinal,
-		normalized.RoomID,
-		jsonbParam(normalized.Payload),
-		payloadHash,
-		normalized.ClientRequestID,
-	)
+	var outcome ReplyOutboxInsertOutcome
+
+	err = r.store.write(ctx, func(tx *sql.Tx, now int64) error {
+		result, execErr := tx.ExecContext(ctx, replyOutboxInsertSQL,
+			normalized.MessageID,
+			normalized.Phase,
+			normalized.Ordinal,
+			normalized.RoomID,
+			string(normalized.Payload),
+			payloadHash,
+			normalized.ClientRequestID,
+			now,
+		)
+		if execErr != nil {
+			return fmt.Errorf("insert reply outbox row: %w", execErr)
+		}
+
+		inserted, execErr := rowsAffected(result)
+		if execErr != nil || inserted == 1 {
+			outcome = ReplyOutboxInserted
+
+			return execErr
+		}
+
+		outcome, execErr = classifyRecordedPayload(ctx, tx, &normalized, payloadHash)
+
+		return execErr
+	})
 	if err != nil {
 		return ReplyOutboxInserted, safeMessageRepositoryError("insert reply outbox row", normalized.MessageID, err)
 	}
 
-	if tag.RowsAffected() == 1 {
-		return ReplyOutboxInserted, nil
-	}
-
-	out, err := r.classifyRecordedPayload(ctx, &normalized, payloadHash)
-	if err != nil {
-		return out, fmt.Errorf("classify recorded payload: %w", err)
-	}
-
-	return out, nil
+	return outcome, nil
 }
 
-func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, entry *ReplyOutboxEntry, payloadHash string) (ReplyOutboxInsertOutcome, error) {
+func classifyRecordedPayload(ctx context.Context, tx *sql.Tx, entry *ReplyOutboxEntry, payloadHash string) (ReplyOutboxInsertOutcome, error) {
 	var recordedHash, recordedClientRequestID string
 
-	err := pgxdb.QueryRow(ctx, r.pool, replyOutboxConflictSQL, entry.MessageID, entry.Phase, entry.Ordinal).
+	err := tx.QueryRowContext(ctx, replyOutboxConflictSQL, entry.MessageID, entry.Phase, entry.Ordinal).
 		Scan(&recordedHash, &recordedClientRequestID)
 	if err != nil {
-		return ReplyOutboxAlreadyRecorded,
-			safeMessageRepositoryError("inspect reply outbox row", entry.MessageID, err)
+		return ReplyOutboxAlreadyRecorded, fmt.Errorf("inspect recorded reply outbox row: %w", err)
 	}
 
 	if recordedHash != payloadHash || recordedClientRequestID != entry.ClientRequestID {
@@ -189,7 +195,7 @@ func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, ent
 }
 
 func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, lease time.Duration) (*ReplyOutboxClaim, error) {
-	if err := ensurePool(r.pool); err != nil {
+	if err := ensureStore(r.store); err != nil {
 		return nil, err
 	}
 
@@ -203,31 +209,56 @@ func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, le
 		return nil, err
 	}
 
-	var claim ReplyOutboxClaim
-
 	replayHorizonMS, err := leaseMilliseconds(r.automaticReplayHorizon)
 	if err != nil {
 		return nil, err
 	}
 
-	row := pgxdb.QueryRow(ctx, r.pool, replyOutboxClaimSQL, token, leaseMS, r.maxAttempts, replayHorizonMS)
+	var claim *ReplyOutboxClaim
 
-	err = row.Scan(&claim.ID, &claim.MessageID, &claim.Phase, &claim.Ordinal,
-		&claim.RoomID, &claim.Payload, &claim.ClientRequestID, &claim.Attempts)
+	err = r.store.write(ctx, func(tx *sql.Tx, now int64) error {
+		var (
+			id            int64
+			safetyExpired bool
+		)
 
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil //nolint:nilnil // 행 없음(no row)을 알리는 계약값이다. runtime 폴링 루프가 nil 결과로 유휴를 판정하므로 sentinel 오류로 바꾸려면 이 패키지 밖 호출자를 함께 고쳐야 한다.
-	}
+		scanErr := tx.QueryRowContext(ctx, replyOutboxClaimCandidateSQL, now, r.maxAttempts, replayHorizonMS).Scan(&id, &safetyExpired)
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			return nil
+		}
 
+		if scanErr != nil {
+			return fmt.Errorf("select reply outbox claim candidate: %w", scanErr)
+		}
+
+		if safetyExpired {
+			if _, execErr := tx.ExecContext(ctx, replyOutboxClaimSafetyReviewSQL, id, now); execErr != nil {
+				return fmt.Errorf("move expired reply outbox row to manual review: %w", execErr)
+			}
+
+			return nil
+		}
+
+		var row ReplyOutboxClaim
+
+		if scanErr := tx.QueryRowContext(ctx, replyOutboxClaimSQL, id, token, now, leaseMS).
+			Scan(&row.ID, &row.MessageID, &row.Phase, &row.Ordinal, &row.RoomID, &row.Payload, &row.ClientRequestID, &row.Attempts); scanErr != nil {
+			return fmt.Errorf("lease reply outbox row: %w", scanErr)
+		}
+
+		claim = &row
+
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("claim reply outbox row: %w", err)
 	}
 
-	return &claim, nil
+	return claim, nil
 }
 
 func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutboxSettlement) (bool, error) {
-	if err := ensurePool(r.pool); err != nil {
+	if err := ensureStore(r.store); err != nil {
 		return false, err
 	}
 
@@ -243,21 +274,46 @@ func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutb
 
 	args := []any{settlement.ID, token, settlement.Status, clampColumnText(settlement.LastError, lastErrorByteLimit)}
 
-	if policy.retry {
-		retryMS, retryErr := replyOutboxRetryMilliseconds(settlement.RetryAfter)
-		if retryErr != nil {
-			return false, fmt.Errorf("reply outbox retry milliseconds: %w", retryErr)
-		}
+	var retryMS int64
 
-		args = append(args, retryMS)
+	if policy.retry {
+		retryMS, err = replyOutboxRetryMilliseconds(settlement.RetryAfter)
+		if err != nil {
+			return false, fmt.Errorf("reply outbox retry milliseconds: %w", err)
+		}
 	}
 
-	tag, err := pgxdb.Exec(ctx, r.pool, policy.sql, args...)
+	applied, err := r.execOne(ctx, policy.sql, func(now int64) []any {
+		if policy.retry {
+			return append(args, now, retryMS)
+		}
+
+		return append(args, now)
+	})
 	if err != nil {
 		return false, fmt.Errorf("settle reply outbox row %d: %w", settlement.ID, err)
 	}
 
-	return tag.RowsAffected() == 1, nil
+	return applied, nil
+}
+
+func (r *ReplyOutboxRepository) execOne(ctx context.Context, query string, args func(now int64) []any) (bool, error) {
+	var applied bool
+
+	err := r.store.write(ctx, func(tx *sql.Tx, now int64) error {
+		result, execErr := tx.ExecContext(ctx, query, args(now)...)
+		if execErr != nil {
+			return fmt.Errorf("execute reply outbox update: %w", execErr)
+		}
+
+		affected, execErr := rowsAffected(result)
+
+		applied = affected == 1
+
+		return execErr
+	})
+
+	return applied, err
 }
 
 func replyOutboxRetryMilliseconds(retryAfter time.Duration) (int64, error) {

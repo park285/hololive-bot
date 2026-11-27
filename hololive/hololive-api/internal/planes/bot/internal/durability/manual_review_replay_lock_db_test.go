@@ -2,96 +2,104 @@ package durability
 
 import (
 	"context"
+	"database/sql"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
 
-func TestManualReviewReplayChecksCutoffAfterLockWait(t *testing.T) {
-	pool := newDurabilityPool(t)
+func TestManualReviewReplayChecksCutoffAfterWriterWait(t *testing.T) {
+	store := newTestStore(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 
 	defer cancel()
 
-	repo := newTestReplyOutboxRepository(pool)
-	entry := newReplyOutboxEntry("message:replay-lock-cutoff", 0, `{"body":"stored"}`)
-	_, err := repo.Insert(ctx, entry)
-	require.NoError(t, err)
-
-	conn, err := pool.Acquire(ctx)
-	require.NoError(t, err)
-
-	defer conn.Release()
-
-	pid := conn.Conn().PgConn().PID()
-
-	tx, err := pool.Begin(ctx)
-	require.NoError(t, err)
-
-	defer func() { require.NoError(t, rollbackInboxTx(ctx, tx)) }()
+	start := time.Now()
 
 	var (
-		id     int64
-		cutoff time.Time
+		clock      atomic.Int64
+		clockReads atomic.Int32
 	)
 
-	err = tx.QueryRow(ctx, `UPDATE bot_reply_outbox
-		SET status='manual_review', attempts=5, first_attempt_at=clock_timestamp()-interval '1 hour',
-		    created_at=clock_timestamp()-interval '144 hours'+interval '2 seconds'
-		WHERE message_id=$1 RETURNING id,created_at+interval '144 hours'`, entry.MessageID).Scan(&id, &cutoff)
-	require.NoError(t, err)
+	clock.Store(start.UnixMilli())
+
+	store.now = func() time.Time {
+		clockReads.Add(1)
+
+		return time.UnixMilli(clock.Load())
+	}
+
+	repo := newTestReplyOutboxRepository(store)
+	id := seedManualReviewCreatedAt(ctx, t, store, repo, "message:replay-lock-cutoff", start.Add(-ManualReplayCutoff+2*time.Second))
+
+	release, holderDone := holdWriter(ctx, store)
+	readsWhileHeld := clockReads.Load()
 
 	type replayResult struct {
-		outcome string
+		outcome ManualReviewOutcome
 		err     error
 	}
 
 	done := make(chan replayResult, 1)
 
 	go func() {
-		var result replayResult
-
-		result.err = conn.QueryRow(ctx, `SELECT grant_bot_reply_outbox_manual_replay($1,$2,$3)`,
-			id, testOperatorEmail, manualReplayReason).Scan(&result.outcome)
-
-		done <- result
+		outcome, replayErr := store.GrantManualReplay(ctx, id, testOperatorEmail, manualReplayReason)
+		done <- replayResult{outcome: outcome, err: replayErr}
 	}()
 
-	waitThroughManualReplayCutoff(ctx, t, pool, pid, cutoff)
-	require.NoError(t, tx.Commit(ctx))
+	require.Never(t, func() bool { return clockReads.Load() > readsWhileHeld }, 200*time.Millisecond, 5*time.Millisecond,
+		"the replay must read the clock only after it owns the writer")
+
+	clock.Store(start.Add(3 * time.Second).UnixMilli())
+	release()
+	require.NoError(t, <-holderDone)
 
 	select {
 	case result := <-done:
 		require.NoError(t, result.err)
-		require.Equal(t, "cutoff_expired", result.outcome)
+		require.Equal(t, ManualReviewCutoffExpired, result.outcome)
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
 
 	var auditCount int
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM bot_reply_outbox_replay_audit WHERE outbox_id=$1`, id).Scan(&auditCount))
+	require.NoError(t, store.QueryRow(ctx, `SELECT count(*) FROM bot_reply_outbox_replay_audit WHERE outbox_id = ?1`, id).Scan(&auditCount))
 	require.Zero(t, auditCount)
-	assertRejectedReplayStaysUnclaimable(ctx, t, pool, repo, id)
+	assertRejectedReplayStaysUnclaimable(ctx, t, store, repo, id)
 }
 
-func waitThroughManualReplayCutoff(ctx context.Context, t *testing.T, pool *pgxpool.Pool, pid uint32, cutoff time.Time) {
+func seedManualReviewCreatedAt(ctx context.Context, t *testing.T, store *Store, repo *ReplyOutboxRepository, messageID string, createdAt time.Time) int64 {
 	t.Helper()
 
-	var blockedAt time.Time
-
-	require.Eventually(t, func() bool {
-		var blocked bool
-
-		lockErr := pool.QueryRow(ctx, `SELECT cardinality(pg_blocking_pids($1::integer))>0,clock_timestamp()`, pid).
-			Scan(&blocked, &blockedAt)
-
-		return lockErr == nil && blocked
-	}, time.Second, 10*time.Millisecond)
-	require.True(t, blockedAt.Before(cutoff), "call must enter the lock wait before the cutoff")
-
-	_, err := pool.Exec(ctx, `SELECT pg_sleep(GREATEST(0,extract(epoch FROM ($1::timestamptz-clock_timestamp())))+0.05)`, cutoff)
+	entry := newReplyOutboxEntry(messageID, 0, `{"body":"stored"}`)
+	_, err := repo.Insert(ctx, entry)
 	require.NoError(t, err)
+
+	var id int64
+
+	require.NoError(t, store.QueryRow(ctx, `UPDATE bot_reply_outbox
+		SET row_version = row_version + 1, status = 'manual_review', attempts = 5, first_attempt_at = ?2, created_at = ?3
+		WHERE message_id = ?1 RETURNING id`, messageID, createdAt.Add(-time.Hour).UnixMilli(), createdAt.UnixMilli()).Scan(&id))
+
+	return id
+}
+
+func holdWriter(ctx context.Context, store *Store) (func(), <-chan error) {
+	held, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+
+	go func() {
+		done <- store.write(ctx, func(*sql.Tx, int64) error {
+			close(held)
+			<-release
+
+			return nil
+		})
+	}()
+
+	<-held
+
+	return func() { close(release) }, done
 }

@@ -1,18 +1,13 @@
-WITH settled AS (
 UPDATE bot_webhook_inbox
 SET status = 'dead',
-    payload = '{}'::jsonb,
+    payload = '{}',
     claim_token = NULL,
     lease_until = NULL,
-    terminal_at = clock_timestamp(),
-    terminal_reason = $3,
-    last_error = $3,
-    updated_at = clock_timestamp()
-WHERE message_id = $1
-  AND claim_token = $2
+    terminal_at = ?3,
+    terminal_reason = ?4,
+    last_error = ?4,
+    updated_at = ?3
+WHERE message_id = ?1
+  AND claim_token = ?2
   AND status = 'processing'
-RETURNING message_id, ordering_key, status
-),
-{{inbox_head_advance}}
-
-SELECT EXISTS (SELECT 1 FROM settled)
+RETURNING ordering_key

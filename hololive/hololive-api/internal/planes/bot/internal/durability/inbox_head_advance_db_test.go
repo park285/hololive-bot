@@ -2,13 +2,11 @@ package durability
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,13 +20,13 @@ type inboxHeadTransition struct {
 }
 
 func TestInboxTransitionsMoveTheOrderingHeadOnlyWhenTerminal(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	ctx := t.Context()
 
-	for _, transition := range inboxHeadTransitions(ctx, pool, repo) {
+	for _, transition := range inboxHeadTransitions(ctx, store, repo) {
 		t.Run(transition.name+" with a successor", func(t *testing.T) {
-			truncateDurabilityTables(ctx, t, pool)
+			truncateDurabilityTables(ctx, t, store)
 
 			head := inboxMessage("message:head-advance-first", "room-1", headAdvanceOrderingKey)
 			successor := inboxMessage("message:head-advance-second", "room-1", headAdvanceOrderingKey)
@@ -44,20 +42,20 @@ func TestInboxTransitionsMoveTheOrderingHeadOnlyWhenTerminal(t *testing.T) {
 				want = successor.MessageID
 			}
 
-			got, ok := webhookHead(ctx, t, pool, headAdvanceOrderingKey)
+			got, ok := webhookHead(ctx, t, store, headAdvanceOrderingKey)
 			require.True(t, ok, "active successor must keep an ordering head")
 			assert.Equal(t, want, got)
 		})
 
 		t.Run(transition.name+" without a successor", func(t *testing.T) {
-			truncateDurabilityTables(ctx, t, pool)
+			truncateDurabilityTables(ctx, t, store)
 
 			head := inboxMessage("message:head-advance-only", "room-1", headAdvanceOrderingKey)
 			admitOne(ctx, t, repo, head)
 
 			transition.apply(t, claimHeadAdvanceMessage(ctx, t, repo, head))
 
-			got, ok := webhookHead(ctx, t, pool, headAdvanceOrderingKey)
+			got, ok := webhookHead(ctx, t, store, headAdvanceOrderingKey)
 
 			if transition.terminal {
 				assert.False(t, ok, "terminal head without successor must release the ordering key, got %q", got)
@@ -71,7 +69,7 @@ func TestInboxTransitionsMoveTheOrderingHeadOnlyWhenTerminal(t *testing.T) {
 	}
 }
 
-func inboxHeadTransitions(ctx context.Context, pool *pgxpool.Pool, repo *InboxRepository) []inboxHeadTransition {
+func inboxHeadTransitions(ctx context.Context, store *Store, repo *InboxRepository) []inboxHeadTransition {
 	return []inboxHeadTransition{
 		{name: "complete", terminal: true, apply: func(t *testing.T, claim *InboxClaim) {
 			t.Helper()
@@ -98,7 +96,7 @@ func inboxHeadTransitions(ctx context.Context, pool *pgxpool.Pool, repo *InboxRe
 		{name: "reclaim after max attempts", terminal: true, apply: func(t *testing.T, claim *InboxClaim) {
 			t.Helper()
 
-			expireInboxLease(ctx, t, pool, claim.MessageID)
+			expireInboxLease(ctx, t, store, claim.MessageID)
 
 			reclaim, err := repo.ReclaimExpired(ctx, claim.Attempts, 100)
 			require.NoError(t, err)
@@ -107,7 +105,7 @@ func inboxHeadTransitions(ctx context.Context, pool *pgxpool.Pool, repo *InboxRe
 		{name: "reclaim with attempts left", terminal: false, apply: func(t *testing.T, claim *InboxClaim) {
 			t.Helper()
 
-			expireInboxLease(ctx, t, pool, claim.MessageID)
+			expireInboxLease(ctx, t, store, claim.MessageID)
 
 			reclaim, err := repo.ReclaimExpired(ctx, claim.Attempts+1, 100)
 			require.NoError(t, err)
@@ -127,22 +125,22 @@ func claimHeadAdvanceMessage(ctx context.Context, t *testing.T, repo *InboxRepos
 	return claim
 }
 
-func expireInboxLease(ctx context.Context, t *testing.T, pool *pgxpool.Pool, messageID string) {
+func expireInboxLease(ctx context.Context, t *testing.T, store *Store, messageID string) {
 	t.Helper()
 
-	_, err := pool.Exec(ctx,
-		"UPDATE bot_webhook_inbox SET lease_until = clock_timestamp() - interval '1 minute' WHERE message_id = $1",
-		messageID)
+	_, err := store.Exec(ctx,
+		"UPDATE bot_webhook_inbox SET lease_until = ?2 WHERE message_id = ?1",
+		messageID, time.Now().Add(-time.Minute).UnixMilli())
 	require.NoError(t, err)
 }
 
-func webhookHead(ctx context.Context, t *testing.T, pool *pgxpool.Pool, orderingKey string) (string, bool) {
+func webhookHead(ctx context.Context, t *testing.T, store *Store, orderingKey string) (string, bool) {
 	t.Helper()
 
 	var head string
 
-	err := pool.QueryRow(ctx, "SELECT message_id FROM bot_webhook_heads WHERE ordering_key = $1", orderingKey).Scan(&head)
-	if errors.Is(err, pgx.ErrNoRows) {
+	err := store.QueryRow(ctx, "SELECT message_id FROM bot_webhook_heads WHERE ordering_key = ?1", orderingKey).Scan(&head)
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", false
 	}
 
@@ -151,53 +149,13 @@ func webhookHead(ctx context.Context, t *testing.T, pool *pgxpool.Pool, ordering
 	return head, true
 }
 
-func TestBeginLockedMessageTxHoldsTheAdmissionOrderingLock(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
-	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
-
-	message := inboxMessage("message:locked-transition", "room-1", orderingKeyAlpha)
-	admitOne(ctx, t, repo, message)
-
-	owner, err := repo.beginLockedMessageTx(ctx, message.MessageID)
-	require.NoError(t, err)
-
-	pgErr, ok := errors.AsType[*pgconn.PgError](lockOrderingKeyWithTimeout(ctx, t, pool, message.OrderingKey))
-	require.True(t, ok, "admission lock must time out while settlement holds the ordering key")
-	assert.Equal(t, "55P03", pgErr.Code, "settlement must hold the same ordering key lock as admission")
-
-	require.NoError(t, rollbackInboxTx(ctx, owner))
-
-	require.NoError(t, lockOrderingKeyWithTimeout(ctx, t, pool, message.OrderingKey),
-		"ending the settlement transaction must release the ordering key lock")
-}
-
-func lockOrderingKeyWithTimeout(ctx context.Context, t *testing.T, pool *pgxpool.Pool, orderingKey string) error {
-	t.Helper()
-
-	tx, err := pool.Begin(ctx)
-	require.NoError(t, err)
-
-	_, err = tx.Exec(ctx, "SET LOCAL lock_timeout = '100ms'")
-	require.NoError(t, err)
-
-	lockErr := lockInboxOrderingKey(ctx, tx, orderingKey)
-	require.NoError(t, rollbackInboxTx(ctx, tx))
-
-	return lockErr
-}
-
 func TestInboxSettlementOfAnUnknownMessageIsNotOwned(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	const missing = "message:never-admitted"
-
-	_, err := repo.beginLockedMessageTx(ctx, missing)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
 
 	applied, err := repo.Complete(ctx, missing, testClaimToken)
 	require.NoError(t, err)

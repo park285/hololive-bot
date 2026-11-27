@@ -13,8 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ncruces/go-sqlite3"
 	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/park285/iris-client-go/v6/webhook"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
@@ -24,7 +23,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
-	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability/durabilitytest"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -129,16 +128,11 @@ func TestReplyOutboxOutcomeUnknownRetryDelayIncreasesByAttempt(t *testing.T) {
 }
 
 func TestManualReviewBacklogMetricsExposeCountAndOldestAge(t *testing.T) {
-	pool := dbtest.NewPool(t)
+	durable := durabilitytest.Open(t)
 
-	_, err := pool.Exec(t.Context(), "TRUNCATE bot_reply_outbox_resolution_audit, bot_reply_outbox_replay_audit, bot_reply_outbox RESTART IDENTITY")
-	if err != nil {
-		t.Fatal(err)
-	}
+	repo := newTestReplyOutboxRepository(t, durable.Store)
 
-	repo := newTestReplyOutboxRepository(t, pool)
-
-	_, err = repo.Insert(t.Context(), &durability.ReplyOutboxEntry{
+	_, err := repo.Insert(t.Context(), &durability.ReplyOutboxEntry{
 		MessageID: "message:metric", Phase: transport.ReplyPhase, RoomID: testRoomID,
 		Payload: []byte(`{"kind":"text","message":"answer"}`), ClientRequestID: "hololive:v1:message:metric:reply:0",
 	})
@@ -146,7 +140,7 @@ func TestManualReviewBacklogMetricsExposeCountAndOldestAge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = pool.Exec(t.Context(), "UPDATE bot_reply_outbox SET status = 'manual_review', updated_at = clock_timestamp() - interval '10 seconds'")
+	_, err = durable.DB.ExecContext(t.Context(), "UPDATE bot_reply_outbox SET row_version = row_version + 1, status = 'manual_review', updated_at = ?1", time.Now().Add(-10*time.Second).UnixMilli())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,7 +426,7 @@ func claimDeadlineInboxMessage(t *testing.T, inbox *durability.InboxRepository) 
 	return claim
 }
 
-func assertDeadlineSettlementState(t *testing.T, pool *pgxpool.Pool, messageID string) {
+func assertDeadlineSettlementState(t *testing.T, durable durabilitytest.Fixture, messageID string) {
 	t.Helper()
 
 	var (
@@ -440,13 +434,13 @@ func assertDeadlineSettlementState(t *testing.T, pool *pgxpool.Pool, messageID s
 		inboxPayload               []byte
 	)
 
-	err := pool.QueryRow(t.Context(), `SELECT status FROM bot_command_executions WHERE message_id = $1`, messageID).
+	err := durable.DB.QueryRowContext(t.Context(), `SELECT status FROM bot_command_executions WHERE message_id = ?1`, messageID).
 		Scan(&commandStatus)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = pool.QueryRow(t.Context(), `SELECT status, payload FROM bot_webhook_inbox WHERE message_id = $1`, messageID).
+	err = durable.DB.QueryRowContext(t.Context(), `SELECT status, payload FROM bot_webhook_inbox WHERE message_id = ?1`, messageID).
 		Scan(&inboxStatus, &inboxPayload)
 	if err != nil {
 		t.Fatal(err)
@@ -462,15 +456,10 @@ func assertDeadlineSettlementState(t *testing.T, pool *pgxpool.Pool, messageID s
 }
 
 func TestDurableCommandUsesConfiguredHandlerDeadline(t *testing.T) {
-	pool := dbtest.NewPool(t)
+	durable := durabilitytest.Open(t)
 	ctx := t.Context()
 
-	_, err := pool.Exec(ctx, `TRUNCATE bot_webhook_heads, bot_reply_outbox, bot_command_executions, bot_webhook_inbox RESTART IDENTITY CASCADE`)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	inbox := durability.NewInboxRepository(pool)
+	inbox := durability.NewInboxRepository(durable.Store)
 	claim := claimDeadlineInboxMessage(t, inbox)
 
 	const handlerTimeout = 25 * time.Millisecond
@@ -478,7 +467,7 @@ func TestDurableCommandUsesConfiguredHandlerDeadline(t *testing.T) {
 	deadlineSeen := make(chan time.Duration, 1)
 	r := &durableRuntime{
 		inbox:    inbox,
-		commands: durability.NewCommandExecutionRepository(pool),
+		commands: durability.NewCommandExecutionRepository(durable.Store),
 		bot: durableMessageProcessorFunc(func(commandCtx context.Context, _ *webhook.Message) error {
 			deadline, ok := commandCtx.Deadline()
 			if !ok {
@@ -495,7 +484,7 @@ func TestDurableCommandUsesConfiguredHandlerDeadline(t *testing.T) {
 		heartbeatEvery:    time.Hour,
 		settlementTimeout: 3 * time.Second,
 		inboxHeartbeat:    inbox.Heartbeat,
-		commandHeartbeat:  durability.NewCommandExecutionRepository(pool).Heartbeat,
+		commandHeartbeat:  durability.NewCommandExecutionRepository(durable.Store).Heartbeat,
 	}
 
 	if claimErr := r.processInboxClaim(ctx, claim, "deadline-token"); !errors.Is(claimErr, context.DeadlineExceeded) {
@@ -507,7 +496,7 @@ func TestDurableCommandUsesConfiguredHandlerDeadline(t *testing.T) {
 		t.Fatalf("command deadline remaining = %s, want (0,%s]", seen, handlerTimeout)
 	}
 
-	assertDeadlineSettlementState(t, pool, claim.MessageID)
+	assertDeadlineSettlementState(t, durable, claim.MessageID)
 }
 
 func TestCommandCompletionDistinguishesDefiniteAndUncertainFailure(t *testing.T) {
@@ -525,18 +514,13 @@ func TestCommandCompletionDistinguishesDefiniteAndUncertainFailure(t *testing.T)
 }
 
 func TestDuplicateActiveCommandDefersInboxUntilOutcomeIsKnown(t *testing.T) {
-	pool := dbtest.NewPool(t)
+	durable := durabilitytest.Open(t)
 	ctx := t.Context()
 
-	_, err := pool.Exec(ctx, `TRUNCATE bot_webhook_heads, bot_reply_outbox, bot_command_executions, bot_webhook_inbox RESTART IDENTITY CASCADE`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	inbox := durability.NewInboxRepository(durable.Store)
+	commands := durability.NewCommandExecutionRepository(durable.Store)
 
-	inbox := durability.NewInboxRepository(pool)
-	commands := durability.NewCommandExecutionRepository(pool)
-
-	_, err = inbox.AdmitResult(ctx, durability.InboxMessage{
+	_, err := inbox.AdmitResult(ctx, durability.InboxMessage{
 		MessageID: "message:crash-window", RoomID: testRoomID, OrderingKey: testOrderingKey,
 		Payload: []byte(`{"JSON":{"message_id":"crash-window"}}`),
 	})
@@ -554,7 +538,7 @@ func TestDuplicateActiveCommandDefersInboxUntilOutcomeIsKnown(t *testing.T) {
 		t.Fatalf("command claim = %v, err = %v", claimed, err)
 	}
 
-	if _, err = pool.Exec(ctx, `UPDATE bot_webhook_inbox SET lease_until = lease_until - interval '1 millisecond' WHERE message_id = $1`, first.MessageID); err != nil {
+	if _, err = durable.DB.ExecContext(ctx, `UPDATE bot_webhook_inbox SET lease_until = lease_until - 1 WHERE message_id = ?1`, first.MessageID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -574,14 +558,14 @@ func TestDuplicateActiveCommandDefersInboxUntilOutcomeIsKnown(t *testing.T) {
 		inboxMaxAttempts:  testDurableProfile(t).BotReplyOutbox.MaxAttempts,
 		settlementTimeout: workercontract.Milliseconds(testDurableProfile(t).BotWebhookInbox.SettlementTimeoutMS),
 	}
-	assertActiveCommandDefersInbox(t, pool, r, second)
-	expireCommandClaim(t, pool, commands, second.MessageID)
-	assertTerminalDuplicateCompletes(t, pool, r, inbox, second.MessageID)
+	assertActiveCommandDefersInbox(t, durable, r, second)
+	expireCommandClaim(t, durable, commands, second.MessageID)
+	assertTerminalDuplicateCompletes(t, durable, r, inbox, second.MessageID)
 }
 
 func assertActiveCommandDefersInbox(
 	t *testing.T,
-	pool *pgxpool.Pool,
+	durable durabilitytest.Fixture,
 	r *durableRuntime,
 	claim *durability.InboxClaim,
 ) {
@@ -599,12 +583,12 @@ func assertActiveCommandDefersInbox(
 		payload                    []byte
 	)
 
-	if err = pool.QueryRow(ctx, `SELECT status, payload FROM bot_webhook_inbox WHERE message_id = $1`, claim.MessageID).
+	if err = durable.DB.QueryRowContext(ctx, `SELECT status, payload FROM bot_webhook_inbox WHERE message_id = ?1`, claim.MessageID).
 		Scan(&inboxStatus, &payload); err != nil {
 		t.Fatal(err)
 	}
 
-	if err = pool.QueryRow(ctx, `SELECT status FROM bot_command_executions WHERE message_id = $1`, claim.MessageID).
+	if err = durable.DB.QueryRowContext(ctx, `SELECT status FROM bot_command_executions WHERE message_id = ?1`, claim.MessageID).
 		Scan(&commandStatus); err != nil {
 		t.Fatal(err)
 	}
@@ -617,7 +601,7 @@ func assertActiveCommandDefersInbox(
 
 func expireCommandClaim(
 	t *testing.T,
-	pool *pgxpool.Pool,
+	durable durabilitytest.Fixture,
 	commands *durability.CommandExecutionRepository,
 	messageID string,
 ) {
@@ -625,16 +609,16 @@ func expireCommandClaim(
 
 	ctx := t.Context()
 
-	_, err := pool.Exec(ctx, `UPDATE bot_command_executions
-		SET claimed_at = clock_timestamp() - interval '6 minutes'
-		WHERE message_id = $1`, messageID)
+	_, err := durable.DB.ExecContext(ctx, `UPDATE bot_command_executions
+		SET claimed_at = ?2
+		WHERE message_id = ?1`, messageID, time.Now().Add(-6*time.Minute).UnixMilli())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = pool.Exec(ctx, `UPDATE bot_webhook_inbox
-		SET available_at = clock_timestamp()
-		WHERE message_id = $1`, messageID)
+	_, err = durable.DB.ExecContext(ctx, `UPDATE bot_webhook_inbox
+		SET available_at = ?2
+		WHERE message_id = ?1`, messageID, time.Now().UnixMilli())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,7 +631,7 @@ func expireCommandClaim(
 
 func assertTerminalDuplicateCompletes(
 	t *testing.T,
-	pool *pgxpool.Pool,
+	durable durabilitytest.Fixture,
 	r *durableRuntime,
 	inbox *durability.InboxRepository,
 	messageID string,
@@ -671,7 +655,7 @@ func assertTerminalDuplicateCompletes(
 		payload     []byte
 	)
 
-	if err = pool.QueryRow(ctx, `SELECT status, payload FROM bot_webhook_inbox WHERE message_id = $1`, messageID).
+	if err = durable.DB.QueryRowContext(ctx, `SELECT status, payload FROM bot_webhook_inbox WHERE message_id = ?1`, messageID).
 		Scan(&inboxStatus, &payload); err != nil {
 		t.Fatal(err)
 	}
@@ -700,19 +684,14 @@ func TestExpiredCommandObservationEmitsMetricAndActionableLog(t *testing.T) {
 }
 
 func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
-	pool := dbtest.NewPool(t)
+	durable := durabilitytest.Open(t)
 	ctx := t.Context()
-
-	_, err := pool.Exec(ctx, `TRUNCATE bot_webhook_heads, bot_reply_outbox, bot_command_executions, bot_webhook_inbox RESTART IDENTITY CASCADE`)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	payload := testWebhookBody(t, "failed-message", "!bad")
 
-	inbox := durability.NewInboxRepository(pool)
+	inbox := durability.NewInboxRepository(durable.Store)
 
-	_, err = inbox.AdmitResult(ctx, durability.InboxMessage{
+	_, err := inbox.AdmitResult(ctx, durability.InboxMessage{
 		MessageID: "message:failed-message", RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: payload,
 	})
 	if err != nil {
@@ -728,7 +707,7 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 		t.Fatal("failed inbox claim is nil")
 	}
 
-	commands := durability.NewCommandExecutionRepository(pool)
+	commands := durability.NewCommandExecutionRepository(durable.Store)
 	r := &durableRuntime{
 		inbox:    inbox,
 		commands: commands,
@@ -747,16 +726,16 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 		t.Fatalf("process failed inbox claim error = %v, want validation failure", claimErr)
 	}
 
-	var status, summary string
+	var status string
 
-	err = pool.QueryRow(ctx, `SELECT status, result_summary FROM bot_command_executions WHERE message_id = $1`, claim.MessageID).
-		Scan(&status, &summary)
+	err = durable.DB.QueryRowContext(ctx, `SELECT status FROM bot_command_executions WHERE message_id = ?1`, claim.MessageID).
+		Scan(&status)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if status != durability.CommandExecutionFailed || summary != durability.CommandExecutionFailed {
-		t.Fatalf("command result = (%q,%q), want failed safe summary", status, summary)
+	if status != durability.CommandExecutionFailed {
+		t.Fatalf("command status = %q, want failed", status)
 	}
 }
 
@@ -847,8 +826,8 @@ func assertDurableRepositoryFailureSafe(t *testing.T, err error, rawID, causeTex
 		t.Fatal("expected repository failure")
 	}
 
-	pgErr, ok := errors.AsType[*pgconn.PgError](err)
-	if !ok || !strings.Contains(pgErr.Error(), rawID) {
+	sqliteErr, ok := errors.AsType[*sqlite3.Error](err)
+	if !ok || !strings.Contains(sqliteErr.Error(), rawID) {
 		t.Fatalf("database cause chain was not preserved: %v", err)
 	}
 
@@ -872,41 +851,37 @@ func assertDurableRepositoryFailureSafe(t *testing.T, err error, rawID, causeTex
 func testCommandClaimRepositoryPrivacy(t *testing.T, rawID, causeText string) {
 	t.Helper()
 
-	pool := dbtest.NewPool(t)
+	durable := durabilitytest.Open(t)
 
-	_, err := pool.Exec(t.Context(), `
-		CREATE FUNCTION fail_command_claim_for_privacy_test() RETURNS trigger AS $$
-		BEGIN RAISE EXCEPTION 'database rejected %', NEW.message_id; END
-		$$ LANGUAGE plpgsql;
-		CREATE TRIGGER fail_command_claim_for_privacy_test
+	_, err := durable.DB.ExecContext(t.Context(), `CREATE TRIGGER fail_command_claim_for_privacy_test
 		BEFORE INSERT ON bot_command_executions
-		FOR EACH ROW EXECUTE FUNCTION fail_command_claim_for_privacy_test()`)
+		BEGIN
+			SELECT RAISE(ABORT, 'database rejected ' || NEW.message_id);
+		END`)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = durability.NewCommandExecutionRepository(pool).Claim(t.Context(), rawID, "webhook", "claim-token")
+	_, err = durability.NewCommandExecutionRepository(durable.Store).Claim(t.Context(), rawID, "webhook", "claim-token")
 	assertDurableRepositoryFailureSafe(t, err, rawID, causeText)
 }
 
 func testCommandHeartbeatRepositoryPrivacy(t *testing.T, rawID, causeText string) {
 	t.Helper()
 
-	pool := dbtest.NewPool(t)
-	repo := durability.NewCommandExecutionRepository(pool)
+	durable := durabilitytest.Open(t)
+	repo := durability.NewCommandExecutionRepository(durable.Store)
 	claimed, err := repo.Claim(t.Context(), rawID, "webhook", "claim-token")
 
 	if err != nil || !claimed {
 		t.Fatalf("claim = %v, err = %v", claimed, err)
 	}
 
-	_, err = pool.Exec(t.Context(), `
-		CREATE FUNCTION fail_command_heartbeat_for_privacy_test() RETURNS trigger AS $$
-		BEGIN RAISE EXCEPTION 'database rejected %', NEW.message_id; END
-		$$ LANGUAGE plpgsql;
-		CREATE TRIGGER fail_command_heartbeat_for_privacy_test
+	_, err = durable.DB.ExecContext(t.Context(), `CREATE TRIGGER fail_command_heartbeat_for_privacy_test
 		BEFORE UPDATE ON bot_command_executions
-		FOR EACH ROW EXECUTE FUNCTION fail_command_heartbeat_for_privacy_test()`)
+		BEGIN
+			SELECT RAISE(ABORT, 'database rejected ' || NEW.message_id);
+		END`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -918,8 +893,8 @@ func testCommandHeartbeatRepositoryPrivacy(t *testing.T, rawID, causeText string
 func testInboxReleaseRepositoryPrivacy(t *testing.T, rawID, causeText string) {
 	t.Helper()
 
-	pool := dbtest.NewPool(t)
-	repo := durability.NewInboxRepository(pool)
+	durable := durabilitytest.Open(t)
+	repo := durability.NewInboxRepository(durable.Store)
 
 	_, err := repo.AdmitResult(t.Context(), durability.InboxMessage{
 		MessageID: rawID, RoomID: testRoomID, OrderingKey: testOrderingKey, Payload: []byte(`{"body":"x"}`),
@@ -933,19 +908,17 @@ func testInboxReleaseRepositoryPrivacy(t *testing.T, rawID, causeText string) {
 		t.Fatalf("claim = %v, err = %v", claim, err)
 	}
 
-	_, err = pool.Exec(t.Context(),
-		"UPDATE bot_webhook_inbox SET last_error = 'processing_failed' WHERE message_id = $1", rawID)
+	_, err = durable.DB.ExecContext(t.Context(),
+		"UPDATE bot_webhook_inbox SET last_error = 'processing_failed' WHERE message_id = ?1", rawID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = pool.Exec(t.Context(), `
-		CREATE FUNCTION fail_inbox_release_for_privacy_test() RETURNS trigger AS $$
-		BEGIN RAISE EXCEPTION 'database rejected %', NEW.message_id; END
-		$$ LANGUAGE plpgsql;
-		CREATE TRIGGER fail_inbox_release_for_privacy_test
+	_, err = durable.DB.ExecContext(t.Context(), `CREATE TRIGGER fail_inbox_release_for_privacy_test
 		BEFORE UPDATE ON bot_webhook_inbox
-		FOR EACH ROW EXECUTE FUNCTION fail_inbox_release_for_privacy_test()`)
+		BEGIN
+			SELECT RAISE(ABORT, 'database rejected ' || NEW.message_id);
+		END`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -955,8 +928,8 @@ func testInboxReleaseRepositoryPrivacy(t *testing.T, rawID, causeText string) {
 
 	var lastError string
 
-	if scanErr := pool.QueryRow(t.Context(),
-		"SELECT last_error FROM bot_webhook_inbox WHERE message_id = $1", rawID).Scan(&lastError); scanErr != nil {
+	if scanErr := durable.DB.QueryRowContext(t.Context(),
+		"SELECT last_error FROM bot_webhook_inbox WHERE message_id = ?1", rawID).Scan(&lastError); scanErr != nil {
 		t.Fatal(scanErr)
 	}
 
@@ -978,16 +951,16 @@ func TestReleaseInboxStoresBoundedReasonWithoutCauseText(t *testing.T) {
 		{"deadline", context.DeadlineExceeded, durability.InboxFailureCommandClaimContextDeadline},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			pool := dbtest.NewPool(t)
+			durable := durabilitytest.Open(t)
 			ctx := t.Context()
-			r, claim := admittedInboxReleaseFixture(t, pool, "message:"+sentinel)
+			r, claim := admittedInboxReleaseFixture(t, durable, "message:"+sentinel)
 			releaseCtx := failedInboxReleaseContext(ctx, t, test.cause)
 
 			r.releaseInbox(releaseCtx, claim, "stale-token", test.cause)
 
 			var status, lastError, token string
 
-			if err := pool.QueryRow(ctx, "SELECT status, last_error, claim_token FROM bot_webhook_inbox WHERE message_id = $1", claim.MessageID).Scan(&status, &lastError, &token); err != nil {
+			if err := durable.DB.QueryRowContext(ctx, "SELECT status, last_error, claim_token FROM bot_webhook_inbox WHERE message_id = ?1", claim.MessageID).Scan(&status, &lastError, &token); err != nil {
 				t.Fatal(err)
 			}
 
@@ -997,7 +970,7 @@ func TestReleaseInboxStoresBoundedReasonWithoutCauseText(t *testing.T) {
 
 			r.releaseInbox(releaseCtx, claim, "release-token", test.cause)
 
-			if err := pool.QueryRow(ctx, "SELECT status, last_error FROM bot_webhook_inbox WHERE message_id = $1", claim.MessageID).Scan(&status, &lastError); err != nil {
+			if err := durable.DB.QueryRowContext(ctx, "SELECT status, last_error FROM bot_webhook_inbox WHERE message_id = ?1", claim.MessageID).Scan(&status, &lastError); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1008,17 +981,12 @@ func TestReleaseInboxStoresBoundedReasonWithoutCauseText(t *testing.T) {
 	}
 }
 
-func admittedInboxReleaseFixture(t *testing.T, pool *pgxpool.Pool, messageID string) (*durableRuntime, *durability.InboxClaim) {
+func admittedInboxReleaseFixture(t *testing.T, durable durabilitytest.Fixture, messageID string) (*durableRuntime, *durability.InboxClaim) {
 	t.Helper()
 
 	ctx := t.Context()
 
-	_, err := pool.Exec(ctx, `TRUNCATE bot_webhook_heads, bot_reply_outbox, bot_command_executions, bot_webhook_inbox RESTART IDENTITY CASCADE`)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	r, err := newDurableRuntime(nil, nil, pool, mustDurableReplyOutbox(t, pool, testDurableProfile(t)), testDurableProfile(t), slog.New(slog.DiscardHandler))
+	r, err := newDurableRuntime(nil, nil, durable.Store, mustDurableReplyOutbox(t, durable.Store, testDurableProfile(t)), testDurableProfile(t), slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1058,12 +1026,12 @@ func failedInboxReleaseContext(ctx context.Context, t *testing.T, cause error) c
 }
 
 func TestAdmitMessageLogsValidationConstraintOnFailure(t *testing.T) {
-	pool := dbtest.NewPool(t)
+	durable := durabilitytest.Open(t)
 
 	var logs bytes.Buffer
 
 	admitter := durableAdmitter{
-		inbox:  durability.NewInboxRepository(pool),
+		inbox:  durability.NewInboxRepository(durable.Store),
 		logger: slog.New(slog.NewJSONHandler(&logs, nil)),
 	}
 
@@ -1091,7 +1059,7 @@ func TestAdmitMessageWithoutLoggerReturnsErrorWithoutPanic(t *testing.T) {
 		Room: testRoomID, JSON: &webhook.MessageJSON{MessageID: "message:no-logger"},
 	}, []byte(`{}`))
 	if err == nil {
-		t.Fatal("admission must fail when the pool is not configured")
+		t.Fatal("admission must fail when the store is not configured")
 	}
 }
 
@@ -1146,10 +1114,10 @@ func TestAdmitMessageRejectsWithoutOptionalCounters(t *testing.T) {
 	}
 }
 
-func newTestReplyOutboxRepository(t *testing.T, pool *pgxpool.Pool) *durability.ReplyOutboxRepository {
+func newTestReplyOutboxRepository(t *testing.T, store *durability.Store) *durability.ReplyOutboxRepository {
 	t.Helper()
 
-	outbox, err := newDurableReplyOutbox(pool, testDurableProfile(t))
+	outbox, err := newDurableReplyOutbox(store, testDurableProfile(t))
 	require.NoError(t, err)
 
 	return outbox.repository

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,18 +17,18 @@ const (
 )
 
 func TestManualReviewDiscardWithoutReplay(t *testing.T) {
-	pool := newDurabilityPool(t)
+	store := newTestStore(t)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
-	repo := newTestReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(store)
 	entry := newReplyOutboxEntry("message:manual-discard", 0, `{"body":"stored"}`)
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, repo, entry))
 
-	id := discardManualReviewWithoutReplay(ctx, t, pool, entry)
+	id := discardManualReviewWithoutReplay(ctx, t, store, entry)
 
-	assertDiscardedRowIsScrubbed(ctx, t, pool, id)
-	assertDiscardAuditRecordsTheDecision(ctx, t, pool, id)
+	assertDiscardedRowIsScrubbed(ctx, t, store, id)
+	assertDiscardAuditRecordsTheDecision(ctx, t, store, id)
 
 	stats, err := repo.ManualReviewStats(ctx)
 	require.NoError(t, err)
@@ -39,39 +38,32 @@ func TestManualReviewDiscardWithoutReplay(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, claim)
 
-	assertDiscardAuditIsAppendOnly(ctx, t, pool, id)
-	assertDiscardAuditIsPrunedWithTheRow(ctx, t, pool, id)
+	assertDiscardAuditIsAppendOnly(ctx, t, store, id)
+	assertDiscardAuditIsPrunedWithTheRow(ctx, t, store, id)
 }
 
 func discardManualReviewWithoutReplay(
 	ctx context.Context,
 	t *testing.T,
-	pool *pgxpool.Pool,
+	store *Store,
 	entry *ReplyOutboxEntry,
 ) int64 {
 	t.Helper()
 
-	var id int64
+	id := markReplyManualReview(ctx, t, store, entry.MessageID, 1)
 
-	require.NoError(t, pool.QueryRow(ctx, `UPDATE bot_reply_outbox
-		SET status = 'manual_review', attempts = 1
-		WHERE message_id = $1 RETURNING id`, entry.MessageID).Scan(&id))
+	_, err := store.Exec(ctx, `UPDATE bot_reply_outbox
+		SET row_version = row_version + 1, status = 'discarded', payload = NULL WHERE id = ?1`, id)
+	requireConstraintViolation(t, err, "discarded reply transition requires an audited manual-review decision")
 
-	_, err := pool.Exec(ctx, `UPDATE bot_reply_outbox
-		SET status = 'discarded', payload = NULL WHERE id = $1`, id)
-	requirePGErrorCode(t, err, "23514")
-
-	var outcome string
-
-	require.NoError(t, pool.QueryRow(ctx, `SELECT public.discard_bot_reply_outbox_manual_review(
-		$1, $2, $3, $4)`, id, testOperatorEmail,
-		testDiscardIncidentReason, testIrisStateOutcomeUnknown).Scan(&outcome))
-	require.Equal(t, "discarded", outcome)
+	outcome, err := store.DiscardManualReview(ctx, id, testOperatorEmail, testDiscardIncidentReason, testIrisStateOutcomeUnknown)
+	require.NoError(t, err)
+	require.Equal(t, ManualReviewDiscarded, outcome)
 
 	return id
 }
 
-func assertDiscardedRowIsScrubbed(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id int64) {
+func assertDiscardedRowIsScrubbed(ctx context.Context, t *testing.T, store *Store, id int64) {
 	t.Helper()
 
 	var (
@@ -79,8 +71,8 @@ func assertDiscardedRowIsScrubbed(ctx context.Context, t *testing.T, pool *pgxpo
 		payloadIsNull, claimTokenIsNull, leaseUntilIsNull bool
 	)
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT status, payload IS NULL, claim_token IS NULL,
-		lease_until IS NULL, last_error FROM bot_reply_outbox WHERE id = $1`, id).Scan(
+	require.NoError(t, store.QueryRow(ctx, `SELECT status, payload IS NULL, claim_token IS NULL,
+		lease_until IS NULL, last_error FROM bot_reply_outbox WHERE id = ?1`, id).Scan(
 		&status, &payloadIsNull, &claimTokenIsNull, &leaseUntilIsNull, &lastError))
 	require.Equal(t, ReplyOutboxDiscarded, status)
 	require.True(t, payloadIsNull)
@@ -89,13 +81,13 @@ func assertDiscardedRowIsScrubbed(ctx context.Context, t *testing.T, pool *pgxpo
 	require.Equal(t, "operator discarded manual review without replay", lastError)
 }
 
-func assertDiscardAuditRecordsTheDecision(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id int64) {
+func assertDiscardAuditRecordsTheDecision(ctx context.Context, t *testing.T, store *Store, id int64) {
 	t.Helper()
 
 	var decision, irisState, actor, reason string
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT decision, observed_iris_state, actor, reason
-		FROM bot_reply_outbox_resolution_audit WHERE outbox_id = $1`, id).Scan(
+	require.NoError(t, store.QueryRow(ctx, `SELECT decision, observed_iris_state, actor, reason
+		FROM bot_reply_outbox_resolution_audit WHERE outbox_id = ?1`, id).Scan(
 		&decision, &irisState, &actor, &reason))
 	require.Equal(t, "discarded_without_replay", decision)
 	require.Equal(t, testIrisStateOutcomeUnknown, irisState)
@@ -103,77 +95,75 @@ func assertDiscardAuditRecordsTheDecision(ctx context.Context, t *testing.T, poo
 	require.Equal(t, testDiscardIncidentReason, reason)
 }
 
-func assertDiscardAuditIsAppendOnly(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id int64) {
+func assertDiscardAuditIsAppendOnly(ctx context.Context, t *testing.T, store *Store, id int64) {
 	t.Helper()
 
-	_, err := pool.Exec(ctx, `UPDATE bot_reply_outbox_resolution_audit
-		SET reason = 'rewritten' WHERE outbox_id = $1`, id)
-	requirePGErrorCode(t, err, "55000")
+	_, err := store.Exec(ctx, `UPDATE bot_reply_outbox_resolution_audit
+		SET reason = 'rewritten' WHERE outbox_id = ?1`, id)
+	requireConstraintViolation(t, err, "bot_reply_outbox_resolution_audit events are immutable")
 
-	_, err = pool.Exec(ctx, `DELETE FROM bot_reply_outbox_resolution_audit WHERE outbox_id = $1`, id)
-	requirePGErrorCode(t, err, "55000")
+	_, err = store.Exec(ctx, `DELETE FROM bot_reply_outbox_resolution_audit WHERE outbox_id = ?1`, id)
+	requireConstraintViolation(t, err, "bot_reply_outbox_resolution_audit events are immutable")
 }
 
-func assertDiscardAuditIsPrunedWithTheRow(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id int64) {
+func assertDiscardAuditIsPrunedWithTheRow(ctx context.Context, t *testing.T, store *Store, id int64) {
 	t.Helper()
 
-	_, err := pool.Exec(ctx, `UPDATE bot_reply_outbox
-		SET updated_at = clock_timestamp() - interval '9 days' WHERE id = $1`, id)
+	_, err := store.Exec(ctx, `UPDATE bot_reply_outbox
+		SET row_version = row_version + 1, updated_at = ?2 WHERE id = ?1`, id, time.Now().Add(-9*24*time.Hour).UnixMilli())
 	require.NoError(t, err)
 
-	result, err := NewDurableLedgerRepository(pool).Maintain(ctx, 8*24*time.Hour, 30*24*time.Hour, 10)
+	result, err := NewDurableLedgerRepository(store).Maintain(ctx, 8*24*time.Hour, 30*24*time.Hour, 10)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), result.DeletedOutbox)
 
 	var auditCount int
 
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT count(*) FROM bot_reply_outbox_resolution_audit WHERE outbox_id = $1", id).Scan(&auditCount))
+	require.NoError(t, store.QueryRow(ctx,
+		"SELECT count(*) FROM bot_reply_outbox_resolution_audit WHERE outbox_id = ?1", id).Scan(&auditCount))
 	require.Zero(t, auditCount)
 }
 
 func TestManualReviewDiscardRejectsInvalidInput(t *testing.T) {
-	pool := newDurabilityPool(t)
+	store := newTestStore(t)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
-	repo := newTestReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(store)
 	manual := newReplyOutboxEntry("message:manual-discard-invalid", 0, `{"body":"stored"}`)
 	pending := newReplyOutboxEntry("message:manual-discard-pending", 0, `{"body":"pending"}`)
 
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, repo, manual))
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, repo, pending))
 
-	var manualID, pendingID int64
+	manualID := markReplyManualReview(ctx, t, store, manual.MessageID, 0)
 
-	require.NoError(t, pool.QueryRow(ctx, `UPDATE bot_reply_outbox
-		SET status = 'manual_review' WHERE message_id = $1 RETURNING id`, manual.MessageID).Scan(&manualID))
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT id FROM bot_reply_outbox WHERE message_id = $1", pending.MessageID).Scan(&pendingID))
+	var pendingID int64
+
+	require.NoError(t, store.QueryRow(ctx,
+		"SELECT id FROM bot_reply_outbox WHERE message_id = ?1", pending.MessageID).Scan(&pendingID))
 
 	tests := []struct {
 		name    string
 		id      int64
-		actor   any
-		reason  any
-		state   any
-		outcome string
+		actor   string
+		reason  string
+		state   string
+		outcome ManualReviewOutcome
 	}{
-		{name: "missing row", id: -1, actor: testDiscardActor, reason: testDiscardReason, state: testIrisStateOutcomeUnknown, outcome: "not_found"},
-		{name: "not manual review", id: pendingID, actor: testDiscardActor, reason: testDiscardReason, state: testIrisStateOutcomeUnknown, outcome: "not_manual_review"},
-		{name: "invalid actor", id: manualID, actor: "operator with spaces", reason: testDiscardReason, state: testIrisStateOutcomeUnknown, outcome: "invalid_operator_metadata"},
-		{name: "missing actor", id: manualID, actor: nil, reason: testDiscardReason, state: testIrisStateOutcomeUnknown, outcome: "invalid_operator_metadata"},
-		{name: "control character in reason", id: manualID, actor: testDiscardActor, reason: "incident\nunsafe", state: testIrisStateOutcomeUnknown, outcome: "invalid_operator_metadata"},
-		{name: "unknown Iris state", id: manualID, actor: testDiscardActor, reason: testDiscardReason, state: "maybe_sent", outcome: "invalid_iris_state"},
-		{name: "missing Iris state", id: manualID, actor: testDiscardActor, reason: testDiscardReason, state: nil, outcome: "invalid_iris_state"},
+		{name: "missing row", id: -1, actor: testDiscardActor, reason: testDiscardReason, state: testIrisStateOutcomeUnknown, outcome: ManualReviewNotFound},
+		{name: "not manual review", id: pendingID, actor: testDiscardActor, reason: testDiscardReason, state: testIrisStateOutcomeUnknown, outcome: ManualReviewNotManualReview},
+		{name: "invalid actor", id: manualID, actor: "operator with spaces", reason: testDiscardReason, state: testIrisStateOutcomeUnknown, outcome: ManualReviewInvalidOperatorMetadata},
+		{name: "missing actor", id: manualID, actor: "", reason: testDiscardReason, state: testIrisStateOutcomeUnknown, outcome: ManualReviewInvalidOperatorMetadata},
+		{name: "control character in reason", id: manualID, actor: testDiscardActor, reason: "incident\nunsafe", state: testIrisStateOutcomeUnknown, outcome: ManualReviewInvalidOperatorMetadata},
+		{name: "unknown Iris state", id: manualID, actor: testDiscardActor, reason: testDiscardReason, state: "maybe_sent", outcome: ManualReviewInvalidIrisState},
+		{name: "missing Iris state", id: manualID, actor: testDiscardActor, reason: testDiscardReason, state: "", outcome: ManualReviewInvalidIrisState},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var outcome string
-
-			require.NoError(t, pool.QueryRow(ctx, `SELECT public.discard_bot_reply_outbox_manual_review(
-				$1, $2, $3, $4)`, tc.id, tc.actor, tc.reason, tc.state).Scan(&outcome))
+			outcome, err := store.DiscardManualReview(ctx, tc.id, tc.actor, tc.reason, tc.state)
+			require.NoError(t, err)
 			require.Equal(t, tc.outcome, outcome)
 		})
 	}
@@ -183,30 +173,27 @@ func TestManualReviewDiscardRejectsInvalidInput(t *testing.T) {
 		auditCount int
 	)
 
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT status FROM bot_reply_outbox WHERE id = $1", manualID).Scan(&status))
+	require.NoError(t, store.QueryRow(ctx,
+		"SELECT status FROM bot_reply_outbox WHERE id = ?1", manualID).Scan(&status))
 	require.Equal(t, ReplyOutboxManualReview, status)
-	require.NoError(t, pool.QueryRow(ctx,
+	require.NoError(t, store.QueryRow(ctx,
 		"SELECT count(*) FROM bot_reply_outbox_resolution_audit").Scan(&auditCount))
 	require.Zero(t, auditCount)
 }
 
 func TestManualReviewDiscardIsExactlyOnceUnderConcurrency(t *testing.T) {
-	pool := newDurabilityPool(t)
+	store := newTestStore(t)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
-	repo := newTestReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(store)
 	entry := newReplyOutboxEntry("message:manual-discard-concurrent", 0, `{"body":"stored"}`)
 	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, repo, entry))
 
-	var id int64
-
-	require.NoError(t, pool.QueryRow(ctx, `UPDATE bot_reply_outbox
-		SET status = 'manual_review' WHERE message_id = $1 RETURNING id`, entry.MessageID).Scan(&id))
+	id := markReplyManualReview(ctx, t, store, entry.MessageID, 0)
 
 	start := make(chan struct{})
-	outcomes := make(chan string, 2)
+	outcomes := make(chan ManualReviewOutcome, 2)
 	errs := make(chan error, 2)
 
 	var wg sync.WaitGroup
@@ -215,11 +202,8 @@ func TestManualReviewDiscardIsExactlyOnceUnderConcurrency(t *testing.T) {
 		wg.Go(func() {
 			<-start
 
-			var outcome string
-
-			err := pool.QueryRow(ctx, `SELECT public.discard_bot_reply_outbox_manual_review(
-				$1, $2, $3, $4)`, id, testOperatorEmail,
-				"incident INC-2026-0818 concurrent decision", testIrisStateOutcomeUnknown).Scan(&outcome)
+			outcome, err := store.DiscardManualReview(ctx, id, testOperatorEmail,
+				"incident INC-2026-0818 concurrent decision", testIrisStateOutcomeUnknown)
 
 			outcomes <- outcome
 
@@ -236,81 +220,18 @@ func TestManualReviewDiscardIsExactlyOnceUnderConcurrency(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	counts := map[string]int{}
+	counts := map[ManualReviewOutcome]int{}
 
 	for outcome := range outcomes {
 		counts[outcome]++
 	}
 
-	require.Equal(t, 1, counts["discarded"])
-	require.Equal(t, 1, counts["not_manual_review"])
+	require.Equal(t, 1, counts[ManualReviewDiscarded])
+	require.Equal(t, 1, counts[ManualReviewNotManualReview])
 
 	var auditCount int
 
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT count(*) FROM bot_reply_outbox_resolution_audit WHERE outbox_id = $1", id).Scan(&auditCount))
+	require.NoError(t, store.QueryRow(ctx,
+		"SELECT count(*) FROM bot_reply_outbox_resolution_audit WHERE outbox_id = ?1", id).Scan(&auditCount))
 	require.Equal(t, 1, auditCount)
-}
-
-func TestManualReviewResolutionAuditRuntimePrivileges(t *testing.T) {
-	ownerPool, runtimePool, runtimeRole := newAuditPrivilegePools(t)
-	ctx := t.Context()
-	ownerRepo := newTestReplyOutboxRepository(ownerPool)
-	entry := newReplyOutboxEntry("message:manual-discard-runtime-privileges", 0, `{"body":"stored"}`)
-	require.Equal(t, ReplyOutboxInserted, mustInsertReply(ctx, t, ownerRepo, entry))
-
-	var id int64
-
-	require.NoError(t, ownerPool.QueryRow(ctx, `UPDATE bot_reply_outbox
-		SET status = 'manual_review' WHERE message_id = $1 RETURNING id`, entry.MessageID).Scan(&id))
-
-	var outcome string
-
-	require.NoError(t, ownerPool.QueryRow(ctx, `SELECT public.discard_bot_reply_outbox_manual_review(
-		$1, $2, $3, $4)`, id, testOperatorEmail,
-		"incident INC-2026-0818 authorized discard", testIrisStateOutcomeUnknown).Scan(&outcome))
-	require.Equal(t, "discarded", outcome)
-
-	for _, privilege := range []string{"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"} {
-		var allowed bool
-
-		require.NoError(t, ownerPool.QueryRow(ctx,
-			`SELECT has_table_privilege($1, 'public.bot_reply_outbox_resolution_audit', $2)`,
-			runtimeRole, privilege).Scan(&allowed))
-		require.False(t, allowed, "runtime role retained %s on resolution audit", privilege)
-	}
-
-	var sequenceAllowed, functionAllowed bool
-
-	require.NoError(t, ownerPool.QueryRow(ctx,
-		`SELECT has_sequence_privilege($1, 'public.bot_reply_outbox_resolution_audit_id_seq', 'USAGE')`,
-		runtimeRole).Scan(&sequenceAllowed))
-	require.False(t, sequenceAllowed)
-	require.NoError(t, ownerPool.QueryRow(ctx,
-		`SELECT has_function_privilege($1, 'public.discard_bot_reply_outbox_manual_review(bigint,text,text,text)', 'EXECUTE')`,
-		runtimeRole).Scan(&functionAllowed))
-	require.False(t, functionAllowed)
-
-	var triggerFunctionAllowed bool
-
-	require.NoError(t, ownerPool.QueryRow(ctx,
-		`SELECT has_function_privilege($1, 'public.enforce_bot_reply_outbox_discard_audit()', 'EXECUTE')`,
-		runtimeRole).Scan(&triggerFunctionAllowed))
-	require.False(t, triggerFunctionAllowed)
-
-	_, err := runtimePool.Exec(ctx, `INSERT INTO bot_reply_outbox_resolution_audit
-		(outbox_id, decision, observed_iris_state, actor, reason)
-		VALUES ($1, 'discarded_without_replay', 'outcome_unknown', 'forged', 'forged decision')`, id)
-	requireInsufficientPrivilege(t, err)
-
-	_, err = runtimePool.Exec(ctx, `UPDATE bot_reply_outbox_resolution_audit
-		SET reason = 'forged update' WHERE outbox_id = $1`, id)
-	requireInsufficientPrivilege(t, err)
-
-	_, err = runtimePool.Exec(ctx, `DELETE FROM bot_reply_outbox_resolution_audit WHERE outbox_id = $1`, id)
-	requireInsufficientPrivilege(t, err)
-
-	_, err = runtimePool.Exec(ctx, `SELECT public.discard_bot_reply_outbox_manual_review(
-		$1, 'forged', 'forged decision', 'outcome_unknown')`, id)
-	requireInsufficientPrivilege(t, err)
 }

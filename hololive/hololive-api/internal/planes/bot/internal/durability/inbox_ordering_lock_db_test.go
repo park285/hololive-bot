@@ -1,72 +1,81 @@
 package durability
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
-	"github.com/park285/shared-go/postgres/pgxdb"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	orderingKeyAlpha = "room:alpha"
-	orderingKeyBeta  = "room:beta"
-)
+const orderingKeyAlpha = "room:alpha"
 
-func TestLockInboxOrderingKeysAcquiresEntireUniqueBatch(t *testing.T) {
-	pool := newDurabilityPool(t)
+type concurrentInboxOutcome struct {
+	name    string
+	err     error
+	applied bool
+}
+
+func TestInboxOrderingHeadStaysConsistentUnderConcurrentAdmissionAndSettlement(t *testing.T) {
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	ctx := t.Context()
-	owner, err := pool.Begin(ctx)
+
+	first := inboxMessage("message:ordering-first", "room-1", orderingKeyAlpha)
+	admitOne(ctx, t, repo, first)
+
+	claim, err := repo.Claim(ctx, testClaimToken, durabilityTestLease)
 	require.NoError(t, err)
+	require.NotNil(t, claim)
 
-	defer func() {
-		if rollbackErr := pgxdb.Rollback(ctx, owner); rollbackErr != nil {
-			t.Errorf("rollback owner transaction: %v", rollbackErr)
-		}
-	}()
+	const admissions = 8
 
-	require.NoError(t, lockInboxOrderingKeys(ctx, owner, []string{
-		orderingKeyBeta,
-		orderingKeyAlpha,
-		orderingKeyAlpha,
-	}))
+	start := make(chan struct{})
+	outcomes := make(chan concurrentInboxOutcome, admissions+1)
 
-	observer, err := pool.Begin(ctx)
-	require.NoError(t, err)
+	var wg sync.WaitGroup
 
-	defer func() {
-		if rollbackErr := pgxdb.Rollback(ctx, observer); rollbackErr != nil {
-			t.Errorf("rollback observer transaction: %v", rollbackErr)
-		}
-	}()
+	for i := range admissions {
+		wg.Go(func() {
+			<-start
 
-	for _, key := range []string{orderingKeyAlpha, orderingKeyBeta} {
-		var acquired bool
+			messageID := fmt.Sprintf("message:ordering-%02d", i)
+			admitted, admitErr := repo.AdmitResult(ctx, inboxMessage(messageID, "room-1", orderingKeyAlpha))
 
-		require.NoError(t, observer.QueryRow(ctx,
-			"SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))", key).Scan(&acquired))
-		assert.False(t, acquired, "batch owner must hold %q", key)
+			outcomes <- concurrentInboxOutcome{name: messageID, err: admitErr, applied: admitted == workercontract.AdmissionAccepted}
+		})
 	}
 
-	require.NoError(t, owner.Commit(ctx))
+	wg.Go(func() {
+		<-start
 
-	for _, key := range []string{orderingKeyAlpha, orderingKeyBeta} {
-		var acquired bool
+		applied, completeErr := repo.Complete(ctx, first.MessageID, testClaimToken)
+		outcomes <- concurrentInboxOutcome{name: "complete " + first.MessageID, err: completeErr, applied: applied}
+	})
 
-		require.NoError(t, observer.QueryRow(ctx,
-			"SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))", key).Scan(&acquired))
-		assert.True(t, acquired, "released batch lock %q must be acquirable", key)
+	close(start)
+	wg.Wait()
+	close(outcomes)
+
+	for outcome := range outcomes {
+		require.NoError(t, outcome.err, outcome.name)
+		require.True(t, outcome.applied, outcome.name)
 	}
 
-	require.NoError(t, observer.Commit(ctx))
-}
+	var oldestActive string
 
-func TestLockInboxOrderingKeysSkipsEmptyBatch(t *testing.T) {
-	assert.NoError(t, lockInboxOrderingKeys(t.Context(), nil, nil))
-}
+	require.NoError(t, store.QueryRow(ctx, `SELECT message_id FROM bot_webhook_inbox
+		WHERE ordering_key = ?1 AND status IN ('pending', 'processing', 'retry')
+		ORDER BY id LIMIT 1`, orderingKeyAlpha).Scan(&oldestActive))
 
-func TestLockInboxOrderingKeysRejectsNilTransactionForNonEmptyBatch(t *testing.T) {
-	err := lockInboxOrderingKeys(t.Context(), nil, []string{orderingKeyAlpha})
-	require.ErrorIs(t, err, ErrInvalidArgument)
-	assert.ErrorContains(t, err, "transaction must not be nil")
+	head, ok := webhookHead(ctx, t, store, orderingKeyAlpha)
+	require.True(t, ok, "active messages must keep an ordering head")
+	assert.Equal(t, oldestActive, head, "the head must be the oldest active message after concurrent admission and settlement")
+
+	var heads int
+
+	require.NoError(t, store.QueryRow(ctx, "SELECT count(*) FROM bot_webhook_heads").Scan(&heads))
+	assert.Equal(t, 1, heads)
 }

@@ -1,17 +1,13 @@
-WITH candidate AS MATERIALIZED (
+UPDATE bot_webhook_inbox
+SET status = 'processing',
+    claim_token = ?2,
+    lease_until = ?1 + ?3,
+    attempts = attempts + 1,
+    updated_at = ?1
+WHERE id = (
     SELECT due.id
     {{inbox_ready_relation}}
-
     ORDER BY due.available_at ASC, due.id ASC
     LIMIT 1
-    FOR UPDATE SKIP LOCKED
 )
-UPDATE bot_webhook_inbox AS inbox
-SET status = 'processing',
-    claim_token = $1,
-    lease_until = clock_timestamp() + ($2::bigint * INTERVAL '1 millisecond'),
-    attempts = inbox.attempts + 1,
-    updated_at = clock_timestamp()
-FROM candidate
-WHERE inbox.id = candidate.id
-RETURNING inbox.message_id, inbox.room_id, inbox.ordering_key, inbox.payload, inbox.attempts, inbox.lease_until
+RETURNING message_id, room_id, ordering_key, payload, attempts, lease_until

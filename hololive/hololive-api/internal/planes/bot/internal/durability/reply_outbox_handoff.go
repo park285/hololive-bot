@@ -2,12 +2,10 @@ package durability
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 var replyHandoffSettlementPolicies = map[string]replyOutboxSettlementPolicy{
@@ -24,7 +22,7 @@ type ReplyHandoffClaim struct {
 	Elapsed              time.Duration
 	Attempts             int32
 	OperatorReplayGrants int32
-	claimXID             uint32
+	rowVersion           int64
 	ReplayHorizonExpired bool
 }
 
@@ -36,7 +34,7 @@ type ReplyHandoffSettlement struct {
 }
 
 func (r *ReplyOutboxRepository) SettleAccepted(ctx context.Context, id int64, claimToken, irisRequestID string, firstCheck time.Duration) (bool, error) {
-	if err := ensurePool(r.pool); err != nil {
+	if err := ensureStore(r.store); err != nil {
 		return false, err
 	}
 
@@ -55,16 +53,18 @@ func (r *ReplyOutboxRepository) SettleAccepted(ctx context.Context, id int64, cl
 		return false, fmt.Errorf("first handoff check delay: %w", err)
 	}
 
-	tag, err := pgxdb.Exec(ctx, r.pool, replyOutboxSettleAcceptedSQL, id, token, requestID, firstCheckMS)
+	applied, err := r.execOne(ctx, replyOutboxSettleAcceptedSQL, func(now int64) []any {
+		return []any{id, token, requestID, now, firstCheckMS}
+	})
 	if err != nil {
 		return false, fmt.Errorf("settle reply outbox row %d accepted: %w", id, err)
 	}
 
-	return tag.RowsAffected() == 1, nil
+	return applied, nil
 }
 
 func (r *ReplyOutboxRepository) ClaimHandoffDue(ctx context.Context, batchSize int32, softClaim time.Duration) ([]ReplyHandoffClaim, error) {
-	if err := ensurePool(r.pool); err != nil {
+	if err := ensureStore(r.store); err != nil {
 		return nil, err
 	}
 
@@ -82,25 +82,48 @@ func (r *ReplyOutboxRepository) ClaimHandoffDue(ctx context.Context, batchSize i
 		return nil, err
 	}
 
-	rows, err := pgxdb.Query(ctx, r.pool, replyOutboxHandoffClaimSQL, batchSize, softClaimMS, replayHorizonMS)
+	var claims []ReplyHandoffClaim
+
+	err = r.store.write(ctx, func(tx *sql.Tx, now int64) error {
+		var claimErr error
+
+		claims, claimErr = claimHandoffDueTx(ctx, tx, now, batchSize, softClaimMS, replayHorizonMS)
+
+		return claimErr
+	})
 	if err != nil {
 		return nil, fmt.Errorf("claim reply handoff checks: %w", err)
 	}
 
-	claims, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ReplyHandoffClaim, error) {
+	return claims, nil
+}
+
+func claimHandoffDueTx(ctx context.Context, tx *sql.Tx, now int64, batchSize int32, softClaimMS, replayHorizonMS int64) ([]ReplyHandoffClaim, error) {
+	rows, err := tx.QueryContext(ctx, replyOutboxHandoffClaimSQL, now, batchSize, softClaimMS, replayHorizonMS)
+	if err != nil {
+		return nil, fmt.Errorf("select reply handoff checks: %w", err)
+	}
+	defer rows.Close()
+
+	claims := make([]ReplyHandoffClaim, 0, batchSize)
+
+	for rows.Next() {
 		var (
-			claim     ReplyHandoffClaim
-			elapsedMS int64
+			claim                ReplyHandoffClaim
+			checkTokenMS, elapse int64
 		)
 
-		scanErr := row.Scan(&claim.ID, &claim.IrisRequestID, &claim.CheckToken, &claim.claimXID, &elapsedMS,
-			&claim.Attempts, &claim.OperatorReplayGrants, &claim.ReplayHorizonExpired)
+		if err := rows.Scan(&claim.ID, &claim.IrisRequestID, &checkTokenMS, &claim.rowVersion, &elapse,
+			&claim.Attempts, &claim.OperatorReplayGrants, &claim.ReplayHorizonExpired); err != nil {
+			return nil, fmt.Errorf("scan reply handoff check: %w", err)
+		}
 
-		claim.Elapsed = time.Duration(elapsedMS) * time.Millisecond
+		claim.CheckToken = timeFromMS(checkTokenMS)
+		claim.Elapsed = time.Duration(elapse) * time.Millisecond
+		claims = append(claims, claim)
+	}
 
-		return claim, scanErr
-	})
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read reply handoff checks: %w", err)
 	}
 
@@ -108,7 +131,7 @@ func (r *ReplyOutboxRepository) ClaimHandoffDue(ctx context.Context, batchSize i
 }
 
 func (r *ReplyOutboxRepository) SettleHandoff(ctx context.Context, settlement ReplyHandoffSettlement) (bool, error) {
-	if err := ensurePool(r.pool); err != nil {
+	if err := ensureStore(r.store); err != nil {
 		return false, err
 	}
 
@@ -119,29 +142,37 @@ func (r *ReplyOutboxRepository) SettleHandoff(ctx context.Context, settlement Re
 
 	claim := settlement.Claim
 	args := []any{
-		claim.ID, claim.CheckToken, claim.IrisRequestID, claim.claimXID, settlement.Status,
+		claim.ID, claim.CheckToken.UnixMilli(), claim.IrisRequestID, claim.rowVersion, settlement.Status,
 		clampColumnText(settlement.LastError, lastErrorByteLimit),
 	}
 
+	var retryMS int64
+
 	if policy.retry {
-		retryMS, err := replyOutboxRetryMilliseconds(settlement.RetryAfter)
+		var err error
+
+		retryMS, err = replyOutboxRetryMilliseconds(settlement.RetryAfter)
 		if err != nil {
 			return false, fmt.Errorf("reply handoff retry milliseconds: %w", err)
 		}
-
-		args = append(args, retryMS)
 	}
 
-	tag, err := pgxdb.Exec(ctx, r.pool, policy.sql, args...)
+	applied, err := r.execOne(ctx, policy.sql, func(now int64) []any {
+		if policy.retry {
+			return append(args, now, retryMS)
+		}
+
+		return append(args, now)
+	})
 	if err != nil {
 		return false, fmt.Errorf("settle reply handoff row %d: %w", claim.ID, err)
 	}
 
-	return tag.RowsAffected() == 1, nil
+	return applied, nil
 }
 
 func (r *ReplyOutboxRepository) RescheduleHandoff(ctx context.Context, claim ReplyHandoffClaim, step, horizon time.Duration) (time.Duration, bool, error) {
-	if err := ensurePool(r.pool); err != nil {
+	if err := ensureStore(r.store); err != nil {
 		return 0, false, err
 	}
 
@@ -155,16 +186,32 @@ func (r *ReplyOutboxRepository) RescheduleHandoff(ctx context.Context, claim Rep
 		return 0, false, fmt.Errorf("handoff horizon: %w", err)
 	}
 
-	var delayMS int64
+	var (
+		delayMS     int64
+		rescheduled bool
+	)
 
-	err = pgxdb.QueryRow(ctx, r.pool, replyOutboxHandoffRescheduleSQL,
-		claim.ID, claim.CheckToken, claim.IrisRequestID, claim.claimXID, stepMS, horizonMS).Scan(&delayMS)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, false, nil
-	}
+	err = r.store.write(ctx, func(tx *sql.Tx, now int64) error {
+		scanErr := tx.QueryRowContext(ctx, replyOutboxHandoffRescheduleSQL,
+			claim.ID, claim.CheckToken.UnixMilli(), claim.IrisRequestID, claim.rowVersion, now, stepMS, horizonMS).Scan(&delayMS)
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			return nil
+		}
 
+		if scanErr != nil {
+			return fmt.Errorf("reschedule reply handoff check: %w", scanErr)
+		}
+
+		rescheduled = true
+
+		return nil
+	})
 	if err != nil {
 		return 0, false, fmt.Errorf("reschedule reply handoff row %d: %w", claim.ID, err)
+	}
+
+	if !rescheduled {
+		return 0, false, nil
 	}
 
 	return time.Duration(delayMS) * time.Millisecond, true, nil

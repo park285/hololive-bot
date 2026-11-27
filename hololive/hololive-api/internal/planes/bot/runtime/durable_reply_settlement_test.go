@@ -2,9 +2,7 @@ package botruntime
 
 import (
 	"context"
-	"errors"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -12,15 +10,12 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v6/iris"
-	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
-	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability/durabilitytest"
 )
 
 func TestReplySettlementAfterCancellationHoldsRoomOrder(t *testing.T) {
@@ -33,8 +28,8 @@ func TestReplySettlementAfterCancellationHoldsRoomOrder(t *testing.T) {
 		{name: "lost admission response", dispatchErr: transport.ErrReplyOutcomeUnknown, status: durability.ReplyOutboxOutcomeUnknown},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			pool := dbtest.NewPool(t)
-			repository := newTestReplyOutboxRepository(t, pool)
+			durable := durabilitytest.Open(t)
+			repository := newTestReplyOutboxRepository(t, durable.Store)
 
 			for ordinal := range uint64(2) {
 				_, err := repository.Insert(t.Context(), &durability.ReplyOutboxEntry{
@@ -63,7 +58,7 @@ func TestReplySettlementAfterCancellationHoldsRoomOrder(t *testing.T) {
 				unleased  bool
 			)
 
-			require.NoError(t, pool.QueryRow(t.Context(), "SELECT status, claim_token IS NULL AND lease_until IS NULL FROM bot_reply_outbox WHERE id = $1", claim.ID).
+			require.NoError(t, durable.DB.QueryRowContext(t.Context(), "SELECT status, claim_token IS NULL AND lease_until IS NULL FROM bot_reply_outbox WHERE id = ?1", claim.ID).
 				Scan(&rowStatus, &unleased))
 			require.Equal(t, testCase.status, rowStatus)
 			require.True(t, unleased)
@@ -90,8 +85,8 @@ func TestReplySettlementAfterCancellationHoldsRoomOrder(t *testing.T) {
 }
 
 func TestEpochBootstrapFailurePreservesStoredReplyPayload(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	repository := newTestReplyOutboxRepository(t, pool)
+	durable := durabilitytest.Open(t)
+	repository := newTestReplyOutboxRepository(t, durable.Store)
 	_, err := repository.Insert(t.Context(), &durability.ReplyOutboxEntry{
 		MessageID: "message:epoch-bootstrap", Phase: transport.ReplyPhase, RoomID: testRoomID,
 		Payload:         []byte(`{"kind":"text","message":"answer"}`),
@@ -140,7 +135,7 @@ func TestEpochBootstrapFailurePreservesStoredReplyPayload(t *testing.T) {
 		payloadKept bool
 	)
 
-	require.NoError(t, pool.QueryRow(t.Context(), "SELECT status, payload IS NOT NULL FROM bot_reply_outbox WHERE id = $1", claim.ID).Scan(&rowStatus, &payloadKept))
+	require.NoError(t, durable.DB.QueryRowContext(t.Context(), "SELECT status, payload IS NOT NULL FROM bot_reply_outbox WHERE id = ?1", claim.ID).Scan(&rowStatus, &payloadKept))
 
 	if rowStatus != durability.ReplyOutboxRetryablePreDispatch || !payloadKept {
 		t.Fatalf("temporary bootstrap failure settled as %q with payload_kept=%t", rowStatus, payloadKept)
@@ -157,8 +152,8 @@ func TestAcceptedReplyLostSettlementClaimRecordsUnknownAttempt(t *testing.T) {
 }
 
 func TestReplySettlementKeepsBoundedBudgetAfterCallerCancellation(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	repository := newTestReplyOutboxRepository(t, pool)
+	durable := durabilitytest.Open(t)
+	repository := newTestReplyOutboxRepository(t, durable.Store)
 	_, err := repository.Insert(t.Context(), &durability.ReplyOutboxEntry{
 		MessageID: "message:blocked-settlement", Phase: transport.ReplyPhase, RoomID: testRoomID,
 		Payload: []byte(`{"kind":"text","message":"answer"}`), ClientRequestID: transport.ReplyClientRequestID("message:blocked-settlement", 0),
@@ -169,13 +164,18 @@ func TestReplySettlementKeepsBoundedBudgetAfterCallerCancellation(t *testing.T) 
 	require.NoError(t, err)
 	require.NotNil(t, claim)
 
-	tx, err := pool.Begin(t.Context())
+	holder, err := durable.DB.Conn(t.Context())
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), tx)) }()
+	defer func() { require.NoError(t, holder.Close()) }()
 
-	_, err = tx.Exec(t.Context(), "SELECT id FROM bot_reply_outbox WHERE id = $1 FOR UPDATE", claim.ID)
+	_, err = holder.ExecContext(t.Context(), "BEGIN IMMEDIATE")
 	require.NoError(t, err)
+
+	defer func() {
+		_, rollbackErr := holder.ExecContext(context.WithoutCancel(t.Context()), "ROLLBACK")
+		require.NoError(t, rollbackErr)
+	}()
 
 	runtime := &durableRuntime{outbox: repository, settlementTimeout: 25 * time.Millisecond, outboxMaxAttempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -185,61 +185,5 @@ func TestReplySettlementKeepsBoundedBudgetAfterCallerCancellation(t *testing.T) 
 	require.False(t, applied)
 	require.Error(t, err)
 
-	timeoutErr, ok := errors.AsType[net.Error](err)
-	require.True(t, ok && timeoutErr.Timeout(), "정산 자체의 시간 예산으로 종료되어야 함: %v", err)
-}
-
-func TestReplySettlementUsesRuntimeReserveWhileOrdinaryTransactionHeld(t *testing.T) {
-	base := dbtest.NewPool(t)
-	db := base.Config().ConnConfig
-	resources, closePool, err := databaseproviders.ProvideDatabaseResources(t.Context(), &settings.PostgresConfig{
-		Host: db.Host, Port: int(db.Port), User: db.User, Password: db.Password,
-		Database: db.Database, SSLMode: "disable", PoolMinConns: 0, PoolMaxConns: 2,
-	}, databaseproviders.RuntimePool{Name: "bot", ReservedConns: 1}, slog.New(slog.DiscardHandler))
-	require.NoError(t, err)
-	t.Cleanup(closePool)
-
-	pool := resources.Service.GetPool()
-	repository := newTestReplyOutboxRepository(t, pool)
-
-	_, err = repository.Insert(t.Context(), &durability.ReplyOutboxEntry{
-		MessageID: "message:reserved-settlement", Phase: transport.ReplyPhase, RoomID: testRoomID,
-		Payload: []byte(`{"kind":"text","message":"answer"}`), ClientRequestID: transport.ReplyClientRequestID("message:reserved-settlement", 0),
-	})
-	require.NoError(t, err)
-
-	claim, err := repository.Claim(t.Context(), "reserved-token", time.Minute)
-	require.NoError(t, err)
-	require.NotNil(t, claim)
-
-	ordinary, err := pool.Begin(t.Context())
-	require.NoError(t, err)
-
-	defer func() { require.NoError(t, pgxdb.Rollback(t.Context(), ordinary)) }()
-
-	queuedCtx, cancelQueued := context.WithTimeout(t.Context(), time.Second)
-	defer cancelQueued()
-
-	queued := make(chan error, 1)
-
-	go func() {
-		var value int
-
-		queued <- pool.QueryRow(queuedCtx, "SELECT 1").Scan(&value)
-	}()
-
-	runtime := &durableRuntime{outbox: repository, settlementTimeout: 3 * time.Second, outboxMaxAttempts: testDurableProfile(t).BotReplyOutbox.MaxAttempts}
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	applied, err := runtime.settleOutboxDispatch(ctx, claim, "reserved-token", durability.ReplyOutboxAccepted, "iris-request", nil)
-	require.NoError(t, err)
-	require.True(t, applied)
-	require.ErrorIs(t, <-queued, context.DeadlineExceeded, "ordinary work must not consume the reserved connection")
-	require.NoError(t, ordinary.Commit(t.Context()))
-
-	var status string
-
-	require.NoError(t, pool.QueryRow(t.Context(), "SELECT status FROM bot_reply_outbox WHERE id = $1", claim.ID).Scan(&status))
-	require.Equal(t, durability.ReplyOutboxAccepted, status)
+	require.ErrorIs(t, err, context.DeadlineExceeded, "정산 자체의 시간 예산으로 종료되어야 함")
 }

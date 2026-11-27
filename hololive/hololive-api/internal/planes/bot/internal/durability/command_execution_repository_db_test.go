@@ -8,14 +8,14 @@ import (
 )
 
 func TestCommandExecutionRepository(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewCommandExecutionRepository(pool)
+	store := newTestStore(t)
+	repo := NewCommandExecutionRepository(store)
 	ctx := t.Context()
 
 	const messageID = testMessageID
 
 	t.Run("only the first claim for a message id wins", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 
 		claimed, err := repo.Claim(ctx, messageID, "broadcast_history", testClaimToken)
 		require.NoError(t, err)
@@ -27,8 +27,8 @@ func TestCommandExecutionRepository(t *testing.T) {
 
 		var count int
 
-		require.NoError(t, pool.QueryRow(ctx,
-			"SELECT count(message_id) FROM bot_command_executions WHERE message_id = $1", messageID,
+		require.NoError(t, store.QueryRow(ctx,
+			"SELECT count(message_id) FROM bot_command_executions WHERE message_id = ?1", messageID,
 		).Scan(&count))
 		assert.Equal(t, 1, count)
 
@@ -40,7 +40,7 @@ func TestCommandExecutionRepository(t *testing.T) {
 	})
 
 	t.Run("complete transitions a claimed execution exactly once", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 
 		claimed, err := repo.Claim(ctx, messageID, "broadcast_history", testClaimToken)
 		require.NoError(t, err)
@@ -54,23 +54,22 @@ func TestCommandExecutionRepository(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, applied, "terminal execution must not transition twice")
 
-		var status, summary string
+		var status string
 
-		require.NoError(t, pool.QueryRow(ctx,
-			"SELECT status, result_summary FROM bot_command_executions WHERE message_id = $1", messageID,
-		).Scan(&status, &summary))
+		require.NoError(t, store.QueryRow(ctx,
+			"SELECT status FROM bot_command_executions WHERE message_id = ?1", messageID,
+		).Scan(&status))
 		assert.Equal(t, CommandExecutionSucceeded, status)
-		assert.Equal(t, CommandExecutionSucceeded, summary)
 	})
 
 	t.Run("complete rejects statuses outside the ledger vocabulary", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 
 		_, err := repo.Complete(ctx, messageID, testClaimToken, "claimed")
 		require.ErrorIs(t, err, ErrInvalidArgument)
 	})
 
-	t.Run("blank message id is rejected before touching postgres", func(t *testing.T) {
+	t.Run("blank message id is rejected before touching the store", func(t *testing.T) {
 		_, err := repo.Claim(ctx, "  ", "broadcast_history", testClaimToken)
 		require.ErrorIs(t, err, ErrInvalidArgument)
 	})
@@ -80,8 +79,8 @@ func TestCommandExecutionRepositoryWithoutPool(t *testing.T) {
 	repo := NewCommandExecutionRepository(nil)
 
 	_, err := repo.Claim(t.Context(), testMessageID, "broadcast_history", testClaimToken)
-	require.ErrorIs(t, err, ErrPoolNotConfigured)
+	require.ErrorIs(t, err, ErrStoreNotConfigured)
 
 	_, err = repo.State(t.Context(), testMessageID)
-	require.ErrorIs(t, err, ErrPoolNotConfigured)
+	require.ErrorIs(t, err, ErrStoreNotConfigured)
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
@@ -50,7 +49,7 @@ func commandExecutionStatus(commandErr error) string {
 }
 
 func (r *durableRuntime) releaseInbox(ctx context.Context, claim *durability.InboxClaim, token string, cause error) {
-	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), r.settlementTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.settlementTimeout)
 	defer cancel()
 
 	outcome, err := r.inbox.Release(ctx, claim.MessageID, token, claim.Attempts, r.inboxMaxAttempts, r.inboxRetryAfter, inboxReleaseReason(cause))

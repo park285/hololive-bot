@@ -9,45 +9,22 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/postgres/pgxdb"
-
 	"github.com/kapu/hololive-shared/pkg/sqlassets"
 )
 
-//go:embed queries/*
+//go:embed queries/*.sql
 var sqlAssets embed.FS
 
-var mustSQL = func() func(string) pgxdb.Statement {
-	read := sqlassets.MustStatementReader(sqlAssets, "queries")
-	inboxRelation := read("inbox_ready_relation.sql")
-	replyRelation := read("reply_ready_relation.sql")
-	safety := read("reply_safety_expired.sql")
-	inboxClaim := read("inbox_claim.sql").With("{{inbox_ready_relation}}", inboxRelation)
-	inboxSnapshot := read("inbox_ready_snapshot.sql").With("{{inbox_ready_relation}}", inboxRelation)
-	inboxHeadAdvance := read("inbox_head_advance.sql")
-	replyClaim := read("reply_outbox_claim.sql").
-		With("{{reply_ready_relation}}", replyRelation).
-		With("{{safety_expired}}", safety.WithToken("{{max_attempts}}", "$3").WithToken("{{replay_horizon}}", "$4"))
-	replySnapshot := read("reply_outbox_ready_snapshot.sql").
-		With("{{reply_ready_relation}}", replyRelation).
-		With("{{safety_expired}}", safety.WithToken("{{max_attempts}}", "$1").WithToken("{{replay_horizon}}", "$2"))
+var mustSQL = func() func(string) string {
+	read := sqlassets.MustReader(sqlAssets, "queries")
+	compose := strings.NewReplacer(
+		"{{inbox_ready_relation}}", read("inbox_ready_relation.sql"),
+		"{{reply_ready_relation}}", read("reply_ready_relation.sql"),
+		"{{safety_expired}}", read("reply_safety_expired.sql"),
+	)
 
-	return func(name string) pgxdb.Statement {
-		switch name {
-		case "inbox_claim.sql":
-			return inboxClaim
-		case "inbox_ready_snapshot.sql":
-			return inboxSnapshot
-		case "inbox_abandon.sql", "inbox_complete.sql", "inbox_reclaim_expired.sql", "inbox_release.sql":
-			return read(name).With("{{inbox_head_advance}}", inboxHeadAdvance)
-		case "reply_outbox_claim.sql":
-			return replyClaim
-		case "reply_outbox_ready_snapshot.sql":
-			return replySnapshot
-		default:
-			return read(name)
-		}
+	return func(name string) string {
+		return compose.Replace(read(name))
 	}
 }()
 
@@ -57,42 +34,56 @@ var (
 	commandExecutionExpireStaleSQL  = mustSQL("command_execution_expire_stale.sql")
 	commandExecutionHeartbeatSQL    = mustSQL("command_execution_heartbeat.sql")
 	commandExecutionStateSQL        = mustSQL("command_execution_state.sql")
-	durablePruneTerminalSQL         = mustSQL("durable_prune_terminal.sql")
+	durablePruneCommandSQL          = mustSQL("durable_prune_command.sql")
+	durablePruneInboxSQL            = mustSQL("durable_prune_inbox.sql")
+	durablePruneOutboxSQL           = mustSQL("durable_prune_outbox.sql")
 	inboxAbandonSQL                 = mustSQL("inbox_abandon.sql")
 	inboxAdmitSQL                   = mustSQL("inbox_admit.sql")
 	inboxClaimSQL                   = mustSQL("inbox_claim.sql")
 	inboxCompleteSQL                = mustSQL("inbox_complete.sql")
+	inboxHeadAdvanceSQL             = mustSQL("inbox_head_advance.sql")
+	inboxHeadRemoveSQL              = mustSQL("inbox_head_remove.sql")
+	inboxHeadSuccessorSQL           = mustSQL("inbox_head_successor.sql")
 	inboxHeartbeatSQL               = mustSQL("inbox_heartbeat.sql")
-	inboxMessageOrderingLockSQL     = mustSQL("inbox_message_ordering_lock.sql")
-	inboxOrderingKeyLockSQL         = mustSQL("inbox_ordering_key_lock.sql")
-	inboxOrderingKeysLockSQL        = mustSQL("inbox_ordering_keys_lock.sql")
+	inboxInstallHeadSQL             = mustSQL("inbox_install_head.sql")
 	inboxReadySnapshotSQL           = mustSQL("inbox_ready_snapshot.sql")
 	inboxReclaimCandidatesSQL       = mustSQL("inbox_reclaim_candidates.sql")
-	inboxReclaimExpiredKeysSQL      = mustSQL("inbox_reclaim_expired_keys.sql")
-	inboxReclaimExpiredSQL          = mustSQL("inbox_reclaim_expired.sql")
+	inboxReclaimDeadSQL             = mustSQL("inbox_reclaim_dead.sql")
+	inboxReclaimRetrySQL            = mustSQL("inbox_reclaim_retry.sql")
 	inboxReleaseRetrySQL            = mustSQL("inbox_release_retry.sql")
 	inboxReleaseSQL                 = mustSQL("inbox_release.sql")
+	replyOutboxClaimCandidateSQL    = mustSQL("reply_outbox_claim_candidate.sql")
+	replyOutboxClaimSafetyReviewSQL = mustSQL("reply_outbox_claim_safety_review.sql")
 	replyOutboxClaimSQL             = mustSQL("reply_outbox_claim.sql")
 	replyOutboxConflictSQL          = mustSQL("reply_outbox_conflict.sql")
+	replyOutboxDiscardAuditSQL      = mustSQL("reply_outbox_discard_audit.sql")
+	replyOutboxDiscardSQL           = mustSQL("reply_outbox_discard.sql")
 	replyOutboxHandoffClaimSQL      = mustSQL("reply_outbox_handoff_claim.sql")
 	replyOutboxHandoffRequeueSQL    = mustSQL("reply_outbox_handoff_requeue.sql")
 	replyOutboxHandoffRescheduleSQL = mustSQL("reply_outbox_handoff_reschedule.sql")
 	replyOutboxHandoffSettleSQL     = mustSQL("reply_outbox_handoff_settle.sql")
 	replyOutboxHandoffTerminalSQL   = mustSQL("reply_outbox_handoff_terminal.sql")
 	replyOutboxInsertSQL            = mustSQL("reply_outbox_insert.sql")
+	replyOutboxManualReviewListSQL  = mustSQL("reply_outbox_manual_review_list.sql")
 	replyOutboxManualReviewStatsSQL = mustSQL("reply_outbox_manual_review_stats.sql")
+	replyOutboxOperatorTargetSQL    = mustSQL("reply_outbox_operator_target.sql")
 	replyOutboxReadySnapshotSQL     = mustSQL("reply_outbox_ready_snapshot.sql")
 	replyOutboxReclaimCandidatesSQL = mustSQL("reply_outbox_reclaim_candidates.sql")
-	replyOutboxReclaimExpiredSQL    = mustSQL("reply_outbox_reclaim_expired.sql")
+	replyOutboxReclaimRequeueSQL    = mustSQL("reply_outbox_reclaim_requeue.sql")
+	replyOutboxReclaimReviewSQL     = mustSQL("reply_outbox_reclaim_review.sql")
+	replyOutboxReplayGrantAuditSQL  = mustSQL("reply_outbox_replay_grant_audit.sql")
+	replyOutboxReplayGrantSQL       = mustSQL("reply_outbox_replay_grant.sql")
 	replyOutboxSettleAcceptedSQL    = mustSQL("reply_outbox_settle_accepted.sql")
 	replyOutboxSettleRetrySQL       = mustSQL("reply_outbox_settle_retry.sql")
 	replyOutboxSettleSQL            = mustSQL("reply_outbox_settle.sql")
 	replyOutboxSettleTerminalSQL    = mustSQL("reply_outbox_settle_terminal.sql")
+	webhookNoncePruneSQL            = mustSQL("webhook_nonce_prune.sql")
+	webhookNonceReserveSQL          = mustSQL("webhook_nonce_reserve.sql")
 )
 
 var (
-	ErrPoolNotConfigured = errors.New("durability: postgres pool is not configured")
-	ErrInvalidArgument   = errors.New("durability: invalid argument")
+	ErrStoreNotConfigured = errors.New("durability: store is not configured")
+	ErrInvalidArgument    = errors.New("durability: invalid argument")
 )
 
 const (
@@ -106,20 +97,14 @@ const (
 	lastErrorByteLimit      = 8192
 )
 
-const inboxStatusDead = "dead"
-
 var clientRequestIDPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{8,160}$`)
 
-func ensurePool(pool *pgxpool.Pool) error {
-	if pool == nil {
-		return ErrPoolNotConfigured
+func ensureStore(store *Store) error {
+	if store == nil {
+		return ErrStoreNotConfigured
 	}
 
 	return nil
-}
-
-func jsonbParam(raw []byte) string {
-	return string(raw)
 }
 
 func requireIdentity(name, value string) (string, error) {

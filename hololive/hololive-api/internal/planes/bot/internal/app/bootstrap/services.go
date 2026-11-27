@@ -9,6 +9,7 @@ import (
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	irisproviders "github.com/kapu/hololive-shared/pkg/providers/iris"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -28,7 +29,7 @@ func InitBotInfrastructure(ctx context.Context, appConfig *apiconfig.BotPlaneCon
 
 	defer func() {
 		if retErr != nil {
-			retErr = errors.Join(retErr, owner.Close())
+			retErr = errors.Join(retErr, owner.close(context.WithoutCancel(ctx)))
 		}
 	}()
 
@@ -38,6 +39,18 @@ func InitBotInfrastructure(ctx context.Context, appConfig *apiconfig.BotPlaneCon
 	}
 
 	owner.irisClient = irisClient
+
+	durablePath, err := apiconfig.LoadBotDurableStorePath()
+	if err != nil {
+		return nil, fmt.Errorf("load bot durable store path: %w", err)
+	}
+
+	durable, err := durability.OpenStore(ctx, durability.StoreOptions(durablePath, logger))
+	if err != nil {
+		return nil, fmt.Errorf("open bot durable store: %w", err)
+	}
+
+	owner.durable = durable
 
 	infrastructure, err := buildBotInfrastructureServices(ctx, appConfig, logger, infra, deps, irisClient, owner)
 	if err != nil {
@@ -92,6 +105,7 @@ func buildBotInfrastructureServices(
 		Deps:           deps,
 		IrisRoomLister: irisClient,
 		Postgres:       infra.Postgres,
+		Durable:        owner.durable,
 		Cache:          infra.Cache,
 		Cleanup:        owner.Close,
 	}, nil

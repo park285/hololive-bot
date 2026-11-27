@@ -9,10 +9,10 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +20,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
-	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability/durabilitytest"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -216,11 +216,11 @@ func sentClientRequestID(opts []iris.SendOption) string {
 	return *value
 }
 
-func newHandoffRuntime(t *testing.T, pool *pgxpool.Pool, client durableIrisClient, maxAttempts int32) *durableRuntime {
+func newHandoffRuntime(t *testing.T, store *durability.Store, client durableIrisClient, maxAttempts int32) *durableRuntime {
 	t.Helper()
 
 	return &durableRuntime{
-		outbox: newTestReplyOutboxRepository(t, pool), irisClient: client, logger: slog.New(slog.DiscardHandler),
+		outbox: newTestReplyOutboxRepository(t, store), irisClient: client, logger: slog.New(slog.DiscardHandler),
 		outboxTracker: workercontract.NewExecutorTracker(), outboxTotals: &workercontract.Counters{},
 		outboxClaimLease: time.Minute, dispatchBudget: time.Hour, settlementTimeout: 2 * time.Hour,
 		outboxMaxAttempts: maxAttempts, outboxRetryAfter: time.Millisecond,
@@ -246,39 +246,46 @@ func dispatchNext(t *testing.T, r *durableRuntime) {
 	require.True(t, r.processNextOutbox(t.Context(), func() {}), "no reply became claimable")
 }
 
-func reconcileDue(t *testing.T, r *durableRuntime, pool *pgxpool.Pool, clientRequestID string) {
+func reconcileDue(t *testing.T, r *durableRuntime, durable durabilitytest.Fixture, clientRequestID string) {
 	t.Helper()
 
-	tag, err := pool.Exec(t.Context(), `UPDATE bot_reply_outbox
-		SET accepted_at = statement_timestamp() - (handoff_next_check_at - accepted_at), handoff_next_check_at = statement_timestamp()
-		WHERE client_request_id = $1 AND handoff_next_check_at IS NOT NULL`, clientRequestID)
+	result, err := durable.DB.ExecContext(t.Context(), `UPDATE bot_reply_outbox
+		SET row_version = row_version + 1,
+		    accepted_at = ?2 - (handoff_next_check_at - accepted_at), handoff_next_check_at = ?2
+		WHERE client_request_id = ?1 AND handoff_next_check_at IS NOT NULL`, clientRequestID, time.Now().UnixMilli())
 	require.NoError(t, err)
-	require.EqualValues(t, 1, tag.RowsAffected())
+
+	affected, err := result.RowsAffected()
+	require.NoError(t, err)
+	require.EqualValues(t, 1, affected)
 	require.True(t, r.reconcileReplyHandoffBatch(t.Context(), func() {}), "no accepted reply became due for a handoff check")
 }
 
-func freezeHandoffClock(t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-
-	_, err := pool.Exec(t.Context(), `
-		CREATE TABLE handoff_clock AS SELECT pg_catalog.statement_timestamp() AS instant;
-		CREATE FUNCTION public.clock_timestamp() RETURNS timestamptz LANGUAGE sql VOLATILE
-			AS 'SELECT instant FROM public.handoff_clock';
-		DO $$ BEGIN
-			EXECUTE format('ALTER DATABASE %I SET search_path TO public, pg_catalog', current_database());
-		END $$`)
-	require.NoError(t, err)
-	pool.Reset()
+type handoffClock struct {
+	ms atomic.Int64
 }
 
-func advanceToStoredHandoffCheck(t *testing.T, pool *pgxpool.Pool, clientRequestID string) (accepted, due time.Time) {
+func newHandoffClock() *handoffClock {
+	clock := &handoffClock{}
+	clock.ms.Store(time.Now().UnixMilli())
+
+	return clock
+}
+
+func (c *handoffClock) now() time.Time {
+	return time.UnixMilli(c.ms.Load())
+}
+
+func advanceToStoredHandoffCheck(t *testing.T, durable durabilitytest.Fixture, clock *handoffClock, clientRequestID string) (accepted, due time.Time) {
 	t.Helper()
 
-	require.NoError(t, pool.QueryRow(t.Context(), `UPDATE handoff_clock SET instant = handoff_next_check_at
-		FROM bot_reply_outbox WHERE client_request_id = $1 AND status = 'accepted'
-		RETURNING accepted_at, instant`, clientRequestID).Scan(&accepted, &due))
+	var acceptedMS, dueMS int64
 
-	return accepted, due
+	require.NoError(t, durable.DB.QueryRowContext(t.Context(), `SELECT accepted_at, handoff_next_check_at
+		FROM bot_reply_outbox WHERE client_request_id = ?1 AND status = 'accepted'`, clientRequestID).Scan(&acceptedMS, &dueMS))
+	clock.ms.Store(dueMS)
+
+	return time.UnixMilli(acceptedMS), time.UnixMilli(dueMS)
 }
 
 type handoffRow struct {
@@ -287,51 +294,50 @@ type handoffRow struct {
 	attempts                         int32
 }
 
-func readHandoffRow(t *testing.T, pool *pgxpool.Pool, clientRequestID string) handoffRow {
+func readHandoffRow(t *testing.T, durable durabilitytest.Fixture, clientRequestID string) handoffRow {
 	t.Helper()
 
 	var row handoffRow
 
-	require.NoError(t, pool.QueryRow(t.Context(), `SELECT status, iris_request_id, last_error, payload IS NOT NULL,
+	require.NoError(t, durable.DB.QueryRowContext(t.Context(), `SELECT status, iris_request_id, last_error, payload IS NOT NULL,
 			handoff_next_check_at IS NOT NULL, attempts
-		FROM bot_reply_outbox WHERE client_request_id = $1`, clientRequestID).
+		FROM bot_reply_outbox WHERE client_request_id = ?1`, clientRequestID).
 		Scan(&row.status, &row.irisRequestID, &row.lastError, &row.payloadKept, &row.checkPending, &row.attempts))
 
 	return row
 }
 
 func TestReplyHandoffFailedReissuesWithinTheGenerationCap(t *testing.T) {
-	pool := dbtest.NewPool(t)
+	durable := durabilitytest.Open(t)
+	clock := newHandoffClock()
 	client := newHandoffIrisClient(t)
-	r := newHandoffRuntime(t, pool, client, testDurableProfile(t).BotReplyOutbox.MaxAttempts)
+	r := newHandoffRuntime(t, durable.Store.WithClock(clock.now), client, testDurableProfile(t).BotReplyOutbox.MaxAttempts)
 	base := insertHandoffReply(t, r, "message:handoff-reissue")
 	generations := []string{base, base + ":r1", base + ":r2"}
-
-	freezeHandoffClock(t, pool)
 
 	for generation, id := range generations {
 		dispatchNext(t, r)
 
-		row := readHandoffRow(t, pool, base)
+		row := readHandoffRow(t, durable, base)
 		require.Equal(t, durability.ReplyOutboxAccepted, row.status, "generation %d", generation)
 		require.Equal(t, irisRequestIDFor(id), row.irisRequestID, "generation %d", generation)
 		require.True(t, row.checkPending)
 
 		client.failRequest(id)
 
-		advanceToStoredHandoffCheck(t, pool, base)
+		advanceToStoredHandoffCheck(t, durable, clock, base)
 		require.True(t, r.reconcileReplyHandoffBatch(t.Context(), func() {}), "no accepted reply became due for a handoff check")
 
-		var available, updated time.Time
+		var available, updated int64
 
-		require.NoError(t, pool.QueryRow(t.Context(), `SELECT available_at, updated_at FROM bot_reply_outbox
-			WHERE client_request_id = $1`, base).Scan(&available, &updated))
-		require.Equal(t, time.Millisecond<<generation, available.Sub(updated), "generation %d retry delay", generation)
+		require.NoError(t, durable.DB.QueryRowContext(t.Context(), `SELECT available_at, updated_at FROM bot_reply_outbox
+			WHERE client_request_id = ?1`, base).Scan(&available, &updated))
+		require.Equal(t, (time.Millisecond << generation).Milliseconds(), available-updated, "generation %d retry delay", generation)
 
-		_, err := pool.Exec(t.Context(), `UPDATE bot_reply_outbox SET available_at = statement_timestamp() WHERE client_request_id = $1`, base)
+		_, err := durable.DB.ExecContext(t.Context(), `UPDATE bot_reply_outbox SET row_version = row_version + 1, available_at = ?2 WHERE client_request_id = ?1`, base, clock.ms.Load())
 		require.NoError(t, err)
 
-		row = readHandoffRow(t, pool, base)
+		row = readHandoffRow(t, durable, base)
 		require.Equal(t, durability.ReplyOutboxRetryablePreDispatch, row.status, "generation %d", generation)
 		require.Equal(t, contractsalarm.HandoffCodeFailed, row.lastError)
 		require.True(t, row.payloadKept)
@@ -340,7 +346,7 @@ func TestReplyHandoffFailedReissuesWithinTheGenerationCap(t *testing.T) {
 
 	dispatchNext(t, r)
 
-	row := readHandoffRow(t, pool, base)
+	row := readHandoffRow(t, durable, base)
 	assert.Equal(t, durability.ReplyOutboxPermanentConflict, row.status)
 	assert.False(t, row.payloadKept)
 	assert.Equal(t, []string{
@@ -356,16 +362,16 @@ func TestReplyHandoffFailedReissuesWithinTheGenerationCap(t *testing.T) {
 }
 
 func TestReplyHandoffFailedWithoutAttemptBudgetIsDead(t *testing.T) {
-	pool := dbtest.NewPool(t)
+	durable := durabilitytest.Open(t)
 	client := newHandoffIrisClient(t)
-	r := newHandoffRuntime(t, pool, client, 1)
+	r := newHandoffRuntime(t, durable.Store, client, 1)
 	base := insertHandoffReply(t, r, "message:handoff-dead")
 
 	dispatchNext(t, r)
 	client.failRequest(base)
-	reconcileDue(t, r, pool, base)
+	reconcileDue(t, r, durable, base)
 
-	row := readHandoffRow(t, pool, base)
+	row := readHandoffRow(t, durable, base)
 	assert.Equal(t, durability.ReplyOutboxDead, row.status)
 	assert.Equal(t, contractsalarm.HandoffCodeFailed, row.lastError)
 	assert.False(t, row.payloadKept)
@@ -388,9 +394,9 @@ func TestReplyHandoffObservationOutcomes(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			pool := dbtest.NewPool(t)
+			durable := durabilitytest.Open(t)
 			client := newHandoffIrisClient(t)
-			r := newHandoffRuntime(t, pool, client, testDurableProfile(t).BotReplyOutbox.MaxAttempts)
+			r := newHandoffRuntime(t, durable.Store, client, testDurableProfile(t).BotReplyOutbox.MaxAttempts)
 			base := insertHandoffReply(t, r, "message:handoff-"+strings.ReplaceAll(tc.name, " ", "-"))
 
 			dispatchNext(t, r)
@@ -398,9 +404,9 @@ func TestReplyHandoffObservationOutcomes(t *testing.T) {
 
 			client.statusErr = tc.statusErr
 
-			reconcileDue(t, r, pool, base)
+			reconcileDue(t, r, durable, base)
 
-			row := readHandoffRow(t, pool, base)
+			row := readHandoffRow(t, durable, base)
 
 			row.irisRequestID, row.attempts = "", 0
 			assert.Equal(t, tc.want, row)
@@ -411,13 +417,13 @@ func TestReplyHandoffObservationOutcomes(t *testing.T) {
 
 func TestReplyHandoffRescheduleRevokesClaimAtSameDeadline(t *testing.T) {
 	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	r := newHandoffRuntime(t, pool, newHandoffIrisClient(t), testDurableProfile(t).BotReplyOutbox.MaxAttempts)
+	durable := durabilitytest.Open(t)
+	clock := newHandoffClock()
+	r := newHandoffRuntime(t, durable.Store.WithClock(clock.now), newHandoffIrisClient(t), testDurableProfile(t).BotReplyOutbox.MaxAttempts)
 	base := insertHandoffReply(t, r, "message:handoff-same-deadline")
-	freezeHandoffClock(t, pool)
 	dispatchNext(t, r)
 
-	accepted, due := advanceToStoredHandoffCheck(t, pool, base)
+	accepted, due := advanceToStoredHandoffCheck(t, durable, clock, base)
 	horizon := due.Sub(accepted) + replyHandoffSoftClaim
 	claims, err := r.outbox.ClaimHandoffDue(ctx, 1, replyHandoffSoftClaim)
 	require.NoError(t, err)
@@ -439,7 +445,7 @@ func TestReplyHandoffRescheduleRevokesClaimAtSameDeadline(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, applied, "이전 확인으로 다시 재예약하지 않는다")
 
-	_, next := advanceToStoredHandoffCheck(t, pool, base)
+	_, next := advanceToStoredHandoffCheck(t, durable, clock, base)
 	require.Equal(t, accepted.Add(horizon), next)
 
 	claims, err = r.outbox.ClaimHandoffDue(ctx, 1, replyHandoffSoftClaim)
@@ -452,51 +458,51 @@ func TestReplyHandoffRescheduleRevokesClaimAtSameDeadline(t *testing.T) {
 }
 
 func TestReplyHandoffUnconfirmedAtTheHorizonNeedsReview(t *testing.T) {
-	pool := dbtest.NewPool(t)
+	durable := durabilitytest.Open(t)
+	clock := newHandoffClock()
 	client := newHandoffIrisClient(t)
-	r := newHandoffRuntime(t, pool, client, testDurableProfile(t).BotReplyOutbox.MaxAttempts)
+	r := newHandoffRuntime(t, durable.Store.WithClock(clock.now), client, testDurableProfile(t).BotReplyOutbox.MaxAttempts)
 	base := insertHandoffReply(t, r, "message:handoff-horizon")
-	freezeHandoffClock(t, pool)
 
 	dispatchNext(t, r)
 
-	accepted, firstCheck := advanceToStoredHandoffCheck(t, pool, base)
+	accepted, firstCheck := advanceToStoredHandoffCheck(t, durable, clock, base)
 	require.Equal(t, 250*time.Millisecond, firstCheck.Sub(accepted), "dispatch first handoff check delay")
 	require.True(t, r.reconcileReplyHandoffBatch(t.Context(), func() {}))
 
-	_, due := advanceToStoredHandoffCheck(t, pool, base)
+	_, due := advanceToStoredHandoffCheck(t, durable, clock, base)
 	require.Equal(t, 500*time.Millisecond, due.Sub(firstCheck), "unclipped handoff recheck delay")
 
 	claims, err := r.outbox.ClaimHandoffDue(t.Context(), replyHandoffBatchSize, replyHandoffSoftClaim)
 	require.NoError(t, err)
 	require.Len(t, claims, 1)
 
-	var softClaimVersion string
+	var softClaimVersion int64
 
-	require.NoError(t, pool.QueryRow(t.Context(), `SELECT xmin::text FROM bot_reply_outbox WHERE client_request_id = $1`, base).Scan(&softClaimVersion))
+	require.NoError(t, durable.DB.QueryRowContext(t.Context(), `SELECT row_version FROM bot_reply_outbox WHERE client_request_id = ?1`, base).Scan(&softClaimVersion))
 
 	r.dispatchBudget = claims[0].Elapsed + time.Millisecond
 	r.reconcileReplyHandoff(t.Context(), claims[0])
 
-	pending := readHandoffRow(t, pool, base)
+	pending := readHandoffRow(t, durable, base)
 	require.Equal(t, durability.ReplyOutboxAccepted, pending.status)
 	require.True(t, pending.checkPending)
 
-	var (
-		nextCheck          time.Time
-		rescheduledVersion string
-	)
+	var nextCheckMS, rescheduledVersion int64
 
-	require.NoError(t, pool.QueryRow(t.Context(), `SELECT handoff_next_check_at, xmin::text FROM bot_reply_outbox
-		WHERE client_request_id = $1`, base).Scan(&nextCheck, &rescheduledVersion))
+	require.NoError(t, durable.DB.QueryRowContext(t.Context(), `SELECT handoff_next_check_at, row_version FROM bot_reply_outbox
+		WHERE client_request_id = ?1`, base).Scan(&nextCheckMS, &rescheduledVersion))
+
+	nextCheck := time.UnixMilli(nextCheckMS)
+
 	require.NotEqual(t, softClaimVersion, rescheduledVersion, "reschedule must update the soft-claimed row")
 	require.True(t, nextCheck.After(due), "reschedule must advance past the previous check: got %s, previous %s", nextCheck, due)
 	require.Equal(t, accepted.Add(r.dispatchBudget), nextCheck, "last recheck must land on the dispatch horizon")
 
-	advanceToStoredHandoffCheck(t, pool, base)
+	advanceToStoredHandoffCheck(t, durable, clock, base)
 	require.True(t, r.reconcileReplyHandoffBatch(t.Context(), func() {}))
 
-	row := readHandoffRow(t, pool, base)
+	row := readHandoffRow(t, durable, base)
 	assert.Equal(t, durability.ReplyOutboxManualReview, row.status)
 	assert.Equal(t, contractsalarm.HandoffCodeUnconfirmed, row.lastError)
 	assert.True(t, row.payloadKept)
@@ -504,9 +510,9 @@ func TestReplyHandoffUnconfirmedAtTheHorizonNeedsReview(t *testing.T) {
 }
 
 func TestAcceptedSettlementLossResendsTheSameRequest(t *testing.T) {
-	pool := dbtest.NewPool(t)
+	durable := durabilitytest.Open(t)
 	client := newHandoffIrisClient(t)
-	r := newHandoffRuntime(t, pool, client, testDurableProfile(t).BotReplyOutbox.MaxAttempts)
+	r := newHandoffRuntime(t, durable.Store, client, testDurableProfile(t).BotReplyOutbox.MaxAttempts)
 	base := insertHandoffReply(t, r, "message:handoff-lost-settlement")
 
 	claim, err := r.outbox.Claim(t.Context(), "crashed-owner", time.Millisecond)
@@ -516,7 +522,7 @@ func TestAcceptedSettlementLossResendsTheSameRequest(t *testing.T) {
 	requestID, err := transport.DispatchStoredReply(t.Context(), client, claim.RoomID, claim.Payload, claim.ClientRequestID)
 	require.NoError(t, err)
 
-	_, err = pool.Exec(t.Context(), `UPDATE bot_reply_outbox SET lease_until = lease_until - interval '1 millisecond' WHERE id = $1`, claim.ID)
+	_, err = durable.DB.ExecContext(t.Context(), `UPDATE bot_reply_outbox SET row_version = row_version + 1, lease_until = lease_until - 1 WHERE id = ?1`, claim.ID)
 	require.NoError(t, err)
 
 	reclaim, err := r.outbox.ReclaimExpired(t.Context(), 10)
@@ -525,7 +531,7 @@ func TestAcceptedSettlementLossResendsTheSameRequest(t *testing.T) {
 
 	dispatchNext(t, r)
 
-	row := readHandoffRow(t, pool, base)
+	row := readHandoffRow(t, durable, base)
 	assert.Equal(t, durability.ReplyOutboxAccepted, row.status)
 	assert.Equal(t, requestID, row.irisRequestID)
 	assert.Equal(t, []string{base, base}, client.sentIDs())

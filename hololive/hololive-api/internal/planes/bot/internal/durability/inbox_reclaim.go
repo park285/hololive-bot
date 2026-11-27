@@ -2,11 +2,9 @@ package durability
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type InboxReclaim struct {
@@ -14,9 +12,11 @@ type InboxReclaim struct {
 	Abandoned int64
 }
 
-func (r *InboxRepository) ReclaimExpired(ctx context.Context, maxAttempts, batchSize int32) (reclaim InboxReclaim, err error) {
-	if poolErr := ensurePool(r.pool); poolErr != nil {
-		return InboxReclaim{}, poolErr
+var errInboxReclaimCandidateChanged = errors.New("reclaim expired webhook inbox: candidate changed inside the write transaction")
+
+func (r *InboxRepository) ReclaimExpired(ctx context.Context, maxAttempts, batchSize int32) (InboxReclaim, error) {
+	if err := ensureStore(r.store); err != nil {
+		return InboxReclaim{}, err
 	}
 
 	if maxAttempts <= 0 {
@@ -27,60 +27,17 @@ func (r *InboxRepository) ReclaimExpired(ctx context.Context, maxAttempts, batch
 		return InboxReclaim{}, errors.Join(ErrInvalidArgument, errors.New("batch size must be positive"))
 	}
 
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return InboxReclaim{}, fmt.Errorf("begin webhook reclaim: %w", err)
-	}
-
-	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
-
-	reclaim, err = reclaimExpiredInboxTx(ctx, tx, maxAttempts, batchSize)
-	if err != nil {
-		return InboxReclaim{}, fmt.Errorf("reclaim expired inbox tx: %w", err)
-	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return InboxReclaim{}, fmt.Errorf("commit webhook reclaim: %w", err)
-	}
-
-	return reclaim, nil
-}
-
-func reclaimExpiredInboxTx(ctx context.Context, tx pgx.Tx, maxAttempts, batchSize int32) (InboxReclaim, error) {
-	keys, err := expiredInboxOrderingKeys(ctx, tx, batchSize)
-	if err != nil {
-		return InboxReclaim{}, fmt.Errorf("expired inbox ordering keys: %w", err)
-	}
-
-	if len(keys) == 0 {
-		return InboxReclaim{}, nil
-	}
-
-	if lockErr := lockInboxOrderingKeys(ctx, tx, keys); lockErr != nil {
-		return InboxReclaim{}, fmt.Errorf("lock inbox ordering keys: %w", lockErr)
-	}
-
-	candidates, err := lockedExpiredInboxCandidates(ctx, tx, batchSize, keys)
-	if err != nil {
-		return InboxReclaim{}, err
-	}
-
-	if len(candidates) == 0 {
-		return InboxReclaim{}, nil
-	}
-
-	mutation := newInboxReclaimMutation(candidates, maxAttempts)
-
 	var reclaim InboxReclaim
 
-	err = pgxdb.QueryRow(ctx, tx, inboxReclaimExpiredSQL, mutation.ids, mutation.attempts, mutation.statuses, mutation.terminal).
-		Scan(&reclaim.Requeued, &reclaim.Abandoned)
+	err := r.store.write(ctx, func(tx *sql.Tx, now int64) error {
+		var reclaimErr error
+
+		reclaim, reclaimErr = reclaimExpiredInboxTx(ctx, tx, maxAttempts, batchSize, now)
+
+		return reclaimErr
+	})
 	if err != nil {
 		return InboxReclaim{}, fmt.Errorf("reclaim expired webhook inbox leases: %w", err)
-	}
-
-	if reclaim.Requeued+reclaim.Abandoned != int64(len(candidates)) {
-		return InboxReclaim{}, errors.New("reclaim expired webhook inbox: locked candidate count changed")
 	}
 
 	return reclaim, nil
@@ -91,60 +48,119 @@ type inboxReclaimCandidate struct {
 	Attempts int32
 }
 
-func lockedExpiredInboxCandidates(ctx context.Context, tx pgx.Tx, batchSize int32, keys []string) ([]inboxReclaimCandidate, error) {
-	rows, err := pgxdb.Query(ctx, tx, inboxReclaimCandidatesSQL, batchSize, keys)
+func reclaimExpiredInboxTx(ctx context.Context, tx *sql.Tx, maxAttempts, batchSize int32, now int64) (InboxReclaim, error) {
+	candidates, err := expiredInboxCandidates(ctx, tx, batchSize, now)
 	if err != nil {
-		return nil, fmt.Errorf("lock expired inbox candidates: %w", err)
+		return InboxReclaim{}, err
 	}
 
-	candidates, err := pgx.CollectRows(rows, pgx.RowToStructByPos[inboxReclaimCandidate])
+	var reclaim InboxReclaim
+
+	for _, candidate := range candidates {
+		exhausted := candidate.Attempts >= maxAttempts
+
+		query := inboxReclaimRetrySQL
+
+		if exhausted {
+			query = inboxReclaimDeadSQL
+		}
+
+		var messageID, orderingKey string
+
+		if err := tx.QueryRowContext(ctx, query, candidate.ID, candidate.Attempts, now).Scan(&messageID, &orderingKey); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return InboxReclaim{}, errInboxReclaimCandidateChanged
+			}
+
+			return InboxReclaim{}, fmt.Errorf("reclaim webhook inbox row %d: %w", candidate.ID, err)
+		}
+
+		if !exhausted {
+			reclaim.Requeued++
+
+			continue
+		}
+
+		if err := advanceInboxHead(ctx, tx, orderingKey, messageID, now); err != nil {
+			return InboxReclaim{}, err
+		}
+
+		reclaim.Abandoned++
+	}
+
+	return reclaim, nil
+}
+
+func expiredInboxCandidates(ctx context.Context, tx *sql.Tx, batchSize int32, now int64) ([]inboxReclaimCandidate, error) {
+	rows, err := tx.QueryContext(ctx, inboxReclaimCandidatesSQL, now, batchSize)
 	if err != nil {
-		return nil, fmt.Errorf("read expired inbox candidates: %w", err)
+		return nil, fmt.Errorf("select expired webhook inbox candidates: %w", err)
+	}
+	defer rows.Close()
+
+	candidates := make([]inboxReclaimCandidate, 0, batchSize)
+
+	for rows.Next() {
+		var candidate inboxReclaimCandidate
+
+		if err := rows.Scan(&candidate.ID, &candidate.Attempts); err != nil {
+			return nil, fmt.Errorf("scan expired webhook inbox candidate: %w", err)
+		}
+
+		candidates = append(candidates, candidate)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate expired webhook inbox candidates: %w", err)
 	}
 
 	return candidates, nil
 }
 
-func (r *InboxRepository) settle(ctx context.Context, query pgxdb.Statement, messageID, claimToken string) (applied bool, err error) {
-	if poolErr := ensurePool(r.pool); poolErr != nil {
-		return false, poolErr
-	}
+func (r *InboxRepository) settleTerminal(ctx context.Context, messageID string, settle func(*sql.Tx, int64) *sql.Row) (bool, error) {
+	var applied bool
 
-	id, token, err := r.fenceArgs(messageID, claimToken)
-	if err != nil {
-		return false, fmt.Errorf("fence args: %w", err)
-	}
+	err := r.store.write(ctx, func(tx *sql.Tx, now int64) error {
+		var orderingKey string
 
-	tx, err := r.beginLockedMessageTx(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
+		scanErr := settle(tx, now).Scan(&orderingKey)
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			return nil
+		}
 
-	if err != nil {
-		return false, safeMessageRepositoryError("begin webhook settlement", id, err)
-	}
+		if scanErr != nil {
+			return fmt.Errorf("settle inbox message: %w", scanErr)
+		}
 
-	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
+		applied = true
 
-	applied, err = settleInboxTx(ctx, tx, query, id, token)
-	if err != nil {
-		return applied, fmt.Errorf("%w", err)
-	}
+		return advanceInboxHead(ctx, tx, orderingKey, messageID, now)
+	})
 
-	return applied, nil
+	return applied, err
 }
 
-func settleInboxTx(ctx context.Context, tx pgx.Tx, query pgxdb.Statement, id, token string) (applied bool, err error) {
-	err = pgxdb.QueryRow(ctx, tx, query, id, token).Scan(&applied)
+func advanceInboxHead(ctx context.Context, tx *sql.Tx, orderingKey, settledMessageID string, now int64) error {
+	var successor string
+
+	err := tx.QueryRowContext(ctx, inboxHeadSuccessorSQL, orderingKey, settledMessageID).Scan(&successor)
+	if errors.Is(err, sql.ErrNoRows) {
+		if _, removeErr := tx.ExecContext(ctx, inboxHeadRemoveSQL, orderingKey, settledMessageID); removeErr != nil {
+			return fmt.Errorf("remove webhook ordering head: %w", removeErr)
+		}
+
+		return nil
+	}
+
 	if err != nil {
-		return false, safeMessageRepositoryError("settle webhook inbox row", id, err)
+		return fmt.Errorf("select webhook ordering successor: %w", err)
 	}
 
-	if err = tx.Commit(ctx); err != nil {
-		return false, safeMessageRepositoryError("commit webhook settlement", id, err)
+	if _, err := tx.ExecContext(ctx, inboxHeadAdvanceSQL, orderingKey, settledMessageID, successor, now); err != nil {
+		return fmt.Errorf("advance webhook ordering head: %w", err)
 	}
 
-	return applied, nil
+	return nil
 }
 
 func (r *InboxRepository) fenceArgs(messageID, claimToken string) (id, token string, err error) {
@@ -159,36 +175,4 @@ func (r *InboxRepository) fenceArgs(messageID, claimToken string) (id, token str
 	}
 
 	return id, token, nil
-}
-
-type inboxReclaimMutation struct {
-	ids      []int64
-	attempts []int32
-	statuses []string
-	terminal []bool
-}
-
-func newInboxReclaimMutation(candidates []inboxReclaimCandidate, maxAttempts int32) inboxReclaimMutation {
-	var mutation inboxReclaimMutation
-
-	mutation.ids = make([]int64, 0, len(candidates))
-	mutation.attempts = make([]int32, 0, len(candidates))
-	mutation.statuses = make([]string, 0, len(candidates))
-	mutation.terminal = make([]bool, 0, len(candidates))
-
-	for _, candidate := range candidates {
-		status := "retry"
-		exhausted := candidate.Attempts >= maxAttempts
-
-		if exhausted {
-			status = inboxStatusDead
-		}
-
-		mutation.ids = append(mutation.ids, candidate.ID)
-		mutation.attempts = append(mutation.attempts, candidate.Attempts)
-		mutation.statuses = append(mutation.statuses, status)
-		mutation.terminal = append(mutation.terminal, exhausted)
-	}
-
-	return mutation
 }
