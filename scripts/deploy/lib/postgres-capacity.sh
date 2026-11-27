@@ -6,10 +6,8 @@ POSTGRES_CAPACITY_APPLICATION_ROLES=(
 )
 
 postgres_capacity_trim() {
-    local value="$1"
-    value="${value#"${value%%[![:space:]]*}"}"
-    value="${value%"${value##*[![:space:]]}"}"
-    printf '%s' "${value}"
+    set -- "$1" "${2#"${2%%[![:space:]]*}"}"
+    printf -v "$1" '%s' "${2%"${2##*[![:space:]]}"}"
 }
 
 postgres_capacity_read_override() {
@@ -20,15 +18,15 @@ postgres_capacity_read_override() {
     POSTGRES_CAPACITY_OVERRIDE_FOUND=false
     POSTGRES_CAPACITY_OVERRIDE_VALUE=""
     while IFS= read -r raw || [[ -n "${raw}" ]]; do
-        line="$(postgres_capacity_trim "${raw}")"
+        postgres_capacity_trim line "${raw}"
         [[ -n "${line}" && "${line}" != \#* ]] || continue
         if [[ "${line}" == export[[:space:]]* ]]; then
-            line="$(postgres_capacity_trim "${line#export}")"
+            postgres_capacity_trim line "${line#export}"
         fi
         [[ "${line}" == *=* ]] || continue
-        key="$(postgres_capacity_trim "${line%%=*}")"
+        postgres_capacity_trim key "${line%%=*}"
         [[ "${key}" == "${wanted_key}" ]] || continue
-        value="$(postgres_capacity_trim "${line#*=}")"
+        postgres_capacity_trim value "${line#*=}"
         if (( ${#value} >= 2 )) \
             && [[ "${value:0:1}" == '"' && "${value: -1}" == '"' \
                 || "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
@@ -63,7 +61,7 @@ postgres_capacity_parse_policy_target() {
     }
 
     while IFS= read -r raw || [[ -n "${raw}" ]]; do
-        line="$(postgres_capacity_trim "${raw}")"
+        postgres_capacity_trim line "${raw}"
         [[ -n "${line}" && "${line}" != \#* ]] || continue
         if [[ "${line}" == @server-limit\|* ]]; then
             ((server_limit_rows += 1))

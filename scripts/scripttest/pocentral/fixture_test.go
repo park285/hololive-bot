@@ -141,9 +141,11 @@ if [[ "$backup" == "$fixture_root/staged-po-b-"* ]]; then
   read -r -a origin_fields < "$fixture_root/approved-origin"
   set -- "$@" "${origin_fields[@]}"
 fi
-ref_file() { printf '%s/images/%s\n' "$fixture_root" "${1//[\/:]/_}"; }
-hex_of() { if [[ "$1" == old ]]; then printf '%064d\n' 0 | tr 0 a; else printf '%064d\n' 0 | tr 0 b; fi; }
-revision_of() { if [[ "$1" == old ]]; then printf '%040d\n' 0 | tr 0 a; else printf '%040d\n' 0 | tr 0 b; fi; }
+printf -v fixture_zeros '%064d' 0
+fixture_hex_old="${fixture_zeros//0/a}" fixture_hex_new="${fixture_zeros//0/b}"
+fixture_revision_old="${fixture_hex_old:0:40}" fixture_revision_new="${fixture_hex_new:0:40}"
+hex_of() { if [[ "$1" == old ]]; then printf '%s\n' "$fixture_hex_old"; else printf '%s\n' "$fixture_hex_new"; fi; }
+revision_of() { if [[ "$1" == old ]]; then printf '%s\n' "$fixture_revision_old"; else printf '%s\n' "$fixture_revision_new"; fi; }
 fixture_exit_status() {
   local unit="$1" cid="$2" since="$3" until="$EPOCHREALTIME" id at code found=''
   [[ "$since" =~ ^@[0-9]+\.[0-9]{6}$ && "$cid" =~ ^[0-9a-f]{64}$ &&
@@ -220,7 +222,7 @@ python3() {
       candidate)
         mkdir -p "$4"
         cat >"$4/unit.container"
-        [[ "$5" == "sha256:$(hex_of new)" ]] || return 3
+        [[ "$5" == "sha256:$fixture_hex_new" ]] || return 3
         printf 'Image=%s\n' "$5" > "$4/50-worker-profile.conf"
         if [[ -f "$fixture_root/source.profile" ]]; then
           cp "$fixture_root/source.profile" "$4/profile.json"
@@ -244,7 +246,7 @@ python3() {
         [[ "$fixture_case" != *database_query_failure && "$3" == "$service" && "$4" == "$profile_release/candidate" ]] &&
           cmp -s "$4/unit.container" "$unit_dir/$collector_container.container" ;;
       verify-dropin)
-        cmp "$4/50-worker-profile.conf" <(printf 'Image=sha256:%s\n' "$(hex_of new)") ;;
+        cmp "$4/50-worker-profile.conf" <(printf 'Image=sha256:%s\n' "$fixture_hex_new") ;;
       verify-source)
         test -f "$4/profile.json"
         if [[ -f "$fixture_root/source.profile" ]]; then cmp "$fixture_root/source.profile" "$4/profile.json"; fi ;;
@@ -329,9 +331,10 @@ podman() {
   printf 'podman %s\n' "$*" >>"$fixture_root/calls"
   case "$1 $2" in
     'image inspect')
-      file="$(ref_file "${*: -1}")" format="$4"
+      file="${*: -1}" format="$4"
+      file="$fixture_root/images/${file//[\/:]/_}"
       [[ -f "$file" ]] || return 125
-      value="$(cat "$file")"
+      value="$(<"$file")"
       case "$format" in
         '{{.Id}}') hex_of "$value" ;;
         *image.revision*) revision_of "$value" ;;
@@ -342,7 +345,7 @@ podman() {
       ;;
     'image exists')
       [[ "$fixture_case" != inventory_failure ]] || return 125
-      [[ -f "$(ref_file "$3")" ]]
+      [[ -f "$fixture_root/images/${3//[\/:]/_}" ]]
       ;;
     'container exists')
       [[ ! -f "$fixture_root/inventory-unavailable" ]] || return 125
@@ -353,35 +356,39 @@ podman() {
           if [[ -f "$fixture_root/$kind.cid" ]]; then cid="$(<"$fixture_root/$kind.cid")"; fi
           local name="$collector_container"
           [[ "$kind" != issuer ]] || name="$issuer_container"
-          if [[ "$3" == "$name" || "$3" == "$(printf '%064d' "$cid")" ]]; then
+          printf -v cid '%064d' "$cid"
+          if [[ "$3" == "$name" || "$3" == "$cid" ]]; then
             [[ "$(<"$fixture_root/$kind.running")" == true ]]; return
           fi
         done
         return 1
       fi
-      if [[ "$fixture_case" == *stop_leftover_id && "$3" == "$(printf '%064d' 3)" ]]; then return 0; fi
-      if [[ "$3" == "$(printf '%064d' 4)" && -e "$fixture_root/issuer.old-cid" ]]; then return 0; fi
+      local collector_cid issuer_cid
+      printf -v collector_cid '%064d' 3
+      printf -v issuer_cid '%064d' 4
+      if [[ "$fixture_case" == *stop_leftover_id && "$3" == "$collector_cid" ]]; then return 0; fi
+      if [[ "$3" == "$issuer_cid" && -e "$fixture_root/issuer.old-cid" ]]; then return 0; fi
       kind=collector
-      [[ "$3" != "$issuer_container" && "$3" != "$(printf '%064d' 4)" ]] || kind=issuer
-      [[ "$(cat "$fixture_root/$kind.running")" == true || -e "$fixture_root/$kind.leftover" ]]
+      [[ "$3" != "$issuer_container" && "$3" != "$issuer_cid" ]] || kind=issuer
+      [[ "$(<"$fixture_root/$kind.running")" == true || -e "$fixture_root/$kind.leftover" ]]
       ;;
-    'image rm') rm "$(ref_file "$3")" ;;
+    'image rm') rm "$fixture_root/images/${3//[\/:]/_}" ;;
     'tag '*)
       if [[ "$fixture_case" == restore_failure && "$2" == *:rollback-* ]]; then return 9; fi
-      cp "$(ref_file "$2")" "$(ref_file "$3")"
+      cp "$fixture_root/images/${2//[\/:]/_}" "$fixture_root/images/${3//[\/:]/_}"
       ;;
     'load --input')
       kind=po-sandbox
       [[ "$3" != */collector-image.tar ]] || kind=collector
       local image="$issuer_candidate"
       [[ "$kind" != collector ]] || image="$collector_candidate"
-      printf new > "$(ref_file "$image")"
+      printf new > "$fixture_root/images/${image//[\/:]/_}"
       if [[ "$kind" == collector ]]; then
         case "$fixture_case" in
           *load_collector_replaced) printf '{"container_id":"%064d","pid":42}\n' 2 > "$fixture_root/collector.generation" ;;
           *load_collector_restarted) printf '{"container_id":"%064d","pid":43}\n' 1 > "$fixture_root/collector.generation" ;;
           *load_issuer_invocation) printf '%032x\n' 2 > "$fixture_root/issuer.invocation" ;;
-          *load_issuer_image) printf new > "$fixture_root/issuer.runtime"; printf new > "$(ref_file "$issuer")" ;;
+          *load_issuer_image) printf new > "$fixture_root/issuer.runtime"; printf new > "$fixture_root/images/${issuer//[\/:]/_}" ;;
           *load_issuer_restarted) printf 2 > "$fixture_root/issuer.started" ;;
           *load_issuer_unhealthy) touch "$fixture_root/issuer.unhealthy" ;;
           *load_issuer_socket) touch "$fixture_root/issuer.socket-failed" ;;
@@ -391,8 +398,8 @@ podman() {
     'inspect -f')
       object="${*: -1}" kind=collector format="$3"
       [[ "$object" != "$issuer_container" ]] || kind=issuer
-      [[ "$(cat "$fixture_root/$kind.running")" == true ]] || return 125
-      value="$(cat "$fixture_root/$kind.runtime")"
+      [[ "$(<"$fixture_root/$kind.running")" == true ]] || return 125
+      value="$(<"$fixture_root/$kind.runtime")"
       case "$format" in
         *Config.Env*)
           if [[ "$slot" == c ]]; then
@@ -414,7 +421,8 @@ podman() {
           local cid=3 conmon=42; [[ "$kind" != issuer ]] || cid=4
           if [[ -f "$fixture_root/$kind.cid" ]]; then cid="$(<"$fixture_root/$kind.cid")"; fi
           if [[ -f "$fixture_root/$kind.foreign-conmon" ]]; then conmon=99; fi
-          printf '%064d %s %s 43 %d\n' "$cid" "$(hex_of "$value")" "$(<"$fixture_root/$kind.started")" "$conmon"
+          local hex="$fixture_hex_new"; [[ "$value" != old ]] || hex="$fixture_hex_old"
+          printf '%064d %s %s 43 %d\n' "$cid" "$hex" "$(<"$fixture_root/$kind.started")" "$conmon"
           if [[ "$fixture_case" == *capture_cid_changed && "$kind" == issuer ]]; then printf 9 > "$fixture_root/$kind.cid"; fi ;;
         *image.revision*) revision_of "$value" ;;
         '{{.Image}}') hex_of "$value" ;;
@@ -492,9 +500,9 @@ systemctl() {
     show)
       if [[ "$2" == --property=Job && "$3" == --property=ActiveState ]]; then
         [[ "$fixture_case" != manager_probe_failure || "$cutover_started" != true ]] || return 8
-        if [[ -f "$fixture_root/manager-job" ]] && [[ "$(cat "$fixture_root/manager-job")" == "${*: -1}" ]]; then
+        if [[ -f "$fixture_root/manager-job" ]] && [[ "$(<"$fixture_root/manager-job")" == "${*: -1}" ]]; then
           printf 'Job=17\nActiveState=activating\n'
-        elif [[ "$(cat "$fixture_root/$kind.running")" == true ]]; then
+        elif [[ "$(<"$fixture_root/$kind.running")" == true ]]; then
           printf 'Job=\nActiveState=active\n'
         else
           printf 'Job=\nActiveState=failed\n'
@@ -511,7 +519,7 @@ systemctl() {
           if [[ -L "$system_unit_dir/${*: -1}" || -e "$fixture_root/$kind.masked-cache" ]]; then printf 'masked\n'; else printf 'loaded\n'; fi ;;
         ActiveState)
           if [[ "$kind" == collector && -e "$fixture_root/notify.pending" ]]; then printf 'activating\n'; return 0; fi
-          if [[ "$(cat "$fixture_root/$kind.running")" == true ]]; then printf 'active\n'
+          if [[ "$(<"$fixture_root/$kind.running")" == true ]]; then printf 'active\n'
           elif [[ -f "$fixture_root/$kind.exit" ]]; then printf 'failed\n'; else printf 'inactive\n'; fi ;;
         InvocationID)
           cat "$fixture_root/$kind.invocation" ;;
@@ -536,7 +544,7 @@ systemctl() {
         if [[ "$fixture_case" == *unmask_reload_old_cid ]]; then touch "$fixture_root/issuer.old-cid"; fi
         return 8
       fi ;;
-    is-active) [[ "$(cat "$fixture_root/$kind.running")" == true ]] ;;
+    is-active) [[ "$(<"$fixture_root/$kind.running")" == true ]] ;;
 
     restart|--show-transaction)
       if [[ "$1" == --show-transaction ]]; then
@@ -560,9 +568,9 @@ systemctl() {
         test -f "$profile_release/candidate/profile.json" || [[ "$mode" == rollback ]] || return 9
         test -f "$current/$manifest" && test -f "$current/$image_id_file" || return 9
         if [[ "$mode" == resume ]]; then
-          [[ "$(<"$current/$image_id_file")" == "sha256:$(hex_of new)" ]] || return 9
+          [[ "$(<"$current/$image_id_file")" == "sha256:$fixture_hex_new" ]] || return 9
         fi
-        [[ "$(cat "$fixture_root/dropin")" == candidate || "$mode" == rollback ]] || return 9
+        [[ "$(<"$fixture_root/dropin")" == candidate || "$mode" == rollback ]] || return 9
       fi
       if [[ "$fixture_case" == client_lost_pending && "$kind" == issuer && ! -f "$fixture_root/manager-job" ]]; then
         local client_status=0
@@ -570,17 +578,17 @@ systemctl() {
         return "$client_status"
       fi
       if [[ "$kind" == collector ]]; then
-        case "$(cat "$fixture_root/dropin")" in
+        case "$(<"$fixture_root/dropin")" in
           candidate) value=new ;;
           previous) value=old ;;
-          *) value="$(cat "$(ref_file "$collector")")" ;;
+          *) value="$(<"$fixture_root/images/${collector//[\/:]/_}")" ;;
         esac
-        cp "$profile_release/$(cat "$fixture_root/dropin")/profile.json" "$fixture_root/loaded.profile"
+        cp "$profile_release/$(<"$fixture_root/dropin")/profile.json" "$fixture_root/loaded.profile"
         if [[ "$fixture_case" == *rollback_profile ]]; then printf 'other profile\n' > "$fixture_root/loaded.profile"; fi
         if [[ "$fixture_case" == *rollback_unhealthy ]]; then touch "$fixture_root/collector.unhealthy"; fi
         if [[ "$fixture_case" == *rollback_image ]]; then value=new; fi
       else
-        value="$(cat "$(ref_file "$issuer")")"
+        value="$(<"$fixture_root/images/${issuer//[\/:]/_}")"
       fi
       printf '%s' "$value" > "$fixture_root/$kind.runtime"
       if [[ "$fixture_case" == *substitution_failure || "$fixture_case" == restore_failure || "$fixture_case" == manager_probe_failure ]] && [[ "$kind" == issuer && "$value" == new ]]; then

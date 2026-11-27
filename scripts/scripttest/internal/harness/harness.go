@@ -38,6 +38,10 @@ type sessionSet struct {
 
 var testSessions sync.Map
 
+var bashPath = sync.OnceValues(func() (string, error) {
+	return exec.LookPath("bash")
+})
+
 func (r Result) String() string {
 	return fmt.Sprintf("exit %d\nstdout:\n%s\nstderr:\n%s", r.ExitCode, r.Stdout, r.Stderr)
 }
@@ -257,7 +261,12 @@ func Write(tb testing.TB, path, content string) {
 func Executable(tb testing.TB, path, body string) {
 	tb.Helper()
 
-	Write(tb, path, "#!/usr/bin/env bash\n"+body)
+	bash, err := bashPath()
+	if err != nil {
+		tb.Fatalf("locate bash: %v", err)
+	}
+
+	Write(tb, path, "#!"+bash+"\n"+body)
 
 	if err := os.Chmod(path, 0o700); err != nil { // #nosec G302 -- 가짜 명령은 PATH에서 실행할 수 있어야 한다.
 		tb.Fatalf("chmod %s: %v", path, err)

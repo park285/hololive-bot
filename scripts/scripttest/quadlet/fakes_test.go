@@ -34,7 +34,7 @@ if [[ "$1 $2" == 'exec -i' ]]; then
   exit 0
 fi
 printf 'podman %s\n' "$*" >>"${state}/calls"
-image_file() { printf '%s/images/%s' "${state}" "$(printf '%s' "$1" | tr '/:' '__')"; }
+image_file() { printf -v "$1" '%s/images/%s' "${state}" "${2//[\/:]/_}"; }
 case "$1 ${2:-}" in
   'info --format')
     case "$3" in
@@ -71,12 +71,12 @@ case "$1 ${2:-}" in
   'container inspect')
     [[ "$3" == --format && "$4" == '{{.State.Running}} {{.Id}} {{.Image}} {{.State.StartedAt.UnixNano}}' ]] || exit 2
     case "$5" in
-      holo-postgres) printf 'true %064d %064d %s\n' 91 81 "$(cat "$state/pg-started")" ;;
+      holo-postgres) printf 'true %064d %064d %s\n' 91 81 "$(<"$state/pg-started")" ;;
       *) exit 2 ;;
     esac ;;
-  'image exists') [[ -f "$(image_file "$3")" ]] ;;
+  'image exists') image_file file "$3"; [[ -f "$file" ]] ;;
   'image inspect')
-    file="$(image_file "${*: -1}")"
+    image_file file "${*: -1}"
     [[ -f "${file}" ]] || exit 125
     case "$4" in
       '{{.Id}}') key=id ;;
@@ -159,19 +159,19 @@ fi
 printf 'systemctl %s\n' "$*" >>"${state}/calls"
 state_dir() {
   if [[ "${FAKE_COORDINATED:-false}" == true ]]; then
-    printf '%s/%s' "${state}" "${1%.service}"
+    printf -v "$1" '%s/%s' "${state}" "${2%.service}"
   else
-    printf '%s' "${state}"
+    printf -v "$1" '%s' "${state}"
   fi
 }
 restart_unit() {
   local unit="$1" current dropin pair worker next
-  current="$(state_dir "${unit}")"
+  state_dir current "${unit}"
   if [[ "${FAKE_COORDINATED:-false}" == true ]]; then
     [[ "$(<"${current}/loadstate")" != masked ]] || return 1
     [[ ! -e "$current/guard" ]] || return 0
     if [[ "${unit}" == hololive-api.service ]]; then
-      worker="$(state_dir hololive-alarm-worker.service)"
+      state_dir worker hololive-alarm-worker.service
       if [[ "$(<"${worker}/active")" != true && "$(<"${worker}/loadstate")" != masked ]]; then
         restart_unit hololive-alarm-worker.service || return
       fi
@@ -247,9 +247,9 @@ case "$1" in
       done
     fi
     ;;
-  is-active) [[ "$(cat "$(state_dir "${*: -1}")/active")" == true ]] ;;
+  is-active) state_dir current "${*: -1}"; [[ "$(<"${current}/active")" == true ]] ;;
   show)
-    current="$(state_dir "$2")"
+    state_dir current "$2"
     if [[ "$3" == --all ]]; then
       [[ "$4 $5" == '-p LoadState,ActiveState,InvocationID,Result,ExecMainCode,ExecMainStatus,MainPID,ControlPID' ]] || exit 2
       load="$(<"$current/loadstate")"
@@ -290,7 +290,7 @@ case "$1" in
   stop)
     shift
     for unit in "$@"; do
-      current="$(state_dir "$unit")"
+      state_dir current "$unit"
       if [[ ! -f "$current/guard" || "$(<"$current/loadstate")" != loaded ]]; then
         printf '%s\n' "$unit" >>"$state/unguarded-stop"
       fi
@@ -318,7 +318,7 @@ case "$1" in
     shift
     if [[ "${1:-}" == --runtime ]]; then shift; fi
     for unit in "$@"; do
-      current="$(state_dir "${unit}")"
+      state_dir current "${unit}"
       rm -- "$HOLOLIVE_QUADLET_TEST_ROOT/etc/systemd/system/$unit" || exit 1
       if [[ "$unit" == hololive-api.service ]]; then
         case "$FAKE_CASE" in
@@ -333,7 +333,7 @@ case "$1" in
     ;;
   start)
     if [[ -n "$launch_job" ]]; then
-      current="$(state_dir "$2")"
+      state_dir current "$2"
       [[ "$(<"$current/active")" == false && "$(<"$current/loadstate")" == loaded ]] || exit 2
       if [[ "$FAKE_CASE" != client_failed_no_anchor ]]; then
         printf 'Enqueued anchor job %s %s/start.\n' "$launch_job" "$2" >&2
@@ -359,7 +359,7 @@ case "$1" in
     ;;
   simulate-reboot)
     for unit in hololive-alarm-worker.service hololive-api.service; do
-      current="$(state_dir "${unit}")"
+      state_dir current "${unit}"
       printf 'false\n' >"${current}/active"
       if [[ "$(<"${current}/mask_scope")" != masked ]]; then
         printf 'loaded\n' >"${current}/loadstate"
@@ -425,9 +425,9 @@ if [[ "${FAKE_COORDINATED:-false}" == true ]]; then current="${state}/${service}
 case "${action}" in
   capture|prepare)
     [[ "$4" == "${service}" && "$5" == "${FAKE_DEPLOY_ROOT}" ]] || exit 3
-    [[ "$(cat "${current}/active")" == true ]] || exit 3
+    [[ "$(<"${current}/active")" == true ]] || exit 3
     mkdir "${dir}"
-    cid="$(printf '%064d' 1)"
+    printf -v cid '%064d' 1
     if [[ "${FAKE_COORDINATED:-false}" == true ]]; then cid="$(<"$current/cid")"; fi
     printf '{"container_id":"%s","image":"sha256:%064d"}\n' "$cid" 8 >"${dir}/pair.json"
     printf 'profile\n' >"${dir}/profile.json"
@@ -494,8 +494,8 @@ case "${action}" in
     if [[ "$service" == hololive-api && "$FAKE_CASE" == last_pg_restart ]]; then printf '1794960722000000000\n' >"$state/pg-started"; fi
     expected="${dir##*/}"
     if [[ "${FAKE_COORDINATED:-false}" == true && "${expected}" == previous ]]; then expected=baseline; fi
-    [[ "$4" == "${service}" && "$(cat "${current}/active")" == true &&
-      "$(cat "${current}/runtime")" == "${expected}" ]] || exit 1
+    [[ "$4" == "${service}" && "$(<"${current}/active")" == true &&
+      "$(<"${current}/runtime")" == "${expected}" ]] || exit 1
     if [[ "$FAKE_CASE" == worker_cid_changed && "$service" == hololive-alarm-worker ]]; then printf '%064d\n' 9 >"$current/cid"; fi
     ;;
   *) exit 2 ;;
