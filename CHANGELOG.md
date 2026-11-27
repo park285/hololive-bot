@@ -6,8 +6,13 @@
 
 ## 미출시
 
+## r1.2.20 - 2026-11-27
+
+- **관측 어휘 열을 smallint 사전 id로(migration 012):** `source_observations`의 `provider`, `observation_kind`, `completeness`, `continuity`를 고정 사전 표 4개(`source_observation_providers`, `source_observation_kinds`, `source_observation_completeness_values`, `source_observation_continuity_values`)의 `smallint` id 열로도 저장합니다. `observation_contract_generations`에도 `provider_id`, `observation_kind_id`와 id 기준 unique를 더해 관측의 계약 FK를 id로 겁니다. 이번 단계에서는 텍스트 열을 지우지 않습니다. `derive_source_observation_vocabulary` trigger가 INSERT 때 빠진 쪽을 채우고, `(id, name)` FK가 두 값의 일치를 강제합니다. 새 collector는 id만 씁니다. API 소비 SQL과 보존·fence·잠금 DB 함수는 id로 거르고 이름은 사전 표에서 읽습니다. 보존 삭제는 새 인덱스 `idx_source_observations_kind_id_received_id`를 씁니다. evidence hash와 Go 계약 값은 계속 텍스트 이름을 쓰므로 바뀌지 않습니다. 운영 규모 합성 표(108만 행)에서 migration 전체는 12.8초였습니다. 텍스트 열과 이전 인덱스를 지우고 표를 다시 쓰는 다음 단계까지 마치면 heap은 303MB에서 265MB로, 인덱스는 198MB에서 150MB로 줄어듭니다. 같은 어휘를 쓰는 다른 16개 표의 23개 열은 이번 범위가 아닙니다. Fallback delta: none.
+- **대기 migration 창의 collector 호환성:** migration 012는 collector가 쓰는 표를 바꾸지만, r1.2.19 collector의 텍스트 INSERT는 trigger가 id를 채우므로 그대로 동작합니다. r1.2.19 collector의 게시 SQL을 012 스키마에 넣고 collector 시험 전체를 돌렸고, collector DB identity로 이름만 쓴 INSERT와 id만 쓴 INSERT가 모두 fence를 통과하는 시험을 더했습니다. 그래서 012는 대기 migration 적용 창에서 적용하고 collector는 API 수용 뒤에 교체합니다. 012 뒤에도 API와 collector를 r1.2.19로 되돌릴 수 있습니다. 텍스트 열을 지우는 다음 migration 뒤에는 되돌릴 수 없습니다.
 - **구형 `SendMarkdown` 전달 경로 정리:** `iris-client-go`를 `v6.1.0`으로 올리고 퇴역한 `RuntimeIrisClient.SendMarkdown`과 테스트 스텁을 제거했습니다. Markdown 응답은 기존과 같이 `SendRichText`(`type:"richtext"`) 경로만 사용합니다. Fallback delta: none.
 - **스크립트 시험 모듈 lint·vet 복원:** r1.2.19에서 스크립트 시험을 제품 모듈과 분리하면서 `scripts/scripttest`가 `golangci-lint`와 canonical vet 범위에서 빠졌습니다. 그사이 생긴 시험 하네스 위반 7건(Mutex embedding, 미확인 type assertion, 공백)을 고치고, 시험 대상 패키지를 lint·vet에 다시 넣었습니다.
+- **릴리스:** 루트 VERSION 1.2.20, hololive-api 1.2.13, hololive-alarm-worker 1.0.11. `iris-client-go` v6.1.0 갱신과 `SendMarkdown` 제거(#906)가 `hololive-shared`를 바꾸므로 alarm-worker image도 바뀝니다.
 
 ## r1.2.19 - 2026-11-27
 
@@ -21,9 +26,3 @@
 ## r1.2.18 - 2026-11-27
 
 - **변화 없는 결정의 감사 행 생략:** `source_observation_applications`에 정본 상태를 바꾼 결정만 남깁니다. 값이 같은 더 새 영상 목록 관측(누락 해제가 없을 때), 바뀐 것이 없는 영상·프로필·사진 `REPLAY`, 프로필·사진의 `RAW_RETAINED`는 더 이상 행을 만들지 않습니다. 운영 감사 323만 행 중 `youtube_video APPLIED` 82만 행이 영상 472개에서 나왔고 대부분 값이 같은 반복 관측이었습니다. `youtube_live_session` 결정은 보존 보호의 최신 근거라 모두 남기고, 커뮤니티 창 `CANONICALIZED`도 그대로입니다. migration은 없습니다. Fallback delta: none.
-
-## r1.2.17 - 2026-11-27
-
-- **관측 보존 인덱스 축소(migration 010):** 보존 함수가 LIVE·UPCOMING 세션의 최신 적용 관측을 찾으려고 쓰던 `idx_source_application_entity_latest`(운영 212MB)를 지웠습니다. 대신 새 표 `youtube_live_session_application_heads`가 세션별 최대 observation ID를 들고, `write_finalize_applications.sql`이 감사 행과 같은 문장에서 이 값을 올립니다. 늦게 도착한 이전 관측은 값을 되돌리지 않고, 관측이 지워지면 FK CASCADE로 함께 지워집니다. migration은 기존 감사에서 세션별 최대 ID를 채운 뒤 인덱스를 지웁니다.
-- **관측 identity unique 축소(migration 010):** `uq_source_observation_identity`를 여섯 열에서 `(observation_key, schema_version, contract_generation)`으로 줄였습니다. `observation_key`는 provider·kind·subject·scope·예정 시각의 SHA-256이고 collector가 envelope 검증에서 다시 계산하므로 유일성 의미는 같습니다. 운영 감사에서 세 열 기준 중복은 0건이었습니다. 운영 규모 합성 데이터에서 인덱스는 176MB에서 69MB로 줄었고 migration 전체는 약 1.1초였습니다. migration 010은 대기 migration이므로 `docs/current/runbooks/release.md`의 "대기 migration 적용 창"에서 적용합니다. Fallback delta: none.
-- **PostgreSQL `checkpoint_timeout` 30분:** `holo-postgres.container`의 `checkpoint_timeout`을 900s에서 1800s로 올렸습니다. 운영 WAL의 67%가 full-page image이고, 체크포인트 주기마다 페이지의 첫 수정만 full-page image를 남기므로 이 비율을 줄이려는 변경입니다. crash recovery 재생량은 늘어납니다. unit 설치 뒤 `holo-postgres.service`를 재시작해야 적용됩니다. Fallback delta: none.

@@ -1,5 +1,7 @@
 WITH policies AS (
-    SELECT policy.kind, policy.cutoff FROM unnest($1::text[], $2::timestamptz[]) AS policy(kind, cutoff)
+    SELECT policy.kind, kind.id AS kind_id, policy.cutoff
+    FROM unnest($1::text[], $2::timestamptz[]) AS policy(kind, cutoff)
+    JOIN source_observation_kinds AS kind ON kind.name = policy.kind
 ), measured AS (
     SELECT policy.kind,
            min(eligible.received_at) AS oldest,
@@ -10,7 +12,7 @@ WITH policies AS (
         FROM (
             SELECT observation.id
             FROM source_observations observation
-            WHERE observation.observation_kind=policy.kind AND observation.received_at<policy.cutoff
+            WHERE observation.observation_kind_id=policy.kind_id AND observation.received_at<policy.cutoff
             ORDER BY observation.received_at, observation.id
             LIMIT $3
         ) candidate
@@ -20,7 +22,7 @@ WITH policies AS (
         FROM (
             SELECT observation.id, observation.received_at
             FROM source_observations observation
-            WHERE observation.observation_kind=policy.kind AND observation.received_at<policy.cutoff
+            WHERE observation.observation_kind_id=policy.kind_id AND observation.received_at<policy.cutoff
             ORDER BY observation.received_at, observation.id
             LIMIT $3
         ) candidate
