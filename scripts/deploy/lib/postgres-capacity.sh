@@ -202,15 +202,28 @@ postgres_capacity_assert_target() {
 
 postgres_capacity_effective_env() {
     local policy="$1" compose="$2" units="$3" replacement_service="${4:-}" replacement_unit="${5:-}"
-    local owner service key source instances maximum role unit values
+    local owner service key source instances maximum role unit values line row
+    local -a services=() rows=() wanted=()
+    local -A keys=() resolved=()
     postgres_capacity_assert_policy_target "$policy" "$compose" >&2 || return "$?"
     while IFS='|' read -r owner service key source instances maximum role; do
         [[ -n "$source" && "$owner" != \#* && "$owner" != @* ]] || continue
+        [[ -v "keys[$service]" ]] || services+=("$service")
+        keys[$service]+=" $key"
+        rows+=("$service|$key|$source")
+    done < "$policy"
+    for service in "${services[@]}"; do
         unit="$units/$service.container"
         [[ "$service" != "$replacement_service" ]] || unit="$replacement_unit"
-        values="$(postgres_quadlet_environment "$unit" "$compose" "$units/$service.container" "$key")" || return "$?"
-        printf '%s=%s\n' "$source" "${values#*=}"
-    done < "$policy"
+        read -ra wanted <<< "${keys[$service]}"
+        values="$(postgres_quadlet_environment "$unit" "$compose" "$units/$service.container" "${wanted[@]}")" || return "$?"
+        while IFS= read -r line; do
+            resolved["$service|${line%%=*}"]="${line#*=}"
+        done <<< "$values"
+    done
+    for row in "${rows[@]}"; do
+        printf '%s=%s\n' "${row##*|}" "${resolved[${row%|*}]}"
+    done
 }
 
 postgres_writer_assert_sql() {

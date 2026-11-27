@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "scripts/build/po-sandbox-manifest.py"
 VERIFIER = ROOT / "scripts/deploy/lib/po-sandbox-image.sh"
 REVISION = "b" * 40
+INSPECT_FORMAT = '{{index .Config.Labels "org.opencontainers.image.revision"}} {{.Os}}/{{.Architecture}} {{.Id}}'
 
 
 def digest(data):
@@ -53,9 +54,7 @@ class ImageIdentityTests(unittest.TestCase):
             (root / "bin/sudo").write_text('#!/bin/sh\n[ "$1" != -n ] || shift\nexec "$@"\n')
             (root / "bin" / "podman").write_text(
                 '#!/bin/sh\ncase "$4" in\n'
-                f'  *revision*) echo {REVISION} ;;\n'
-                "  *Architecture*) echo linux/arm64 ;;\n"
-                f"  '{{{{.Id}}}}') echo {reported_id} ;;\n"
+                f"  '{INSPECT_FORMAT}') echo {REVISION} linux/arm64 {reported_id} ;;\n"
                 "  *) exit 2 ;;\nesac\n")
             for name in ("sudo", "podman"):
                 (root / "bin" / name).chmod(0o755)

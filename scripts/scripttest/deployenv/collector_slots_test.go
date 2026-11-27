@@ -2,6 +2,7 @@ package deployenv
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-scripttest/internal/harness"
@@ -38,6 +39,35 @@ func TestCollectorSlotMatchesCallerValues(t *testing.T) {
 				harness.Succeeds(t, name, r)
 			} else {
 				harness.Fails(t, name, r)
+			}
+		})
+	}
+}
+
+func TestCollectorSlotsFileFollowsTheSourcedLibrary(t *testing.T) {
+	t.Parallel()
+
+	lib := harness.Path(t, "scripts/deploy/lib")
+
+	want, err := filepath.EvalSymlinks(filepath.Join(lib, "collector-slots.tsv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := map[string]harness.Cmd{
+		"absolute":  {Script: `. "$SCRIPTTEST_ROOT/scripts/deploy/lib/collector-slots.sh"; collector_slots_file`},
+		"relative":  {Script: `. scripts/deploy/lib/collector-slots.sh; collector_slots_file`, Dir: harness.Root(t)},
+		"bare name": {Script: `. collector-slots.sh; collector_slots_file`, Dir: lib},
+	}
+	for name, cmd := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			r := harness.Bash(t, cmd)
+			harness.Succeeds(t, name, r)
+
+			if got := strings.TrimSuffix(r.Stdout, "\n"); got != want {
+				t.Fatalf("%s: got %q, want %q", name, got, want)
 			}
 		})
 	}
