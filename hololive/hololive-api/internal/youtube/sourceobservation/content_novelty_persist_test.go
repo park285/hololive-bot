@@ -268,7 +268,8 @@ func observationIDOf(t *testing.T, pool *pgxpool.Pool, kind contract.Observation
 
 	require.NoError(t, pool.QueryRow(t.Context(), `
 		SELECT id FROM source_observations
-		WHERE observation_kind = $1 AND subject_key = $2 AND scheduled_for = $3
+		WHERE observation_kind_id = (SELECT id FROM source_observation_kinds WHERE name = $1)
+		  AND subject_key = $2 AND scheduled_for = $3
 	`, kind, subjectKey, scheduledFor).Scan(&id))
 
 	return id

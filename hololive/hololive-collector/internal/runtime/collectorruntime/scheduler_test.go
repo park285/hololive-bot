@@ -207,7 +207,7 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 
 	var count int
 
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM source_observations WHERE provider = 'youtubejs'`).Scan(&count); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM source_observations WHERE provider_id = (SELECT id FROM source_observation_providers WHERE name = 'youtubejs')`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 
@@ -259,7 +259,7 @@ func TestLeaseSchedulerPublishesPartialAndDefersAtomically(t *testing.T) {
 	)
 
 	if err := pool.QueryRow(ctx, `
-		SELECT count(*) FROM source_observations WHERE provider = 'youtubejs' AND observation_kind = 'video_list'
+		SELECT count(*) FROM source_observations WHERE provider_id = (SELECT id FROM source_observation_providers WHERE name = 'youtubejs') AND observation_kind_id = (SELECT id FROM source_observation_kinds WHERE name = 'video_list')
 	`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}

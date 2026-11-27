@@ -76,15 +76,15 @@ func seedClaimBacklogRows(tb testing.TB, pool *pgxpool.Pool, active, history int
 
 	_, err := pool.Exec(ctx, `
 		INSERT INTO source_observations (
-			provider, observation_kind, subject_key, observation_key, schema_version, contract_generation,
-			scheduled_for, observed_at, scope_sha256, completeness, continuity, payload_id,
+			provider_id, observation_kind_id, subject_key, observation_key, schema_version, contract_generation,
+			scheduled_for, observed_at, scope_sha256, completeness_id, continuity_id, payload_id,
 			evidence_sha256, provenance_id, fence_epoch, projection_generation
 		)
-		SELECT provider,
-			CASE WHEN n <= $2::int / 25 OR (n > $2::int AND n % 25 = 0) THEN 'shorts_list' ELSE 'video_list' END,
+		SELECT provider_id,
+			(SELECT id FROM source_observation_kinds WHERE name = CASE WHEN n <= $2::int / 25 OR (n > $2::int AND n % 25 = 0) THEN 'shorts_list' ELSE 'video_list' END),
 			'UC_backlog_' || (n % 200), sha256(('backlog-' || n)::bytea), schema_version, contract_generation,
 			scheduled_for - n * INTERVAL '1 minute', observed_at, scope_sha256,
-			completeness, continuity, payload_id, evidence_sha256,
+			completeness_id, continuity_id, payload_id, evidence_sha256,
 			provenance_id, fence_epoch, projection_generation
 		FROM source_observations CROSS JOIN generate_series(1, $2::int + $3::int) AS n
 		WHERE id = $1
@@ -221,7 +221,7 @@ func TestClaimCandidateSelectionIsBoundedUnderActiveBacklog(t *testing.T) {
 			  JOIN source_observations AS predecessor ON predecessor.id = predecessor_queue.observation_id
 			  WHERE predecessor_queue.status IN ('PENDING', 'PROCESSING')
 			    AND predecessor.subject_key = observation.subject_key
-			    AND predecessor.observation_kind = observation.observation_kind
+			    AND predecessor.observation_kind_id = observation.observation_kind_id
 			    AND (predecessor.scheduled_for, predecessor.id) < (observation.scheduled_for, observation.id)
 		  )
 		ORDER BY queue.available_at, queue.observation_id

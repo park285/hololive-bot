@@ -947,8 +947,6 @@ checkpoint는 duplicate suppression의 SSOT가 아니다. 같은 content의 다�
 ```sql
 CREATE TABLE source_observations (
     id BIGSERIAL PRIMARY KEY,
-    provider TEXT NOT NULL,
-    observation_kind TEXT NOT NULL,
     subject_key TEXT NOT NULL,
     observation_key TEXT NOT NULL,
     schema_version SMALLINT NOT NULL CHECK (schema_version > 0),
@@ -958,8 +956,6 @@ CREATE TABLE source_observations (
     source_event_at TIMESTAMPTZ,
     received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     scope_sha256 BYTEA NOT NULL,
-    completeness TEXT NOT NULL,
-    continuity TEXT NOT NULL,
     provider_id SMALLINT NOT NULL,
     observation_kind_id SMALLINT NOT NULL,
     completeness_id SMALLINT NOT NULL,
@@ -981,10 +977,6 @@ CREATE TABLE source_observations (
         schema_version,
         contract_generation
     ),
-    CONSTRAINT fk_source_observation_contract
-        FOREIGN KEY (provider, observation_kind)
-        REFERENCES observation_contract_generations(provider, observation_kind)
-        ON DELETE RESTRICT,
     CONSTRAINT chk_source_observation_text_bounds CHECK (
         length(subject_key) BETWEEN 1 AND 256
         AND length(observation_key) BETWEEN 1 AND 512
@@ -996,24 +988,14 @@ CREATE TABLE source_observations (
         octet_length(scope_sha256) = 32
         AND octet_length(evidence_sha256) = 32
     ),
-    CONSTRAINT chk_source_observation_completeness CHECK (
-        completeness IN ('COMPLETE', 'PARTIAL', 'UNKNOWN')
-    ),
-    CONSTRAINT chk_source_observation_continuity CHECK (
-        continuity IN ('CONTIGUOUS', 'GAP_UNRESOLVED', 'NOT_APPLICABLE')
-    ),
     CONSTRAINT fk_source_observation_contract_ids
         FOREIGN KEY (provider_id, observation_kind_id)
         REFERENCES observation_contract_generations(provider_id, observation_kind_id)
         ON DELETE RESTRICT,
-    CONSTRAINT fk_source_observation_provider_name
-        FOREIGN KEY (provider_id, provider) REFERENCES source_observation_providers(id, name),
-    CONSTRAINT fk_source_observation_kind_name
-        FOREIGN KEY (observation_kind_id, observation_kind) REFERENCES source_observation_kinds(id, name),
-    CONSTRAINT fk_source_observation_completeness_name
-        FOREIGN KEY (completeness_id, completeness) REFERENCES source_observation_completeness_values(id, name),
-    CONSTRAINT fk_source_observation_continuity_name
-        FOREIGN KEY (continuity_id, continuity) REFERENCES source_observation_continuity_values(id, name)
+    CONSTRAINT fk_source_observation_completeness
+        FOREIGN KEY (completeness_id) REFERENCES source_observation_completeness_values(id),
+    CONSTRAINT fk_source_observation_continuity
+        FOREIGN KEY (continuity_id) REFERENCES source_observation_continuity_values(id)
 );
 
 CREATE TABLE source_observation_queue (
@@ -1065,7 +1047,7 @@ CREATE TABLE source_observation_queue (
 
 immutable evidence와 mutable delivery state를 분리해 queue retention과 evidence retention을 독립적으로 운영한다.
 
-`provider`, `observation_kind`, `completeness`, `continuity`는 사전 표 `source_observation_providers`, `source_observation_kinds`, `source_observation_completeness_values`, `source_observation_continuity_values`의 `smallint` id로 저장한다. 사전 표는 `(id, name)`을 고정 값으로 두고 `hololive_runtime`과 `hololive_scraper`에 SELECT만 준다. 전환 기간에는 텍스트 열과 id 열을 함께 두고, `derive_source_observation_vocabulary` trigger가 INSERT 때 빠진 쪽을 채운다. `(id, name)` FK가 두 값의 일치를 강제한다. collector는 id만 쓰고, 소비자 SQL은 id로 거른 뒤 사전 표에서 이름을 읽는다. evidence hash와 Go 계약 값은 계속 텍스트 이름을 쓴다. 텍스트 열, 텍스트 FK와 `idx_source_observations_kind_received_id`는 다음 migration에서 삭제하고 표를 재작성한다.
+`provider`, `observation_kind`, `completeness`, `continuity`는 사전 표 `source_observation_providers`, `source_observation_kinds`, `source_observation_completeness_values`, `source_observation_continuity_values`의 `smallint` id로 저장한다. 사전 표는 `(id, name)`을 고정 값으로 두고 `hololive_runtime`과 `hololive_scraper`에 SELECT만 준다. 관측 행에는 이름 열이 없다. collector는 사전 표에서 id를 찾아 쓰고, 소비자 SQL은 id로 거른 뒤 사전 표에서 이름을 읽는다. provider와 kind는 `observation_contract_generations`의 id 쌍을 통해 사전 표를 참조하고, completeness와 continuity는 사전 표를 직접 참조한다. evidence hash와 Go 계약 값은 계속 텍스트 이름을 쓴다.
 
 ### 9.4 Collision audit
 

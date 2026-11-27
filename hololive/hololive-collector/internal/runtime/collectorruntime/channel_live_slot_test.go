@@ -63,7 +63,7 @@ func TestChannelLiveCheckSlotAdvancesWhileSnapshotRetries(t *testing.T) {
 	var snapshots int64
 
 	if err := pool.QueryRow(ctx, `
-		SELECT count(*) FROM source_observations WHERE observation_kind = 'live_snapshot'
+		SELECT count(*) FROM source_observations WHERE observation_kind_id = (SELECT id FROM source_observation_kinds WHERE name = 'live_snapshot')
 	`).Scan(&snapshots); err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,8 @@ func loadLatestChannelLiveCheckObservation(t *testing.T, pool *pgxpool.Pool) cha
 	if err := pool.QueryRow(t.Context(), `
 		SELECT count(*) OVER (), id, encode(observation_key, 'hex'), scheduled_for
 		FROM source_observations
-		WHERE observation_kind = 'channel_live_check' AND subject_key = $1
+		WHERE observation_kind_id = (SELECT id FROM source_observation_kinds WHERE name = 'channel_live_check')
+		  AND subject_key = $1
 		ORDER BY id DESC
 		LIMIT 1
 	`, testSubjectKey).Scan(&observation.count, &observation.id, &observation.key, &observation.scheduledFor); err != nil {

@@ -7,19 +7,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type vocabularyRow struct {
-	provider, kind, completeness, continuity         string
-	providerID, kindID, completenessID, continuityID int16
-}
+const vocabularyIDColumns = "provider_id,observation_kind_id,completeness_id,continuity_id"
 
-func insertVocabularyObservation(t *testing.T, pool *pgxpool.Pool, subject, columns, values string) error {
+func insertVocabularyObservation(t *testing.T, pool *pgxpool.Pool, subject, values string) error {
 	t.Helper()
 
-	return insertInstanceVocabularyObservation(t, pool, subject, columns, values, "collector-a", 1)
+	return insertInstanceVocabularyObservation(t, pool, subject, values, "collector-a", 1)
 }
 
 func insertInstanceVocabularyObservation(
-	t *testing.T, pool *pgxpool.Pool, subject, columns, values, instance string, generation int64,
+	t *testing.T, pool *pgxpool.Pool, subject, values, instance string, generation int64,
 ) error {
 	t.Helper()
 
@@ -27,7 +24,7 @@ func insertInstanceVocabularyObservation(
 		INSERT INTO source_observation_payloads(observation_kind,schema_version,canonical_profile,payload_sha256,payload)
 		VALUES ('community_page',1,'source-observation-canonical-json-v1',sha256($1::text::bytea),'{}')
 		RETURNING id
-	) INSERT INTO source_observations(`+columns+`,subject_key,observation_key,schema_version,contract_generation,
+	) INSERT INTO source_observations(`+vocabularyIDColumns+`,subject_key,observation_key,schema_version,contract_generation,
 		scheduled_for,observed_at,scope_sha256,payload_id,evidence_sha256,provenance_id,fence_epoch,projection_generation)
 	SELECT `+values+`,$1::text,sha256($1::text::bytea),1,1,now(),now(),decode(repeat('a',64),'hex'),payload.id,
 		decode(repeat('c',64),'hex'),source_observation_provenance_id('job-vocab',$3::text,'community_collect'),1,$2
@@ -36,63 +33,43 @@ func insertInstanceVocabularyObservation(
 	return err
 }
 
-func storedVocabulary(t *testing.T, pool *pgxpool.Pool, subject string) vocabularyRow {
+func storedVocabularyNames(t *testing.T, pool *pgxpool.Pool, subject string) [4]string {
 	t.Helper()
 
-	var row vocabularyRow
+	var names [4]string
 
-	require.NoError(t, pool.QueryRow(t.Context(), `SELECT provider,observation_kind,completeness,continuity,
-		provider_id,observation_kind_id,completeness_id,continuity_id FROM source_observations WHERE subject_key=$1`, subject).
-		Scan(&row.provider, &row.kind, &row.completeness, &row.continuity,
-			&row.providerID, &row.kindID, &row.completenessID, &row.continuityID))
+	require.NoError(t, pool.QueryRow(t.Context(), `SELECT provider_value.name, kind.name, completeness_value.name, continuity_value.name
+		FROM source_observations observation
+		JOIN source_observation_providers provider_value ON provider_value.id = observation.provider_id
+		JOIN source_observation_kinds kind ON kind.id = observation.observation_kind_id
+		JOIN source_observation_completeness_values completeness_value ON completeness_value.id = observation.completeness_id
+		JOIN source_observation_continuity_values continuity_value ON continuity_value.id = observation.continuity_id
+		WHERE observation.subject_key = $1`, subject).Scan(&names[0], &names[1], &names[2], &names[3]))
 
-	return row
+	return names
 }
 
-func TestSourceObservationVocabularyDerivesIDsFromNames(t *testing.T) {
+func TestSourceObservationVocabularyStoresDictionaryIDs(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
-	require.NoError(t, insertVocabularyObservation(t, pool, "named", "provider,observation_kind,completeness,continuity",
-		"'youtubejs','community_page','PARTIAL','GAP_UNRESOLVED'"))
+	require.NoError(t, insertVocabularyObservation(t, pool, "identified", "2,1,2,2"))
 
-	require.Equal(t, vocabularyRow{
-		provider: "youtubejs", kind: "community_page", completeness: "PARTIAL", continuity: "GAP_UNRESOLVED",
-		providerID: 2, kindID: 1, completenessID: 2, continuityID: 2,
-	}, storedVocabulary(t, pool, "named"))
+	require.Equal(t, [4]string{"youtubejs", "community_page", "PARTIAL", "GAP_UNRESOLVED"},
+		storedVocabularyNames(t, pool, "identified"))
 }
 
-func TestSourceObservationVocabularyDerivesNamesFromIDs(t *testing.T) {
-	t.Parallel()
-
-	pool := NewPool(t)
-	require.NoError(t, insertVocabularyObservation(t, pool, "identified",
-		"provider_id,observation_kind_id,completeness_id,continuity_id", "2,1,1,1"))
-
-	require.Equal(t, vocabularyRow{
-		provider: "youtubejs", kind: "community_page", completeness: "COMPLETE", continuity: "CONTIGUOUS",
-		providerID: 2, kindID: 1, completenessID: 1, continuityID: 1,
-	}, storedVocabulary(t, pool, "identified"))
-}
-
-func TestSourceObservationVocabularyRejectsDisagreeingOrUnknownValues(t *testing.T) {
+func TestSourceObservationVocabularyRejectsUnknownIDsAndUncontractedPairs(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
 
-	requireSQLState(t, insertVocabularyObservation(t, pool, "disagree",
-		"provider,provider_id,observation_kind,completeness,continuity",
-		"'youtubejs',1,'community_page','COMPLETE','CONTIGUOUS'"), "23503")
-	requireSQLState(t, insertVocabularyObservation(t, pool, "unknown-name",
-		"provider,observation_kind,completeness,continuity",
-		"'youtubejs','community_page','DONE','CONTIGUOUS'"), "23502")
-	requireSQLState(t, insertVocabularyObservation(t, pool, "unknown-id",
-		"provider_id,observation_kind_id,completeness_id,continuity_id", "2,1,1,9"), "23502")
-	requireSQLState(t, insertVocabularyObservation(t, pool, "no-contract",
-		"provider_id,observation_kind_id,completeness_id,continuity_id", "3,1,1,1"), "23503")
+	requireSQLState(t, insertVocabularyObservation(t, pool, "unknown-completeness", "2,1,9,1"), "23503")
+	requireSQLState(t, insertVocabularyObservation(t, pool, "unknown-continuity", "2,1,1,9"), "23503")
+	requireSQLState(t, insertVocabularyObservation(t, pool, "no-contract", "3,1,1,1"), "23503")
 }
 
-func TestSourceObservationVocabularyFenceAcceptsNameOrIDWritersUnderCollectorIdentity(t *testing.T) {
+func TestSourceObservationVocabularyFenceMatchesLeaseProviderUnderCollectorIdentity(t *testing.T) {
 	t.Parallel()
 
 	pool := NewPool(t)
@@ -112,16 +89,11 @@ func TestSourceObservationVocabularyFenceAcceptsNameOrIDWritersUnderCollectorIde
 	require.NoError(t, err)
 
 	collector := eventGradeSession(t, pool, "hololive_collector_c")
-	fenced := func(subject, columns, values string) error {
-		return insertInstanceVocabularyObservation(t, collector, subject, columns, values, "collector-c", 9201)
+	fenced := func(subject, values string) error {
+		return insertInstanceVocabularyObservation(t, collector, subject, values, "collector-c", 9201)
 	}
 
-	require.NoError(t, fenced("fenced-name",
-		"provider,observation_kind,completeness,continuity", "'youtubejs','community_page','COMPLETE','CONTIGUOUS'"))
-	require.NoError(t, fenced("fenced-id", "provider_id,observation_kind_id,completeness_id,continuity_id", "2,1,1,1"))
-	requireSQLState(t, fenced("fenced-other-provider",
-		"provider_id,observation_kind_id,completeness_id,continuity_id", "1,1,1,1"), "42501")
-
-	require.Equal(t, int16(2), storedVocabulary(t, pool, "fenced-name").providerID)
-	require.Equal(t, "youtubejs", storedVocabulary(t, pool, "fenced-id").provider)
+	require.NoError(t, fenced("fenced", "2,1,1,1"))
+	requireSQLState(t, fenced("fenced-other-provider", "1,1,1,1"), "42501")
+	require.Equal(t, "youtubejs", storedVocabularyNames(t, pool, "fenced")[0])
 }

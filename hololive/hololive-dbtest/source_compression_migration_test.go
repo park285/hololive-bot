@@ -15,11 +15,11 @@ func TestBinaryHashesPreserveRoundTripAndIdentity(t *testing.T) {
 	_, err := pool.Exec(ctx, `WITH payload AS (
 		INSERT INTO source_observation_payloads(observation_kind,schema_version,canonical_profile,payload_sha256,payload)
 		VALUES ('community_page',1,'source-observation-canonical-json-v1',decode(repeat('b',64),'hex'),'{}') RETURNING id
-	) INSERT INTO source_observations(provider,observation_kind,subject_key,observation_key,schema_version,
-		contract_generation,scheduled_for,observed_at,scope_sha256,completeness,continuity,payload_id,
+	) INSERT INTO source_observations(provider_id,observation_kind_id,subject_key,observation_key,schema_version,
+		contract_generation,scheduled_for,observed_at,scope_sha256,completeness_id,continuity_id,payload_id,
 		evidence_sha256,provenance_id,fence_epoch,projection_generation)
-		SELECT 'youtubejs','community_page','UC_binary',sha256('binary-slot'::bytea),1,1,now(),now(),decode(repeat('a',64),'hex'),
-		'COMPLETE','CONTIGUOUS',id,decode(repeat('c',64),'hex'),source_observation_provenance_id('binary','migration','community_collect'),1,1 FROM payload;
+		SELECT (SELECT id FROM source_observation_providers WHERE name = 'youtubejs'),(SELECT id FROM source_observation_kinds WHERE name = 'community_page'),'UC_binary',sha256('binary-slot'::bytea),1,1,now(),now(),decode(repeat('a',64),'hex'),
+		(SELECT id FROM source_observation_completeness_values WHERE name = 'COMPLETE'),(SELECT id FROM source_observation_continuity_values WHERE name = 'CONTIGUOUS'),id,decode(repeat('c',64),'hex'),source_observation_provenance_id('binary','migration','community_collect'),1,1 FROM payload;
 		INSERT INTO source_observation_applications(observation_id,entity_kind_id,entity_key,decision_id)
 		SELECT id,source_observation_entity_kind_id('community_window'),'binary',source_observation_decision_id('APPLIED') FROM source_observations;
 		INSERT INTO youtube_live_absence_slots(observation_id,scheduled_for,evidence_sha256,effective_at,received_at,scope_sha256,coverage)

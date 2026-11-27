@@ -100,7 +100,7 @@ func TestLiveObservationDeletionPreservesNotificationIdentity(t *testing.T) {
 			}
 
 			before := retirementLiveIdentity(t, pool)
-			_, err := pool.Exec(ctx, `DELETE FROM source_observations WHERE observation_kind='live_snapshot'`)
+			_, err := pool.Exec(ctx, `DELETE FROM source_observations WHERE observation_kind_id = (SELECT id FROM source_observation_kinds WHERE name = 'live_snapshot')`)
 			require.NoError(t, err)
 			require.Equal(t, before, retirementLiveIdentity(t, pool))
 
@@ -165,8 +165,8 @@ func TestObservationRetirementRestorePreservesNotificationState(t *testing.T) {
 		SELECT id, observation_kind, schema_version, canonical_profile, payload_sha256, payload, created_at FROM jsonb_populate_record(NULL::source_observation_payloads,$1)`, payload)
 	require.NoError(t, err)
 
-	_, err = pool.Exec(ctx, `INSERT INTO source_observations (id, provider, observation_kind, subject_key, observation_key, schema_version, contract_generation, scheduled_for, observed_at, source_event_at, received_at, scope_sha256, completeness, continuity, evidence_sha256, provenance_id, fence_epoch, projection_generation, schedule_observed_at, payload_id) OVERRIDING SYSTEM VALUE
-		SELECT id, provider, observation_kind, subject_key, observation_key, schema_version, contract_generation, scheduled_for, observed_at, source_event_at, received_at, scope_sha256, completeness, continuity, evidence_sha256, provenance_id, fence_epoch, projection_generation, schedule_observed_at, payload_id FROM jsonb_populate_record(NULL::source_observations,$1)`, observation)
+	_, err = pool.Exec(ctx, `INSERT INTO source_observations (id, provider_id, observation_kind_id, subject_key, observation_key, schema_version, contract_generation, scheduled_for, observed_at, source_event_at, received_at, scope_sha256, completeness_id, continuity_id, evidence_sha256, provenance_id, fence_epoch, projection_generation, schedule_observed_at, payload_id) OVERRIDING SYSTEM VALUE
+		SELECT id, provider_id, observation_kind_id, subject_key, observation_key, schema_version, contract_generation, scheduled_for, observed_at, source_event_at, received_at, scope_sha256, completeness_id, continuity_id, evidence_sha256, provenance_id, fence_epoch, projection_generation, schedule_observed_at, payload_id FROM jsonb_populate_record(NULL::source_observations,$1)`, observation)
 	require.NoError(t, err)
 
 	updated, err := pool.Exec(ctx, `INSERT INTO source_observation_applications

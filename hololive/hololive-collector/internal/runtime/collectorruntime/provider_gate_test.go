@@ -446,7 +446,7 @@ func assertSubjectObservations(t *testing.T, pool *pgxpool.Pool, subject string,
 	var count int
 
 	err := pool.QueryRow(t.Context(), `
-		SELECT count(*) FROM source_observations WHERE provider = 'youtubejs' AND subject_key = $1
+		SELECT count(*) FROM source_observations WHERE provider_id = (SELECT id FROM source_observation_providers WHERE name = 'youtubejs') AND subject_key = $1
 	`, subject).Scan(&count)
 	if err != nil {
 		t.Fatal(err)

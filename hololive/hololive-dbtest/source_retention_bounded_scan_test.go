@@ -185,11 +185,11 @@ func seedBoundedRetention(t *testing.T, pool *pgxpool.Pool, count, protected int
 	_, err := pool.Exec(t.Context(), `WITH payload AS (
 		INSERT INTO source_observation_payloads(observation_kind,schema_version,canonical_profile,payload_sha256,payload)
 		VALUES ('community_page',1,'source-observation-canonical-json-v1',decode(repeat('b',64),'hex'),'{}') RETURNING id
-	) INSERT INTO source_observations(provider,observation_kind,subject_key,observation_key,schema_version,contract_generation,
-		scheduled_for,observed_at,received_at,scope_sha256,completeness,continuity,payload_id,evidence_sha256,
+	) INSERT INTO source_observations(provider_id,observation_kind_id,subject_key,observation_key,schema_version,contract_generation,
+		scheduled_for,observed_at,received_at,scope_sha256,completeness_id,continuity_id,payload_id,evidence_sha256,
 		provenance_id, fence_epoch,projection_generation)
-	SELECT 'youtubejs','community_page','bounded-'||s,sha256(('bounded-'||s)::bytea),1,1,$1,$1,$1::timestamptz+s*interval '1 microsecond',
-		decode(repeat('a',64),'hex'),'COMPLETE','CONTIGUOUS',payload.id,decode(repeat('c',64),'hex'),
+	SELECT (SELECT id FROM source_observation_providers WHERE name = 'youtubejs'),(SELECT id FROM source_observation_kinds WHERE name = 'community_page'),'bounded-'||s,sha256(('bounded-'||s)::bytea),1,1,$1,$1,$1::timestamptz+s*interval '1 microsecond',
+		decode(repeat('a',64),'hex'),(SELECT id FROM source_observation_completeness_values WHERE name = 'COMPLETE'),(SELECT id FROM source_observation_continuity_values WHERE name = 'CONTIGUOUS'),payload.id,decode(repeat('c',64),'hex'),
 		source_observation_provenance_id('bounded-'||s,'dbtest','community_page'),1,1 FROM payload CROSS JOIN generate_series(1,$2::int) s`, base, count)
 	require.NoError(t, err)
 
