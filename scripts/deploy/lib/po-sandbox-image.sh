@@ -14,7 +14,7 @@ po_verify_image() {
   local image="$1" manifest="$2" revision="$3" arch="$4" id_file="$5"
   local actual_revision actual_arch actual_id expected_id
   [[ "$revision" =~ ^[0-9a-f]{40}$ && "$arch" == arm64 ]] || return 1
-  expected_id="$(cat "$id_file")"
+  expected_id="$(<"$id_file")"
   python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert m["schema_version"] == 1 and m["source_revision"] == sys.argv[2] and m["architecture"] == sys.argv[3]' "$manifest" "$revision" "$arch"
   actual_revision="$(sudo -n podman image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")"
   actual_arch="$(sudo -n podman image inspect -f '{{.Os}}/{{.Architecture}}' "$image")"

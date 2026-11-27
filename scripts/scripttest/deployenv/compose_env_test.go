@@ -53,6 +53,31 @@ func TestComposeEnvListsSortedKeys(t *testing.T) {
 	}
 }
 
+func TestComposeEnvKeyExistsMatchesWholeKeys(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "env")
+	harness.Write(t, path, "ABC=1\r\nEMPTY=\n#COMMENTED=1\n")
+
+	cases := map[string]bool{"ABC": true, "EMPTY": true, "AB": false, "ABCD": false, "A.C": false, "COMMENTED": false}
+	for key, exists := range cases {
+		t.Run(key, func(t *testing.T) {
+			t.Parallel()
+
+			r := harness.Bash(t, harness.Cmd{
+				Script: `. "$SCRIPTTEST_ROOT/scripts/deploy/lib/compose-env.sh"; compose_env_key_exists_in_file "$1" "$2"`,
+				Args:   []string{path, key},
+			})
+
+			if exists {
+				harness.Succeeds(t, key, r)
+			} else {
+				harness.Fails(t, key, r)
+			}
+		})
+	}
+}
+
 func TestComposeEnvRejectsUnsafeContent(t *testing.T) {
 	t.Parallel()
 

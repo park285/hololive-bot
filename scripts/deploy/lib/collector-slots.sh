@@ -4,10 +4,6 @@ collector_slots_file() {
     printf '%s\n' "${COLLECTOR_SLOTS_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/collector-slots.tsv}"
 }
 
-collector_slot_columns() {
-    head -n 1 -- "${1:-$(collector_slots_file)}" | tr '\t' '\n'
-}
-
 collector_slot() {
     local slot="$1" column="$2" file="${3:-$(collector_slots_file)}"
     awk -F '\t' -v slot="$slot" -v column="$column" '
@@ -44,10 +40,18 @@ collector_slot_preamble() {
 }
 
 collector_slot_matches() {
-    local slot="$1" file="$2" column name value
-    while IFS= read -r column; do
-        name="slot_$column"
-        value="$(collector_slot "$slot" "$column" "$file")" || return 1
-        [[ "${!name-}" == "$value" ]] || return 1
-    done < <(collector_slot_columns "$file")
+    local slot="$1" file="$2" pairs pair name
+    pairs="$(awk -F '\t' -v slot="$slot" '
+        NR == 1 { width = NF; for (i = 1; i <= NF; i++) { name[i] = $i; field[$i] = i }; next }
+        NF != width { exit 2 }
+        $1 == slot { rows++; for (i = 1; i <= NF; i++) value[i] = ($i == "-" ? "" : $i) }
+        END {
+            if (rows != 1) exit 1
+            for (i = 1; i <= width; i++) print name[i] "\t" value[field[name[i]]]
+        }
+    ' "$file")" || return 1
+    while IFS= read -r pair; do
+        name="slot_${pair%%$'\t'*}"
+        [[ "${!name-}" == "${pair#*$'\t'}" ]] || return 1
+    done <<< "$pairs"
 }
