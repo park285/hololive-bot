@@ -179,8 +179,8 @@ github.com/park285/shared-go/core v1.0.0 h1:njjHcpmuefz77MdkT7u4/GUbDIdtUXpHmn1X
 github.com/park285/shared-go/core v1.0.0/go.mod h1:IpLckMRu7X4bg/79bgJFufCyVjTC/RCs233qKFwMIeU=
 github.com/park285/shared-go/postgres v1.0.4 h1:IXvDtVVQGEEAIQmzTlX8OH+7CXG7W7Qzt0HOZPF/k2Q=
 github.com/park285/shared-go/postgres v1.0.4/go.mod h1:OPcoJxYzmEkyV/WqabBL295iKtkvG43OHLuEZlhSyOk=
-github.com/park285/shared-go/sqlite v1.0.1 h1:Ul0v97X5eCB5Q1aAI+8XVWrVRfLHKDoZQc1PE6pMZVQ=
-github.com/park285/shared-go/sqlite v1.0.1/go.mod h1:sK7D9FkjDRvnRqaTMh85KqHnheCnk+viV9yVu6JnLno=
+github.com/park285/shared-go/sqlite v1.0.2 h1:h6konlK7zzaMSSzwA34kWyCqLYG6F3TeH3cJ2vJEUL0=
+github.com/park285/shared-go/sqlite v1.0.2/go.mod h1:sK7D9FkjDRvnRqaTMh85KqHnheCnk+viV9yVu6JnLno=
 github.com/park285/shared-go/transport v1.0.1 h1:KORquAb07pBOGQk7vYvdPyIQ32LGkti7Ue80xfK/yRY=
 github.com/park285/shared-go/transport v1.0.1/go.mod h1:1ISrFk/Zi1izwr1DQgKE6mMVUAiqmWdnVM2L/i1vNBk=
 github.com/park285/shared-go/v2 v2.26.1 h1:+PGq64xD/M/BKDdZ/z+T3nXB+4THBiK1TTmbpnOcYRY=

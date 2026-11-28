@@ -15,7 +15,7 @@ require (
 	github.com/park285/iris-client-go/v6 v6.1.0
 	github.com/park285/shared-go/core v1.0.0
 	github.com/park285/shared-go/postgres v1.0.4
-	github.com/park285/shared-go/sqlite v1.0.1
+	github.com/park285/shared-go/sqlite v1.0.2
 	github.com/park285/shared-go/transport v1.0.1
 	github.com/park285/shared-go/v2 v2.26.1
 	github.com/prometheus/client_golang v1.25.0
