@@ -10,16 +10,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	prunePlanRetainedRows = 20000
-	prunePlanExpiredRows  = 5
-	prunePlanBatchSize    = 100
-)
+const prunePlanBatchSize = 100
 
-func TestDurablePruneUsesTerminalIndexesInsteadOfScanningRetainedHistory(t *testing.T) {
+func TestDurablePruneUsesTerminalIndexesInsteadOfScanningLedgers(t *testing.T) {
+	for _, backlog := range []struct {
+		name              string
+		retained, expired int
+	}{
+		{name: "few_expired", retained: 20000, expired: 5},
+		{name: "mostly_expired", retained: 500, expired: 20000},
+	} {
+		t.Run(backlog.name, func(t *testing.T) {
+			assertDurablePruneUsesTerminalIndexes(t, backlog.retained, backlog.expired)
+		})
+	}
+}
+
+func assertDurablePruneUsesTerminalIndexes(t *testing.T, retained, expired int) {
+	t.Helper()
+
 	store := newTestStore(t)
 	ctx := t.Context()
-	seedPrunePlanLedgers(ctx, t, store)
+	seedPrunePlanLedgers(ctx, t, store, retained, expired)
 
 	now := time.Now().UnixMilli()
 	terminalCutoff := now - (8 * 24 * time.Hour).Milliseconds()
@@ -38,7 +50,7 @@ func TestDurablePruneUsesTerminalIndexesInsteadOfScanningRetainedHistory(t *test
 			details := explainQueryPlan(ctx, t, store, tc.query, tc.args...)
 
 			for _, detail := range details {
-				assert.NotEqual(t, "SCAN "+tc.relation, detail, "prune must not scan retained %s history", tc.relation)
+				assert.NotEqual(t, "SCAN "+tc.relation, detail, "prune must not scan %s", tc.relation)
 			}
 
 			assert.True(t, usesNamedIndex(details, tc.relation), "prune must search %s through an index: %v", tc.relation, details)
@@ -46,11 +58,11 @@ func TestDurablePruneUsesTerminalIndexesInsteadOfScanningRetainedHistory(t *test
 	}
 }
 
-func seedPrunePlanLedgers(ctx context.Context, t *testing.T, store *Store) {
+func seedPrunePlanLedgers(ctx context.Context, t *testing.T, store *Store, retainedRows, expiredRows int) {
 	t.Helper()
 
 	now := time.Now()
-	expired, retained := now.Add(-9*24*time.Hour).UnixMilli(), now.Add(-24*time.Hour).UnixMilli()
+	expiredAt, retainedAt := now.Add(-9*24*time.Hour).UnixMilli(), now.Add(-24*time.Hour).UnixMilli()
 
 	statements := []string{
 		`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?1)
@@ -75,7 +87,7 @@ func seedPrunePlanLedgers(ctx context.Context, t *testing.T, store *Store) {
 	}
 
 	for i, statement := range statements {
-		_, err := store.Exec(ctx, statement, prunePlanRetainedRows+prunePlanExpiredRows, prunePlanExpiredRows, expired, retained)
+		_, err := store.Exec(ctx, statement, retainedRows+expiredRows, expiredRows, expiredAt, retainedAt)
 		require.NoError(t, err, "seed prune plan statement %d", i)
 	}
 
