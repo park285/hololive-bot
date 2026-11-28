@@ -79,7 +79,7 @@ Runtime service names:
 
 `collector` rollback은 Go binary/image, bundled Node helper, worker profile, Quadlet drop-in(c·b) 또는 native release, paired issuer를 함께 보존한 revision 단위입니다. Binary-only rollback과 schema/data rollback은 허용하지 않습니다. migration 218 이후에는 typed `last_failure_*`를 쓰지 않는 pre-177 collector image가 rollback 대상이 아닙니다. 실제 fleet/DB 계약을 만족하는 pair만 사용하며, 이 문서의 로컬 준비가 운영 canary·rollback 실행을 뜻하지 않습니다.
 
-`hololive-api`의 bot durable 상태(`bot_webhook_inbox`·`bot_reply_outbox`·명령 기록·nonce)는 SQLite 저장소(`BOT_DURABLE_STORE_PATH`)에 있습니다. PostgreSQL에서 SQLite로 전환한 뒤에는 PostgreSQL의 같은 표가 갱신되지 않으므로 전환 전 image는 멈춘 시점의 행을 다시 처리합니다. 따라서 `docs/current/runbooks/hololive-api.md`의 전환·rollback 절차가 우선하며, 전환 뒤에는 image rollback 대신 현재 durable runtime을 fix-forward합니다.
+`hololive-api`의 bot durable 상태(`bot_webhook_inbox`·`bot_reply_outbox`·명령 기록·nonce)는 SQLite 저장소(`BOT_DURABLE_STORE_PATH`)에 있습니다. PostgreSQL의 같은 표는 migration 014가 지웠으므로 SQLite 전환 전 image는 rollback 대상이 아닙니다. bot durable 상태는 image rollback 대신 현재 durable runtime을 fix-forward합니다.
 
 ### RichText 저장 요청과의 경계
 

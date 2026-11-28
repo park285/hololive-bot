@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/sqlite/sqlitedb"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
@@ -107,7 +108,7 @@ func (r *durableRuntime) settleOutboxDispatch(
 	token, status, irisRequestID string,
 	dispatchErr error,
 ) (bool, error) {
-	settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.settlementTimeout)
+	settleCtx, cancel := context.WithTimeout(sqlitedb.WithWritePriority(context.WithoutCancel(ctx)), r.settlementTimeout)
 	defer cancel()
 
 	if status == durability.ReplyOutboxAccepted {

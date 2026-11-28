@@ -17,12 +17,11 @@ const adminOperator = "operator@example.com"
 
 func TestRunRejectsMalformedInvocations(t *testing.T) {
 	for name, args := range map[string][]string{
-		"no command":         nil,
-		"unknown command":    {"replay"},
-		"missing outbox id":  {"grant-replay", "--actor=" + adminOperator, "--reason=incident"},
-		"positional args":    {"discard", "--outbox-id=1", "extra"},
-		"import positionals": {"import-postgres", "now"},
-		"list limit zero":    {"list-manual-review", "--limit=0"},
+		"no command":        nil,
+		"unknown command":   {"replay"},
+		"missing outbox id": {"grant-replay", "--actor=" + adminOperator, "--reason=incident"},
+		"positional args":   {"discard", "--outbox-id=1", "extra"},
+		"list limit zero":   {"list-manual-review", "--limit=0"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			require.Equal(t, exitUsage, Run(t.Context(), args, io.Discard, io.Discard))

@@ -6,7 +6,10 @@
 
 ## 미출시
 
-- **security workflow의 shared-go 고정 commit 갱신:** `go.work`가 r1.2.22부터 `../shared-go/sqlite`를 쓰는데, security workflow는 이 모듈이 없는 `postgres/v1.0.4` commit을 받아 main의 NilAway와 govulncheck가 모듈을 읽지 못하고 실패했습니다. 고정 commit을 `sqlite/v1.0.0`(`3a5abfd`)으로 올렸습니다. 검사 내용은 바뀌지 않습니다.
+- **PostgreSQL bot plane 표와 함수 삭제(migration 014):** r1.2.22에서 SQLite로 옮긴 bot plane 표 7개(`bot_webhook_inbox`·`bot_webhook_heads`·`bot_command_executions`·`bot_reply_outbox`·감사 두 표·`bot_webhook_nonces`)와 `reserve_bot_webhook_nonce`·replay·discard·감사 trigger 함수 7개를 PostgreSQL에서 지웁니다. 이 표는 r1.2.22 전환 뒤 갱신되지 않았고 현행 runtime은 읽거나 쓰지 않습니다. 일회성 이관 명령 `bot-durable-admin import-postgres`와 그 SQLite 적재 경로, PostgreSQL bot 표를 검사하던 시험도 지웠습니다. head 계약은 표·함수가 없음을 확인합니다. 014는 대기 migration 적용 창(collector 정지 뒤 `--resume`)에서 적용합니다. PostgreSQL bot 표를 쓰던 r1.2.21 이하 API로는 이 migration 뒤에 돌아갈 수 없습니다. Fallback delta: none.
+- **정산 쓰기 우선순위 복원:** PostgreSQL 시절 `pgxdb.WithControlAcquire`가 webhook 정산·reply 정산·heartbeat·handoff claim 9곳에 주던 우선 획득이 SQLite 전환에서 빠졌습니다. 이 9곳에 shared-go `sqlite/v1.0.1`의 `sqlitedb.WithWritePriority`를 다시 표시해, 대기 중인 일반 쓰기보다 먼저 SQLite writer를 받게 했습니다.
+- **bot plane 작업자 지표 label:** `bot_webhook_inbox`·`bot_reply_outbox` 작업자의 `queue_backend` label이 `postgres`에서 `sqlite`로 바뀝니다. 두 작업자는 r1.2.22부터 SQLite 상태 DB를 씁니다.
+- **security workflow의 shared-go 고정 commit 갱신:** `go.work`가 r1.2.22부터 `../shared-go/sqlite`를 쓰는데, security workflow는 이 모듈이 없는 `postgres/v1.0.4` commit을 받아 main의 NilAway와 govulncheck가 모듈을 읽지 못하고 실패했습니다. 고정 commit을 `sqlite/v1.0.1`(`78b8d8a`)으로 올렸습니다. 검사 내용은 바뀌지 않습니다.
 
 ## r1.2.22 - 2026-11-28
 
