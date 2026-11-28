@@ -104,7 +104,8 @@ func TestScheduleCardRendererCopiesRowsIntoCard(t *testing.T) {
 func scheduleItemEqual(a, b schedulecard.Item) bool {
 	return a.Day.Equal(b.Day) && a.Start == b.Start && a.End == b.End && a.Status == b.Status && a.Title == b.Title &&
 		slices.Equal(a.With, b.With) && a.Place == b.Place && slices.Equal(a.Tags, b.Tags) && a.Note == b.Note &&
-		a.PrevStart == b.PrevStart && a.MovedFrom.Equal(b.MovedFrom) && a.Converted == b.Converted && a.FromPost == b.FromPost
+		a.PrevStart == b.PrevStart && a.MovedFrom.Equal(b.MovedFrom) && a.Converted == b.Converted && a.FromPost == b.FromPost &&
+		a.Highlight == b.Highlight
 }
 
 func TestScheduleCardMovesTheWindowWithTheConvertedPoster(t *testing.T) {
@@ -121,7 +122,7 @@ func TestScheduleCardMovesTheWindowWithTheConvertedPoster(t *testing.T) {
 		},
 	}
 
-	card := newScheduleCard(scheduleCardMember(), schedule, nil)
+	card := newScheduleCard(scheduleCardMember(), schedule, nil, nil)
 	if !card.WeekStart.Equal(novemberDay(10)) || !card.WeekEnd.Equal(novemberDay(16)) {
 		t.Fatalf("card week = %s..%s, want the poster week moved by one day", card.WeekStart, card.WeekEnd)
 	}
@@ -255,7 +256,7 @@ func TestScheduleCardMarksTimeChangesByCardDay(t *testing.T) {
 		},
 	}
 
-	card := newScheduleCard(scheduleCardMember(), schedule, nil)
+	card := newScheduleCard(scheduleCardMember(), schedule, nil, nil)
 	want := []schedulecard.Item{
 		{Day: novemberDay(13), Start: late25, PrevStart: late23, Status: schedulecard.StatusPlanned, Title: "늦춘 방송"},
 		{Day: novemberDay(13), PrevStart: late25, Status: schedulecard.StatusTentative, Title: "미정 방송"},
@@ -372,7 +373,7 @@ func TestScheduleCardRendererDoesNotShareInFlightDrawAcrossChanges(t *testing.T)
 			}
 
 			got := <-nextDone
-			want := newScheduleCard(member, next, nil)
+			want := newScheduleCard(member, next, nil, nil)
 
 			if startedDraws != 2 || len(got) != 1 || !bytes.Equal(got[0], slices.Concat(pngSignature, []byte(want.Items[0].Title), []byte(want.Items[2].Status))) {
 				t.Fatalf("%s: draws in flight = %d, next card = %q; want its own draw of its own changes", name, startedDraws, got)
@@ -840,5 +841,93 @@ func TestScheduleCardRendererReturnsDrawPanicAsError(t *testing.T) {
 
 	if data, err := renderer.RenderScheduleCards(t.Context(), scheduleCardMember(), scheduleCardSchedule(1), cardtemplate.Classic); err != nil || len(data) != 1 || !isPNGData(data[0]) || len(drawer.cards) != 1 {
 		t.Fatalf("after panic = %q, %v, draws = %d; want a fresh draw", data, err, len(drawer.cards))
+	}
+}
+
+func highlightedSchedule() scheduleposter.PublishedSchedule {
+	schedule := scheduleCardSchedule(1)
+	recorded := schedule.ExtractedAt.Add(time.Hour)
+
+	schedule.Changes = []scheduleposter.Change{
+		recordedChange(scheduleposter.Change{PostID: 101, Item: 1, Kind: scheduleposter.ChangeTimeChanged, Slot: 1, Start: new("21:30")}, recorded),
+		recordedChange(scheduleposter.Change{PostID: 102, Item: 1, Kind: scheduleposter.ChangeCancelled, Slot: 2, Status: scheduleposter.RowCancelled}, recorded),
+		recordedChange(scheduleposter.Change{PostID: 102, Item: 2, Kind: scheduleposter.ChangeAdded, Day: novemberDay(13), Start: new("20:00"), Status: scheduleposter.RowPlanned, TitleKo: "추가 방송"}, recorded),
+	}
+
+	return schedule
+}
+
+func highlightedTitles(card schedulecard.Card) []string {
+	var titles []string
+
+	for i := range card.Items {
+		if card.Items[i].Highlight {
+			titles = append(titles, card.Items[i].Title)
+		}
+	}
+
+	return titles
+}
+
+func TestScheduleCardRendererHighlightsOnlyTheNoticedPosts(t *testing.T) {
+	drawer := &recordingCardDrawer{}
+	renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
+	schedule := highlightedSchedule()
+
+	for _, tc := range []struct {
+		posts []int64
+		want  []string
+	}{
+		{[]int64{102}, []string{"게임", "추가 방송"}},
+		{[]int64{102, 101}, []string{"잡담", "게임", "추가 방송"}},
+	} {
+		if _, err := renderer.RenderScheduleChangeCards(t.Context(), scheduleCardMember(), schedule, cardtemplate.Classic, tc.posts); err != nil {
+			t.Fatalf("RenderScheduleChangeCards(%v) error = %v", tc.posts, err)
+		}
+
+		if got := highlightedTitles(drawer.cards[len(drawer.cards)-1]); !slices.Equal(got, tc.want) {
+			t.Fatalf("posts %v highlighted = %v, want %v", tc.posts, got, tc.want)
+		}
+	}
+
+	for _, posts := range [][]int64{nil, {0}} {
+		if _, err := renderer.RenderScheduleChangeCards(t.Context(), scheduleCardMember(), schedule, cardtemplate.Classic, posts); !errors.Is(err, schedulecard.ErrInvalidCard) {
+			t.Fatalf("RenderScheduleChangeCards(%v) error = %v, want ErrInvalidCard", posts, err)
+		}
+	}
+}
+
+func TestScheduleCardRendererKeepsHighlightedCardsOutOfTheCaches(t *testing.T) {
+	store := newTestCalendarImageCache(t)
+	drawer := &recordingCardDrawer{}
+	member := scheduleCardMember()
+	schedule := highlightedSchedule()
+
+	newRenderer := func() *ScheduleCardRenderer {
+		renderer := newScheduleCardRenderer(schedulecard.Format3x4, 4, drawer.draw)
+
+		renderer.shared = newScheduleCardSharedCache(store)
+
+		return renderer
+	}
+
+	renderer := newRenderer()
+
+	plain, err := renderer.RenderScheduleCards(t.Context(), member, schedule, cardtemplate.Classic)
+	if err != nil || len(drawer.cards) != 1 || len(highlightedTitles(drawer.cards[0])) != 0 {
+		t.Fatalf("plain render = %v, draws = %d; want one unmarked draw", err, len(drawer.cards))
+	}
+
+	for i := range 2 {
+		if _, err := renderer.RenderScheduleChangeCards(t.Context(), member, schedule, cardtemplate.Classic, []int64{102}); err != nil || len(drawer.cards) != 2+i {
+			t.Fatalf("change render %d = %v, draws = %d; want a fresh draw every time", i+1, err, len(drawer.cards))
+		}
+	}
+
+	for _, r := range []*ScheduleCardRenderer{renderer, newRenderer()} {
+		again, err := r.RenderScheduleCards(t.Context(), member, schedule, cardtemplate.Classic)
+		if err != nil || len(drawer.cards) != 3 || !slices.EqualFunc(again, plain, bytes.Equal) {
+			t.Fatalf("plain render after change renders = %v, draws = %d; want the cached unmarked card", err, len(drawer.cards))
+		}
 	}
 }

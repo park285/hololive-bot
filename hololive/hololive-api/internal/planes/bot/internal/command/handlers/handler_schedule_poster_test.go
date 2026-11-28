@@ -48,12 +48,23 @@ type scheduleCardStub struct {
 	member   *domain.Member
 	schedule scheduleposter.PublishedSchedule
 	calls    int
+	changed  []int64
 }
 
 func (s *scheduleCardStub) RenderScheduleCards(_ context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID) ([][]byte, error) {
 	s.calls++
 
-	s.member, s.schedule, s.template = member, schedule, template
+	s.member, s.schedule, s.template, s.changed = member, schedule, template, nil
+
+	return s.data, s.err
+}
+
+func (s *scheduleCardStub) RenderScheduleChangeCards(_ context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID,
+	postIDs []int64,
+) ([][]byte, error) {
+	s.calls++
+
+	s.member, s.schedule, s.template, s.changed = member, schedule, template, postIDs
 
 	return s.data, s.err
 }

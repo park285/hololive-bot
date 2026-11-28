@@ -75,7 +75,7 @@ var (
 	noticeRowsSQL        = withFragment("card_rows.sql", "card_poster", mustSQL("notice_poster.sql"))
 	lockPosterSQL        = mustSQL("lock_poster_schedule.sql")
 	currentChangeSQL     = mustSQL("current_change.sql")
-	noticePostCurrentSQL = withFragment("notice_post_current.sql", "current_change", currentChangeSQL)
+	noticeChangePostsSQL = withFragment("notice_change_posts.sql", "current_change", currentChangeSQL)
 	settleNoticeSQL      = withFragment("settle_notice.sql", "current_change", currentChangeSQL)
 )
 

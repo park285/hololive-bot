@@ -42,6 +42,7 @@ type orbitRow struct {
 	label         string
 	kind          timeKind
 	status        Status
+	marked        bool
 	ordinal       int
 	y, h          float64
 }
@@ -147,7 +148,7 @@ func measureOrbitRow(f *fontSet, s slot, ordinal int) orbitRow {
 	detail := orbitWrap(f, orbitDetailText, sub, width-12, width-12)
 
 	return orbitRow{
-		title: title, detail: detail, label: label, kind: kind, status: s.status, ordinal: ordinal,
+		title: title, detail: detail, label: label, kind: kind, status: s.status, marked: s.highlight, ordinal: ordinal,
 		h: orbitRowHeight(len(title), len(detail)),
 	}
 }

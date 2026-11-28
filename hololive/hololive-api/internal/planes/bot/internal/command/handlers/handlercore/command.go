@@ -71,6 +71,7 @@ type SchedulePosterReader interface {
 
 type ScheduleCardRenderer interface {
 	RenderScheduleCards(ctx context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID) ([][]byte, error)
+	RenderScheduleChangeCards(ctx context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID, postIDs []int64) ([][]byte, error)
 }
 
 type BroadcastHistoryQuery struct {

@@ -486,6 +486,8 @@ func melaOffBar(c *canvas, p melaPal, b box, s slot) {
 	c.Fill(xf(rrect(-tw/2, -th/2, tw, th, 8), tm), p.white)
 	c.Fill(xf(rrect(-tw/2+3.5, -th/2+3.5, tw-7, th-7, 5), tm), hex(0xA9DCFF))
 
+	c.Fill(xf(label.markShape(c, -lw/2, 0), tm), markInk)
+
 	mainS, subS := label.shape(c, -lw/2, 0)
 	c.Fill(xf(mainS, tm), p.navy)
 	c.Fill(xf(subS, tm), p.sub)

@@ -20,6 +20,7 @@ import (
 type noticeStoreStub struct {
 	queue     []scheduleposter.Notice
 	current   bool
+	alsoPosts []int64
 	schedule  scheduleposter.PublishedSchedule
 	found     bool
 	posterIDs []int64
@@ -50,8 +51,12 @@ func (s *noticeStoreStub) MemberPosterRows(_ context.Context, posterID int64, _ 
 	return s.schedule, cardtemplate.Classic, s.found, nil
 }
 
-func (s *noticeStoreStub) NoticePostCurrent(context.Context, scheduleposter.Notice) (bool, error) {
-	return s.current, nil
+func (s *noticeStoreStub) NoticeChangePosts(_ context.Context, notice scheduleposter.Notice) ([]int64, error) {
+	if !s.current {
+		return s.alsoPosts, nil
+	}
+
+	return append([]int64{notice.PostID}, s.alsoPosts...), nil
 }
 
 func (s *noticeStoreStub) SettleNotice(_ context.Context, notice scheduleposter.Notice, status scheduleposter.NoticeStatus, rooms int) error {
@@ -132,6 +137,7 @@ func TestScheduleNoticeSendsOneRenderedCardToEveryLiveRoom(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, handled)
 	require.Equal(t, 1, cards.calls, "모든 방이 같은 그림을 받도록 한 번만 그린다")
+	require.Nil(t, cards.changed, "새 일정표 알림은 표시 없는 원본 카드를 보낸다")
 	require.Equal(t, []int64{7}, store.posterIDs)
 	require.Equal(t, []noticeSettlement{{id: 9, status: scheduleposter.NoticeSent, rooms: 2}}, store.settled)
 
@@ -169,11 +175,14 @@ func TestScheduleNoticeKeepsSendingToOtherRoomsAndStaysPendingAfterARoomFails(t 
 }
 
 func TestScheduleNoticeAnnouncesAnAppliedChangeWithThePost(t *testing.T) {
-	notifier, store, _, _, sends := scheduleNoticeFixture(t, claimedNotice(scheduleposter.NoticeChanged), []string{"100"}, "")
+	notifier, store, cards, _, sends := scheduleNoticeFixture(t, claimedNotice(scheduleposter.NoticeChanged), []string{"100"}, "")
+
+	store.alsoPosts = []int64{2054825907916054600}
 
 	_, err := notifier.NotifyNext(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, []int64{7}, store.posterIDs, "변경 알림도 알림의 포스터를 그린다")
+	require.Equal(t, []int64{2054825907916054528, 2054825907916054600}, cards.changed, "변경 알림 카드는 함께 닫히는 변경까지 표시한다")
 	require.True(t, strings.HasSuffix((*sends)[0].message, " 일정이 변경되었습니다.\nhttps://x.com/i/status/2054825907916054528"), (*sends)[0].message)
 	require.Equal(t, []noticeSettlement{{id: 9, status: scheduleposter.NoticeSent, rooms: 1}}, store.settled)
 }
@@ -188,19 +197,23 @@ func TestScheduleNoticeSkipsWithoutSendingWhenTheNoticeNoLongerHolds(t *testing.
 	unknown.ChannelID = "UC_unknown"
 
 	for name, tt := range map[string]struct {
-		notice  scheduleposter.Notice
-		current bool
-		found   bool
+		notice    scheduleposter.Notice
+		current   bool
+		alsoPosts []int64
+		found     bool
 	}{
 		"expired":           {notice: expired, current: true, found: true},
 		"unknown member":    {notice: unknown, current: true, found: true},
 		"change superseded": {notice: claimedNotice(scheduleposter.NoticeChanged), current: false, found: true},
-		"poster gone":       {notice: claimedNotice(scheduleposter.NoticePublished), current: true, found: false},
+		"only other changes current": {
+			notice: claimedNotice(scheduleposter.NoticeChanged), current: false, alsoPosts: []int64{2054825907916054600}, found: true,
+		},
+		"poster gone": {notice: claimedNotice(scheduleposter.NoticePublished), current: true, found: false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			notifier, store, cards, lister, sends := scheduleNoticeFixture(t, tt.notice, []string{"100"}, "")
 
-			store.current, store.found = tt.current, tt.found
+			store.current, store.alsoPosts, store.found = tt.current, tt.alsoPosts, tt.found
 
 			handled, err := notifier.NotifyNext(t.Context())
 			require.NoError(t, err)

@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,10 +44,16 @@ type scheduleCardKey struct {
 	variant       string
 	memberName    string
 	photo         string
+	highlight     string
 }
 
 func (k scheduleCardKey) String() string {
-	return fmt.Sprintf("%d:%d:%d:%d:%d:%s:%s:%q:%q:%q", k.posterID, k.extractedAtNS, k.changedAtNS, k.editedAtNS, k.changes, k.format, k.template, k.variant, k.memberName, k.photo)
+	key := fmt.Sprintf("%d:%d:%d:%d:%d:%s:%s:%q:%q:%q", k.posterID, k.extractedAtNS, k.changedAtNS, k.editedAtNS, k.changes, k.format, k.template, k.variant, k.memberName, k.photo)
+	if k.highlight != "" {
+		key += ":highlight=" + k.highlight
+	}
+
+	return key
 }
 
 func (k scheduleCardKey) shared() (string, [sha256.Size]byte) {
@@ -131,6 +139,22 @@ func newScheduleCardRenderer(format schedulecard.Format, cacheLimit int, draw fu
 }
 
 func (r *ScheduleCardRenderer) RenderScheduleCards(ctx context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID) ([][]byte, error) {
+	return r.render(ctx, member, schedule, template, nil)
+}
+
+func (r *ScheduleCardRenderer) RenderScheduleChangeCards(ctx context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID,
+	postIDs []int64,
+) ([][]byte, error) {
+	if len(postIDs) == 0 || slices.ContainsFunc(postIDs, func(id int64) bool { return id <= 0 }) {
+		return nil, fmt.Errorf("%w: highlight post ids must be positive, got %v", schedulecard.ErrInvalidCard, postIDs)
+	}
+
+	return r.render(ctx, member, schedule, template, slices.Sorted(slices.Values(postIDs)))
+}
+
+func (r *ScheduleCardRenderer) render(ctx context.Context, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID,
+	highlight []int64,
+) ([][]byte, error) {
 	if member == nil {
 		return nil, errors.New("render schedule card: member is nil")
 	}
@@ -145,6 +169,8 @@ func (r *ScheduleCardRenderer) RenderScheduleCards(ctx context.Context, member *
 
 	variant := r.variants.pick(member.ChannelID, schedulecard.Variants(member.ChannelID, r.format, template))
 	key := newScheduleCardKey(member, &schedule, r.format, template, variant)
+
+	key.highlight = highlightKey(highlight)
 
 	if pages, ok := r.cachedPages(key); ok {
 		return pages, nil
@@ -161,7 +187,7 @@ func (r *ScheduleCardRenderer) RenderScheduleCards(ctx context.Context, member *
 		err := panicguard.RunE(slog.Default(), panicscope.BackgroundTask, "schedule-card-render", func() error {
 			var renderErr error
 
-			pages, renderErr = r.renderAndStore(workCtx, key, member, schedule)
+			pages, renderErr = r.renderAndStore(workCtx, key, member, schedule, highlight)
 
 			if renderErr != nil && errors.Is(renderErr, context.DeadlineExceeded) && workCtx.Err() != nil {
 				return context.Cause(workCtx)
@@ -227,18 +253,18 @@ func scheduleWorkContext(parent context.Context, template cardtemplate.ID) (cont
 	return context.WithTimeout(parent, photoFetchBudget+budget)
 }
 
-func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleCardKey, member *domain.Member, schedule scheduleposter.PublishedSchedule) ([][]byte, error) {
+func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleCardKey, member *domain.Member, schedule scheduleposter.PublishedSchedule,
+	highlight []int64,
+) ([][]byte, error) {
 	if pages, ok := r.cachedPages(key); ok {
 		return pages, nil
 	}
 
-	sharedKey, hash := key.shared()
-	if record, ok := r.shared.read(ctx, sharedKey); ok && len(record) > len(hash) && bytes.Equal(record[:len(hash)], hash[:]) {
-		body := record[len(hash):]
-		if pages, valid := decodeSchedulePages(body); valid {
-			r.cache.putImmutable(key, body)
+	cacheable := len(highlight) == 0
 
-			return cloneSchedulePages(pages), nil
+	if cacheable {
+		if pages, ok := r.sharedPages(ctx, key); ok {
+			return pages, nil
 		}
 	}
 
@@ -255,7 +281,7 @@ func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleC
 
 	photo := photos.photos[member.Photo]
 
-	card := newScheduleCard(member, schedule, photo)
+	card := newScheduleCard(member, schedule, photo, highlight)
 
 	card.Variant = key.variant
 
@@ -272,7 +298,8 @@ func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleC
 		return nil, err
 	}
 
-	if photos.cachePolicy.memoryCacheable && (member.Photo == "" || photo != nil) {
+	if cacheable && photos.cachePolicy.memoryCacheable && (member.Photo == "" || photo != nil) {
+		sharedKey, hash := key.shared()
 		if record := encodeSchedulePages(hash, pages); record != nil {
 			r.cache.putImmutable(key, record[len(hash):])
 			r.shared.write(ctx, sharedKey, record)
@@ -280,6 +307,26 @@ func (r *ScheduleCardRenderer) renderAndStore(ctx context.Context, key scheduleC
 	}
 
 	return pages, nil
+}
+
+func (r *ScheduleCardRenderer) sharedPages(ctx context.Context, key scheduleCardKey) ([][]byte, bool) {
+	sharedKey, hash := key.shared()
+
+	record, ok := r.shared.read(ctx, sharedKey)
+	if !ok || len(record) <= len(hash) || !bytes.Equal(record[:len(hash)], hash[:]) {
+		return nil, false
+	}
+
+	body := record[len(hash):]
+
+	pages, valid := decodeSchedulePages(body)
+	if !valid {
+		return nil, false
+	}
+
+	r.cache.putImmutable(key, body)
+
+	return cloneSchedulePages(pages), true
 }
 
 func validateScheduleAlbum(pages [][]byte) error {
@@ -304,7 +351,7 @@ func validateScheduleAlbum(pages [][]byte) error {
 	return nil
 }
 
-func newScheduleCard(member *domain.Member, schedule scheduleposter.PublishedSchedule, photo image.Image) schedulecard.Card {
+func newScheduleCard(member *domain.Member, schedule scheduleposter.PublishedSchedule, photo image.Image, highlight []int64) schedulecard.Card {
 	slots := schedule.Slots()
 	items := make([]schedulecard.Item, len(slots))
 
@@ -323,6 +370,7 @@ func newScheduleCard(member *domain.Member, schedule scheduleposter.PublishedSch
 			Place:     slot.PlaceKo,
 			Tags:      slot.TagsKo,
 			Note:      slot.NoteKo,
+			Highlight: changedBy(slot, highlight),
 		}
 
 		if slot.TimeChanged {
@@ -347,6 +395,20 @@ func setTimeChange(item *schedulecard.Item, slot *scheduleposter.Slot) {
 	} else {
 		item.MovedFrom = slot.OrigDay
 	}
+}
+
+func changedBy(slot *scheduleposter.Slot, postIDs []int64) bool {
+	return slices.ContainsFunc(slot.Steps, func(step scheduleposter.Step) bool { return slices.Contains(postIDs, step.PostID) })
+}
+
+func highlightKey(postIDs []int64) string {
+	parts := make([]string, len(postIDs))
+
+	for i, id := range postIDs {
+		parts[i] = strconv.FormatInt(id, 10)
+	}
+
+	return strings.Join(parts, ",")
 }
 
 func fromPost(slot *scheduleposter.Slot) bool {

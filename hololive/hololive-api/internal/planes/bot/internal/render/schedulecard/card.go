@@ -56,6 +56,7 @@ type Item struct {
 	Place     string
 	Tags      []string
 	Note      string
+	Highlight bool
 }
 
 type Card struct {

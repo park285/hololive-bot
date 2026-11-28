@@ -896,7 +896,7 @@ func countShown(days []day) int {
 
 	for _, d := range days {
 		for _, s := range d.slots {
-			n += max(1, s.more)
+			n += int(max(1, s.more))
 		}
 	}
 
@@ -1294,5 +1294,64 @@ func TestRenderConcurrent(t *testing.T) {
 
 	for _, err := range errs {
 		t.Error(err)
+	}
+}
+
+func TestPrepareKeepsHighlightThroughFoldedAndMergedSlots(t *testing.T) {
+	marked := func(it Item) Item {
+		it.Highlight = true
+
+		return it
+	}
+
+	items := append(make([]Item, 0, 3+maxSlotsPerDay+1),
+		Item{Day: date(t, "2026-11-10"), Status: StatusOff, Title: "휴방"},
+		marked(Item{Day: date(t, "2026-11-10"), Status: StatusOff, Title: "휴식"}),
+		planned(t, "2026-11-11", at20, "그대로"),
+	)
+
+	for i := range maxSlotsPerDay + 1 {
+		item := planned(t, "2026-11-12", fmt.Sprintf("%02d:00", 14+i), fmt.Sprintf("방송 %d", i+1))
+		if i == maxSlotsPerDay {
+			item = marked(item)
+		}
+
+		items = append(items, item)
+	}
+
+	v, err := prepare(weekCard(t, items...), everyRune)
+	if err != nil {
+		t.Fatalf("prepare() error = %v", err)
+	}
+
+	marks := func(slots []slot) []bool {
+		out := make([]bool, len(slots))
+		for i, s := range slots {
+			out[i] = s.highlight
+		}
+
+		return out
+	}
+
+	if got := marks(v.days[1].slots); !slices.Equal(got, []bool{true}) {
+		t.Errorf("merged off day highlight = %v, want the kept off slot marked", got)
+	}
+
+	if got := marks(v.days[2].slots); !slices.Equal(got, []bool{false}) {
+		t.Errorf("unchanged day highlight = %v, want none", got)
+	}
+
+	thursday := v.days[3].slots
+	if got, last := marks(thursday), thursday[len(thursday)-1]; last.more == 0 || !last.highlight || slices.Contains(got[:len(got)-1], true) {
+		t.Errorf("folded day highlight = %v, want only the summary slot marked", got)
+	}
+
+	fs, err := loadFontSet()
+	if err != nil {
+		t.Fatalf("loadFontSet() error = %v", err)
+	}
+
+	if row := measureOrbitRow(fs, v.days[1].slots[0], 0); !row.marked || !row.segment(0, 1).marked {
+		t.Errorf("orbit row marked = %v, want the highlight carried into the row and its segments", row.marked)
 	}
 }
