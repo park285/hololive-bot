@@ -16,7 +16,6 @@
     {"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5432}},
     {"reject":{"type":"tcp reset"}}
   ]}},
-  {"rule":{"chain":"forward"}}, {"rule":{"chain":"forward"}},
   {"chain":{"hook":"forward","name":"forward_preserve_postgres_source","prio":10}},
   {"rule":{"chain":"forward_preserve_postgres_source","expr":[
     {"match":{"op":"in","left":{"ct":{"key":"status"}},"right":"dnat"}},
@@ -35,9 +34,5 @@
   {"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"udp","field":"dport"}},"right":30006}},{"reject":{"type":"icmpx","expr":"port-unreachable"}}]}},
   {"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"meta":{"key":"iifname"}},"right":"lo"}},{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5433}},{"accept":null}]}},
   {"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"meta":{"key":"iifname"}},"right":"tailscale0"}},{"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"@postgres_sources"}},{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5433}},{"accept":null}]}},
-  {"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5433}},{"reject":{"type":"tcp reset"}}]}},
-  {"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"meta":{"key":"iifname"}},"right":"lo"}},{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5432}},{"accept":null}]}},
-  {"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"meta":{"key":"iifname"}},"right":"tailscale0"}},{"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"@bot_postgres_sources"}},{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5432}},{"accept":null}]}},
-  {"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5432}},{"reject":{"type":"tcp reset"}}]}},
-  {"set":{"name":"bot_postgres_sources","elem":["100.100.1.3"]}}
+  {"rule":{"chain":"input","expr":[{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":5433}},{"reject":{"type":"tcp reset"}}]}}
 ]}
