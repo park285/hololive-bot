@@ -38,11 +38,11 @@ jobs:
           path: hololive-bot
           persist-credentials: false
 
-      - name: Checkout shared-go at postgres/v1.0.4
+      - name: Checkout shared-go at sqlite/v1.0.0
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: park285/shared-go
-          ref: 2e7e60ff1534633b8d1e7528cfd833c6c90f452a
+          ref: 3a5abfd5b3dde1e2d4be2ba9f2b4d7042380a171
           path: shared-go
           persist-credentials: false
 

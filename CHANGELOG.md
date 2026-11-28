@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **security workflow의 shared-go 고정 commit 갱신:** `go.work`가 r1.2.22부터 `../shared-go/sqlite`를 쓰는데, security workflow는 이 모듈이 없는 `postgres/v1.0.4` commit을 받아 main의 NilAway와 govulncheck가 모듈을 읽지 못하고 실패했습니다. 고정 commit을 `sqlite/v1.0.0`(`3a5abfd`)으로 올렸습니다. 검사 내용은 바뀌지 않습니다.
+
 ## r1.2.22 - 2026-11-28
 
 - **bot plane 내구 저장소 PostgreSQL → SQLite 전환:** `hololive-api` bot plane의 webhook inbox·heads, 명령 기록, reply outbox, 감사 두 표, webhook nonce를 `BOT_DURABLE_STORE_PATH`(중앙 Quadlet `/app/bot-durable/bot-durable.db`, 호스트 `/opt/hololive-bot/compose/bot-durable/`)의 SQLite 파일로 옮겼습니다. 이 디렉터리는 `hololive-api`에만 마운트해, `current/data`를 함께 쓰는 collector·alarm-worker가 bot 상태에 접근하지 못하게 합니다. `source-observation-replay-epoch`는 이 변수 없이 실행됩니다. 공용 `shared-go/sqlite`를 쓰며 `<path>.lock` 배타 잠금으로 한 프로세스만 소유합니다. 전환은 `bot-durable-admin import-postgres` 일회성 이관(한 스냅숏, 표·상태별 행 수 대조 뒤 한 트랜잭션 커밋)으로 하며, 운영 전환은 API와 alarm-worker를 `--quiesce`로 멈춘 창에서 일회성 container로 실행합니다(`docs/current/runbooks/hololive-api.md`). 인증된 readiness에 `durable_store`를 추가했습니다. 전환 뒤에는 전환 전 image로 돌아가지 않고 fix-forward합니다. SQLite 파일 백업은 아직 없습니다.
