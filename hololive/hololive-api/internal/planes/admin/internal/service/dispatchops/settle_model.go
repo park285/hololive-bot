@@ -35,7 +35,7 @@ func validateSettlement(group []Delivery, request SettleRequest) error {
 	for index := range group {
 		item := &group[index]
 		if (item.Status != contractsalarm.DispatchStatusDLQ && item.Status != contractsalarm.DispatchStatusQuarantined) ||
-			item.SentAt != nil || item.CancelledAt != nil {
+			item.CancelledAt != nil {
 			return ErrConflict
 		}
 

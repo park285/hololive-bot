@@ -36,18 +36,14 @@ func TestSettlementValidation(t *testing.T) {
 		}
 	}
 
-	for _, sent := range []bool{true, false} {
-		item := Delivery{ID: "1", Status: settlementFailureStatus, UpdatedAt: now}
+	handoffFailed := Delivery{ID: "1", Status: settlementFailureStatus, UpdatedAt: now, SentAt: &now}
+	if err := validateSettlement([]Delivery{handoffFailed}, request); err != nil {
+		t.Fatalf("handoff failure with admission marker rejected: %v", err)
+	}
 
-		if sent {
-			item.SentAt = &now
-		} else {
-			item.CancelledAt = &now
-		}
-
-		if !errors.Is(validateSettlement([]Delivery{item}, request), ErrConflict) {
-			t.Fatalf("terminal marker accepted: sent=%v", sent)
-		}
+	closed := Delivery{ID: "1", Status: settlementFailureStatus, UpdatedAt: now, CancelledAt: &now}
+	if !errors.Is(validateSettlement([]Delivery{closed}, request), ErrConflict) {
+		t.Fatal("closed delivery accepted")
 	}
 
 	request.Action = "quarantine"

@@ -116,3 +116,48 @@ func TestOpsIntegrationRequarantineStartsNewRetention(t *testing.T) {
 		}
 	}
 }
+
+func TestOpsIntegrationSettlementAfterHandoffFailure(t *testing.T) {
+	for _, action := range []string{"cancel", "quarantine"} {
+		t.Run(action, func(t *testing.T) {
+			repo, pool := setupOpsIntegration(t)
+			ids := seedOpsGroup(t, pool, 2, true)
+			ctx := t.Context()
+			if _, err := pool.Exec(ctx, `UPDATE alarm_dispatch_deliveries SET sent_at = dlq_at - interval '5 seconds',
+  last_error_code = 'handoff_failed' WHERE id = ANY($1::bigint[])`, ids); err != nil {
+				t.Fatal(err)
+			}
+			before, err := repo.Detail(ctx, ids[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if before.ReplayBlocked == "" {
+				t.Fatalf("admitted handoff failure must stay blocked from replay: %+v", before)
+			}
+			request := SettleRequest{OperatorID: "operator-1", Reason: "handoff 실패 종결", Action: action}
+			for _, item := range before.Group {
+				request.Targets = append(request.Targets, Revision{ID: item.ID, UpdatedAt: item.UpdatedAt})
+			}
+			result, err := repo.Settle(ctx, ids[0], request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.IDs) != len(before.Group) {
+				t.Fatal(result)
+			}
+			after, err := repo.Detail(ctx, ids[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected := map[string]string{"cancel": "cancelled", "quarantine": "quarantined"}[action]
+			for index, item := range after.Group {
+				if item.Status != expected || item.SentAt == nil || !item.SentAt.Equal(*before.Group[index].SentAt) {
+					t.Fatalf("delivery: %+v", item)
+				}
+			}
+			if after.ReplayBlocked == "" {
+				t.Fatalf("settled handoff failure became replayable: %+v", after)
+			}
+		})
+	}
+}

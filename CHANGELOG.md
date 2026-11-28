@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **handoff 실패 발송의 관리자 취소·격리:** Iris가 요청을 받은 뒤 handoff가 실패한 DLQ(`handoff_failed`)와 확인되지 않은 격리(`handoff_unconfirmed`)에는 `sent_at`이 남습니다. 관리자 `settle`이 이 표식을 이미 보낸 발송으로 보고 409를 돌려줘, 이런 행은 보존 기간 180일이 지날 때까지 발송 실패 건수에 남았습니다. 이제 `sent_at`이 있어도 `dlq`·`quarantined` 묶음을 취소하거나 격리할 수 있습니다. `sent_at`은 보존되므로 수동 재처리 차단은 그대로이고, 상태가 `sent`인 묶음과 이미 취소된 묶음은 계속 거절합니다. Fallback delta: none.
+
 ## r1.2.23 - 2026-11-28
 
 - **PostgreSQL bot plane 표와 함수 삭제(migration 014):** r1.2.22에서 SQLite로 옮긴 bot plane 표 7개(`bot_webhook_inbox`·`bot_webhook_heads`·`bot_command_executions`·`bot_reply_outbox`·감사 두 표·`bot_webhook_nonces`)와 `reserve_bot_webhook_nonce`·replay·discard·감사 trigger 함수 7개를 PostgreSQL에서 지웁니다. 이 표는 r1.2.22 전환 뒤 갱신되지 않았고 현행 runtime은 읽거나 쓰지 않습니다. 일회성 이관 명령 `bot-durable-admin import-postgres`와 그 SQLite 적재 경로, PostgreSQL bot 표를 검사하던 시험도 지웠습니다. head 계약은 표·함수가 없음을 확인합니다. 014는 대기 migration 적용 창(collector 정지 뒤 `--resume`)에서 적용합니다. PostgreSQL bot 표를 쓰던 r1.2.21 이하 API로는 이 migration 뒤에 돌아갈 수 없습니다. Fallback delta: none.
