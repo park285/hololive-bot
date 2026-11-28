@@ -107,7 +107,7 @@ replacement, and failed cutover restoration. No live operation is implied by the
 ## Infra images
 
 `holo-postgres`, `valkey-cache` and `admin-dashboard-ingress` run the official upstream images
-`docker.io/library/postgres:19.0-alpine`, `docker.io/valkey/valkey:9.1.3-alpine3.24` and
+`docker.io/library/postgres:19.0-alpine`, `docker.io/valkey/valkey:9.2.1-alpine3.24` and
 `docker.io/library/nginx:1.31.10-alpine-slim` (`Pull=never`) without a local recipe.
 `./build-all.sh --no-bump --build-only` pulls each from the multi-arch index digest pinned in
 `UPSTREAM_BY_SERVICE` for the target platform and prints the pulled image ID. It does not retag the shared
@@ -118,8 +118,8 @@ pinned digest to a newer upstream release. ChatBotGo loads the same Valkey image
 The Valkey health check runs `valkey-cli` directly, so it works on both the previous owned image and
 the official one: install the new unit files before changing `VALKEY_IMAGE`.
 
-Valkey 9.1.3은 잘못된 `RESTORE` 문자열 길이로 서버가 종료되는 결함과
-Cluster Pub/Sub의 힙 버퍼 오버플로를 고친 버전입니다. 버전 업데이트는 기존
+Valkey 9.2.1은 9.2.0의 TLS 인증서 로딩 회귀와 IO thread·forkless save 충돌을 고친 버전입니다.
+9.2부터 `ZRANGEBYSCORE`·`ZCOUNT` 계열은 `(`만 있거나 빈 점수 경계를 거부합니다. 버전 업데이트는 기존
 인증·소켓·메모리 정책을 유지하며 Cluster나 Sentinel 전환을 포함하지 않습니다.
 `appendonly no`·`save ""` 구성을 재생성하면 메모리 상태가 지워지므로
 소비자별 데이터 보존 계약을 확인한 뒤 승인된 전환 절차를 적용합니다.

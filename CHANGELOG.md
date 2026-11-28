@@ -6,6 +6,8 @@
 
 ## 미출시
 
+- **Valkey 9.2.1:** `valkey-cache` 이미지(이미지 태그, Quadlet `VALKEY_IMAGE`, `build-all.sh` upstream digest `3ad5a213…`)와 시험 fixture를 `valkey:9.2.1-alpine3.24`로 올렸습니다. 9.2.1은 9.2.0의 TLS 인증서 로딩 회귀와 IO thread·forkless save 충돌을 고칩니다. 9.2부터 `ZRANGEBYSCORE`·`ZCOUNT`는 `(`만 있는 점수 경계를 거부하지만, 명령 허용 스크립트는 항상 숫자를 붙인 `(<cutoff>`를 씁니다. `valkey-cache`는 `appendonly no`·`save ""`이므로 다음 배포의 컨테이너 재생성은 메모리 상태를 비웁니다. 이번 변경은 배포하지 않습니다.
+
 ## r1.2.26 - 2026-11-28
 
 - **응답 outbox 정리의 writer 점유 상한:** `durable_prune_outbox.sql`은 종료 상태와 수동 검토 상태를 OR로 묶은 뒤 만료 행 전체를 정렬하고 나서 batch만큼 지웠습니다. 그래서 쓰기 transaction 안의 정렬 비용이 만료 backlog에 비례했고, 통계상 만료 행이 많으면 planner가 retention index 대신 표 전체 SCAN을 골랐습니다. 이제 두 상태를 각자의 partial index 순서로 batch만큼만 읽어 합친 뒤 오래된 순서로 batch를 지우므로, 정렬 입력이 batch의 두 배를 넘지 않습니다. 지우는 행과 순서(`updated_at`, `id`)는 같습니다. 만료 행이 대부분인 경우의 계획 시험과 두 상태에 걸친 정리 순서 시험을 더했습니다. Fallback delta: none.
