@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	defaultValkeyImage = "docker.io/valkey/valkey:9.1.3-alpine3.24"
+	defaultValkeyImage = "docker.io/valkey/valkey:9.2.1-alpine3.24"
 	pinnedValkeyImage  = "localhost/iris-stack-valkey:pinned"
 	staleStart         = "installed Valkey start checks differ from the checkout; run a full sync first"
 	unsupportedOrigin  = "unsupported Quadlet/systemd override origin"

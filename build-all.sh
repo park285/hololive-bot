@@ -29,12 +29,12 @@ declare -A IMAGE_BY_SERVICE=(
     [collector]=localhost/hololive-collector:prod
     [youtube-po-c]=localhost/hololive-youtube-po-sandbox:prod
     [holo-postgres]=docker.io/library/postgres:19.0-alpine
-    [valkey-cache]=docker.io/valkey/valkey:9.1.3-alpine3.24
+    [valkey-cache]=docker.io/valkey/valkey:9.2.1-alpine3.24
     [admin-dashboard-ingress]=docker.io/library/nginx:1.31.10-alpine-slim
 )
 declare -A UPSTREAM_BY_SERVICE=(
     [holo-postgres]=docker.io/library/postgres@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f
-    [valkey-cache]=docker.io/valkey/valkey@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
+    [valkey-cache]=docker.io/valkey/valkey@sha256:3ad5a213cb1bc2fd4a113c89b6248a88655a6bf1dda69519d04e03cd3e3d2742
     [admin-dashboard-ingress]=docker.io/library/nginx@sha256:c293b28729906d97fa5302fce3bd79bd27a3ea9a5d9604e21c6ff0ebf14549fc
 )
 declare -A DOCKERFILE_BY_SERVICE=(

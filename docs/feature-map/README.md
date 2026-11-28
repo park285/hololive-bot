@@ -4,7 +4,7 @@
 
 ## 시작과 증거
 
-저장소 루트에서 Go 1.27.4와 `go.work`의 형제 모듈, 로컬 Podman, OpenSSL, jq를 준비한다. 스크립트는 이미 떠 있는 자원을 쓰지 않고 매번 DB·Valkey·개발 인증서를 새로 만들고 저장소의 시험 프로필을 복사한다. PostgreSQL은 dbtest의 `postgres:19.0-alpine` 고정 digest, Valkey는 `docker.io/valkey/valkey:9.1.3-alpine3.24` 고정 digest 로컬 이미지가 있어야 한다. 이미지를 자동으로 받지 않는다. 실제 앱, H3 요청기와 dbtest 마이그레이션을 빌드하며 웹훅이나 관리 API 주소를 환경에서 물려받지 않는다.
+저장소 루트에서 Go 1.27.4와 `go.work`의 형제 모듈, 로컬 Podman, OpenSSL, jq를 준비한다. 스크립트는 이미 떠 있는 자원을 쓰지 않고 매번 DB·Valkey·개발 인증서를 새로 만들고 저장소의 시험 프로필을 복사한다. PostgreSQL은 dbtest의 `postgres:19.0-alpine` 고정 digest, Valkey는 `docker.io/valkey/valkey:9.2.1-alpine3.24` 고정 digest 로컬 이미지가 있어야 한다. 이미지를 자동으로 받지 않는다. 실제 앱, H3 요청기와 dbtest 마이그레이션을 빌드하며 웹훅이나 관리 API 주소를 환경에서 물려받지 않는다.
 
 ```bash
 scripts/verify/hololive-runtime.sh --help

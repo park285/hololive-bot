@@ -8,6 +8,7 @@
 
 - **SQLite 통계 갱신:** hololive-api의 `shared-go/sqlite`를 v1.0.2(`36a1225`)로 올렸습니다. bot plane 상태 DB를 열 때, 마이그레이션 뒤, 그리고 한 시간마다 `PRAGMA optimize`가 통계를 만들고 갱신합니다. 대표 행을 넣은 시험 DB에서 durability 쿼리의 계획은 바뀌지 않았습니다. security workflow가 받는 shared-go 고정 commit도 `sqlite/v1.0.2`(`36a1225`)로 올렸습니다. 검사 내용은 바뀌지 않습니다. Fallback delta: none.
 - **의존성 최신화:** Go 5개 모듈의 `quic-go` v0.66.0, `miniredis/v2` v2.41.0, `moby/sys/user` v0.5.1, `cloud.google.com/go/auth` v0.24.5, `google.golang.org/api` v0.317.0과 간접 의존성, youtubejs의 `@types/node` 26.6.11과 eventgrade·po-sandbox·youtubejs lockfile을 올렸습니다. ingress nginx는 1.31.10(이미지 태그, Quadlet `NGINX_IMAGE`, `build-all.sh` upstream digest)입니다. distroless `static-debian13` 기반 이미지와 PostgreSQL 19.0-alpine(운영 `holo-postgres` upstream 포함) digest는 같은 태그의 현재 index로 바꿨습니다. CI의 `actions/setup-python`은 v7.1.0 커밋으로 맞췄습니다. Valkey 9.1.3과 PostgreSQL 19.0 버전은 계약 고정값이라 그대로 둡니다. 이번 변경은 배포하지 않습니다.
+- **Valkey 9.2.1:** `valkey-cache` 이미지(이미지 태그, Quadlet `VALKEY_IMAGE`, `build-all.sh` upstream digest `3ad5a213…`)와 시험 fixture를 `valkey:9.2.1-alpine3.24`로 올렸습니다. 9.2.1은 9.2.0의 TLS 인증서 로딩 회귀와 IO thread·forkless save 충돌을 고칩니다. 9.2부터 `ZRANGEBYSCORE`·`ZCOUNT`는 `(`만 있는 점수 경계를 거부하지만, 명령 허용 스크립트는 항상 숫자를 붙인 `(<cutoff>`를 씁니다. `valkey-cache`는 `appendonly no`·`save ""`이므로 다음 배포의 컨테이너 재생성은 메모리 상태를 비웁니다. 이번 변경은 배포하지 않습니다.
 
 ## r1.2.25 - 2026-11-28
 

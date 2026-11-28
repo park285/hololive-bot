@@ -9,7 +9,7 @@ INTEGRATION_TAG_PACKAGES=(
     ./hololive/hololive-api/internal/planes/admin/internal/service/dispatchops
 )
 INTEGRATION_POSTGRES_IMAGE="${INTEGRATION_POSTGRES_IMAGE:-docker.io/library/postgres:19.0-alpine@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f}"
-INTEGRATION_VALKEY_IMAGE="${INTEGRATION_VALKEY_IMAGE:-docker.io/valkey/valkey:9.1.3-alpine3.24@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b}"
+INTEGRATION_VALKEY_IMAGE="${INTEGRATION_VALKEY_IMAGE:-docker.io/valkey/valkey:9.2.1-alpine3.24@sha256:3ad5a213cb1bc2fd4a113c89b6248a88655a6bf1dda69519d04e03cd3e3d2742}"
 INTEGRATION_TEST_DB_CONTAINER=""
 INTEGRATION_TEST_VALKEY_CONTAINER=""
 
