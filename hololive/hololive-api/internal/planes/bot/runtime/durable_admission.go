@@ -12,6 +12,7 @@ import (
 
 	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/park285/iris-client-go/v6/webhook"
+	"github.com/park285/shared-go/sqlite/sqlitedb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
@@ -339,7 +340,7 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 
 	msg, err := webhook.DecodeMessage(claim.Payload)
 	if err != nil {
-		settleCtx, cancel := context.WithTimeout(ctx, r.settlementTimeout)
+		settleCtx, cancel := context.WithTimeout(sqlitedb.WithWritePriority(ctx), r.settlementTimeout)
 		defer cancel()
 
 		if _, abandonErr := r.inbox.Abandon(settleCtx, claim.MessageID, token, "stored webhook payload is not decodable"); abandonErr != nil {
@@ -381,7 +382,7 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 	stopHeartbeat()
 	<-heartbeatDone
 
-	settleCtx, cancelSettle := context.WithTimeout(context.WithoutCancel(ctx), r.settlementTimeout)
+	settleCtx, cancelSettle := context.WithTimeout(sqlitedb.WithWritePriority(context.WithoutCancel(ctx)), r.settlementTimeout)
 	defer cancelSettle()
 
 	return errors.Join(err, r.completeCommandAndInbox(settleCtx, claim.MessageID, token, err))
@@ -421,7 +422,7 @@ func (r *durableRuntime) claimCommand(ctx context.Context, claim *durability.Inb
 		return false, nil
 	}
 
-	settleCtx, cancel := context.WithTimeout(ctx, r.settlementTimeout)
+	settleCtx, cancel := context.WithTimeout(sqlitedb.WithWritePriority(ctx), r.settlementTimeout)
 	defer cancel()
 
 	if _, err = r.inbox.Complete(settleCtx, claim.MessageID, token); err != nil {
@@ -439,7 +440,7 @@ func (r *durableRuntime) deferInboxForClaimedCommand(
 	token string,
 	claimedAt time.Time,
 ) error {
-	ctx, cancel := context.WithTimeout(ctx, r.settlementTimeout)
+	ctx, cancel := context.WithTimeout(sqlitedb.WithWritePriority(ctx), r.settlementTimeout)
 	defer cancel()
 
 	retryAfter := claimedAt.Add(commandStaleAfter + r.maintenanceEvery).Sub(r.nowTime())

@@ -15,20 +15,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/migrationsource"
 )
 
-func assertInboxPayload(t *testing.T, pool *pgxpool.Pool, messageID, want string) {
-	t.Helper()
-
-	var got string
-
-	if err := pool.QueryRow(t.Context(), "SELECT payload::text FROM bot_webhook_inbox WHERE message_id = $1", messageID).Scan(&got); err != nil {
-		t.Fatalf("query inbox payload for %s: %v", messageID, err)
-	}
-
-	if got != want {
-		t.Fatalf("inbox payload for %s = %s, want %s", messageID, got, want)
-	}
-}
-
 func TestEpoch4BaselineLateFailureRollsBackAllObjectsLedgerAndPrivileges(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	ctx := t.Context()
@@ -68,8 +54,6 @@ func TestEpoch4BaselineLateFailureRollsBackAllObjectsLedgerAndPrivileges(t *test
 	if result.Applied != len(files) || result.Skipped != 0 || result.Total != len(files) {
 		t.Fatalf("rerun result = %+v, want applied=%d skipped=0 total=%d", result, len(files), len(files))
 	}
-
-	assertReplayAuditSealed(t, pool, runtimeRole)
 }
 
 func assertReplayAuditAbsent(t *testing.T, pool *pgxpool.Pool, runtimeRole string) {
@@ -85,11 +69,11 @@ func assertReplayAuditAbsent(t *testing.T, pool *pgxpool.Pool, runtimeRole strin
 		to_regprocedure('public.append_bot_reply_outbox_replay_claim_audit()') IS NOT NULL,
 		to_regprocedure('public.reject_bot_reply_outbox_replay_audit_mutation()') IS NOT NULL`).Scan(
 		&tablePresent, &grantFunctionPresent, &claimFunctionPresent, &mutationFunctionPresent); err != nil {
-		t.Fatalf("inspect rolled-back migration 136 objects: %v", err)
+		t.Fatalf("inspect replay audit objects: %v", err)
 	}
 
 	if tablePresent || grantFunctionPresent || claimFunctionPresent || mutationFunctionPresent {
-		t.Fatalf("migration 136 left partial objects: table=%v grant=%v claim=%v mutation=%v",
+		t.Fatalf("replay audit left partial objects: table=%v grant=%v claim=%v mutation=%v",
 			tablePresent, grantFunctionPresent, claimFunctionPresent, mutationFunctionPresent)
 	}
 
@@ -97,7 +81,7 @@ func assertReplayAuditAbsent(t *testing.T, pool *pgxpool.Pool, runtimeRole strin
 
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_trigger
 		WHERE tgname IN ('bot_reply_outbox_replay_audit_immutable', 'bot_reply_outbox_replay_claim_audit')`).Scan(&triggerCount); err != nil {
-		t.Fatalf("count rolled-back migration 136 triggers: %v", err)
+		t.Fatalf("count replay audit triggers: %v", err)
 	}
 
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM (
@@ -115,125 +99,27 @@ func assertReplayAuditAbsent(t *testing.T, pool *pgxpool.Pool, runtimeRole strin
 		      'reject_bot_reply_outbox_replay_audit_mutation'
 		  )
 	) AS exposed`, runtimeRole).Scan(&privilegeCount); err != nil {
-		t.Fatalf("count rolled-back migration 136 privileges: %v", err)
+		t.Fatalf("count replay audit privileges: %v", err)
 	}
 
 	if triggerCount != 0 || privilegeCount != 0 {
-		t.Fatalf("migration 136 left trigger/ACL exposure: triggers=%d privileges=%d", triggerCount, privilegeCount)
+		t.Fatalf("replay audit left trigger/ACL exposure: triggers=%d privileges=%d", triggerCount, privilegeCount)
 	}
 }
 
-func assertReplayAuditSealed(t *testing.T, pool *pgxpool.Pool, runtimeRole string) {
-	t.Helper()
-
-	ctx := t.Context()
-
-	var tablePresent, grantFunctionPresent bool
-
-	if err := pool.QueryRow(ctx, `SELECT
-		to_regclass('public.bot_reply_outbox_replay_audit') IS NOT NULL,
-		to_regprocedure('public.grant_bot_reply_outbox_manual_replay(bigint,text,text)') IS NOT NULL`).Scan(
-		&tablePresent, &grantFunctionPresent); err != nil {
-		t.Fatalf("inspect migration 136 objects: %v", err)
-	}
-
-	if !tablePresent || !grantFunctionPresent {
-		t.Fatalf("migration 136 objects missing: table=%v grant_function=%v", tablePresent, grantFunctionPresent)
-	}
-
-	var triggerCount int
-
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_trigger
-		WHERE tgname IN ('bot_reply_outbox_replay_audit_immutable', 'bot_reply_outbox_replay_claim_audit')`).Scan(&triggerCount); err != nil {
-		t.Fatalf("count migration 136 triggers: %v", err)
-	}
-
-	if triggerCount != 2 {
-		t.Fatalf("migration 136 trigger count = %d, want 2", triggerCount)
-	}
-
-	for _, privilege := range []string{"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"} {
-		var allowed bool
-
-		if err := pool.QueryRow(ctx,
-			`SELECT has_table_privilege($1, 'public.bot_reply_outbox_replay_audit', $2)`,
-			runtimeRole, privilege).Scan(&allowed); err != nil {
-			t.Fatalf("inspect runtime table privilege %s: %v", privilege, err)
-		}
-
-		if allowed {
-			t.Errorf("runtime-equivalent role retained audit table privilege %s", privilege)
-		}
-	}
-
-	var sequenceAllowed, functionAllowed bool
-
-	if err := pool.QueryRow(ctx, `SELECT
-		has_sequence_privilege($1, 'public.bot_reply_outbox_replay_audit_id_seq', 'USAGE'),
-		has_function_privilege($1, 'public.grant_bot_reply_outbox_manual_replay(bigint,text,text)', 'EXECUTE')`,
-		runtimeRole).Scan(&sequenceAllowed, &functionAllowed); err != nil {
-		t.Fatalf("inspect runtime sequence/function privileges: %v", err)
-	}
-
-	if sequenceAllowed || functionAllowed {
-		t.Errorf("runtime-equivalent role retained audit sequence/function privileges: sequence=%v function=%v",
-			sequenceAllowed, functionAllowed)
-	}
-}
-
-func TestCurrentSchemaRejectsTerminalPayloadRetention(t *testing.T) {
+func TestHeadContractRejectsARecreatedBotPlaneTable(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	_, err := Run(t.Context(), pool, migrations.FS, Config{})
-	require.NoError(t, err)
-
-	assertConstraintValidated(t, pool, "bot_webhook_inbox", "chk_bot_webhook_inbox_terminal_payload_scrubbed", true)
-	assertLegacyTerminalWriterRejected(t, pool, "legacy-succeeded", "succeeded")
-	assertLegacyTerminalWriterRejected(t, pool, "legacy-dead", "dead")
-}
-
-func TestHeadContractRejectsDeferrableWebhookNonceKey(t *testing.T) {
-	for name, alter := range map[string]string{
-		"primary key": `ALTER TABLE public.bot_webhook_nonces
-			DROP CONSTRAINT bot_webhook_nonces_pkey,
-			ADD CONSTRAINT bot_webhook_nonces_pkey PRIMARY KEY (digest) DEFERRABLE INITIALLY IMMEDIATE`,
-		"additional unique key": `ALTER TABLE public.bot_webhook_nonces
-			ADD CONSTRAINT bot_webhook_nonces_digest_deferred UNIQUE (digest) DEFERRABLE INITIALLY IMMEDIATE`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			pool := dbtest.NewBlankPool(t)
-			_, err := Run(t.Context(), pool, migrations.FS, Config{})
-			require.NoError(t, err)
-
-			_, err = Run(t.Context(), pool, migrations.FS, Config{VerifyOnly: true})
-			require.NoError(t, err)
-
-			_, err = pool.Exec(t.Context(), alter)
-			require.NoError(t, err)
-
-			_, err = Run(t.Context(), pool, migrations.FS, Config{VerifyOnly: true})
-			require.Error(t, err)
-		})
-	}
-}
-
-func TestHeadContractAcceptsDeferrableKeyThatCannotArbitrateNonces(t *testing.T) {
-	pool := dbtest.NewBlankPool(t)
-	_, err := Run(t.Context(), pool, migrations.FS, Config{})
-	require.NoError(t, err)
-
-	_, err = pool.Exec(t.Context(), `ALTER TABLE public.bot_webhook_nonces
-		ADD CONSTRAINT bot_webhook_nonces_digest_expiry UNIQUE (digest, expires_at) DEFERRABLE INITIALLY IMMEDIATE`)
 	require.NoError(t, err)
 
 	_, err = Run(t.Context(), pool, migrations.FS, Config{VerifyOnly: true})
 	require.NoError(t, err)
 
-	var first, second bool
+	_, err = pool.Exec(t.Context(), "CREATE TABLE public.bot_webhook_nonces (digest bytea PRIMARY KEY)")
+	require.NoError(t, err)
 
-	require.NoError(t, pool.QueryRow(t.Context(), "SELECT public.reserve_bot_webhook_nonce($1, $2)", make([]byte, 32), int64(600_000_000)).Scan(&first))
-	require.NoError(t, pool.QueryRow(t.Context(), "SELECT public.reserve_bot_webhook_nonce($1, $2)", make([]byte, 32), int64(600_000_000)).Scan(&second))
-	require.True(t, first)
-	require.False(t, second)
+	_, err = Run(t.Context(), pool, migrations.FS, Config{VerifyOnly: true})
+	require.Error(t, err)
 }
 
 func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
@@ -257,7 +143,7 @@ func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 
 	assertTablePresent(t, pool, "members")
 	assertTablePresent(t, pool, "alarms")
-	assertConstraintValidated(t, pool, "bot_webhook_inbox", "chk_bot_webhook_inbox_terminal_payload_scrubbed", true)
+	assertTableAbsent(t, pool, "bot_webhook_inbox")
 
 	result, err = Run(t.Context(), pool, migrations.FS, Config{})
 	if err != nil {
@@ -267,55 +153,6 @@ func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	if result.Applied != 0 || result.Skipped != entries || result.Total != entries {
 		t.Fatalf("second result = %+v, want applied=0 skipped=%d total=%d", result, entries, entries)
 	}
-}
-
-func assertConstraintValidated(t *testing.T, pool *pgxpool.Pool, table, constraint string, want bool) {
-	t.Helper()
-
-	var got bool
-
-	err := pool.QueryRow(t.Context(), `
-		SELECT convalidated
-		FROM pg_constraint
-		WHERE conrelid = $1::regclass
-		  AND conname = $2`, table, constraint).Scan(&got)
-	if err != nil {
-		t.Fatalf("query constraint %s on %s: %v", constraint, table, err)
-	}
-
-	if got != want {
-		t.Fatalf("constraint %s on %s convalidated = %v, want %v", constraint, table, got, want)
-	}
-}
-
-func assertLegacyTerminalWriterRejected(t *testing.T, pool *pgxpool.Pool, messageID, status string) {
-	t.Helper()
-
-	if _, err := pool.Exec(t.Context(), `
-		INSERT INTO bot_webhook_inbox(message_id, room_id, ordering_key, payload)
-		VALUES ($1, 'room', 'room', '{"message":"retained"}'::jsonb)`, messageID); err != nil {
-		t.Fatalf("legacy writer insert for %s: %v", status, err)
-	}
-
-	assertInboxPayload(t, pool, messageID, `{"message": "retained"}`)
-
-	updateSQL := "UPDATE bot_webhook_inbox SET status = $1 WHERE message_id = $2"
-
-	if status == "dead" {
-		updateSQL = `UPDATE bot_webhook_inbox
-			SET status = $1, terminal_at = clock_timestamp(), terminal_reason = 'legacy terminal failure'
-			WHERE message_id = $2`
-	}
-
-	if _, err := pool.Exec(t.Context(), updateSQL, status, messageID); err != nil {
-		if !strings.Contains(err.Error(), "chk_bot_webhook_inbox_terminal_payload_scrubbed") {
-			t.Fatalf("legacy writer %s update error = %v, want terminal payload CHECK", status, err)
-		}
-	} else {
-		t.Fatalf("legacy writer %s update unexpectedly succeeded", status)
-	}
-
-	assertInboxPayload(t, pool, messageID, `{"message": "retained"}`)
 }
 
 func assertTablePresent(t *testing.T, pool *pgxpool.Pool, name string) {

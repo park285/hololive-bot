@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/sqlite/sqlitedb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/retry"
 
@@ -313,7 +314,7 @@ func (r *durableRuntime) heartbeatAttempt(ctx context.Context, messageID, token 
 		budget = 5 * time.Second
 	}
 
-	attemptCtx, cancel := context.WithTimeout(ctx, budget)
+	attemptCtx, cancel := context.WithTimeout(sqlitedb.WithWritePriority(ctx), budget)
 
 	defer cancel()
 

@@ -56,17 +56,9 @@ Epoch activation은 irreversible production data write이고 통합 `hololive-ap
 
 Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 시작하지 않습니다. 기존 image rollback tag는 더 이상 안전한 rollback target이 아니며, 사전 관찰한 epoch-aware image를 유지하거나 source processing을 중지한 채 fix-forward합니다.
 
-## Bot durable store PostgreSQL → SQLite 전환
+## Bot durable store
 
-이 전환은 운영 데이터 쓰기이며 `hololive-api` 중지를 동반하므로 대상 host·중지·이관·재시작을 모두 포함한 승인 아래에서만 실행합니다.
-
-1. 같은 release로 중앙 배포 트리를 전체 동기화하고(`sudo ./scripts/deploy/sync-opt-current.sh`) API·worker 후보 image를 적재합니다. 전체 동기화가 호스트 `/opt/hololive-bot/compose/bot-durable/`을 uid 1000 소유 `0700`으로 만들며, SELinux 호스트에서는 스택 호스트 보안 프로필의 `container_file_t` 규칙이 먼저 적용돼 있어야 합니다. 이 디렉터리에 `bot-durable.db`가 없는지 확인합니다.
-2. Iris webhook 전달을 멈추고 `sudo "$helper" --quiesce sha256:<api-id> sha256:<worker-id>`로 API와 worker를 함께 보존·정지합니다(`helper=/opt/hololive-bot/compose/current/scripts/deploy/quadlet-redeploy-service.sh`). 전환 전 image가 PostgreSQL의 bot 표에 더 쓰지 않아야 합니다. 단일 서비스 helper는 실행 중인 container를 보존한 뒤 곧바로 재시작하므로 이관 창을 만들지 못합니다. `[OUTCOME] quiesced`가 출력한 두 release 경로를 기록합니다.
-3. `bot-durable-admin import-postgres`를 일회성으로 한 번 실행합니다. 명령은 PostgreSQL을 `REPEATABLE READ READ ONLY` 스냅숏 하나로 읽어 bot 표 7개(inbox·heads·명령 기록·reply outbox·감사 두 표·nonce)의 모든 행을 id 그대로 옮기고, 표별·상태별 행 수가 원본 스냅숏과 같을 때만 한 트랜잭션으로 커밋합니다. 대상에 행이 있거나 소유 잠금을 얻지 못하면(`hololive-api` 실행 중) 아무것도 쓰지 않고 실패합니다. PostgreSQL 연결은 앱과 같은 `POSTGRES_*` 해석을 따릅니다. `hololive_runtime`은 감사 표를 읽을 수 없으므로 관리 socket의 `hololive_migrator`로 접속합니다(`POSTGRES_SOCKET_PATH=/var/run/postgresql`, `POSTGRES_USER=hololive_migrator`, `POSTGRES_DB=hololive`, `POSTGRES_SSLMODE=disable`, `POSTGRES_PASSWORD`에는 migrate unit의 `PGPASSWORD`와 같은 migrator 비밀번호). 일회성 실행은 후보 API image의 `podman run --rm --entrypoint /app/bin/bot-durable-admin <image> import-postgres`입니다. `hololive-db-migrate.container`와 같은 격리(`--network=none`, 관리 socket volume `hololive-bot_holo-pg-admin-socket`, `--read-only`, `--cap-drop all`, `--user 1000:1000`, `--userns=auto:size=65536`)에 `hololive-api.container`와 같은 `bot-durable` volume(`:idmap`)과 `BOT_DURABLE_STORE_PATH`를 더합니다. migrator 비밀번호는 prestart가 만든 `/run/hololive-bot/quadlet-env/hololive-db-migrate.env`의 `PGPASSWORD` 값을 root 전용 임시 env 파일의 `POSTGRES_PASSWORD`로 옮겨 `--env-file`로 넘깁니다. 같은 인자로 대상만 root 전용 임시 디렉터리로 바꾸면 운영 중에 리허설할 수 있습니다. PostgreSQL은 읽기만 합니다.
-4. stdout의 `<표>/<상태>=<행 수>` 목록을 보관합니다. 실패하면 부분 커밋이 없으므로 원인을 해소한 뒤 비어 있는 대상에 다시 실행합니다.
-5. collector를 [대기 migration 적용 창](release.md#대기-migration-적용-창)의 순서(d→b→a→c)로 멈춘 뒤 `sudo "$helper" --resume '<api-release-dir>' '<alarm-release-dir>'`로 두 후보를 엽니다. `--resume`은 여섯 업무 역할의 PostgreSQL 연결이 0건일 때만 진행합니다. 마지막 줄의 `[OUTCOME] deployed`를 확인하고 collector를 c→a→b→d로 다시 띄웁니다. 이어서 readiness의 `durable_store`, webhook·reply 처리, `list-manual-review` 결과를 확인한 뒤 Iris webhook 전달을 재개합니다.
-
-전환 뒤 PostgreSQL의 bot 표는 갱신되지 않습니다. 전환 전 image는 멈춘 시점의 PostgreSQL 행을 다시 처리하므로 전환 뒤에는 그 image로 돌아가지 않고 fix-forward합니다. 이 저장소의 배포 스크립트와 스택 도구는 SQLite 파일을 백업하지 않습니다. PostgreSQL 표·함수 제거와 백업 편입은 전환 확인 뒤 별도 작업입니다.
+Bot plane 내구 상태는 r1.2.22부터 `BOT_DURABLE_STORE_PATH`의 SQLite 파일에 있습니다. PostgreSQL에 있던 같은 이름의 표 7개와 `reserve_bot_webhook_nonce`·replay·discard 함수는 migration 014가 지웠습니다. PostgreSQL에서 옮기던 `bot-durable-admin import-postgres` 명령도 없앴습니다. 이 저장소의 배포 스크립트와 스택 도구는 SQLite 파일을 백업하지 않습니다.
 
 ## Key environment variables
 
@@ -323,7 +315,7 @@ sudo podman exec hololive-api ./bin/bot-durable-admin discard \
 
 `discarded`는 재발송 권한을 만들지 않고 terminal retention을 따릅니다. 실행 전에는 반드시 같은 `iris_request_id`의 최신 `/reply-status`를 조회하고, `queued`/`preparing`/`prepared`/`sending`이면 진행 중인 handoff가 끝날 때까지 보류합니다. `failed`에서 재발송이 필요하다고 판단한 경우에는 discard가 아니라 위 `grant-replay`와 144시간 cutoff를 사용합니다.
 
-Bot plane 내구 스키마(`bot_webhook_inbox`·`bot_webhook_heads`·`bot_command_executions`·`bot_reply_outbox`·감사 두 표·`bot_webhook_nonces`)는 `hololive/hololive-api/internal/planes/bot/internal/durability/migrations/`의 SQLite migration이 정의합니다. `hololive-api`가 기동할 때 소유 잠금을 잡은 뒤 적용하며, 적용한 파일의 sha256이 원장과 다르면 기동하지 않습니다. 스키마 변경은 새 forward migration 파일로만 진행합니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. 종결 행의 payload는 writer가 직접 비우고, 비종결 행에 payload가 없으면 CHECK가 거부합니다. PostgreSQL에 남은 같은 이름의 표와 `reserve_bot_webhook_nonce`·replay·discard 함수는 [전환](#bot-durable-store-postgresql--sqlite-전환) 원본이며 현행 runtime은 읽거나 쓰지 않습니다.
+Bot plane 내구 스키마(`bot_webhook_inbox`·`bot_webhook_heads`·`bot_command_executions`·`bot_reply_outbox`·감사 두 표·`bot_webhook_nonces`)는 `hololive/hololive-api/internal/planes/bot/internal/durability/migrations/`의 SQLite migration이 정의합니다. `hololive-api`가 기동할 때 소유 잠금을 잡은 뒤 적용하며, 적용한 파일의 sha256이 원장과 다르면 기동하지 않습니다. 스키마 변경은 새 forward migration 파일로만 진행합니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. 종결 행의 payload는 writer가 직접 비우고, 비종결 행에 payload가 없으면 CHECK가 거부합니다.
 
 기존 DB는 032 완료 원본 32쌍이나 신규 실적용 1쌍만 수용합니다. 부분 DB를 추정하거나 원장을 교체하지 않습니다. [migration 규약](../../../hololive/hololive-api/scripts/migrations/CONVENTIONS.md)을 따릅니다.
 

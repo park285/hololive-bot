@@ -24,7 +24,7 @@ func (r *BotRuntime) WorkerRegistrations() []workercontract.Registration {
 		{
 			WorkerID:          apiconfig.WorkerBotWebhookInbox,
 			Runtime:           workercontract.RuntimeGo,
-			QueueBackend:      workercontract.QueuePostgres,
+			QueueBackend:      workercontract.QueueSQLite,
 			QueueScope:        workercontract.QueueScopeShared,
 			SettingsValidated: true,
 			ExecutorSnapshot:  func() workercontract.ExecutorSnapshot { return durable.inboxTracker.Snapshot(time.Now()) },
@@ -34,7 +34,7 @@ func (r *BotRuntime) WorkerRegistrations() []workercontract.Registration {
 		{
 			WorkerID:          apiconfig.WorkerBotReplyOutbox,
 			Runtime:           workercontract.RuntimeGo,
-			QueueBackend:      workercontract.QueuePostgres,
+			QueueBackend:      workercontract.QueueSQLite,
 			QueueScope:        workercontract.QueueScopeShared,
 			SettingsValidated: true,
 			ExecutorSnapshot:  func() workercontract.ExecutorSnapshot { return durable.outboxTracker.Snapshot(time.Now()) },

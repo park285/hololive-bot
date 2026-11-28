@@ -7,16 +7,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
-	"slices"
 	"text/tabwriter"
 	"time"
 
 	apiconfig "github.com/kapu/hololive-api/internal/config"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability/pgimport"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-	databaseproviders "github.com/kapu/hololive-shared/pkg/providers/database"
 )
 
 const (
@@ -25,7 +20,6 @@ const (
 	exitUsage  = 2
 
 	operatorTimeout = 30 * time.Second
-	importTimeout   = 10 * time.Minute
 
 	defaultManualReviewListLimit = 50
 	maxManualReviewListLimit     = 1000
@@ -37,11 +31,8 @@ commands:
   list-manual-review [--limit=N]
   grant-replay   --outbox-id=ID --actor=ACTOR --reason=REASON
   discard        --outbox-id=ID --actor=ACTOR --reason=REASON --observed-iris-state=STATE
-  import-postgres
 
-list-manual-review, grant-replay and discard attach to the running store at BOT_DURABLE_STORE_PATH.
-import-postgres reads POSTGRES_* in one read-only snapshot and owns the store,
-so hololive-api must be stopped first.`
+list-manual-review, grant-replay and discard attach to the running store at BOT_DURABLE_STORE_PATH.`
 
 type operatorRequest struct {
 	outboxID          int64
@@ -70,8 +61,6 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			})
 	case "list-manual-review":
 		return runListManualReview(ctx, args, stdout, stderr, logger)
-	case "import-postgres":
-		return runImport(ctx, args, stdout, stderr, logger)
 	case "help", "-h", "--help":
 		if _, err := fmt.Fprintln(stdout, usageText); err != nil {
 			return exitFailed
@@ -233,74 +222,6 @@ func withAttachedStore(ctx context.Context, logger *slog.Logger, fn func(context
 	defer func() { err = errors.Join(err, store.Close(context.WithoutCancel(ctx))) }()
 
 	return fn(ctx, store)
-}
-
-func runImport(ctx context.Context, args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
-	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	flags.SetOutput(stderr)
-
-	if err := flags.Parse(args[1:]); err != nil {
-		return usageExit(stderr, fmt.Errorf("parse %s flags: %w", args[0], err))
-	}
-
-	if flags.NArg() != 0 {
-		return usageExit(stderr, fmt.Errorf("%s takes no positional arguments, got %d", args[0], flags.NArg()))
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, importTimeout)
-	defer cancel()
-
-	summary, err := importFromPostgres(ctx, logger)
-
-	for _, bucket := range slices.Sorted(maps.Keys(summary)) {
-		if _, writeErr := fmt.Fprintf(stdout, "%s=%d\n", bucket, summary[bucket]); writeErr != nil {
-			err = errors.Join(err, fmt.Errorf("write import summary: %w", writeErr))
-
-			break
-		}
-	}
-
-	if err != nil {
-		logger.Error("import bot plane rows from PostgreSQL", slog.Any("error", err))
-
-		return exitFailed
-	}
-
-	return exitOK
-}
-
-func importFromPostgres(ctx context.Context, logger *slog.Logger) (_ durability.ImportSummary, err error) {
-	path, err := apiconfig.LoadBotDurableStorePath()
-	if err != nil {
-		return nil, fmt.Errorf("load bot durable store path: %w", err)
-	}
-
-	postgres, err := settings.LoadPostgresEndpointConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load PostgreSQL source config: %w", err)
-	}
-
-	postgres.PoolMinConns, postgres.PoolMaxConns = 1, 1
-
-	resources, cleanup, err := databaseproviders.ProvideMaintenanceDatabaseResources(ctx, &postgres, logger)
-	if err != nil {
-		return nil, fmt.Errorf("open PostgreSQL source: %w", err)
-	}
-	defer cleanup()
-
-	store, err := durability.OpenStore(ctx, durability.StoreOptions(path, logger))
-	if err != nil {
-		return nil, fmt.Errorf("open bot durable store: %w", err)
-	}
-
-	defer func() { err = errors.Join(err, store.Close(context.WithoutCancel(ctx))) }()
-
-	summary, err := pgimport.Copy(ctx, resources.Service.GetPool(), store)
-	if err != nil {
-		return nil, fmt.Errorf("copy bot plane rows: %w", err)
-	}
-
-	return summary, nil
 }
 
 func usageExit(stderr io.Writer, err error) int {
