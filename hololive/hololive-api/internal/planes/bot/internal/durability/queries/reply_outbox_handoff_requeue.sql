@@ -1,12 +1,13 @@
 UPDATE bot_reply_outbox
-SET status = $5,
+SET status = ?5,
     handoff_next_check_at = NULL,
-    last_error = $6,
-    available_at = clock_timestamp() + ($7::bigint * INTERVAL '1 millisecond'),
-    updated_at = clock_timestamp()
-WHERE id = $1
+    last_error = ?6,
+    available_at = ?7 + ?8,
+    updated_at = ?7,
+    row_version = row_version + 1
+WHERE id = ?1
   AND status = 'accepted'
   AND claim_token IS NULL
-  AND handoff_next_check_at = $2
-  AND iris_request_id = $3
-  AND xmin = $4::xid
+  AND handoff_next_check_at = ?2
+  AND iris_request_id = ?3
+  AND row_version = ?4

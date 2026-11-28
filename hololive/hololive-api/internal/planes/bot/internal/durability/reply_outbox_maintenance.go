@@ -7,8 +7,6 @@ import (
 	"math"
 	"slices"
 	"time"
-
-	"github.com/park285/shared-go/postgres/pgxdb"
 )
 
 type ReplyOutboxManualReviewStats struct {
@@ -17,21 +15,21 @@ type ReplyOutboxManualReviewStats struct {
 }
 
 func (r *ReplyOutboxRepository) ManualReviewStats(ctx context.Context) (ReplyOutboxManualReviewStats, error) {
-	if err := ensurePool(r.pool); err != nil {
+	if err := ensureStore(r.store); err != nil {
 		return ReplyOutboxManualReviewStats{}, err
 	}
 
 	var (
-		stats         ReplyOutboxManualReviewStats
-		oldestSeconds float64
+		stats    ReplyOutboxManualReviewStats
+		oldestMS int64
 	)
 
-	err := pgxdb.QueryRow(ctx, r.pool, replyOutboxManualReviewStatsSQL).Scan(&stats.Backlog, &oldestSeconds)
+	err := r.store.read().QueryRowContext(ctx, replyOutboxManualReviewStatsSQL, r.store.nowMS()).Scan(&stats.Backlog, &oldestMS)
 	if err != nil {
 		return ReplyOutboxManualReviewStats{}, fmt.Errorf("observe reply outbox manual review backlog: %w", err)
 	}
 
-	stats.OldestAge = time.Duration(oldestSeconds * float64(time.Second))
+	stats.OldestAge = time.Duration(oldestMS) * time.Millisecond
 
 	return stats, nil
 }

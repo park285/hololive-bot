@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -164,6 +165,27 @@ func (c *BotPlaneConfig) validateRequired() error {
 
 	if err := runtimepolicy.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
 		return fmt.Errorf("validate holodex API key: %w", err)
+	}
+
+	return nil
+}
+
+func LoadBotDurableStorePath() (string, error) {
+	if err := loadProcessEnv(); err != nil {
+		return "", err
+	}
+
+	path := sharedenv.String("BOT_DURABLE_STORE_PATH", "")
+	if err := validateDurableStorePath(path); err != nil {
+		return "", err
+	}
+
+	return path, nil
+}
+
+func validateDurableStorePath(path string) error {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return fmt.Errorf("BOT_DURABLE_STORE_PATH must be a clean absolute path, got %q", path)
 	}
 
 	return nil

@@ -10,10 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/park285/iris-client-go/v6/webhook"
-	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
@@ -201,13 +199,13 @@ type durableReplyOutbox struct {
 	totals     *workercontract.Counters
 }
 
-func newDurableReplyOutbox(pgPool *pgxpool.Pool, profile *apiconfig.APIWorkerProfile) (durableReplyOutbox, error) {
+func newDurableReplyOutbox(store *durability.Store, profile *apiconfig.APIWorkerProfile) (durableReplyOutbox, error) {
 	if profile == nil {
 		return durableReplyOutbox{}, errors.New("build reply outbox: API worker profile is required")
 	}
 
 	repository, err := durability.NewReplyOutboxRepositoryWithPolicy(
-		pgPool,
+		store,
 		profile.BotReplyOutbox.MaxAttempts,
 		workercontract.Milliseconds(profile.BotReplyOutbox.AutomaticReplayHorizonMS),
 	)
@@ -230,7 +228,7 @@ func (o durableReplyOutbox) writer(logger *slog.Logger) durableReplyWriter {
 func newDurableRuntime(
 	bot *orchestration.Bot,
 	client durableIrisClient,
-	pgPool *pgxpool.Pool,
+	store *durability.Store,
 	outbox durableReplyOutbox,
 	profile *apiconfig.APIWorkerProfile,
 	logger *slog.Logger,
@@ -250,8 +248,8 @@ func newDurableRuntime(
 	dispatchBudget, _ := outboxProfile.Executor.AttemptTimeout.FixedDuration()
 
 	r := &durableRuntime{
-		inbox: durability.NewInboxRepository(pgPool), commands: durability.NewCommandExecutionRepository(pgPool),
-		outbox: outbox.repository, ledger: durability.NewDurableLedgerRepository(pgPool),
+		inbox: durability.NewInboxRepository(store), commands: durability.NewCommandExecutionRepository(store),
+		outbox: outbox.repository, ledger: durability.NewDurableLedgerRepository(store),
 		bot: bot, irisClient: client, logger: logger,
 		inboxWorkers: inboxProfile.Executor.ConfiguredWorkers, outboxWorkers: outboxProfile.Executor.ConfiguredWorkers,
 		inboxEnabled: inboxProfile.Executor.Enabled, outboxEnabled: outboxProfile.Executor.Enabled,
@@ -341,7 +339,7 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 
 	msg, err := webhook.DecodeMessage(claim.Payload)
 	if err != nil {
-		settleCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
+		settleCtx, cancel := context.WithTimeout(ctx, r.settlementTimeout)
 		defer cancel()
 
 		if _, abandonErr := r.inbox.Abandon(settleCtx, claim.MessageID, token, "stored webhook payload is not decodable"); abandonErr != nil {
@@ -383,7 +381,7 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 	stopHeartbeat()
 	<-heartbeatDone
 
-	settleCtx, cancelSettle := context.WithTimeout(pgxdb.WithControlAcquire(context.WithoutCancel(ctx)), r.settlementTimeout)
+	settleCtx, cancelSettle := context.WithTimeout(context.WithoutCancel(ctx), r.settlementTimeout)
 	defer cancelSettle()
 
 	return errors.Join(err, r.completeCommandAndInbox(settleCtx, claim.MessageID, token, err))
@@ -423,7 +421,7 @@ func (r *durableRuntime) claimCommand(ctx context.Context, claim *durability.Inb
 		return false, nil
 	}
 
-	settleCtx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
+	settleCtx, cancel := context.WithTimeout(ctx, r.settlementTimeout)
 	defer cancel()
 
 	if _, err = r.inbox.Complete(settleCtx, claim.MessageID, token); err != nil {
@@ -441,7 +439,7 @@ func (r *durableRuntime) deferInboxForClaimedCommand(
 	token string,
 	claimedAt time.Time,
 ) error {
-	ctx, cancel := context.WithTimeout(pgxdb.WithControlAcquire(ctx), r.settlementTimeout)
+	ctx, cancel := context.WithTimeout(ctx, r.settlementTimeout)
 	defer cancel()
 
 	retryAfter := claimedAt.Add(commandStaleAfter + r.maintenanceEvery).Sub(r.nowTime())

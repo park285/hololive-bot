@@ -123,6 +123,7 @@ podman start "$worker" >>"$evidence/started"
 api=$(podman "${runtime[@]}" --name "$name-api" --entrypoint /fixture/api \
     -e STACK_WORKER_PROFILE_FILE=/fixture/api-profile.json -e POSTGRES_USER=hololive_runtime \
     -e KAKAO_ROOMS=930003 -e IRIS_WEBHOOK_TOKEN=c3-webhook -e PHOTO_SYNC_ENABLED=false \
+    -e BOT_DURABLE_STORE_PATH=/tmp/bot-durable/bot-durable.db \
     -e HOLOLIVE_H3_ADDR=127.0.0.1:30001 -e HOLOLIVE_ADMIN_API_H3_ADDR=127.0.0.1:30006 \
     -e HOLOLIVE_INTERNAL_H3_SERVER_NAME=127.0.0.1 \
     -e HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/fixture/cert.pem -e ALARM_INTERNAL_URL=https://127.0.0.1:30007 "$postgres")

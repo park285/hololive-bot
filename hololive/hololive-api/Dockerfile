@@ -69,6 +69,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -o /dist/bin/source-observation-replay-epoch ./cmd/source-observation-replay-epoch && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
+      -o /dist/bin/bot-durable-admin ./cmd/bot-durable-admin && \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
       -o /dist/bin/healthcheck ./cmd/healthcheck
 
 FROM runtime-base

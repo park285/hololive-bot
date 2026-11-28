@@ -11,9 +11,11 @@ require (
 	github.com/kapu/hololive-collector v0.0.0
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
+	github.com/ncruces/go-sqlite3 v0.38.1
 	github.com/park285/iris-client-go/v6 v6.1.0
 	github.com/park285/shared-go/core v1.0.0
 	github.com/park285/shared-go/postgres v1.0.4
+	github.com/park285/shared-go/sqlite v1.0.0
 	github.com/park285/shared-go/transport v1.0.1
 	github.com/park285/shared-go/v2 v2.26.1
 	github.com/prometheus/client_golang v1.25.0
@@ -89,6 +91,8 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/ncruces/go-sqlite3-wasm/v6 v6.7.35401 // indirect
+	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pandatix/go-abnf v0.5.5 // indirect

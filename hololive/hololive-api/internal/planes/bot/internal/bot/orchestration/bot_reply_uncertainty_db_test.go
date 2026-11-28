@@ -14,7 +14,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/botcommand"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
-	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability/durabilitytest"
 )
 
 type lostReplyReceiptWriter struct {
@@ -38,9 +38,9 @@ func (w *lostReplyReceiptWriter) RecordReply(ctx context.Context, entry *transpo
 }
 
 func TestBotCommittedReplyWithLostReceiptDoesNotStageErrorResponse(t *testing.T) {
-	pool := dbtest.NewPool(t)
+	durable := durabilitytest.Open(t)
 	cause := errors.New("reply commit acknowledgement lost")
-	writer := &lostReplyReceiptWriter{repo: newTestReplyOutboxRepository(t, pool), cause: cause}
+	writer := &lostReplyReceiptWriter{repo: newTestReplyOutboxRepository(t, durable.Store), cause: cause}
 	registry := command.NewRegistry()
 	bot := withMessagePath(&Bot{
 		logger:         newBotTestLogger(),
@@ -67,6 +67,6 @@ func TestBotCommittedReplyWithLostReceiptDoesNotStageErrorResponse(t *testing.T)
 
 	var count int
 
-	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM bot_reply_outbox").Scan(&count))
+	require.NoError(t, durable.DB.QueryRowContext(t.Context(), "SELECT count(*) FROM bot_reply_outbox").Scan(&count))
 	require.Equal(t, 1, count)
 }

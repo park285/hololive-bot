@@ -1,22 +1,20 @@
-WITH due AS MATERIALIZED (
+UPDATE bot_reply_outbox
+SET handoff_next_check_at = ?1 + ?3,
+    row_version = row_version + 1
+WHERE id IN (
     SELECT id
     FROM bot_reply_outbox
     WHERE status = 'accepted'
       AND claim_token IS NULL
-      AND handoff_next_check_at <= clock_timestamp()
+      AND handoff_next_check_at <= ?1
     ORDER BY handoff_next_check_at ASC, id ASC
-    LIMIT $1
-    FOR UPDATE SKIP LOCKED
+    LIMIT ?2
 )
-UPDATE bot_reply_outbox AS outbox
-SET handoff_next_check_at = clock_timestamp() + ($2::bigint * INTERVAL '1 millisecond')
-FROM due
-WHERE outbox.id = due.id
-RETURNING outbox.id,
-          outbox.iris_request_id,
-          outbox.handoff_next_check_at,
-          outbox.xmin,
-          floor(EXTRACT(EPOCH FROM (clock_timestamp() - outbox.accepted_at)) * 1000)::bigint,
-          outbox.attempts,
-          outbox.operator_replay_grants,
-          COALESCE(outbox.first_attempt_at <= clock_timestamp() - ($3::bigint * INTERVAL '1 millisecond'), true)
+RETURNING id,
+          iris_request_id,
+          handoff_next_check_at,
+          row_version,
+          ?1 - accepted_at,
+          attempts,
+          operator_replay_grants,
+          coalesce(first_attempt_at <= ?1 - ?4, 1)

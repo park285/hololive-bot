@@ -2,16 +2,10 @@ package durability
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/park285/shared-go/postgres/pgxdb"
-
-	"github.com/kapu/hololive-shared/pkg/dbx"
 )
-
-const replyOutboxStatusPending = "pending"
 
 type replyReclaimCandidate struct {
 	ID                   int64
@@ -20,8 +14,10 @@ type replyReclaimCandidate struct {
 	HorizonExpired       bool
 }
 
+var errReplyReclaimSnapshotChanged = errors.New("reply reclaim snapshot no longer eligible")
+
 func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize int32) (ReplyOutboxReclaim, error) {
-	if err := ensurePool(r.pool); err != nil {
+	if err := ensureStore(r.store); err != nil {
 		return ReplyOutboxReclaim{}, err
 	}
 
@@ -36,85 +32,74 @@ func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize in
 
 	var result ReplyOutboxReclaim
 
-	if err := dbx.InPgxTxOptions(ctx, r.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		candidates, err := lockedReplyReclaimCandidates(ctx, tx, batchSize, horizonMS)
-		if err != nil {
-			return err
+	err = r.store.write(ctx, func(tx *sql.Tx, now int64) error {
+		candidates, candidateErr := expiredReplyReclaimCandidates(ctx, tx, now, batchSize, horizonMS)
+		if candidateErr != nil {
+			return candidateErr
 		}
 
-		result, err = applyReplyReclaim(ctx, tx, candidates, r.maxAttempts, horizonMS)
+		result, candidateErr = applyReplyReclaim(ctx, tx, candidates, r.maxAttempts, now, horizonMS)
 
-		return err
-	}); err != nil {
+		return candidateErr
+	})
+	if err != nil {
 		return ReplyOutboxReclaim{}, fmt.Errorf("reclaim expired reply outbox leases: %w", err)
 	}
 
 	return result, nil
 }
 
-func lockedReplyReclaimCandidates(ctx context.Context, tx pgx.Tx, batchSize int32, horizonMS int64) ([]replyReclaimCandidate, error) {
-	rows, err := pgxdb.Query(ctx, tx, replyOutboxReclaimCandidatesSQL, batchSize, horizonMS)
+func expiredReplyReclaimCandidates(ctx context.Context, tx *sql.Tx, now int64, batchSize int32, horizonMS int64) ([]replyReclaimCandidate, error) {
+	rows, err := tx.QueryContext(ctx, replyOutboxReclaimCandidatesSQL, now, batchSize, horizonMS)
 	if err != nil {
-		return nil, fmt.Errorf("lock reply reclaim candidates: %w", err)
+		return nil, fmt.Errorf("select reply reclaim candidates: %w", err)
+	}
+	defer rows.Close()
+
+	candidates := make([]replyReclaimCandidate, 0, batchSize)
+
+	for rows.Next() {
+		var candidate replyReclaimCandidate
+
+		if err := rows.Scan(&candidate.ID, &candidate.Attempts, &candidate.OperatorReplayGrants, &candidate.HorizonExpired); err != nil {
+			return nil, fmt.Errorf("scan reply reclaim candidate: %w", err)
+		}
+
+		candidates = append(candidates, candidate)
 	}
 
-	candidates, err := pgx.CollectRows(rows, pgx.RowToStructByPos[replyReclaimCandidate])
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read reply reclaim candidates: %w", err)
 	}
 
 	return candidates, nil
 }
 
-type replyReclaimMutation struct {
-	ids             []int64
-	targets, errors []string
-	retry           []bool
-	result          ReplyOutboxReclaim
-}
+func applyReplyReclaim(ctx context.Context, tx *sql.Tx, candidates []replyReclaimCandidate, maxAttempts int32, now, horizonMS int64) (ReplyOutboxReclaim, error) {
+	var result ReplyOutboxReclaim
 
-func newReplyReclaimMutation(candidates []replyReclaimCandidate, maxAttempts int32) replyReclaimMutation {
-	mutation := replyReclaimMutation{
-		ids: make([]int64, 0, len(candidates)), targets: make([]string, 0, len(candidates)),
-		errors: make([]string, 0, len(candidates)), retry: make([]bool, 0, len(candidates)),
-	}
 	for _, candidate := range candidates {
 		retry := !candidate.HorizonExpired &&
 			int64(candidate.Attempts) < int64(maxAttempts)+int64(candidate.OperatorReplayGrants)
-		target, reason := ReplyOutboxManualReview, "automatic replay safety boundary reached"
+
+		query, args := replyOutboxReclaimReviewSQL, []any{candidate.ID, now}
 
 		if retry {
-			target, reason = replyOutboxStatusPending, "submit lease expired"
-			mutation.result.Requeued++
+			query, args = replyOutboxReclaimRequeueSQL, []any{candidate.ID, now, horizonMS}
+			result.Requeued++
 		} else {
-			mutation.result.SafetyManualReview++
+			result.SafetyManualReview++
 		}
 
-		mutation.ids = append(mutation.ids, candidate.ID)
-		mutation.targets = append(mutation.targets, target)
-		mutation.errors = append(mutation.errors, reason)
-		mutation.retry = append(mutation.retry, retry)
+		outcome, err := tx.ExecContext(ctx, query, args...)
+		if err != nil {
+			return ReplyOutboxReclaim{}, fmt.Errorf("apply reply reclaim to row %d: %w", candidate.ID, err)
+		}
+
+		if affected, err := rowsAffected(outcome); err != nil || affected != 1 {
+			return ReplyOutboxReclaim{}, errors.Join(errReplyReclaimSnapshotChanged, err)
+		}
 	}
 
-	return mutation
-}
-
-func applyReplyReclaim(ctx context.Context, tx pgx.Tx, candidates []replyReclaimCandidate, maxAttempts int32, horizonMS int64) (ReplyOutboxReclaim, error) {
-	if len(candidates) == 0 {
-		return ReplyOutboxReclaim{}, nil
-	}
-
-	mutation := newReplyReclaimMutation(candidates, maxAttempts)
-
-	tag, err := pgxdb.Exec(ctx, tx, replyOutboxReclaimExpiredSQL, mutation.ids, mutation.targets,
-		mutation.errors, mutation.retry, horizonMS)
-	if err != nil {
-		return ReplyOutboxReclaim{}, fmt.Errorf("apply reply reclaim: %w", err)
-	}
-
-	if tag.RowsAffected() != int64(len(candidates)) {
-		return ReplyOutboxReclaim{}, errors.New("reply reclaim snapshot no longer eligible")
-	}
-
-	return mutation.result, nil
+	return result, nil
 }

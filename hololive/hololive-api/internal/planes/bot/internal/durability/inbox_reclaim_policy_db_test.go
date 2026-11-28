@@ -2,13 +2,14 @@ package durability
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestInboxReclaimSkipsLockedHeadAndAppliesMixedPolicies(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+func TestInboxReclaimAppliesMixedPolicies(t *testing.T) {
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	ctx := t.Context()
 
 	for _, id := range []string{"exhausted", "retryable", "live"} {
@@ -21,37 +22,27 @@ func TestInboxReclaimSkipsLockedHeadAndAppliesMixedPolicies(t *testing.T) {
 
 	admitOne(ctx, t, repo, inboxMessage("message:successor", "exhausted", "room:exhausted"))
 
-	_, err := pool.Exec(ctx, `UPDATE bot_webhook_inbox SET lease_until=clock_timestamp()-interval '1 minute',
+	_, err := store.Exec(ctx, `UPDATE bot_webhook_inbox SET lease_until = ?1,
 		attempts=CASE WHEN message_id='message:exhausted' THEN 3 ELSE 1 END
-		WHERE message_id IN ('message:exhausted','message:retryable')`)
-	require.NoError(t, err)
-
-	locker, err := pool.Begin(ctx)
-	require.NoError(t, err)
-
-	defer func() { require.NoError(t, rollbackInboxTx(ctx, locker)) }()
-
-	_, err = locker.Exec(ctx, `SELECT message_id FROM bot_webhook_inbox WHERE message_id='message:exhausted' FOR UPDATE`)
+		WHERE message_id IN ('message:exhausted','message:retryable')`, time.Now().Add(-time.Minute).UnixMilli())
 	require.NoError(t, err)
 
 	result, err := repo.ReclaimExpired(ctx, 3, 100)
 	require.NoError(t, err)
-	require.Equal(t, InboxReclaim{Requeued: 1}, result)
+	require.Equal(t, InboxReclaim{Requeued: 1, Abandoned: 1}, result)
 
-	status, _, _, _ := inboxRow(ctx, t, pool, "message:live")
+	status, _, _, _ := inboxRow(ctx, t, store, "message:live")
 	require.Equal(t, "processing", status)
-	require.NoError(t, locker.Commit(ctx))
 
-	result, err = repo.ReclaimExpired(ctx, 3, 100)
-	require.NoError(t, err)
-	require.Equal(t, InboxReclaim{Abandoned: 1}, result)
-
-	status, _, _, _ = inboxRow(ctx, t, pool, "message:exhausted")
+	status, _, _, _ = inboxRow(ctx, t, store, "message:exhausted")
 	require.Equal(t, "dead", status)
+
+	status, _, _, _ = inboxRow(ctx, t, store, "message:retryable")
+	require.Equal(t, "retry", status)
 
 	var head string
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT message_id FROM bot_webhook_heads WHERE ordering_key='room:exhausted'`).Scan(&head))
+	require.NoError(t, store.QueryRow(ctx, `SELECT message_id FROM bot_webhook_heads WHERE ordering_key='room:exhausted'`).Scan(&head))
 	require.Equal(t, "message:successor", head)
 
 	result, err = repo.ReclaimExpired(ctx, 3, 100)

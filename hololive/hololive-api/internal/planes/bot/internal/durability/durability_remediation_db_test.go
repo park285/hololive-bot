@@ -2,13 +2,10 @@ package durability
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,12 +21,12 @@ func inboxMessage(messageID, roomID, orderingKey string) InboxMessage {
 }
 
 func TestReplyOutboxSettleRejectsPreDispatchAfterAcceptance(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := newTestReplyOutboxRepository(pool)
+	store := newTestStore(t)
+	repo := newTestReplyOutboxRepository(store)
 	ctx := t.Context()
 
 	t.Run("accepted rows never return to the claim queue as pre-dispatch", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 
 		entry := newReplyOutboxEntry("message:m-accepted", 0, `{"body":"x"}`)
 		claim := claimOne(ctx, t, repo, entry)
@@ -47,7 +44,7 @@ func TestReplyOutboxSettleRejectsPreDispatchAfterAcceptance(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, applied, "Iris가 이미 수리한 행은 pre-dispatch로 정산될 수 없다")
 
-		status, _, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+		status, _, _, _ := replyOutboxRow(ctx, t, store, entry.ClientRequestID)
 		assert.Equal(t, "accepted", status)
 
 		reclaimed, err := repo.Claim(ctx, "token-b", durabilityTestLease)
@@ -56,7 +53,7 @@ func TestReplyOutboxSettleRejectsPreDispatchAfterAcceptance(t *testing.T) {
 	})
 
 	t.Run("submitting rows still settle as pre-dispatch", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 
 		entry := newReplyOutboxEntry("message:m-submitting", 0, `{"body":"x"}`)
 		claim := claimOne(ctx, t, repo, entry)
@@ -69,7 +66,7 @@ func TestReplyOutboxSettleRejectsPreDispatchAfterAcceptance(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.True(t, applied)
-		advanceReplyRetry(ctx, t, pool, claim.ID)
+		advanceReplyRetry(ctx, t, store, claim.ID)
 
 		reclaimed, err := repo.Claim(ctx, "token-b", durabilityTestLease)
 		require.NoError(t, err)
@@ -79,10 +76,10 @@ func TestReplyOutboxSettleRejectsPreDispatchAfterAcceptance(t *testing.T) {
 }
 
 func TestOnlyTheHandoffReconcilerMovesAnAcceptedReplyToATerminalState(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := newTestReplyOutboxRepository(pool)
+	store := newTestStore(t)
+	repo := newTestReplyOutboxRepository(store)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	entry := newReplyOutboxEntry("message:m-terminal", 0, `{"body":"x"}`)
 	claim := claimOne(ctx, t, repo, entry)
@@ -108,26 +105,22 @@ func TestOnlyTheHandoffReconcilerMovesAnAcceptedReplyToATerminalState(t *testing
 	require.NoError(t, err)
 	assert.True(t, applied)
 
-	status, payload, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+	status, payload, _, _ := replyOutboxRow(ctx, t, store, entry.ClientRequestID)
 	assert.Equal(t, ReplyOutboxHandoffCompleted, status)
 	assert.Nil(t, payload)
 }
 
 func TestOversizedDiagnosticsAreTruncatedInsteadOfStrandingTheRow(t *testing.T) {
-	pool := newDurabilityPool(t)
+	store := newTestStore(t)
 	ctx := t.Context()
 	oversized := strings.Repeat("e", 9000)
 
 	t.Run("inbox release reduces last_error to a bounded reason and reaches retry", func(t *testing.T) {
-		assertInboxReleaseBoundsLastError(ctx, t, pool, oversized)
+		assertInboxReleaseBoundsLastError(ctx, t, store, oversized)
 	})
 
 	t.Run("outbox settle truncates last_error and reaches the terminal status", func(t *testing.T) {
-		assertOutboxSettleTruncatesLastError(ctx, t, pool, oversized)
-	})
-
-	t.Run("command execution records the terminal summary and rejects raw diagnostics", func(t *testing.T) {
-		assertCommandExecutionScrubsResultSummary(ctx, t, pool)
+		assertOutboxSettleTruncatesLastError(ctx, t, store, oversized)
 	})
 
 	t.Run("truncation keeps the head valid utf-8", func(t *testing.T) {
@@ -137,11 +130,11 @@ func TestOversizedDiagnosticsAreTruncatedInsteadOfStrandingTheRow(t *testing.T) 
 	})
 }
 
-func assertInboxReleaseBoundsLastError(ctx context.Context, t *testing.T, pool *pgxpool.Pool, oversized string) {
+func assertInboxReleaseBoundsLastError(ctx context.Context, t *testing.T, store *Store, oversized string) {
 	t.Helper()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
-	repo := NewInboxRepository(pool)
+	repo := NewInboxRepository(store)
 	msg := inboxMessage("message:m-clamp", "room-1", "room:room-1")
 	admitOne(ctx, t, repo, msg)
 
@@ -152,21 +145,21 @@ func assertInboxReleaseBoundsLastError(ctx context.Context, t *testing.T, pool *
 	require.NoError(t, err)
 	require.Equal(t, InboxReleaseRetried, outcome)
 
-	status, _, _, _ := inboxRow(ctx, t, pool, msg.MessageID)
+	status, _, _, _ := inboxRow(ctx, t, store, msg.MessageID)
 	assert.Equal(t, "retry", status)
 
 	var stored string
 
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT last_error FROM bot_webhook_inbox WHERE message_id = $1", msg.MessageID).Scan(&stored))
+	require.NoError(t, store.QueryRow(ctx,
+		"SELECT last_error FROM bot_webhook_inbox WHERE message_id = ?1", msg.MessageID).Scan(&stored))
 	assert.Equal(t, InboxFailureProcessingFailed, stored)
 }
 
-func assertOutboxSettleTruncatesLastError(ctx context.Context, t *testing.T, pool *pgxpool.Pool, oversized string) {
+func assertOutboxSettleTruncatesLastError(ctx context.Context, t *testing.T, store *Store, oversized string) {
 	t.Helper()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
-	repo := newTestReplyOutboxRepository(pool)
+	repo := newTestReplyOutboxRepository(store)
 	entry := newReplyOutboxEntry("message:m-clamp", 0, `{"body":"x"}`)
 	claim := claimOne(ctx, t, repo, entry)
 
@@ -179,59 +172,29 @@ func assertOutboxSettleTruncatesLastError(ctx context.Context, t *testing.T, poo
 	require.NoError(t, err)
 	require.True(t, applied)
 
-	status, _, _, token := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+	status, _, _, token := replyOutboxRow(ctx, t, store, entry.ClientRequestID)
 	assert.Equal(t, ReplyOutboxOutcomeUnknown, status)
 	assert.Nil(t, token)
 }
 
-func assertCommandExecutionScrubsResultSummary(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-	truncateDurabilityTables(ctx, t, pool)
-
-	repo := NewCommandExecutionRepository(pool)
-	claimed, err := repo.Claim(ctx, "message:m-clamp", "alarm", testClaimToken)
-	require.NoError(t, err)
-	require.True(t, claimed)
-
-	applied, err := repo.Complete(ctx, "message:m-clamp", testClaimToken, CommandExecutionFailed)
-	require.NoError(t, err)
-	require.True(t, applied)
-
-	var status, summary string
-
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT status, result_summary FROM bot_command_executions WHERE message_id = $1",
-		"message:m-clamp").Scan(&status, &summary))
-	assert.Equal(t, CommandExecutionFailed, status)
-	assert.Equal(t, CommandExecutionFailed, summary)
-
-	_, err = pool.Exec(ctx, `UPDATE bot_command_executions SET result_summary = 'raw diagnostic' WHERE message_id = $1`,
-		"message:m-clamp")
-
-	pgErr, ok := errors.AsType[*pgconn.PgError](err)
-	require.True(t, ok, "terminal summary rewrite error = %v", err)
-	assert.Equal(t, "23514", pgErr.Code)
-	assert.Equal(t, "chk_bot_command_executions_terminal_summary_scrubbed", pgErr.ConstraintName)
-}
-
 func TestInboxReclaimExpiredLeases(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	ctx := t.Context()
 
 	t.Run("an expired lease returns to the queue and fences the old worker out", func(t *testing.T) {
-		assertInboxReclaimRequeuesExpiredLease(ctx, t, pool, repo)
+		assertInboxReclaimRequeuesExpiredLease(ctx, t, store, repo)
 	})
 
 	t.Run("exhausted attempts become dead with a recorded reason", func(t *testing.T) {
-		assertInboxReclaimAbandonsExhaustedAttempts(ctx, t, pool, repo)
+		assertInboxReclaimAbandonsExhaustedAttempts(ctx, t, store, repo)
 	})
 
 	t.Run("a live lease is left alone", func(t *testing.T) {
-		assertInboxReclaimLeavesLiveLeaseAlone(ctx, t, pool, repo)
+		assertInboxReclaimLeavesLiveLeaseAlone(ctx, t, store, repo)
 	})
 
-	t.Run("invalid arguments are rejected before touching postgres", func(t *testing.T) {
+	t.Run("invalid arguments are rejected before touching the store", func(t *testing.T) {
 		assertInboxReclaimRejectsInvalidArguments(ctx, t, repo)
 	})
 }
@@ -239,18 +202,18 @@ func TestInboxReclaimExpiredLeases(t *testing.T) {
 func assertInboxReclaimRequeuesExpiredLease(
 	ctx context.Context,
 	t *testing.T,
-	pool *pgxpool.Pool,
+	store *Store,
 	repo *InboxRepository,
 ) {
 	t.Helper()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	msg := inboxMessage("message:m-lease", "room-1", "room:room-1")
 	admitOne(ctx, t, repo, msg)
 
 	_, err := repo.Claim(ctx, testClaimToken, time.Millisecond)
 	require.NoError(t, err)
-	expireInboxLease(ctx, t, pool, msg.MessageID)
+	expireInboxLease(ctx, t, store, msg.MessageID)
 
 	reclaim, err := repo.ReclaimExpired(ctx, 5, 100)
 	require.NoError(t, err)
@@ -270,18 +233,18 @@ func assertInboxReclaimRequeuesExpiredLease(
 func assertInboxReclaimAbandonsExhaustedAttempts(
 	ctx context.Context,
 	t *testing.T,
-	pool *pgxpool.Pool,
+	store *Store,
 	repo *InboxRepository,
 ) {
 	t.Helper()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	msg := inboxMessage("message:m-dead", "room-1", "room:room-1")
 	admitOne(ctx, t, repo, msg)
 
 	_, err := repo.Claim(ctx, testClaimToken, time.Millisecond)
 	require.NoError(t, err)
-	expireInboxLease(ctx, t, pool, msg.MessageID)
+	expireInboxLease(ctx, t, store, msg.MessageID)
 
 	reclaim, err := repo.ReclaimExpired(ctx, 1, 100)
 	require.NoError(t, err)
@@ -289,11 +252,11 @@ func assertInboxReclaimAbandonsExhaustedAttempts(
 
 	var (
 		status, reason string
-		terminalAt     *time.Time
+		terminalAt     *int64
 	)
 
-	require.NoError(t, pool.QueryRow(ctx,
-		"SELECT status, terminal_reason, terminal_at FROM bot_webhook_inbox WHERE message_id = $1",
+	require.NoError(t, store.QueryRow(ctx,
+		"SELECT status, terminal_reason, terminal_at FROM bot_webhook_inbox WHERE message_id = ?1",
 		msg.MessageID).Scan(&status, &reason, &terminalAt))
 	assert.Equal(t, "dead", status)
 	assert.NotEmpty(t, reason)
@@ -307,11 +270,11 @@ func assertInboxReclaimAbandonsExhaustedAttempts(
 func assertInboxReclaimLeavesLiveLeaseAlone(
 	ctx context.Context,
 	t *testing.T,
-	pool *pgxpool.Pool,
+	store *Store,
 	repo *InboxRepository,
 ) {
 	t.Helper()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	msg := inboxMessage("message:m-live", "room-1", "room:room-1")
 	admitOne(ctx, t, repo, msg)
@@ -335,12 +298,12 @@ func assertInboxReclaimRejectsInvalidArguments(ctx context.Context, t *testing.T
 }
 
 func TestInboxClaimSerializesOneOrderingKey(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	ctx := t.Context()
 
 	t.Run("a second message of the same room waits for the first", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 		admitOne(ctx, t, repo, inboxMessage("message:m-room1-a", "room-1", "room:room-1"))
 		admitOne(ctx, t, repo, inboxMessage("message:m-room1-b", "room-1", "room:room-1"))
 
@@ -364,7 +327,7 @@ func TestInboxClaimSerializesOneOrderingKey(t *testing.T) {
 	})
 
 	t.Run("distinct rooms stay concurrent", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 		admitOne(ctx, t, repo, inboxMessage("message:m-room1", "room-1", "room:room-1"))
 		admitOne(ctx, t, repo, inboxMessage("message:m-room2", "room-2", "room:room-2"))
 
@@ -380,12 +343,12 @@ func TestInboxClaimSerializesOneOrderingKey(t *testing.T) {
 }
 
 func TestCommandExecutionClaimOwnership(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewCommandExecutionRepository(pool)
+	store := newTestStore(t)
+	repo := NewCommandExecutionRepository(store)
 	ctx := t.Context()
 
 	t.Run("a foreign process cannot complete another claim", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 
 		claimed, err := repo.Claim(ctx, "message:m-own", "alarm", testClaimToken)
 		require.NoError(t, err)
@@ -401,26 +364,25 @@ func TestCommandExecutionClaimOwnership(t *testing.T) {
 	})
 
 	t.Run("a stale claim is closed terminally and never re-executes", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 
 		claimed, err := repo.Claim(ctx, "message:m-stale", "alarm", testClaimToken)
 		require.NoError(t, err)
 		require.True(t, claimed)
 
-		_, err = pool.Exec(ctx, `UPDATE bot_command_executions SET claimed_at = claimed_at - interval '20 milliseconds' WHERE message_id = $1`, "message:m-stale")
+		_, err = store.Exec(ctx, `UPDATE bot_command_executions SET claimed_at = claimed_at - 20 WHERE message_id = ?1`, "message:m-stale")
 		require.NoError(t, err)
 
 		expired, err := repo.ExpireStaleClaims(ctx, 10*time.Millisecond, 100)
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), expired)
 
-		var status, summary string
+		var status string
 
-		require.NoError(t, pool.QueryRow(ctx,
-			"SELECT status, result_summary FROM bot_command_executions WHERE message_id = $1",
-			"message:m-stale").Scan(&status, &summary))
+		require.NoError(t, store.QueryRow(ctx,
+			"SELECT status FROM bot_command_executions WHERE message_id = ?1",
+			"message:m-stale").Scan(&status))
 		assert.Equal(t, CommandExecutionOutcomeUnknown, status)
-		assert.NotEmpty(t, summary)
 
 		reclaimed, err := repo.Claim(ctx, "message:m-stale", "alarm", "token-b")
 		require.NoError(t, err)
@@ -432,7 +394,7 @@ func TestCommandExecutionClaimOwnership(t *testing.T) {
 	})
 
 	t.Run("a fresh claim is left alone", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 
 		_, err := repo.Claim(ctx, "message:m-fresh", "alarm", testClaimToken)
 		require.NoError(t, err)
@@ -444,12 +406,12 @@ func TestCommandExecutionClaimOwnership(t *testing.T) {
 }
 
 func TestReplyOutboxInsertDistinguishesReplayFromDivergence(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := newTestReplyOutboxRepository(pool)
+	store := newTestStore(t)
+	repo := newTestReplyOutboxRepository(store)
 	ctx := t.Context()
 
 	t.Run("an identical replay is an idempotent no-op", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 
 		entry := newReplyOutboxEntry("message:m-replay", 0, `{"body":"first"}`)
 		outcome, err := repo.Insert(ctx, entry)
@@ -462,7 +424,7 @@ func TestReplyOutboxInsertDistinguishesReplayFromDivergence(t *testing.T) {
 	})
 
 	t.Run("a divergent payload for the same slot is an explicit conflict", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 
 		entry := newReplyOutboxEntry("message:m-diverge", 0, `{"body":"first"}`)
 		outcome, err := repo.Insert(ctx, entry)
@@ -476,16 +438,16 @@ func TestReplyOutboxInsertDistinguishesReplayFromDivergence(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, ReplyOutboxPayloadDiverged, outcome)
 
-		_, payload, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+		_, payload, _, _ := replyOutboxRow(ctx, t, store, entry.ClientRequestID)
 		assert.JSONEq(t, `{"body":"first"}`, string(payload))
 	})
 }
 
 func TestReplyOutboxOrdinalSharesTheTransportDomain(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := newTestReplyOutboxRepository(pool)
+	store := newTestStore(t)
+	repo := newTestReplyOutboxRepository(store)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	_, err := repo.Insert(ctx, newReplyOutboxEntry("message:m-ordinal", ^uint64(0), `{"body":"x"}`))
 	require.ErrorIs(t, err, ErrInvalidArgument, "BIGINT 정의역 밖 ordinal은 드라이버 인코딩 오류가 아니라 인자 오류다")
@@ -502,10 +464,10 @@ func TestReplyOutboxOrdinalSharesTheTransportDomain(t *testing.T) {
 }
 
 func TestReplyOutboxInsertDoesNotShareThePayloadBuffer(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := newTestReplyOutboxRepository(pool)
+	store := newTestStore(t)
+	repo := newTestReplyOutboxRepository(store)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	payload := []byte(`{"body":"first"}`)
 	entry := newReplyOutboxEntry("message:m-buffer", 0, "")
@@ -527,10 +489,10 @@ func TestReplyOutboxInsertDoesNotShareThePayloadBuffer(t *testing.T) {
 }
 
 func TestRoomIdentifierFollowsTheWebhookContract(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	admission, err := repo.AdmitResult(ctx, inboxMessage("message:m-longroom", strings.Repeat("방", 256), "room:long"))
 	require.NoError(t, err, "SDK Room 계약(256 rune) 안의 방 제목이 admission에서 탈락하면 메시지가 유실된다")
@@ -541,10 +503,10 @@ func TestRoomIdentifierFollowsTheWebhookContract(t *testing.T) {
 }
 
 func TestLeaseBelowOneMillisecondIsRejected(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	admitOne(ctx, t, repo, inboxMessage("message:m-lease-floor", "room-1", "room:room-1"))
 
@@ -556,9 +518,9 @@ func TestLeaseBelowOneMillisecondIsRejected(t *testing.T) {
 }
 
 func TestMessageIdentityIsOneKeySpaceAcrossTheThreeLedgers(t *testing.T) {
-	pool := newDurabilityPool(t)
+	store := newTestStore(t)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	const raw = "m-shared"
 
@@ -566,7 +528,7 @@ func TestMessageIdentityIsOneKeySpaceAcrossTheThreeLedgers(t *testing.T) {
 	require.Equal(t, "message:m-shared", prefixed)
 	require.Equal(t, prefixed, MessageIdentity(prefixed), "정규화는 멱등이어야 한다")
 
-	inbox := NewInboxRepository(pool)
+	inbox := NewInboxRepository(store)
 	admission, err := inbox.AdmitResult(ctx, inboxMessage(raw, "room-1", "room:room-1"))
 	require.NoError(t, err)
 	require.Equal(t, workercontract.AdmissionAccepted, admission)
@@ -575,7 +537,7 @@ func TestMessageIdentityIsOneKeySpaceAcrossTheThreeLedgers(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, workercontract.AdmissionAccepted, admission, "raw id와 접두 id가 다른 행을 만들면 메시지당 실행 1회가 깨진다")
 
-	executions := NewCommandExecutionRepository(pool)
+	executions := NewCommandExecutionRepository(store)
 	claimed, err := executions.Claim(ctx, raw, "alarm", testClaimToken)
 	require.NoError(t, err)
 	require.True(t, claimed)
@@ -584,7 +546,7 @@ func TestMessageIdentityIsOneKeySpaceAcrossTheThreeLedgers(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, claimed)
 
-	outbox := newTestReplyOutboxRepository(pool)
+	outbox := newTestReplyOutboxRepository(store)
 	entry := newReplyOutboxEntry(prefixed, 0, `{"body":"x"}`)
 	outcome, err := outbox.Insert(ctx, entry)
 	require.NoError(t, err)

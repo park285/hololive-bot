@@ -13,21 +13,21 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
-	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability/durabilitytest"
 )
 
 func TestInboxAttemptTrackingEndsOnReturnAndPanic(t *testing.T) {
 	for _, outcome := range []string{"success", "failure", "panic"} {
 		t.Run(outcome, func(t *testing.T) {
-			pool := dbtest.NewPool(t)
-			inbox := durability.NewInboxRepository(pool)
+			durable := durabilitytest.Open(t)
+			inbox := durability.NewInboxRepository(durable.Store)
 			_, err := inbox.AdmitResult(t.Context(), durability.InboxMessage{
 				MessageID: "message:attempt", RoomID: testRoomID, OrderingKey: testOrderingKey,
 				Payload: testWebhookBody(t, "attempt", "!help"),
 			})
 			require.NoError(t, err)
 
-			commands := durability.NewCommandExecutionRepository(pool)
+			commands := durability.NewCommandExecutionRepository(durable.Store)
 			tracker := workercontract.NewExecutorTracker()
 			runtime := &durableRuntime{
 				inbox: inbox, commands: commands,
@@ -93,8 +93,8 @@ func TestOutboxAttemptTrackingEndsOnReturnAndPanic(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
-			pool := dbtest.NewPool(t)
-			outbox := newTestReplyOutboxRepository(t, pool)
+			durable := durabilitytest.Open(t)
+			outbox := newTestReplyOutboxRepository(t, durable.Store)
 			_, err := outbox.Insert(t.Context(), &durability.ReplyOutboxEntry{
 				MessageID: "message:attempt", Phase: transport.ReplyPhase, RoomID: testRoomID,
 				Payload:         []byte(`{"kind":"text","message":"answer"}`),

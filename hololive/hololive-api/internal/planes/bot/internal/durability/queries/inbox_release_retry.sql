@@ -2,11 +2,11 @@ UPDATE bot_webhook_inbox
 SET status = 'retry',
     claim_token = NULL,
     lease_until = NULL,
-    available_at = clock_timestamp() + ($3::bigint * INTERVAL '1 millisecond'),
-    last_error = $4,
-    updated_at = clock_timestamp()
-WHERE message_id = $1
-  AND claim_token = $2
+    available_at = ?3 + ?4,
+    last_error = ?5,
+    updated_at = ?3
+WHERE message_id = ?1
+  AND claim_token = ?2
   AND status = 'processing'
-  AND attempts = $5
-RETURNING status
+  AND attempts = ?6
+RETURNING ordering_key

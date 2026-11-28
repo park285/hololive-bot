@@ -2,177 +2,51 @@ package durability
 
 import (
 	"context"
-	jsonv2 "encoding/json/v2"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/postgres/pgxdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInboxClaimDoesNotScanBlockedFollowers(t *testing.T) {
-	pool := newDurabilityPool(t)
+	store := newTestStore(t)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
-	repo := NewInboxRepository(pool)
+	repo := NewInboxRepository(store)
 	admitOne(ctx, t, repo, inboxMessage("message:head-plan", "room-1", "room:room-1"))
 
-	_, err := pool.Exec(ctx, `INSERT INTO bot_webhook_inbox(message_id, room_id, ordering_key, payload)
-		SELECT 'message:follower-' || n, 'room-1', 'room:room-1', '{"JSON":{"message_id":"follower"}}'::jsonb
-		FROM generate_series(1, 5000) AS n`)
+	now := time.Now().UnixMilli()
+
+	_, err := store.Exec(ctx, `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 5000)
+		INSERT INTO bot_webhook_inbox(message_id, room_id, ordering_key, payload, available_at, created_at, updated_at)
+		SELECT 'message:follower-' || i, 'room-1', 'room:room-1', '{"JSON":{"message_id":"follower"}}', ?1, ?1, ?1
+		FROM n`, now)
 	require.NoError(t, err)
 
-	tx, err := pool.Begin(ctx)
+	_, err = store.Exec(ctx, "ANALYZE")
 	require.NoError(t, err)
 
-	defer func() { require.NoError(t, pgxdb.Rollback(ctx, tx)) }()
+	details := explainQueryPlan(ctx, t, store, inboxClaimSQL, now, "plan-token", durabilityTestLease.Milliseconds())
 
-	var planJSON []byte
-
-	err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+inboxClaimSQL.SQL(), "plan-token", int64(durabilityTestLease/time.Millisecond)).Scan(&planJSON)
-	require.NoError(t, err)
-
-	var plan []map[string]any
-
-	require.NoError(t, jsonv2.Unmarshal(planJSON, &plan))
-	require.NotEmpty(t, plan)
-
-	stats := inboxPlanStats(plan[0])
-	assert.False(t, stats.SeqScan, "claim plan must not sequentially scan the inbox")
-	assert.True(t, stats.IndexLookup, "claim plan must use an inbox index lookup")
-	assert.LessOrEqual(t, stats.ExaminedRows, float64(4), "claim plan examined blocked follower rows")
-}
-
-type claimPlanStats struct {
-	ExaminedRows float64
-	SeqScan      bool
-	IndexLookup  bool
-}
-
-func inboxPlanStats(node map[string]any) claimPlanStats {
-	plan := planMapValue(node, "Plan")
-	if plan != nil {
-		return inboxPlanStats(plan)
+	for _, detail := range details {
+		assert.False(t, strings.HasPrefix(detail, "SCAN due") || strings.HasPrefix(detail, "SCAN bot_webhook_inbox"),
+			"claim plan must not scan blocked followers: %v", details)
 	}
 
-	stats := claimPlanStats{}
-
-	if node["Relation Name"] == "bot_webhook_inbox" {
-		loops := planFloatValue(node, "Actual Loops")
-		if loops == 0 {
-			loops = 1
-		}
-
-		actual := planFloatValue(node, "Actual Rows")
-		filtered := planFloatValue(node, "Rows Removed by Filter")
-		rechecked := planFloatValue(node, "Rows Removed by Index Recheck")
-
-		stats.ExaminedRows = (actual + filtered + rechecked) * loops
-
-		nodeType := planStringValue(node, "Node Type")
-
-		stats.SeqScan = nodeType == "Seq Scan"
-		stats.IndexLookup = nodeType == "Index Scan" || nodeType == "Index Only Scan" || nodeType == "Bitmap Heap Scan"
-	}
-
-	children := planSliceValue(node, "Plans")
-	for _, child := range children {
-		childNode := planNodeValue(child)
-		childStats := inboxPlanStats(childNode)
-
-		stats.ExaminedRows += childStats.ExaminedRows
-
-		stats.SeqScan = stats.SeqScan || childStats.SeqScan
-		stats.IndexLookup = stats.IndexLookup || childStats.IndexLookup
-	}
-
-	return stats
-}
-
-func planMapValue(node map[string]any, key string) map[string]any {
-	value, ok := node[key].(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	return value
-}
-
-func planNodeValue(value any) map[string]any {
-	node, ok := value.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	return node
-}
-
-func planFloatValue(node map[string]any, key string) float64 {
-	value, ok := node[key].(float64)
-	if !ok {
-		return 0
-	}
-
-	return value
-}
-
-func planStringValue(node map[string]any, key string) string {
-	value, ok := node[key].(string)
-	if !ok {
-		return ""
-	}
-
-	return value
-}
-
-func planSliceValue(node map[string]any, key string) []any {
-	value, ok := node[key].([]any)
-	if !ok {
-		return nil
-	}
-
-	return value
-}
-
-func waitForInboxLockContenders(t *testing.T, blocker pgx.Tx) {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-
-	for {
-		var waiting int
-
-		err := blocker.QueryRow(ctx, `SELECT count(*) FROM pg_locks
-			WHERE locktype = 'advisory' AND NOT granted AND pg_backend_pid() = ANY(pg_blocking_pids(pid))`).Scan(&waiting)
-		require.NoError(t, err)
-
-		if waiting == 2 {
-			return
-		}
-	}
+	assert.True(t, usesNamedIndex(details, "due"), "claim plan must look up the head message by index: %v", details)
 }
 
 func TestInboxConcurrentFirstAdmitsPreserveOneOldestHead(t *testing.T) {
-	pool := newDurabilityPool(t)
+	store := newTestStore(t)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
-	repo := NewInboxRepository(pool)
-	blocker, err := pool.Begin(ctx)
-	require.NoError(t, err)
-
-	defer func() { require.NoError(t, rollbackInboxTx(ctx, blocker)) }()
-
-	_, err = pgxdb.Exec(ctx, blocker, inboxOrderingKeyLockSQL, "room:barrier-first")
-	require.NoError(t, err)
-
+	repo := NewInboxRepository(store)
 	start := make(chan struct{})
 	errs := make(chan error, 2)
 
@@ -186,65 +60,62 @@ func TestInboxConcurrentFirstAdmitsPreserveOneOldestHead(t *testing.T) {
 	}
 
 	close(start)
-	waitForInboxLockContenders(t, blocker)
-	require.NoError(t, blocker.Commit(ctx))
 	require.NoError(t, <-errs)
 	require.NoError(t, <-errs)
 
 	var head, oldest string
 
-	require.NoError(t, pool.QueryRow(ctx, "SELECT message_id FROM bot_webhook_heads WHERE ordering_key = 'room:barrier-first'").Scan(&head))
-	require.NoError(t, pool.QueryRow(ctx, "SELECT message_id FROM bot_webhook_inbox WHERE ordering_key = 'room:barrier-first' ORDER BY id LIMIT 1").Scan(&oldest))
+	require.NoError(t, store.QueryRow(ctx, "SELECT message_id FROM bot_webhook_heads WHERE ordering_key = 'room:barrier-first'").Scan(&head))
+	require.NoError(t, store.QueryRow(ctx, "SELECT message_id FROM bot_webhook_inbox WHERE ordering_key = 'room:barrier-first' ORDER BY id LIMIT 1").Scan(&oldest))
 	assert.Equal(t, oldest, head)
 }
 
 func TestInboxAdmitRacingTerminalTransitionPreservesSuccessorHead(t *testing.T) {
-	pool := newDurabilityPool(t)
+	store := newTestStore(t)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
-	repo := NewInboxRepository(pool)
+	repo := NewInboxRepository(store)
 	admitOne(ctx, t, repo, inboxMessage("message:terminal-head", "room-1", "room:barrier-terminal"))
 
 	claim, err := repo.Claim(ctx, "terminal-token", durabilityTestLease)
 	require.NoError(t, err)
 	require.NotNil(t, claim)
 
-	blocker, err := pool.Begin(ctx)
-	require.NoError(t, err)
-
-	defer func() { require.NoError(t, rollbackInboxTx(ctx, blocker)) }()
-
-	_, err = pgxdb.Exec(ctx, blocker, inboxOrderingKeyLockSQL, "room:barrier-terminal")
-	require.NoError(t, err)
-
+	start := make(chan struct{})
 	errs := make(chan error, 2)
 
-	go func() { _, e := repo.Abandon(ctx, claim.MessageID, "terminal-token", "poison"); errs <- e }()
 	go func() {
+		<-start
+
+		_, e := repo.Abandon(ctx, claim.MessageID, "terminal-token", "poison")
+		errs <- e
+	}()
+	go func() {
+		<-start
+
 		_, e := repo.AdmitResult(ctx, inboxMessage("message:successor", "room-1", "room:barrier-terminal"))
 		errs <- e
 	}()
 
-	waitForInboxLockContenders(t, blocker)
-	require.NoError(t, blocker.Commit(ctx))
+	close(start)
 	require.NoError(t, <-errs)
 	require.NoError(t, <-errs)
 
 	var head string
 
-	require.NoError(t, pool.QueryRow(ctx, "SELECT message_id FROM bot_webhook_heads WHERE ordering_key = 'room:barrier-terminal'").Scan(&head))
+	require.NoError(t, store.QueryRow(ctx, "SELECT message_id FROM bot_webhook_heads WHERE ordering_key = 'room:barrier-terminal'").Scan(&head))
 	assert.Equal(t, "message:successor", head)
 }
 
 func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := newTestReplyOutboxRepository(pool)
+	store := newTestStore(t)
+	repo := newTestReplyOutboxRepository(store)
 	ctx := t.Context()
 
 	for _, status := range []string{ReplyOutboxOutcomeUnknown, ReplyOutboxRetryablePreDispatch} {
 		t.Run(status, func(t *testing.T) {
-			truncateDurabilityTables(ctx, t, pool)
+			truncateDurabilityTables(ctx, t, store)
 
 			entry := newReplyOutboxEntry("message:m-"+status, 0, `{"body":"delivered"}`)
 			claim := claimOne(ctx, t, repo, entry)
@@ -263,7 +134,7 @@ func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
 			assert.False(t, applied,
 				"Iris가 수리한 뒤 재발송 가능 status로 정산되면 admission TTL이 지난 시점에 중복 발화가 된다")
 
-			rowStatus, _, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+			rowStatus, _, _, _ := replyOutboxRow(ctx, t, store, entry.ClientRequestID)
 			assert.Equal(t, ReplyOutboxAccepted, rowStatus)
 
 			resend, err := repo.Claim(ctx, "token-b", durabilityTestLease)
@@ -273,7 +144,7 @@ func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
 	}
 
 	t.Run("lease reclaim leaves an unleased accepted row to the handoff reconciler", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
+		truncateDurabilityTables(ctx, t, store)
 
 		entry := newReplyOutboxEntry("message:m-unleased", 0, `{"body":"delivered"}`)
 		inserted, err := repo.Insert(ctx, entry)
@@ -290,14 +161,14 @@ func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
 
 		var unleased bool
 
-		require.NoError(t, pool.QueryRow(ctx, `SELECT lease_until IS NULL FROM bot_reply_outbox WHERE id = $1`, claim.ID).Scan(&unleased))
+		require.NoError(t, store.QueryRow(ctx, `SELECT lease_until IS NULL FROM bot_reply_outbox WHERE id = ?1`, claim.ID).Scan(&unleased))
 		require.True(t, unleased)
 
 		reclaim, err := repo.ReclaimExpired(ctx, 100)
 		require.NoError(t, err)
 		assert.Equal(t, ReplyOutboxReclaim{}, reclaim)
 
-		status, payload, _, token := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+		status, payload, _, token := replyOutboxRow(ctx, t, store, entry.ClientRequestID)
 		assert.Equal(t, ReplyOutboxAccepted, status)
 		assert.NotNil(t, payload, "failed 재발송에 쓸 payload는 handoff 확인 전까지 남는다")
 		assert.Nil(t, token)
@@ -305,10 +176,10 @@ func TestReplyOutboxAcceptedNeverReturnsToTheClaimQueue(t *testing.T) {
 }
 
 func TestReplyOutboxClaimsPreserveRoomOrderWhileOtherRoomsProgress(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := newTestReplyOutboxRepository(pool)
+	store := newTestStore(t)
+	repo := newTestReplyOutboxRepository(store)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	roomAHead := newReplyOutboxEntry("message:room-a-head", 0, `{"kind":"text","message":"a1"}`)
 	roomAFollower := newReplyOutboxEntry("message:room-a-follower", 0, `{"kind":"text","message":"a2"}`)
@@ -350,10 +221,10 @@ func TestReplyOutboxClaimsPreserveRoomOrderWhileOtherRoomsProgress(t *testing.T)
 }
 
 func TestInboxPoisonTerminalTransitionRacesHeadOfLineClaims(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	ctx := t.Context()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	const workers = 16
 
@@ -407,7 +278,7 @@ func TestInboxPoisonTerminalTransitionRacesHeadOfLineClaims(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	status, _, _, _ := inboxRow(ctx, t, pool, poison.MessageID)
+	status, _, _, _ := inboxRow(ctx, t, store, poison.MessageID)
 	assert.Equal(t, "dead", status)
 
 	claim, err := repo.Claim(ctx, "final-worker", durabilityTestLease)
@@ -424,19 +295,19 @@ const (
 )
 
 func TestInboxPoisonMessageReachesTerminalAndUnblocksTheRoom(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	ctx := t.Context()
 
 	t.Run("cooperative release stops retrying once attempts are exhausted", func(t *testing.T) {
-		assertCooperativeReleaseReachesTerminal(ctx, t, pool, repo)
+		assertCooperativeReleaseReachesTerminal(ctx, t, store, repo)
 	})
 
 	t.Run("a worker can declare a permanent failure without burning attempts", func(t *testing.T) {
-		assertAbandonBypassesTheAttemptBudget(ctx, t, pool, repo)
+		assertAbandonBypassesTheAttemptBudget(ctx, t, store, repo)
 	})
 
-	t.Run("invalid arguments are rejected before touching postgres", func(t *testing.T) {
+	t.Run("invalid arguments are rejected before touching the store", func(t *testing.T) {
 		assertInboxTerminalRejectsInvalidArguments(ctx, t, repo)
 	})
 }
@@ -444,11 +315,11 @@ func TestInboxPoisonMessageReachesTerminalAndUnblocksTheRoom(t *testing.T) {
 func assertCooperativeReleaseReachesTerminal(
 	ctx context.Context,
 	t *testing.T,
-	pool *pgxpool.Pool,
+	store *Store,
 	repo *InboxRepository,
 ) {
 	t.Helper()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	poison := inboxMessage("message:poison", "room-1", poisonOrderingKey)
 	healthy := inboxMessage("message:healthy", "room-1", poisonOrderingKey)
@@ -460,7 +331,7 @@ func assertCooperativeReleaseReachesTerminal(
 	require.Equal(t, InboxReleaseAbandoned, outcome,
 		"협조적 Release만 하는 워커에서는 ReclaimExpired가 영원히 안 도므로 여기서 종단에 닿아야 한다")
 
-	status, _, attempts, _ := inboxRow(ctx, t, pool, poison.MessageID)
+	status, _, attempts, _ := inboxRow(ctx, t, store, poison.MessageID)
 	assert.Equal(t, "dead", status)
 	assert.LessOrEqual(t, attempts, poisonMaxAttempts)
 
@@ -501,7 +372,7 @@ func releaseUntilTerminal(
 
 		require.Equal(t, InboxReleaseRetried, outcome)
 
-		_, err = repo.pool.Exec(ctx, `UPDATE bot_webhook_inbox SET available_at = available_at - interval '1 millisecond' WHERE message_id = $1`, poison.MessageID)
+		_, err = repo.store.Exec(ctx, `UPDATE bot_webhook_inbox SET available_at = available_at - 1 WHERE message_id = ?1`, poison.MessageID)
 		require.NoError(t, err)
 	}
 
@@ -511,11 +382,11 @@ func releaseUntilTerminal(
 func assertAbandonBypassesTheAttemptBudget(
 	ctx context.Context,
 	t *testing.T,
-	pool *pgxpool.Pool,
+	store *Store,
 	repo *InboxRepository,
 ) {
 	t.Helper()
-	truncateDurabilityTables(ctx, t, pool)
+	truncateDurabilityTables(ctx, t, store)
 
 	poison := inboxMessage("message:unparseable", "room-1", poisonOrderingKey)
 	healthy := inboxMessage("message:next", "room-1", poisonOrderingKey)
@@ -534,7 +405,7 @@ func assertAbandonBypassesTheAttemptBudget(
 	require.NoError(t, err)
 	require.True(t, applied)
 
-	status, _, _, token := inboxRow(ctx, t, pool, poison.MessageID)
+	status, _, _, token := inboxRow(ctx, t, store, poison.MessageID)
 	assert.Equal(t, "dead", status)
 	assert.Nil(t, token)
 

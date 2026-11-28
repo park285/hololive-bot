@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/park285/shared-go/v2/pkg/irisdurable"
 	"github.com/park285/shared-go/v2/pkg/irisdurable/contracttest"
@@ -36,14 +35,14 @@ func TestIrisDurableContract(t *testing.T) {
 		Admitter: func(t *testing.T) irisdurable.Admitter {
 			t.Helper()
 
-			return contractAdmitter{inbox: NewInboxRepository(newDurabilityPool(t))}
+			return contractAdmitter{inbox: NewInboxRepository(newTestStore(t))}
 		},
 		ReplyOutbox: func(t *testing.T) contracttest.ReplyOutboxFixture {
 			t.Helper()
 
-			pool := newReplyDelayPool(t)
+			store := newTestStore(t)
 
-			return &contractReplyOutbox{pool: pool, repo: newTestReplyOutboxRepository(pool)}
+			return &contractReplyOutbox{store: store, repo: newTestReplyOutboxRepository(store)}
 		},
 		Reissue: &contracttest.ReissueFixture{
 			Ladder: irisdurable.ReissueLadder{
@@ -109,8 +108,8 @@ func (a contractAdmitter) Admit(ctx context.Context, input irisdurable.Admission
 }
 
 type contractReplyOutbox struct {
-	pool *pgxpool.Pool
-	repo *ReplyOutboxRepository
+	store *Store
+	repo  *ReplyOutboxRepository
 }
 
 func (o *contractReplyOutbox) NewRecord(t *testing.T, payload []byte) irisdurable.ReplyRecord {
@@ -225,7 +224,7 @@ func (o *contractReplyOutbox) Settle(ctx context.Context, attempt irisdurable.Re
 	}
 
 	if outcome.Status.Resendable() {
-		return makeReplyRetryDue(ctx, o.pool, id, max(outcome.RetryAfter.Truncate(time.Millisecond), time.Millisecond))
+		return makeReplyRetryDue(ctx, o.store, id, max(outcome.RetryAfter.Truncate(time.Millisecond), time.Millisecond))
 	}
 
 	return nil
@@ -243,8 +242,8 @@ func (o *contractReplyOutbox) Inspect(ctx context.Context, identity irisdurable.
 		attempts int32
 	)
 
-	err = o.pool.QueryRow(ctx,
-		"SELECT status, client_request_id, attempts, payload IS NOT NULL FROM bot_reply_outbox WHERE message_id = $1 AND phase = $2 AND ordinal = $3",
+	err = o.store.QueryRow(ctx,
+		"SELECT status, client_request_id, attempts, payload IS NOT NULL FROM bot_reply_outbox WHERE message_id = ?1 AND phase = ?2 AND ordinal = ?3",
 		identity.MessageID, identity.Phase, ordinal,
 	).Scan(&status, &state.ClientRequestID, &attempts, &state.PayloadPresent)
 	if err != nil {
@@ -265,8 +264,8 @@ func (o *contractReplyOutbox) rowID(ctx context.Context, identity irisdurable.Re
 
 	var id int64
 
-	err = o.pool.QueryRow(ctx,
-		"SELECT id FROM bot_reply_outbox WHERE message_id = $1 AND phase = $2 AND ordinal = $3",
+	err = o.store.QueryRow(ctx,
+		"SELECT id FROM bot_reply_outbox WHERE message_id = ?1 AND phase = ?2 AND ordinal = ?3",
 		identity.MessageID, identity.Phase, ordinal,
 	).Scan(&id)
 	if err != nil {

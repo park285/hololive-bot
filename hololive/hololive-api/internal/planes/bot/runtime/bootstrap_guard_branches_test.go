@@ -44,5 +44,5 @@ func TestBuildBotRuntime_FailsFastWhenBotDependenciesMissing(t *testing.T) {
 	runtime, err := buildBotRuntime(t.Context(), &apiconfig.BotPlaneConfig{}, testBootstrapGuardLogger(), &appbootstrap.BotInfrastructure{})
 	require.Error(t, err)
 	assert.Nil(t, runtime)
-	assert.Contains(t, err.Error(), "durable postgres pool is nil")
+	assert.Contains(t, err.Error(), "durable store is nil")
 }

@@ -43,7 +43,8 @@ bot/admin plane과 YouTube Community consume plane을 한 프로세스에서 호
 
 | Dependency | Purpose | Failure impact |
 |---|---|---|
-| PostgreSQL | command/domain/admin data, subscriptions, outbox, Iris webhook nonce | command/admin failures; nonce 판정 실패 시 webhook 503 |
+| PostgreSQL | command/domain/admin data, subscriptions | command/admin failures |
+| Bot durable SQLite (`BOT_DURABLE_STORE_PATH`) | bot webhook inbox, command 기록, reply outbox, Iris webhook nonce | webhook admission·nonce 판정 실패 시 webhook 503, reply 발송 정지 |
 | Valkey | cache, rate limit, outbox wakeup, member epoch Pub/Sub, coordination(job lock) | degraded command, admin, and cache behavior |
 | Iris | KakaoTalk ingress/reply automation | webhook/reply delivery failure |
 | Alarm API | alarm CRUD/query, LIVE 구독 방 목록(`GET /internal/alarm/channel/:id/live-rooms`) | alarm commands and admin operations fail; 일정 알림은 대기로 남음 |
@@ -58,9 +59,9 @@ Bot·admin은 필수 `ALARM_INTERNAL_URL`의 worker provider를 사용하며 in-
 
 ### Iris webhook 재전송 판정
 
-서명이 유효하면 bot plane은 기존 PostgreSQL 풀에서 `public.reserve_bot_webhook_nonce`를 실행한 뒤에만 본문을 전달합니다. `bot_webhook_nonces`의 기본 키는 SDK가 만든 식별자(메서드·대상·timestamp·nonce)의 SHA-256입니다. 원문이나 메시지 본문은 저장하지 않습니다. DB 시각으로 10분(서명 허용 오차 ±5분의 두 배) 안에는 중복을 401로 거부하며 재전송이 만료를 연장하지 않습니다. 동시 요청도 하나만 통과합니다. 만료된 동일 키는 다시 선점할 수 있고, 각 판정은 만료 행을 최대 64개씩 정리합니다. 유휴 중 정리가 밀려도 인증 시한은 변하지 않습니다.
+서명이 유효하면 bot plane은 로컬 SQLite 저장소의 `bot_webhook_nonces`에 식별자를 선점한 뒤에만 본문을 전달합니다. 기본 키는 SDK가 만든 식별자(메서드·대상·timestamp·nonce)의 SHA-256입니다. 원문이나 메시지 본문은 저장하지 않습니다. 단일 writer 트랜잭션 안에서 읽은 시각으로 10분(서명 허용 오차 ±5분의 두 배) 안에는 중복을 401로 거부하며 재전송이 만료를 연장하지 않습니다. 동시 요청도 하나만 통과합니다. 만료된 동일 키는 다시 선점할 수 있고, 각 판정은 만료 행을 최대 64개씩 정리합니다. 유휴 중 정리가 밀려도 인증 시한은 변하지 않습니다.
 
-API 계정에는 선점 함수의 `EXECUTE`만 부여하며 원장 행을 직접 읽거나 지울 수 없습니다. 저장 실패·timeout이면 SDK가 503을 반환하며 다른 저장소로 대체하지 않습니다. 이 원장은 서명 재사용만 막습니다. 새 서명으로 재전송한 같은 메시지는 기존 PostgreSQL inbox가 메시지 ID로 판정합니다.
+저장 실패·timeout이면 SDK가 503을 반환하며 다른 저장소로 대체하지 않습니다. 이 원장은 서명 재사용만 막습니다. 새 서명으로 재전송한 같은 메시지는 같은 저장소의 inbox가 메시지 ID로 판정합니다.
 ## Must not own
 
 - Alarm checker/scheduler loops owned by `alarm-worker`
@@ -100,7 +101,7 @@ API 계정에는 선점 함수의 `EXECUTE`만 부여하며 원장 행을 직접
 ## Source fallback retirement
 
 - 영속 reply INSERT의 접수 결과 불명(`ErrReplyStagingFailed`)과 Iris 전송 결과 불명은 같은 추가 응답 억제 규칙을 따릅니다. 도움말·달력 이미지 실패의 대체 텍스트나 공통 오류 응답을 추가하지 않고 명령 결과 불명을 보존합니다.
-- Reply 발송은 Iris `202` admission과 `requestId` 저장에서 끝나고 행은 lease 없는 `accepted`가 됩니다. handoff 확인은 bot plane의 reply handoff reconciler가 맡으며 `failed`는 같은 행의 `:r1`/`:r2` 재발급(세대 상한 2, 예산 소진 시 `dead`), `outcome_unknown`·`404`·지평 미확인은 자동 재발송 없는 `manual_review`로 정산합니다. `failed`에 `reason: room_not_joined`가 붙으면 예산과 관계없이 `dead`(`handoff_room_not_joined`)입니다. `last_error` 어휘는 `handoff_failed`, `handoff_room_not_joined`, `handoff_outcome_unknown`, `handoff_status_missing`, `handoff_unconfirmed`이며, alarm-worker 발송 원장과 같은 값인 shared `pkg/contracts/alarm`의 `HandoffCode*`를 씁니다. 확인 간격과 재발송 예산 판정은 bot plane이 따로 소유합니다. 발송 정산은 caller 취소와 분리된 기존 `settlement_timeout_ms` 예산을 사용하며, 적용되지 않은 정산은 결과 불명으로 집계합니다. Reply outbox attempt `success`는 admission 완료를 뜻하고 handoff 완료 지표는 없으며 reconciler 결과는 로그와 manual review backlog로 관측합니다. 엄격 shape CHECK(migration 332)는 lease 있는 `accepted`를 거부하고, 만료 lease reclaim은 `submitting`만 다룹니다. `bot_reply_outbox_accepted_reclaimed_total`은 삭제했습니다. 확인 간격·전이표·관측·적용 전제·rollback 조건은 [API runbook](../runbooks/hololive-api.md#2-durable-webhook-or-reply-backlog-grows)을 따릅니다.
+- Reply 발송은 Iris `202` admission과 `requestId` 저장에서 끝나고 행은 lease 없는 `accepted`가 됩니다. handoff 확인은 bot plane의 reply handoff reconciler가 맡으며 `failed`는 같은 행의 `:r1`/`:r2` 재발급(세대 상한 2, 예산 소진 시 `dead`), `outcome_unknown`·`404`·지평 미확인은 자동 재발송 없는 `manual_review`로 정산합니다. `failed`에 `reason: room_not_joined`가 붙으면 예산과 관계없이 `dead`(`handoff_room_not_joined`)입니다. `last_error` 어휘는 `handoff_failed`, `handoff_room_not_joined`, `handoff_outcome_unknown`, `handoff_status_missing`, `handoff_unconfirmed`이며, alarm-worker 발송 원장과 같은 값인 shared `pkg/contracts/alarm`의 `HandoffCode*`를 씁니다. 확인 간격과 재발송 예산 판정은 bot plane이 따로 소유합니다. 발송 정산은 caller 취소와 분리된 기존 `settlement_timeout_ms` 예산을 사용하며, 적용되지 않은 정산은 결과 불명으로 집계합니다. Reply outbox attempt `success`는 admission 완료를 뜻하고 handoff 완료 지표는 없으며 reconciler 결과는 로그와 manual review backlog로 관측합니다. SQLite 스키마의 shape CHECK는 lease 있는 `accepted`를 거부하고, 만료 lease reclaim은 `submitting`만 다룹니다. `bot_reply_outbox_accepted_reclaimed_total`은 삭제했습니다. 확인 간격·전이표·관측·적용 전제·rollback 조건은 [API runbook](../runbooks/hololive-api.md#2-durable-webhook-or-reply-backlog-grows)을 따릅니다.
 - 멤버 조회 backend 오류는 미발견 응답으로 바꾸지 않습니다. 달력 cache miss의 공유 조회는 기존 bot 명령 시간 예산으로 제한하고, 각 대기 요청은 자신의 context 취소에 따라 반환합니다. 달력 항목 스냅샷(`bot:calendar:entries:v1:<YYYY-MM>`, TTL `BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS`)과 렌더한 월간 달력 PNG 페이지(`bot:calendar:album:v7:<YYYY-MM>:<kind>:<theme>`, `<kind>`는 `empty`·`birthday`·`anniversary`, 값 앞에 항목 해시, TTL 7일; 생일·데뷔 기념일이 모두 있는 달은 2장 분리, 한 종류만 있거나 빈 달은 1장; 라이트 4종 `prism_daylight`·`shirokami_risograph`·`sakura_sora_press`·`museum_archive`와 다크 3종 `cream_bromide`·`kurokami_risograph`·`holo_stage` 총 7종 풀에서 각 페이지가 다크·라이트 구분 없이 직전 테마만 피해 독립 무작위 선택)는 Valkey에 두어 인스턴스와 재시작 사이에서 공유합니다. 같은 달 항목이 바뀌면 해당 월·페이지 종류·테마 key를 덮어쓰고, 차단 사진 대체 이미지처럼 공유하면 안 되는 렌더 결과는 저장하지 않습니다. 이 cache는 정본이 아니므로 Valkey 오류와 손상 값은 miss로 보고 PostgreSQL 조회·렌더로 진행하며 `render_failed`로 세지 않고 `calendar_entry_cache_failed`·`calendar_image_cache_failed` Warn 로그로만 드러냅니다. 호출자 취소·기한 만료로 끝난 cache 연산은 Valkey 장애가 아니므로 이 경고를 남기지 않습니다. 공유 멤버 캐시의 epoch 구독·재조회 작업은 공유 Valkey client와 bot·admin pool을 닫기 전에 종료합니다.
 - bot·worker의 공유 방 Catalog는 같은 인스턴스에서 겹친 전체 HTTP 조회와 per-room 저장 순회를 공유합니다. owner의 전체 예산은 기존 `QueryTimeout.Default` 5초이며 initiator/follower는 각자 취소할 수 있습니다. owner가 저장 중 만료돼도 살아 있는 waiter는 이미 확보한 방 정보를 사용합니다. 완료 뒤의 miss는 새 조회가 가능하고 negative cache는 없습니다. DB 조회 오류의 HTTP fallback 금지, 명시적 webhook metadata 우선, unknown의 plain 처리와 동일 metadata의 `Observe` 저장 재시도는 유지합니다.
 

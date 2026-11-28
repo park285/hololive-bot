@@ -9,14 +9,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ncruces/go-sqlite3"
 	"github.com/park285/iris-client-go/v6/iris"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability/durabilitytest"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
@@ -42,21 +42,19 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 		causeText = "database rejected"
 	)
 
-	pool := dbtest.NewPool(t)
-	_, err := pool.Exec(t.Context(), `
-		CREATE FUNCTION fail_handler_reply_insert_for_privacy_test() RETURNS trigger AS $$
-		BEGIN RAISE EXCEPTION 'database rejected % %', NEW.message_id, NEW.client_request_id; END
-		$$ LANGUAGE plpgsql;
-		CREATE TRIGGER fail_handler_reply_insert_for_privacy_test
+	durable := durabilitytest.Open(t)
+	_, err := durable.DB.ExecContext(t.Context(), `CREATE TRIGGER fail_handler_reply_insert_for_privacy_test
 		BEFORE INSERT ON bot_reply_outbox
-		FOR EACH ROW EXECUTE FUNCTION fail_handler_reply_insert_for_privacy_test()`)
+		BEGIN
+			SELECT RAISE(ABORT, 'database rejected ' || NEW.message_id || ' ' || NEW.client_request_id);
+		END`)
 	require.NoError(t, err)
 
 	var logs bytes.Buffer
 
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
-	writer := repositoryReplyOutboxWriter{repo: newTestReplyOutboxRepository(t, pool)}
-	messageStrings := messagestrings.NewStore(pool, slog.New(slog.DiscardHandler))
+	writer := repositoryReplyOutboxWriter{repo: newTestReplyOutboxRepository(t, durable.Store)}
+	messageStrings := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
 	require.NoError(t, messageStrings.Load(t.Context()))
 
 	bot := &Bot{
@@ -68,10 +66,9 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 	err = bot.handleCommandExecutionError(ctx, testRoomID, "privacy-test", errors.New("command failed"))
 	require.Error(t, err)
 
-	var pgErr *pgconn.PgError
-
-	require.ErrorAs(t, err, &pgErr, "repository cause must remain available through staging wrappers")
-	require.Contains(t, pgErr.Error(), rawID)
+	sqliteErr, ok := errors.AsType[*sqlite3.Error](err)
+	require.True(t, ok, "repository cause must remain available through staging wrappers: %T", err)
+	require.Contains(t, sqliteErr.Error(), rawID)
 	require.NotContains(t, err.Error(), rawID)
 	require.NotContains(t, err.Error(), causeText)
 	require.Contains(t, err.Error(), "message_token=anon:")
@@ -82,10 +79,10 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 	require.Contains(t, logs.String(), `reason=database_operation_failed`)
 }
 
-func newTestReplyOutboxRepository(t *testing.T, pool *pgxpool.Pool) *durability.ReplyOutboxRepository {
+func newTestReplyOutboxRepository(t *testing.T, store *durability.Store) *durability.ReplyOutboxRepository {
 	t.Helper()
 
-	repository, err := durability.NewReplyOutboxRepositoryWithPolicy(pool, 5, iris.ReplyAutomaticReplayHorizon)
+	repository, err := durability.NewReplyOutboxRepositoryWithPolicy(store, 5, iris.ReplyAutomaticReplayHorizon)
 	require.NoError(t, err)
 
 	return repository

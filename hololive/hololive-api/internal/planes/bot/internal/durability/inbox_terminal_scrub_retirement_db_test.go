@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/stretchr/testify/require"
 )
@@ -12,76 +11,76 @@ import (
 const retiredScrubPayload = `{"body":"retained"}`
 
 func TestInboxCompleteScrubsWithoutCompatibilityTrigger(t *testing.T) {
-	pool, repo := claimedInboxForScrubRetirement(t)
+	store, repo := claimedInboxForScrubRetirement(t)
 
 	applied, err := repo.Complete(t.Context(), testMessageID, testClaimToken)
 	require.NoError(t, err)
 	require.True(t, applied)
 
-	assertScrubRetirementInbox(t, pool, "succeeded", `{}`)
+	assertScrubRetirementInbox(t, store, "succeeded", `{}`)
 }
 
 func TestInboxAbandonScrubsWithoutCompatibilityTrigger(t *testing.T) {
-	pool, repo := claimedInboxForScrubRetirement(t)
+	store, repo := claimedInboxForScrubRetirement(t)
 
 	applied, err := repo.Abandon(t.Context(), testMessageID, testClaimToken, "invalid message")
 	require.NoError(t, err)
 	require.True(t, applied)
 
-	assertScrubRetirementInbox(t, pool, "dead", `{}`)
+	assertScrubRetirementInbox(t, store, "dead", `{}`)
 }
 
 func TestInboxReleasePreservesRetryAndScrubsTerminalWithoutCompatibilityTrigger(t *testing.T) {
 	t.Run("retry retains payload", func(t *testing.T) {
-		pool, repo := claimedInboxForScrubRetirement(t)
+		store, repo := claimedInboxForScrubRetirement(t)
 
 		outcome, err := repo.Release(t.Context(), testMessageID, testClaimToken, 1, 2, time.Second, "retryable")
 		require.NoError(t, err)
 		require.Equal(t, InboxReleaseRetried, outcome)
 
-		assertScrubRetirementInbox(t, pool, "retry", retiredScrubPayload)
+		assertScrubRetirementInbox(t, store, "retry", retiredScrubPayload)
 	})
 
 	t.Run("exhausted attempts scrub payload", func(t *testing.T) {
-		pool, repo := claimedInboxForScrubRetirement(t)
+		store, repo := claimedInboxForScrubRetirement(t)
 
 		outcome, err := repo.Release(t.Context(), testMessageID, testClaimToken, 1, 1, time.Second, "exhausted")
 		require.NoError(t, err)
 		require.Equal(t, InboxReleaseAbandoned, outcome)
 
-		assertScrubRetirementInbox(t, pool, "dead", `{}`)
+		assertScrubRetirementInbox(t, store, "dead", `{}`)
 	})
 }
 
 func TestInboxReclaimPreservesRetryAndScrubsTerminalWithoutCompatibilityTrigger(t *testing.T) {
 	t.Run("retry retains payload", func(t *testing.T) {
-		pool, repo := claimedInboxForScrubRetirement(t)
-		expireScrubRetirementLease(t, pool)
+		store, repo := claimedInboxForScrubRetirement(t)
+		expireScrubRetirementLease(t, store)
 
 		reclaim, err := repo.ReclaimExpired(t.Context(), 2, 1)
 		require.NoError(t, err)
 		require.Equal(t, InboxReclaim{Requeued: 1}, reclaim)
 
-		assertScrubRetirementInbox(t, pool, "retry", retiredScrubPayload)
+		assertScrubRetirementInbox(t, store, "retry", retiredScrubPayload)
 	})
 
 	t.Run("exhausted attempts scrub payload", func(t *testing.T) {
-		pool, repo := claimedInboxForScrubRetirement(t)
-		expireScrubRetirementLease(t, pool)
+		store, repo := claimedInboxForScrubRetirement(t)
+		expireScrubRetirementLease(t, store)
 
 		reclaim, err := repo.ReclaimExpired(t.Context(), 1, 1)
 		require.NoError(t, err)
 		require.Equal(t, InboxReclaim{Abandoned: 1}, reclaim)
 
-		assertScrubRetirementInbox(t, pool, "dead", `{}`)
+		assertScrubRetirementInbox(t, store, "dead", `{}`)
 	})
 }
 
-func claimedInboxForScrubRetirement(t *testing.T) (*pgxpool.Pool, *InboxRepository) {
+func claimedInboxForScrubRetirement(t *testing.T) (*Store, *InboxRepository) {
 	t.Helper()
 
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	message := InboxMessage{
 		MessageID:   testMessageID,
 		RoomID:      testDurableRoomID,
@@ -98,22 +97,22 @@ func claimedInboxForScrubRetirement(t *testing.T) (*pgxpool.Pool, *InboxReposito
 	require.NotNil(t, claim)
 	require.Equal(t, testMessageID, claim.MessageID)
 
-	return pool, repo
+	return store, repo
 }
 
-func expireScrubRetirementLease(t *testing.T, pool *pgxpool.Pool) {
+func expireScrubRetirementLease(t *testing.T, store *Store) {
 	t.Helper()
 
-	_, err := pool.Exec(t.Context(), `UPDATE bot_webhook_inbox
-		SET lease_until = clock_timestamp() - interval '1 second'
-		WHERE message_id = $1`, testMessageID)
+	_, err := store.Exec(t.Context(), `UPDATE bot_webhook_inbox
+		SET lease_until = ?2
+		WHERE message_id = ?1`, testMessageID, time.Now().Add(-time.Second).UnixMilli())
 	require.NoError(t, err)
 }
 
-func assertScrubRetirementInbox(t *testing.T, pool *pgxpool.Pool, wantStatus, wantPayload string) {
+func assertScrubRetirementInbox(t *testing.T, store *Store, wantStatus, wantPayload string) {
 	t.Helper()
 
-	status, payload, _, token := inboxRow(t.Context(), t, pool, testMessageID)
+	status, payload, _, token := inboxRow(t.Context(), t, store, testMessageID)
 	require.Equal(t, wantStatus, status)
 	require.JSONEq(t, wantPayload, string(payload))
 	require.Nil(t, token)

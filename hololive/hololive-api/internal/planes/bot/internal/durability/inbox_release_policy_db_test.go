@@ -8,8 +8,8 @@ import (
 )
 
 func TestInboxReleaseRejectsStaleAttemptWithoutAdvancingHead(t *testing.T) {
-	pool := newDurabilityPool(t)
-	repo := NewInboxRepository(pool)
+	store := newTestStore(t)
+	repo := NewInboxRepository(store)
 	ctx := t.Context()
 	first := inboxMessage("message:attempt-first", "room", "room:attempt-policy")
 	second := inboxMessage("message:attempt-second", "room", first.OrderingKey)
@@ -24,7 +24,7 @@ func TestInboxReleaseRejectsStaleAttemptWithoutAdvancingHead(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, InboxReleaseNotOwned, outcome)
 
-	status, _, attempts, token := inboxRow(ctx, t, pool, first.MessageID)
+	status, _, attempts, token := inboxRow(ctx, t, store, first.MessageID)
 	require.Equal(t, "processing", status)
 	require.Equal(t, claim.Attempts, attempts)
 	require.NotNil(t, token)

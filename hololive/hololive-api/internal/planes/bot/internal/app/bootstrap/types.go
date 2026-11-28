@@ -6,6 +6,7 @@ import (
 	"github.com/park285/iris-client-go/v6/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -21,6 +22,7 @@ type BotInfrastructure struct {
 	Deps           *orchestration.Dependencies
 	IrisRoomLister IrisRoomLister
 	Postgres       database.Client
+	Durable        *durability.Store
 	Cache          BotCache
 	Cleanup        func() error
 }

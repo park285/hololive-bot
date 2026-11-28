@@ -27,6 +27,29 @@ func TestLoadBotPlaneRuntimeRejectsNonPositiveHolodexTimeout(t *testing.T) {
 	}
 }
 
+func TestLoadBotDurableStorePathRequiresCleanAbsolutePath(t *testing.T) {
+	for _, path := range []string{"", "bot-durable.db", "/var/lib/hololive/../bot-durable.db"} {
+		t.Run(path, func(t *testing.T) {
+			setBotPlaneEnv(t)
+			t.Setenv("BOT_DURABLE_STORE_PATH", path)
+
+			_, err := LoadBotDurableStorePath()
+			if err == nil || !strings.Contains(err.Error(), "BOT_DURABLE_STORE_PATH must be a clean absolute path") {
+				t.Fatalf("LoadBotDurableStorePath() error = %v, want durable store path rejection", err)
+			}
+		})
+	}
+}
+
+func TestLoadBotPlaneRuntimeDoesNotNeedTheDurableStorePath(t *testing.T) {
+	setBotPlaneEnv(t)
+	t.Setenv("BOT_DURABLE_STORE_PATH", "")
+
+	if _, err := LoadBotPlaneRuntime(); err != nil {
+		t.Fatalf("LoadBotPlaneRuntime() error = %v; source-observation-replay-epoch shares this loader and never opens the bot store", err)
+	}
+}
+
 func TestLoadBotPlaneRuntimeRequiresHolodexAPIKey(t *testing.T) {
 	t.Run("load rejects empty key", func(t *testing.T) {
 		setBotPlaneEnv(t)
