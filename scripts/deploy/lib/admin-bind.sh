@@ -62,11 +62,9 @@ admin_network_assert_firewall() {
         ($input | index([$published[2]])) as $boundary |
         ($sources | length == 1) and
         ($sources[0].elem | sort == ["100.100.1.3", "100.100.1.5", "100.100.1.6", "100.100.1.8"]) and
-        ([.nftables[] | .set // empty | select(.name == "bot_postgres_sources")] as $bot |
-            ($bot | length == 1) and ($bot[0].elem == ["100.100.1.3"])) and
         any(.nftables[]; .chain.hook == "forward" and .chain.name == "forward" and .chain.prio == -20) and
         ([.nftables[] | .rule // empty | select(.chain == "forward")] as $forward |
-            ($forward | length == 6) and
+            ($forward | length == 4) and
             ($forward[2].expr == dnat(5433; 5432) + sources + [{"accept":null}]) and
             ($forward[3].expr == dnat(5433; 5432) + [{"reject":{"type":"tcp reset"}}])) and
         any(.nftables[]; .chain.hook == "input" and .chain.name == "input" and .chain.prio == -20) and

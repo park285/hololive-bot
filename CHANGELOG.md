@@ -10,6 +10,7 @@
 - **정산 쓰기 우선순위 복원:** PostgreSQL 시절 `pgxdb.WithControlAcquire`가 webhook 정산·reply 정산·heartbeat·handoff claim 9곳에 주던 우선 획득이 SQLite 전환에서 빠졌습니다. 이 9곳에 shared-go `sqlite/v1.0.1`의 `sqlitedb.WithWritePriority`를 다시 표시해, 대기 중인 일반 쓰기보다 먼저 SQLite writer를 받게 했습니다.
 - **bot plane 작업자 지표 label:** `bot_webhook_inbox`·`bot_reply_outbox` 작업자의 `queue_backend` label이 `postgres`에서 `sqlite`로 바뀝니다. 두 작업자는 r1.2.22부터 SQLite 상태 DB를 씁니다.
 - **security workflow의 shared-go 고정 commit 갱신:** `go.work`가 r1.2.22부터 `../shared-go/sqlite`를 쓰는데, security workflow는 이 모듈이 없는 `postgres/v1.0.4` commit을 받아 main의 NilAway와 govulncheck가 모듈을 읽지 못하고 실패했습니다. 고정 commit을 `sqlite/v1.0.1`(`78b8d8a`)으로 올렸습니다. 검사 내용은 바뀌지 않습니다.
+- **ChatBotGo PostgreSQL 방화벽 규칙 삭제:** ChatBotGo가 r1.0.15에서 PostgreSQL을 퇴역해 `admin-dashboard-ingress.nft`의 5432 게시 규칙(`bot_postgres_sources` 집합과 input·forward의 허용·거부 규칙)을 지웠습니다. hololive PostgreSQL(5433) 규칙은 그대로입니다. 설치 뒤 `systemctl reload admin-dashboard-ingress-firewall.service`로 적용합니다.
 
 ## r1.2.22 - 2026-11-28
 
