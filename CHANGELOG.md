@@ -6,9 +6,12 @@
 
 ## 미출시
 
+## r1.2.26 - 2026-11-28
+
 - **응답 outbox 정리의 writer 점유 상한:** `durable_prune_outbox.sql`은 종료 상태와 수동 검토 상태를 OR로 묶은 뒤 만료 행 전체를 정렬하고 나서 batch만큼 지웠습니다. 그래서 쓰기 transaction 안의 정렬 비용이 만료 backlog에 비례했고, 통계상 만료 행이 많으면 planner가 retention index 대신 표 전체 SCAN을 골랐습니다. 이제 두 상태를 각자의 partial index 순서로 batch만큼만 읽어 합친 뒤 오래된 순서로 batch를 지우므로, 정렬 입력이 batch의 두 배를 넘지 않습니다. 지우는 행과 순서(`updated_at`, `id`)는 같습니다. 만료 행이 대부분인 경우의 계획 시험과 두 상태에 걸친 정리 순서 시험을 더했습니다. Fallback delta: none.
-- **SQLite 통계 갱신:** hololive-api의 `shared-go/sqlite`를 v1.0.2(`36a1225`)로 올렸습니다. bot plane 상태 DB를 열 때, 마이그레이션 뒤, 그리고 한 시간마다 `PRAGMA optimize`가 통계를 만들고 갱신합니다. 대표 행을 넣은 시험 DB에서 durability 쿼리의 계획은 바뀌지 않았습니다. security workflow가 받는 shared-go 고정 commit도 `sqlite/v1.0.2`(`36a1225`)로 올렸습니다. 검사 내용은 바뀌지 않습니다. Fallback delta: none.
-- **의존성 최신화:** Go 5개 모듈의 `quic-go` v0.66.0, `miniredis/v2` v2.41.0, `moby/sys/user` v0.5.1, `cloud.google.com/go/auth` v0.24.5, `google.golang.org/api` v0.317.0과 간접 의존성, youtubejs의 `@types/node` 26.6.11과 eventgrade·po-sandbox·youtubejs lockfile을 올렸습니다. ingress nginx는 1.31.10(이미지 태그, Quadlet `NGINX_IMAGE`, `build-all.sh` upstream digest)입니다. distroless `static-debian13` 기반 이미지와 PostgreSQL 19.0-alpine(운영 `holo-postgres` upstream 포함) digest는 같은 태그의 현재 index로 바꿨습니다. CI의 `actions/setup-python`은 v7.1.0 커밋으로 맞췄습니다. Valkey 9.1.3과 PostgreSQL 19.0 버전은 계약 고정값이라 그대로 둡니다. 이번 변경은 배포하지 않습니다.
+- **SQLite 통계 갱신:** hololive-api의 `shared-go/sqlite`를 v1.0.2(`36a1225`)로 올렸습니다. bot plane 상태 DB를 열 때, 마이그레이션 뒤, 그리고 한 시간마다 `PRAGMA optimize`가 통계를 만들고 갱신합니다. 대표 행을 넣은 시험 DB에서 durability 쿼리의 계획은 바뀌지 않았습니다. pending 행이 없을 때 분석한 통계로 계획해도 durability 쿼리 53개는 적체 상태에서 새로 분석한 통계와 계획이 같습니다. security workflow가 받는 shared-go 고정 commit도 `sqlite/v1.0.2`(`36a1225`)로 올렸습니다. 검사 내용은 바뀌지 않습니다. Fallback delta: none.
+- **의존성 최신화:** Go 5개 모듈의 `quic-go` v0.66.0, `miniredis/v2` v2.41.0, `moby/sys/user` v0.5.1, `cloud.google.com/go/auth` v0.24.5, `google.golang.org/api` v0.317.0과 간접 의존성, youtubejs의 `@types/node` 26.6.11과 eventgrade·po-sandbox·youtubejs lockfile을 올렸습니다. ingress nginx는 1.31.10(이미지 태그, Quadlet `NGINX_IMAGE`, `build-all.sh` upstream digest)입니다. distroless `static-debian13` 기반 이미지와 PostgreSQL 19.0-alpine(운영 `holo-postgres` upstream 포함) digest는 같은 태그의 현재 index로 바꿨습니다. CI의 `actions/setup-python`은 v7.1.0 커밋으로 맞췄습니다. Valkey 9.1.3과 PostgreSQL 19.0 버전은 계약 고정값이라 그대로 둡니다. Go 모듈과 distroless 기반 이미지는 이번 hololive-api·alarm-worker image에 들어갑니다. nginx·PostgreSQL 실행 image는 host `compose.env`의 identity가 정하므로 이번 배포로 바뀌지 않습니다.
+- **릴리스:** 루트 VERSION 1.2.26, hololive-api 1.2.19, hololive-alarm-worker 1.0.16. 두 image 모두 의존성과 기반 이미지가 바뀌어 다시 빌드합니다. collector와 PO issuer는 이번에 다시 배포하지 않습니다.
 
 ## r1.2.25 - 2026-11-28
 
@@ -19,12 +22,3 @@
 
 - **handoff 실패 발송의 관리자 취소·격리:** Iris가 요청을 받은 뒤 handoff가 실패한 DLQ(`handoff_failed`)와 확인되지 않은 격리(`handoff_unconfirmed`)에는 `sent_at`이 남습니다. 관리자 `settle`이 이 표식을 이미 보낸 발송으로 보고 409를 돌려줘, 이런 행은 보존 기간 180일이 지날 때까지 발송 실패 건수에 남았습니다. 이제 `sent_at`이 있어도 `dlq`·`quarantined` 묶음을 취소하거나 격리할 수 있습니다. `sent_at`은 보존되므로 수동 재처리 차단은 그대로이고, 상태가 `sent`인 묶음과 이미 취소된 묶음은 계속 거절합니다. Fallback delta: none.
 - **릴리스:** 루트 VERSION 1.2.24, hololive-api 1.2.17, hololive-alarm-worker 1.0.15(배포 트리 revision과 같은 label의 image가 필요해 다시 빌드함).
-
-## r1.2.23 - 2026-11-28
-
-- **PostgreSQL bot plane 표와 함수 삭제(migration 014):** r1.2.22에서 SQLite로 옮긴 bot plane 표 7개(`bot_webhook_inbox`·`bot_webhook_heads`·`bot_command_executions`·`bot_reply_outbox`·감사 두 표·`bot_webhook_nonces`)와 `reserve_bot_webhook_nonce`·replay·discard·감사 trigger 함수 7개를 PostgreSQL에서 지웁니다. 이 표는 r1.2.22 전환 뒤 갱신되지 않았고 현행 runtime은 읽거나 쓰지 않습니다. 일회성 이관 명령 `bot-durable-admin import-postgres`와 그 SQLite 적재 경로, PostgreSQL bot 표를 검사하던 시험도 지웠습니다. head 계약은 표·함수가 없음을 확인합니다. 014는 대기 migration 적용 창(collector 정지 뒤 `--resume`)에서 적용합니다. PostgreSQL bot 표를 쓰던 r1.2.21 이하 API로는 이 migration 뒤에 돌아갈 수 없습니다. Fallback delta: none.
-- **정산 쓰기 우선순위 복원:** PostgreSQL 시절 `pgxdb.WithControlAcquire`가 webhook 정산·reply 정산·heartbeat·handoff claim 9곳에 주던 우선 획득이 SQLite 전환에서 빠졌습니다. 이 9곳에 shared-go `sqlite/v1.0.1`의 `sqlitedb.WithWritePriority`를 다시 표시해, 대기 중인 일반 쓰기보다 먼저 SQLite writer를 받게 했습니다.
-- **bot plane 작업자 지표 label:** `bot_webhook_inbox`·`bot_reply_outbox` 작업자의 `queue_backend` label이 `postgres`에서 `sqlite`로 바뀝니다. 두 작업자는 r1.2.22부터 SQLite 상태 DB를 씁니다.
-- **security workflow의 shared-go 고정 commit 갱신:** `go.work`가 r1.2.22부터 `../shared-go/sqlite`를 쓰는데, security workflow는 이 모듈이 없는 `postgres/v1.0.4` commit을 받아 main의 NilAway와 govulncheck가 모듈을 읽지 못하고 실패했습니다. 고정 commit을 `sqlite/v1.0.1`(`78b8d8a`)으로 올렸습니다. 검사 내용은 바뀌지 않습니다.
-- **ChatBotGo PostgreSQL 방화벽 규칙 삭제:** ChatBotGo가 r1.0.15에서 PostgreSQL을 퇴역해 `admin-dashboard-ingress.nft`의 5432 게시 규칙(`bot_postgres_sources` 집합과 input·forward의 허용·거부 규칙)을 지웠습니다. hololive PostgreSQL(5433) 규칙은 그대로입니다. 설치 뒤 `systemctl reload admin-dashboard-ingress-firewall.service`로 적용합니다.
-- **릴리스:** 루트 VERSION 1.2.23, hololive-api 1.2.16, hololive-alarm-worker 1.0.14(배포 트리 revision과 같은 label의 image가 필요해 다시 빌드함).
