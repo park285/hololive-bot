@@ -70,7 +70,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 exec 3>&2
 exec 2> >(tee "$evidence/stderr" >&3)
-postgres=docker.io/library/postgres@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
+postgres=docker.io/library/postgres@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f
 valkey=docker.io/valkey/valkey@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
 revision=$(git rev-parse HEAD)
 if [[ -z $binary ]]; then

@@ -30,12 +30,12 @@ declare -A IMAGE_BY_SERVICE=(
     [youtube-po-c]=localhost/hololive-youtube-po-sandbox:prod
     [holo-postgres]=docker.io/library/postgres:19.0-alpine
     [valkey-cache]=docker.io/valkey/valkey:9.1.3-alpine3.24
-    [admin-dashboard-ingress]=docker.io/library/nginx:1.31.9-alpine-slim
+    [admin-dashboard-ingress]=docker.io/library/nginx:1.31.10-alpine-slim
 )
 declare -A UPSTREAM_BY_SERVICE=(
-    [holo-postgres]=docker.io/library/postgres@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188
+    [holo-postgres]=docker.io/library/postgres@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f
     [valkey-cache]=docker.io/valkey/valkey@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
-    [admin-dashboard-ingress]=docker.io/library/nginx@sha256:5bfced78d24d644270bedb0a9968697042e38d5c03fb6354603df025279c1cbe
+    [admin-dashboard-ingress]=docker.io/library/nginx@sha256:c293b28729906d97fa5302fce3bd79bd27a3ea9a5d9604e21c6ff0ebf14549fc
 )
 declare -A DOCKERFILE_BY_SERVICE=(
     [hololive-api]=hololive/hololive-api/Dockerfile

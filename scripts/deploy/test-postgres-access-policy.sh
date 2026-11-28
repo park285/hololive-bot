@@ -5,7 +5,7 @@ if [[ -n "${CONTAINER_HOST:-}${CONTAINER_CONNECTION:-}" ]] || [[ "$(podman info 
   exit 2
 fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-image="${POSTGRES_POLICY_TEST_IMAGE:-docker.io/library/postgres@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188}"
+image="${POSTGRES_POLICY_TEST_IMAGE:-docker.io/library/postgres@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f}"
 fixture="$(mktemp -d)"
 id="holo-policy-$(date +%s)-$$"
 server="${id}-server"

@@ -108,7 +108,7 @@ replacement, and failed cutover restoration. No live operation is implied by the
 
 `holo-postgres`, `valkey-cache` and `admin-dashboard-ingress` run the official upstream images
 `docker.io/library/postgres:19.0-alpine`, `docker.io/valkey/valkey:9.1.3-alpine3.24` and
-`docker.io/library/nginx:1.31.9-alpine-slim` (`Pull=never`) without a local recipe.
+`docker.io/library/nginx:1.31.10-alpine-slim` (`Pull=never`) without a local recipe.
 `./build-all.sh --no-bump --build-only` pulls each from the multi-arch index digest pinned in
 `UPSTREAM_BY_SERVICE` for the target platform and prints the pulled image ID. It does not retag the shared
 upstream name, so an arm64 build on kapu leaves the host-platform tag that other repositories' tests run in place.
