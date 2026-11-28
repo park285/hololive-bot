@@ -6,6 +6,7 @@
 
 ## 미출시
 
+- **응답 outbox 정리의 writer 점유 상한:** `durable_prune_outbox.sql`은 종료 상태와 수동 검토 상태를 OR로 묶은 뒤 만료 행 전체를 정렬하고 나서 batch만큼 지웠습니다. 그래서 쓰기 transaction 안의 정렬 비용이 만료 backlog에 비례했고, 통계상 만료 행이 많으면 planner가 retention index 대신 표 전체 SCAN을 골랐습니다. 이제 두 상태를 각자의 partial index 순서로 batch만큼만 읽어 합친 뒤 오래된 순서로 batch를 지우므로, 정렬 입력이 batch의 두 배를 넘지 않습니다. 지우는 행과 순서(`updated_at`, `id`)는 같습니다. 만료 행이 대부분인 경우의 계획 시험과 두 상태에 걸친 정리 순서 시험을 더했습니다. Fallback delta: none.
 - **SQLite 통계 갱신:** hololive-api의 `shared-go/sqlite`를 v1.0.2(`36a1225`)로 올렸습니다. bot plane 상태 DB를 열 때, 마이그레이션 뒤, 그리고 한 시간마다 `PRAGMA optimize`가 통계를 만들고 갱신합니다. 대표 행을 넣은 시험 DB에서 durability 쿼리의 계획은 바뀌지 않았습니다. security workflow가 받는 shared-go 고정 commit도 `sqlite/v1.0.2`(`36a1225`)로 올렸습니다. 검사 내용은 바뀌지 않습니다. Fallback delta: none.
 - **의존성 최신화:** Go 5개 모듈의 `quic-go` v0.66.0, `miniredis/v2` v2.41.0, `moby/sys/user` v0.5.1, `cloud.google.com/go/auth` v0.24.5, `google.golang.org/api` v0.317.0과 간접 의존성, youtubejs의 `@types/node` 26.6.11과 eventgrade·po-sandbox·youtubejs lockfile을 올렸습니다. ingress nginx는 1.31.10(이미지 태그, Quadlet `NGINX_IMAGE`, `build-all.sh` upstream digest)입니다. distroless `static-debian13` 기반 이미지와 PostgreSQL 19.0-alpine(운영 `holo-postgres` upstream 포함) digest는 같은 태그의 현재 index로 바꿨습니다. CI의 `actions/setup-python`은 v7.1.0 커밋으로 맞췄습니다. Valkey 9.1.3과 PostgreSQL 19.0 버전은 계약 고정값이라 그대로 둡니다. 이번 변경은 배포하지 않습니다.
 
