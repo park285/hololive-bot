@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"time"
 
@@ -27,7 +28,7 @@ const (
 type ScheduleNoticeStore interface {
 	MemberPosterRows(ctx context.Context, posterID int64, memberID int, channelID string, day time.Time) (scheduleposter.PublishedSchedule, cardtemplate.ID, bool, error)
 	ClaimNotice(ctx context.Context, lease time.Duration) (scheduleposter.Notice, bool, error)
-	NoticePostCurrent(ctx context.Context, notice scheduleposter.Notice) (bool, error)
+	NoticeChangePosts(ctx context.Context, notice scheduleposter.Notice) ([]int64, error)
 	SettleNotice(ctx context.Context, notice scheduleposter.Notice, status scheduleposter.NoticeStatus, rooms int) error
 }
 
@@ -109,7 +110,7 @@ func (n *SchedulePosterNotifier) notify(ctx context.Context, notice schedulepost
 		return fmt.Errorf("find member: %w", err)
 	}
 
-	schedule, template, reason, err := n.load(ctx, notice, member)
+	schedule, template, changedPosts, reason, err := n.load(ctx, notice, member)
 	if err != nil {
 		return err
 	}
@@ -124,7 +125,7 @@ func (n *SchedulePosterNotifier) notify(ctx context.Context, notice schedulepost
 	}
 
 	if len(rooms) > 0 {
-		if err := n.send(ctx, notice, member, &schedule, template, rooms); err != nil {
+		if err := n.send(ctx, notice, member, &schedule, template, changedPosts, rooms); err != nil {
 			return err
 		}
 	}
@@ -139,39 +140,43 @@ func (n *SchedulePosterNotifier) notify(ctx context.Context, notice schedulepost
 	return nil
 }
 
-func (n *SchedulePosterNotifier) load(ctx context.Context, notice scheduleposter.Notice, member *domain.Member) (scheduleposter.PublishedSchedule, cardtemplate.ID, string, error) {
+func (n *SchedulePosterNotifier) load(ctx context.Context, notice scheduleposter.Notice, member *domain.Member) (scheduleposter.PublishedSchedule, cardtemplate.ID, []int64, string, error) {
+	var changedPosts []int64
+
 	switch notice.Kind {
 	case scheduleposter.NoticePublished:
 	case scheduleposter.NoticeChanged:
-		current, err := n.notices.NoticePostCurrent(ctx, notice)
+		posts, err := n.notices.NoticeChangePosts(ctx, notice)
 		if err != nil {
-			return scheduleposter.PublishedSchedule{}, "", "", fmt.Errorf("check post: %w", err)
+			return scheduleposter.PublishedSchedule{}, "", nil, "", fmt.Errorf("list change posts: %w", err)
 		}
 
-		if !current {
-			return scheduleposter.PublishedSchedule{}, "", "post_not_applied", nil
+		if !slices.Contains(posts, notice.PostID) {
+			return scheduleposter.PublishedSchedule{}, "", nil, "post_not_applied", nil
 		}
+
+		changedPosts = posts
 	default:
-		return scheduleposter.PublishedSchedule{}, "", "", fmt.Errorf("unknown notice kind %q", notice.Kind)
+		return scheduleposter.PublishedSchedule{}, "", nil, "", fmt.Errorf("unknown notice kind %q", notice.Kind)
 	}
 
 	schedule, template, found, err := n.notices.MemberPosterRows(ctx, notice.PosterID, member.ID, notice.ChannelID, jstDay(notice.ClaimedAt))
 	if err != nil {
-		return scheduleposter.PublishedSchedule{}, "", "", fmt.Errorf("load poster rows: %w", err)
+		return scheduleposter.PublishedSchedule{}, "", nil, "", fmt.Errorf("load poster rows: %w", err)
 	}
 
 	if !found {
-		return scheduleposter.PublishedSchedule{}, "", "poster_unavailable", nil
+		return scheduleposter.PublishedSchedule{}, "", nil, "poster_unavailable", nil
 	}
 
-	return schedule, template, "", nil
+	return schedule, template, changedPosts, "", nil
 }
 
 func (n *SchedulePosterNotifier) send(ctx context.Context, notice scheduleposter.Notice, member *domain.Member, schedule *scheduleposter.PublishedSchedule,
-	template cardtemplate.ID, rooms []string,
+	template cardtemplate.ID, changedPosts []int64, rooms []string,
 ) error {
 	renderCtx, cancel := context.WithTimeout(ctx, scheduleNoticeRenderTime)
-	reply, err := renderScheduleReply(renderCtx, n.deps, member, schedule, template)
+	reply, err := renderScheduleReply(renderCtx, n.deps, member, schedule, template, changedPosts)
 
 	cancel()
 

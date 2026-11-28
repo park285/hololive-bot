@@ -89,6 +89,7 @@ type titleBlock struct {
 	tagRow bool
 	struck bool
 	muted  bool
+	marked bool
 	cut    bool
 }
 
@@ -104,6 +105,7 @@ func newTitleBlock(s slot, mainT, subT txt) titleBlock {
 		mainLH: mainT.Size * 1.24, subLH: subT.Size * 1.32,
 		struck: s.status == StatusCancelled,
 		muted:  s.status == StatusCancelled || s.more > 0,
+		marked: s.highlight,
 	}
 }
 
@@ -199,11 +201,22 @@ func (b *titleBlock) draw(c *canvas, x, top float64, mainCol, subCol color.RGBA)
 		lastCY = y + b.mainLH/2
 
 		base := lastCY + mainMid
+		lw := c.f.width(b.mainT, l)
+		inline := i == len(b.main)-1 && b.inline != ""
+
+		if b.marked {
+			markW := lw
+
+			if inline {
+				markW += b.mainT.Size*0.35 + c.f.width(b.subT, b.inline)
+			}
+
+			c.Fill(markBand(x, base, markW, b.mainT), markInk)
+		}
+
 		c.text(b.mainT, l, x, base, alignL, mainCol)
 
-		lw := c.f.width(b.mainT, l)
-
-		if i == len(b.main)-1 && b.inline != "" {
+		if inline {
 			c.text(b.subT, b.inline, x+lw+b.mainT.Size*0.35, base-mainMid+subMid, alignL, subCol)
 		}
 
@@ -240,6 +253,14 @@ func drawChips(c *canvas, t txt, tags []string, x, cy float64, col color.RGBA) {
 
 		x += w + chipGap(t)
 	}
+}
+
+var markInk = rgba(0xFFD43B, 0.62)
+
+func markBand(x, base, w float64, t txt) shape {
+	h := t.Size * 0.42
+
+	return rrect(x-t.Size*0.12, base-h*0.72, w+t.Size*0.24, h, h*0.3)
 }
 
 func strike(c *canvas, x, cy, w float64, t txt, col color.RGBA) {
@@ -401,10 +422,11 @@ func fitTable(f *fontSet, days []day, st rowStyle, sp tableSpec) (tableFit, bool
 type offLine struct {
 	main, sub   string
 	mainT, subT txt
+	marked      bool
 }
 
 func layoutOff(f *fontSet, s slot, mainT, subT txt, maxW float64) offLine {
-	l := offLine{main: f.clamp(mainT, s.main, maxW), mainT: mainT, subT: subT}
+	l := offLine{main: f.clamp(mainT, s.main, maxW), mainT: mainT, subT: subT, marked: s.highlight}
 
 	rest := maxW - f.width(mainT, l.main) - l.gap()
 	if s.sub == "" || rest <= 0 {
@@ -438,7 +460,17 @@ func (l offLine) shape(c *canvas, x, cy float64) (mainS, subS shape) {
 	return mainS, subS
 }
 
+func (l offLine) markShape(c *canvas, x, cy float64) shape {
+	if !l.marked {
+		return shape{}
+	}
+
+	return markBand(x, cy+c.f.mid(l.mainT), l.width(c.f), l.mainT)
+}
+
 func (l offLine) draw(c *canvas, x, cy float64, mainCol, subCol color.RGBA) {
+	c.Fill(l.markShape(c, x, cy), markInk)
+
 	mainS, subS := l.shape(c, x, cy)
 	c.Fill(mainS, mainCol)
 	c.Fill(subS, subCol)

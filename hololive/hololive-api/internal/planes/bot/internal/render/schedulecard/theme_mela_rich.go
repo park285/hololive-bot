@@ -187,6 +187,8 @@ func melaRichOffRow(c *canvas, st melaRichStyle, d day, b box) {
 	c.Fill(xf(rrect(-tw/2, -th/2, tw, th, 8), tm), hex(0xFFFFFF))
 	c.Fill(xf(rrect(-tw/2+3.5, -th/2+3.5, tw-7, th-7, 5), tm), st.offPillBG)
 
+	c.Fill(xf(label.markShape(c, -lw/2, 0), tm), markInk)
+
 	mainS, subS := label.shape(c, -lw/2, 0)
 	c.Fill(xf(mainS, tm), st.offPillInk)
 	c.Fill(xf(subS, tm), st.offPillInk)

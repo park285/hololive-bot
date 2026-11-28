@@ -244,7 +244,14 @@ func tsuzuriRichTitle(c *canvas, st tsuzuriRichStyle, sb *slotBox, titleX, top, 
 		mc := crescent(titleX+13, pcy, 11.5, deg(-16))
 		c.Fill(mc, hex(0xE8BA54))
 		c.Stroke(mc, 1.2, hex(0xB88222))
-		c.textMid(tsuzuriRowStyle(st).main.scaled(k), "휴방", titleX+34, pcy, alignL, st.sub)
+
+		mainT := tsuzuriRowStyle(st).main.scaled(k)
+
+		if sb.s.highlight {
+			c.Fill(markBand(titleX+34, pcy+c.f.mid(mainT), c.f.width(mainT, "휴방"), mainT), markInk)
+		}
+
+		c.textMid(mainT, "휴방", titleX+34, pcy, alignL, st.sub)
 
 		return
 	}

@@ -6,6 +6,11 @@
 
 ## 미출시
 
+## r1.2.25 - 2026-11-28
+
+- **일정 변경 알림 카드의 형광펜 표시:** 일정 변경 알림은 머리말만 "일정이 변경되었습니다"라고 알려 어떤 일정이 바뀌었는지 카드에서 알 수 없었습니다. 이제 변경 알림으로 보내는 카드에서, 알린 게시물과 보낸 뒤 함께 `sent`로 닫히는 대기 변경 알림의 게시물이 바꾼 칸(시각·날짜·취소·휴방·추가·내용 변경, 숨겨진 칸을 묶은 "외 N건" 포함)의 제목 아래에 반투명 노란 밑줄을 그립니다. 머리말 문구, `!스케쥴` 카드, 새 일정표 알림 카드는 그대로이며, 표시한 카드는 메모리·공유 카드 캐시에 넣지 않습니다. 텍스트 파일 대체에는 표시가 없습니다. Fallback delta: none.
+- **릴리스:** 루트 VERSION 1.2.25, hololive-api 1.2.18. alarm-worker는 바뀌지 않아 다시 빌드하지 않고 API만 교체합니다.
+
 ## r1.2.24 - 2026-11-28
 
 - **handoff 실패 발송의 관리자 취소·격리:** Iris가 요청을 받은 뒤 handoff가 실패한 DLQ(`handoff_failed`)와 확인되지 않은 격리(`handoff_unconfirmed`)에는 `sent_at`이 남습니다. 관리자 `settle`이 이 표식을 이미 보낸 발송으로 보고 409를 돌려줘, 이런 행은 보존 기간 180일이 지날 때까지 발송 실패 건수에 남았습니다. 이제 `sent_at`이 있어도 `dlq`·`quarantined` 묶음을 취소하거나 격리할 수 있습니다. `sent_at`은 보존되므로 수동 재처리 차단은 그대로이고, 상태가 `sent`인 묶음과 이미 취소된 묶음은 계속 거절합니다. Fallback delta: none.
@@ -19,10 +24,3 @@
 - **security workflow의 shared-go 고정 commit 갱신:** `go.work`가 r1.2.22부터 `../shared-go/sqlite`를 쓰는데, security workflow는 이 모듈이 없는 `postgres/v1.0.4` commit을 받아 main의 NilAway와 govulncheck가 모듈을 읽지 못하고 실패했습니다. 고정 commit을 `sqlite/v1.0.1`(`78b8d8a`)으로 올렸습니다. 검사 내용은 바뀌지 않습니다.
 - **ChatBotGo PostgreSQL 방화벽 규칙 삭제:** ChatBotGo가 r1.0.15에서 PostgreSQL을 퇴역해 `admin-dashboard-ingress.nft`의 5432 게시 규칙(`bot_postgres_sources` 집합과 input·forward의 허용·거부 규칙)을 지웠습니다. hololive PostgreSQL(5433) 규칙은 그대로입니다. 설치 뒤 `systemctl reload admin-dashboard-ingress-firewall.service`로 적용합니다.
 - **릴리스:** 루트 VERSION 1.2.23, hololive-api 1.2.16, hololive-alarm-worker 1.0.14(배포 트리 revision과 같은 label의 image가 필요해 다시 빌드함).
-
-## r1.2.22 - 2026-11-28
-
-- **bot plane 내구 저장소 PostgreSQL → SQLite 전환:** `hololive-api` bot plane의 webhook inbox·heads, 명령 기록, reply outbox, 감사 두 표, webhook nonce를 `BOT_DURABLE_STORE_PATH`(중앙 Quadlet `/app/bot-durable/bot-durable.db`, 호스트 `/opt/hololive-bot/compose/bot-durable/`)의 SQLite 파일로 옮겼습니다. 이 디렉터리는 `hololive-api`에만 마운트해, `current/data`를 함께 쓰는 collector·alarm-worker가 bot 상태에 접근하지 못하게 합니다. `source-observation-replay-epoch`는 이 변수 없이 실행됩니다. 공용 `shared-go/sqlite`를 쓰며 `<path>.lock` 배타 잠금으로 한 프로세스만 소유합니다. 전환은 `bot-durable-admin import-postgres` 일회성 이관(한 스냅숏, 표·상태별 행 수 대조 뒤 한 트랜잭션 커밋)으로 하며, 운영 전환은 API와 alarm-worker를 `--quiesce`로 멈춘 창에서 일회성 container로 실행합니다(`docs/current/runbooks/hololive-api.md`). 인증된 readiness에 `durable_store`를 추가했습니다. 전환 뒤에는 전환 전 image로 돌아가지 않고 fix-forward합니다. SQLite 파일 백업은 아직 없습니다.
-- **스크립트 동작 시험과 배포 스크립트 공용 함수의 프로세스 생성 감소:** 시험 fixture와 가짜 명령은 파일을 읽거나 문자열을 바꿀 때마다 하위 셸을 만들고 `cat`·`tr`을 실행했습니다. 배포 스크립트가 불러오는 `postgres_capacity_trim`도 용량 정책과 env 파일의 줄마다 하위 셸을 만들었습니다. 이를 bash 내장 기능(`$(<file)`, `printf -v`, 매개변수 확장)으로 바꾸고, 가짜 명령은 `env`를 거치지 않고 bash를 직접 실행합니다. `compose_env_key_exists_in_file`은 키 목록을 정렬해 `grep`에 넘기던 파이프라인 대신 awk 한 번으로 키를 찾습니다. `collector_slot_matches`는 열마다 슬롯 표를 다시 읽지 않고 awk 한 번으로 모든 열을 대조하며, `po_verify_image`는 image ID 파일을 `cat` 대신 `$(<file)`로 읽고, 적재된 image의 revision·플랫폼·ID를 `podman image inspect` 세 번 대신 한 번에 읽습니다. 용량 검사(`postgres_capacity_effective_env`)는 Quadlet 환경을 정책 키마다 해석하지 않고 서비스마다 한 번 해석하며, `collector_slots_file`은 `dirname` 대신 매개변수 확장으로 디렉터리를 구합니다. 로컬 측정에서 시험이 만드는 프로세스는 pocentral 패키지가 207,656개에서 106,585개로, quadlet 패키지가 97,218개에서 53,191개로 줄었습니다. 용량 판정 결과는 바뀌지 않습니다. 키 존재 확인은 이제 키를 정규식이 아닌 문자열로 비교하므로 `A.C`가 `ABC`와 일치하지 않습니다. 슬롯 대조는 슬롯 표가 비었거나 없을 때 통과하던 결함을 고쳐 실패로 판정합니다.
-- **스크립트 동작 시험을 Go 모듈 검사와 병렬 실행:** CI의 스크립트 동작 시험은 다섯 Go 모듈 job이 끝난 뒤에야 시작했습니다. 이 시험을 별도 `script-tests` job으로 옮겨 Go 모듈 job과 함께 돌리고, 필수 `fast-gate`는 두 job이 모두 성공했는지만 판정합니다. 검사 내용은 바뀌지 않습니다.
-- **릴리스:** 루트 VERSION 1.2.22, hololive-api 1.2.15, hololive-alarm-worker 1.0.13(배포 트리 revision과 같은 label의 image가 필요해 다시 빌드함).

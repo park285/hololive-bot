@@ -82,7 +82,7 @@ func (c *SchedulePosterCommand) Execute(ctx context.Context, cmdCtx *botcommand.
 }
 
 func (c *SchedulePosterCommand) replySchedule(ctx context.Context, room string, member *domain.Member, schedule scheduleposter.PublishedSchedule, template cardtemplate.ID) error {
-	reply, err := renderScheduleReply(ctx, c.Deps(), member, &schedule, template)
+	reply, err := renderScheduleReply(ctx, c.Deps(), member, &schedule, template, nil)
 	if err != nil {
 		return err
 	}
@@ -95,8 +95,20 @@ type scheduleReply struct {
 	text  string
 }
 
-func renderScheduleReply(ctx context.Context, deps *handlercore.Dependencies, member *domain.Member, schedule *scheduleposter.PublishedSchedule, template cardtemplate.ID) (scheduleReply, error) {
-	pages, err := deps.ScheduleCards.RenderScheduleCards(ctx, member, *schedule, template)
+func renderScheduleReply(ctx context.Context, deps *handlercore.Dependencies, member *domain.Member, schedule *scheduleposter.PublishedSchedule, template cardtemplate.ID,
+	changedPosts []int64,
+) (scheduleReply, error) {
+	var (
+		pages [][]byte
+		err   error
+	)
+
+	if len(changedPosts) > 0 {
+		pages, err = deps.ScheduleCards.RenderScheduleChangeCards(ctx, member, *schedule, template, changedPosts)
+	} else {
+		pages, err = deps.ScheduleCards.RenderScheduleCards(ctx, member, *schedule, template)
+	}
+
 	if errors.Is(err, schedulecard.ErrRenderBudget) {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return scheduleReply{}, ctxErr

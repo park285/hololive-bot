@@ -197,16 +197,16 @@ func TestStoreRecordMatchQueuesChangedNoticesOnlyForAppliedChanges(t *testing.T)
 	require.Equal(t, scheduleposter.NoticeChanged, notice.Kind)
 	require.EqualValues(t, 16, notice.PostID)
 
-	current, err := store.NoticePostCurrent(ctx, notice)
+	posts, err := store.NoticeChangePosts(ctx, notice)
 	require.NoError(t, err)
-	require.True(t, current)
+	require.Equal(t, []int64{16}, posts)
 
 	_, err = pool.Exec(ctx, `UPDATE schedule_posters SET rows_extracted_at = rows_extracted_at + interval '1 second' WHERE id = 101`)
 	require.NoError(t, err)
 
-	current, err = store.NoticePostCurrent(ctx, notice)
+	posts, err = store.NoticeChangePosts(ctx, notice)
 	require.NoError(t, err)
-	require.False(t, current, "다시 뽑은 묶음에 아직 대응하지 않은 변경은 알리지 않는다")
+	require.Empty(t, posts, "다시 뽑은 묶음에 아직 대응하지 않은 변경은 알리지 않는다")
 }
 
 func recordTimeChange(t *testing.T, store *scheduleposter.Store, pool *pgxpool.Pool, schedule scheduleposter.PublishedSchedule, id int64, slot int) {
@@ -241,9 +241,9 @@ func TestStoreRequeuedChangeIsAnnouncedAfterItsRematch(t *testing.T) {
 	require.True(t, ok)
 	require.EqualValues(t, 18, requeued.PostID)
 
-	current, err := store.NoticePostCurrent(ctx, requeued)
+	posts, err := store.NoticeChangePosts(ctx, requeued)
 	require.NoError(t, err)
-	require.False(t, current)
+	require.Equal(t, []int64{17}, posts, "다시 대응하게 돌려진 글은 빠지고 함께 닫힐 현재 변경만 남는다")
 	require.NoError(t, store.SettleNotice(ctx, requeued, scheduleposter.NoticeSkipped, 0))
 
 	recordTimeChange(t, store, pool, schedule, 18, 1)
@@ -254,6 +254,10 @@ func TestStoreRequeuedChangeIsAnnouncedAfterItsRematch(t *testing.T) {
 	notice, ok := claimNotice(t, store)
 	require.True(t, ok)
 	require.EqualValues(t, 17, notice.PostID)
+
+	posts, err = store.NoticeChangePosts(ctx, notice)
+	require.NoError(t, err)
+	require.Equal(t, []int64{17, 18}, posts, "카드에 표시할 변경은 보낸 뒤 함께 닫히는 알림과 같다")
 	require.NoError(t, store.SettleNotice(ctx, notice, scheduleposter.NoticeSent, 2))
 	require.Equal(t, []storedNotice{
 		{kind: scheduleposter.NoticeChanged, poster: 101, post: new(int64(18)), status: scheduleposter.NoticeSkipped},
@@ -261,6 +265,52 @@ func TestStoreRequeuedChangeIsAnnouncedAfterItsRematch(t *testing.T) {
 		{kind: scheduleposter.NoticeChanged, poster: 101, post: new(int64(18)), status: scheduleposter.NoticeSent, rooms: new(2)},
 		{kind: scheduleposter.NoticeChanged, poster: 101, post: new(int64(99)), status: noticePending},
 	}, storedNotices(t, pool), "다시 대응한 글은 새로 알리고, 보낸 카드에 담긴 대기 변경만 함께 닫는다")
+}
+
+func TestStoreNoticeChangePostsListsOnlyTheChangesTheSettleCloses(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	store, pool, _, schedule := newChangesStore(t)
+
+	_, err := pool.Exec(ctx, `DELETE FROM schedule_poster_notices`)
+	require.NoError(t, err)
+
+	_, err = store.InsertPosts(ctx, 101, []scheduleposter.Post{post(17, jstAt(10, 18, 0)), post(18, jstAt(10, 19, 0))})
+	require.NoError(t, err)
+
+	decide(t, store, 17, relevant)
+	decide(t, store, 18, relevant)
+
+	recordTimeChange(t, store, pool, schedule, 17, 1)
+	recordTimeChange(t, store, pool, schedule, 18, 2)
+
+	notice, ok := claimNotice(t, store)
+	require.True(t, ok)
+	require.EqualValues(t, 17, notice.PostID)
+
+	for _, tt := range []struct {
+		name, sibling string
+		want          []int64
+	}{
+		{"leased by another processor", `lease_until = now() + interval '1 minute'`, []int64{17}},
+		{"created after the claim", `lease_until = NULL, created_at = $1::timestamptz + interval '1 second'`, []int64{17}},
+		{"already settled", `created_at = $1::timestamptz, status = 'skipped', settled_at = now()`, []int64{17}},
+		{"pending and unleased", `status = 'pending', settled_at = NULL`, []int64{17, 18}},
+	} {
+		_, err = pool.Exec(ctx, `UPDATE schedule_poster_notices SET `+tt.sibling+` WHERE post_id = 18 AND $1::timestamptz IS NOT NULL`, notice.ClaimedAt)
+		require.NoError(t, err)
+
+		posts, listErr := store.NoticeChangePosts(ctx, notice)
+		require.NoError(t, listErr)
+		require.Equal(t, tt.want, posts, tt.name)
+	}
+
+	require.NoError(t, store.SettleNotice(ctx, notice, scheduleposter.NoticeSent, 1))
+	require.Equal(t, []storedNotice{
+		{kind: scheduleposter.NoticeChanged, poster: 101, post: new(int64(17)), status: scheduleposter.NoticeSent, rooms: new(1)},
+		{kind: scheduleposter.NoticeChanged, poster: 101, post: new(int64(18)), status: scheduleposter.NoticeSent, rooms: new(1)},
+	}, storedNotices(t, pool), "목록에 든 변경이 곧 함께 닫히는 변경이다")
 }
 
 func TestStoreSettleSentPublishedNoticeAbsorbsPendingChangesOnItsCard(t *testing.T) {

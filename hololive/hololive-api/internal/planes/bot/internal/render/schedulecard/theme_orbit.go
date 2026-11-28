@@ -316,6 +316,10 @@ func orbitEntry(c *canvas, r *orbitRow) {
 	for j, text := range r.title {
 		y := mid + orbitTitleLH*float64(j)
 
+		if r.marked {
+			c.Fill(markBand(orbitTitleX, y+c.f.mid(orbitTitleText), c.f.width(orbitTitleText, text), orbitTitleText), markInk)
+		}
+
 		if r.status == StatusCancelled {
 			textStruck(c, orbitTitleText, text, orbitTitleX, y, ink)
 		} else {

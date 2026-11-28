@@ -63,14 +63,14 @@ func (s *Store) ClaimNotice(ctx context.Context, lease time.Duration) (Notice, b
 	return notice, true, nil
 }
 
-func (s *Store) NoticePostCurrent(ctx context.Context, notice Notice) (bool, error) {
-	var current bool
+func (s *Store) NoticeChangePosts(ctx context.Context, notice Notice) ([]int64, error) {
+	var posts []int64
 
-	if err := pgxdb.QueryRow(ctx, s.pool, noticePostCurrentSQL, notice.ID).Scan(&current); err != nil {
-		return false, fmt.Errorf("check schedule poster notice post: %w", err)
+	if err := pgxdb.QueryRow(ctx, s.pool, noticeChangePostsSQL, notice.ID, notice.ClaimedAt).Scan(&posts); err != nil {
+		return nil, fmt.Errorf("list schedule poster notice change posts: %w", err)
 	}
 
-	return current, nil
+	return posts, nil
 }
 
 func (s *Store) SettleNotice(ctx context.Context, notice Notice, status NoticeStatus, rooms int) error {

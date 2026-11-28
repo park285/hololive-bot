@@ -53,14 +53,15 @@ type day struct {
 func (d day) off() bool { return len(d.slots) == 1 && d.slots[0].status == StatusOff }
 
 type slot struct {
-	start   string
-	minutes int
-	status  Status
-	main    string
-	sub     string
-	tags    []string
-	more    int
-	from    string
+	start     string
+	minutes   int
+	status    Status
+	main      string
+	sub       string
+	tags      []string
+	more      int32
+	highlight bool
+	from      string
 }
 
 func prepare(card Card, drawable func(rune) bool) (view, error) {
@@ -215,7 +216,7 @@ func toSlot(it *Item, drawable func(rune) bool, template cardtemplate.ID) (slot,
 		titleLimit = maxOrbitTitleRunes
 	}
 
-	s := slot{start: start, minutes: minutes, status: it.Status, main: cleanText(it.Title, titleLimit, drawable)}
+	s := slot{start: start, minutes: minutes, status: it.Status, main: cleanText(it.Title, titleLimit, drawable), highlight: it.Highlight}
 
 	switch {
 	case prev != "" && prev != start:
@@ -499,6 +500,10 @@ func mergeOff(slots []slot, fromPost bool) []slot {
 		}
 	}
 
+	if len(offs) > 0 {
+		offs[0].highlight = slices.ContainsFunc(offs, func(s slot) bool { return s.highlight })
+	}
+
 	switch {
 	case len(offs) == 0, streaming && fromPost:
 		return rest
@@ -517,13 +522,15 @@ func capSlots(slots []slot, limit int) []slot {
 	}
 
 	kept := slots[: limit-1 : limit-1]
-	rest := 0
+	rest, marked := int32(0), false
 
 	for _, s := range slots[limit-1:] {
 		rest += max(1, s.more)
+
+		marked = marked || s.highlight
 	}
 
-	return append(kept, slot{minutes: noTime, status: StatusPlanned, main: fmt.Sprintf("외 %d건", rest), more: rest})
+	return append(kept, slot{minutes: noTime, status: StatusPlanned, main: fmt.Sprintf("외 %d건", rest), more: rest, highlight: marked})
 }
 
 func foldDays(days []day, limit int) []day {
